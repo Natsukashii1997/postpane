@@ -72,7 +72,7 @@ export function ResetSection({
       ...Object.fromEntries(
         styleKeys.map((key) => [key, defaultHUDConfig[key]]),
       ),
-      mode: config.hasNotch ? "notch" : "logos",
+      mode: "logos",
     });
     setRevision(revision + 1);
   };

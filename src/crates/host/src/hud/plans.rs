@@ -30,17 +30,12 @@ fn defaults() -> &'static Value {
 pub(crate) struct Screen<'a> {
     view: &'a Value,
     id: &'a str,
-    has_notch: bool,
 }
 
 impl<'a> Screen<'a> {
     /// `view` is the presentation owner's view, drafts included.
-    pub(crate) fn new(view: &'a Value, id: &'a str, has_notch: bool) -> Self {
-        Self {
-            view,
-            id,
-            has_notch,
-        }
+    pub(crate) fn new(view: &'a Value, id: &'a str) -> Self {
+        Self { view, id }
     }
 
     fn value(&self, key: &str) -> Value {
@@ -60,7 +55,7 @@ impl<'a> Screen<'a> {
         .find(fits)
         .cloned()
         .unwrap_or_else(|| match key {
-            "mode" => json!(if self.has_notch { "notch" } else { "logos" }),
+            "mode" => json!("logos"),
             _ => fallback.clone(),
         })
     }
@@ -87,11 +82,7 @@ impl<'a> Screen<'a> {
     }
 
     pub(crate) fn mode(&self) -> Mode {
-        serde_json::from_value(self.value("mode")).unwrap_or(if self.has_notch {
-            Mode::Notch
-        } else {
-            Mode::Logos
-        })
+        serde_json::from_value(self.value("mode")).unwrap_or(Mode::Logos)
     }
 
     pub(crate) fn mode_name(&self) -> &'static str {
@@ -195,7 +186,7 @@ fn plan(
     now_ms: i64,
 ) -> HudConfig {
     let monitor = &display.info;
-    let screen = Screen::new(view, &monitor.screen_id, monitor.notch.is_some());
+    let screen = Screen::new(view, &monitor.screen_id);
     let mode = screen.mode();
     let notch = mode == Mode::Notch;
     let edge = if notch {
@@ -291,18 +282,13 @@ impl Planner {
             .collect()
     }
 
-    /// The primary screen's id and whether it has a notch.
-    pub(crate) fn primary(&self) -> Option<(&str, bool)> {
+    /// The primary screen's id.
+    pub(crate) fn primary(&self) -> Option<&str> {
         self.displays
             .iter()
             .find(|display| display.info.primary)
             .or(self.displays.first())
-            .map(|display| {
-                (
-                    display.info.screen_id.as_str(),
-                    display.info.notch.is_some(),
-                )
-            })
+            .map(|display| display.info.screen_id.as_str())
     }
 
     /// Gives each screen's window its plan where the plan changed.
@@ -346,16 +332,16 @@ mod tests {
     #[test]
     fn a_screen_reads_its_own_value_then_the_defaults() {
         let shared = json!({"store": {"screens": {}, "screenDefaults": {"edge": "left"}}, "layouts": {}, "sharedLayout": {"style": {"width": 600}}});
-        let screen = Screen::new(&shared, "a", false);
+        let screen = Screen::new(&shared, "a");
+        // Every screen, notched or not, defaults to Dynamic.
         assert!(screen.mode() == Mode::Logos);
-        assert!(Screen::new(&shared, "a", true).mode() == Mode::Notch);
         assert_eq!(screen.text("edge"), "left");
         assert_eq!(screen.layout()["style"]["width"], 600);
         let own = view(
             json!({"mode": "simple", "offset": "far", "logoSize": 30}),
             json!({"hud": {}}),
         );
-        let screen = Screen::new(&own, "a", true);
+        let screen = Screen::new(&own, "a");
         assert!(screen.mode() == Mode::Simple);
         // A value of the wrong type falls back to the default.
         assert_eq!(screen.number("offset"), 0.5);
@@ -366,7 +352,7 @@ mod tests {
     #[test]
     fn a_strip_is_as_wide_as_geometry_ts_draws_it() {
         let defaults = view(json!({}), json!({}));
-        let screen = Screen::new(&defaults, "a", false);
+        let screen = Screen::new(&defaults, "a");
         let labels = |n: usize| vec!["72%".to_owned(); n];
         assert_eq!(
             strip_width(&screen, Mode::Notch, Edge::Top, &labels(3), 185.0),
