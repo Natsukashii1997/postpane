@@ -1,6 +1,17 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33），所有屏幕默认动态形态（PR #29），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 4 剩余的小人与图标，开工前先和常浩对齐想要的感觉，再出三版。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 4 剩余的小人与图标，开工前先和常浩对齐想要的感觉，再出三版；建议开新会话做。
+
+## 新回复等通知换成「回执」外观（2026-11-04，Claude，常浩指着黑底「有新回复」卡说还没做，选甲「回执」，看过实物后说「看过了，合并」；PR #35 测试全过已 squash 合并 `34126a4`、已打包安装）
+
+- 时间：开工 `2026-11-04 22:50`（估计，按会话进度；本节写于 `2026-11-04 23:05`）。来由：通知卡和横条仍是黑底，和其他纸面不一套；issue #34，预览 https://claude.ai/artifact/RfBWq92n9egDR75zccuwYv 。
+- 改了哪些文件（PR #35）：`src/packages/hud/src/HUDScene.tsx`（动态与简约形态下通知也取纸面，通知卡与通知队列包纸）、`alerts/CompactAlertView.tsx`（通知横条：粗体名、撕线、蓝/琥珀/墨色状态，宽度相应加宽）、`alerts/CompletionAlertView.tsx`（新回复卡：撕线、蓝色小方框、点线时间与窄体数字、方角按钮）、`alerts/QuotaAlertViews.tsx`（额度类通知：纸色、方角按钮、网纹进度框）、`alerts/alert-tones.ts` 与 `alert-palette.ts`（新：通知取色，纸上蓝/琥珀/实心墨）、`paper.ts`（新 `blue`）、`test/alert-tones.test.ts`（新）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 121` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`）。
+- 验证：已打包安装；我尝试结束一轮后回来截「有新回复」实物，但通知已不在，未截到。实物由常浩自己看过（「看过了，合并」）。额度告急、额度重置、需要登录未实机看过，只有测试覆盖。
+- 截图：无（未截到）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（23:03:23 启动）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-04-receipt-news/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：刘海形态、额度面板里夹带的通知行未改；可清理 worktree 增加 `.claude/worktrees/34-receipt-news`（现共 8 个可清理）。
+- 本轮新坑：无。
 
 ## 悬停小卡换成「小收据」外观（2026-11-04，Claude，常浩问截图里的黑框是什么并要求换样式，选甲「小收据」，看过实物后说「没问题，合并」；PR #33 测试全过已 squash 合并 `7c9482e`、已打包安装）
 
