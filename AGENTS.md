@@ -48,7 +48,7 @@ NOTICE               来源与许可说明
 src/
   apps/desktop/      React 工作区 + Tauri 外壳（src-tauri/）
   apps/mcp/          给助手用的 MCP 服务
-  crates/            Rust：agents（每个客户端一个目录）、core、runtime、platform、host、hud、lan、share、l10n、engine
+  crates/            Rust：agents（每个客户端一个目录）、core、runtime、platform、host、hud、l10n、engine
   packages/          前端：app（设置、统计、会话窗口）、hud（侧栏）、ui、protocol、engine-client、vite-config
   fixtures/          对照用测试数据
   tooling/           构建入口与仓库检查脚本

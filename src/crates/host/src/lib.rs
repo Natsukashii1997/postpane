@@ -21,7 +21,6 @@ pub mod extension;
 mod hud;
 mod instance;
 mod mcp_clients;
-mod phones;
 mod picture;
 mod screens;
 mod shell;
@@ -38,7 +37,6 @@ struct Backend {
     error: Option<String>,
     tools: Option<Arc<tools::ToolsChannel>>,
     extension: Option<Arc<dyn extension::ProductExtension>>,
-    share: Option<Arc<agent_hud_share::PhoneShare>>,
 }
 impl Backend {
     fn install_snapshot(&mut self, app: &tauri::AppHandle, mut value: Value) {
@@ -67,9 +65,6 @@ impl Backend {
             self.publish_snapshot(app);
             if let (Some(extension), Some(snapshot)) = (&self.extension, &self.snapshot) {
                 extension.observe_snapshot(Arc::clone(snapshot));
-            }
-            if let (Some(share), Some(snapshot)) = (&self.share, &self.snapshot) {
-                share.observe(Arc::clone(snapshot));
             }
         } else if let Some(snapshot) = &self.snapshot {
             coordinator::snapshot(app, snapshot, false);
@@ -190,7 +185,6 @@ struct Service {
     hooks: Arc<Mutex<agent_hud_runtime::hooks::Hooks>>,
     hook_actions: Arc<Mutex<()>>,
     extension: Option<Arc<dyn extension::ProductExtension>>,
-    share: Option<Arc<agent_hud_share::PhoneShare>>,
     /// Taken before `backend` for a collection pass, so an account reading in
     /// progress delays only that pass, never a UI request.
     collection: agent_hud_runtime::CollectionGate,
@@ -218,7 +212,6 @@ impl Service {
         mut runtime: Runtime,
         extension: Option<Arc<dyn extension::ProductExtension>>,
         tools_directory: std::path::PathBuf,
-        share_directory: Option<std::path::PathBuf>,
     ) -> Result<Self, String> {
         let hooks = runtime.hooks_handle();
         let collection = runtime.collection_gate();
@@ -244,7 +237,6 @@ impl Service {
             error: None,
             tools: None,
             extension: extension.clone(),
-            share: None,
         }));
         let tools = Arc::new(tools::ToolsChannel::new(
             app.clone(),
@@ -255,15 +247,6 @@ impl Service {
             .lock()
             .map_err(|_| "Runtime lock is unavailable")?
             .tools = Some(tools);
-        let share = phones::start(
-            share_directory,
-            extension.as_deref(),
-            Arc::downgrade(&backend),
-        );
-        backend
-            .lock()
-            .map_err(|_| "Runtime lock is unavailable")?
-            .share = share.clone();
         if let Some(product) = &extension {
             let snapshots = Arc::downgrade(&backend);
             let queries = snapshots.clone();
@@ -481,7 +464,6 @@ impl Service {
             hooks,
             hook_actions: Arc::new(Mutex::new(())),
             extension,
-            share,
             collection,
         })
     }
@@ -526,21 +508,9 @@ async fn native_request(
     let hook_actions = Arc::clone(&service.hook_actions);
     let stopped = Arc::clone(&service.stopped);
     let extension = service.extension.clone();
-    let share = service.share.clone();
     let collection = Arc::clone(&service.collection);
     let wake = Arc::clone(&service.wake);
     tauri::async_runtime::spawn_blocking(move || {
-        // Answered by the share's own thread, never under the Backend lock
-        // its usage reads take.
-        if method == "phone_share" {
-            return share
-                .as_ref()
-                .ok_or("Sharing with phones is not part of this app")?
-                .request(
-                    params["method"].as_str().ok_or("Phone sharing method is required")?,
-                    params.get("params").cloned().unwrap_or(Value::Null),
-                );
-        }
         if method == "extension" {
             return tools::extension_request(
                 extension.as_deref(),
@@ -957,7 +927,6 @@ pub fn run_with_options(
                     runtime,
                     extension.clone(),
                     demo_data,
-                    None,
                 )?;
                 demo::play(app.handle().clone(), &service);
                 app.manage(service);
@@ -978,8 +947,7 @@ pub fn run_with_options(
                     app.handle().clone(),
                     runtime,
                     extension.clone(),
-                    data.clone(),
-                    Some(data.join("local-network")),
+                    data,
                 )?;
                 if launch_at_login {
                     app.state::<system::System>().register_if_never_registered();
@@ -1042,9 +1010,6 @@ pub fn run_with_options(
                     service.stopped.store(true, Ordering::Release);
                     if let Some(extension) = &service.extension {
                         extension.stop();
-                    }
-                    if let Some(share) = &service.share {
-                        share.stop();
                     }
                     if let Ok(_changed) = service.wake.0.lock() {
                         service.wake.1.notify_one();

@@ -20,7 +20,6 @@ import {
   Download,
   Monitor,
   MoreHorizontal,
-  Network,
   Plug,
   Puzzle,
   Settings2,
@@ -114,7 +113,7 @@ class ViewErrorBoundary extends Component<
 
 type Page = string;
 /** Sidebar groups, top to bottom; a gap separates them. */
-const pageGroups = ["app", "agents", "devices", "about"] as const;
+const pageGroups = ["app", "agents", "about"] as const;
 type PageGroup = (typeof pageGroups)[number];
 const pages: {
   id: string;
@@ -175,15 +174,6 @@ const pages: {
     group: "agents",
   },
   {
-    // What paired phones read: quota and token usage, never sessions.
-    id: "local-network",
-    label: "Local Network",
-    icon: Network,
-    color: "#5e5ce6",
-    description: "Share quota and token usage with paired phones.",
-    group: "devices",
-  },
-  {
     id: "updates",
     label: "Updates",
     icon: Download,
@@ -199,7 +189,6 @@ const chinesePages: Record<string, [string, string]> = {
   "agent-plugins": ["智能体插件", "Agent HUD 为这台电脑上的智能体添加的功能。"],
   relays: ["中转站", "智能体经过的中转站。"],
   prices: ["价格", "每个模型的价格，不对时可以自己改。"],
-  "local-network": ["局域网", "与已配对的手机共享额度和 token 用量。"],
   updates: ["更新", "Agent HUD 的更新与 Beta 版本。"],
 };
 const selectedScreenKey = storageKeys.selectedScreen;
@@ -925,7 +914,6 @@ function AppContent({
                       {(page === "general" ||
                         page === "prices" ||
                         page === "relays" ||
-                        page === "local-network" ||
                         page === "display" ||
                         page === "agents" ||
                         page === "agent-plugins" ||

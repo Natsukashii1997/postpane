@@ -1095,7 +1095,6 @@ export type NativeMethod =
   | "open_native"
   | "toggle_hud"
   | "extension"
-  | "phone_share"
   | "set_credentials"
   | "remove_credentials"
   | "add_relay_source"
