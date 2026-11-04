@@ -201,6 +201,7 @@ pub fn bundle_app(bundle: &str) -> Option<&'static str> {
         ("com.anthropic.claudefordesktop", "claude"),
         ("com.openai.codex", "codex"),
         ("com.google.antigravity", "antigravity"),
+        ("app.postpane", AGENT_HUD),
         ("app.agenthud", AGENT_HUD),
         ("com.agenthud", AGENT_HUD),
     ];

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "identifier": "app.agenthud.windows",
+  "identifier": "app.postpane.windows",
   "bundle": {
     "targets": ["nsis"],
     "windows": {

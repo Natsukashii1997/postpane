@@ -1,6 +1,25 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 2 改名与本机切换；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-1 合并后做 2-2 界面文字、MCP 名与插件名；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 2-1：应用标识与数据目录换成驿窗（2026-11-04，Claude，常浩让继续推进；PR 待合并、未安装）
+
+- 时间：开工 `2026-11-04 15:52`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 15:57`）。来由：ROADMAP 阶段 2 第一批。
+- 改了哪些文件：
+  - `src/apps/desktop/src-tauri/tauri.conf.json`：应用名与主程序名 PostPane，标识 `app.postpane.mac`，设置窗口标题；`tauri.windows.conf.json`、`tauri.linux.conf.json` 标识同步。
+  - `src/crates/platform/src/data_folder.rs`：数据目录名换成 `app.postpane.*`；首次启动迁移的旧目录从 `app.agenthud.next` 改为各系统的 `app.agenthud.<系统>`；`os/*/mod.rs` 各加 `EARLIER_FOLDER`。
+  - `src/crates/agents/src/cursor/mod.rs`：Cursor 回合日志位置跟到新目录；`naming/surfaces.rs`：认出 `app.postpane` 开头的来源。
+  - `src/apps/desktop/src-tauri/src/main.rs`：去掉共用代码里的系统判断，只按 `/Applications/` 判断。
+  - `AGENTS.md`：结构一节 parity 说明更正、补 `docs/upstream/`。
+- 测试：`cargo test --workspace` 退出码 0，637 项通过；`test:ts` `ℹ pass 110` / `ℹ fail 0`；`test:mcp` `ℹ pass 6` / `ℹ fail 0`；`test:plugins` `ℹ pass 14` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；typecheck、build、prettier、check:packages、check:clients、check:test-paths 通过；`check:platform` 现为 `Platform boundary: shared code selects adapters only through mod/use selectors.`（基线那条消掉了）。
+- 验证：未打包安装；迁移只有单元测试覆盖，真实迁移要到本机切换时验证。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 换标识后 macOS 会给新应用一份新的网页存储，前端存在 localStorage 的 `agenthud.hud-config.v3`、隐藏卡片、选中屏幕等可能不跟过来，切换时要核对侧栏显示设置。
+  - 钩子配置里识别自家条目的标记（`Agent HUD` 字样）、MCP 名 `agent-hud`、插件名、中转程序名、界面上的 Agent HUD 字样都还没改，留给 2-2。
+  - Windows 登录项名、Linux 桌面文件名仍是旧的，不在电脑版范围内。
+- 本轮新坑：无。
 
 ## 阶段 1-4：文档收尾（2026-11-04，Claude，常浩让继续推进；纯文档，按工程流程第 3 节直接提交 main、无需发布）
 
