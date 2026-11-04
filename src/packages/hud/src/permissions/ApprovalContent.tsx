@@ -12,6 +12,7 @@ import {
 } from "../IslandNews";
 import { alertText } from "../tokens";
 import { useGround } from "../ground";
+import { PAPER_FIGURES, PAPER_SEAL, usePaper } from "../paper";
 
 export function RequestDeliveryNotice({
   delivery,
@@ -78,9 +79,42 @@ export function ApprovalContent({
   const secondary = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)";
   const tertiary = light ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.38)";
   const cardSurface = light ? "rgba(0,0,0,0.035)" : "rgba(255,255,255,0.045)";
+  // Beside the dock the card is a receipt (HUDExpandedSurface prints it).
+  const paper = usePaper();
+  const asking =
+    selected.kind === "question" || Boolean(selected.questions?.length);
 
   return (
-    <div className="hud-approval-content" style={cardColumn(0)}>
+    <div
+      className="hud-approval-content"
+      style={{ ...cardColumn(0), position: "relative" }}
+    >
+      {paper && (
+        // The receipt's stamp: waiting to be approved, or answered.
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: -4,
+            right: 30,
+            width: 38,
+            height: 38,
+            boxSizing: "border-box",
+            display: "grid",
+            placeItems: "center",
+            border: `2px solid ${paper.red}`,
+            borderRadius: "50%",
+            color: paper.red,
+            font: `900 ${zh ? 12 : 9}px/1 ${PAPER_SEAL}`,
+            transform: "rotate(-14deg)",
+            opacity: 0.85,
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        >
+          {asking ? (zh ? "待答" : "ASK") : zh ? "待批" : "WAIT"}
+        </span>
+      )}
       <div
         style={{
           display: "flex",
@@ -89,23 +123,48 @@ export function ApprovalContent({
           padding: "0 4px 8px",
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 600, color: secondary }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: paper ? paper.dim : secondary,
+            letterSpacing: paper ? "0.24em" : undefined,
+          }}
+        >
           {zh ? "待审批" : "Waiting"}
         </span>
         <span
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            fontVariantNumeric: "tabular-nums",
-            color: signalText,
-            padding: "2px 6px",
-            borderRadius: 999,
-            background: "rgba(233, 161, 109, 0.16)",
-          }}
+          style={
+            paper
+              ? {
+                  font: `700 14px/1 ${PAPER_FIGURES}`,
+                  fontVariantNumeric: "tabular-nums",
+                  color: paper.red,
+                }
+              : {
+                  fontSize: 10,
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                  color: signalText,
+                  padding: "2px 6px",
+                  borderRadius: 999,
+                  background: "rgba(233, 161, 109, 0.16)",
+                }
+          }
         >
           {requests.length}
         </span>
       </div>
+      {paper && (
+        // A tear from edge to edge under the header.
+        <div
+          aria-hidden="true"
+          style={{
+            margin: `0 -${paper.bleed.right}px 10px -${paper.bleed.left}px`,
+            borderTop: `1.2px dashed ${paper.line}`,
+          }}
+        />
+      )}
       <div style={cardColumn(2)}>
         {requests.map((request) => {
           const contextPath = shortenHomePath(request.path ?? request.cwd);
@@ -115,9 +174,9 @@ export function ApprovalContent({
               className="hud-open-request"
               style={{
                 ...cardColumn(9),
-                borderRadius: 10,
-                padding: 10,
-                background: cardSurface,
+                borderRadius: paper ? 0 : 10,
+                padding: paper ? "2px 0 4px" : 10,
+                background: paper ? "transparent" : cardSurface,
               }}
             >
               <PermissionRowHead request={request} open light={light} />
@@ -126,7 +185,7 @@ export function ApprovalContent({
                   style={{
                     fontSize: 11,
                     fontVariantNumeric: "tabular-nums",
-                    color: tertiary,
+                    color: paper ? paper.dim : tertiary,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",

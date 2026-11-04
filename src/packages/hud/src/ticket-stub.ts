@@ -26,6 +26,8 @@ export interface StubMarks {
   punched: boolean;
   /** Sealed: the agent waits for your approval or answer. */
   sealed: boolean;
+  /** The seal reads 答, not 批: every request it waits on is a question. */
+  answer: boolean;
   /** The reading is printed in red: its tightest quota is nearly spent. */
   warn: boolean;
 }
@@ -33,12 +35,15 @@ export interface StubMarks {
 export function stubMarks(vendor: {
   working: number;
   waiting: number;
+  /** How many of the `waiting` requests are questions. */
+  questions?: number;
   used: number | null;
 }): StubMarks {
   const sealed = vendor.waiting > 0;
   return {
     punched: vendor.working > 0 && !sealed,
     sealed,
+    answer: sealed && vendor.questions === vendor.waiting,
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,
   };
 }

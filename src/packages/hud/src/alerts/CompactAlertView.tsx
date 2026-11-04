@@ -14,6 +14,7 @@ import { quotaAlertCopy } from "./quota-alert-copy";
 import { systemCalendar } from "@agent-hud/ui/format";
 import { alertInk, alertText } from "../tokens";
 import { useGround } from "../ground";
+import { PAPER_FIGURES, PAPER_SEAL, type Paper } from "../paper";
 
 /** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
 export function compactQuotaStatus(event: IslandEvent, zh = false): string {
@@ -41,7 +42,7 @@ export function compactAlertLabels(
           : "Question"
         : request.kind === "plan"
           ? zh
-            ? "计划待审"
+            ? "待确认计划"
             : "Plan"
           : zh
             ? "待批准"
@@ -95,6 +96,28 @@ export function compactAlertDockWidth(
   );
   const font = Math.round(9 * scale);
   const icon = Math.round(17 * scale);
+  if (request) {
+    // Printed on paper: the name in bold, a tear, then a seal and the status
+    // in spaced bold red (CompactAlertView's paper tag).
+    const bold = (text: string) => Math.ceil(labelWidth(text, font) * 1.05);
+    const leading = icon + Math.round(5 * scale) + bold(who);
+    const tear = Math.round(8 * scale) + 2;
+    const trailing =
+      Math.round(12 * scale) +
+      Math.round(4 * scale) +
+      bold(status) +
+      Math.ceil(status.length * font * 0.06) +
+      (badge
+        ? Math.round(4 * scale) + labelWidth(badge, Math.round(8 * scale))
+        : 0);
+    return Math.ceil(
+      leading +
+        tear +
+        Math.round(8 * scale) +
+        trailing +
+        Math.round(20 * scale),
+    );
+  }
   const glyph = Math.round(9 * scale);
   const leading = icon + Math.round(5 * scale) + labelWidth(who, font);
   const badgeExtra = badge
@@ -118,6 +141,7 @@ export function CompactAlertView({
   light,
   botLogos,
   zh,
+  paper: printed = null,
   onOpen,
   onDismissAndStats,
 }: {
@@ -131,6 +155,8 @@ export function CompactAlertView({
   light: boolean;
   botLogos: boolean;
   zh: boolean;
+  /** The paper a request's tag is printed on, beside the dock. */
+  paper?: Paper | null;
   onOpen: () => void;
   onDismissAndStats: () => void;
 }) {
@@ -144,6 +170,8 @@ export function CompactAlertView({
   const iconSize = onDock ? Math.round(17 * scale) : 17;
   const glyphSize = onDock ? Math.round(9 * scale) : 11;
   const ground = useGround(light);
+  // Beside the dock a request is a paper tag (HUDExpandedSurface prints it).
+  const paper = request ? printed : null;
   const signalText = alertText("warning", ground);
   const turnText = alertText("turn", ground);
   const calmAccent = alertText("calm", ground);
@@ -157,6 +185,55 @@ export function CompactAlertView({
     : event?.kind === "completion" || event?.kind === "sign-in-needed"
       ? onOpen
       : onDismissAndStats;
+
+  const printedWhat =
+    request && paper ? (
+      <>
+        <span
+          aria-hidden="true"
+          style={{
+            display: "grid",
+            placeItems: "center",
+            width: Math.round(12 * scale),
+            height: Math.round(12 * scale),
+            boxSizing: "border-box",
+            border: `${1.2 * scale}px solid ${paper.red}`,
+            borderRadius: 2 * scale,
+            color: paper.red,
+            font: `900 ${7.5 * scale}px/1 ${PAPER_SEAL}`,
+            transform: "rotate(-9deg)",
+            flexShrink: 0,
+          }}
+        >
+          {request.kind === "question" ? (zh ? "答" : "?") : zh ? "批" : "!"}
+        </span>
+        <span
+          style={{
+            fontSize: font,
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            color: paper.red,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {status}
+        </span>
+        {badge && (
+          <span
+            style={{
+              font: `600 ${Math.round(8 * scale)}px/1 ${PAPER_FIGURES}`,
+              fontVariantNumeric: "tabular-nums",
+              color: paper.dim,
+              flexShrink: 0,
+            }}
+          >
+            {badge}
+          </span>
+        )}
+      </>
+    ) : null;
 
   const trailingWhat = request ? (
     <>
@@ -320,10 +397,10 @@ export function CompactAlertView({
         <span
           style={{
             fontSize: font,
-            fontWeight: 500,
+            fontWeight: paper ? 600 : 500,
             // The row's own ink: the scene's may be the light HUD's while the
             // row itself is drawn dark (on the notch).
-            color: alertInk(0.96, ground),
+            color: paper ? paper.ink : alertInk(0.96, ground),
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -340,6 +417,18 @@ export function CompactAlertView({
           }}
         />
       )}
+      {paper && (
+        // The tag's tear between its owner and its status.
+        <span
+          aria-hidden="true"
+          style={{
+            alignSelf: "stretch",
+            margin: `${Math.round(5 * scale)}px 0`,
+            borderLeft: `1.2px dashed ${paper.line}`,
+            flexShrink: 0,
+          }}
+        />
+      )}
       <div
         style={{
           display: "flex",
@@ -351,7 +440,7 @@ export function CompactAlertView({
           flexShrink: 0,
         }}
       >
-        {trailingWhat}
+        {printedWhat ?? trailingWhat}
       </div>
     </div>
   );

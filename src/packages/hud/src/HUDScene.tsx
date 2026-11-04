@@ -56,6 +56,7 @@ import {
   type StatsTarget,
 } from "./panel/listed-sessions";
 import { HUDGroundProvider } from "./ground";
+import { PaperContext, paperOf } from "./paper";
 
 export type {
   HUDConfig,
@@ -461,6 +462,25 @@ export function HUDScene({
     requestsCount: requests.length,
   });
 
+  // A request beside the dock is printed on paper, its tag and its card; in
+  // the notch it keeps the notch's ground.
+  const paper = useMemo(
+    () =>
+      detached && request
+        ? paperOf(light, {
+            left: surfacePadding.left,
+            right: surfacePadding.right,
+          })
+        : null,
+    [
+      detached,
+      Boolean(request),
+      light,
+      surfacePadding.left,
+      surfacePadding.right,
+    ],
+  );
+
   const [heldFrame, setHeldFrame] = useState<HUDRect | null>(null);
   const lastFrameRef = useRef<HUDRect | null>(null);
   const lastPointerPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -616,15 +636,17 @@ export function HUDScene({
     request || event ? (
       <>
         {request ? (
-          <ApprovalContent
-            requests={requests}
-            selected={request}
-            select={news.select}
-            decide={onRequestDecision}
-            openSettings={openSettings}
-            light={light}
-            language={snapshotLanguage(snapshot)}
-          />
+          <PaperContext.Provider value={paper}>
+            <ApprovalContent
+              requests={requests}
+              selected={request}
+              select={news.select}
+              decide={onRequestDecision}
+              openSettings={openSettings}
+              light={light}
+              language={snapshotLanguage(snapshot)}
+            />
+          </PaperContext.Provider>
         ) : event ? (
           <NewsContent
             event={event}
@@ -907,6 +929,7 @@ export function HUDScene({
             eventContent={eventContent}
             inUsagePanel={inUsagePanel}
             delivery={delivery}
+            paper={paper}
           />
           <div
             className="hud-resting-strip"

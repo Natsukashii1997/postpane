@@ -16,6 +16,7 @@ import { clientDisplayName } from "../IslandNews";
 import { alertFill, alertText, onAlertFill, permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
+import { usePaper } from "../paper";
 
 /** A question's draft: the offered answers picked, the words typed, and
  * whether those words are the answer (`own`). Skipping or picking a single
@@ -95,22 +96,65 @@ export function PermissionQuestionCard({
   const vendor = request.vendor ?? clientDisplayName(request.source);
   const detailText = request.detail?.trim() || null;
 
+  // On paper (HUDExpandedSurface prints it beside the dock) the answers are
+  // printed rows with dotted rules, the buttons boxes, Submit filled with ink.
+  const paper = usePaper();
   const text = (alpha: number) =>
-    light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
+    paper
+      ? paper.text(alpha)
+      : light
+        ? `rgba(0,0,0,${alpha})`
+        : `rgba(255,255,255,${alpha})`;
   const stroke = (alpha: number) =>
-    light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
-  const primary = text(0.92);
-  const secondary = text(0.55);
-  const tertiary = text(0.38);
-  const inset = light ? "rgba(0,0,0,0.045)" : "rgba(255,255,255,0.055)";
-  const highlight = light ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)";
+    paper
+      ? paper.text(Math.min(1, alpha * 3))
+      : light
+        ? `rgba(0,0,0,${alpha})`
+        : `rgba(255,255,255,${alpha})`;
+  const primary = paper ? paper.ink : text(0.92);
+  const secondary = paper ? paper.dim : text(0.55);
+  const tertiary = paper ? paper.dim : text(0.38);
+  const inset = paper
+    ? paper.fill
+    : light
+      ? "rgba(0,0,0,0.045)"
+      : "rgba(255,255,255,0.055)";
+  const highlight = paper
+    ? paper.fill
+    : light
+      ? "rgba(0,0,0,0.08)"
+      : "rgba(255,255,255,0.1)";
+  const round = (radius: number) => (paper ? 2 : radius);
   const ground = useGround(light);
   const controls = permissionColors(ground);
-  const allow = controls.allowFill;
-  const onAllow = controls.onAllow;
-  const signal = alertFill("warning", ground);
-  const signalText = alertText("warning", ground);
-  const onSignal = onAlertFill(ground);
+  const allow = paper ? paper.ink : controls.allowFill;
+  const onAllow = paper ? paper.paper : controls.onAllow;
+  const signal = paper ? paper.ink : alertFill("warning", ground);
+  const signalText = paper ? paper.red : alertText("warning", ground);
+  const onSignal = paper ? paper.paper : onAlertFill(ground);
+  const accentEdge = paper ? paper.ink : "rgba(233,161,109,0.45)";
+  // A question's header (such as 下一步): a tinted chip, or a red box on paper.
+  const tag = paper
+    ? { background: "transparent", boxShadow: `inset 0 0 0 1.2px ${paper.red}` }
+    : { background: "rgba(233, 161, 109, 0.14)" };
+  // An answer's row: a tinted box, or on paper a printed line over a dotted
+  // rule, washed when picked.
+  const answerRow = (chosen: boolean, edge = chosen) =>
+    paper
+      ? {
+          borderRadius: 0,
+          borderStyle: "dotted",
+          borderWidth: "0 0 1.2px",
+          borderColor: paper.line,
+          background: chosen ? paper.fill : "transparent",
+        }
+      : {
+          borderRadius: 6,
+          borderStyle: "solid",
+          borderWidth: 1,
+          borderColor: edge ? accentEdge : "transparent",
+          background: chosen ? highlight : inset,
+        };
   const code = (command: string, key: number) => (
     <code
       key={key}
@@ -118,7 +162,7 @@ export function PermissionQuestionCard({
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 10,
         padding: "0 4px",
-        borderRadius: 4,
+        borderRadius: round(4),
         background: highlight,
         color: primary,
       }}
@@ -192,8 +236,8 @@ export function PermissionQuestionCard({
                   fontSize: 10,
                   fontWeight: 700,
                   padding: "2px 6px",
-                  borderRadius: 4,
-                  background: "rgba(233, 161, 109, 0.14)",
+                  borderRadius: round(4),
+                  ...tag,
                   color: signalText,
                 }}
               >
@@ -220,7 +264,7 @@ export function PermissionQuestionCard({
           style={{
             ...cardColumn(3),
             padding: "7px 8px",
-            borderRadius: 6,
+            borderRadius: round(6),
             background: inset,
           }}
         >
@@ -253,7 +297,7 @@ export function PermissionQuestionCard({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: 0,
                 background: allow,
                 color: onAllow,
@@ -280,7 +324,7 @@ export function PermissionQuestionCard({
               gap: 4,
               height: 22,
               padding: "0 9px",
-              borderRadius: 6,
+              borderRadius: round(6),
               border: `1px solid ${stroke(0.18)}`,
               background: "transparent",
               color: secondary,
@@ -327,7 +371,7 @@ export function PermissionQuestionCard({
       style={{
         width: 12,
         height: 12,
-        borderRadius: multi ? 3 : "50%",
+        borderRadius: multi ? round(3) : "50%",
         border: `1.2px solid ${chosen ? signal : stroke(0.28)}`,
         background: chosen ? signal : "transparent",
         display: "inline-grid",
@@ -361,8 +405,8 @@ export function PermissionQuestionCard({
                 fontSize: 10,
                 fontWeight: 700,
                 padding: "2px 6px",
-                borderRadius: 4,
-                background: "rgba(233, 161, 109, 0.14)",
+                borderRadius: round(4),
+                ...tag,
                 color: signalText,
               }}
             >
@@ -430,9 +474,7 @@ export function PermissionQuestionCard({
                 gap: 7,
                 width: "100%",
                 padding: "6px 8px",
-                borderRadius: 6,
-                border: `1px solid ${chosen ? "rgba(233,161,109,0.45)" : "transparent"}`,
-                background: chosen ? highlight : inset,
+                ...answerRow(chosen),
                 color: "inherit",
                 textAlign: "left",
                 cursor: disabled ? "default" : "pointer",
@@ -480,9 +522,7 @@ export function PermissionQuestionCard({
               alignItems: "center",
               gap: 7,
               padding: "6px 8px",
-              borderRadius: 6,
-              border: "1px solid rgba(233,161,109,0.45)",
-              background: hasCustom ? highlight : inset,
+              ...answerRow(hasCustom, true),
             }}
           >
             {renderMarker(hasCustom, q.multiSelect)}
@@ -545,9 +585,7 @@ export function PermissionQuestionCard({
               gap: 7,
               width: "100%",
               padding: "6px 8px",
-              borderRadius: 6,
-              border: `1px solid ${hasCustom ? "rgba(233,161,109,0.45)" : "transparent"}`,
-              background: hasCustom ? highlight : inset,
+              ...answerRow(hasCustom),
               color: "inherit",
               textAlign: "left",
               cursor: disabled ? "default" : "pointer",
@@ -594,7 +632,7 @@ export function PermissionQuestionCard({
             gap: 4,
             height: 22,
             padding: "0 9px",
-            borderRadius: 6,
+            borderRadius: round(6),
             border: `1px solid ${stroke(0.18)}`,
             background: "transparent",
             color: secondary,
@@ -621,7 +659,7 @@ export function PermissionQuestionCard({
               gap: 4,
               height: 22,
               padding: "0 9px",
-              borderRadius: 6,
+              borderRadius: round(6),
               border: `1px solid ${stroke(0.18)}`,
               background: "transparent",
               color: secondary,
@@ -644,7 +682,7 @@ export function PermissionQuestionCard({
             gap: 4,
             height: 22,
             padding: "0 9px",
-            borderRadius: 6,
+            borderRadius: round(6),
             border: 0,
             background: allow,
             color: onAllow,
