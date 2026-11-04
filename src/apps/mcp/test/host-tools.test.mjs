@@ -46,6 +46,13 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
     { encoding: "utf8" },
   );
   assert.equal(compiled.status, 0, compiled.error?.message ?? compiled.stderr);
+  // Bun's compiled output comes with a broken signature, and macOS kills it on launch.
+  if (process.platform === "darwin") {
+    const signed = spawnSync("codesign", ["--force", "--sign", "-", file], {
+      encoding: "utf8",
+    });
+    assert.equal(signed.status, 0, signed.error?.message ?? signed.stderr);
+  }
   return {
     file,
     requests: () =>
