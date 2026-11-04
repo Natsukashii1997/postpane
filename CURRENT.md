@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），小人保持现样、菜单栏图标本机关掉；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），其他小人之后各做一版；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+
+## 侧栏 Codex 小人常驻并补齐花瓣动作（2026-11-05，Claude，常浩看过三版预览选丙「花瓣身体语言」、确认三批计划，看过实物后说「看过了，合并」；PR #43 测试全过已 squash 合并 `009de4b`、已打包安装）
+
+- 时间：开工 `2026-11-05 00:55`（会话创建时间；本节写于 `2026-11-05 07:33`）。来由：常浩要侧栏图标都像 Clawd 一样活起来，先做 Codex：一直是绿色小人，不再平时显示 OpenAI 花纹；三版预览 https://claude.ai/artifact/Ue8gWQt89gBbTk6vC6ZQzu 选丙，要求和现有 Codex 小人形象一致、在原动效上融合，不重做；issue #42。
+- 改了哪些文件（PR #43）：`src/packages/hud/src/bots/bot-spec.ts`（`stays`、`petals` 开关，只有 `openai` 打开；`staysAsBot`）、`scene/HUDMarkStrip.tsx`（侧栏按 `staysAsBot` 常驻，原来写死 `false`）、`bot-form.ts`（轮廓加花瓣张合系数）、`bot-renderer.ts` 与 `bot-still.ts`（按张合画身体并进缓存键、出错变暗、长命令进度环）、`bot-motion.ts`（各工具转法、改文件 30° 咔哒、张合、出错卡住、完成绽放与跳舞、读文件扫行与进度环眼神；两处导入补 `.ts`）、`test/codex-petals.test.ts`（7 个测试）、`docs/parity/c08-bots.md` 与 `README.md`（第 50 行有意改动并重算汇总）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 128` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`）。之后只改测试文件类型标注，复跑 `pnpm run check` 退出 0、`node --test src/packages/hud/test/codex-petals.test.ts` 为 `ℹ pass 7` / `ℹ fail 0`，合并的提交即 `4c55cfe`。
+- 验证：本地临时调试页（未提交，已删）用真实 `BotMark` 排开 Codex 18 个状态，64px 与 22px 两档看了打盹合拢、进度环、出错变暗叉眼、压缩收瓣、完成笑眼。实机由常浩看过侧栏；我未截到实机（HUD 截图工具要先在设置里打开「让智能体排布 HUD」，没改设置）。
+- 截图：无。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（07:30:15，按 L-03）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-codex-bot/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划说分 3 个提交，实际合成 1 个（三批改同一组文件）。
+  - 「长活完成」「额度重置」要宿主给出对应 `card` 才出现，没有时按「回复完成」演。
+  - 常浩新定：以后其他小人动效只出一版，沿用现有程序化小人形象与动效，不出三版、不做像素或道具款（已记进项目记忆）。
+  - 可清理 worktree 增加 `.claude/worktrees/42-codex-bot`（现共 12 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 后台第 3 批：统计窗口外壳与用量页换热敏小票（2026-11-05，Claude，常浩确认计划并选图表配色「甲 墨色深浅」，经 HUD 回复「合并」；PR #41 测试全过已 squash 合并 `f5b10ee`、已打包安装）
 
