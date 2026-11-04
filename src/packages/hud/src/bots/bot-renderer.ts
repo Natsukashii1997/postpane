@@ -90,6 +90,9 @@ export function botRenderLook(motion: BotMotion) {
     motion.ring === null ? -1 : s(motion.ring, 120),
     motion.prop,
     motion.prop ? s(motion.propAge, 24) : 0,
+    motion.glow,
+    s(motion.glowLevel, 30),
+    motion.avatar ? s(motion.clock, 12) : 0,
     motion.limbs,
     motion.flap,
     motion.sign,
@@ -721,14 +724,39 @@ function drawBody(
     );
   eyes(context, s, face, yaw, pitch, m.dressed);
 }
-const STICKER = "#fdfdfa",
-  STICKER_INK = "#141414";
+const STICKER_INK = "#ffffff",
+  AVATAR_BLUE = "#3370ff",
+  AVATAR_GREEN = "#19a974",
+  AVATAR_ORANGE = "#ff8a00",
+  AVATAR_RED = "#e5484d",
+  AVATAR_PURPLE = "#8e4ec6",
+  AVATAR_INDIGO = "#6e56cf";
+const GLOWS: Record<NonNullable<BotMotion["glow"]>, string> = {
+  news: AVATAR_BLUE,
+  busy: AVATAR_BLUE,
+  ask: AVATAR_ORANGE,
+  done: AVATAR_GREEN,
+  fail: AVATAR_RED,
+};
+const tinted = (hex: string, alpha: number) =>
+  `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${alpha})`;
 /** A portrait drawn as itself: lids close over its own eyes, and a prop sits beside it. */
 function drawAvatar(
   context: CanvasRenderingContext2D,
   form: BotForm,
   motion: BotMotion,
 ) {
+  if (motion.glow && motion.glowLevel > 0.02) {
+    const color = GLOWS[motion.glow],
+      light = context.createRadialGradient(0.5, 0.52, 0.28, 0.5, 0.52, 0.72);
+    light.addColorStop(0, tinted(color, 0));
+    light.addColorStop(0.35, tinted(color, 0.8 * motion.glowLevel));
+    light.addColorStop(1, tinted(color, 0));
+    context.fillStyle = light;
+    context.beginPath();
+    context.arc(0.5, 0.52, 0.72, 0, 2 * Math.PI);
+    context.fill();
+  }
   context.drawImage(form.artwork, 0, 0, 1, 1);
   const lid = 1 - Math.max(0, Math.min(1, motion.face.open));
   if (lid > 0.04)
@@ -757,6 +785,95 @@ function drawAvatar(
       context.stroke();
     }
   if (motion.prop) drawAvatarProp(context, motion.prop, motion.propAge);
+  if (motion.sign) drawAvatarBadge(context, motion.sign, motion.clock);
+}
+/** A sign as a coloured badge on the avatar's top-left corner, big enough to read at strip size. */
+function drawAvatarBadge(
+  context: CanvasRenderingContext2D,
+  sign: BotSign,
+  clock: number,
+) {
+  context.save();
+  if (sign === "z") {
+    context.fillStyle = AVATAR_INDIGO;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    for (let i = 0; i < 2; i++) {
+      const q = ((((clock + i * 1.2) % 2.4) + 2.4) % 2.4) / 2.4;
+      context.globalAlpha = Math.sin(Math.PI * q);
+      context.font = `800 ${0.24 + 0.12 * q}px -apple-system, "Helvetica Neue", sans-serif`;
+      context.fillText("z", 0.12 - 0.14 * q, 0.14 - 0.24 * q);
+    }
+    context.restore();
+    return;
+  }
+  const asks =
+      sign === "exclamation" || sign === "question" || sign === "lines",
+    beat = (((clock % 0.8) + 0.8) % 0.8) / 0.8,
+    size = asks ? 1 + 0.12 * Math.sin(Math.PI * beat) : 1,
+    color =
+      sign === "cross"
+        ? AVATAR_RED
+        : sign === "hourglass"
+          ? AVATAR_PURPLE
+          : sign === "ellipsis"
+            ? AVATAR_BLUE
+            : AVATAR_ORANGE;
+  context.translate(0.04, 0.06);
+  context.scale(size, size);
+  context.fillStyle = color;
+  context.strokeStyle = STICKER_INK;
+  context.lineWidth = 0.035;
+  context.beginPath();
+  context.arc(0, 0, 0.2, 0, 2 * Math.PI);
+  context.fill();
+  context.stroke();
+  context.fillStyle = context.strokeStyle = STICKER_INK;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  if (sign === "exclamation") {
+    context.beginPath();
+    context.roundRect(-0.03, -0.13, 0.06, 0.15, 0.03);
+    context.arc(0, 0.085, 0.035, 0, 2 * Math.PI);
+    context.fill();
+  } else if (sign === "question") {
+    context.font = `900 0.3px -apple-system, "Helvetica Neue", sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("?", 0, 0.015);
+  } else if (sign === "lines") {
+    context.lineWidth = 0.045;
+    for (const y of [-0.07, 0, 0.07]) {
+      context.beginPath();
+      context.moveTo(-0.09, y);
+      context.lineTo(0.09, y);
+      context.stroke();
+    }
+  } else if (sign === "cross") {
+    context.lineWidth = 0.055;
+    context.beginPath();
+    context.moveTo(-0.08, -0.08);
+    context.lineTo(0.08, 0.08);
+    context.moveTo(0.08, -0.08);
+    context.lineTo(-0.08, 0.08);
+    context.stroke();
+  } else if (sign === "hourglass") {
+    context.beginPath();
+    context.moveTo(-0.08, -0.11);
+    context.lineTo(0.08, -0.11);
+    context.lineTo(0, 0);
+    context.lineTo(0.08, 0.11);
+    context.lineTo(-0.08, 0.11);
+    context.lineTo(0, 0);
+    context.closePath();
+    context.fill();
+  } else
+    for (const x of [-0.08, 0, 0.08]) {
+      context.beginPath();
+      context.arc(x, 0, 0.03, 0, 2 * Math.PI);
+      context.fill();
+    }
+  context.restore();
 }
 function drawAvatarProp(
   context: CanvasRenderingContext2D,
@@ -766,16 +883,16 @@ function drawAvatarProp(
   const clamp = (v: number) => Math.max(0, Math.min(1, v)),
     swing = (v: number) => Math.sin(Math.PI * clamp(v));
   context.save();
-  context.fillStyle = STICKER;
+  context.fillStyle = prop === "sent" ? AVATAR_GREEN : AVATAR_BLUE;
   context.strokeStyle = STICKER_INK;
-  context.lineWidth = 0.016;
+  context.lineWidth = 0.03;
   context.lineJoin = context.lineCap = "round";
   if (prop === "letter") {
     const pop = 1 + 0.25 * swing(age / 0.5),
-      w = 0.26 * pop,
-      h = 0.18 * pop,
-      x = 0.05 - w / 2,
-      y = 0.06 - h / 2 - 0.06 * swing(age / 0.6);
+      w = 0.4 * pop,
+      h = 0.28 * pop,
+      x = 0.06 - w / 2,
+      y = 0.06 - h / 2 - 0.08 * swing(age / 0.6);
     context.globalAlpha = clamp(age / 0.35);
     context.beginPath();
     context.rect(x, y, w, h);
@@ -786,15 +903,16 @@ function drawAvatarProp(
     context.lineTo(x + w / 2, y + h * 0.58);
     context.lineTo(x + w, y);
     context.stroke();
-    context.fillStyle = "#d6453d";
+    context.fillStyle = AVATAR_RED;
     context.beginPath();
-    context.arc(x + w, y, 0.04, 0, 2 * Math.PI);
+    context.arc(x + w, y, 0.06, 0, 2 * Math.PI);
     context.fill();
+    context.stroke();
   } else {
-    const w = 0.36,
-      h = 0.22,
-      x = -0.14,
-      y = 0.58;
+    const w = 0.5,
+      h = 0.3,
+      x = -0.24,
+      y = 0.52;
     if (prop === "sent") {
       const q = clamp(age / 1.6),
         rise = q < 0.5 ? 4 * q ** 3 : 1 - (-2 * q + 2) ** 3 / 2;
@@ -810,7 +928,7 @@ function drawAvatarProp(
     context.stroke();
     context.fillStyle = STICKER_INK;
     if (prop === "sent") {
-      context.lineWidth = 0.03;
+      context.lineWidth = 0.05;
       context.beginPath();
       context.moveTo(x + w * 0.32, y + h * 0.52);
       context.lineTo(x + w * 0.46, y + h * 0.7);
@@ -823,8 +941,8 @@ function drawAvatarProp(
         context.beginPath();
         context.arc(
           x + w * (0.28 + 0.22 * i),
-          y + h * 0.5 - hop * h * 0.18,
-          0.022,
+          y + h * 0.5 - hop * h * 0.2,
+          0.035,
           0,
           2 * Math.PI,
         );
@@ -876,7 +994,7 @@ export function drawBot(
   context.save();
   bare(context, form, motion);
   context.restore();
-  if (options.signs !== false && motion.sign) {
+  if (options.signs !== false && motion.sign && !form.spec.avatar) {
     const t = context.getTransform(),
       side = Math.hypot(t.a, t.b),
       place = signBox(form, side),
@@ -922,7 +1040,7 @@ export function renderBot(
   bare(context, form, motion, true);
   context.restore();
   context.resetTransform();
-  if (motion.sign)
+  if (motion.sign && !form.spec.avatar)
     paintSign(
       context,
       motion.sign,

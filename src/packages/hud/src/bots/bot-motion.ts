@@ -174,6 +174,8 @@ export function petalRatchet(time: number) {
 }
 /** What an avatar holds beside it: a bubble of dots, the sent bubble, or a letter. */
 export type AvatarProp = "typing" | "sent" | "letter";
+/** The coloured light behind an avatar: news and work are blue, asking orange, done green, failure red. */
+export type AvatarGlow = "news" | "busy" | "ask" | "done" | "fail";
 /** Direct BotMotion.swift state machine. set/play record events even when a host skips drawing. */
 export class BotMotion {
   staysBot = false;
@@ -191,6 +193,10 @@ export class BotMotion {
   avatar = false;
   prop: AvatarProp | null = null;
   propAge = 0;
+  glow: AvatarGlow | null = null;
+  glowLevel = 0;
+  /** The step's clock, for an avatar's badges and floating z. */
+  clock = 0;
   pulses = false;
   finned = false;
   state = botState();
@@ -778,17 +784,25 @@ export class BotMotion {
       shake = 0,
       breathes = true,
       prop: AvatarProp | null = null,
-      propAge = 0;
+      propAge = 0,
+      glow: AvatarGlow | null = null,
+      glowLevel = 0;
+    const pulse = (period: number) =>
+      Math.abs(Math.sin((Math.PI * now) / period));
     if (event?.kind === "start") {
-      tilt = 3 * swing(time / 0.8);
-      lift = -0.05 * swing(time / 0.5);
+      tilt = 4 * swing(time / 0.8);
+      lift = -0.08 * swing(time / 0.5);
       breathes = false;
       prop = "letter";
       propAge = time;
+      glow = "news";
+      glowLevel = swing(time / 1.2);
     } else if (event?.kind === "failed") {
       shake =
-        time < 0.7 ? 0.04 * Math.sin(time * 8 * Math.PI) * (1 - time / 0.7) : 0;
-      tilt = time > 0.7 ? -2 : 0;
+        time < 0.7 ? 0.06 * Math.sin(time * 8 * Math.PI) * (1 - time / 0.7) : 0;
+      tilt = time > 0.7 ? -3 : 0;
+      glow = "fail";
+      glowLevel = time < 0.4 ? time / 0.4 : Math.max(0.4, 1 - (time - 0.4));
     } else if (event?.kind === "limit-hit")
       lift = 0.025 * easeOut(clamp01(time / 0.9));
     else if (dozing) {
@@ -799,17 +813,23 @@ export class BotMotion {
     } else if (isAttention(this.look)) {
       const side = this.state.facing === "right" ? 1 : -1,
         nudge = (((now % 1.6) + 1.6) % 1.6) / 0.3;
-      tilt = side * (5 - 1.5 * swing(nudge));
+      tilt = side * (7 - 2.5 * swing(nudge));
+      glow = "ask";
+      glowLevel = 0.55 + 0.45 * pulse(1.2);
     } else if (this.look === "done" && age >= 0 && age < 1.6) {
-      tilt = -3.5 * swing(age / 0.6);
+      tilt = -5 * swing(age / 0.6);
       breathes = false;
       prop = "sent";
       propAge = age;
+      glow = "done";
+      glowLevel = swing(age / 1.6);
     } else if (isWorking(this.look) && !this.state.holds) {
-      tilt = -3 - 1.2 * Math.sin((2 * Math.PI * now) / 1.6);
-      lift = 0.025;
+      tilt = -4 - 2 * Math.sin((2 * Math.PI * now) / 1.6);
+      lift = 0.03;
       prop = "typing";
       propAge = now;
+      glow = "busy";
+      glowLevel = 0.45 + 0.25 * pulse(1.6);
     } else if (this.state.hovered && this.hoverAt !== null) {
       const since = now - this.hoverAt;
       tilt = -4.5 * easeInOut(clamp01(since / 0.35));
@@ -834,6 +854,9 @@ export class BotMotion {
     };
     this.prop = m > 0.5 ? prop : null;
     this.propAge = propAge;
+    this.glow = m > 0.5 ? glow : null;
+    this.glowLevel = glow ? glowLevel * m : 0;
+    this.clock = now;
     this.faded += (this.fadeGoal - this.faded) * (1 - Math.exp(-dt * 6));
     if (Math.abs(this.fadeGoal - this.faded) < 0.005)
       this.faded = this.fadeGoal;
