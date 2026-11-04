@@ -1,4 +1,5 @@
 import {
+  Fragment,
   memo,
   useEffect,
   useMemo,
@@ -7,11 +8,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  ChartNoAxesColumnIncreasing,
-  CircleArrowDown,
-  Settings,
-} from "lucide-react";
+import { CircleArrowDown } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import type { Quota, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
@@ -24,19 +21,24 @@ import {
   type HUDUpdateNotice,
 } from "./model";
 import { usePanelServices } from "./PanelContext";
-import { useGround } from "./ground";
+import { OnPaper } from "./ground";
 import { FittingName } from "./panel/FittingName";
 import { SourceBalances, SourceProviderBlock } from "./panel/QuotaSection";
 import { SourceSessions } from "./panel/SessionsSection";
 import {
+  condensed,
   densityMetrics,
   inPanelOrder,
   palette,
+  paperColors,
+  receiptTitle,
   type Logo,
 } from "./panel/theme";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
-import { snapshotLanguage } from "@agent-hud/ui/format";
+import { dateTime, snapshotLanguage } from "@agent-hud/ui/format";
+import { useFormat } from "@agent-hud/ui/format-context";
+import { PAPER_GRAIN, perforatedSide, perforationMask } from "./ticket-stub";
 
 export { SOURCE_PANEL } from "./panel/theme";
 
@@ -72,7 +74,20 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   active = true,
   inlineAlert,
 }: SourceHoverPanelProps) {
-  const colors = palette(useGround(light));
+  // The panel is one receipt (#22): paper with ink, whatever the look, its
+  // holes on the side facing into the screen, as the stubs beside it.
+  const colors = palette({ light, paper: true });
+  const paper = paperColors(light);
+  const side = perforatedSide(config.edge);
+  const pad = {
+    top: 14 + (side === "top" ? 6 : 0),
+    right: 16 + (side === "right" ? 6 : 0),
+    bottom: 10 + (side === "bottom" ? 6 : 0),
+    left: 16 + (side === "left" ? 6 : 0),
+  };
+  const torn = config.panelLayout.style?.separators !== false;
+  const format = useFormat();
+  const zh = snapshotLanguage(snapshot) === "zh";
   const services = usePanelServices();
   const [draftError, setDraftError] = useState<string | null>(null);
   const panelElement = useRef<HTMLDivElement>(null),
@@ -205,20 +220,24 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
               gap: "var(--hud-section-gap)",
             }}
           >
-            {blockLines.map((line, index) => (
+            <div
+              style={{
+                ...receiptTitle,
+                display: "flex",
+                justifyContent: "space-between",
+                color: colors.secondary,
+              }}
+            >
+              <span>{zh ? "额度" : "QUOTA"}</span>
+              {config.resetCountdown && <span>{zh ? "重置" : "RESET"}</span>}
+            </div>
+            {blockLines.map((line) => (
               <div
                 key={line.map((b) => b.key).join("+")}
                 style={{
                   display: "grid",
                   gridTemplateColumns: line.length === 2 ? "1fr 1fr" : "1fr",
                   gap: density.section,
-                  ...(index > 0 &&
-                  config.panelLayout.style?.separators !== false
-                    ? {
-                        boxShadow: `inset 0 1px 0 ${colors.divider}`,
-                        paddingTop: "var(--hud-divided-gap)",
-                      }
-                    : {}),
                 }}
               >
                 {line.map((block) => (
@@ -246,6 +265,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             Logo={Logo}
             layout={config.panelLayout.tokens}
             active={active}
+            compact
+            onStats={onStats}
           />
         ),
       },
@@ -266,6 +287,54 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     ],
     config.panelSections ?? defaultHUDConfig.panelSections,
   );
+  // What the receipt lists, torn apart where the layout keeps separators.
+  const printed: { key: string; node: ReactNode }[] = [
+    ...(inlineAlert ? [{ key: "inline-alert", node: inlineAlert }] : []),
+    ...(snapshot.indexing?.kind
+      ? [
+          {
+            key: "indexing",
+            node: <SourceIndexing snapshot={snapshot} light={light} />,
+          },
+        ]
+      : []),
+    ...(focusVendor && !vendorNames.length
+      ? [
+          {
+            key: "focus",
+            node: (
+              <strong style={{ fontSize: 13, fontWeight: 600 }}>
+                {focusVendor}
+              </strong>
+            ),
+          },
+        ]
+      : []),
+    ...sections
+      .filter((section) => section.content)
+      .map((section) => ({ key: section.key, node: section.content })),
+  ];
+  const tear = (bleed: boolean) => (
+    <div
+      aria-hidden="true"
+      className="hud-source-tear"
+      style={{
+        flex: "0 0 auto",
+        borderTop: `1.2px dashed ${colors.divider}`,
+        margin: bleed ? `0 ${-pad.right}px 0 ${-pad.left}px` : 0,
+      }}
+    />
+  );
+  const footerButton = {
+    ...receiptTitle,
+    height: 24,
+    minHeight: 24,
+    padding: "0 2px",
+    borderRadius: 2,
+    letterSpacing: "0.12em",
+    color: colors.secondary,
+    background: "transparent",
+  };
   const panel = (
     <div
       ref={panelElement}
@@ -278,14 +347,75 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           "--hud-row-padding": `${density.row}px`,
           "--hud-session-gap": `${density.session}px`,
           "--hud-divided-gap": `${density.divided}px`,
+          position: "relative",
+          isolation: "isolate",
           display: "flex",
           flexDirection: "column",
           gap: density.section,
+          paddingTop: pad.top,
+          paddingBottom: pad.bottom,
           maxHeight,
           color: colors.text,
         } as CSSProperties
       }
     >
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: -1,
+          filter: "drop-shadow(0 1px 1px rgba(0,0,0,.18))",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 3,
+            background: `${PAPER_GRAIN} 0 0 / 160px 160px, ${paper.paper}`,
+            WebkitMask: perforationMask(side, 1.4),
+            mask: perforationMask(side, 1.4),
+          }}
+        />
+      </span>
+      <header
+        className="hud-source-receipt-head"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 12,
+          padding: `0 ${pad.right}px 0 ${pad.left}px`,
+        }}
+      >
+        <b
+          style={{
+            fontSize: 17,
+            fontWeight: 700,
+            lineHeight: 1,
+            letterSpacing: "0.32em",
+            color: colors.text,
+          }}
+        >
+          {zh ? "驿窗" : "POSTPANE"}
+        </b>
+        <span
+          style={{
+            font: `600 12px/1 ${condensed}`,
+            letterSpacing: "0.14em",
+            whiteSpace: "nowrap",
+            color: colors.secondary,
+          }}
+        >
+          {dateTime(
+            Date.parse(snapshot.generatedAt),
+            format.calendar,
+            format.language,
+          )}
+        </span>
+      </header>
+      {tear(false)}
       <div
         data-hud-natural-scroll
         className={
@@ -301,57 +431,24 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           flex: "1 1 auto",
         }}
       >
-        <div
-          className="hud-source-sections"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: density.section,
-          }}
-        >
-          {inlineAlert && (
-            <div
-              data-hud-section="inline-alert"
-              style={
-                config.panelLayout.style?.separators !== false
-                  ? {
-                      boxShadow: `inset 0 -1px 0 ${colors.divider}`,
-                      paddingBottom: "var(--hud-divided-gap)",
-                    }
-                  : undefined
-              }
-            >
-              {inlineAlert}
-            </div>
-          )}
-          {snapshot.indexing?.kind && (
-            <div
-              data-hud-section="indexing"
-              style={
-                config.panelLayout.style?.separators !== false
-                  ? {
-                      boxShadow: `inset 0 -1px 0 ${colors.divider}`,
-                      paddingBottom: "var(--hud-divided-gap)",
-                    }
-                  : undefined
-              }
-            >
-              <SourceIndexing snapshot={snapshot} light={light} />
-            </div>
-          )}
-          {focusVendor && !vendorNames.length && (
-            <strong style={{ fontSize: 13, fontWeight: 600 }}>
-              {focusVendor}
-            </strong>
-          )}
-          {sections.map((section) =>
-            section.content ? (
-              <div key={section.key} data-hud-section={section.key}>
-                {section.content}
-              </div>
-            ) : null,
-          )}
-        </div>
+        <OnPaper>
+          <div
+            className="hud-source-sections"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: density.section,
+              padding: `0 ${pad.right}px 0 ${pad.left}px`,
+            }}
+          >
+            {printed.map((item, index) => (
+              <Fragment key={item.key}>
+                {index > 0 && torn && tear(true)}
+                <div data-hud-section={item.key}>{item.node}</div>
+              </Fragment>
+            ))}
+          </div>
+        </OnPaper>
       </div>
       {services?.draft?.unsaved && (
         <div
@@ -360,6 +457,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             gap: 8,
             alignItems: "center",
             fontSize: 11,
+            padding: `0 ${pad.right}px 0 ${pad.left}px`,
             color: colors.secondary,
           }}
         >
@@ -401,112 +499,78 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           {snapshotLanguage(snapshot) === "zh" ? "完成编辑" : "Finish editing"}
         </Button>
       )}
+      {tear(false)}
       <footer
         data-hud-footer
         className="hud-source-footer"
         style={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
+          gap: 10,
           flex: "0 0 auto",
-          paddingTop: 6,
-          boxShadow: `inset 0 1px 0 ${colors.divider}`,
+          padding: `0 ${pad.right - 2}px 0 ${pad.left - 2}px`,
           color: colors.secondary,
         }}
       >
         <Button
           variant="ghost"
-          size="icon-sm"
-          aria-label={snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
-          title={snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
+          size="xs"
+          aria-label={zh ? "设置" : "Settings"}
+          title={zh ? "设置" : "Settings"}
           disabled={!onConfigure}
           onClick={onConfigure}
-          style={{
-            width: 28,
-            height: 28,
-            minHeight: 28,
-            padding: 0,
-            borderRadius: 0,
-            color: colors.secondary,
-            background: "transparent",
-          }}
+          style={footerButton}
         >
-          <Settings style={{ width: 14, height: 14 }} strokeWidth={1.7} />
+          {zh ? "设置" : "SETTINGS"}
         </Button>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          {update && (
-            // It arrives as the HUD's other changes do: it grows in, or with
-            // reduced motion only fades in.
-            <motion.span
-              key={update.version}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              style={{ display: "inline-flex" }}
-            >
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  snapshotLanguage(snapshot) === "zh"
-                    ? "发现新版本"
-                    : "New version available"
-                }
-                title={
-                  snapshotLanguage(snapshot) === "zh"
-                    ? `更新至 ${update.version}`
-                    : `Update to ${update.version}`
-                }
-                disabled={!onUpdate}
-                onClick={onUpdate}
-                style={{
-                  width: 28,
-                  height: 28,
-                  minHeight: 28,
-                  padding: 0,
-                  borderRadius: 0,
-                  color: colors.accent,
-                  background: "transparent",
-                }}
-              >
-                <CircleArrowDown
-                  style={{ width: 14, height: 14 }}
-                  strokeWidth={1.7}
-                />
-              </Button>
-            </motion.span>
-          )}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-              snapshotLanguage(snapshot) === "zh"
-                ? "用量统计"
-                : "Usage statistics"
-            }
-            title={
-              snapshotLanguage(snapshot) === "zh"
-                ? "用量统计"
-                : "Usage statistics"
-            }
-            disabled={!onStats}
-            onClick={onStats}
-            style={{
-              width: 28,
-              height: 28,
-              minHeight: 28,
-              padding: 0,
-              borderRadius: 0,
-              color: colors.secondary,
-              background: "transparent",
-            }}
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-label={zh ? "用量统计" : "Usage statistics"}
+          title={zh ? "用量统计" : "Usage statistics"}
+          disabled={!onStats}
+          onClick={onStats}
+          style={footerButton}
+        >
+          {zh ? "统计" : "STATISTICS"}
+        </Button>
+        <span style={{ flex: 1 }} />
+        {update && (
+          // It arrives as the HUD's other changes do: it grows in, or with
+          // reduced motion only fades in.
+          <motion.span
+            key={update.version}
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            style={{ display: "inline-flex" }}
           >
-            <ChartNoAxesColumnIncreasing
-              style={{ width: 14, height: 14 }}
-              strokeWidth={1.7}
-            />
-          </Button>
-        </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={zh ? "发现新版本" : "New version available"}
+              title={
+                zh ? `更新至 ${update.version}` : `Update to ${update.version}`
+              }
+              disabled={!onUpdate}
+              onClick={onUpdate}
+              style={{
+                width: 24,
+                height: 24,
+                minHeight: 24,
+                padding: 0,
+                borderRadius: 2,
+                color: colors.accent,
+                background: "transparent",
+              }}
+            >
+              <CircleArrowDown
+                style={{ width: 14, height: 14 }}
+                strokeWidth={1.7}
+              />
+            </Button>
+          </motion.span>
+        )}
       </footer>
     </div>
   );

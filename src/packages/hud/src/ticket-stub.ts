@@ -42,3 +42,30 @@ export function stubMarks(vendor: {
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,
   };
 }
+
+/** A faint paper grain for the stubs and the panel's receipt, tiled. */
+export const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .2 0 0 0 0 .19 0 0 0 0 .17 0 0 0 .14 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>',
+)}")`;
+
+export type PaperSide = "top" | "right" | "bottom" | "left";
+
+/** A stub's perforated side: the one facing into the screen. */
+export const perforatedSide = (
+  edge: "top" | "right" | "bottom" | "left",
+): PaperSide =>
+  edge === "right"
+    ? "left"
+    : edge === "left"
+      ? "right"
+      : edge === "top"
+        ? "bottom"
+        : "top";
+
+/** The CSS mask that punches a row of holes along `side`, one every
+ * 10 × `unit` points: a stub's at its bot's scale, the receipt's at 1.4. */
+export function perforationMask(side: PaperSide, unit: number): string {
+  return side === "top" || side === "bottom"
+    ? `radial-gradient(circle at ${5 * unit}px ${side === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
+    : `radial-gradient(circle at ${side === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
+}
