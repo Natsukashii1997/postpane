@@ -173,7 +173,7 @@ export function petalRatchet(time: number) {
   return 30 * (cycles * ticks + done + part);
 }
 /** What an avatar holds beside it: a bubble of dots, the sent bubble, or a letter. */
-export type AvatarProp = "typing" | "sent" | "letter";
+export type AvatarProp = "typing" | "sent" | "letter" | "hello";
 /** The coloured light behind an avatar: news and work are blue, asking orange, done green, failure red. */
 export type AvatarGlow = "news" | "busy" | "ask" | "done" | "fail";
 /** Direct BotMotion.swift state machine. set/play record events even when a host skips drawing. */
@@ -195,6 +195,10 @@ export class BotMotion {
   propAge = 0;
   glow: AvatarGlow | null = null;
   glowLevel = 0;
+  /** Shows the breathing green dot of an avatar that is idle and online. */
+  online = false;
+  /** How strongly the portrait itself shows; badges stay solid when it fades. */
+  shade = 1;
   /** The step's clock, for an avatar's badges and floating z. */
   clock = 0;
   pulses = false;
@@ -531,15 +535,11 @@ export class BotMotion {
         this.event ||
         this.pending ||
         this.blinking ||
-        (this.hoverAt !== null && now - this.hoverAt < 0.6) ||
+        (this.hoverAt !== null && now - this.hoverAt < 1.8) ||
         Math.abs(this.faded - this.fadeGoal) > 0.01
       )
         return every(BotPace.lively);
-      const steady = every(
-        isCalm(this.look) && !this.state.hovered
-          ? BotPace.calm
-          : BotPace.following,
-      );
+      const steady = every(dozing ? BotPace.calm : BotPace.following);
       return this.blinksOn ? Math.min(steady, at(this.nextBlink)) : steady;
     }
     if (this.petals) {
@@ -803,9 +803,13 @@ export class BotMotion {
       tilt = time > 0.7 ? -3 : 0;
       glow = "fail";
       glowLevel = time < 0.4 ? time / 0.4 : Math.max(0.4, 1 - (time - 0.4));
-    } else if (event?.kind === "limit-hit")
-      lift = 0.025 * easeOut(clamp01(time / 0.9));
-    else if (dozing) {
+    } else if (event?.kind === "limit-hit" || this.state.badge === "limited") {
+      const sag =
+        event?.kind === "limit-hit" ? easeOut(clamp01(time / 0.9)) : 1;
+      tilt = -6 * sag;
+      lift = 0.04 * sag;
+      breathes = false;
+    } else if (dozing) {
       const sway = Math.sin((2 * Math.PI * now) / 4.4);
       tilt = -4 + sway;
       lift = 0.02 + 0.01 * sway;
@@ -832,12 +836,25 @@ export class BotMotion {
       glowLevel = 0.45 + 0.25 * pulse(1.6);
     } else if (this.state.hovered && this.hoverAt !== null) {
       const since = now - this.hoverAt;
-      tilt = -4.5 * easeInOut(clamp01(since / 0.35));
-      grow = 1 + 0.035 * swing(since / 0.5);
-      lift = -0.03 * swing(since / 0.4);
-    } else {
-      const beat = ((now % 9) + 9) % 9;
-      if (beat > 5 && beat < 7.2) tilt = -2.2 * swing((beat - 5) / 2.2);
+      tilt =
+        -8 * easeInOut(clamp01(since / 0.35)) +
+        2 * Math.sin((2 * Math.PI * Math.max(0, since - 0.6)) / 1.6);
+      grow = 1 + 0.1 * swing(since / 0.6) + 0.03 * clamp01(since / 0.6);
+      lift = -0.06 * swing(since / 0.45);
+      prop = since < 1.8 ? "hello" : null;
+      propAge = since;
+    } else if (isCalm(this.look)) {
+      // Idle sways all the time, and every eight seconds looks left then right.
+      const beat = ((now % 8) + 8) % 8,
+        look =
+          beat > 4.6 && beat < 6
+            ? -7 * swing((beat - 4.6) / 1.4)
+            : beat > 6 && beat < 7.4
+              ? 5 * swing((beat - 6) / 1.4)
+              : 0;
+      tilt = 3 * Math.sin((2 * Math.PI * now) / 4.2) + look;
+      lift = -0.02 * Math.abs(Math.sin((2 * Math.PI * now) / 4.2));
+      if (beat > 4.55 && beat < 4.6 + 1 / 24) this.blinks = [now, now + 0.24];
     }
     const turn = (tilt * m * Math.PI) / 180,
       neck = 0.45,
@@ -856,11 +873,17 @@ export class BotMotion {
     this.propAge = propAge;
     this.glow = m > 0.5 ? glow : null;
     this.glowLevel = glow ? glowLevel * m : 0;
+    this.online =
+      m > 0.5 &&
+      isCalm(this.look) &&
+      !dozing &&
+      !event &&
+      this.state.badge === null;
     this.clock = now;
     this.faded += (this.fadeGoal - this.faded) * (1 - Math.exp(-dt * 6));
     if (Math.abs(this.fadeGoal - this.faded) < 0.005)
       this.faded = this.fadeGoal;
-    this.opacity = Math.min(this.opacity, 1 + (this.faded - 1) * m);
+    this.shade = 1 + (this.faded - 1) * m;
   }
   private moving(age: number) {
     const start = BotMoves.move(age).start;
@@ -1094,6 +1117,8 @@ export class BotMotion {
     }
     if (this.avatar && isWorking(this.look) && !this.state.hovered)
       target.open = 0.72;
+    if (this.avatar && this.state.badge === "limited" && !this.event)
+      target.open = 0.45;
     if (this.state.holds) every = null;
     if (this.pending?.kind === "start" && !this.avatar) target.open = 0;
     if (this.event) {

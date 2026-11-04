@@ -93,6 +93,8 @@ export function botRenderLook(motion: BotMotion) {
     motion.glow,
     s(motion.glowLevel, 30),
     motion.avatar ? s(motion.clock, 12) : 0,
+    motion.online,
+    s(motion.shade, 40),
     motion.limbs,
     motion.flap,
     motion.sign,
@@ -729,8 +731,9 @@ const STICKER_INK = "#ffffff",
   AVATAR_GREEN = "#19a974",
   AVATAR_ORANGE = "#ff8a00",
   AVATAR_RED = "#e5484d",
-  AVATAR_PURPLE = "#8e4ec6",
-  AVATAR_INDIGO = "#6e56cf";
+  AVATAR_INDIGO = "#6e56cf",
+  AVATAR_YELLOW = "#ffc53d",
+  AVATAR_SLATE = "#34373c";
 const GLOWS: Record<NonNullable<BotMotion["glow"]>, string> = {
   news: AVATAR_BLUE,
   busy: AVATAR_BLUE,
@@ -757,6 +760,7 @@ function drawAvatar(
     context.arc(0.5, 0.52, 0.72, 0, 2 * Math.PI);
     context.fill();
   }
+  context.globalAlpha = motion.shade;
   context.drawImage(form.artwork, 0, 0, 1, 1);
   const lid = 1 - Math.max(0, Math.min(1, motion.face.open));
   if (lid > 0.04)
@@ -768,6 +772,7 @@ function drawAvatar(
       context.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI);
       context.clip();
       context.globalCompositeOperation = "destination-out";
+      context.globalAlpha = 1;
       context.fillRect(x - rx, top, 2 * rx, edge - top);
       context.restore();
       const half = rx * Math.sqrt(Math.max(0, 1 - ((edge - y) / ry) ** 2));
@@ -784,6 +789,23 @@ function drawAvatar(
       );
       context.stroke();
     }
+  context.globalAlpha = 1;
+  if (motion.online) {
+    const beat = Math.abs(Math.sin((Math.PI * motion.clock) / 1.4));
+    context.save();
+    context.fillStyle = tinted(AVATAR_GREEN, 0.35 * beat);
+    context.beginPath();
+    context.arc(0.86, 0.86, 0.07 + 0.06 * beat, 0, 2 * Math.PI);
+    context.fill();
+    context.fillStyle = AVATAR_GREEN;
+    context.strokeStyle = STICKER_INK;
+    context.lineWidth = 0.03;
+    context.beginPath();
+    context.arc(0.86, 0.86, 0.075, 0, 2 * Math.PI);
+    context.fill();
+    context.stroke();
+    context.restore();
+  }
   if (motion.prop) drawAvatarProp(context, motion.prop, motion.propAge);
   if (motion.sign) drawAvatarBadge(context, motion.sign, motion.clock);
 }
@@ -815,7 +837,7 @@ function drawAvatarBadge(
       sign === "cross"
         ? AVATAR_RED
         : sign === "hourglass"
-          ? AVATAR_PURPLE
+          ? AVATAR_SLATE
           : sign === "ellipsis"
             ? AVATAR_BLUE
             : AVATAR_ORANGE;
@@ -858,15 +880,20 @@ function drawAvatarBadge(
     context.lineTo(-0.08, 0.08);
     context.stroke();
   } else if (sign === "hourglass") {
+    // Out of quota reads as an empty battery: a white shell, one red bar blinking.
+    context.lineWidth = 0.03;
     context.beginPath();
-    context.moveTo(-0.08, -0.11);
-    context.lineTo(0.08, -0.11);
-    context.lineTo(0, 0);
-    context.lineTo(0.08, 0.11);
-    context.lineTo(-0.08, 0.11);
-    context.lineTo(0, 0);
-    context.closePath();
+    context.roundRect(-0.12, -0.07, 0.21, 0.14, 0.03);
+    context.stroke();
+    context.beginPath();
+    context.roundRect(0.1, -0.035, 0.035, 0.07, 0.012);
     context.fill();
+    if (beat < 0.6) {
+      context.fillStyle = AVATAR_RED;
+      context.beginPath();
+      context.roundRect(-0.095, -0.045, 0.045, 0.09, 0.012);
+      context.fill();
+    }
   } else
     for (const x of [-0.08, 0, 0.08]) {
       context.beginPath();
@@ -887,7 +914,24 @@ function drawAvatarProp(
   context.strokeStyle = STICKER_INK;
   context.lineWidth = 0.03;
   context.lineJoin = context.lineCap = "round";
-  if (prop === "letter") {
+  if (prop === "hello") {
+    const pop = age < 0.3 ? 0.6 + 0.6 * swing(age / 0.6) : 1,
+      fade = age > 1.4 ? 1 - (age - 1.4) / 0.4 : 1;
+    context.globalAlpha = clamp(fade);
+    context.translate(0.04, 0.06);
+    context.scale(pop, pop);
+    context.fillStyle = AVATAR_YELLOW;
+    context.beginPath();
+    context.arc(0, 0, 0.2, 0, 2 * Math.PI);
+    context.fill();
+    context.lineWidth = 0.035;
+    context.stroke();
+    context.fillStyle = "#3a2a00";
+    context.font = `900 0.19px -apple-system, "Helvetica Neue", sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("Hi", 0, 0.012);
+  } else if (prop === "letter") {
     const pop = 1 + 0.25 * swing(age / 0.5),
       w = 0.4 * pop,
       h = 0.28 * pop,
@@ -911,19 +955,19 @@ function drawAvatarProp(
   } else {
     const w = 0.5,
       h = 0.3,
-      x = -0.24,
-      y = 0.52;
+      x = -0.21,
+      y = -0.1;
     if (prop === "sent") {
       const q = clamp(age / 1.6),
         rise = q < 0.5 ? 4 * q ** 3 : 1 - (-2 * q + 2) ** 3 / 2;
       context.globalAlpha = 1 - q;
-      context.translate(0, -0.35 * rise);
+      context.translate(0, -0.18 * rise);
     }
     context.beginPath();
     context.roundRect(x, y, w, h, h * 0.45);
-    context.moveTo(x + w * 0.7, y + h);
-    context.lineTo(x + w * 0.82, y + h * 1.35);
-    context.lineTo(x + w * 0.85, y + h);
+    context.moveTo(x + w * 0.62, y + h);
+    context.lineTo(x + w * 0.8, y + h * 1.4);
+    context.lineTo(x + w * 0.8, y + h);
     context.fill();
     context.stroke();
     context.fillStyle = STICKER_INK;

@@ -65,16 +65,44 @@ test("a failure keeps the avatar's eyes rather than crossing them", () => {
   assert.equal(motion.sign, "cross");
 });
 
-test("a limit fades the avatar", () => {
+test("a limit fades the avatar, hangs its head and half-closes its eyes", () => {
   const limited = run({ look: "idle", badge: "limited" }, 2);
-  assert.ok(limited.opacity < 0.6, `opacity ${limited.opacity}`);
-  assert.ok(run(look("idle"), 2).opacity > 0.99);
+  assert.ok(limited.shade < 0.6, `shade ${limited.shade}`);
+  assert.ok(limited.pose.rotation < -4, `rotation ${limited.pose.rotation}`);
+  assert.ok(limited.face.open < 0.6, `open ${limited.face.open}`);
+  assert.equal(limited.sign, "hourglass");
+  assert.equal(limited.online, false);
+  assert.ok(run(look("idle"), 2).shade > 0.99);
+});
+
+test("an idle avatar keeps swaying and shows it is online", () => {
+  const motion = new BotMotion(1);
+  motion.staysBot = true;
+  motion.fit(hermes);
+  motion.set(botState(look("idle")), 10);
+  const tilts: number[] = [];
+  for (let t = 10; t <= 14; t += 1 / 24) {
+    motion.step(t);
+    tilts.push(motion.pose.rotation);
+  }
+  assert.ok(Math.max(...tilts) - Math.min(...tilts) > 4);
+  assert.equal(motion.online, true);
+  assert.equal(run(look("asleep"), 2).online, false);
+});
+
+test("hovering says hi for a moment", () => {
+  const motion = run(look("idle"), 1);
+  motion.set(botState({ look: "idle", hovered: true }), 11);
+  for (let t = 11; t <= 11.5; t += 1 / 24) motion.step(t);
+  assert.equal(motion.prop, "hello");
+  for (let t = 11.5; t <= 13; t += 1 / 24) motion.step(t);
+  assert.equal(motion.prop, null);
 });
 
 test("an avatar that rests as its artwork stays still", () => {
   const resting = run(look("idle"), 3, false);
   assert.equal(resting.morph, 0);
-  assert.equal(resting.pose.rotation, 0);
-  assert.equal(resting.pose.x, 0);
+  assert.equal(Math.abs(resting.pose.rotation), 0);
+  assert.equal(Math.abs(resting.pose.x), 0);
   assert.equal(resting.prop, null);
 });
