@@ -22,6 +22,7 @@ import {
   type HUDConfig,
 } from "@agent-hud/hud/model";
 import { islandPath, stripMetrics } from "@agent-hud/hud/geometry";
+import { PAPER_FIGURES, paperFace, paperOf } from "@agent-hud/hud/paper";
 import { isRingStyle } from "@agent-hud/hud/usage-meter/arcs";
 import {
   MarkBars,
@@ -81,6 +82,7 @@ export function SmallHUDPreview({
       <div
         ref={stage}
         aria-hidden="true"
+        className="settings-hud-preview"
         style={{
           position: "relative",
           height: 112,
@@ -276,6 +278,9 @@ export function PartSample({
       !matchMedia("(prefers-color-scheme: dark)").matches);
   const { quotaDisplay } = useFormat();
   const amounts = [4, 8, 5, 11, 16, 9, 6, 13, 20, 14, 10, 7];
+  // Printed on the panel's own paper, in the HUD's appearance.
+  const paper = paperOf(light);
+  const warning = light ? "#b7791f" : "#e0a948";
   return (
     <div
       aria-hidden="true"
@@ -286,9 +291,9 @@ export function PartSample({
         flexDirection: "column",
         justifyContent: "center",
         gap: kind === "sessions" ? 8 : 10,
-        borderRadius: 9,
-        background: light ? "#f5f5f7" : "#000",
-        color: light ? "#1d1d1f" : "#f5f5f7",
+        ...paperFace(paper),
+        border: `1px solid ${paper.line}`,
+        color: paper.ink,
         opacity: enabled ? 1 : 0.25,
         pointerEvents: "none",
         fontSize: 11,
@@ -317,11 +322,11 @@ export function PartSample({
                   position: "absolute",
                   width: 6,
                   height: 6,
-                  background: "#34c759",
+                  background: paper.ink,
                   borderRadius: "50%",
                   bottom: -2,
                   right: -2,
-                  boxShadow: `0 0 0 1.5px ${light ? "#f5f5f7" : "#000"}`,
+                  boxShadow: `0 0 0 1.5px ${paper.paper}`,
                 }}
               />
             </span>
@@ -332,16 +337,15 @@ export function PartSample({
                 display: "flex",
                 alignItems: "center",
                 gap: 3,
-                color: "#e6b94d",
-                padding: "3px 6px",
-                borderRadius: 20,
-                background: "#e6b94d24",
+                color: warning,
+                padding: "2px 5px",
+                border: `1px solid ${warning}`,
                 fontSize: 9,
               }}
             >
               <MessageCircleQuestion size={9} />1
             </span>
-            <span>60k tok</span>
+            <span style={{ fontFamily: PAPER_FIGURES }}>60k tok</span>
           </div>
         </>
       ) : kind === "quota" ? (
@@ -365,13 +369,7 @@ export function PartSample({
                   placeItems: "center",
                   width: 20,
                   height: 18,
-                  borderRadius: 5,
-                  background:
-                    index === 0
-                      ? light
-                        ? "#0000000f"
-                        : "#ffffff12"
-                      : "transparent",
+                  background: index === 0 ? paper.fill : "transparent",
                   opacity: index === 0 ? 1 : 0.5,
                 }}
               >
@@ -392,29 +390,35 @@ export function PartSample({
                 width: 7,
                 height: 7,
                 borderRadius: "50%",
-                background: "#34c759",
+                background: paper.text(0.35),
+                boxShadow: "inset 0 1px 1.2px rgba(0,0,0,.5)",
               }}
             />
             <strong style={{ fontWeight: 600 }}>{t("Session", "会话")}</strong>
             <span
               style={{
                 flex: 1,
-                height: 4,
-                background: light ? "#0001" : "#fff1",
-                borderRadius: 5,
+                height: 7,
+                border: `1px solid ${paper.ink}`,
+                boxSizing: "border-box",
               }}
             >
               <i
                 style={{
                   display: "block",
                   width: `${quotaPercent(28, quotaDisplay)}%`,
-                  height: 4,
-                  borderRadius: 5,
-                  background: "#34c759",
+                  height: "100%",
+                  background: `repeating-linear-gradient(-45deg, ${paper.ink} 0 1.5px, transparent 1.5px 3.5px)`,
                 }}
               />
             </span>
-            <strong style={{ color: "#34c759", fontWeight: 600 }}>
+            <strong
+              style={{
+                fontFamily: PAPER_FIGURES,
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
               {quotaPercentLabel(28, quotaDisplay)}
             </strong>
             {config.resetCountdown && (
@@ -458,11 +462,11 @@ export function PartSample({
               >
                 <i
                   style={{
-                    background: "#3aa0ef",
+                    background: paper.text(0.82),
                     height: `${(amounts[(i + 4) % 12] / (amounts[i % 12] + amounts[(i + 4) % 12])) * 100}%`,
                   }}
                 />
-                <i style={{ background: "#20b9a8", flex: 1 }} />
+                <i style={{ background: paper.text(0.32), flex: 1 }} />
               </div>
             ))}
           </div>
