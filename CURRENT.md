@@ -4,7 +4,7 @@
 
 ## 阶段 2-4（进行中）：打包安装驿窗与本机切换（2026-11-04，Claude，常浩同意由 Claude 用屏幕操控代点设置；无需发布）
 
-- 时间：开工 `2026-11-04 16:51`（打包开始前用 `date` 记录的最近时刻；本节写于 `2026-11-04 17:02`）。来由：阶段 2 最后一批。
+- 时间：开工 `2026-11-04 16:48`（开工时没用 date 记录，取打包日志文件的创建时间；本节写于 `2026-11-04 17:02`）。来由：阶段 2 最后一批。
 - 改了哪些文件：仓库只改本文件。本机：安装 `/Applications/PostPane.app`；`~/.claude/settings.json`、`~/.codex/hooks.json` 的钩子由驿窗重写；`~/.claude/plugins/known_marketplaces.json` 插件来源由驿窗改到 `app.postpane.mac`。
 - 测试：未跑新测试（本批不改代码）。核对命令 `grep -c` 原样结果：Claude 钩子 `old=0 new=5`，Codex 钩子 `old=0 new=3`，设置 `clientHooks` 为 `True`。
 - 验证：
