@@ -4,7 +4,7 @@
 
 ## 悬停小卡换成「小收据」外观（2026-11-04，Claude，常浩问截图里的黑框是什么并要求换样式，选甲「小收据」，看过实物后说「没问题，合并」；PR #33 测试全过已 squash 合并 `7c9482e`、已打包安装）
 
-- 时间：开工 `2026-11-04 22:33`（估计，按会话进度；本节写于 `2026-11-04 22:49`）。来由：额度面板换纸后，鼠标停在撕角票上弹出的小卡（peek）仍是黑底；issue #32，预览 https://claude.ai/artifact/VMX6bcvKEj1wdijMu74Bse 。
+- 时间：开工 `2026-11-04 22:33`（估计，按会话进度；本节写于 `2026-11-04 22:47`）。来由：额度面板换纸后，鼠标停在撕角票上弹出的小卡（peek）仍是黑底；issue #32，预览 https://claude.ai/artifact/VMX6bcvKEj1wdijMu74Bse 。
 - 改了哪些文件（PR #33）：`src/packages/hud/src/scene/AgentPeek.tsx`（纸上的小卡：名字下撕线、点线连到窄体数字）、`scene/useHUDLayout.ts`（动态形态的小卡也取纸面；高度为撕线多留 6；没有读数时为「--」一行留高度）、`scene/HUDExpandedSurface.tsx`（小卡读到纸面）、`paper.ts`（新 `paperLevel`：墨、琥珀、红、灰）、`test/paper-level.test.ts`（新）。
 - 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 119` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`），在最终提交上跑。
 - 验证：安装后鼠标悬停实机截图，深色 Claude、Hermes，用 HUD 草稿临时切浅色截 Claude、DeepSeek，截完丢弃草稿，回读设置为深色。第一次装后发现 Hermes（无读数）小卡「额度 --」一行被裁，修正后重装复看正常。
