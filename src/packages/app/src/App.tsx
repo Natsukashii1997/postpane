@@ -805,61 +805,75 @@ function AppContent({
     <PanelServicesProvider value={panelServices}>
       <SettingsNavigation.Provider value={setPage}>
         <TooltipProvider delayDuration={400}>
-          <div className="apple-app" data-theme={theme}>
+          <div
+            className="apple-app"
+            data-theme={theme}
+            lang={chinese ? "zh" : "en"}
+          >
             <aside className="apple-sidebar">
               <div className="sidebar-drag-space" data-tauri-drag-region />
-              <nav aria-label={chinese ? "设置" : "Settings"}>
-                {pageGroups.map((group) => {
-                  const items = allPages.filter((item) => item.group === group);
-                  if (!items.length) return null;
-                  return (
-                    <div className="sidebar-group" key={group}>
-                      {items.map((item) => {
-                        const { id, label, icon: Icon, color } = item;
-                        return (
-                          <Button
-                            key={id}
-                            variant="ghost"
-                            className={`apple-navigation ${page === id ? "is-selected" : ""}`}
-                            onClick={() => setPage(id)}
-                            aria-current={page === id ? "page" : undefined}
-                          >
-                            <span
-                              className="sidebar-symbol"
-                              style={{ background: color }}
-                            >
-                              {item.customIcon ?? (
-                                <Icon size={13} strokeWidth={1.9} />
-                              )}
-                            </span>
-                            <span>
-                              {chinese
-                                ? (chinesePages[id]?.[0] ?? label)
-                                : label}
-                            </span>
-                          </Button>
-                        );
-                      })}
+              <div className="sidebar-slot" aria-hidden="true" />
+              <div className="sidebar-roll-shadow">
+                <div className="sidebar-roll">
+                  <div className="sidebar-roll-title" aria-hidden="true">
+                    驿 窗<small>SETTINGS</small>
+                  </div>
+                  <nav aria-label={chinese ? "设置" : "Settings"}>
+                    {pageGroups.map((group) => {
+                      const items = allPages.filter(
+                        (item) => item.group === group,
+                      );
+                      if (!items.length) return null;
+                      return (
+                        <div className="sidebar-group" key={group}>
+                          {items.map((item) => {
+                            const { id, label, icon: Icon, color } = item;
+                            return (
+                              <Button
+                                key={id}
+                                variant="ghost"
+                                className={`apple-navigation ${page === id ? "is-selected" : ""}`}
+                                onClick={() => setPage(id)}
+                                aria-current={page === id ? "page" : undefined}
+                              >
+                                <span
+                                  className="sidebar-symbol"
+                                  style={{ background: color }}
+                                >
+                                  {item.customIcon ?? (
+                                    <Icon size={13} strokeWidth={1.9} />
+                                  )}
+                                </span>
+                                <span>
+                                  {chinese
+                                    ? (chinesePages[id]?.[0] ?? label)
+                                    : label}
+                                </span>
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </nav>
+                  <div className="sidebar-product">
+                    <img src={appIcon} alt="PostPane" width={32} height={32} />
+                    <div>
+                      <strong>{productName}</strong>
+                      <span>
+                        {runningVersion} ·{" "}
+                        {demo
+                          ? chinese
+                            ? "演示"
+                            : "Demo"
+                          : chinese
+                            ? "实时"
+                            : "Live"}
+                      </span>
                     </div>
-                  );
-                })}
-              </nav>
-              <div className="sidebar-product">
-                <img src={appIcon} alt="PostPane" width={32} height={32} />
-                <div>
-                  <strong>{productName}</strong>
-                  <span>
-                    {runningVersion} ·{" "}
-                    {demo
-                      ? chinese
-                        ? "演示"
-                        : "Demo"
-                      : chinese
-                        ? "实时"
-                        : "Live"}
-                  </span>
+                    {sourceMenu}
+                  </div>
                 </div>
-                {sourceMenu}
               </div>
             </aside>
             <main
@@ -880,6 +894,19 @@ function AppContent({
                         : currentPage?.description}
                     </p>
                   ) : null}
+                  <div className="receipt-meta" aria-hidden="true">
+                    <span>
+                      {chinese ? "单号" : "No."}{" "}
+                      {String(
+                        allPages.findIndex((item) => item.id === page) + 1,
+                      ).padStart(4, "0")}
+                    </span>
+                    <span>
+                      {chinese
+                        ? `第 ${allPages.findIndex((item) => item.id === page) + 1} / ${allPages.length} 页`
+                        : `Page ${allPages.findIndex((item) => item.id === page) + 1} of ${allPages.length}`}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="settings-scroll">

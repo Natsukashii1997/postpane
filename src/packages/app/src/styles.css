@@ -2,6 +2,7 @@
    app's windows use. A product built on the app imports this one. */
 @import "@agent-hud/ui/global.css";
 @import "./settings/settings.css";
+@import "./settings/receipt.css";
 @source "../../hud/src";
 @source ".";
 
