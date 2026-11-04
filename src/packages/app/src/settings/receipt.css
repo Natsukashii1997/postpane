@@ -1,0 +1,586 @@
+/* The settings window printed as a thermal receipt (docs/ROADMAP.md stage 4,
+   issue #36). A desk under everything; the page list comes out of a printer
+   slot as a short strip; each page is one long receipt with a torn top and
+   bottom. Grey thermal ink, dashed rules, a ruler for sliders, two boxes for
+   on and off. Only `.apple-app` (this window) wears it: the HUD and its panel
+   keep their own look. */
+
+.apple-app {
+  --rc-desk: #c9c4b9;
+  --rc-paper: #f6f4ef;
+  --rc-ink: 52, 50, 58;
+  --rc-red: #b8352a;
+  --rc-amber: #a86a12;
+  --rc-green: #3a8a52;
+  --rc-sheen: rgba(255, 255, 255, 0.22);
+  --rc-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --rc-serif: "Songti SC", "STSong", serif;
+  --rc-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --rc-num:
+    "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif;
+  --rc-tooth: 9px;
+
+  /* The shared theme, re-inked for paper. */
+  --foreground: rgb(var(--rc-ink));
+  --card-foreground: rgb(var(--rc-ink));
+  --muted-foreground: rgba(var(--rc-ink), 0.6);
+  --dim: rgba(var(--rc-ink), 0.6);
+  --primary: rgb(var(--rc-ink));
+  --primary-foreground: var(--rc-paper);
+  --ring: rgb(var(--rc-ink));
+  --border: rgba(var(--rc-ink), 0.22);
+  --input: rgba(var(--rc-ink), 0.55);
+  --muted: rgba(var(--rc-ink), 0.08);
+  --secondary: rgba(var(--rc-ink), 0.06);
+  --accent: rgba(var(--rc-ink), 0.08);
+  --settings-card: transparent;
+  --settings-card-border: transparent;
+}
+.apple-app[data-theme="dark"] {
+  --rc-desk: #11100e;
+  --rc-paper: #2b2925;
+  --rc-ink: 236, 231, 220;
+  --rc-red: #e0776a;
+  --rc-amber: #e0a84a;
+  --rc-green: #7cc492;
+  --rc-sheen: rgba(255, 255, 255, 0);
+  --rc-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Menus and toasts open outside the window's element. */
+:root:has(.apple-app) {
+  --popover: #f6f4ef;
+  --popover-foreground: rgb(52, 50, 58);
+  --accent: rgba(52, 50, 58, 0.1);
+  --accent-foreground: rgb(52, 50, 58);
+}
+:root:has(.apple-app[data-theme="dark"]) {
+  --popover: #2b2925;
+  --popover-foreground: rgb(236, 231, 220);
+  --accent: rgba(236, 231, 220, 0.12);
+  --accent-foreground: rgb(236, 231, 220);
+}
+:root:has(.apple-app) [data-slot="select-content"],
+:root:has(.apple-app) [data-slot="dropdown-menu-content"] {
+  border-radius: 0;
+  border: 1.2px solid var(--popover-foreground);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+:root:has(.apple-app) [data-slot="select-item"],
+:root:has(.apple-app) [data-slot="dropdown-menu-item"] {
+  border-radius: 0;
+}
+
+/* ---- The desk and the paper ---------------------------------------- */
+
+.apple-app {
+  background: var(--rc-grain), var(--rc-desk);
+}
+.apple-app .apple-sidebar {
+  background: transparent;
+  border-right: 0;
+  padding: 0 22px 18px;
+}
+.rc-paper,
+.apple-app .sidebar-roll,
+.apple-app .settings-header .settings-column,
+.apple-app .settings-pane-content {
+  color: rgb(var(--rc-ink));
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 30%,
+      var(--rc-sheen) 46%,
+      transparent 62%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(var(--rc-ink), 0.014) 0 1px,
+      transparent 1px 3px
+    ),
+    var(--rc-grain), var(--rc-paper);
+}
+/* Torn edges: a row of teeth cut into the paper. */
+.rc-torn-bottom,
+.apple-app .sidebar-roll,
+.apple-app .settings-pane-content {
+  -webkit-mask:
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--rc-tooth) / 2)
+      no-repeat;
+  mask:
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--rc-tooth) / 2)
+      no-repeat;
+}
+.rc-torn-top,
+.apple-app .settings-header .settings-column {
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+      top / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--rc-tooth) / 2)
+      no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+      top / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--rc-tooth) / 2)
+      no-repeat;
+}
+.rc-lift,
+.apple-app .sidebar-roll-shadow,
+.apple-app .settings-scroll {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2))
+    drop-shadow(0 8px 12px rgba(0, 0, 0, 0.14));
+}
+.apple-app[data-theme="dark"] .sidebar-roll-shadow,
+.apple-app[data-theme="dark"] .settings-scroll {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
+}
+.apple-app .settings-header {
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.18));
+}
+
+/* ---- The page list: a strip out of the printer slot ----------------- */
+
+.apple-app .sidebar-slot {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 40px;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(#0d0d0f, #2a2a2e);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.6),
+    0 1px 0 rgba(255, 255, 255, 0.35);
+  z-index: 2;
+}
+.apple-app[data-theme="dark"] .sidebar-slot {
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.apple-app .sidebar-roll-shadow {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.apple-app .sidebar-roll {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px 24px;
+  margin-top: 4px;
+}
+.apple-app .sidebar-roll-title {
+  text-align: center;
+  font: 900 15px/1.2 var(--rc-serif);
+  letter-spacing: 6px;
+  margin-right: -6px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+.apple-app .sidebar-roll-title small {
+  display: block;
+  font: 500 9.5px/1.6 var(--rc-mono);
+  letter-spacing: 3px;
+  opacity: 0.7;
+}
+.apple-app .apple-sidebar nav {
+  gap: 0;
+  padding: 6px 0;
+  counter-reset: rc-page;
+}
+.apple-app .sidebar-group {
+  gap: 0;
+  padding: 4px 0;
+}
+.apple-app .sidebar-group + .sidebar-group {
+  border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+.apple-app .apple-navigation[data-slot="button"] {
+  counter-increment: rc-page;
+  height: 32px;
+  min-height: 32px;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 0;
+  font-size: 13.5px;
+  color: rgb(var(--rc-ink));
+  background: transparent;
+}
+.apple-app .apple-navigation[data-slot="button"]::before {
+  content: counter(rc-page, decimal-leading-zero);
+  font: 500 11px/1 var(--rc-mono);
+  width: 16px;
+  opacity: 0.55;
+}
+.apple-app .apple-navigation .sidebar-symbol {
+  display: none;
+}
+.apple-app .apple-navigation:hover {
+  background: rgba(var(--rc-ink), 0.07);
+}
+.apple-app .apple-navigation.is-selected,
+.apple-app[data-theme="light"] .apple-navigation.is-selected {
+  background: rgb(var(--rc-ink));
+  color: var(--rc-paper);
+}
+.apple-app .apple-navigation.is-selected::before {
+  opacity: 0.8;
+}
+.apple-app .apple-navigation.is-selected::after {
+  content: "◀";
+  margin-left: auto;
+  font-size: 9px;
+}
+.apple-app .sidebar-product {
+  margin-top: 0;
+  padding: 10px 4px 0;
+  border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
+  font-family: var(--rc-mono);
+}
+.apple-app .sidebar-product > img {
+  display: none;
+}
+.apple-app .sidebar-product strong {
+  font: 500 11px/1.5 var(--rc-mono);
+}
+.apple-app .sidebar-product span {
+  font: 400 10.5px/1.5 var(--rc-mono);
+  color: rgba(var(--rc-ink), 0.7);
+}
+.apple-app .sidebar-product span::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--rc-green);
+  vertical-align: 1px;
+}
+
+/* ---- The page: one receipt, its header printed at the top ----------- */
+
+.apple-app .apple-content {
+  background: transparent;
+}
+.apple-app .settings-header {
+  padding: 26px 24px 0;
+}
+.apple-app .settings-header .settings-column {
+  padding: 24px 30px 14px;
+  text-align: center;
+  box-sizing: border-box;
+}
+.apple-app .settings-header .settings-column::before {
+  content: "驿 窗 · POSTPANE";
+  display: block;
+  font: 500 10px/1 var(--rc-mono);
+  letter-spacing: 4px;
+  opacity: 0.6;
+  margin-bottom: 10px;
+}
+.apple-app .settings-header h1 {
+  font: 900 26px/1.15 var(--rc-serif);
+  letter-spacing: 8px;
+  margin-right: -8px;
+}
+.apple-app .settings-header p {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--rc-ink));
+  letter-spacing: 1px;
+}
+.apple-app .receipt-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
+  font: 400 11px/1.4 var(--rc-mono);
+  opacity: 0.8;
+}
+.apple-app .settings-scroll {
+  padding: 0 24px 40px;
+}
+.apple-app .settings-pane-content {
+  padding: 10px 30px calc(30px + var(--rc-tooth));
+  box-sizing: border-box;
+}
+
+/* ---- Sections and rows ---------------------------------------------- */
+
+.apple-app .settings-page {
+  gap: 10px;
+}
+.apple-app .settings-section {
+  gap: 4px;
+}
+.apple-app .settings-section-header {
+  padding-inline: 0;
+  display: block;
+  margin-top: 8px;
+}
+.apple-app .settings-section-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 700 11.5px/18px var(--rc-mono);
+  letter-spacing: 4px;
+}
+.apple-app .settings-section-header h2::before,
+.apple-app .settings-section-header h2::after {
+  content: "";
+  flex: 1;
+  border-top: 1.5px solid rgba(var(--rc-ink), 0.8);
+}
+.apple-app .settings-section-header p {
+  text-align: center;
+}
+.apple-app .settings-section-action {
+  justify-content: center;
+  margin-top: 4px;
+}
+.apple-app .settings-card {
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.apple-app .settings-card > * + *::before,
+.apple-app .settings-collapsible-body > * + *::before,
+.apple-app .settings-collapsible.is-open .settings-collapsible-body::before {
+  left: 0;
+  right: 0;
+  height: 0;
+  background: none;
+  border-top: 1.5px dashed rgba(var(--rc-ink), 0.28);
+}
+.apple-app .settings-row {
+  padding: 9px 0;
+}
+.apple-app .settings-row-title {
+  font-size: 13.5px;
+}
+.apple-app .settings-row-subtitle,
+.apple-app .settings-row-detail {
+  font-size: 11px;
+}
+.apple-app .settings-collapsible-header {
+  padding-inline: 0;
+  border-radius: 0;
+}
+
+/* ---- Controls ------------------------------------------------------- */
+
+/* On and off: two boxes, the chosen one printed solid. */
+.apple-app [data-slot="switch"] {
+  position: relative;
+  isolation: isolate;
+  width: 54px;
+  height: 22px;
+  border-radius: 0;
+  border: 1.3px solid rgb(var(--rc-ink));
+  background: var(--rc-paper) !important;
+  box-shadow: none;
+  font: 600 11px/1 var(--font-sans);
+}
+.apple-app [data-slot="switch"][data-size="sm"] {
+  width: 44px;
+  height: 18px;
+  font-size: 10px;
+}
+.apple-app [data-slot="switch-thumb"] {
+  width: 50% !important;
+  height: 100% !important;
+  border-radius: 0;
+  background: rgb(var(--rc-ink)) !important;
+  translate: none !important;
+  transform: translateX(0) !important;
+  transition: transform 0.12s ease-out;
+}
+.apple-app
+  [data-slot="switch"][data-state="checked"]
+  [data-slot="switch-thumb"] {
+  transform: translateX(100%) !important;
+}
+.apple-app [data-slot="switch"]::before,
+.apple-app [data-slot="switch"]::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+  pointer-events: none;
+  color: rgb(var(--rc-ink));
+}
+.apple-app [data-slot="switch"]::before {
+  content: "Off";
+  left: 0;
+}
+.apple-app [data-slot="switch"]::after {
+  content: "On";
+  right: 0;
+}
+.apple-app:lang(zh) [data-slot="switch"]::before {
+  content: "关";
+}
+.apple-app:lang(zh) [data-slot="switch"]::after {
+  content: "开";
+}
+.apple-app [data-slot="switch"][data-state="unchecked"]::before,
+.apple-app [data-slot="switch"][data-state="checked"]::after {
+  color: var(--rc-paper);
+}
+.apple-app [data-slot="switch"]:focus-visible {
+  outline: 1.5px dashed rgb(var(--rc-ink));
+  outline-offset: 2px;
+}
+
+/* A slider is a ruler with a printed bar and a pointer. */
+.apple-app [data-slot="slider"] {
+  height: 22px;
+}
+.apple-app [data-slot="slider-track"] {
+  height: 16px !important;
+  border-radius: 0;
+  overflow: visible;
+  background:
+    linear-gradient(rgb(var(--rc-ink)), rgb(var(--rc-ink))) left bottom / 100%
+      1.5px no-repeat,
+    repeating-linear-gradient(
+        90deg,
+        rgba(var(--rc-ink), 0.9) 0 1px,
+        transparent 1px 25%
+      )
+      left bottom / calc(100% + 1px) 8px no-repeat,
+    repeating-linear-gradient(
+        90deg,
+        rgba(var(--rc-ink), 0.5) 0 1px,
+        transparent 1px 5%
+      )
+      left bottom / calc(100% + 1px) 4px no-repeat;
+}
+.apple-app [data-slot="slider-range"] {
+  top: 1px;
+  height: 5px !important;
+  background: rgb(var(--rc-ink));
+}
+.apple-app [data-slot="slider-thumb"] {
+  width: 12px;
+  height: 9px;
+  border: 0;
+  border-radius: 0;
+  background: rgb(var(--rc-ink));
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  box-shadow: none;
+  transform: translateY(-9px);
+}
+.apple-app [data-slot="slider-thumb"]:hover,
+.apple-app [data-slot="slider-thumb"]:focus-visible {
+  box-shadow: none;
+  background: var(--rc-red);
+}
+.apple-app .settings-slider-value {
+  font: 600 17px/1 var(--rc-num);
+  letter-spacing: 0.3px;
+  color: rgb(var(--rc-ink));
+}
+
+/* Segments: printed choices, the picked one solid. */
+.apple-app .settings-segments [data-slot="tabs-list"] {
+  gap: 2px;
+  padding: 0;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+.apple-app .settings-segments [data-slot="tabs-trigger"] {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: rgb(var(--rc-ink)) !important;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+.apple-app .settings-segments [data-slot="tabs-trigger"]::before {
+  content: "□";
+  font-family: var(--rc-mono);
+  margin-right: 4px;
+}
+.apple-app .settings-segments [data-slot="tabs-trigger"][data-state="active"] {
+  background: rgb(var(--rc-ink)) !important;
+  color: var(--rc-paper) !important;
+}
+.apple-app
+  .settings-segments
+  [data-slot="tabs-trigger"][data-state="active"]::before {
+  content: "■";
+}
+
+/* Buttons and fields: square, inked. */
+.apple-app .apple-content [data-slot="button"],
+.apple-app .apple-content [data-slot="select-trigger"],
+.apple-app .apple-content [data-slot="input"],
+.apple-app .settings-field textarea {
+  border-radius: 0;
+  box-shadow: none;
+}
+.apple-app .apple-content [data-slot="button"][data-variant="outline"],
+.apple-app .apple-content [data-slot="select-trigger"],
+.apple-app .apple-content [data-slot="input"],
+.apple-app .settings-field textarea {
+  border: 1.2px solid rgb(var(--rc-ink));
+  background: var(--rc-paper);
+  color: rgb(var(--rc-ink));
+}
+.apple-app .apple-content [data-slot="button"][data-variant="default"] {
+  background: rgb(var(--rc-ink));
+  color: var(--rc-paper);
+}
+.apple-app .apple-content [data-slot="button"][data-variant="destructive"] {
+  background: var(--rc-red);
+  color: var(--rc-paper);
+}
+.apple-app .apple-content [data-slot="button"][data-variant="outline"]:hover {
+  background: rgba(var(--rc-ink), 0.08);
+}
+
+/* Small marks: a tag is a solid stamp, a pill an outlined one. */
+.apple-app .settings-tag {
+  border-radius: 0;
+  background: rgb(var(--rc-ink));
+  color: var(--rc-paper);
+}
+.apple-app .settings-pill {
+  border-radius: 0;
+  border: 1.2px solid currentColor;
+  background: transparent;
+}
+.apple-app .settings-pill.is-green {
+  color: var(--rc-green);
+}
+.apple-app .settings-pill.is-blue {
+  color: rgb(var(--rc-ink));
+}
+.apple-app .settings-pill.is-orange {
+  color: var(--rc-amber);
+}
+.apple-app .settings-pill.is-red {
+  color: var(--rc-red);
+}
+.apple-app .settings-notice {
+  border-radius: 0;
+  border: 1.2px dashed currentColor;
+  background: transparent;
+}
