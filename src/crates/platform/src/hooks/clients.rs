@@ -1,0 +1,139 @@
+//! Explicit installation coordinator. Status is refreshed only at delegation or
+//! a user setting action, never by the five-second snapshot projection.
+use super::{install, observers, InstallContext};
+use agent_hud_core::l10n;
+use serde_json::{json, Value};
+#[derive(Default)]
+pub(super) struct Clients {
+    context: Option<InstallContext>,
+    rows: Vec<Value>,
+    notice: Option<String>,
+}
+/// The hooks a client is installed with, from its descriptor.
+fn flags(source: &str) -> Vec<&'static str> {
+    agent_hud_agents::hooks::hooks_by_id(source)
+        .map(|hooks| hooks.flags())
+        .unwrap_or_default()
+}
+/// Whether the client's hooks have a way to launch on `os`. Where they have
+/// none (Antigravity's on Windows) its settings are left alone, and that is
+/// not a failure of the switch: the other clients' hooks still go in.
+fn launches(source: &str, os: agent_hud_agents::Os) -> bool {
+    agent_hud_agents::hooks::hooks_by_id(source)
+        .is_some_and(|hooks| hooks.launch.on(os).value().is_some())
+}
+/// Whether the client reports its sessions through an observer plugin.
+fn observed(source: &str) -> bool {
+    agent_hud_agents::by_id(source).is_some_and(|agent| agent.observer.is_some())
+}
+impl Clients {
+    pub(super) fn context(&self) -> Option<&InstallContext> {
+        self.context.as_ref()
+    }
+    pub fn delegate(&mut self, context: InstallContext) -> Result<(), String> {
+        install::canonical(&context)?;
+        self.context = Some(context);
+        self.refresh(None);
+        Ok(())
+    }
+    /// Puts in, or takes out, every found client's hooks and observer. A client that fails is left out and named in
+    /// the notice; the others still go in, so one broken client folder never turns the switch off (Open #16). The
+    /// error is only what stops every client.
+    pub fn install(&mut self, enabled: bool) -> Result<(), String> {
+        let context=self.context.as_ref().ok_or_else(|| l10n::text("这个版本没有指定固定的回调程序，客户端配置未作改动", "No fixed hook-owner executable has been delegated; no client configuration was changed"))?;
+        if enabled {
+            install::canonical(context)?;
+        }
+        let sources = crate::discovery::discover_at(&context.home, &context.environment)
+            .into_iter()
+            .filter(|p| p.installed || p.configured || p.usage)
+            .map(|p| p.id)
+            .collect::<Vec<_>>();
+        let mut errors = Vec::new();
+        for source in sources {
+            if observed(&source) {
+                if let Err(error) = observers::observer_plan(context, &source, enabled)
+                    .and_then(|plan| observers::apply_observer_plan(&plan))
+                {
+                    errors.push(format!("{source}: {error}"));
+                }
+            }
+            // Removing ours stays possible everywhere; adding only where the
+            // hooks can launch.
+            let hooked = !enabled || launches(&source, crate::os::OS);
+            for flag in flags(&source).into_iter().filter(|_| hooked) {
+                if let Err(error) = install::install_plan(context, &source, flag, enabled)
+                    .and_then(|plan| install::apply_plan(&plan))
+                {
+                    errors.push(format!("{source}: {error}"));
+                }
+            }
+        }
+        self.refresh((!errors.is_empty()).then(|| errors.join("; ")));
+        Ok(())
+    }
+    fn refresh(&mut self, notice: Option<String>) {
+        self.notice = notice;
+        self.rows.clear();
+        let Some(context) = self.context.as_ref() else {
+            return;
+        };
+        for source in crate::discovery::discover_at(&context.home, &context.environment)
+            .into_iter()
+            .filter(|p| p.installed || p.configured || p.usage)
+            .map(|p| p.id)
+        {
+            let mut known = false;
+            let mut installed = true;
+            let mut error = None;
+            if observed(&source) {
+                known = true;
+                match observers::observer_plan(context, &source, true) {
+                    Ok(plan) => installed &= !plan.changed,
+                    Err(e) => {
+                        installed = false;
+                        error = Some(e);
+                    }
+                }
+            }
+            let hooked = launches(&source, crate::os::OS);
+            for flag in flags(&source).into_iter().filter(|_| hooked) {
+                known = true;
+                match install::install_plan(context, &source, flag, true) {
+                    Ok(plan) => installed &= !plan.changed,
+                    Err(e) => {
+                        installed = false;
+                        error = Some(e);
+                    }
+                }
+            }
+            if known {
+                self.rows.push(
+                    json!({"source":source,"installed":installed,"active":false,"notice":error}),
+                );
+            }
+        }
+    }
+    pub fn status(&self, enabled: bool, desired: bool) -> Value {
+        let installed = self.rows.iter().any(|row| row["installed"] == true);
+        let notice=self.notice.clone().or_else(||if self.context.is_none(){Some(l10n::text("这个版本没有指定固定的回调程序。接收回调不会安装客户端回调，客户端配置未作改动。", "No fixed hook-owner executable has been delegated. Listening does not install client hooks; client configuration is unchanged."))}else{None});
+        json!({"supported":super::supported(),"enabled":enabled,"desired":desired,"installed":installed,"installable":self.context.is_some(),"notice":notice,"clients":self.rows})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use agent_hud_agents::Os;
+
+    #[test]
+    fn hooks_go_in_only_where_the_client_can_launch_them() {
+        // Antigravity's hooks run as a POSIX command, which Windows lacks.
+        assert!(!super::launches("antigravity", Os::Windows));
+        assert!(super::launches("antigravity", Os::MacOs));
+        for client in ["claude", "codex"] {
+            assert!(super::launches(client, Os::Windows), "{client}");
+            assert!(super::launches(client, Os::MacOs), "{client}");
+        }
+        assert!(!super::launches("not-a-client", Os::MacOs));
+    }
+}

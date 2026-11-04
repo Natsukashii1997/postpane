@@ -1,0 +1,14 @@
+驿窗 PostPane
+
+本项目源自 Agent HUD（https://github.com/jazzenchen/agent-hud-open，
+提交 917df21），依据 Apache License 2.0 使用和修改，许可证全文见 LICENSE。
+自该版本起的所有改动由本项目作者完成，不再与上游同步。
+
+This project is derived from Agent HUD
+(https://github.com/jazzenchen/agent-hud-open, commit 917df21) and is used and
+modified under the Apache License 2.0; see LICENSE. All changes since that
+commit are made by this project's author and are not synchronized with upstream.
+
+Third-party artwork keeps its own notices. In particular, the Clawd sprites in
+src/packages/hud/src/assets are Copyright Anthropic PBC and are not covered by
+this project's license; see src/packages/hud/src/assets/README.md.
