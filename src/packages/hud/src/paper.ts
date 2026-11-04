@@ -23,6 +23,8 @@ export interface Paper {
   /** Tear lines and separators. */
   line: string;
   red: string;
+  /** A reply's mark: the one note of colour a reply's tag and card carry. */
+  blue: string;
   /** A wash of ink under a command or a picked answer. */
   fill: string;
   /** Ink at `alpha`. */
@@ -44,6 +46,7 @@ export function paperOf(
     dim: light ? "#77736a" : "#a39d90",
     line: `rgba(${ink},${light ? 0.3 : 0.26})`,
     red: light ? "#c4261e" : "#ff6a57",
+    blue: light ? "#2f5fb3" : "#8fb0ec",
     fill: `rgba(${ink},${light ? 0.07 : 0.08})`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,

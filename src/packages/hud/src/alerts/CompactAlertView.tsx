@@ -14,7 +14,7 @@ import { quotaAlertCopy } from "./quota-alert-copy";
 import { systemCalendar } from "@agent-hud/ui/format";
 import { alertInk, alertText } from "../tokens";
 import { useGround } from "../ground";
-import { PAPER_FIGURES, PAPER_SEAL, type Paper } from "../paper";
+import { PAPER_FIGURES, PAPER_SEAL, paperLevel, type Paper } from "../paper";
 
 /** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
 export function compactQuotaStatus(event: IslandEvent, zh = false): string {
@@ -118,8 +118,14 @@ export function compactAlertDockWidth(
         Math.round(20 * scale),
     );
   }
+  // A notice beside the dock is printed too: its name in bold, then a tear.
   const glyph = Math.round(9 * scale);
-  const leading = icon + Math.round(5 * scale) + labelWidth(who, font);
+  const leading =
+    icon +
+    Math.round(5 * scale) +
+    Math.ceil(labelWidth(who, font) * 1.05) +
+    Math.round(8 * scale) +
+    2;
   const badgeExtra = badge
     ? Math.round(4 * scale) + labelWidth(badge, Math.round(8 * scale)) + 8
     : 0;
@@ -170,12 +176,15 @@ export function CompactAlertView({
   const iconSize = onDock ? Math.round(17 * scale) : 17;
   const glyphSize = onDock ? Math.round(9 * scale) : 11;
   const ground = useGround(light);
-  // Beside the dock a request is a paper tag (HUDExpandedSurface prints it).
-  const paper = request ? printed : null;
+  // Beside the dock a request is a paper tag and a notice a receipt's
+  // (HUDExpandedSurface prints them): a reply in blue, a warning in amber.
+  const paper = printed;
   const signalText = alertText("warning", ground);
-  const turnText = alertText("turn", ground);
-  const calmAccent = alertText("calm", ground);
-  const warnAccent = alertText("warning", ground);
+  const turnText = paper ? paper.blue : alertText("turn", ground);
+  const calmAccent = paper ? paper.ink : alertText("calm", ground);
+  const warnAccent = paper
+    ? paperLevel("warning", paper)
+    : alertText("warning", ground);
   const secondary = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)";
   const segmentBg = light ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)";
   // PermissionAlertViews.swift line 55: "Clicking the collapsed form does nothing on purpose".

@@ -2,10 +2,13 @@ import { ArrowUpRight } from "lucide-react";
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { agentVendorName } from "../model";
 import { ReminderMark } from "./ReminderMark";
-import { alertFill, alertInk, alertText, onAlertFill } from "../tokens";
-import { useGround } from "../ground";
+import { useAlertPalette } from "./alert-palette";
 import { cardColumn } from "../card-column";
-import { palette } from "../panel/theme";
+import {
+  receiptMeterBox,
+  receiptMeterFill,
+  usePanelPalette,
+} from "../panel/theme";
 import { MiddleTruncated } from "../panel/MiddleTruncated";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { quotaAlertCopy, resetCreditCopy } from "./quota-alert-copy";
@@ -20,7 +23,8 @@ function Metric({
   label: string;
   light: boolean;
 }) {
-  const ink = (alpha: number) => alertInk(alpha, { light });
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
   return (
     <div style={{ ...cardColumn(4), minWidth: 0 }}>
       <span
@@ -61,7 +65,8 @@ function Heading({
   light: boolean;
   botLogos: boolean;
 }) {
-  const ink = (alpha: number) => alertInk(alpha, { light });
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
   return (
     <header style={{ display: "flex", alignItems: "center", gap: 9 }}>
       <ReminderMark event={event} size={22} light={light} botLogos={botLogos} />
@@ -112,6 +117,7 @@ function StatsButton({
   zh: boolean;
   onClick: () => void;
 }) {
+  const colors = useAlertPalette(light);
   return (
     <button
       type="button"
@@ -123,10 +129,10 @@ function StatsButton({
         alignItems: "center",
         justifyContent: "center",
         gap: 6,
-        borderRadius: 7,
+        borderRadius: colors.paper ? 2 : 7,
         border: 0,
         background: fill,
-        color: onAlertFill({ light }),
+        color: colors.onFill,
         opacity: 0.9,
         fontSize: 12,
         fontWeight: 600,
@@ -159,8 +165,8 @@ export function ResetCreditAlertView({
   botLogos?: boolean;
   zh?: boolean;
 }) {
-  const ground = useGround(light);
-  const ink = (alpha: number) => alertInk(alpha, ground);
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
   const account = snapshot?.accounts?.find(
     (candidate) => candidate.id === event.accountId,
   );
@@ -181,8 +187,8 @@ export function ResetCreditAlertView({
         name={agentVendorName(event.source)}
         under={account?.name ?? event.title ?? null}
         news={zh ? "新增重置" : "new reset"}
-        accentFill={alertFill("calm", ground)}
-        accentText={alertText("calm", ground)}
+        accentFill={colors.fill("calm")}
+        accentText={colors.text("calm")}
         light={light}
         botLogos={botLogos}
       />
@@ -211,7 +217,7 @@ export function ResetCreditAlertView({
         />
       </div>
       <StatsButton
-        fill={alertFill("calm", ground)}
+        fill={colors.fill("calm")}
         light={light}
         zh={zh}
         onClick={() => {
@@ -239,8 +245,8 @@ export function SignInAlertView({
   botLogos?: boolean;
   zh?: boolean;
 }) {
-  const ground = useGround(light);
-  const ink = (alpha: number) => alertInk(alpha, ground);
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
   const name = event.title ?? agentVendorName(event.source);
   return (
     <article style={{ ...cardColumn(14), fontSize: 12, color: "inherit" }}>
@@ -249,8 +255,8 @@ export function SignInAlertView({
         name={name}
         under={null}
         news={zh ? "需要重新登录" : "sign in again"}
-        accentFill={alertFill("warning", ground)}
-        accentText={alertText("warning", ground)}
+        accentFill={colors.fill("warning")}
+        accentText={colors.text("warning")}
         light={light}
         botLogos={botLogos}
       />
@@ -270,10 +276,10 @@ export function SignInAlertView({
         style={{
           height: 30,
           width: "100%",
-          borderRadius: 7,
+          borderRadius: colors.paper ? 2 : 7,
           border: 0,
-          background: alertFill("warning", ground),
-          color: onAlertFill({ light }),
+          background: colors.fill("warning"),
+          color: colors.onFill,
           opacity: 0.9,
           fontSize: 12,
           fontWeight: 600,
@@ -305,8 +311,9 @@ export function QuotaAlertView({
   botLogos?: boolean;
   zh?: boolean;
 }) {
-  const ground = useGround(light);
-  const ink = (alpha: number) => alertInk(alpha, ground);
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
+  const track = usePanelPalette(light).track;
   const settings = useFormat();
   const copy = quotaAlertCopy(event, {
     ...settings,
@@ -314,8 +321,8 @@ export function QuotaAlertView({
   });
   const isReset = event.kind === "quota-reset";
   const tone = isReset ? "calm" : "warning";
-  const accentFill = alertFill(tone, ground);
-  const accentText = alertText(tone, ground);
+  const accentFill = colors.fill(tone);
+  const accentText = colors.text(tone);
   const windowName = event.title ?? "";
   return (
     <article style={{ ...cardColumn(20), fontSize: 12, color: "inherit" }}>
@@ -389,8 +396,9 @@ export function QuotaAlertView({
           style={{
             height: 4,
             borderRadius: 4,
-            background: palette(ground).track,
+            background: track,
             overflow: "hidden",
+            ...(colors.paper && receiptMeterBox(colors.paper)),
           }}
         >
           <div
@@ -399,6 +407,7 @@ export function QuotaAlertView({
               height: "100%",
               borderRadius: 4,
               background: accentFill,
+              ...(colors.paper && receiptMeterFill(accentText)),
             }}
           />
         </div>

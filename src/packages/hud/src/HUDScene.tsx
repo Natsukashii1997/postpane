@@ -465,11 +465,11 @@ export function HUDScene({
   });
 
   // A request beside the dock is printed on paper, its tag and its card, and
-  // so is the usage panel, as a receipt; in the notch they keep the notch's
-  // ground.
+  // so are a notice's and the usage panel, as receipts; in the notch they
+  // keep the notch's ground.
   const paper = useMemo(
     () =>
-      (detached && request) || receipt
+      (detached && (request || event)) || receipt
         ? paperOf(light, {
             left: surfacePadding.left - receiptInset.left,
             right: surfacePadding.right - receiptInset.right,
@@ -478,6 +478,7 @@ export function HUDScene({
     [
       detached,
       Boolean(request),
+      Boolean(event),
       receipt,
       light,
       surfacePadding.left,
@@ -654,25 +655,31 @@ export function HUDScene({
             />
           </PaperContext.Provider>
         ) : event ? (
-          <NewsContent
-            event={event}
-            snapshot={snapshot}
-            dismiss={news.dismiss}
-            onStats={showPanelStats}
-            handoff={handoff}
-            light={light}
-            botLogos={config.botLogos}
-          />
+          <PaperContext.Provider value={paper}>
+            <NewsContent
+              event={event}
+              snapshot={snapshot}
+              dismiss={news.dismiss}
+              onStats={showPanelStats}
+              handoff={handoff}
+              light={light}
+              botLogos={config.botLogos}
+            />
+          </PaperContext.Provider>
         ) : null}
-        <PendingEventRows
-          queue={news.queue}
-          currentID={(request ?? event)!.id}
-          requests={requests}
-          select={news.select}
-          includeRequests={!request}
-          light={light}
-          zh={snapshotLanguage(snapshot) === "zh"}
-        />
+        {/* A notice's queue is printed on its receipt; a request's stays as
+            it was. */}
+        <PaperContext.Provider value={request ? null : paper}>
+          <PendingEventRows
+            queue={news.queue}
+            currentID={(request ?? event)!.id}
+            requests={requests}
+            select={news.select}
+            includeRequests={!request}
+            light={light}
+            zh={snapshotLanguage(snapshot) === "zh"}
+          />
+        </PaperContext.Provider>
       </>
     ) : null;
 

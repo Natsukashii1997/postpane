@@ -11,9 +11,9 @@ import { usePanelServices } from "../PanelContext";
 import { clientDisplayName, compactDuration, newsTitle } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
 import { dateFormat, snapshotLanguage } from "@agent-hud/ui/format";
-import { alertFill, alertInk, alertText, onAlertFill } from "../tokens";
-import { useGround } from "../ground";
+import { useAlertPalette } from "./alert-palette";
 import { cardColumn } from "../card-column";
+import { PAPER_FIGURES, type Paper } from "../paper";
 
 export function CompletionAlertView({
   event,
@@ -40,11 +40,12 @@ export function CompletionAlertView({
   const hasSession = Boolean(
     session?.navigationTarget || event.navigationTarget,
   );
-  const ground = useGround(light);
-  const ink = (alpha: number) => alertInk(alpha, ground);
-  const turnAccent = alertFill("turn", ground);
-  const turnText = alertText("turn", ground);
-  const onTurnAccent = onAlertFill(ground);
+  const colors = useAlertPalette(light);
+  const ink = colors.ink;
+  const paper = colors.paper;
+  const turnAccent = colors.fill("turn");
+  const turnText = colors.text("turn");
+  const onTurnAccent = colors.onFill;
 
   const startedRaw = event.startedAt ?? session?.liveFacts?.turnStartedAt;
   const started = startedRaw ? Date.parse(startedRaw) : NaN;
@@ -127,8 +128,22 @@ export function CompletionAlertView({
             </span>
           )}
         </div>
-        <MessageSquareText size={12} strokeWidth={2.2} color={turnText} />
-        <span style={{ color: turnText, fontSize: 12, fontWeight: 500 }}>
+        {!paper && (
+          <MessageSquareText size={12} strokeWidth={2.2} color={turnText} />
+        )}
+        <span
+          style={{
+            color: turnText,
+            fontSize: 12,
+            fontWeight: paper ? 600 : 500,
+            ...(paper && {
+              border: `1.2px solid ${turnText}`,
+              borderRadius: 2,
+              padding: "1px 7px",
+              letterSpacing: "0.06em",
+            }),
+          }}
+        >
           {zh ? "有新回复" : "New reply"}
         </span>
         <button
@@ -153,6 +168,7 @@ export function CompletionAlertView({
           <X size={10} strokeWidth={2.4} />
         </button>
       </header>
+      {paper && <ReceiptTear paper={paper} />}
       <div style={cardColumn(8)}>
         <strong
           style={{
@@ -191,9 +207,17 @@ export function CompletionAlertView({
         style={{
           display: "flex",
           justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 6,
           fontSize: 11,
           fontVariantNumeric: "tabular-nums",
           color: ink(0.5),
+          ...(paper && {
+            fontFamily: PAPER_FIGURES,
+            fontSize: 14,
+            fontWeight: 700,
+            color: paper.ink,
+          }),
         }}
       >
         <time>
@@ -201,10 +225,21 @@ export function CompletionAlertView({
             new Date(event.at),
           )}
         </time>
+        {paper && (
+          <span
+            aria-hidden="true"
+            style={{
+              flex: 1,
+              borderBottom: `1px dotted ${paper.line}`,
+              transform: "translateY(-3px)",
+            }}
+          />
+        )}
         {Number.isFinite(started) && ended > started && (
           <span>{compactDuration((ended - started) / 1000)}</span>
         )}
       </div>
+      {paper && <ReceiptTear paper={paper} />}
       <div style={cardColumn(8)}>
         {failed && hasSession ? (
           <span style={{ fontSize: 11, color: ink(0.65) }}>
@@ -229,10 +264,10 @@ export function CompletionAlertView({
               gap: 4,
               height: 22,
               padding: "0 9px",
-              borderRadius: 6,
-              border: `1px solid ${ink(0.18)}`,
+              borderRadius: paper ? 2 : 6,
+              border: `1px solid ${paper ? paper.ink : ink(0.18)}`,
               background: "transparent",
-              color: ink(0.6),
+              color: paper ? paper.ink : ink(0.6),
               fontSize: 11,
               fontWeight: 500,
               whiteSpace: "nowrap",
@@ -253,7 +288,7 @@ export function CompletionAlertView({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: paper ? 2 : 6,
                 border: 0,
                 background: turnAccent,
                 color: onTurnAccent,
@@ -280,5 +315,19 @@ export function CompletionAlertView({
         </div>
       </div>
     </article>
+  );
+}
+
+/** A tear line across the whole receipt, past the card's margins. */
+function ReceiptTear({ paper }: { paper: Paper }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        borderTop: `1.2px dashed ${paper.line}`,
+        marginLeft: -paper.bleed.left,
+        marginRight: -paper.bleed.right,
+      }}
+    />
   );
 }
