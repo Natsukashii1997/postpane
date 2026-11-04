@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：1-2 合并后做 1-3 去掉成本数字；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：1-3 合并后做 1-4 文档收尾，再进阶段 2 改名与本机切换；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 1-3：界面去掉成本数字，只看 token（2026-11-04，Claude，常浩决定成本与套餐价值都去掉、只看 token；PR 待合并、无需发布）
+
+- 时间：开工 `2026-11-04 15:19`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 15:27`）。来由：常浩不需要成本数字，统计里的套餐价值、会话图表的费用切换都去掉。
+- 改了哪些文件：
+  - 统计：`src/packages/app/src/Statistics.tsx` 去掉套餐价值卡片；`statistics/ProviderCard.tsx` 去掉费用格、缓存费用说明、最高会话与时段的按价估算；`statistics/StatsTheme.tsx` 去掉模型提示与汇总里的按价估算。
+  - 会话：`sessions/SessionListSection.tsx` 去掉今日费用、每行费用，表头改为「Token · 上下文」；`sessions/SessionDetailView.tsx` 去掉费用卡、每轮费用提示，图表固定按 token、不再显示费用切换；`sessions/SubagentTimeline.tsx` 去掉每行费用。
+  - 侧栏：`src/packages/hud/src/panel/QuotaSection.tsx` 去掉「最近 24 小时」后的花费。
+  - 本文件。
+- 测试：`cargo test --workspace` 退出码 0，637 项通过；`test:ts` `ℹ pass 110` / `ℹ fail 0`；`test:mcp` `ℹ pass 6` / `ℹ fail 0`；`test:plugins` `ℹ pass 14` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；typecheck、build、prettier、check:packages、check:clients、check:test-paths 通过；`check:platform` 仍只报基线那条 `main.rs:7`。
+- 验证：浏览器开发预览（独立数据目录）实际查看统计窗口的 Tokens 页、Sessions 页和一个会话详情页，读页面文字，没有 Cost、费用、At API prices、套餐价值字样；会话详情只剩 Token、轮次、上下文、缓存命中等。
+- 截图：未存档。
+- 发布与回读：无需发布；未安装到 /Applications。
+- 与授权不一致之处、遗留问题、范围外发现：API 余额类账户（如 DeepSeek）的余额卡片和侧栏余额块里还有「估算花费」「日均消耗」「预计耗尽」，属于余额读数，这次没动，要不要一并去掉待常浩定；后台计价代码与 `costText` 等函数保留未删。
+- 本轮新坑：无。
 
 ## 阶段 1-2：助手置顶与折叠，藏起中转站/价格/更新（2026-11-04，Claude，常浩改定“旧功能背后保留、界面隐藏”；PR 待合并、无需发布）
 

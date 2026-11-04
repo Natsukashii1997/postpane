@@ -9,7 +9,7 @@ import {
 } from "../lib/sessions";
 import type { Session } from "../lib/types";
 import { useAnimatedNumber } from "../statistics/StatsTheme";
-import { moneyAmount, share } from "@agent-hud/ui/format";
+import { share } from "@agent-hud/ui/format";
 import { ShareRows, TurnSparkline } from "./SessionCharts";
 import {
   card,
@@ -20,15 +20,11 @@ import {
   kindColor,
   kindNames,
   Missing,
-  moneyText,
   numeric,
   plain,
   row,
-  sessionMoney,
-  sessionsMoney,
   statusLine,
   type Theme,
-  unpricedHelp,
 } from "./SessionTheme";
 
 /** The columns a session row and its day's header share: who and how, its turns, its figures. */
@@ -37,7 +33,7 @@ export const rowGap = 18;
 
 /**
  * The sessions filed under today in one card (Open's SessionsTodayCard, the
- * phone's TodaySummary): how many, what they cost, their tokens split by the
+ * phone's TodaySummary): how many, their tokens split by the
  * kinds present in Open's order; and beside them, where those tokens went:
  * the sessions that spent the most, each a labelled bar of its share, the
  * rest summed. A session counts its sub-agents, which nest under it.
@@ -56,7 +52,6 @@ export function TodayCard({
   const zh = Boolean(theme.zh);
   const { total, kinds } = sessionKinds(sessions);
   const animatedTotal = useAnimatedNumber(total);
-  const money = sessionsMoney(sessions);
   const kindsTotal = kinds?.reduce((sum, entry) => sum + entry.value, 0) ?? 0;
   const ranked = topSessions(sessions, 5);
   const ranking = [
@@ -111,24 +106,6 @@ export function TodayCard({
               ? `今天 · ${partial ? "已加载 " : ""}${sessions.length} 个会话`
               : `Today · ${sessions.length}${partial ? " loaded " : " "}${sessions.length === 1 ? "session" : "sessions"}`}
           </strong>
-          {money.value !== null && (
-            <span
-              style={{ color: theme.secondary, fontSize: 11 }}
-              title={unpricedHelp(money.unpriced, zh)}
-            >
-              {zh ? "费用 " : "Cost "}
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: theme.text,
-                  ...numeric,
-                }}
-              >
-                {moneyText(money, zh)}
-              </span>
-            </span>
-          )}
         </div>
         <div
           style={{
@@ -342,7 +319,7 @@ function ContextFigure({ session, theme }: { session: Session; theme: Theme }) {
 /**
  * One session as the phone lists it, in three columns: its title, model ·
  * project · client and its status line; its newest turns as a sparkline; its
- * tokens, cost and context. A click opens its page.
+ * tokens and context. A click opens its page.
  */
 export function SessionRow({
   session,
@@ -448,21 +425,6 @@ export function SessionRow({
         >
           {session.tokens > 0 ? compact(animatedTokens) : "—"}
         </strong>
-        <span
-          style={numeric}
-          title={
-            session.accountCost === undefined
-              ? unpricedHelp(sessionMoney(session).unpriced, zh)
-              : undefined
-          }
-        >
-          {session.accountCost !== undefined
-            ? // A priced account's own estimate, in its currency (Open's SessionMoney).
-              session.accountCost
-              ? `≈${moneyAmount(session.accountCost.amount, session.accountCost.currency, zh ? "zh" : "en", true)}`
-              : "—"
-            : moneyText(sessionMoney(session), zh)}
-        </span>
         <ContextFigure session={session} theme={theme} />
       </span>
     </button>
@@ -534,11 +496,7 @@ export function DayHeader({
       <span
         style={{ fontSize: 11, textAlign: "right", ...numeric, ...clipped }}
       >
-        {open
-          ? zh
-            ? "Token · 费用 · 上下文"
-            : "Tokens · cost · context"
-          : folded}
+        {open ? (zh ? "Token · 上下文" : "Tokens · context") : folded}
       </span>
     </Element>
   );

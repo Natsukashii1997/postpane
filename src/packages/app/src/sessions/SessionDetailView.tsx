@@ -14,7 +14,6 @@ import {
   countdown,
   dateFormat,
   localeDateTime,
-  moneyAmount,
   share,
 } from "@agent-hud/ui/format";
 import type {
@@ -35,21 +34,17 @@ import {
   clipped,
   ColorKey,
   compact,
-  cost,
   durationLabel,
   integer,
   kindColor,
   kindNames,
-  moneyText,
   numeric,
   plain,
   row,
-  sessionMoney,
   sinceLabel,
   timeLabel,
   type Entry,
   type Theme,
-  unpricedHelp,
 } from "./SessionTheme";
 
 function formatMessageText(value: unknown): string {
@@ -118,12 +113,6 @@ function turnNotes(entry: Entry, zh: boolean): string[] {
         (entry.peakContext != null
           ? (zh ? " · 轮中最高 " : " · peak ") + compact(entry.peakContext)
           : ""),
-    );
-  const turnCost = entry.listCost ?? entry.pricedCost ?? null;
-  if (turnCost != null)
-    notes.push(
-      cost(turnCost, zh, entry.listCost == null) +
-        (zh ? " 按 API 价" : " at API prices"),
     );
   return notes;
 }
@@ -232,14 +221,6 @@ export function DetailFigures({
   const percent = (part: number) => `${Math.round(part * 100)}%`;
   // The session with its sub-agents, as Core counts it on its row too.
   const totals = detail?.usage ?? session.usage ?? null;
-  const language = zh ? "zh" : "en";
-  // A priced account's own estimate comes first, as Open's SessionMoney.
-  const account = session.accountCost !== undefined;
-  const money = sessionMoney(session);
-  const unpricedModels = (detail?.models ?? [])
-    .filter((model) => model.priced === false)
-    .map((model) => model.name ?? model.id ?? "")
-    .filter(Boolean);
   const credits = detail?.credits ?? null;
   const breakdown = detail?.turnsBy != null;
   const calls = detail?.callCount ?? 0;
@@ -260,39 +241,6 @@ export function DetailFigures({
         ? "五类合计，含缓存读取"
         : "All five kinds, cache reads included",
     },
-    account
-      ? {
-          title: zh ? "费用" : "Cost",
-          value: session.accountCost
-            ? `≈${moneyAmount(session.accountCost.amount, session.accountCost.currency, language, true)}`
-            : "—",
-          note: zh ? "本会话" : "This session",
-          help: zh
-            ? "按账户价格估算的本会话费用"
-            : "This session's cost at the account's prices",
-        }
-      : {
-          title: zh ? "费用" : "Cost",
-          value: moneyText(money, zh),
-          note:
-            money.value === null
-              ? "—"
-              : money.unpriced > 0
-                ? zh
-                  ? "部分 · 按 API 价"
-                  : "Partial · at API prices"
-                : zh
-                  ? "按 API 价"
-                  : "At API prices",
-          help: [
-            zh
-              ? "同样的调用按厂商 API 公开价计算的费用，不是实际扣费"
-              : "What the same calls cost at the vendor's API list price; not a charge",
-            unpricedHelp(money.unpriced, zh, unpricedModels),
-          ]
-            .filter(Boolean)
-            .join(zh ? "。" : ". "),
-        },
     ...(credits
       ? [
           {
@@ -1380,11 +1328,8 @@ export function InlineDetail({
   const entries = detail?.turns ?? [];
   const byPrompt = detail?.turnsBy === "prompt";
   const picked = entries.find((entry) => entry.id === selectedEntry);
-  // Cost bars only when every turn has a list price, so no turn looks free.
-  const priced =
-    byPrompt &&
-    entries.length > 0 &&
-    entries.every((entry) => entry.listCost != null);
+  // PostPane shows tokens only, never cost (docs/ROADMAP.md, stage 1).
+  const priced = false;
   const shown: Measure = priced ? measure : "tokens";
   const hasContext = entries.some((entry) => entry.context != null);
   const lastMessage = session.liveFacts?.message?.trim();
