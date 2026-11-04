@@ -3,8 +3,7 @@ import type { Account } from "@agent-hud/protocol";
 import { accountReadLabel } from "./account-labels";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { MiddleTruncated } from "./MiddleTruncated";
-import { palette } from "./theme";
-import { useGround } from "../ground";
+import { usePanelPalette } from "./theme";
 
 /** The account above its windows (Open's AccountSectionHeader): its name,
  * shortened from the middle, its plan, and at the end of the line whether it
@@ -20,7 +19,7 @@ export function AccountHeader({
   now: number;
   light: boolean;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   const { language } = useFormat();
   const current = account.current !== false;
   const name = account.name ?? account.label ?? account.id;
@@ -84,7 +83,7 @@ export function BlockNotice({
   /** In the warning's text shade, as for a vendor outage. */
   warning?: boolean;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   return (
     <div
       className="hud-source-block-notice"

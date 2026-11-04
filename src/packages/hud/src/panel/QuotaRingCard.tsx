@@ -13,11 +13,10 @@ import {
 import { quotaMetric } from "../quota-metrics";
 import { quotaShortName } from "../model";
 import { usePanelServices } from "../PanelContext";
-import { useGround } from "../ground";
 import { MAX_USAGE_ITEMS, type RingStyle } from "../usage-meter/arcs";
 import { UsageRing } from "../usage-meter/UsageRing";
 import { FittingName } from "./FittingName";
-import { palette, type Measure } from "./theme";
+import { usePanelPalette, type Measure } from "./theme";
 
 /** The ring's diameter and line for each `ringSize`. */
 const RINGS = {
@@ -45,7 +44,7 @@ export function QuotaRingCard({
   showReset: boolean;
   onStats?: () => void;
 }) {
-  const colors = palette(useGround(light)),
+  const colors = usePanelPalette(light),
     format = useFormat(),
     services = usePanelServices(),
     reduceMotion = useReducedMotion() ?? false,

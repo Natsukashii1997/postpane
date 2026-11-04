@@ -24,16 +24,17 @@ import {
   type HUDUpdateNotice,
 } from "./model";
 import { usePanelServices } from "./PanelContext";
-import { useGround } from "./ground";
 import { FittingName } from "./panel/FittingName";
 import { SourceBalances, SourceProviderBlock } from "./panel/QuotaSection";
 import { SourceSessions } from "./panel/SessionsSection";
 import {
   densityMetrics,
   inPanelOrder,
-  palette,
+  receiptTear,
+  usePanelPalette,
   type Logo,
 } from "./panel/theme";
+import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
 import { snapshotLanguage } from "@agent-hud/ui/format";
@@ -72,7 +73,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   active = true,
   inlineAlert,
 }: SourceHoverPanelProps) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   const services = usePanelServices();
   const [draftError, setDraftError] = useState<string | null>(null);
   const panelElement = useRef<HTMLDivElement>(null),
@@ -215,7 +217,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
                   ...(index > 0 &&
                   config.panelLayout.style?.separators !== false
                     ? {
-                        boxShadow: `inset 0 1px 0 ${colors.divider}`,
+                        ...(paper
+                          ? receiptTear(paper)
+                          : { boxShadow: `inset 0 1px 0 ${colors.divider}` }),
                         paddingTop: "var(--hud-divided-gap)",
                       }
                     : {}),
@@ -410,7 +414,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           alignItems: "center",
           flex: "0 0 auto",
           paddingTop: 6,
-          boxShadow: `inset 0 1px 0 ${colors.divider}`,
+          ...(paper
+            ? receiptTear(paper)
+            : { boxShadow: `inset 0 1px 0 ${colors.divider}` }),
           color: colors.secondary,
         }}
       >
