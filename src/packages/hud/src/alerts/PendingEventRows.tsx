@@ -24,6 +24,7 @@ import {
 } from "../IslandNews";
 import { alertText } from "../tokens";
 import { useGround } from "../ground";
+import { PAPER_FIGURES, usePaper } from "../paper";
 import { cardColumn } from "../card-column";
 import { dateFormat } from "@agent-hud/ui/format";
 
@@ -120,11 +121,23 @@ export function PermissionRowHead({
   const hideSummary =
     open && (isQuestion || (showsDetail && detail === summary));
   const signalText = alertText("warning", useGround(light));
-  const secondary = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)";
-  const tertiary = light ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.38)";
-  const openSummaryColor = light
-    ? "rgba(0,0,0,0.85)"
-    : "rgba(255,255,255,0.85)";
+  // On a request's paper (HUDExpandedSurface prints it beside the dock).
+  const paper = usePaper();
+  const secondary = paper
+    ? paper.dim
+    : light
+      ? "rgba(0,0,0,0.55)"
+      : "rgba(255,255,255,0.55)";
+  const tertiary = paper
+    ? paper.dim
+    : light
+      ? "rgba(0,0,0,0.38)"
+      : "rgba(255,255,255,0.38)";
+  const openSummaryColor = paper
+    ? paper.text(0.85)
+    : light
+      ? "rgba(0,0,0,0.85)"
+      : "rgba(255,255,255,0.85)";
 
   return (
     <div
@@ -148,7 +161,7 @@ export function PermissionRowHead({
       <span
         style={{
           fontSize: 12,
-          fontWeight: 500,
+          fontWeight: paper ? 600 : 500,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -163,10 +176,12 @@ export function PermissionRowHead({
           display: "inline-flex",
           alignItems: "center",
           gap: 3,
-          padding: "1px 4px",
-          borderRadius: 3,
-          background: "rgba(233, 161, 109, 0.14)",
-          color: signalText,
+          padding: paper ? "1px 5px" : "1px 4px",
+          borderRadius: paper ? 2 : 3,
+          // On paper the kind is a box printed in red.
+          background: paper ? "transparent" : "rgba(233, 161, 109, 0.14)",
+          boxShadow: paper ? `inset 0 0 0 1.2px ${paper.red}` : undefined,
+          color: paper ? paper.red : signalText,
           flexShrink: 0,
         }}
       >
@@ -176,6 +191,7 @@ export function PermissionRowHead({
             fontSize: 10,
             fontWeight: 700,
             fontVariantNumeric: "tabular-nums",
+            letterSpacing: paper ? "0.08em" : undefined,
           }}
         >
           {badge}
@@ -199,7 +215,8 @@ export function PermissionRowHead({
       {hideSummary && <span style={{ flex: 1 }} />}
       <span
         style={{
-          fontSize: 11,
+          fontSize: paper ? 12 : 11,
+          fontFamily: paper ? PAPER_FIGURES : undefined,
           fontVariantNumeric: "tabular-nums",
           color: tertiary,
           flexShrink: 0,

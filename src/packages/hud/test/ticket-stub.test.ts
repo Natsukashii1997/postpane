@@ -24,6 +24,7 @@ test("a working agent is punched, a waiting one sealed instead", () => {
   assert.deepEqual(stubMarks(idle), {
     punched: false,
     sealed: false,
+    answer: false,
     warn: false,
   });
   assert.equal(stubMarks({ ...idle, working: 1 }).punched, true);
@@ -37,4 +38,12 @@ test("the reading turns red from 80% of the tightest quota", () => {
   assert.equal(stubMarks({ ...vendor, used: 79.9 }).warn, false);
   assert.equal(stubMarks({ ...vendor, used: 80 }).warn, true);
   assert.equal(stubMarks({ ...vendor, used: null }).warn, false);
+});
+
+test("the seal reads 答 only while every waiting request is a question", () => {
+  const idle = { working: 1, used: 30 };
+  assert.equal(stubMarks({ ...idle, waiting: 2, questions: 2 }).answer, true);
+  assert.equal(stubMarks({ ...idle, waiting: 2, questions: 1 }).answer, false);
+  assert.equal(stubMarks({ ...idle, waiting: 1 }).answer, false);
+  assert.equal(stubMarks({ ...idle, waiting: 0, questions: 0 }).answer, false);
 });

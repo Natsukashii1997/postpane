@@ -24,27 +24,14 @@ import {
   stubMarks,
   stubSize,
 } from "../ticket-stub";
+import { PAPER_GRAIN, perforatedSide } from "../paper";
 
 const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
-// A faint paper grain for the Dynamic stubs, tiled.
-const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .2 0 0 0 0 .19 0 0 0 0 .17 0 0 0 .14 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>',
-)}")`;
 const STUB_INK = "#2a2925",
   STUB_RED = "rgba(196,38,30,.92)";
-
-/** A stub's perforated side: the one facing into the screen. */
-const perforatedSide = (edge: HUDEdge) =>
-  edge === "right"
-    ? "left"
-    : edge === "left"
-      ? "right"
-      : edge === "top"
-        ? "bottom"
-        : "top";
 
 export function HUDMarkStrip({
   id,
@@ -467,6 +454,7 @@ function StubFace({
   const marks = stubMarks({
     working: vendor.working,
     waiting: vendor.waiting,
+    questions: vendor.questions,
     used: markUsed(vendor),
   });
   return (
@@ -500,7 +488,7 @@ function StubFace({
               transform: "rotate(-10deg)",
             }}
           >
-            {zh ? "批" : "!"}
+            {zh ? (marks.answer ? "答" : "批") : marks.answer ? "?" : "!"}
           </span>
         ) : (
           <span

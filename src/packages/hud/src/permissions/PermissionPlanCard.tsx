@@ -6,6 +6,7 @@ import { inlineMarkdown } from "@agent-hud/ui/text/inline-markdown";
 import { alertFill, onAlertFill, permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
+import { usePaper } from "../paper";
 
 /** Whether the user is writing what a plan should change, and what they wrote
  * so far, by request: the island redraws its cards as the pointer comes and
@@ -46,21 +47,37 @@ export function PermissionPlanCard({
   const canAnswerPlan = request.answersPlan === true;
   const vendor = request.vendor ?? clientDisplayName(request.source);
 
+  // On paper (HUDExpandedSurface prints it beside the dock) the plan sits on
+  // a wash of ink and the buttons are printed boxes, Approve filled with ink.
+  const paper = usePaper();
   const text = (alpha: number) =>
-    light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
+    paper
+      ? paper.text(alpha)
+      : light
+        ? `rgba(0,0,0,${alpha})`
+        : `rgba(255,255,255,${alpha})`;
   const stroke = (alpha: number) =>
-    light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
-  const primary = text(0.92);
-  const secondary = text(0.55);
-  const inset = light ? "rgba(0,0,0,0.045)" : "rgba(255,255,255,0.055)";
+    paper
+      ? paper.text(Math.min(1, alpha * 3))
+      : light
+        ? `rgba(0,0,0,${alpha})`
+        : `rgba(255,255,255,${alpha})`;
+  const primary = paper ? paper.ink : text(0.92);
+  const secondary = paper ? paper.dim : text(0.55);
+  const inset = paper
+    ? paper.fill
+    : light
+      ? "rgba(0,0,0,0.045)"
+      : "rgba(255,255,255,0.055)";
+  const round = (radius: number) => (paper ? 2 : radius);
   const ground = useGround(light);
   const controls = permissionColors(ground);
-  const allow = controls.allowFill;
-  const allowText = controls.alwaysText;
-  const allowEdge = controls.alwaysEdge;
-  const onAllow = controls.onAllow;
-  const signal = alertFill("warning", ground);
-  const onSignal = onAlertFill(ground);
+  const allow = paper ? paper.ink : controls.allowFill;
+  const allowText = paper ? paper.ink : controls.alwaysText;
+  const allowEdge = paper ? paper.ink : controls.alwaysEdge;
+  const onAllow = paper ? paper.paper : controls.onAllow;
+  const signal = paper ? paper.ink : alertFill("warning", ground);
+  const onSignal = paper ? paper.paper : onAlertFill(ground);
 
   return (
     <div style={cardColumn(8)}>
@@ -71,7 +88,7 @@ export function PermissionPlanCard({
             maxHeight: 150,
             overflowY: "auto",
             padding: 9,
-            borderRadius: 7,
+            borderRadius: round(7),
             background: inset,
             fontSize: 11,
             lineHeight: 1.5,
@@ -149,7 +166,7 @@ export function PermissionPlanCard({
                 flex: 1,
                 height: 24,
                 padding: "0 8px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: `1px solid ${stroke(0.2)}`,
                 background: inset,
                 color: primary,
@@ -167,7 +184,7 @@ export function PermissionPlanCard({
                 alignItems: "center",
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: `1px solid ${stroke(0.18)}`,
                 background: "transparent",
                 color: secondary,
@@ -188,7 +205,7 @@ export function PermissionPlanCard({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: 0,
                 background: signal,
                 color: onSignal,
@@ -213,7 +230,7 @@ export function PermissionPlanCard({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: `1px solid ${stroke(0.18)}`,
                 background: "transparent",
                 color: secondary,
@@ -238,7 +255,7 @@ export function PermissionPlanCard({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: `1px solid ${allowEdge}`,
                 background: "transparent",
                 color: allowText,
@@ -262,7 +279,7 @@ export function PermissionPlanCard({
                 gap: 4,
                 height: 22,
                 padding: "0 9px",
-                borderRadius: 6,
+                borderRadius: round(6),
                 border: 0,
                 background: allow,
                 color: onAllow,
@@ -295,7 +312,7 @@ export function PermissionPlanCard({
               gap: 4,
               height: 22,
               padding: "0 9px",
-              borderRadius: 6,
+              borderRadius: round(6),
               border: `1px solid ${stroke(0.18)}`,
               background: "transparent",
               color: secondary,

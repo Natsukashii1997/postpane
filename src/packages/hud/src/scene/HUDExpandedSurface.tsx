@@ -21,6 +21,7 @@ import { AgentPeek } from "./AgentPeek";
 import { Silhouette, type useNotchGeometry } from "./NotchSurface";
 import { outsideSimplePanel } from "./simple-panel";
 import { snapshotLanguage } from "@agent-hud/ui/format";
+import { paperFace, perforatedSide, perforation, type Paper } from "../paper";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
@@ -64,6 +65,7 @@ export function HUDExpandedSurface({
   eventContent,
   inUsagePanel,
   delivery,
+  paper = null,
 }: {
   config: HUDConfig;
   edge: HUDEdge;
@@ -105,6 +107,8 @@ export function HUDExpandedSurface({
   eventContent: ReactNode;
   inUsagePanel?: boolean;
   delivery?: RequestDelivery;
+  /** The paper a request's tag and card are printed on, beside the dock. */
+  paper?: Paper | null;
 }) {
   // A hardware notch's row stays dark whatever the appearance, at rest and
   // while a reminder shows its wings, so it stays one with the camera
@@ -147,6 +151,13 @@ export function HUDExpandedSurface({
     config.mode === "simple" && detached
       ? outsideSimplePanel(strip, edge, metricsRadius)
       : undefined;
+  // The tag's and the card's side facing into the screen is perforated, as
+  // the stubs' are.
+  const punched = paper
+    ? open
+      ? perforation(perforatedSide(edge), 14, 3)
+      : perforation(perforatedSide(edge), 10 * scale, 2.1 * scale)
+    : undefined;
 
   return (
     <div
@@ -228,24 +239,47 @@ export function HUDExpandedSurface({
                       ? "left center"
                       : "right center",
               overflow: config.mode === "notch" ? "visible" : "hidden",
-              borderRadius: detached
-                ? Math.min(
-                    peek ? (simplePeek ? targetSize.height / 2 : 14) : 22,
-                    targetSize.height / 2,
-                  )
-                : config.mode === "simple"
-                  ? 26
-                  : 0,
+              borderRadius: paper
+                ? 3
+                : detached
+                  ? Math.min(
+                      peek ? (simplePeek ? targetSize.height / 2 : 14) : 22,
+                      targetSize.height / 2,
+                    )
+                  : config.mode === "simple"
+                    ? 26
+                    : 0,
               background:
-                detached || config.mode === "simple" ? fill : "transparent",
+                !paper && (detached || config.mode === "simple")
+                  ? fill
+                  : "transparent",
               // The Simple line is the panel growing: no outline of its own.
               border:
-                (detached || config.mode === "simple") && !simplePeek
+                !paper && (detached || config.mode === "simple") && !simplePeek
                   ? `1px solid ${outline}`
                   : "none",
-              boxShadow: config.mode === "notch" ? undefined : shadow,
+              boxShadow: config.mode === "notch" || paper ? undefined : shadow,
+              // The paper's holes cut its shadow too.
+              filter: paper
+                ? open
+                  ? "drop-shadow(0 12px 22px rgba(0,0,0,.32))"
+                  : "drop-shadow(0 5px 10px rgba(0,0,0,.28))"
+                : undefined,
+              color: paper?.ink,
             }}
           >
+            {paper && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  ...paperFace(paper),
+                  WebkitMask: punched,
+                  mask: punched,
+                }}
+              />
+            )}
             {config.mode === "notch" && (
               <svg
                 aria-hidden="true"
@@ -362,6 +396,7 @@ export function HUDExpandedSurface({
                         light={rowLight}
                         botLogos={config.botLogos}
                         zh={snapshotLanguage(snapshot) === "zh"}
+                        paper={paper}
                         onOpen={() => forceOpen()}
                         onDismissAndStats={() => {
                           dismissNews();

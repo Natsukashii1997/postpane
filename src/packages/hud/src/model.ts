@@ -119,6 +119,8 @@ export interface HUDVendor {
   level: "normal" | "warning" | "critical" | "stale";
   working: number;
   waiting: number;
+  /** How many of the `waiting` requests are questions. */
+  questions: number;
   balance: string | null;
   /** What an agent with no window and no balance shows instead: its last 24 hours at list prices, else their tokens (`recentLabel`). */
   usage: string | null;
@@ -185,6 +187,11 @@ export function vendorsFromSnapshot(
       ).length,
       waiting: snapshot.approvals.filter((a) => vendorKey(a.source) === key)
         .length,
+      questions: snapshot.approvals.filter(
+        (a) =>
+          vendorKey(a.source) === key &&
+          (a.kind === "question" || Boolean(a.questions?.length)),
+      ).length,
       balance: deepseekBalances.length
         ? deepseekBalances
             .map((b) =>

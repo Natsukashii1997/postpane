@@ -3,6 +3,7 @@ import type { Approval, RequestDecision } from "@agent-hud/protocol";
 import { permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
+import { usePaper } from "../paper";
 
 export function PermissionToolCard({
   request,
@@ -20,18 +21,33 @@ export function PermissionToolCard({
   answer: (decision: RequestDecision) => void | Promise<void>;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
+  // On paper the buttons are printed boxes: Allow filled with the ink,
+  // Always allow outlined in it, Deny in red (HUDExpandedSurface's paper).
+  const paper = usePaper();
   const text = (alpha: number) =>
-    light ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`;
-  const secondary = text(0.55);
-  const inset = light ? "rgba(0,0,0,0.045)" : "rgba(255,255,255,0.055)";
+    paper
+      ? paper.text(alpha)
+      : light
+        ? `rgba(0,0,0,${alpha})`
+        : `rgba(255,255,255,${alpha})`;
+  const secondary = paper ? paper.dim : text(0.55);
+  const inset = paper
+    ? paper.fill
+    : light
+      ? "rgba(0,0,0,0.045)"
+      : "rgba(255,255,255,0.055)";
+  const round = (radius: number) => (paper ? 2 : radius);
   const controls = permissionColors(useGround(light));
-  const allow = controls.allowFill;
+  const allow = paper ? paper.ink : controls.allowFill;
   const allowText = controls.alwaysText;
-  const allowEdge = controls.alwaysEdge;
-  const onAllow = controls.onAllow;
+  const alwaysText = paper ? paper.ink : controls.alwaysText;
+  const allowEdge = paper ? paper.ink : controls.alwaysEdge;
+  const onAllow = paper ? paper.paper : controls.onAllow;
   const denyText = controls.denyText;
-  const denyFill = controls.denyFill;
-  const denyStroke = controls.denyEdge;
+  const denyButtonText = paper ? paper.red : controls.denyText;
+  const denyFill = paper ? "transparent" : controls.denyFill;
+  const denyStroke = paper ? paper.red : controls.denyEdge;
+  const weight = paper ? 600 : 500;
 
   return (
     <div style={cardColumn(9)}>
@@ -41,7 +57,7 @@ export function PermissionToolCard({
           style={{
             ...cardColumn(2),
             padding: 9,
-            borderRadius: 7,
+            borderRadius: round(7),
             background: inset,
             fontSize: 11,
             fontVariantNumeric: "tabular-nums",
@@ -107,7 +123,7 @@ export function PermissionToolCard({
           <div
             style={{
               padding: "8px 9px",
-              borderRadius: 7,
+              borderRadius: round(7),
               background: inset,
               fontSize: 11,
               fontVariantNumeric: "tabular-nums",
@@ -167,12 +183,12 @@ export function PermissionToolCard({
             gap: 4,
             height: 22,
             padding: "0 9px",
-            borderRadius: 6,
+            borderRadius: round(6),
             border: `1px solid ${denyStroke}`,
             background: denyFill,
-            color: denyText,
+            color: denyButtonText,
             fontSize: 11,
-            fontWeight: 500,
+            fontWeight: weight,
             whiteSpace: "nowrap",
             cursor: disabled ? "default" : "pointer",
           }}
@@ -193,12 +209,12 @@ export function PermissionToolCard({
               gap: 4,
               height: 22,
               padding: "0 9px",
-              borderRadius: 6,
+              borderRadius: round(6),
               border: `1px solid ${allowEdge}`,
               background: "transparent",
-              color: allowText,
+              color: alwaysText,
               fontSize: 11,
-              fontWeight: 500,
+              fontWeight: weight,
               whiteSpace: "nowrap",
               cursor: disabled ? "default" : "pointer",
             }}
@@ -217,12 +233,12 @@ export function PermissionToolCard({
             gap: 4,
             height: 22,
             padding: "0 9px",
-            borderRadius: 6,
+            borderRadius: round(6),
             border: 0,
             background: allow,
             color: onAllow,
             fontSize: 11,
-            fontWeight: 500,
+            fontWeight: weight,
             whiteSpace: "nowrap",
             cursor: disabled ? "default" : "pointer",
           }}
