@@ -85,6 +85,9 @@ export function botRenderLook(motion: BotMotion) {
     s(f.crossed, 30),
     s(motion.kept.lift, 300),
     s(motion.kept.scale, 60),
+    s(motion.petal, 60),
+    s(motion.dim, 20),
+    motion.ring === null ? -1 : s(motion.ring, 120),
     motion.limbs,
     motion.flap,
     motion.sign,
@@ -454,6 +457,8 @@ function stillPart(
   decor: number,
   helper = false,
   flap: BotFlap = { left: 0, right: 0 },
+  petal = 1,
+  dim = 0,
 ) {
   const s = form.spec,
     [cx, cy] = s.center,
@@ -464,7 +469,7 @@ function stillPart(
     context.drawImage(form.artwork, 0, 0, 1, 1);
   }
   context.translate(0, (s.settle ?? 0) * m.eased);
-  const path = formOutline(form, m.eased, turn),
+  const path = formOutline(form, m.eased, turn, petal),
     ringShare = s.ring ? Math.max(0, Math.min(1, (m.share - 0.5) / 0.5)) : 0;
   if (s.ring && ringShare > 0) {
     context.globalAlpha = ringShare;
@@ -533,6 +538,10 @@ function stillPart(
     context.lineJoin = "round";
     context.stroke(path);
   }
+  if (dim > 0) {
+    context.fillStyle = `rgba(0, 0, 0, ${0.28 * dim})`;
+    context.fillRect(-0.3, -0.3, 1.6, 1.6);
+  }
   context.restore();
   if (s.ring && ringShare > 0) {
     context.save();
@@ -595,6 +604,37 @@ function drawHelper(
   }
   context.restore();
 }
+/** A ring around the body that fills clockwise from the top, in the body's own paint. */
+function progressRing(
+  context: CanvasRenderingContext2D,
+  form: BotForm,
+  share: number,
+  strength: number,
+) {
+  const s = form.spec,
+    [cx, cy] = s.center,
+    outer = s.radius * 1.34,
+    inner = s.radius * 1.2,
+    from = -Math.PI / 2,
+    band = (to: number) => {
+      const p = new Path2D();
+      p.arc(cx, cy, outer, from, to);
+      p.arc(cx, cy, inner, to, from, true);
+      p.closePath();
+      return p;
+    };
+  for (const [to, alpha] of [
+    [from + 2 * Math.PI, 0.22],
+    [from + 2 * Math.PI * share, 1],
+  ] as const) {
+    if (to <= from) continue;
+    context.save();
+    context.globalAlpha = alpha * strength;
+    context.clip(band(to));
+    fillPaint(context, form, s.paint);
+    context.restore();
+  }
+}
 function drawBody(
   context: CanvasRenderingContext2D,
   form: BotForm,
@@ -614,6 +654,8 @@ function drawBody(
           motion.helper,
           motion.flap,
           context,
+          motion.petal,
+          motion.dim,
         )
       : null;
   if (!still?.restore()) {
@@ -626,10 +668,14 @@ function drawBody(
       settled,
       motion.helper,
       motion.flap,
+      motion.petal,
+      motion.dim,
     );
     context.restore();
     still?.keep();
   }
+  if (motion.ring !== null && m.dressed > 0)
+    progressRing(context, form, motion.ring, m.dressed);
   context.translate(0, (s.settle ?? 0) * m.eased);
   if (s.keeps) {
     const b = s.keeps,
@@ -657,7 +703,12 @@ function drawBody(
       Math.sin(pitch) * s.radius * 0.62,
     ];
   if (s.keeps)
-    wear(context, s, formOutline(form, m.eased, motion.turn), m.dressed);
+    wear(
+      context,
+      s,
+      formOutline(form, m.eased, motion.turn, motion.petal),
+      m.dressed,
+    );
   for (const item of decor.slice(settled))
     decorate(
       context,
