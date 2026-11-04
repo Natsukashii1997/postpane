@@ -6,7 +6,13 @@ import type {
 import { formatTokens } from "../quota-metrics";
 import { sourceID, sourcesForMark } from "../model";
 import { usePanelQuery, usePanelServices } from "../PanelContext";
-import { noButtonChrome, palette, tabular, type Logo } from "./theme";
+import {
+  noButtonChrome,
+  palette,
+  receiptTitle,
+  tabular,
+  type Logo,
+} from "./theme";
 import { useGround } from "../ground";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
@@ -100,8 +106,6 @@ export function SourceSessions({
       style={{
         display: "grid",
         gap: "var(--hud-session-gap, 6px)",
-        paddingTop: "var(--hud-divided-gap, 8px)",
-        boxShadow: `inset 0 1px 0 ${colors.divider}`,
         fontSize: 12,
       }}
     >
@@ -119,8 +123,8 @@ export function SourceSessions({
           lineHeight: "16px",
         }}
       >
-        <strong style={{ fontWeight: 600, color: colors.text }}>
-          {zh ? "会话" : "Sessions"}
+        <strong style={{ ...receiptTitle, color: colors.secondary }}>
+          {zh ? "会话" : "SESSIONS"}
         </strong>
         <span
           style={{
@@ -156,7 +160,7 @@ export function SourceSessions({
             alignItems: "center",
             gap: 8,
             width: "100%",
-            color: colors.secondary,
+            color: colors.text,
             lineHeight: "15px",
             minHeight: 15,
           }}
@@ -183,7 +187,14 @@ export function SourceSessions({
             {sessionTitle(session.title, session.cwd) ||
               (zh ? "（未命名会话）" : "(untitled session)")}
           </span>
-          <span style={{ ...tabular, fontSize: 12, whiteSpace: "nowrap" }}>
+          <span
+            style={{
+              ...tabular,
+              fontSize: 12,
+              whiteSpace: "nowrap",
+              color: colors.secondary,
+            }}
+          >
             {formatTokens(session.tokens)} tok
           </span>
         </button>
