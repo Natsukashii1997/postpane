@@ -18,7 +18,12 @@ import { quotaDisplayLabel } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
-import { stubBotTop, stubMarks, stubSize } from "../ticket-stub";
+import {
+  stubBotTop,
+  stubFootHeight,
+  stubMarks,
+  stubSize,
+} from "../ticket-stub";
 
 const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
@@ -126,7 +131,7 @@ export function HUDMarkStrip({
     paddingTop: botTop + (side === "top" ? 3 * unit : 0),
     paddingLeft: side === "left" ? 3 * unit : 0,
     paddingRight: side === "right" ? 3 * unit : 0,
-    paddingBottom: 7 * unit + (side === "bottom" ? 3 * unit : 0),
+    paddingBottom: side === "bottom" ? 3 * unit : 0,
   };
   const paper = (
     <span
@@ -391,8 +396,8 @@ export function HUDMarkStrip({
                   vendor={vendor}
                   label={meterLabel(vendor, quotaDisplay)}
                   unit={unit}
+                  foot={stubFootHeight(metrics.logo)}
                   side={side}
-                  vertical={!horizontal(edge)}
                   zh={zh}
                 />
               )}
@@ -440,20 +445,23 @@ export function HUDMarkStrip({
   );
 }
 
-/** What a stub prints under its bot: the reading, or a seal; and a punch hole. */
+/**
+ * What a stub prints on its tear-off foot, under a dashed tear line: the
+ * reading, or a seal; and a punch hole near its top.
+ */
 function StubFace({
   vendor,
   label,
   unit,
+  foot,
   side,
-  vertical,
   zh,
 }: {
   vendor: HUDVendor;
   label: string;
   unit: number;
+  foot: number;
   side: "left" | "right" | "top" | "bottom";
-  vertical: boolean;
   zh: boolean;
 }) {
   const marks = stubMarks({
@@ -463,61 +471,67 @@ function StubFace({
   });
   return (
     <>
-      {marks.sealed ? (
-        <span
-          aria-hidden="true"
-          style={{
-            marginTop: "auto",
-            display: "grid",
-            placeItems: "center",
-            width: 17 * unit,
-            height: 17 * unit,
-            boxSizing: "border-box",
-            border: `${1.5 * unit}px solid ${STUB_RED}`,
-            borderRadius: 3 * unit,
-            color: STUB_RED,
-            font: `900 ${11 * unit}px/1 "Songti SC", "STSong", serif`,
-            transform: "rotate(-10deg)",
-          }}
-        >
-          {zh ? "批" : "!"}
-        </span>
-      ) : (
-        <span
-          aria-hidden="true"
-          style={{
-            position: "relative",
-            marginTop: "auto",
-            maxWidth: "100%",
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-            font: `600 ${10.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
-            letterSpacing: 0.2 * unit,
-            fontVariantNumeric: "tabular-nums",
-            color: marks.warn ? STUB_RED : STUB_INK,
-          }}
-        >
-          {label}
-        </span>
-      )}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: side === "left" ? 3 * unit : 0,
+          right: side === "right" ? 3 * unit : 0,
+          bottom: side === "bottom" ? 3 * unit : 0,
+          height: foot,
+          boxSizing: "border-box",
+          borderTop: `${unit}px dashed rgba(42,41,37,.34)`,
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        {marks.sealed ? (
+          <span
+            style={{
+              display: "grid",
+              placeItems: "center",
+              width: 12 * unit,
+              height: 12 * unit,
+              boxSizing: "border-box",
+              border: `${1.2 * unit}px solid ${STUB_RED}`,
+              borderRadius: 2.5 * unit,
+              color: STUB_RED,
+              font: `900 ${8 * unit}px/1 "Songti SC", "STSong", serif`,
+              transform: "rotate(-10deg)",
+            }}
+          >
+            {zh ? "批" : "!"}
+          </span>
+        ) : (
+          <span
+            style={{
+              maxWidth: "100%",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+              font: `600 ${9.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
+              letterSpacing: 0.15 * unit,
+              fontVariantNumeric: "tabular-nums",
+              color: marks.warn ? STUB_RED : STUB_INK,
+            }}
+          >
+            {label}
+          </span>
+        )}
+      </span>
       {marks.punched && (
         <span
           aria-hidden="true"
           style={{
             position: "absolute",
-            width: 7 * unit,
-            height: 7 * unit,
+            width: 5.5 * unit,
+            height: 5.5 * unit,
             borderRadius: "50%",
             background: "rgba(18,22,30,.88)",
             boxShadow: `inset 0 ${1.2 * unit}px ${1.5 * unit}px rgba(0,0,0,.6)`,
-            top: vertical ? 5 * unit : side === "top" ? 6 * unit : undefined,
-            bottom: side === "bottom" ? 6 * unit : undefined,
-            left: vertical
-              ? side === "left"
-                ? 6 * unit
-                : undefined
-              : 5 * unit,
-            right: side === "right" ? 6 * unit : undefined,
+            top: (side === "top" ? 3 * unit : 0) + 4 * unit,
+            left:
+              side === "right" ? undefined : (side === "left" ? 5 : 4) * unit,
+            right: side === "right" ? 5 * unit : undefined,
           }}
         />
       )}
