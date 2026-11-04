@@ -40,6 +40,7 @@ pub(crate) fn data_parent(home: &Path) -> PathBuf {
     home.join("Library/Application Support")
 }
 pub(crate) const DATA_FOLDER: &str = crate::data_folder::MAC;
+pub(crate) const EARLIER_FOLDER: &str = crate::data_folder::EARLIER_MAC;
 pub(crate) fn caches_dir(home: &Path) -> PathBuf {
     home.join("Library/Caches")
 }

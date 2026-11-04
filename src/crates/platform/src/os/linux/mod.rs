@@ -33,6 +33,7 @@ pub(crate) fn data_parent(home: &Path) -> PathBuf {
         .unwrap_or_else(|| home.join(".local/share"))
 }
 pub(crate) const DATA_FOLDER: &str = crate::data_folder::LINUX;
+pub(crate) const EARLIER_FOLDER: &str = crate::data_folder::EARLIER_LINUX;
 pub(crate) fn caches_dir(home: &Path) -> PathBuf {
     std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)

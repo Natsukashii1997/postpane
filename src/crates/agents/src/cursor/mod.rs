@@ -28,9 +28,9 @@ const fn turn_log(base: Base, folder: &'static [&'static str]) -> Source {
         },
     }
 }
-static MAC_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::AppData, &["app.agenthud.mac"])];
+static MAC_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::AppData, &["app.postpane.mac"])];
 static WINDOWS_SOURCES: [Source; 1] = [HEADERS];
-static LINUX_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::DataHome, &["app.agenthud.linux"])];
+static LINUX_SOURCES: [Source; 2] = [HEADERS, turn_log(Base::DataHome, &["app.postpane.linux"])];
 
 // Brings Cursor forward without a session, for one with no folder or cloud id.
 static APP_NAVIGATION: crate::discovery::AppNavigation = crate::discovery::AppNavigation {

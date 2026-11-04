@@ -15,13 +15,21 @@ use std::{
 /// desktop app's Tauri configuration gives it. A build uses its own system's
 /// name; the test below checks all three on every system.
 #[allow(dead_code)]
-pub(crate) const MAC: &str = "app.agenthud.mac";
+pub(crate) const MAC: &str = "app.postpane.mac";
 #[allow(dead_code)]
-pub(crate) const WINDOWS: &str = "app.agenthud.windows";
+pub(crate) const WINDOWS: &str = "app.postpane.windows";
 #[allow(dead_code)]
-pub(crate) const LINUX: &str = "app.agenthud.linux";
-/// The name earlier builds used on every system.
-const EARLIER: &str = "app.agenthud.next";
+pub(crate) const LINUX: &str = "app.postpane.linux";
+/// Agent HUD's folder on each system, which PostPane's first launch moves
+/// to its own (docs/ROADMAP.md, stage 2).
+#[allow(dead_code)]
+pub(crate) const EARLIER_MAC: &str = "app.agenthud.mac";
+#[allow(dead_code)]
+pub(crate) const EARLIER_WINDOWS: &str = "app.agenthud.windows";
+#[allow(dead_code)]
+pub(crate) const EARLIER_LINUX: &str = "app.agenthud.linux";
+/// The name earlier builds used on this system.
+const EARLIER: &str = crate::os::EARLIER_FOLDER;
 /// The file every collector locks in the folder it uses. Once it is in this
 /// build's folder, that folder is the one in use.
 pub(crate) const LOCK: &str = "instance.lock";
