@@ -4,7 +4,7 @@
 
 ## 阶段 4：审批横条与展开框换成票签；额度面板改动撤回（2026-11-04，Claude，常浩选审批横条「一 票签」，要求结构照旧、按钮用常规文字；实物看过后说「没问题，合并」；额度面板未经确认，常浩要求撤回；PR #27 已合并 `f8e4d0f`、PR #26 撤回 #24、已打包安装）
 
-- 时间：开工 `2026-11-04 20:50`（悬停面板对齐起算；本节写于 `2026-11-04 21:50` 前后，以 `date` 为准）。来由：ROADMAP 阶段 4 剩余的悬停部分。
+- 时间：开工 `2026-11-04 20:50`（悬停面板对齐起算；本节写于 `2026-11-04 21:42`）。来由：ROADMAP 阶段 4 剩余的悬停部分。
 - 过程与误会（重要）：「悬停面板」在常浩那里指的是**审批横条鼠标移上去展开的审批框**，不是侧栏小票弹出的额度面板。我按额度面板出了三版（https://claude.ai/artifact/C4TZ6aZwzCQJkkB45swhQs ），常浩选「甲 整张票据」并同意分 3 批，我据此合并了 #24（额度面板票据外观）、开了会话区 #25；常浩随后指出额度面板还没让他确认过，要撤回、以后重新设计。已用 PR #26 还原 #24（代码与 `35fdb67` 一致），#22、#25 关闭为不做，装回改之前的应用。审批的两种去处分镜 https://claude.ai/artifact/VA2na2qCUPGqqXTN1wZY9z 被否（常浩要保留窄横条 + 悬停展开的现有结构）。最终选型页 https://claude.ai/artifact/QyWVEHs5q83asx7MPjfcdP 「一 票签」。
 - 改了哪些文件（PR #27）：`src/packages/hud/src/paper.ts`（新：纸色、纸纹、齿孔）、`alerts/CompactAlertView.tsx`（纸签横条、批/答小方章、「待确认计划」）、`scene/HUDExpandedSurface.tsx` 与 `HUDScene.tsx`（动态/简约模式下审批卡外壳换纸面）、`permissions/ApprovalContent.tsx`、`PermissionToolCard.tsx`、`PermissionQuestionCard.tsx`、`PermissionPlanCard.tsx`、`alerts/PendingEventRows.tsx`（圆戳、撕线、印刷行、按钮配色；文字全部不变）、`model.ts` + `ticket-stub.ts` + `scene/HUDMarkStrip.tsx`（撕角票章区分「批」「答」）、`test/ticket-stub.test.ts`。
 - 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 637 passed / 0 failed、`ℹ pass 115` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`）；`node scripts/check-rules.mjs` 通过。撤回 PR #26 同样跑过 check 与 test（`ℹ pass 114` / `ℹ fail 0`、Rust 637）。
