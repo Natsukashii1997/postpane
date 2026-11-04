@@ -1,6 +1,17 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 4 剩余的小人与图标，开工前先和常浩对齐想要的感觉，再出三版；建议开新会话做。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），阶段 4 已收尾（小人保持现样、菜单栏图标本机关掉），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 3 唤起类应用（豆包、ChatGPT 桌面版一键唤起），开工前先和常浩对齐入口放在哪；阶段 5 结论草案仍待常浩确认。
+
+## 阶段 4 收尾：小人不改，菜单栏图标关掉（2026-11-04，Claude，常浩看过示意图后说「都不做，小人就是现在的样子，菜单栏图标默认不显示，直接给我改设置，我不需要，图标做完了」；交接已提交到 main、本机设置已改并回读）
+
+- 时间：开工 `2026-11-04 23:07`（会话创建时间；本节写于 `2026-11-04 23:13`）。来由：ROADMAP 阶段 4 剩余的「小人与图标」，先用示意图对齐范围 https://claude.ai/artifact/3tcEEHALJcvjQwFuy6SqHr （A 撕角票标志与小人、B 菜单栏图标、C 应用图标），常浩决定都不改。
+- 改了哪些文件：`docs/ROADMAP.md`（阶段 4 加完成状态）、`CURRENT.md`（本节与顶部下一步）。代码未改；本机 `~/Library/Application Support/app.postpane.mac/settings.json` 的 `showMenuBarIcon` 改为 `false`（`providers` 保留）。
+- 测试：`node --test tests/*.test.mjs` 结果 `ℹ pass 4` / `ℹ fail 0`；`pnpm run check`、`pnpm test` 未跑（没改代码）。
+- 验证：退出驿窗 → 改设置 → 重新打开；回读设置为 `showMenuBarIcon = False`；应用运行中用 System Events 查驿窗进程，没有状态栏菜单（`menu bar 2` 不存在）。未截图看菜单栏。
+- 截图：无。
+- 发布与回读：无需发布。回滚：退出驿窗后 `cp ~/Library/Application\ Support/postpane/evidence/2026-11-04-hide-menubar/settings-before.json ~/Library/Application\ Support/app.postpane.mac/settings.json` 再打开，或在设置「通用」里打开菜单栏图标。
+- 与授权不一致之处、遗留问题、范围外发现：常浩说「默认不显示」，这次只改了他本机的设置，代码里新装的默认值仍是显示（`src/crates/core/src/lib.rs` 的 `showMenuBarIcon: true`）；只有他一人使用，暂不改。可清理 worktree 仍是 8 个，清理前问常浩。
+- 本轮新坑：无。
 
 ## 新回复等通知换成「回执」外观（2026-11-04，Claude，常浩指着黑底「有新回复」卡说还没做，选甲「回执」，看过实物后说「看过了，合并」；PR #35 测试全过已 squash 合并 `34126a4`、已打包安装）
 
