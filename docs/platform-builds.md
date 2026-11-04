@@ -84,8 +84,6 @@ qualify desktop focus, display, client, or network behavior.
   Save different placements on two displays, restart with their enumeration order
   changed, and check placements follow each monitor's Windows device path. Mirrored
   and remote displays without a unique device path retain session-only identity.
-- For the private product, pair over LAN, restart, reconnect, revoke, and confirm
-  the certificate fingerprint survives restart.
 - Check HUD alerts and the current-user login item. With both products installed,
   verify that enabling or disabling one product's login item leaves the other
   product's entry unchanged.

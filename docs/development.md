@@ -16,7 +16,6 @@ src/
     platform/            OS environment, source discovery, native actions, per-OS adapters
     host/                The Tauri host: windows, HUD panels, menu bar, collection thread, MCP tools
     hud/                 HUD presentation shared by the host: layout plans and the bot director
-    lan/                 Local-network service for the iPhone app
     l10n/                Chinese and English strings
     engine/              JSON-lines CLI using that runtime
   packages/

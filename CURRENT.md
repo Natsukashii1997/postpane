@@ -1,6 +1,17 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：1-3 合并后做 1-4 文档收尾，再进阶段 2 改名与本机切换；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 2 改名与本机切换；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 1-4：文档收尾（2026-11-04，Claude，常浩让继续推进；纯文档，按工程流程第 3 节直接提交 main、无需发布）
+
+- 时间：开工 `2026-11-04 15:50`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 15:51`）。来由：阶段 1 最后一批；顺带补记常浩“余额照留”的决定。
+- 改了哪些文件：`README.md` 换成驿窗说明；上游 `README.md`、`README.zh-CN.md` 移到 `docs/upstream/` 并修正图片相对路径；`docs/development.md`、`docs/platform-architecture.md`、`docs/platform-builds.md` 去掉局域网；`docs/ROADMAP.md` 补记余额照留、改写 1-4；本文件。
+- 测试：`node --test tests/*.test.mjs` 原样结果 `ℹ pass 4 ℹ fail 0`（本节只改文档，未跑构建）；`node src/tooling/parity-ledger.mjs --check` 输出 `Parity ledger: 1217 behaviors, 583 match or are fixed, 494 open.`。
+- 验证：只改文档，无界面。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：`docs/parity/` 没有归档，因为 `parity-ledger` 检查依赖它在原处；`AGENTS.md` 结构一节里 parity 的说明（“裁剪后归档”）已过时，AGENTS 改动按流程要走 PR，留到阶段 2 的 PR 一并改。
+- 本轮新坑：无。
 
 ## 阶段 1-3：界面去掉成本数字，只看 token（2026-11-04，Claude，常浩决定成本与套餐价值都去掉、只看 token；PR 待合并、无需发布）
 
