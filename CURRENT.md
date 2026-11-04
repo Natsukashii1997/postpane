@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），小人保持现样、菜单栏图标本机关掉；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框已合并（PR #37），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 2 批「设置四页正文」（智能体页左侧列表、插件卡片、显示页 HUD 预览与光晕、页尾合计与条码），先开 issue 再做；之后第 3 批统计用量、第 4 批统计会话。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），小人保持现样、菜单栏图标本机关掉；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 3 批「统计用量」，先开 issue 再做；之后第 4 批统计会话。
+
+## 后台第 2 批：设置四页正文换小票细节与网纹框滑块（2026-11-05，Claude，常浩确认分批计划并说「按推荐开工」，看过显示页浅色实物后经 HUD 回复「合并」；PR #39 测试全过已 squash 合并 `3297988`、已打包安装）
+
+- 时间：开工 `2026-11-05 00:03`（会话创建时间；本节写于 `2026-11-05 00:28`）。来由：第 1 批外框之后的设置四页正文，滑块常浩已选「甲 网纹框」（预览 https://claude.ai/artifact/45fUqbNvXETpyBaaoMsDeR ），issue #38。三个细节按推荐答案：智能体列表反白加「◀」、「共 N 项」数本页显示出的设置行、部件样例改纸面。
+- 改了哪些文件（PR #39）：`src/packages/app/src/settings/receipt.css`（网纹框滑块；智能体列表、拖动目标、确认弹窗；HUD 预览墨框；插件卡头悬停与展开明细缩进虚线；页尾双线、「共 N 项」CSS 计数、固定花纹条码）、`SettingsPrimitives.tsx`（滑块带 `data-min`/`data-max`，印两端值）、`SettingsSamples.tsx`（HUD 预览加类名；部件样例用真面板的 `paperOf` 取色印成纸面）、`src/packages/hud/package.json`（多导出 `./paper`）、`docs/ROADMAP.md`（第 2 批标完成）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 121` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`），都在合并的提交 `c70cef4` 上跑。
+- 验证：浏览器开发模式（独立数据目录 `evidence/2026-11-05-backstage-pages/devdata`）看了四页浅深两色、中英文；打包安装后实机只看了显示页浅色，网纹框把手在 WebKit 下压在框上。深色与其他三页未实机看：本轮 computer-use 访问驿窗被拒，改用 `open -a` 唤出设置窗口加 `screencapture -l` 只截到当前页。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-backstage-pages/设置-显示-浅色.png`。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（00:21:08，按 L-03）；设置回读 `appearance=system`、`showMenuBarIcon=false`（本轮未改）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-backstage-pages/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划说内部分 4 步提交，实际合成 1 个提交（改动集中在同一个样式文件）。
+  - 页尾没做原预览右侧的「已保存 时:分:秒」（设置是改了就存，免得加状态逻辑），计划里已说明。
+  - 「合并」经 agent-hud 插件转入，合并前核实了 PR 仍开着、头提交即测过的 `c70cef4`、main 无新提交。
+  - 可清理 worktree 增加 `.claude/worktrees/38-backstage-pages`（现共 10 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 后台第 1 批：设置窗口换热敏小票外框（2026-11-04，Claude，常浩先看两轮三版预览后选「一 热敏小票」并确认 4 批计划，看过实物截图后说「合并」；PR #37 测试全过已 squash 合并 `03202ee`、已打包安装）
 
