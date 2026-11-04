@@ -442,6 +442,8 @@ export function HUDScene({
     surfacePadding,
     marginStyle,
     measurementWidth,
+    receipt,
+    receiptInset,
   } = useHUDLayout({
     config,
     snapshot,
@@ -462,22 +464,26 @@ export function HUDScene({
     requestsCount: requests.length,
   });
 
-  // A request beside the dock is printed on paper, its tag and its card; in
-  // the notch it keeps the notch's ground.
+  // A request beside the dock is printed on paper, its tag and its card, and
+  // so is the usage panel, as a receipt; in the notch they keep the notch's
+  // ground.
   const paper = useMemo(
     () =>
-      detached && request
+      (detached && request) || receipt
         ? paperOf(light, {
-            left: surfacePadding.left,
-            right: surfacePadding.right,
+            left: surfacePadding.left - receiptInset.left,
+            right: surfacePadding.right - receiptInset.right,
           })
         : null,
     [
       detached,
       Boolean(request),
+      receipt,
       light,
       surfacePadding.left,
       surfacePadding.right,
+      receiptInset.left,
+      receiptInset.right,
     ],
   );
 
@@ -787,54 +793,58 @@ export function HUDScene({
                     {eventContent && (!inUsagePanel || Boolean(request)) ? (
                       eventContent
                     ) : (
-                      <SourceHoverPanel
-                        active={open}
-                        config={config}
-                        snapshot={measured.snapshot}
-                        focusVendor={focusedVendor?.name}
-                        light={light}
-                        Logo={HUDLogo}
-                        onConfigure={
-                          onConfigure
-                            ? () => {
-                                endHold();
-                                onConfigure();
-                              }
-                            : undefined
-                        }
-                        onStats={
-                          onStats
-                            ? () => {
-                                endHold();
-                                onStats();
-                              }
-                            : undefined
-                        }
-                        update={update}
-                        onUpdate={
-                          onUpdate
-                            ? () => {
-                                endHold();
-                                onUpdate();
-                              }
-                            : undefined
-                        }
-                        inlineAlert={
-                          inUsagePanel && !request && event ? (
-                            <InlineEventRow
-                              event={event}
-                              snapshot={measured.snapshot}
-                              light={light}
-                              botLogos={config.botLogos}
-                              zh={snapshotLanguage(measured.snapshot) === "zh"}
-                              onOpen={() => {
-                                news.dismiss();
-                                showPanelStats?.();
-                              }}
-                            />
-                          ) : undefined
-                        }
-                      />
+                      <PaperContext.Provider value={paper}>
+                        <SourceHoverPanel
+                          active={open}
+                          config={config}
+                          snapshot={measured.snapshot}
+                          focusVendor={focusedVendor?.name}
+                          light={light}
+                          Logo={HUDLogo}
+                          onConfigure={
+                            onConfigure
+                              ? () => {
+                                  endHold();
+                                  onConfigure();
+                                }
+                              : undefined
+                          }
+                          onStats={
+                            onStats
+                              ? () => {
+                                  endHold();
+                                  onStats();
+                                }
+                              : undefined
+                          }
+                          update={update}
+                          onUpdate={
+                            onUpdate
+                              ? () => {
+                                  endHold();
+                                  onUpdate();
+                                }
+                              : undefined
+                          }
+                          inlineAlert={
+                            inUsagePanel && !request && event ? (
+                              <InlineEventRow
+                                event={event}
+                                snapshot={measured.snapshot}
+                                light={light}
+                                botLogos={config.botLogos}
+                                zh={
+                                  snapshotLanguage(measured.snapshot) === "zh"
+                                }
+                                onOpen={() => {
+                                  news.dismiss();
+                                  showPanelStats?.();
+                                }}
+                              />
+                            ) : undefined
+                          }
+                        />
+                      </PaperContext.Provider>
                     )}
                     <RequestDeliveryNotice
                       delivery={delivery}
@@ -930,6 +940,7 @@ export function HUDScene({
             inUsagePanel={inUsagePanel}
             delivery={delivery}
             paper={paper}
+            paperInset={receiptInset}
           />
           <div
             className="hud-resting-strip"

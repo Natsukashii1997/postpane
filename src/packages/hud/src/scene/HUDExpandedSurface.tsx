@@ -21,7 +21,14 @@ import { AgentPeek } from "./AgentPeek";
 import { Silhouette, type useNotchGeometry } from "./NotchSurface";
 import { outsideSimplePanel } from "./simple-panel";
 import { snapshotLanguage } from "@agent-hud/ui/format";
-import { paperFace, perforatedSide, perforation, type Paper } from "../paper";
+import {
+  PaperContext,
+  paperFace,
+  perforatedSide,
+  perforation,
+  type Paper,
+} from "../paper";
+import type { Insets } from "./receipt-sheet";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
@@ -66,6 +73,7 @@ export function HUDExpandedSurface({
   inUsagePanel,
   delivery,
   paper = null,
+  paperInset,
 }: {
   config: HUDConfig;
   edge: HUDEdge;
@@ -107,8 +115,11 @@ export function HUDExpandedSurface({
   eventContent: ReactNode;
   inUsagePanel?: boolean;
   delivery?: RequestDelivery;
-  /** The paper a request's tag and card are printed on, beside the dock. */
+  /** The paper a request's tag and card, or the usage panel's receipt, are
+   * printed on, beside the dock. */
   paper?: Paper | null;
+  /** Where the receipt's sheet sits in the frame, clear of the dock. */
+  paperInset?: Insets;
 }) {
   // A hardware notch's row stays dark whatever the appearance, at rest and
   // while a reminder shows its wings, so it stays one with the camera
@@ -274,6 +285,8 @@ export function HUDExpandedSurface({
                 style={{
                   position: "absolute",
                   inset: 0,
+                  ...paperInset,
+                  borderRadius: 3,
                   ...paperFace(paper),
                   WebkitMask: punched,
                   mask: punched,
@@ -307,7 +320,7 @@ export function HUDExpandedSurface({
                 />
               </svg>
             )}
-            {!detached && config.mode === "logos" && (
+            {!detached && config.mode === "logos" && !paper && (
               <Silhouette
                 width={frame.width}
                 height={frame.height}
@@ -458,27 +471,29 @@ export function HUDExpandedSurface({
                             (!inUsagePanel || Boolean(request)) ? (
                               eventContent
                             ) : (
-                              <SourceHoverPanel
-                                active={open}
-                                config={config}
-                                snapshot={snapshot}
-                                focusVendor={focusedVendor?.name}
-                                light={light}
-                                Logo={HUDLogo}
-                                onConfigure={configurePanel}
-                                onStats={showPanelStats}
-                                inlineAlert={
-                                  inUsagePanel && !request
-                                    ? eventContent
-                                    : undefined
-                                }
-                                maxHeight={Math.max(
-                                  40,
-                                  frame.height -
-                                    surfacePadding.top -
-                                    surfacePadding.bottom,
-                                )}
-                              />
+                              <PaperContext.Provider value={paper}>
+                                <SourceHoverPanel
+                                  active={open}
+                                  config={config}
+                                  snapshot={snapshot}
+                                  focusVendor={focusedVendor?.name}
+                                  light={light}
+                                  Logo={HUDLogo}
+                                  onConfigure={configurePanel}
+                                  onStats={showPanelStats}
+                                  inlineAlert={
+                                    inUsagePanel && !request
+                                      ? eventContent
+                                      : undefined
+                                  }
+                                  maxHeight={Math.max(
+                                    40,
+                                    frame.height -
+                                      surfacePadding.top -
+                                      surfacePadding.bottom,
+                                  )}
+                                />
+                              </PaperContext.Provider>
                             )}
                             <RequestDeliveryNotice
                               delivery={delivery}

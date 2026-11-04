@@ -1,7 +1,9 @@
-import type { ComponentType, CSSProperties } from "react";
+import { useMemo, type ComponentType, type CSSProperties } from "react";
 import { DollarSign, Flame, Gauge, Percent, Sigma } from "lucide-react";
 import type { QuotaMeasure } from "@agent-hud/protocol";
-import { hudPalette, type Ground } from "../tokens";
+import { useGround } from "../ground";
+import { usePaper, type Paper } from "../paper";
+import { hudPalette, type Ground, type HUDPalette } from "../tokens";
 
 export type Logo = ComponentType<{
   source: string;
@@ -106,4 +108,78 @@ export function agentColor(index: number, light: boolean) {
  * ground the desktop shows through (`hud/tokens.ts`, Open's Theme.under). */
 export function palette(ground: Ground) {
   return hudPalette(ground);
+}
+
+/** The panel's tokens printed on `paper`, the receipt: ink for the text and
+ * an ordinary level, amber for a warning, red for a critical one. */
+export function paperPalette(paper: Paper): HUDPalette {
+  const warning = paper.light ? "#b7791f" : "#e0a948";
+  return {
+    text: paper.ink,
+    secondary: paper.dim,
+    tertiary: paper.text(0.42),
+    divider: paper.line,
+    track: paper.fill,
+    selected: paper.fill,
+    accent: paper.red,
+    ok: paper.ink,
+    warning,
+    critical: paper.red,
+    okText: paper.ink,
+    warningText: warning,
+    criticalText: paper.red,
+  };
+}
+
+/** The panel's tokens where it is drawn: on the receipt's paper beside the
+ * dock, or on the HUD's own ground (the notch, the settings' preview). */
+export function usePanelPalette(light: boolean): HUDPalette {
+  const paper = usePaper();
+  const ground = useGround(light);
+  return useMemo(
+    () => (paper ? paperPalette(paper) : palette(ground)),
+    [paper, ground],
+  );
+}
+
+/** A status dot on the receipt: punched through, not glowing. */
+export const RECEIPT_PUNCH = "inset 0 1px 1.2px rgba(0,0,0,.5)";
+
+/** A meter on the receipt: a small ruled box instead of a rounded track. */
+export function receiptMeterBox(paper: Paper): CSSProperties {
+  return {
+    height: 7,
+    background: "transparent",
+    border: `1px solid ${paper.ink}`,
+    borderRadius: 1,
+    boxSizing: "border-box",
+  };
+}
+
+/** A meter's reading on the receipt, printed in hatching of `color`. */
+export function receiptMeterFill(color: string): CSSProperties {
+  return {
+    height: "100%",
+    borderRadius: 0,
+    background: `repeating-linear-gradient(-45deg, ${color} 0 1.5px, transparent 1.5px 3.5px)`,
+  };
+}
+
+/** A tear line across the receipt, from one side of the paper to the
+ * other: a dashed rule bled past the content's margins. */
+export function receiptTear(paper: Paper): CSSProperties {
+  return {
+    borderTop: `1.2px dashed ${paper.line}`,
+    marginLeft: -paper.bleed.left,
+    marginRight: -paper.bleed.right,
+    paddingLeft: paper.bleed.left,
+    paddingRight: paper.bleed.right,
+  };
+}
+
+/** One agent's shade of ink on the receipt: the Token chart's slots, darkest
+ * first, told apart by depth rather than hue. */
+export function paperAgentColor(index: number, paper: Paper) {
+  const depths = [0.88, 0.58, 0.36, 0.2];
+  return paper.text(depths[Math.max(0, index) % depths.length] - 0.08);
 }

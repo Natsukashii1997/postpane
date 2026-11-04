@@ -4,8 +4,7 @@ import { Info, RotateCcw } from "lucide-react";
 import type { ResetCredits } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { expiryLabel, nextExpiryLabel, say } from "./account-labels";
-import { palette } from "./theme";
-import { useGround } from "../ground";
+import { usePanelPalette } from "./theme";
 
 /** Codex's earned usage resets, once beneath the signed-in account's windows:
  * how many are available and the first expiry, with every expiry in a card
@@ -20,7 +19,7 @@ export function ResetCreditsRow({
   showExpiry: boolean;
   light: boolean;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   const { language } = useFormat();
   const row = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<DOMRect | null>(null);
@@ -155,7 +154,7 @@ function ResetCreditsCard({
   anchor: DOMRect;
   light: boolean;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   const { language } = useFormat();
   const credits = resets.credits ?? [];
   const missing = resets.availableCount - credits.length;

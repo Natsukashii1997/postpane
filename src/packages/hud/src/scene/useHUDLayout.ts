@@ -23,6 +23,7 @@ import {
 import { peekLineWidth } from "./AgentPeek";
 import { SIMPLE_EDGE_MARGIN } from "./simple-panel";
 import { useNotchGeometry } from "./NotchSurface";
+import { RECEIPT_EXTRA, receiptSheetInset } from "./receipt-sheet";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
@@ -142,6 +143,11 @@ export function useHUDLayout({
         : 26) / 26,
   );
   const simplePeek = Boolean(peek && config.mode === "simple");
+  // The usage panel beside the dock is printed as a receipt: a sheet of its
+  // own, apart from the dock's stubs, so a panel grown from the dock keeps
+  // RECEIPT_EXTRA more room on the dock's side for the gap and the margin.
+  const receipt = config.mode !== "notch" && !standaloneAlert && !peek;
+  const receiptExtra = receipt && !detached ? RECEIPT_EXTRA : 0;
   const surfaceFlare =
     open || config.mode === "logos"
       ? HUD_METRICS.expandedFlare
@@ -157,7 +163,7 @@ export function useHUDLayout({
             Math.max(
               config.panelWidth,
               404 + metrics.width + 12 + surfaceFlare + 16,
-            ),
+            ) + receiptExtra,
           )
         : config.panelWidth;
   // On a side edge the line starts behind the dock, so it reads as the dock growing; that side carries no text.
@@ -270,10 +276,10 @@ export function useHUDLayout({
           left: 18,
         }
       : {
-          top: edge === "top" ? metrics.height + 12 : 14,
-          right: edge === "right" ? metrics.width + 12 : 18,
-          bottom: edge === "bottom" ? metrics.height + 12 : 14,
-          left: edge === "left" ? metrics.width + 12 : 18,
+          top: edge === "top" ? metrics.height + 12 + receiptExtra : 14,
+          right: edge === "right" ? metrics.width + 12 + receiptExtra : 18,
+          bottom: edge === "bottom" ? metrics.height + 12 + receiptExtra : 14,
+          left: edge === "left" ? metrics.width + 12 + receiptExtra : 18,
         };
   const surfacePadding = {
     top: bodyPadding.top + (flared && !horizontal(edge) ? surfaceFlare : 0),
@@ -282,6 +288,16 @@ export function useHUDLayout({
       bodyPadding.bottom + (flared && !horizontal(edge) ? surfaceFlare : 0),
     left: bodyPadding.left + (flared && horizontal(edge) ? surfaceFlare : 0),
   };
+  // Where the receipt's sheet sits in the frame: clear of the stubs, by
+  // RECEIPT_GAP, on the dock's side of a panel grown from the dock, and
+  // inside its flare.
+  const receiptInset = receiptSheetInset(
+    receipt && !detached,
+    edge,
+    frame,
+    strip,
+    flared ? surfaceFlare : 0,
+  );
   const marginStyle: CSSProperties =
     config.mode !== "simple"
       ? {}
@@ -329,5 +345,7 @@ export function useHUDLayout({
     surfacePadding,
     marginStyle,
     measurementWidth,
+    receipt,
+    receiptInset,
   };
 }

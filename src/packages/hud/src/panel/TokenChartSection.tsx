@@ -17,11 +17,19 @@ import { Button } from "@agent-hud/ui/components/button";
 import { formatTokens } from "../quota-metrics";
 import { HUD_METRICS, sourcesForMark } from "../model";
 import { usePanelQuery } from "../PanelContext";
-import { agentColor, palette, tabular, type Logo, type Period } from "./theme";
+import {
+  agentColor,
+  paperAgentColor,
+  receiptTear,
+  usePanelPalette,
+  tabular,
+  type Logo,
+  type Period,
+} from "./theme";
+import { usePaper } from "../paper";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat, numberFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { hexAlpha } from "../tokens";
-import { useGround } from "../ground";
 import { orderedModels, visibleModelCounts } from "./model-visibility";
 
 const moving: Transition = {
@@ -51,7 +59,8 @@ export function SourceTokenChart({
   useEffect(() => setPeriod(initial), [initial]);
   const [hovered, setHovered] = useState<number | null>(null);
   const histogram = useRef<HTMLDivElement>(null);
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   const now = Date.parse(snapshot.generatedAt);
   const periods: { label: Period; duration: number }[] = [
     { label: "24h", duration: 86_400_000 },
@@ -148,7 +157,9 @@ export function SourceTokenChart({
         display: "grid",
         gap: 6,
         paddingTop: 8,
-        boxShadow: `inset 0 1px 0 ${colors.divider}`,
+        ...(paper
+          ? receiptTear(paper)
+          : { boxShadow: `inset 0 1px 0 ${colors.divider}` }),
       }}
     >
       <div
@@ -227,7 +238,7 @@ export function SourceTokenChart({
           position: "relative",
           height: 40,
           margin: "8px 6px 0",
-          boxShadow: `inset 0 -1px 0 ${colors.divider}`,
+          boxShadow: `inset 0 -1px 0 ${paper ? paper.ink : colors.divider}`,
           display: "flex",
           alignItems: "flex-end",
           gap: 2,
@@ -285,7 +296,9 @@ export function SourceTokenChart({
                           style={{
                             display: "block",
                             flex: `${point.models![model.id] ?? 0} 0 0`,
-                            background: agentColor(slot, light),
+                            background: paper
+                              ? paperAgentColor(slot, paper)
+                              : agentColor(slot, light),
                             transition: still
                               ? undefined
                               : `flex-grow ${HUD_METRICS.duration}s cubic-bezier(${HUD_METRICS.ease.join(",")})`,
@@ -382,7 +395,8 @@ function ColumnDetail({
   zh: boolean;
   Logo?: Logo;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   const cardWidth = Math.min(280, width);
   const midpoint = ((index + 0.5) / Math.max(1, count)) * width;
   const preferred =
@@ -425,7 +439,7 @@ function ColumnDetail({
         borderRadius: 8,
         fontSize: 11,
         color: colors.text,
-        background: light ? "#ffffff" : "#2c2c2e",
+        background: paper ? paper.paper : light ? "#ffffff" : "#2c2c2e",
         border: `1px solid ${colors.divider}`,
         boxShadow: "0 6px 18px rgba(0,0,0,0.28)",
       }}
@@ -445,7 +459,9 @@ function ColumnDetail({
               height: 6,
               borderRadius: "50%",
               flex: "0 0 6px",
-              background: agentColor(slot, light),
+              background: paper
+                ? paperAgentColor(slot, paper)
+                : agentColor(slot, light),
             }}
           />
           {Logo && <Logo source={model.provider} size={12} light={light} />}

@@ -25,17 +25,20 @@ import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice, serviceNotice } from "./account-labels";
 import { ResetCreditsRow } from "./ResetCreditsRow";
 import { usePanelServices } from "../PanelContext";
-import { useGround } from "../ground";
 import { agentVendorName } from "../agent-artwork";
 import { visibleBalances } from "../balance-rows";
 import {
   measures,
   noButtonChrome,
-  palette,
+  RECEIPT_PUNCH,
+  receiptMeterBox,
+  receiptMeterFill,
+  usePanelPalette,
   tabular,
   type Logo,
   type Measure,
 } from "./theme";
+import { PAPER_FIGURES, usePaper } from "../paper";
 import { SourceTokenChart } from "./TokenChartSection";
 import { QuotaRingCard } from "./QuotaRingCard";
 
@@ -51,7 +54,7 @@ export function MetricPicker({
   availability: Record<Measure, ReturnType<typeof quotaMetricAvailability>>;
 }) {
   const zh = useFormat().language === "zh";
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   return (
     <TooltipProvider delayDuration={300}>
       <div
@@ -129,7 +132,8 @@ export function SourceQuotaRow({
   showReset: boolean;
   onStats?: () => void;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   const services = usePanelServices();
   const [hovered, setHovered] = useState(false);
   const clickable = Boolean(services?.selectProvider || onStats);
@@ -218,7 +222,11 @@ export function SourceQuotaRow({
           flex: "0 0 8px",
           borderRadius: "50%",
           background: color,
-          boxShadow: light || !known ? undefined : `0 0 8px ${color}`,
+          boxShadow: paper
+            ? RECEIPT_PUNCH
+            : light || !known
+              ? undefined
+              : `0 0 8px ${color}`,
         }}
       />
       <FittingName
@@ -246,6 +254,7 @@ export function SourceQuotaRow({
             background: colors.track,
             borderRadius: 4,
             overflow: "hidden",
+            ...(paper && receiptMeterBox(paper)),
           }}
         >
           {projection != null && pct != null && (
@@ -273,6 +282,10 @@ export function SourceQuotaRow({
               borderRadius: 4,
               background:
                 row.status === "stale" ? colors.secondary : quotaLevel,
+              ...(paper &&
+                receiptMeterFill(
+                  row.status === "stale" ? colors.secondary : quotaLevel,
+                )),
             }}
           />
           {measure === "burn" && budget != null && (
@@ -305,6 +318,12 @@ export function SourceQuotaRow({
           fontWeight: 600,
           whiteSpace: "nowrap",
           color: known ? levelText : colors.secondary,
+          ...(paper &&
+            reading.available && {
+              fontFamily: PAPER_FIGURES,
+              fontSize: 16,
+              fontWeight: 700,
+            }),
         }}
       >
         {reading.value}
@@ -325,6 +344,11 @@ export function SourceQuotaRow({
               measure === "burn" && reading.runsOut
                 ? colors.warningText
                 : colors.secondary,
+            ...(paper && {
+              fontFamily: PAPER_FIGURES,
+              fontSize: 13,
+              fontWeight: 500,
+            }),
           }}
         >
           {reading.detail}
@@ -352,7 +376,7 @@ export function QuotaWidgets({
   showReset: boolean;
   onStats?: () => void;
 }) {
-  const colors = palette(useGround(light)),
+  const colors = usePanelPalette(light),
     services = usePanelServices(),
     format = useFormat(),
     clickable = Boolean(services?.selectProvider || onStats),
@@ -496,7 +520,8 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
       ) as Record<Measure, ReturnType<typeof quotaMetricAvailability>>,
     [rows, now, format],
   );
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   // Open's ReportView.accountSections: the rows split by account in row
   // order. Only a section whose rows name an account the readers reported
   // gets a header; rows of no account stand without one.
@@ -630,7 +655,16 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
               <span>
                 {format.language === "zh" ? "最近 24 小时" : "Last 24 hours"}
               </span>
-              <strong style={{ color: colors.text }}>
+              <strong
+                style={{
+                  color: colors.text,
+                  ...(paper && {
+                    fontFamily: PAPER_FIGURES,
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }),
+                }}
+              >
                 {`${tokensShort(recent.tokens)} Token`}
               </strong>
             </div>
@@ -714,7 +748,8 @@ export function SourceBalances({
   layout?: PanelBlockLayout;
   onStats?: () => void;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   const services = usePanelServices();
   const clickable = Boolean(services?.selectProvider || onStats);
   const [period, setPeriod] = useState<"day" | "week" | "month">(
@@ -951,6 +986,11 @@ export function SourceBalances({
                         fontSize: 15,
                         fontWeight: 600,
                         color: colors.text,
+                        ...(paper && {
+                          fontFamily: PAPER_FIGURES,
+                          fontSize: 20,
+                          fontWeight: 700,
+                        }),
                       }}
                     >
                       {column.value}

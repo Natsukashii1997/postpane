@@ -1,8 +1,7 @@
 import type { Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { indexingText } from "@agent-hud/ui/text/indexing";
-import { useGround } from "../ground";
-import { palette, SOURCE_PANEL } from "./theme";
+import { usePanelPalette, SOURCE_PANEL } from "./theme";
 
 /** While the usage ledger is read through (built for the first time, or
  * again after a data-version change): what runs, how far, and that totals
@@ -14,7 +13,7 @@ export function SourceIndexing({
   snapshot: Snapshot;
   light: boolean;
 }) {
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
   const text = indexingText(snapshot.indexing, snapshotLanguage(snapshot));
   if (!text) return null;
   return (

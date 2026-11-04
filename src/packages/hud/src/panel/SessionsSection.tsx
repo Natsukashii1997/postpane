@@ -6,8 +6,14 @@ import type {
 import { formatTokens } from "../quota-metrics";
 import { sourceID, sourcesForMark } from "../model";
 import { usePanelQuery, usePanelServices } from "../PanelContext";
-import { noButtonChrome, palette, tabular, type Logo } from "./theme";
-import { useGround } from "../ground";
+import {
+  noButtonChrome,
+  receiptTear,
+  usePanelPalette,
+  tabular,
+  type Logo,
+} from "./theme";
+import { usePaper } from "../paper";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
 import { noSessionsMatch } from "./session-filters";
@@ -53,7 +59,8 @@ export function SourceSessions({
     snapshot.sessionsRevision,
     active,
   );
-  const colors = palette(useGround(light));
+  const colors = usePanelPalette(light);
+  const paper = usePaper();
   // Snapshot rows provide a first paint only; the complete-index query owns
   // ordering and totals. Both list the newest last message first and look
   // at no session state (owner, 2026-10-26).
@@ -101,7 +108,9 @@ export function SourceSessions({
         display: "grid",
         gap: "var(--hud-session-gap, 6px)",
         paddingTop: "var(--hud-divided-gap, 8px)",
-        boxShadow: `inset 0 1px 0 ${colors.divider}`,
+        ...(paper
+          ? receiptTear(paper)
+          : { boxShadow: `inset 0 1px 0 ${colors.divider}` }),
         fontSize: 12,
       }}
     >
