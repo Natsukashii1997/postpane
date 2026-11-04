@@ -208,9 +208,13 @@ export function useHUDLayout({
             height: simplePeek
               ? 26 * scale
               : (20 +
+                  // The name, then each reading, or one "--" row with none.
                   (1 +
-                    focusedVendor.quotas.length +
-                    (focusedVendor.balance ? 1 : 0)) *
+                    Math.max(
+                      1,
+                      focusedVendor.quotas.length +
+                        (focusedVendor.balance ? 1 : 0),
+                    )) *
                     18) *
                   scale +
                 PEEK_TEAR * 2,
