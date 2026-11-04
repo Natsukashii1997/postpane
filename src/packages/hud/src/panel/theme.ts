@@ -59,14 +59,6 @@ export const noButtonChrome: CSSProperties = {
 
 export const tabular: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-/** A receipt section's small, letter-spaced title (#22), in the dim ink. */
-export const receiptTitle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  lineHeight: "13px",
-  letterSpacing: "0.2em",
-};
-
 /** Unknown or newly discovered blocks retain their source order after saved ones. */
 export function inPanelOrder<T extends { key: string }>(
   items: T[],
@@ -110,50 +102,8 @@ export function agentColor(index: number, light: boolean) {
   return colors[((index % colors.length) + colors.length) % colors.length];
 }
 
-/** The receipt the hover panel is printed on (#22): light paper with dark
- * ink, or dark paper with light ink, as the stubs beside it. */
-const PAPER = {
-  light: {
-    paper: "#f3f1eb",
-    ink: "#2a2925",
-    dim: "#77736a",
-    faint: "rgba(42,41,37,.45)",
-    line: "rgba(42,41,37,.3)",
-    fill: "rgba(42,41,37,.08)",
-    red: "#c4261e",
-  },
-  dark: {
-    paper: "#2b2925",
-    ink: "#ece7dc",
-    dim: "#a39d90",
-    faint: "rgba(236,231,220,.42)",
-    line: "rgba(236,231,220,.26)",
-    fill: "rgba(236,231,220,.08)",
-    red: "#ff6a57",
-  },
-} as const;
-export function paperColors(light: boolean) {
-  return PAPER[light ? "light" : "dark"];
-}
-
-/** The stubs' condensed face, for the figures a receipt prints. */
-export const condensed =
-  '"Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif';
-
 /** The panel's tokens on `ground`: the light or dark HUD's, opaque or on a
- * ground the desktop shows through (`hud/tokens.ts`, Open's Theme.under);
- * on the receipt, its greys and hairlines are the paper's ink. */
+ * ground the desktop shows through (`hud/tokens.ts`, Open's Theme.under). */
 export function palette(ground: Ground) {
-  const colors = hudPalette(ground);
-  if (!ground.paper) return colors;
-  const paper = paperColors(ground.light);
-  return {
-    ...colors,
-    text: paper.ink,
-    secondary: paper.dim,
-    tertiary: paper.faint,
-    divider: paper.line,
-    track: paper.fill,
-    selected: paper.fill,
-  };
+  return hudPalette(ground);
 }

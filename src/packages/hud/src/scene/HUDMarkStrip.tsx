@@ -19,9 +19,6 @@ import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
 import {
-  PAPER_GRAIN,
-  perforatedSide,
-  perforationMask,
   stubBotTop,
   stubFootHeight,
   stubMarks,
@@ -32,8 +29,22 @@ const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
+// A faint paper grain for the Dynamic stubs, tiled.
+const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .2 0 0 0 0 .19 0 0 0 0 .17 0 0 0 .14 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>',
+)}")`;
 const STUB_INK = "#2a2925",
   STUB_RED = "rgba(196,38,30,.92)";
+
+/** A stub's perforated side: the one facing into the screen. */
+const perforatedSide = (edge: HUDEdge) =>
+  edge === "right"
+    ? "left"
+    : edge === "left"
+      ? "right"
+      : edge === "top"
+        ? "bottom"
+        : "top";
 
 export function HUDMarkStrip({
   id,
@@ -106,7 +117,9 @@ export function HUDMarkStrip({
     unit = metrics.logo / 20,
     side = perforatedSide(edge),
     botTop = stubBotTop(metrics.logo);
-  const perforation = perforationMask(side, unit);
+  const perforation = horizontal(edge)
+    ? `radial-gradient(circle at ${5 * unit}px ${side === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
+    : `radial-gradient(circle at ${side === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
   // The bot sits on the stub like a sticker: the paper is its own layer
   // behind it, so the bot's moves and props are never clipped by the paper.
   const stubStyle: CSSProperties = {

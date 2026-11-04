@@ -17,16 +17,7 @@ import { Button } from "@agent-hud/ui/components/button";
 import { formatTokens } from "../quota-metrics";
 import { HUD_METRICS, sourcesForMark } from "../model";
 import { usePanelQuery } from "../PanelContext";
-import {
-  agentColor,
-  condensed,
-  noButtonChrome,
-  palette,
-  receiptTitle,
-  tabular,
-  type Logo,
-  type Period,
-} from "./theme";
+import { agentColor, palette, tabular, type Logo, type Period } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat, numberFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { hexAlpha } from "../tokens";
@@ -45,8 +36,6 @@ export function SourceTokenChart({
   Logo,
   layout = {},
   active = true,
-  compact = false,
-  onStats,
 }: {
   snapshot: Snapshot;
   focusVendor?: string;
@@ -54,19 +43,10 @@ export function SourceTokenChart({
   Logo?: Logo;
   layout?: PanelLayout["tokens"];
   active?: boolean;
-  /** The receipt's one line (#22): the last 24 hours' total and small bars,
-   * opening the statistics. */
-  compact?: boolean;
-  onStats?: () => void;
 }) {
   const zh = useFormat().language === "zh";
-  const initial = compact
-    ? "24h"
-    : layout.period === "week"
-      ? "7d"
-      : layout.period === "month"
-        ? "30d"
-        : "24h";
+  const initial =
+    layout.period === "week" ? "7d" : layout.period === "month" ? "30d" : "24h";
   const [period, setPeriod] = useState<Period>(initial);
   useEffect(() => setPeriod(initial), [initial]);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -160,76 +140,6 @@ export function SourceTokenChart({
     .map((model, slot) => ({ model, slot }))
     .filter(({ model }) =>
       points.some((point) => (point.models?.[model.id] ?? 0) > 0),
-    );
-  if (compact)
-    return (
-      <button
-        className="hud-source-today-usage"
-        title={notice ?? (zh ? "查看用量统计" : "Show usage statistics")}
-        disabled={!onStats}
-        onClick={onStats}
-        style={{
-          ...noButtonChrome,
-          display: "flex",
-          alignItems: "flex-end",
-          gap: 12,
-          width: "100%",
-          cursor: onStats ? "pointer" : undefined,
-        }}
-      >
-        <span style={{ display: "grid", gap: 6 }}>
-          <span style={{ ...receiptTitle, color: colors.secondary }}>
-            {zh ? "今日用量" : "TODAY"}
-          </span>
-          <span
-            style={{
-              ...tabular,
-              font: `700 24px/1 ${condensed}`,
-              letterSpacing: "0.02em",
-              whiteSpace: "nowrap",
-              color: colors.text,
-            }}
-          >
-            {known ? <TokenCount tokens={total} still={still} /> : "—"}
-            <small
-              style={{
-                marginLeft: 4,
-                fontSize: 13,
-                fontWeight: 600,
-                color: colors.secondary,
-              }}
-            >
-              tok
-            </small>
-          </span>
-        </span>
-        <span
-          aria-hidden="true"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            height: 26,
-            display: "flex",
-            alignItems: "flex-end",
-            gap: 2,
-          }}
-        >
-          {bars &&
-            points.map((point) => (
-              <i
-                key={point.timestamp}
-                style={{
-                  flex: "1 1 0",
-                  minWidth: 0,
-                  height: `${Math.max(3, (point.tokens / peak) * 100)}%`,
-                  background: colors.text,
-                  opacity: 0.75,
-                  borderRadius: 0.5,
-                }}
-              />
-            ))}
-        </span>
-      </button>
     );
   return (
     <section
