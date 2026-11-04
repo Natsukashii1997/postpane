@@ -32,7 +32,24 @@ fn catalog() -> Value {
 
 /// An owner with a notched main display and a second display without a notch.
 fn owner() -> (tempfile::TempDir, Presentation) {
+    owner_with(None)
+}
+
+/// An owner whose built-in "main" screen was set to the Notch HUD: every screen
+/// defaults to Dynamic, so a test of the notch HUD saves it first.
+fn notched_owner() -> (tempfile::TempDir, Presentation) {
+    owner_with(Some(json!({"screens": {"main": {"mode": "notch"}}})))
+}
+
+fn owner_with(saved: Option<Value>) -> (tempfile::TempDir, Presentation) {
     let folder = tempfile::tempdir().unwrap();
+    if let Some(saved) = saved {
+        std::fs::write(
+            folder.path().join("presentation.json"),
+            serde_json::to_vec(&saved).unwrap(),
+        )
+        .unwrap();
+    }
     let owner = Presentation::new(folder.path().to_path_buf()).unwrap();
     owner.screens(vec![
         json!({"id": "main", "hasNotch": true, "primary": true}),
@@ -205,8 +222,19 @@ fn a_screen_proposal_of_the_shared_layout_uses_it() {
 }
 
 #[test]
-fn a_style_is_kept_as_what_it_changes() {
+fn every_screen_defaults_to_dynamic() {
     let (_folder, owner) = owner();
+    let read = call(&owner, "get_hud", json!({})).unwrap();
+    assert_eq!(
+        read["screens"][0]["hud"]["mode"], "dynamic",
+        "a notched screen too"
+    );
+    assert_eq!(read["screens"][1]["hud"]["mode"], "dynamic");
+}
+
+#[test]
+fn a_style_is_kept_as_what_it_changes() {
+    let (_folder, owner) = notched_owner();
     let read = call(&owner, "get_hud", json!({"screen": "main"})).unwrap();
     let hud = read["screens"][0]["hud"].clone();
     assert_eq!(hud["mode"], "notch");
@@ -224,7 +252,7 @@ fn a_style_is_kept_as_what_it_changes() {
     );
     assert_eq!(
         owner.view()["store"]["screens"]["main"],
-        json!({"appearance": "light"})
+        json!({"appearance": "light", "mode": "notch"})
     );
     draft(&owner, json!({"screen": "side", "hud": {"reset": true}}));
     assert_eq!(drafts(&owner)["styles"], json!(["main"]));
@@ -238,7 +266,7 @@ fn a_style_is_kept_as_what_it_changes() {
 
 #[test]
 fn a_dock_leaving_the_notch_is_placed_clear_of_it() {
-    let (_folder, owner) = owner();
+    let (_folder, owner) = notched_owner();
     let result = draft(
         &owner,
         json!({"screen": "main", "hud": {"mode": "dynamic"}}),
@@ -347,7 +375,7 @@ fn widgets_a_kind_rejects_and_half_bar_rows_are_refused() {
 
 #[test]
 fn absent_agents_and_models_are_refused() {
-    let (_folder, owner) = owner();
+    let (_folder, owner) = notched_owner();
     let error = refused(
         &owner,
         json!({"sessions": {"agents": ["codex"]}, "tokens": {"agents": ["codex"], "models": ["gpt-model:5"]}}),
@@ -368,7 +396,7 @@ fn absent_agents_and_models_are_refused() {
 
 #[test]
 fn style_fields_the_mode_or_glow_does_not_draw_are_refused() {
-    let (_folder, owner) = owner();
+    let (_folder, owner) = notched_owner();
     let error = refused(
         &owner,
         json!({"screen": "main", "hud": {"logoSize": 30, "glow": {"gridPitch": 6}}}),

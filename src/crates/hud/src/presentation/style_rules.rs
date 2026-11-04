@@ -361,15 +361,12 @@ fn look_key(key: &str) -> bool {
 }
 
 /// The look a screen draws from `saved` (ui/use-hud-config.ts `getScreenHUDConfig`):
-/// the defaults, the notch mode on a screen with a notch and a dock on one without,
+/// the defaults, the Dynamic (logos) mode on every screen, notched or not,
 /// the shared glow, then the screen's own settings.
-pub(super) fn drawn(saved: &Saved, key: &str, has_notch: bool) -> Map<String, Value> {
+pub(super) fn drawn(saved: &Saved, key: &str) -> Map<String, Value> {
     let defaults: Value = serde_json::from_str(DEFAULTS).expect("checked-in defaults");
     let mut style = defaults.as_object().cloned().unwrap_or_default();
-    style.insert(
-        "mode".into(),
-        json!(if has_notch { "notch" } else { "logos" }),
-    );
+    style.insert("mode".into(), json!("logos"));
     merge(&mut style, &saved.screen_defaults);
     let own = saved.screens.get(key).cloned().unwrap_or(Value::Null);
     if let Some(own) = own.as_object() {
@@ -387,8 +384,8 @@ pub(super) fn drawn(saved: &Saved, key: &str, has_notch: bool) -> Map<String, Va
 }
 
 /// The look a screen has saved, with its style draft drawn over it.
-pub(super) fn effective(s: &State, key: &str, has_notch: bool) -> Map<String, Value> {
-    let mut style = drawn(&s.saved, key, has_notch);
+pub(super) fn effective(s: &State, key: &str) -> Map<String, Value> {
+    let mut style = drawn(&s.saved, key);
     if let Some(draft) = s.styles.get(key).and_then(Value::as_object) {
         merge(&mut style, draft);
     }
@@ -396,7 +393,7 @@ pub(super) fn effective(s: &State, key: &str, has_notch: bool) -> Map<String, Va
 }
 
 /// The default look a screen is given, as the HUD style's Reset to Default gives it.
-fn default_look(s: &State, has_notch: bool) -> Map<String, Value> {
+fn default_look(s: &State) -> Map<String, Value> {
     let defaults: Value = serde_json::from_str(DEFAULTS).expect("checked-in defaults");
     let mut style = defaults.as_object().cloned().unwrap_or_default();
     merge(&mut style, &s.saved.screen_defaults);
@@ -407,10 +404,7 @@ fn default_look(s: &State, has_notch: bool) -> Map<String, Value> {
     );
     style.remove("showsRings");
     style.retain(|key, _| look_key(key));
-    style.insert(
-        "mode".into(),
-        json!(if has_notch { "notch" } else { "logos" }),
-    );
+    style.insert("mode".into(), json!("logos"));
     style
 }
 
@@ -428,16 +422,8 @@ pub(super) fn reduced(
 
 /// A screen's look in `version` that differs from what it has saved now: the style
 /// draft that brings that version back.
-pub(super) fn restoring(
-    version: &Saved,
-    s: &State,
-    key: &str,
-    has_notch: bool,
-) -> Map<String, Value> {
-    reduced(
-        &drawn(version, key, has_notch),
-        &drawn(&s.saved, key, has_notch),
-    )
+pub(super) fn restoring(version: &Saved, s: &State, key: &str) -> Map<String, Value> {
+    reduced(&drawn(version, key), &drawn(&s.saved, key))
 }
 
 /// The settings a hud's style fields write.
@@ -622,7 +608,7 @@ pub(super) fn proposal(
         });
     };
     let has_notch = screen["hasNotch"] == true;
-    let saved = drawn(&s.saved, scope, has_notch);
+    let saved = drawn(&s.saved, scope);
     let asked = reduced(&patch(hud), &saved);
     let (changes, placed_clear, reasons) = if resets {
         let reasons = if given.is_empty() {
@@ -630,7 +616,7 @@ pub(super) fn proposal(
         } else {
             vec![format!("hud.reset proposes the default style of the resting HUD of {name} whole, so the hud takes no other style field with it: leave out {}, or leave out hud.reset.", listed(&given))]
         };
-        (reduced(&default_look(s, has_notch), &saved), false, reasons)
+        (reduced(&default_look(s), &saved), false, reasons)
     } else if s
         .styles
         .get(scope)

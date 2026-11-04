@@ -260,7 +260,7 @@ export function getScreenHUDConfig(
   const hidden = new Set(layout.hiddenSections ?? []);
   return {
     ...defaultHUDConfig,
-    mode: screen.hasNotch ? "notch" : "logos",
+    mode: "logos",
     ...screenSettings(store.screenDefaults),
     ...screenSettings(store.screens[screen.id]),
     ...pickSettings(store.global, globalKeys),

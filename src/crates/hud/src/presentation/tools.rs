@@ -373,7 +373,7 @@ fn listing(
     for screen in &mut screens {
         let key = screen["id"].as_str().unwrap_or("").to_owned();
         screen["key"] = json!(key);
-        let style = style_rules::effective(s, &key, screen["hasNotch"] == true);
+        let style = style_rules::effective(s, &key);
         screen["hud"] = style_rules::listing(&style);
         screen["held"] = json!(s.holds.get(&key).is_some_and(|until| *until > now()));
         screen["holdSecondsLeft"] = json!(s
@@ -415,17 +415,15 @@ fn listing(
 /// attached screen's own in `mode`, the mode it has now where none is given, else what
 /// any attached screen can show.
 fn hud_agents(s: &State, id: &str, mode: Option<&str>, snapshot: &Value) -> (Vec<String>, String) {
-    let mode_of = |key: &str, has_notch: bool| {
-        style_rules::effective(s, key, has_notch)
+    let mode_of = |key: &str| {
+        style_rules::effective(s, key)
             .get("mode")
             .and_then(Value::as_str)
-            .unwrap_or("notch")
+            .unwrap_or("logos")
             .to_owned()
     };
-    if let Some(screen) = attached(s, id) {
-        let mode = mode
-            .map(str::to_owned)
-            .unwrap_or_else(|| mode_of(id, screen["hasNotch"] == true));
+    if attached(s, id).is_some() {
+        let mode = mode.map(str::to_owned).unwrap_or_else(|| mode_of(id));
         return (
             rules::resting_agents(snapshot, &mode, now()),
             format!("the resting HUD of {}", screen_name(s, id, false)),
@@ -434,11 +432,7 @@ fn hud_agents(s: &State, id: &str, mode: Option<&str>, snapshot: &Value) -> (Vec
     let mut agents = vec![];
     for screen in &s.screens {
         let key = screen["id"].as_str().unwrap_or("");
-        agents.extend(rules::resting_agents(
-            snapshot,
-            &mode_of(key, screen["hasNotch"] == true),
-            now(),
-        ));
+        agents.extend(rules::resting_agents(snapshot, &mode_of(key), now()));
     }
     (agents, "any attached screen's resting HUD".into())
 }
@@ -549,13 +543,8 @@ fn draft(
                 } else {
                     propose_choice(s, id, previous.layouts.get(id).map(canonical));
                     match &screen {
-                        Some(screen) => {
-                            let look = style_rules::restoring(
-                                &previous,
-                                s,
-                                id,
-                                screen["hasNotch"] == true,
-                            );
+                        Some(_) => {
+                            let look = style_rules::restoring(&previous, s, id);
                             if look.is_empty() {
                                 s.styles.remove(id);
                             } else {
