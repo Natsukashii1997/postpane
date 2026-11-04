@@ -20,7 +20,7 @@ import {
   type HUDEdge,
   type HUDVendor,
 } from "../model";
-import { peekLineWidth } from "./AgentPeek";
+import { PEEK_TEAR, peekLineWidth } from "./AgentPeek";
 import { SIMPLE_EDGE_MARGIN } from "./simple-panel";
 import { useNotchGeometry } from "./NotchSurface";
 import { RECEIPT_EXTRA, receiptSheetInset } from "./receipt-sheet";
@@ -146,7 +146,9 @@ export function useHUDLayout({
   // The usage panel beside the dock is printed as a receipt: a sheet of its
   // own, apart from the dock's stubs, so a panel grown from the dock keeps
   // RECEIPT_EXTRA more room on the dock's side for the gap and the margin.
-  const receipt = config.mode !== "notch" && !standaloneAlert && !peek;
+  // A hovered agent's peek card is a small receipt too; the Simple dock's
+  // one-line peek keeps the dock's ground.
+  const receipt = config.mode !== "notch" && !standaloneAlert && !simplePeek;
   const receiptExtra = receipt && !detached ? RECEIPT_EXTRA : 0;
   const surfaceFlare =
     open || config.mode === "logos"
@@ -210,7 +212,8 @@ export function useHUDLayout({
                     focusedVendor.quotas.length +
                     (focusedVendor.balance ? 1 : 0)) *
                     18) *
-                scale,
+                  scale +
+                PEEK_TEAR * 2,
           }
         : {
             width: fullWidth,

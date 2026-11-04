@@ -87,3 +87,20 @@ export function perforation(
     ? `radial-gradient(circle at ${side === "left" ? "0" : "100%"} ${half}px, ${edge}) 0 0 / 100% ${pitch}px repeat-y`
     : `radial-gradient(circle at ${half}px ${side === "top" ? "0" : "100%"}, ${edge}) 0 0 / ${pitch}px 100% repeat-x`;
 }
+
+/** A level printed on the receipt: ink, amber for a warning, red for a
+ * critical one, and the dim ink with no reading. */
+export function paperLevel(
+  level: "normal" | "warning" | "critical" | "stale",
+  paper: Paper,
+): string {
+  return level === "critical"
+    ? paper.red
+    : level === "warning"
+      ? paper.light
+        ? "#b7791f"
+        : "#e0a948"
+      : level === "normal"
+        ? paper.ink
+        : paper.dim;
+}

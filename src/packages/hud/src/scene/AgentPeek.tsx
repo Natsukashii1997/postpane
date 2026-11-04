@@ -2,6 +2,7 @@ import { labelWidth } from "../geometry";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { quotaPercentLabel, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
+import { PAPER_FIGURES, paperLevel, usePaper, type Paper } from "../paper";
 import {
   quotaShortName,
   statusColor,
@@ -102,6 +103,7 @@ export function AgentPeek({
 }) {
   const color = useMarkLevelText(light);
   const { quotaDisplay } = useFormat();
+  const paper = usePaper();
   if (simple) {
     const items = peekItems(vendor, zh, color, quotaDisplay);
     return (
@@ -140,6 +142,8 @@ export function AgentPeek({
       </div>
     );
   }
+  if (paper)
+    return <ReceiptPeek vendor={vendor} scale={scale} zh={zh} paper={paper} />;
   return (
     <div
       className="hud-agent-peek-bubble"
@@ -222,3 +226,107 @@ export function AgentPeek({
     </div>
   );
 }
+
+/** The hovered agent's readings printed as a small receipt: its name over a
+ * tear line, then each window's share used, dotted across to the figure,
+ * and the balance of an API-billed agent (Stage 4, the receipt's peek). */
+function ReceiptPeek({
+  vendor,
+  scale,
+  zh,
+  paper,
+}: {
+  vendor: HUDVendor;
+  scale: number;
+  zh: boolean;
+  paper: Paper;
+}) {
+  const { quotaDisplay } = useFormat();
+  const rows: { id: string; label: string; value: string; color?: string }[] =
+    vendor.quotas.map((q) => ({
+      id: q.id,
+      label: quotaShortName(q),
+      value:
+        q.usedPercent == null
+          ? "--"
+          : quotaPercentLabel(q.usedPercent, quotaDisplay),
+      color: q.usedPercent == null ? paper.dim : paperLevel(q.status, paper),
+    }));
+  if (!vendor.quotas.length && !vendor.balance)
+    rows.push({ id: "quota", label: zh ? "额度" : "Quota", value: "--" });
+  if (vendor.balance)
+    rows.push({
+      id: "balance",
+      label: zh ? "余额" : "Balance",
+      value: vendor.balance,
+      color: paperLevel(vendor.level, paper),
+    });
+  return (
+    <div
+      className="hud-agent-peek-bubble"
+      style={{
+        fontSize: 12 * scale,
+        padding: `${10 * scale}px ${12 * scale}px ${10 * scale}px ${16 * scale}px`,
+        width: 196 * scale,
+        color: paper.ink,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          height: 18 * scale,
+          fontWeight: 700,
+          fontSize: 13 * scale,
+          // The tear line runs across the whole slip.
+          borderBottom: `1.2px dashed ${paper.line}`,
+          margin: `0 ${-12 * scale}px ${PEEK_TEAR - 1.2}px ${-16 * scale}px`,
+          padding: `0 ${12 * scale}px ${PEEK_TEAR}px ${16 * scale}px`,
+          boxSizing: "content-box",
+        }}
+      >
+        {vendor.name}
+      </div>
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 6,
+            height: 18 * scale,
+            lineHeight: `${18 * scale}px`,
+            color: paper.dim,
+          }}
+        >
+          <span style={{ whiteSpace: "nowrap" }}>{row.label}</span>
+          <span
+            aria-hidden="true"
+            style={{
+              flex: "1 1 auto",
+              minWidth: 8,
+              borderBottom: `1px dotted ${paper.line}`,
+              transform: `translateY(${-3 * scale}px)`,
+            }}
+          />
+          <strong
+            style={{
+              fontFamily: PAPER_FIGURES,
+              fontVariantNumeric: "tabular-nums",
+              fontSize: 15 * scale,
+              fontWeight: 700,
+              color: row.color ?? paper.ink,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {row.value}
+          </strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The room under the name for the receipt's tear line, on top of the
+ * peek's rows (`useHUDLayout`). */
+export const PEEK_TEAR = 3;

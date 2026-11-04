@@ -387,15 +387,17 @@ export function HUDExpandedSurface({
                           textAlign: "left",
                         }}
                       >
-                        <AgentPeek
-                          vendor={focusedVendor}
-                          simple={config.mode === "simple"}
-                          scale={scale}
-                          light={light}
-                          zh={snapshotLanguage(snapshot) === "zh"}
-                          tuck={peekTuck}
-                          edge={edge}
-                        />
+                        <PaperContext.Provider value={paper}>
+                          <AgentPeek
+                            vendor={focusedVendor}
+                            simple={config.mode === "simple"}
+                            scale={scale}
+                            light={light}
+                            zh={snapshotLanguage(snapshot) === "zh"}
+                            tuck={peekTuck}
+                            edge={edge}
+                          />
+                        </PaperContext.Provider>
                       </button>
                     ) : !open && (request || event) ? (
                       <CompactAlertView
