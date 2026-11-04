@@ -2,6 +2,17 @@
 
 更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩说要做时，从头设计额度面板（鼠标移到侧栏小票上弹出的大面板），先对齐内容与感觉、出 3 版。
 
+## 所有屏幕默认动态形态（2026-11-04，Claude，常浩说「把出厂规则也改掉，默认动态」；PR #29 测试全过已 squash 合并 `3ef2f98`、已打包安装）
+
+- 时间：开工 `2026-11-04 21:46`（估计，按会话进度；本节写于 `2026-11-04 21:59`）。来由：常浩要笔记本内屏默认就是侧边动态形态，并要求出厂规则也改，不再「有刘海默认刘海」。issue #28。
+- 改了哪些文件（PR #29）：`src/packages/protocol/hud-defaults.json` 与 `src/packages/app/src/lib/use-hud-config.ts`（默认 `mode` 为 `logos`）、`src/crates/host/src/hud/plans.rs` 与 `coordinator.rs`（默认动态，去掉只为此传的 `has_notch`，`primary()` 只返回 id）、`src/crates/hud/src/presentation/style_rules.rs` 与 `tools.rs`（默认外观、恢复默认、形态兜底改动态，去掉随之不用的参数）、`src/packages/app/src/settings/display/ResetSection.tsx`（设置里恢复默认外观为动态）、`tool_tests.rs`（新增 `every_screen_defaults_to_dynamic`，四个专测刘海行为的用例改为先存成刘海）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 638 passed / 0 failed、`ℹ pass 115` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`）；改 ResetSection 后重跑 check 与 `test:ts` 通过。
+- 验证：安装后核对设置文件里内屏 `37D8832A-…` 仍为 `logos`。新屏或重置后默认动态这一点只有测试覆盖，未实机重置验证。
+- 截图：无界面改动。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-04-default-logos/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：`docs/upstream` 的上游说明仍写「有刘海默认刘海」，未改；可清理 worktree 增加 `.claude/worktrees/28-default-logos`。
+- 本轮新坑：无。
+
 ## 阶段 4：审批横条与展开框换成票签；额度面板改动撤回（2026-11-04，Claude，常浩选审批横条「一 票签」，要求结构照旧、按钮用常规文字；实物看过后说「没问题，合并」；额度面板未经确认，常浩要求撤回；PR #27 已合并 `f8e4d0f`、PR #26 撤回 #24、已打包安装）
 
 - 时间：开工 `2026-11-04 20:50`（悬停面板对齐起算；本节写于 `2026-11-04 21:42`）。来由：ROADMAP 阶段 4 剩余的悬停部分。
