@@ -1,6 +1,22 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27），所有屏幕默认动态形态（PR #29），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：额度面板（鼠标移到侧栏小票上弹出的大面板）三版外观已出、内容照旧只换外观，预览 https://claude.ai/artifact/PKUh19WL1XSnf6Fy5AM59C （甲 收据 / 乙 深色精修 / 丙 票夹），等常浩挑定后给分批计划、确认再实现。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31），所有屏幕默认动态形态（PR #29），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：请常浩定阶段 4 剩余部分先做哪个——鼠标悬停撕角票时的小卡（peek，现在仍是深色）要不要也印成纸，还是先做小人与图标；定了再出三版或给计划。
+
+## 额度面板换成「收据」外观（2026-11-04，Claude，常浩选甲「收据」、柱图选「墨色深浅」，看过浅深两色实物后说「没问题，合并」；PR #31 测试全过已 squash 合并 `62f5f1b`、已打包安装）
+
+- 时间：开工 `2026-11-04 22:09`（会话创建时间；本节写于 `2026-11-04 22:31`）。来由：ROADMAP 阶段 4 剩余的额度面板，内容、顺序、按钮照旧只换外观；issue #30，预览 https://claude.ai/artifact/PKUh19WL1XSnf6Fy5AM59C 。
+- 改了哪些文件（PR #31）：`src/packages/hud/src/panel/theme.ts`（新 `usePanelPalette`：纸上用墨色、琥珀、红；网纹进度框、打孔、撕线、柱图墨色深浅的样式）、`HoverPanel.tsx` 与 `panel/*.tsx`（取色统一走 `usePanelPalette`；撕线、网纹进度框、打孔状态点、窄体数字、墨色柱图）、`HUDScene.tsx`（额度面板在动态与简约形态下也取纸面，测量时同样包纸）、`scene/useHUDLayout.ts`（新 `receipt`；从侧栏长出的面板在侧栏一侧多留 16）、`scene/receipt-sheet.ts`（新：纸铺在哪，与撕角票隔开 10）、`scene/HUDExpandedSurface.tsx`（纸按位置铺、纸上不画异形底）、`test/receipt-sheet.test.ts`（新，3 项）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 118` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`），都在最终提交上复跑。
+- 验证：安装后实机截图——设置「按家分开」时点撕角票钉住的单家面板（深色）；用 HUD 草稿临时切浅色/深色并关掉分家，鼠标悬停撕角票截全量面板浅深两色，截完已丢弃草稿，设置回读为深色、按家分开。简约形态和贴上/下/左边缘只有单元测试覆盖，未实机看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-04-receipt-quota/` 的 `额度面板-浅色.jpg`、`额度面板-深色.jpg`、`单家面板-深色.jpg`（含会话标题和邮箱，不进仓库）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启，实机看到纸面。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-04-receipt-quota/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 页脚按钮照旧只有图标，没加预览里的「设置 / 统计」文字；面板在侧栏一侧宽了 16，内容宽度不变。
+  - 悬停撕角票时的小卡（peek）、设置里的面板预览、刘海形态都没改；设置里的「透明度」对纸面不起作用（与票签一致）。
+  - `get_hud_screenshot` 只画裸面板，看不到纸面；要看实物得在屏幕上悬停截图。
+  - 安装时脚本读错打包路径，旧版先被删、新版没复制上，随即补装成功，见 L-03。
+  - 可清理 worktree 增加 `.claude/worktrees/30-receipt-quota`。
+- 本轮新坑：L-03。
 
 ## 所有屏幕默认动态形态（2026-11-04，Claude，常浩说「把出厂规则也改掉，默认动态」；PR #29 测试全过已 squash 合并 `3ef2f98`、已打包安装）
 
