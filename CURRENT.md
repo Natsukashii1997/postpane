@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），小人保持现样、菜单栏图标本机关掉；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 3 批「统计用量」，先开 issue 再做；之后第 4 批统计会话。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），小人保持现样、菜单栏图标本机关掉；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+
+## 后台第 3 批：统计窗口外壳与用量页换热敏小票（2026-11-05，Claude，常浩确认计划并选图表配色「甲 墨色深浅」，经 HUD 回复「合并」；PR #41 测试全过已 squash 合并 `f5b10ee`、已打包安装）
+
+- 时间：开工 `2026-11-05 00:30`（估计，按会话进度；本节写于 `2026-11-05 00:54`）。来由：后台第 3 批，issue #40；图表配色三版预览 https://claude.ai/artifact/2Wn7dQ3UJqwwDyswH1rrk1 ，常浩选甲。版式按推荐：一整条长小票；会话页接受过渡状态。
+- 改了哪些文件（PR #41）：`src/packages/app/src/settings/receipt.css`（纸、墨变量与弹层样式扩到 `.statistics-window`；新增统计窗口一节：桌面底、Token / 会话两格反白、撕齿长小票、页尾「共 N 个智能体」与条码）、`App.tsx`（统计窗口加 `lang`）、`statistics/StatsTheme.tsx`（`themeFor` 纸面墨色并加 `ink`；`card` 撕线分隔；`modelColor(id, theme)` 按 `rankModels` 排的用量墨色深浅；总数窄体大字）、`Statistics.tsx`（分段反白、复选框墨色、调用 `rankModels`）、`StatisticsParts.tsx`（再导出）、`statistics/UsageChart.tsx`、`ActivityHeatmap.tsx`、`ProviderCard.tsx`、`QuotaHistory.tsx`（取色改墨色、去圆角）、`docs/ROADMAP.md`（第 3 批标完成）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 638 passed / 0 failed、`ℹ pass 121` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`），都在合并的提交 `c0195ab` 上跑。
+- 验证：浏览器开发模式（独立数据目录 `evidence/2026-11-05-backstage-stats/devdata`，`?window=statistics`）看了 Token 页浅深两色全页、会话页浅色。实机未看：两次请求 computer-use 访问驿窗都未获批准，统计窗口要从设置菜单打开，命令行唤不出来。
+- 截图：无（实机未截）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（00:47:35，按 L-03）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-backstage-stats/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 超过 5 个模型时其余同用最浅一档，图例里没有另加「其他」一行。
+  - 会话页只换了外壳与纸面，内部仍是原来的白卡（SessionTheme 是另一套主题），留第 4 批。
+  - 「合并」经 agent-hud 插件转入，合并前核实 PR 仍开着、头提交即测过的 `c0195ab`、main 无新提交。
+  - 可清理 worktree 增加 `.claude/worktrees/40-backstage-stats`（现共 11 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 后台第 2 批：设置四页正文换小票细节与网纹框滑块（2026-11-05，Claude，常浩确认分批计划并说「按推荐开工」，看过显示页浅色实物后经 HUD 回复「合并」；PR #39 测试全过已 squash 合并 `3297988`、已打包安装）
 
