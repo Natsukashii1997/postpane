@@ -172,8 +172,8 @@ export function Connection({
             </DialogTitle>
             <DialogDescription>
               {t(
-                "Agent HUD stops reading this account until you add them again.",
-                "重新添加之前，Agent HUD 不再读取这个账户。",
+                "PostPane stops reading this account until you add them again.",
+                "重新添加之前，驿窗不再读取这个账户。",
               )}
             </DialogDescription>
           </DialogHeader>

@@ -1,6 +1,17 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-1 合并后做 2-2 界面文字、MCP 名与插件名；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-3 图标出 3 版给常浩挑，然后 2-4 打包安装与本机切换（需常浩在场）；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 2-2：界面文字换成驿窗（2026-11-04，Claude，常浩授权测试全过的 PR 直接合并；无需发布、未安装）
+
+- 时间：开工 `2026-11-04 16:26`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 16:30`）。来由：ROADMAP 阶段 2 第二批。
+- 改了哪些文件：界面上能看到的 Agent HUD 字样，中文换成「驿窗」、英文换成「PostPane」：`src/packages/app/src/App.tsx`（设置页说明、默认产品名、图标替代文字）、`lib/agent-plugins.ts`、`settings/AgentPluginsPane.tsx`、`settings/agent-plugins/ClientCards.tsx`、`HooksSection.tsx`、`settings/agents/Connection.tsx`、`src/packages/hud/src/HUDScene.tsx`、`scene/HUDMarkStrip.tsx`、`src/crates/host/src/instance.rs`（无法启动、已在运行的提示，另一份安装的路径）、`hud/mod.rs`（侧栏窗口标题）、`tray.rs`（菜单栏提示）、`system/macos.rs`、`src/apps/mcp/src/index.ts`（两个工具说明）；`src/packages/app/test/agent-plugins.test.ts` 期望文字同步；本文件。
+- 测试：`cargo test --workspace` 退出码 0，637 项通过；`test:ts` 首跑 `ℹ pass 109` / `ℹ fail 1`（测试仍期望旧文字），改期望后 `ℹ pass 110` / `ℹ fail 0`；`test:mcp` `ℹ pass 6` / `ℹ fail 0`；`test:plugins` `ℹ pass 14` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；typecheck、build、prettier、check:platform、check:packages、check:clients、check:test-paths 通过。
+- 验证：只改文字，未在预览里逐页看。
+- 截图：无。
+- 发布与回读：无需发布；未安装。
+- 与授权不一致之处、遗留问题、范围外发现：内部协议名保持不变——钩子配置键与识别标记、MCP 服务名 `agent-hud`、插件名、`CLAUDE_CODE_ENTRYPOINT`、中转程序文件名、日志前缀，改了会让新应用认不出旧配置与历史记录；Windows、Linux 专用文字未改。
+- 本轮新坑：无。
 
 ## 阶段 2-1：应用标识与数据目录换成驿窗（2026-11-04，Claude，常浩让继续推进；PR 待合并、未安装）
 

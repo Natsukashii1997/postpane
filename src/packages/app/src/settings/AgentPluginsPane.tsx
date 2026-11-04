@@ -61,13 +61,13 @@ function setupNote(snapshot: Snapshot, t: Text) {
     snapshot.connection.platform;
   return platform === "windows"
     ? t(
-        "Adding HUD tools needs Agent HUD in its standard Windows location.",
-        "需要从 Windows 标准安装位置运行 Agent HUD，才能添加 HUD 工具。",
+        "Adding HUD tools needs PostPane in its standard Windows location.",
+        "需要从 Windows 标准安装位置运行驿窗，才能添加 HUD 工具。",
       )
     : platform === "macos"
       ? t(
-          "Adding HUD tools needs Agent HUD in an approved macOS location.",
-          "需要从 macOS 指定安装位置运行 Agent HUD，才能添加 HUD 工具。",
+          "Adding HUD tools needs PostPane in an approved macOS location.",
+          "需要从 macOS 指定安装位置运行驿窗，才能添加 HUD 工具。",
         )
       : t("This build can't add HUD tools.", "当前版本无法添加 HUD 工具。");
 }

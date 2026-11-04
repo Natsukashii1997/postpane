@@ -349,7 +349,7 @@ serveStdio(() => {
     "hud_snapshot",
     {
       description:
-        "Read Agent HUD’s current local snapshot: recent/active display sessions, complete token totals, provider status and capabilities. Historical sessions are paged with hud_sessions. Unavailable data stays unavailable.",
+        "Read PostPane’s current local snapshot: recent/active display sessions, complete token totals, provider status and capabilities. Historical sessions are paged with hud_sessions. Unavailable data stays unavailable.",
       inputSchema: z.object({}),
       annotations: readOnly,
     },
@@ -485,7 +485,7 @@ serveStdio(() => {
     "hud_set_preference",
     {
       description:
-        "Save a user-requested presentation preference in Agent HUD. Does not change client configuration.",
+        "Save a user-requested presentation preference in PostPane. Does not change client configuration.",
       inputSchema: z.object({
         key: z.enum(["appearance", "animations"]),
         value: z.union([z.enum(["dark", "light", "system"]), z.boolean()]),
