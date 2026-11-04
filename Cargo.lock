@@ -68,7 +68,6 @@ version = "0.1.0"
 dependencies = [
  "agent-hud-hud",
  "agent-hud-runtime",
- "agent-hud-share",
  "base64 0.22.1",
  "block2",
  "cairo-rs",
@@ -113,27 +112,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-hud-lan"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "core-foundation 0.10.1",
- "flate2",
- "libc",
- "qrcode",
- "ring",
- "rustls",
- "security-framework",
- "security-framework-sys",
- "serde",
- "serde_json",
- "sha2",
- "uuid",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "agent-hud-platform"
 version = "0.1.0"
 dependencies = [
@@ -169,20 +147,6 @@ dependencies = [
  "chrono",
  "serde_json",
  "tempfile",
-]
-
-[[package]]
-name = "agent-hud-share"
-version = "0.1.0"
-dependencies = [
- "agent-hud-lan",
- "chrono",
- "core-foundation 0.10.1",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "uuid",
 ]
 
 [[package]]
@@ -3052,12 +3016,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "qrcode"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
-
-[[package]]
 name = "quick-xml"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3360,7 +3318,6 @@ checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
- "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",
