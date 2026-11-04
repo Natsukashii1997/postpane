@@ -1,10 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stubMarks, stubSize } from "../src/ticket-stub.ts";
+import {
+  stubBotTop,
+  stubFootHeight,
+  stubMarks,
+  stubSize,
+} from "../src/ticket-stub.ts";
 
-test("a stub is 42 × 62 at the default 20 pt bot and grows with it", () => {
-  assert.deepEqual(stubSize(20), { width: 42, height: 62 });
-  assert.deepEqual(stubSize(30), { width: 63, height: 93 });
+test("a stub is 34 × 50 at the default 20 pt bot and grows with it", () => {
+  assert.deepEqual(stubSize(20), { width: 34, height: 50 });
+  assert.deepEqual(stubSize(30), { width: 51, height: 75 });
+});
+
+test("the bot and the tear-off foot fit the stub", () => {
+  for (const logo of [20, 30, 60]) {
+    const { height } = stubSize(logo);
+    assert.ok(stubBotTop(logo) + logo <= height - stubFootHeight(logo));
+  }
 });
 
 test("a working agent is punched, a waiting one sealed instead", () => {

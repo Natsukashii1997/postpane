@@ -127,7 +127,7 @@ fn strip_width(
             // Upright ticket stubs (ticket-stub.ts `stubSize`).
             let logo = screen.number("logoSize").clamp(20.0, 60.0);
             let gap = logo * screen.number("gapScale").clamp(0.1, 0.6);
-            let stub_width = (logo * 2.1).round();
+            let stub_width = (logo * 1.7).round();
             if !horizontal {
                 stub_width
             } else if labels.is_empty() {
@@ -372,15 +372,15 @@ mod tests {
             strip_width(&screen, Mode::Notch, Edge::Top, &labels(3), 185.0),
             185.0
         );
-        // Logos: 42 × 62 pt stubs 8 pt apart, or one 42 pt column on a side.
+        // Logos: 34 × 50 pt stubs 8 pt apart, or one 34 pt column on a side.
         assert_eq!(
             strip_width(&screen, Mode::Logos, Edge::Top, &labels(3), 0.0),
-            142.0
+            118.0
         );
-        assert_eq!(strip_width(&screen, Mode::Logos, Edge::Top, &[], 0.0), 42.0);
+        assert_eq!(strip_width(&screen, Mode::Logos, Edge::Top, &[], 0.0), 34.0);
         assert_eq!(
             strip_width(&screen, Mode::Logos, Edge::Left, &labels(3), 0.0),
-            42.0
+            34.0
         );
         // Simple, 22 pt with rings and numbers: 5 + 3 × (22 + 5 + 21) + 2 × 10 + 10,
         // or a column as wide as its widest row and 3 pt of margin.
