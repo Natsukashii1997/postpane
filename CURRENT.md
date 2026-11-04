@@ -1,6 +1,25 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-4 收尾——把 Claude、Codex 的 HUD 工具（MCP）重新指向驿窗，核对插件与图标，经常浩同意后把旧 Agent HUD.app 移到废纸篓；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 2（改名与本机切换）已完成，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：阶段 0 遗留的审批卡真实往返验证（需常浩在终端开默认权限的 Claude Code 触发一次权限请求）；之后进 ROADMAP 阶段 3。
+
+## 阶段 2-4 收尾：HUD 工具指向驿窗、核对插件与图标、旧应用移到废纸篓（2026-11-04，Claude，常浩同意按推荐计划做、同意把旧应用移到废纸篓；纯文档提交 main、无需发布）
+
+- 时间：开工 `2026-11-04 17:05`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 17:09`）。来由：2-4 剩余几项。
+- 改了哪些文件：仓库只改本文件。本机：`~/.claude.json`、`~/.codex/config.toml` 的 `agent-hud` 服务用 `claude mcp remove/add --scope user` 与 `codex mcp remove/add` 重新添加（与设置页「移除再添加」走同一组命令，见 `src/crates/host/src/mcp_clients.rs` `args()`；没动技能文件）；`/Applications/Agent HUD.app` 经访达移到废纸篓。
+- 测试：未跑测试（本批不改代码）。核对：两份配置里命令都是 `/Applications/PostPane.app/Contents/MacOS/PostPane`、参数 `--mcp`，`grep -c 'Agent HUD.app'` 两份都是 `0`；`claude mcp get agent-hud` 显示 `Status: ✔ Connected`；`codex mcp get agent-hud` 显示 `enabled: true`。
+- 验证：
+  - 插件：`claude plugin list` 显示 `agent-hud@agent-hud` 1.1.0、`Read from: …/app.postpane.mac/claude-plugin`、`Status: ✔ enabled`；插件钩子文件不含旧路径。
+  - 图标：截屏放大程序坞，显示驿灯；安装包 `icon.icns` 与仓库同一份（shasum 一致）。访达未单独截图（`qlmanage -t` 卡住已停）。
+  - 侧栏显示设置：新旧网页存储里都只有 `agenthud.selected-screen` 一项，值相同；其余显示设置不在网页存储，未受换标识影响。
+  - 旧应用：访达返回已移入 `.Trash`，`/Applications/Agent HUD.app` 已不存在。
+- 截图：无存档（截屏含其他私人窗口，已删）。
+- 发布与回读：无需发布。回滚：配置备份在 `~/Library/Application Support/postpane/evidence/2026-11-04-switch/mcp-before/`；旧应用可从废纸篓放回。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - `codex mcp add` 会重写整个 `config.toml`，顺带改了 `node_repl` 一段的写法：去掉空的 `args = []`、`120` 写成 `120.0`、环境变量换序，语义不变。
+  - 移走旧应用时还有 5 组旧 `agent-hud-mcp`/`agent-hud-engine` 进程挂在早先开的会话上，会话结束后自行退出；新开的会话才连驿窗。
+  - 旧残留目录 `~/Library/WebKit/app.agenthud.mac`、`~/Library/Caches/app.agenthud`、`app.agenthud.mac` 未处理。
+  - 审批卡真实往返仍未验证。
+- 本轮新坑：无。
 
 ## 阶段 2-4（进行中）：打包安装驿窗与本机切换（2026-11-04，Claude，常浩同意由 Claude 用屏幕操控代点设置；无需发布）
 
