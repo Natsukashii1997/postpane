@@ -1,6 +1,8 @@
 import type { CSSProperties, MutableRefObject } from "react";
 import { BotMark } from "../BotMark";
+import { botKey } from "../bots/artwork";
 import { botState, facingFromEdge, isAttention } from "../bots/bot-state";
+import { staysAsBot } from "../bots/bot-spec";
 import { DockMemory, type Direction } from "../bots/mark-director";
 import { labelWidth, type HUDRect, type stripMetrics } from "../geometry";
 import {
@@ -326,7 +328,7 @@ export function HUDMarkStrip({
                         )
                       : null;
                   })()}
-                  staysBot={false}
+                  staysBot={staysAsBot(botKey(vendor.name))}
                   aim={
                     nativePointer?.point
                       ? (() => {

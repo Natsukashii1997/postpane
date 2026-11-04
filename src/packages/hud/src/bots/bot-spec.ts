@@ -71,6 +71,10 @@ export interface BotSpec {
   signAt?: Point;
   unpainted?: Box[];
   crossesEyes?: boolean;
+  /** Stays a bot in the side strip instead of resting as its logo. */
+  stays?: boolean;
+  /** Petals open, close and turn with the work. */
+  petals?: boolean;
   keeps?: Box;
   ownEyes?: Box[];
   limbs?: { arms: Box[]; legs: Box[]; pixel: number };
@@ -129,6 +133,8 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
       shape: { kind: "outline", keep: 1.1, smooth: 5 },
       spin: 7,
       crossesEyes: true,
+      stays: true,
+      petals: true,
     }),
     antigravity: spec({
       reach: 0.75,
@@ -391,3 +397,11 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
     }),
   };
 }
+/** A bot whose spec keeps it awake in the side strip, so it never rests as its logo. */
+let staying: Set<string> | null = null;
+export const staysAsBot = (key: string) =>
+  (staying ??= new Set(
+    Object.entries(botSpecs(true))
+      .filter(([, value]) => value.stays)
+      .map(([name]) => name),
+  )).has(key);

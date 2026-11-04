@@ -15,8 +15,8 @@ import {
   type BotPhase,
   type BotEvent,
   type BotSign,
-} from "./bot-state";
-import { BotMoves, easeInOut, easeOut, easeOutBack } from "./bot-moves";
+} from "./bot-state.ts";
+import { BotMoves, easeInOut, easeOut, easeOutBack } from "./bot-moves.ts";
 export interface BotFace {
   open: number;
   look: number;
@@ -145,6 +145,7 @@ export interface MotionSpec {
   spin?: number;
   limbs?: { pixel: number } | null;
   crossesEyes?: boolean;
+  petals?: boolean;
   keeps?: unknown;
   decor?: readonly { kind: string; fins?: readonly { hand: number }[] }[];
 }
@@ -158,6 +159,18 @@ const hopPath = [
   [1, 3, 0],
   [0, 0, 0],
 ] as const;
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+const swing = (x: number) => Math.sin(Math.PI * clamp01(x));
+/** Degrees an editing bot has clicked round by `time`: 30° a tick, ten ticks a burst. */
+export function petalRatchet(time: number) {
+  time = Math.max(0, time);
+  const cycles = Math.floor(time / BotMoves.cycle + 1e-9),
+    inner = time - cycles * BotMoves.cycle,
+    ticks = BotMoves.burst / 0.3,
+    done = Math.min(ticks, Math.floor(inner / 0.3 + 1e-9)),
+    part = done < ticks ? easeOut(clamp01((inner - done * 0.3) / 0.1)) : 0;
+  return 30 * (cycles * ticks + done + part);
+}
 /** Direct BotMotion.swift state machine. set/play record events even when a host skips drawing. */
 export class BotMotion {
   staysBot = false;
@@ -167,6 +180,11 @@ export class BotMotion {
   limbed = false;
   stepShare = 0;
   crossesEyes = false;
+  petals = false;
+  /** Petal spread for the outline: 1 as drawn, 0 closed round, above 1 flared. */
+  petal = 1;
+  dim = 0;
+  ring: number | null = null;
   pulses = false;
   finned = false;
   state = botState();
@@ -200,6 +218,11 @@ export class BotMotion {
   private event: { kind: BotEvent; start: number } | null = null;
   private beatsFrom = 0;
   private heldSide = 1;
+  private turnFrom = 0;
+  private joltFrom = 0;
+  private fluttered: number | null = null;
+  private petalGoal = 1;
+  private petalLive = false;
   private settled = false;
   private random: SplitMix;
   constructor(seed?: bigint | number) {
@@ -210,6 +233,7 @@ export class BotMotion {
     this.limbed = Boolean(spec.limbs);
     this.stepShare = spec.limbs ? (spec.limbs.pixel / 2) * spec.radius : 0;
     this.crossesEyes = Boolean(spec.crossesEyes);
+    this.petals = Boolean(spec.petals);
     this.pulses = Boolean(spec.keeps);
     this.finned = Boolean(
       spec.decor?.some(
@@ -266,6 +290,7 @@ export class BotMotion {
     this.settled = false;
     if (next.holds && !before.holds) this.heldSide = BotMoves.ponderSide(now);
     if (next.look !== before.look) {
+      this.turnFrom = this.turn;
       this.leaving = { ...this.pose };
       this.since =
         now +
@@ -340,6 +365,7 @@ export class BotMotion {
       (this.morph > 0.9 || !hasFace)
     ) {
       this.event = { kind: this.pending.kind, start: now };
+      this.joltFrom = this.turn;
       this.pending = null;
       this.act = null;
     }
@@ -353,6 +379,7 @@ export class BotMotion {
       this.greetAfter = null;
       if (this.greetsOnHover) {
         this.greeting = now;
+        this.fluttered = now;
         this.greetSide = aim[0] < 0 ? -1 : 1;
       }
     }
@@ -395,7 +422,8 @@ export class BotMotion {
       this.turn =
         this.act?.kind === "turn"
           ? this.act.from + 60 * this.act.side * easeInOut(progress)
-          : this.turn + this.spinRate(now, dozing) * dt;
+          : this.turn + this.turnStep(now, dt, dozing);
+    if (this.petals) this.turnPetals(age, now);
     this.signs(now, arrived, dozing);
     this.pose = arrived
       ? this.sitting(age, progress, swell, dozing)
@@ -409,6 +437,13 @@ export class BotMotion {
       this.pose.footing = 0;
       if (!this.limbed && this.look.startsWith("tool-") && !this.state.holds)
         this.pose.y = BotMoves.bob(now - this.beatsFrom) * this.morph;
+      if (
+        this.petals &&
+        this.look === "tool-command" &&
+        !this.state.holds &&
+        BotMoves.inBurst(now - this.beatsFrom)
+      )
+        this.pose.x = 0.008 * Math.sin(now * 90) * this.morph;
     } else if (this.morph > 0.5) this.pose.x += 0.025 * this.face.look;
     if (!this.limbed) this.played(now);
     this.limbs =
@@ -421,6 +456,7 @@ export class BotMotion {
       this.updateFace(age, now, dt, aim, swell, dozing);
     else this.following = this.blinking = false;
     if (arrived) this.keep(age, now, dt);
+    if (this.petals) this.shapePetals(age, now, dt, dozing);
     const stills =
       (this.state.holds && isWorking(this.look)) ||
       (this.turnsToCard && age >= 0.45);
@@ -473,6 +509,24 @@ export class BotMotion {
       this.greeting !== null
     )
       return every(BotPace.lively);
+    if (this.petals) {
+      if (
+        this.petalLive ||
+        Math.abs(this.petal - this.petalGoal) > 0.005 ||
+        this.dim > 0.01 ||
+        this.ring !== null ||
+        (this.look === "done" && age < this.doneLength)
+      )
+        return every(BotPace.lively);
+      if (
+        isWorking(this.look) &&
+        !this.state.holds &&
+        this.spinRate(now, dozing) !== 0
+      )
+        return every(
+          this.look === "thinking" ? BotPace.following : BotPace.lively,
+        );
+    }
     let pace: number | null = this.following
         ? BotPace.following
         : this.breathes(dozing) || this.spinRate(now, dozing) !== 0
@@ -560,11 +614,121 @@ export class BotMotion {
       dozing
     )
       return 0;
+    if (this.petals) return this.petalSpin(now);
     return this.look.startsWith("tool-")
       ? BotMoves.inBurst(now - this.beatsFrom)
         ? BotMoves.busySpin
         : 0
       : this.spin;
+  }
+  private get doneLength() {
+    return this.petals && this.state.card === "long-done" ? 2.8 : 1.5;
+  }
+  private compactBreath(age: number) {
+    return Math.sin((Math.PI * Math.max(0, age)) / 1.8) ** 2;
+  }
+  /** Petal bots turn with the work: steady thought, ticking edits, racing commands, reading backwards. */
+  private petalSpin(now: number) {
+    const kind = this.event?.kind;
+    if (kind === "failed" || kind === "limit-hit") return 0;
+    const busy = BotMoves.inBurst(now - this.beatsFrom);
+    switch (this.look) {
+      case "thinking":
+        return 45;
+      case "tool-edit":
+        return busy ? 100 : 0;
+      case "tool-command":
+        return busy ? 240 : 25;
+      case "tool-read":
+        return -40;
+      case "tool-long-command":
+        return 20;
+      case "compacting":
+        return 0;
+      case "plain":
+        return busy ? BotMoves.busySpin : 0;
+      default:
+        return this.state.badge === "limited" ? this.spin * 0.3 : this.spin;
+    }
+  }
+  private turnStep(now: number, dt: number, dozing: boolean) {
+    const rate = this.spinRate(now, dozing);
+    if (rate === 0 || !this.petals || this.look !== "tool-edit")
+      return rate * dt;
+    const clock = now - this.beatsFrom;
+    return petalRatchet(clock) - petalRatchet(clock - dt);
+  }
+  /** Turns that are not a steady spin: a failed jam, and the bloom or dance that ends a reply. */
+  private turnPetals(age: number, now: number) {
+    if (this.event?.kind === "failed") {
+      const time = now - this.event.start;
+      this.turn =
+        this.joltFrom +
+        (time < 1.2 ? 7 * Math.sin(time * 55) * (1 - time / 1.2) : 0);
+    } else if (this.look === "done" && age >= 0 && age < this.doneLength) {
+      const card = this.state.card,
+        bloom = easeInOut(clamp01(age / 0.9));
+      this.turn =
+        this.turnFrom +
+        (card === "long-done"
+          ? 40 * age
+          : (card === "reset" ? 120 : 60) * bloom);
+    }
+  }
+  private shapePetals(age: number, now: number, dt: number, dozing: boolean) {
+    const pulse = (period: number) =>
+        Math.abs(Math.sin((Math.PI * now) / period)),
+      waiting = !this.turnsToCard && age < BotMoves.fullWait;
+    let petal = 1,
+      dim = 0,
+      live = false;
+    if (dozing) petal = 0.12;
+    else if (this.look === "compacting" && !this.state.holds) {
+      petal = 1 - 0.75 * this.compactBreath(age);
+      live = true;
+    } else if (this.look === "permission") {
+      petal = waiting ? 1 + 0.5 * pulse(0.8) : 1.25;
+      live = waiting;
+    } else if (this.look === "question") {
+      petal = waiting ? 1.1 + 0.15 * pulse(1.2) : 1.15;
+      live = waiting;
+    } else if (this.look === "plan") petal = this.moving(age) ? 1.5 : 1.1;
+    else if (this.look === "done" && age < this.doneLength) {
+      const card = this.state.card;
+      petal =
+        card === "long-done"
+          ? 1.2 + 0.3 * pulse(0.4)
+          : 1 + (card === "reset" ? 1 : 0.6) * swing(age / 0.9);
+      live = true;
+    } else if (this.state.badge === "limited" && isCalm(this.look)) petal = 0.7;
+    if (this.fluttered !== null) {
+      const time = now - this.fluttered;
+      if (time < 0.9) {
+        petal += 0.35 * Math.sin(2 * Math.PI * 3 * time) * (1 - time / 0.9);
+        live = true;
+      } else this.fluttered = null;
+    }
+    if (this.event) {
+      const time = now - this.event.start;
+      if (this.event.kind === "failed") {
+        petal = Math.min(petal, 0.8);
+        dim = 1;
+      } else if (this.event.kind === "limit-hit") petal = Math.min(petal, 0.45);
+      else {
+        petal = 1 + 0.5 * swing(time / 0.5);
+        live = true;
+      }
+    }
+    this.petalGoal = petal;
+    this.petalLive = live;
+    this.petal += (petal - this.petal) * (1 - Math.exp(-dt * 16));
+    if (Math.abs(petal - this.petal) < 0.002) this.petal = petal;
+    this.dim += (dim - this.dim) * (1 - Math.exp(-dt * 10));
+    if (Math.abs(dim - this.dim) < 0.005) this.dim = dim;
+    this.ring =
+      this.look === "tool-long-command" && !this.state.holds
+        ? (Math.max(0, age) % 6) / 6
+        : null;
   }
   private moving(age: number) {
     const start = BotMoves.move(age).start;
@@ -634,7 +798,17 @@ export class BotMotion {
         pose.scaleX = pose.scaleY = 1 + 0.2 * pop;
         pose.y = -0.1 * pop;
       }
+      if (this.petals && this.state.card === "long-done" && age < 2.8) {
+        const beat = Math.sin((2 * Math.PI * age) / 0.8);
+        pose.rotation += 12 * beat;
+        pose.y -= 0.03 * Math.abs(beat);
+      }
     } else {
+      if (this.petals && this.look === "compacting" && !this.state.holds) {
+        const shrink = 1 - 0.14 * this.compactBreath(age);
+        pose.scaleX *= shrink;
+        pose.scaleY *= shrink;
+      }
       if (this.breathes(dozing)) {
         const breath = (2 * Math.PI * age) / this.period;
         pose.scaleX = 1 + 0.03 * Math.sin(2 * breath);
@@ -736,6 +910,28 @@ export class BotMotion {
       target.look = BotMoves.ponderGaze[0] * side;
       target.lookY = BotMoves.ponderGaze[1];
       every = [2.2, 4.5];
+    } else if (
+      this.petals &&
+      (this.look.startsWith("tool-") || this.look === "compacting") &&
+      !this.state.hovered &&
+      !this.state.holds
+    ) {
+      every = [2.2, 4.5];
+      if (this.look === "tool-read") {
+        const line = ((now % 3.3) + 3.3) % 3.3;
+        target.look = -0.7 + 1.4 * ((line % 1.1) / 1.1);
+        target.lookY = -0.2 + 0.25 * Math.floor(line / 1.1);
+      } else if (this.look === "tool-long-command" && this.ring !== null) {
+        const a = -Math.PI / 2 + 2 * Math.PI * this.ring;
+        target.look = Math.cos(a) * 0.6;
+        target.lookY = Math.sin(a) * 0.6;
+      } else if (this.look === "compacting") {
+        target.open = 1 - 0.8 * this.compactBreath(age);
+        every = null;
+      } else {
+        target.lookY = 0.45;
+        if (this.look === "tool-command") target.open = 0.6;
+      }
     } else if (dozing || (this.look === "compacting" && this.limbed)) {
       target.open = 0;
       every = null;

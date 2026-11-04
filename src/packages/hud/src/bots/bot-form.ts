@@ -314,26 +314,35 @@ export function makeForm(
 }
 const outlines = new WeakMap<
   BotForm,
-  { eased: number; turn: number; path: Path2D }
+  { eased: number; turn: number; petal: number; path: Path2D }
 >();
-export function formOutline(form: BotForm, eased: number, turn: number) {
+/** `petal` scales how far the outline strays from a circle: 0 closes it, above 1 flares it. */
+export function formOutline(
+  form: BotForm,
+  eased: number,
+  turn: number,
+  petal = 1,
+) {
   const cached = outlines.get(form);
-  if (cached?.eased === eased && cached.turn === turn) return cached.path;
+  if (cached?.eased === eased && cached.turn === turn && cached.petal === petal)
+    return cached.path;
   const path = new Path2D(),
     blend = eased,
-    [cx, cy] = form.spec.center;
+    [cx, cy] = form.spec.center,
+    round = form.spec.radius;
   for (let i = 0; i < 360; i++) {
     const sample = (((i - turn) % 360) + 360) % 360,
       low = Math.floor(sample),
       part = sample - low;
-    const body =
+    const shaped =
         form.body[low] + (form.body[(low + 1) % 360] - form.body[low]) * part,
+      body = round + (shaped - round) * petal,
       r = form.logo[i] + (body - form.logo[i]) * blend,
       a = (i * Math.PI) / 180;
     if (!i) path.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
     else path.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
   }
   path.closePath();
-  outlines.set(form, { eased, turn, path });
+  outlines.set(form, { eased, turn, petal, path });
   return path;
 }
