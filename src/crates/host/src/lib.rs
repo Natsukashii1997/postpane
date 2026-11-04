@@ -922,12 +922,8 @@ pub fn run_with_options(
                 // The demo goes through the real Core, in a folder of its own.
                 let runtime =
                     agent_hud_runtime::Runtime::demo(demo_data.clone(), demo_script.take())?;
-                let service = Service::start(
-                    app.handle().clone(),
-                    runtime,
-                    extension.clone(),
-                    demo_data,
-                )?;
+                let service =
+                    Service::start(app.handle().clone(), runtime, extension.clone(), demo_data)?;
                 demo::play(app.handle().clone(), &service);
                 app.manage(service);
             } else {
@@ -943,12 +939,8 @@ pub fn run_with_options(
                 }
                 let launch_at_login = runtime.launch_at_login_enabled();
                 let data = agent_hud_runtime::local_tools_directory()?;
-                let service = Service::start(
-                    app.handle().clone(),
-                    runtime,
-                    extension.clone(),
-                    data,
-                )?;
+                let service =
+                    Service::start(app.handle().clone(), runtime, extension.clone(), data)?;
                 if launch_at_login {
                     app.state::<system::System>().register_if_never_registered();
                 }
