@@ -1,6 +1,23 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏已改为「贴纸票根」（PR #19 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩在外接屏上看贴纸票根实物，确认后做阶段 4 的悬停面板（先出 3 版）。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏已瘦身为「撕角票」34×50（PR #21 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩确认撕角票实物后，做阶段 4 的悬停面板（先对齐感觉，再出 3 版）。
+
+## 阶段 4：动态模式票根瘦身为撕角票（2026-11-04，Claude，常浩看实物后说票偏宽、家数多了放不下，并在三版里选「乙 撕角票」；PR #21 测试全过已 squash 合并 `8b6bf3e`、已打包安装并截图回读）
+
+- 时间：开工 `2026-11-04 20:37`（`date` 记录；本节写于 `2026-11-04 20:44`）。来由：常浩看贴纸票根实物，觉得每张偏宽，往后 agent 多了一屏放不下；喜欢最早的票根样子，要求读数和票面和谐融合。issue #20。
+- 设计过程：预览 https://claude.ai/artifact/3E6e9BKwEzFGzfSJPSesnM （甲 边码票 32×44 竖印读数 / 乙 撕角票 34×50 撕线下横印 / 丙 连票卷 30×42 墨条反白 / 现版对照，附整屏容量比较），常浩选乙。上一轮预览 X8wnGDprGnyhjSAYJ2BumP 保留未动。
+- 改了哪些文件（PR #21）：`src/packages/hud/src/ticket-stub.ts`（票 1.7×2.5 个标志、小人上移到 0.35、新增撕角高度 0.7）、`src/packages/hud/src/scene/HUDMarkStrip.tsx`（读数印在撕线下一截，字 9.5；「批」章 12；打孔 5.5 固定在票头）、`src/crates/host/src/hud/plans.rs`（`strip_width` 同步为 1.7 与测试）、`src/packages/hud/test/ticket-stub.test.ts`（新尺寸、小人与撕角不重叠）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 637 passed / 0 failed、前端 `ℹ pass 114` / `ℹ fail 0`、MCP `ℹ pass 14`、插件 `ℹ pass 6`）。在 worktree `.claude/worktrees/20-tear-stub` 跑。
+- 验证：常浩没有外接屏，笔记本内屏临时改成右边缘动态模式（把外接屏那份设置复制给内屏 `37D8832A-…`，原设置备份 `~/Library/Application Support/postpane/evidence/2026-11-04-ticket-stubs/presentation-before-builtin-logos.json`）。装好后截屏核对：四张撕角票、撕线、读数 32% / 3% / ≈$0.16 / ¥811.01、Claude 在跑有打孔；「批」章与红字本次未遇到，未实物核对。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-04-tear-stub/laptop-right-edge-2043.png`。
+- 发布与回读：打包 `PostPane.app` 已 ditto 到 `/Applications` 并重启，截图回读如上。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-04-tear-stub/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 笔记本内屏仍是临时的右边缘动态模式，常浩说改回再改（备份见上）。
+  - 「¥811.01」刚好放满 34 宽，余额再长一位会被截断，到时再定缩字还是去小数。
+  - Claude 道具动起来会短暂扫过读数（各版都有，预览已标出）。
+  - 上一轮遗留照旧：「标志离边距离」在动态模式下无作用；HUD 工具（MCP）重启后需在设置里重开。
+  - 合并后的 worktree `.claude/worktrees/18-ticket-stubs`、`.claude/worktrees/20-tear-stub` 可清理。
+- 本轮新坑：无。
 
 ## 阶段 4：动态模式静止侧栏改为贴纸票根（2026-11-04，Claude，常浩选定方向「票根」→ 变体乙 → 小人适配「乙 贴纸票」，并说「按计划开工」；PR #19 测试全过已 squash 合并 `1808d76`、已打包安装）
 
