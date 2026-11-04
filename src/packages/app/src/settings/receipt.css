@@ -450,49 +450,55 @@
   outline-offset: 2px;
 }
 
-/* A slider is a ruler with a printed bar and a pointer. */
+/* A slider is a hatched bar in a thin box, like the quota panel's: a solid
+   upright block marks the value, and the two ends print the range. The
+   block is only sized, never moved, so WebKit keeps it on the bar. */
 .apple-app [data-slot="slider"] {
-  height: 22px;
+  height: 28px;
+}
+.apple-app [data-slot="slider"]::before,
+.apple-app [data-slot="slider"]::after {
+  position: absolute;
+  top: -6px;
+  font: 500 9px/1 var(--rc-mono);
+  color: rgba(var(--rc-ink), 0.5);
+  pointer-events: none;
+}
+.apple-app [data-slot="slider"]::before {
+  content: attr(data-min);
+  left: 0;
+}
+.apple-app [data-slot="slider"]::after {
+  content: attr(data-max);
+  right: 0;
 }
 .apple-app [data-slot="slider-track"] {
-  height: 16px !important;
+  height: 10px !important;
+  box-sizing: border-box;
   border-radius: 0;
-  overflow: visible;
-  background:
-    linear-gradient(rgb(var(--rc-ink)), rgb(var(--rc-ink))) left bottom / 100%
-      1.5px no-repeat,
-    repeating-linear-gradient(
-        90deg,
-        rgba(var(--rc-ink), 0.9) 0 1px,
-        transparent 1px 25%
-      )
-      left bottom / calc(100% + 1px) 8px no-repeat,
-    repeating-linear-gradient(
-        90deg,
-        rgba(var(--rc-ink), 0.5) 0 1px,
-        transparent 1px 5%
-      )
-      left bottom / calc(100% + 1px) 4px no-repeat;
+  border: 1.4px solid rgb(var(--rc-ink));
+  background: transparent;
 }
 .apple-app [data-slot="slider-range"] {
-  top: 1px;
-  height: 5px !important;
-  background: rgb(var(--rc-ink));
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(var(--rc-ink)) 0 1.4px,
+    transparent 1.4px 4px
+  );
 }
 .apple-app [data-slot="slider-thumb"] {
   width: 12px;
-  height: 9px;
+  height: 22px;
   border: 0;
   border-radius: 0;
   background: rgb(var(--rc-ink));
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  box-shadow: none;
-  transform: translateY(-9px);
+  box-shadow: 0 0 0 2px var(--rc-paper);
 }
 .apple-app [data-slot="slider-thumb"]:hover,
 .apple-app [data-slot="slider-thumb"]:focus-visible {
-  box-shadow: none;
-  background: var(--rc-red);
+  box-shadow: 0 0 0 2px var(--rc-paper);
+  outline: 1.5px dashed rgb(var(--rc-ink));
+  outline-offset: 3px;
 }
 .apple-app .settings-slider-value {
   font: 600 17px/1 var(--rc-num);
@@ -589,4 +595,216 @@
   border-radius: 0;
   border: 1.2px dashed currentColor;
   background: transparent;
+}
+
+/* ---- The Agents page ------------------------------------------------ */
+
+/* The agent list prints like the page list: square rows, the chosen one
+   solid with a pointer, a dashed rule under the pinned ones. */
+.apple-app .agents-list {
+  gap: 0;
+  padding-right: 14px;
+  border-right: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+.apple-app .agents-list-item {
+  border-radius: 0;
+  color: rgb(var(--rc-ink));
+}
+.apple-app .agents-list-item:hover {
+  background: rgba(var(--rc-ink), 0.07);
+}
+.apple-app .agents-list-item.is-selected {
+  background: rgb(var(--rc-ink));
+  color: var(--rc-paper);
+}
+.apple-app .agents-list-item.is-selected::after {
+  content: "◀";
+  margin-left: auto;
+  font-size: 9px;
+}
+.apple-app .agents-list-item.is-off .agents-list-name,
+.apple-app .agents-list-state {
+  color: rgba(var(--rc-ink), 0.5);
+}
+.apple-app .agents-list-item.is-selected .agents-list-name,
+.apple-app .agents-list-item.is-selected .agents-list-state {
+  color: var(--rc-paper);
+  opacity: 0.75;
+}
+.apple-app .agents-list-item.is-selected:not(.is-off) .agents-list-name {
+  opacity: 1;
+}
+.apple-app .agents-list-item:focus-visible {
+  outline: 1.5px dashed rgb(var(--rc-ink));
+  outline-offset: -3px;
+}
+.apple-app .agents-list-label {
+  font-family: var(--rc-mono);
+  color: rgba(var(--rc-ink), 0.6);
+}
+.apple-app .agents-list-fold {
+  margin-top: 6px;
+  border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+.apple-app .agents-detail-title h2 {
+  font: 700 13.5px/18px var(--rc-mono);
+  letter-spacing: 2px;
+}
+
+/* A dragged quota row shows where it lands with a dashed box. */
+.apple-app .agents-draggable.is-target {
+  background: transparent;
+  outline: 1.5px dashed rgb(var(--rc-ink));
+  outline-offset: -1px;
+}
+.apple-app .agents-grip {
+  color: rgb(var(--rc-ink));
+}
+
+/* The confirm dialog opens outside the window's element. */
+:root:has(.apple-app) .agents-dialog[data-slot="dialog-content"] {
+  border-radius: 0;
+  border: 1.2px solid var(--popover-foreground);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+:root:has(.apple-app) .agents-dialog [data-slot="button"] {
+  border-radius: 0;
+}
+
+/* ---- The Display page ----------------------------------------------- */
+
+/* The HUD preview stays in colour (the glow is judged by it), framed in ink. */
+.apple-app .settings-hud-preview {
+  border-radius: 0 !important;
+  outline: 1.5px solid rgb(var(--rc-ink));
+}
+.apple-app .apple-content [data-slot="button"][data-variant="ghost"]:hover {
+  background: rgba(var(--rc-ink), 0.08);
+}
+
+/* ---- The Agent plugins page ---------------------------------------- */
+
+/* A client card opens into indented line items under a dashed rule, like a
+   receipt's sub-lines. */
+.apple-app .settings-collapsible-header:hover {
+  background: rgba(var(--rc-ink), 0.07);
+}
+.apple-app .settings-collapsible-header:focus-visible {
+  outline: 1.5px dashed rgb(var(--rc-ink));
+  outline-offset: -2px;
+}
+.apple-app .settings-collapsible.is-open > .settings-collapsible-body {
+  margin-left: 6px;
+  padding-left: 16px;
+  border-left: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+
+/* ---- The page's foot: a total, a barcode, the tear ------------------ */
+
+/* Counts the rows printed on this page; folded rows are not printed. The
+   barcode is a fixed pattern and carries nothing. */
+.apple-app .settings-pane-content {
+  counter-reset: rc-item;
+}
+.apple-app .settings-pane-content .settings-row {
+  counter-increment: rc-item;
+}
+.apple-app .settings-pane-content:has(.settings-row)::after {
+  content: "Total " counter(rc-item) " items";
+  display: block;
+  margin-top: 22px;
+  padding: 10px 0 48px;
+  border-top: 3px double rgba(var(--rc-ink), 0.75);
+  font: 700 13px/1 var(--rc-mono);
+  letter-spacing: 1px;
+  background: linear-gradient(
+      90deg,
+      rgb(var(--rc-ink)) 0% 1.4%,
+      transparent 1.4% 2.7%,
+      rgb(var(--rc-ink)) 2.7% 3.4%,
+      transparent 3.4% 4.2%,
+      rgb(var(--rc-ink)) 4.2% 5.5%,
+      transparent 5.5% 6.7%,
+      rgb(var(--rc-ink)) 6.7% 7.4%,
+      transparent 7.4% 9.1%,
+      rgb(var(--rc-ink)) 9.1% 10.7%,
+      transparent 10.7% 11.7%,
+      rgb(var(--rc-ink)) 11.7% 12.7%,
+      transparent 12.7% 14.3%,
+      rgb(var(--rc-ink)) 14.3% 16%,
+      transparent 16% 16.6%,
+      rgb(var(--rc-ink)) 16.6% 18%,
+      transparent 18% 18.9%,
+      rgb(var(--rc-ink)) 18.9% 20.6%,
+      transparent 20.6% 21.3%,
+      rgb(var(--rc-ink)) 21.3% 22.8%,
+      transparent 22.8% 24%,
+      rgb(var(--rc-ink)) 24% 24.8%,
+      transparent 24.8% 25.4%,
+      rgb(var(--rc-ink)) 25.4% 27.6%,
+      transparent 27.6% 29.4%,
+      rgb(var(--rc-ink)) 29.4% 30.1%,
+      transparent 30.1% 31.3%,
+      rgb(var(--rc-ink)) 31.3% 33.5%,
+      transparent 33.5% 34.2%,
+      rgb(var(--rc-ink)) 34.2% 35.5%,
+      transparent 35.5% 36.8%,
+      rgb(var(--rc-ink)) 36.8% 38.5%,
+      transparent 38.5% 39.4%,
+      rgb(var(--rc-ink)) 39.4% 40.2%,
+      transparent 40.2% 42.1%,
+      rgb(var(--rc-ink)) 42.1% 43.4%,
+      transparent 43.4% 44.2%,
+      rgb(var(--rc-ink)) 44.2% 45.7%,
+      transparent 45.7% 46.6%,
+      rgb(var(--rc-ink)) 46.6% 47.4%,
+      transparent 47.4% 49%,
+      rgb(var(--rc-ink)) 49% 50.1%,
+      transparent 50.1% 51.1%,
+      rgb(var(--rc-ink)) 51.1% 51.8%,
+      transparent 51.8% 53.5%,
+      rgb(var(--rc-ink)) 53.5% 54.5%,
+      transparent 54.5% 56.2%,
+      rgb(var(--rc-ink)) 56.2% 57.6%,
+      transparent 57.6% 58.4%,
+      rgb(var(--rc-ink)) 58.4% 60%,
+      transparent 60% 61%,
+      rgb(var(--rc-ink)) 61% 62.9%,
+      transparent 62.9% 64.3%,
+      rgb(var(--rc-ink)) 64.3% 65.1%,
+      transparent 65.1% 65.9%,
+      rgb(var(--rc-ink)) 65.9% 67.2%,
+      transparent 67.2% 67.8%,
+      rgb(var(--rc-ink)) 67.8% 68.4%,
+      transparent 68.4% 69.5%,
+      rgb(var(--rc-ink)) 69.5% 71.2%,
+      transparent 71.2% 72.6%,
+      rgb(var(--rc-ink)) 72.6% 74.8%,
+      transparent 74.8% 75.8%,
+      rgb(var(--rc-ink)) 75.8% 77.1%,
+      transparent 77.1% 78.3%,
+      rgb(var(--rc-ink)) 78.3% 79.6%,
+      transparent 79.6% 81.2%,
+      rgb(var(--rc-ink)) 81.2% 82.5%,
+      transparent 82.5% 83.7%,
+      rgb(var(--rc-ink)) 83.7% 84.6%,
+      transparent 84.6% 85.5%,
+      rgb(var(--rc-ink)) 85.5% 87.3%,
+      transparent 87.3% 88%,
+      rgb(var(--rc-ink)) 88% 89%,
+      transparent 89% 90.5%,
+      rgb(var(--rc-ink)) 90.5% 92.6%,
+      transparent 92.6% 94.4%,
+      rgb(var(--rc-ink)) 94.4% 96.6%,
+      transparent 96.6% 98.3%,
+      rgb(var(--rc-ink)) 98.3% 100%,
+      transparent 100% 100%
+    )
+    center bottom / 82% 34px no-repeat;
+}
+.apple-app:lang(zh) .settings-pane-content:has(.settings-row)::after {
+  content: "共 " counter(rc-item) " 项";
+  letter-spacing: 2px;
 }

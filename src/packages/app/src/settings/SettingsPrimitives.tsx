@@ -297,6 +297,8 @@ export function Slide({
           disabled={disabled}
           onValueChange={(values) => change(values[0])}
           className="settings-slider"
+          data-min={format(min)}
+          data-max={format(max)}
         />
         <output className="settings-slider-value">{format(value)}</output>
       </div>
