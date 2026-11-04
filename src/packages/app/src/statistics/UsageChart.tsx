@@ -121,9 +121,9 @@ export const UsageChart = memo(function UsageChart({
     () =>
       data.models.map((model) => ({
         id: model.id,
-        color: modelColor(model.id),
+        color: modelColor(model.id, theme),
       })),
-    [data.models],
+    [data.models, theme],
   );
   const targetBars = useMemo<NormalizedBar[]>(() => {
     const span = plot.end - plot.start;
@@ -196,7 +196,7 @@ export const UsageChart = memo(function UsageChart({
             height - 1 - stackHeight,
             barWidth,
             stackHeight,
-            2,
+            0,
           );
         else
           ctx.rect(
@@ -395,7 +395,7 @@ export const UsageChart = memo(function UsageChart({
               .filter((model) => (inspected.models[model.id] ?? 0) > 0)
               .map((model) => (
                 <div key={model.id} style={{ ...row, marginTop: 5 }}>
-                  <Swatch color={modelColor(model.id)} />
+                  <Swatch color={modelColor(model.id, theme)} />
                   <HUDLogo
                     source={model.provider}
                     size={11}

@@ -77,7 +77,7 @@ function useQuotaHistory(
 const HEIGHT = 44;
 
 function accent(theme: StatsTheme) {
-  return theme.light ? "#007aff" : "#0a84ff";
+  return theme.text;
 }
 
 function reducedMotion() {

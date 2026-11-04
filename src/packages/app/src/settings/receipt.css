@@ -3,9 +3,11 @@
    slot as a short strip; each page is one long receipt with a torn top and
    bottom. Grey thermal ink, dashed rules, a ruler for sliders, two boxes for
    on and off. Only `.apple-app` (this window) wears it: the HUD and its panel
-   keep their own look. */
+   keep their own look. The statistics window (issue #40) prints on the
+   same paper. */
 
-.apple-app {
+.apple-app,
+.statistics-window {
   --rc-desk: #c9c4b9;
   --rc-paper: #f6f4ef;
   --rc-ink: 52, 50, 58;
@@ -36,7 +38,8 @@
   --settings-card: transparent;
   --settings-card-border: transparent;
 }
-.apple-app[data-theme="dark"] {
+.apple-app[data-theme="dark"],
+.statistics-window[data-theme="dark"] {
   --rc-desk: #11100e;
   --rc-paper: #2b2925;
   --rc-ink: 236, 231, 220;
@@ -48,26 +51,34 @@
 }
 
 /* Menus and toasts open outside the window's element. */
-:root:has(.apple-app) {
+:root:has(.apple-app),
+:root:has(.statistics-window) {
   --popover: #f6f4ef;
   --popover-foreground: rgb(52, 50, 58);
   --accent: rgba(52, 50, 58, 0.1);
   --accent-foreground: rgb(52, 50, 58);
 }
-:root:has(.apple-app[data-theme="dark"]) {
+:root:has(.apple-app[data-theme="dark"]),
+:root:has(.statistics-window[data-theme="dark"]) {
   --popover: #2b2925;
   --popover-foreground: rgb(236, 231, 220);
   --accent: rgba(236, 231, 220, 0.12);
   --accent-foreground: rgb(236, 231, 220);
 }
 :root:has(.apple-app) [data-slot="select-content"],
-:root:has(.apple-app) [data-slot="dropdown-menu-content"] {
+:root:has(.apple-app) [data-slot="dropdown-menu-content"],
+:root:has(.statistics-window) [data-slot="select-content"],
+:root:has(.statistics-window) [data-slot="dropdown-menu-content"],
+:root:has(.statistics-window) [data-slot="popover-content"],
+:root:has(.statistics-window) [data-slot="hover-card-content"] {
   border-radius: 0;
   border: 1.2px solid var(--popover-foreground);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
 }
 :root:has(.apple-app) [data-slot="select-item"],
-:root:has(.apple-app) [data-slot="dropdown-menu-item"] {
+:root:has(.apple-app) [data-slot="dropdown-menu-item"],
+:root:has(.statistics-window) [data-slot="select-item"],
+:root:has(.statistics-window) [data-slot="dropdown-menu-item"] {
   border-radius: 0;
 }
 
@@ -806,5 +817,198 @@
 }
 .apple-app:lang(zh) .settings-pane-content:has(.settings-row)::after {
   content: "共 " counter(rc-item) " 项";
+  letter-spacing: 2px;
+}
+
+/* ---- The statistics window ------------------------------------------ */
+
+/* The same desk; the Tokens / Sessions choice printed in two boxes; each
+   page one long receipt torn at both ends. */
+.statistics-window,
+.statistics-window .statistics-toolbar {
+  background: var(--rc-grain), var(--rc-desk);
+  color: rgb(var(--rc-ink));
+}
+.statistics-window .statistics-toolbar [data-slot="tabs-list"] {
+  gap: 2px;
+  padding: 0;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+.statistics-window .statistics-toolbar [data-slot="tabs-trigger"] {
+  height: 26px;
+  padding: 0 16px;
+  border: 1.2px solid rgba(var(--rc-ink), 0.5);
+  border-radius: 0;
+  box-shadow: none !important;
+  background: var(--rc-paper) !important;
+  color: rgb(var(--rc-ink)) !important;
+  font-size: 12.5px;
+}
+.statistics-window
+  .statistics-toolbar
+  [data-slot="tabs-trigger"][data-state="active"] {
+  border-color: rgb(var(--rc-ink));
+  background: rgb(var(--rc-ink)) !important;
+  color: var(--rc-paper) !important;
+}
+.statistics-window [data-slot="button"],
+.statistics-window [data-slot="select-trigger"],
+.statistics-window [data-slot="badge"] {
+  border-radius: 0;
+  box-shadow: none;
+}
+.statistics-window [data-slot="button"][data-variant="outline"] {
+  border: 1.2px solid rgb(var(--rc-ink));
+  background: var(--rc-paper);
+}
+.statistics-window div:has(> .statistics-native),
+.statistics-window div:has(> .session-statistics-native) {
+  margin: 4px 24px 40px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2))
+    drop-shadow(0 8px 12px rgba(0, 0, 0, 0.14));
+}
+.statistics-window[data-theme="dark"] div:has(> .statistics-native),
+.statistics-window[data-theme="dark"] div:has(> .session-statistics-native) {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
+}
+.statistics-window .statistics-native,
+.statistics-window .session-statistics-native {
+  padding: 18px 30px calc(30px + var(--rc-tooth));
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 30%,
+      var(--rc-sheen) 46%,
+      transparent 62%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(var(--rc-ink), 0.014) 0 1px,
+      transparent 1px 3px
+    ),
+    var(--rc-grain), var(--rc-paper) !important;
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+      top / var(--rc-tooth) 51% repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - var(--rc-tooth))
+      no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+      top / var(--rc-tooth) 51% repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
+      bottom / var(--rc-tooth) 51% repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - var(--rc-tooth))
+      no-repeat;
+}
+
+/* The foot: a total of the agents printed above, and a barcode that
+   carries nothing. */
+.statistics-window .statistics-native {
+  counter-reset: rc-agent;
+}
+.statistics-window .statistics-agent-card {
+  counter-increment: rc-agent;
+}
+.statistics-window .statistics-native:has(.statistics-agent-card)::after {
+  content: "Total " counter(rc-agent) " agents";
+  display: block;
+  margin-top: 10px;
+  padding: 10px 0 48px;
+  border-top: 3px double rgba(var(--rc-ink), 0.75);
+  font: 700 13px/1 var(--rc-mono);
+  letter-spacing: 1px;
+  background: linear-gradient(
+      90deg,
+      rgb(var(--rc-ink)) 0% 1.4%,
+      transparent 1.4% 2.7%,
+      rgb(var(--rc-ink)) 2.7% 3.4%,
+      transparent 3.4% 4.2%,
+      rgb(var(--rc-ink)) 4.2% 5.5%,
+      transparent 5.5% 6.7%,
+      rgb(var(--rc-ink)) 6.7% 7.4%,
+      transparent 7.4% 9.1%,
+      rgb(var(--rc-ink)) 9.1% 10.7%,
+      transparent 10.7% 11.7%,
+      rgb(var(--rc-ink)) 11.7% 12.7%,
+      transparent 12.7% 14.3%,
+      rgb(var(--rc-ink)) 14.3% 16%,
+      transparent 16% 16.6%,
+      rgb(var(--rc-ink)) 16.6% 18%,
+      transparent 18% 18.9%,
+      rgb(var(--rc-ink)) 18.9% 20.6%,
+      transparent 20.6% 21.3%,
+      rgb(var(--rc-ink)) 21.3% 22.8%,
+      transparent 22.8% 24%,
+      rgb(var(--rc-ink)) 24% 24.8%,
+      transparent 24.8% 25.4%,
+      rgb(var(--rc-ink)) 25.4% 27.6%,
+      transparent 27.6% 29.4%,
+      rgb(var(--rc-ink)) 29.4% 30.1%,
+      transparent 30.1% 31.3%,
+      rgb(var(--rc-ink)) 31.3% 33.5%,
+      transparent 33.5% 34.2%,
+      rgb(var(--rc-ink)) 34.2% 35.5%,
+      transparent 35.5% 36.8%,
+      rgb(var(--rc-ink)) 36.8% 38.5%,
+      transparent 38.5% 39.4%,
+      rgb(var(--rc-ink)) 39.4% 40.2%,
+      transparent 40.2% 42.1%,
+      rgb(var(--rc-ink)) 42.1% 43.4%,
+      transparent 43.4% 44.2%,
+      rgb(var(--rc-ink)) 44.2% 45.7%,
+      transparent 45.7% 46.6%,
+      rgb(var(--rc-ink)) 46.6% 47.4%,
+      transparent 47.4% 49%,
+      rgb(var(--rc-ink)) 49% 50.1%,
+      transparent 50.1% 51.1%,
+      rgb(var(--rc-ink)) 51.1% 51.8%,
+      transparent 51.8% 53.5%,
+      rgb(var(--rc-ink)) 53.5% 54.5%,
+      transparent 54.5% 56.2%,
+      rgb(var(--rc-ink)) 56.2% 57.6%,
+      transparent 57.6% 58.4%,
+      rgb(var(--rc-ink)) 58.4% 60%,
+      transparent 60% 61%,
+      rgb(var(--rc-ink)) 61% 62.9%,
+      transparent 62.9% 64.3%,
+      rgb(var(--rc-ink)) 64.3% 65.1%,
+      transparent 65.1% 65.9%,
+      rgb(var(--rc-ink)) 65.9% 67.2%,
+      transparent 67.2% 67.8%,
+      rgb(var(--rc-ink)) 67.8% 68.4%,
+      transparent 68.4% 69.5%,
+      rgb(var(--rc-ink)) 69.5% 71.2%,
+      transparent 71.2% 72.6%,
+      rgb(var(--rc-ink)) 72.6% 74.8%,
+      transparent 74.8% 75.8%,
+      rgb(var(--rc-ink)) 75.8% 77.1%,
+      transparent 77.1% 78.3%,
+      rgb(var(--rc-ink)) 78.3% 79.6%,
+      transparent 79.6% 81.2%,
+      rgb(var(--rc-ink)) 81.2% 82.5%,
+      transparent 82.5% 83.7%,
+      rgb(var(--rc-ink)) 83.7% 84.6%,
+      transparent 84.6% 85.5%,
+      rgb(var(--rc-ink)) 85.5% 87.3%,
+      transparent 87.3% 88%,
+      rgb(var(--rc-ink)) 88% 89%,
+      transparent 89% 90.5%,
+      rgb(var(--rc-ink)) 90.5% 92.6%,
+      transparent 92.6% 94.4%,
+      rgb(var(--rc-ink)) 94.4% 96.6%,
+      transparent 96.6% 98.3%,
+      rgb(var(--rc-ink)) 98.3% 100%,
+      transparent 100% 100%
+    )
+    center bottom / 82% 34px no-repeat;
+}
+.statistics-window:lang(zh)
+  .statistics-native:has(.statistics-agent-card)::after {
+  content: "共 " counter(rc-agent) " 个智能体";
   letter-spacing: 2px;
 }
