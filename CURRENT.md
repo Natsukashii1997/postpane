@@ -1,6 +1,23 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏已瘦身为「撕角票」34×50（PR #21 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩确认撕角票实物后，做阶段 4 的悬停面板（先对齐感觉，再出 3 版）。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩说要做时，从头设计额度面板（鼠标移到侧栏小票上弹出的大面板），先对齐内容与感觉、出 3 版。
+
+## 阶段 4：审批横条与展开框换成票签；额度面板改动撤回（2026-11-04，Claude，常浩选审批横条「一 票签」，要求结构照旧、按钮用常规文字；实物看过后说「没问题，合并」；额度面板未经确认，常浩要求撤回；PR #27 已合并 `f8e4d0f`、PR #26 撤回 #24、已打包安装）
+
+- 时间：开工 `2026-11-04 20:50`（悬停面板对齐起算；本节写于 `2026-11-04 21:50` 前后，以 `date` 为准）。来由：ROADMAP 阶段 4 剩余的悬停部分。
+- 过程与误会（重要）：「悬停面板」在常浩那里指的是**审批横条鼠标移上去展开的审批框**，不是侧栏小票弹出的额度面板。我按额度面板出了三版（https://claude.ai/artifact/C4TZ6aZwzCQJkkB45swhQs ），常浩选「甲 整张票据」并同意分 3 批，我据此合并了 #24（额度面板票据外观）、开了会话区 #25；常浩随后指出额度面板还没让他确认过，要撤回、以后重新设计。已用 PR #26 还原 #24（代码与 `35fdb67` 一致），#22、#25 关闭为不做，装回改之前的应用。审批的两种去处分镜 https://claude.ai/artifact/VA2na2qCUPGqqXTN1wZY9z 被否（常浩要保留窄横条 + 悬停展开的现有结构）。最终选型页 https://claude.ai/artifact/QyWVEHs5q83asx7MPjfcdP 「一 票签」。
+- 改了哪些文件（PR #27）：`src/packages/hud/src/paper.ts`（新：纸色、纸纹、齿孔）、`alerts/CompactAlertView.tsx`（纸签横条、批/答小方章、「待确认计划」）、`scene/HUDExpandedSurface.tsx` 与 `HUDScene.tsx`（动态/简约模式下审批卡外壳换纸面）、`permissions/ApprovalContent.tsx`、`PermissionToolCard.tsx`、`PermissionQuestionCard.tsx`、`PermissionPlanCard.tsx`、`alerts/PendingEventRows.tsx`（圆戳、撕线、印刷行、按钮配色；文字全部不变）、`model.ts` + `ticket-stub.ts` + `scene/HUDMarkStrip.tsx`（撕角票章区分「批」「答」）、`test/ticket-stub.test.ts`。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 637 passed / 0 failed、`ℹ pass 115` / `ℹ fail 0`、`ℹ pass 6`、`ℹ pass 14`）；`node scripts/check-rules.mjs` 通过。撤回 PR #26 同样跑过 check 与 test（`ℹ pass 114` / `ℹ fail 0`、Rust 637）。
+- 验证：装好后用一次真实提问（AskUserQuestion）触发「答 待回答」横条与展开框，常浩看实物回复「没问题，合并」。权限请求类展开框没有实物触发，只在子代理的本地预览页看过浅/深两色。
+- 截图：无存档（实物由常浩直接看）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-04-approval-tag/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 合并 #24、开工 #25 超出了常浩的本意（见上），已撤回；以后涉及「哪个面板」先用截图对齐指的是哪一个。
+  - 刘海模式的审批横条与展开框未改（刘海里须黑色）。设置里的「透明度」对纸面不起作用。
+  - 笔记本内屏仍是临时的右边缘动态模式（原设置备份 `evidence/2026-11-04-ticket-stubs/presentation-before-builtin-logos.json`），常浩说改回再改。
+  - 驿窗 HUD 工具（MCP）重启应用后要在设置里重开「Let agents arrange the HUD」才能截图。
+  - 可清理的 worktree：`.claude/worktrees/18-ticket-stubs`、`20-tear-stub`、`22-receipt-panel`、`23-approval-tag`。
+- 本轮新坑：无。
 
 ## 阶段 4：动态模式票根瘦身为撕角票（2026-11-04，Claude，常浩看实物后说票偏宽、家数多了放不下，并在三版里选「乙 撕角票」；PR #21 测试全过已 squash 合并 `8b6bf3e`、已打包安装并截图回读）
 
