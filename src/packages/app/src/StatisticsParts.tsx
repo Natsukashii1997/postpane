@@ -14,6 +14,7 @@ export {
   kindLabels,
   kinds,
   modelColor,
+  rankModels,
   ModelLine,
   number,
   plain,

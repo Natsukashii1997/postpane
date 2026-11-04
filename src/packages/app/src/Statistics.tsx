@@ -46,6 +46,7 @@ import {
   kindLabel,
   kinds,
   modelColor,
+  rankModels,
   number,
   plain,
   row,
@@ -201,11 +202,11 @@ function Segments({
     >
       <TabsList
         style={{
-          background: theme.segment,
-          borderRadius: 7,
-          height: 28,
-          padding: 2,
-          gap: 1,
+          background: "transparent",
+          borderRadius: 0,
+          height: 26,
+          padding: 0,
+          gap: 2,
         }}
       >
         {choices.map((choice) => (
@@ -216,15 +217,12 @@ function Segments({
               height: 24,
               padding: "3px 11px",
               border: 0,
-              borderRadius: 5,
-              fontSize: 12,
-              fontWeight: value === choice.value ? 500 : 400,
+              borderRadius: 0,
+              fontSize: 12.5,
+              fontWeight: 400,
               lineHeight: "16px",
-              color: theme.text,
-              boxShadow:
-                value === choice.value && theme.light
-                  ? "0 1px 2px rgba(0,0,0,.08)"
-                  : "none",
+              color: value === choice.value ? theme.ground : theme.text,
+              boxShadow: "none",
               background:
                 value === choice.value ? theme.selected : "transparent",
               transition:
@@ -327,6 +325,8 @@ export default function Statistics({
     action,
     active,
   );
+  // Each model's shade of ink follows its share of these tokens.
+  if (data) rankModels(data.models);
   // The quota history runs to the latest reading: a window read again
   // moves its end along with the page's.
   const readings = snapshot.quotas
@@ -484,7 +484,7 @@ export default function Statistics({
                 fontWeight: 500,
                 height: 28,
                 padding: "0 10px",
-                borderRadius: 6,
+                borderRadius: 0,
                 background: theme.segment,
               }}
             >
@@ -780,7 +780,7 @@ export default function Statistics({
                         color: checked ? theme.text : theme.secondary,
                         fontSize: 11,
                         padding: "3px 4px",
-                        borderRadius: 4,
+                        borderRadius: 0,
                         background: checked ? theme.segment : "transparent",
                       }}
                     >
@@ -790,10 +790,10 @@ export default function Statistics({
                           width: 13,
                           height: 13,
                           flexShrink: 0,
-                          borderRadius: 3.5,
-                          border: `1px solid ${checked ? "#007aff" : theme.divider}`,
-                          background: checked ? "#007aff" : "transparent",
-                          color: "#fff",
+                          borderRadius: 0,
+                          border: `1px solid ${checked ? theme.text : theme.divider}`,
+                          background: checked ? theme.text : "transparent",
+                          color: theme.ground,
                           display: "inline-grid",
                           placeItems: "center",
                         }}
@@ -806,8 +806,8 @@ export default function Statistics({
                           width: 6,
                           height: 6,
                           flexShrink: 0,
-                          borderRadius: 2,
-                          background: modelColor(model.id),
+                          borderRadius: 0,
+                          background: modelColor(model.id, theme),
                         }}
                       />
                       <HUDLogo

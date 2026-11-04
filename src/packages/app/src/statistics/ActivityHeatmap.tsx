@@ -61,7 +61,7 @@ function HeatmapRow({
                 className="statistics-heatmap-cell"
                 style={{
                   height: 14,
-                  borderRadius: 3,
+                  borderRadius: 0,
                   background: known
                     ? color(data.intensity[index]?.[hour] ?? 0)
                     : "transparent",
@@ -103,7 +103,7 @@ function HeatmapRow({
                   );
                   return (
                     <div key={id} style={{ ...row, gap: 5 }}>
-                      <Swatch color={modelColor(id)} />
+                      <Swatch color={modelColor(id, theme)} />
                       {model && (
                         <HUDLogo
                           source={model.provider}
@@ -141,10 +141,10 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({
     ? ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const color = (value: number) => {
-    if (!value)
-      return theme.light ? "rgba(0,0,0,.075)" : "rgba(255,255,255,.06)";
+    if (!value) return `rgba(${theme.ink},.06)`;
+    // Busier hours print in darker ink.
     const intensity = Math.sqrt(Math.max(0, Math.min(1, value)));
-    return `rgb(${(0.08 + 0.62 * intensity) * 255} ${(0.28 + 0.69 * intensity) * 255} ${(0.17 + 0.53 * intensity) * 255})`;
+    return `rgba(${theme.ink},${(0.1 + 0.82 * intensity).toFixed(2)})`;
   };
   return (
     <Card
@@ -163,9 +163,7 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({
           alignItems: "center",
           fontSize: 10,
           color: theme.secondary,
-          ["--heatmap-outline" as string]: theme.light
-            ? "rgba(29,29,31,.6)"
-            : "rgba(245,245,247,.6)",
+          ["--heatmap-outline" as string]: theme.text,
         }}
       >
         <span />
@@ -203,7 +201,7 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({
             style={{
               width: 12,
               height: 10,
-              borderRadius: 2,
+              borderRadius: 0,
               background: color(value),
             }}
           />

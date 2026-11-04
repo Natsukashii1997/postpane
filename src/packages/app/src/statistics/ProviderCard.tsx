@@ -78,21 +78,8 @@ export const ProviderCard = memo(function ProviderCard({
   const providerBilling = billing.filter(
     (b) => vendorKey(b.vendor) === vendorKey(provider.id),
   );
-  const accent =
-    (
-      {
-        claude: "#d18b68",
-        openai: "#10a37f",
-        google: "#8e75ff",
-        cursor: "#a4a4a9",
-        deepseek: "#5366e9",
-        zai: "#3b82f6",
-        minimax: "#ec4899",
-        kimi: "#6366f1",
-        github: "#a855f7",
-        qwen: "#615ced",
-      } as Record<string, string>
-    )[vendorKey(provider.id)] ?? theme.secondary;
+  // On the receipt every agent prints in the same ink.
+  const accent = theme.text;
   const cells: [string, ReactNode][] = [
     "input",
     "output",
@@ -141,7 +128,7 @@ export const ProviderCard = memo(function ProviderCard({
           <div
             style={{
               height: 2,
-              borderRadius: 2,
+              borderRadius: 0,
               overflow: "hidden",
               background: theme.track,
             }}
@@ -172,8 +159,8 @@ export const ProviderCard = memo(function ProviderCard({
         ...card(theme),
         ...(highlighted
           ? {
-              border: "1.5px solid #30d158",
-              boxShadow: "0 0 0 2px rgba(48, 209, 88, 0.2)",
+              border: `1.5px dashed ${theme.text}`,
+              boxShadow: "none",
               transition: "border-color 220ms ease, box-shadow 220ms ease",
             }
           : {
@@ -186,8 +173,8 @@ export const ProviderCard = memo(function ProviderCard({
           style={{
             width: 26,
             height: 26,
-            borderRadius: 6,
-            background: `${accent}2e`,
+            borderRadius: 0,
+            background: `${accent}14`,
             display: "inline-grid",
             placeItems: "center",
             flexShrink: 0,
@@ -207,7 +194,7 @@ export const ProviderCard = memo(function ProviderCard({
           style={{
             marginLeft: "auto",
             padding: "2px 7px",
-            borderRadius: 100,
+            borderRadius: 0,
             background: theme.segment,
             color: theme.secondary,
             fontSize: 11,
@@ -496,8 +483,8 @@ export const APIBillingCard = memo(function APIBillingCard({
         ...card(theme),
         ...(highlighted
           ? {
-              border: "1.5px solid #30d158",
-              boxShadow: "0 0 0 2px rgba(48, 209, 88, 0.2)",
+              border: `1.5px dashed ${theme.text}`,
+              boxShadow: "none",
               transition: "border-color 220ms ease, box-shadow 220ms ease",
             }
           : {
@@ -526,7 +513,7 @@ export const APIBillingCard = memo(function APIBillingCard({
                 ...plain,
                 fontSize: 10,
                 padding: "2px 6px",
-                borderRadius: 4,
+                borderRadius: 0,
                 color: period === p ? theme.text : theme.secondary,
                 background: period === p ? theme.segment : "transparent",
               }}
@@ -578,7 +565,7 @@ export const APIBillingCard = memo(function APIBillingCard({
                 minWidth: 1,
                 height: `${Math.max(4, (point.amount / peak) * 100)}%`,
                 background: theme.secondary,
-                borderRadius: "2px 2px 0 0",
+                borderRadius: 0,
                 opacity: 0.7,
               }}
             />

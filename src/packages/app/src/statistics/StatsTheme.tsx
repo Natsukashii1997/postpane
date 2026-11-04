@@ -34,6 +34,8 @@ export interface StatsTheme {
   track: string;
   segment: string;
   selected: string;
+  /** The receipt's ink as "r,g,b", for shades of it. */
+  ink: string;
 }
 
 export const kinds: StatisticsTokenKind[] = [
@@ -62,17 +64,24 @@ export function kindLabel(kind: StatisticsTokenKind, zh = false): string {
   return zh ? zhKindLabels[kind] : kindLabels[kind];
 }
 
-const palette = [
-  "#c084fc",
-  "#60a5fa",
-  "#2dd4bf",
-  "#fb923c",
-  "#f472b6",
-  "#a3e635",
-];
+/** The models' shades of ink, darkest for the most tokens; every model past
+ * the fifth shares the palest. */
+const inkDepths = [0.92, 0.68, 0.48, 0.32, 0.18];
+let modelRanks = new Map<string, number>();
+
+/** Orders the models by tokens, most first, so each keeps its shade. */
+export function rankModels(models: StatisticsModel[]) {
+  const sorted = [...models].sort(
+    (a, b) => b.selectedTokens - a.selectedTokens,
+  );
+  modelRanks = new Map(sorted.map((model, index) => [model.id, index]));
+}
 
 /** TokenFormat.short: "48k", "1.3k", "2.4M". */
 export const compact = tokensShort;
+
+/** Narrow figures, as the receipt prints its totals. */
+const figures = `"Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`;
 
 export const integer = (value: number) => numberFormat("en").format(value);
 
@@ -106,12 +115,13 @@ export const plain: CSSProperties = {
 };
 
 export const card = (theme: StatsTheme): CSSProperties => ({
-  borderRadius: 10,
-  border: `1px solid ${theme.border}`,
-  background: `var(--statistics-card, ${theme.card})`,
+  borderRadius: 0,
+  border: 0,
+  borderTop: `1.5px dashed ${theme.divider}`,
+  background: "transparent",
   boxShadow: "none",
   color: "inherit",
-  padding: "12px 14px",
+  padding: "14px 0 4px",
   gap: 10,
   minWidth: 0,
 });
@@ -126,8 +136,8 @@ export const raisedCard = (theme: StatsTheme): CSSProperties => ({
   display: "grid",
   gap: 5,
   padding: 10,
-  borderRadius: 8,
-  border: `1px solid ${theme.border}`,
+  borderRadius: 0,
+  border: `1.2px solid ${theme.text}`,
   background: theme.ground,
   color: theme.text,
   boxShadow: "0 2px 12px rgba(0,0,0,.2)",
@@ -136,35 +146,23 @@ export const raisedCard = (theme: StatsTheme): CSSProperties => ({
 });
 
 export function themeFor(light: boolean, zh = false): StatsTheme {
-  return light
-    ? {
-        light,
-        zh,
-        ground: "#f5f5f7",
-        text: "#1d1d1f",
-        secondary: "#6e6e73",
-        tertiary: "#8e8e93",
-        card: "#fff",
-        border: "rgba(0,0,0,.06)",
-        divider: "rgba(0,0,0,.08)",
-        track: "rgba(0,0,0,.10)",
-        segment: "rgba(0,0,0,.08)",
-        selected: "#fff",
-      }
-    : {
-        light,
-        zh,
-        ground: "#282828",
-        text: "#f5f5f7",
-        secondary: "#98989d",
-        tertiary: "#6e6e73",
-        card: "rgba(255,255,255,.05)",
-        border: "rgba(255,255,255,.12)",
-        divider: "rgba(255,255,255,.10)",
-        track: "rgba(255,255,255,.12)",
-        segment: "rgba(255,255,255,.08)",
-        selected: "rgba(255,255,255,.24)",
-      };
+  // The thermal receipt's paper and ink (settings/receipt.css).
+  const ink = light ? "52,50,58" : "236,231,220";
+  return {
+    light,
+    zh,
+    ink,
+    ground: light ? "#f6f4ef" : "#2b2925",
+    text: light ? "#34323a" : "#ece7dc",
+    secondary: `rgba(${ink},.62)`,
+    tertiary: `rgba(${ink},.45)`,
+    card: "transparent",
+    border: `rgba(${ink},.5)`,
+    divider: `rgba(${ink},.3)`,
+    track: `rgba(${ink},.1)`,
+    segment: `rgba(${ink},.08)`,
+    selected: light ? "#34323a" : "#ece7dc",
+  };
 }
 
 export function dimensionsLabel(selected: StatisticsTokenKind[], zh = false) {
@@ -177,10 +175,9 @@ export function dimensionsLabel(selected: StatisticsTokenKind[], zh = false) {
     .join(" + ");
 }
 
-export function modelColor(id: string) {
-  let hash = 0;
-  for (const char of id) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-  return palette[(hash >>> 0) % palette.length];
+export function modelColor(id: string, theme: StatsTheme) {
+  const rank = modelRanks.get(id) ?? inkDepths.length - 1;
+  return `rgba(${theme.ink},${inkDepths[Math.min(rank, inkDepths.length - 1)]})`;
 }
 
 export function dateLabel(at: string | number, timeZone: string, zh = false) {
@@ -275,7 +272,7 @@ export function IndexingProgress({
           position: "relative",
           height: 5,
           background: theme.track,
-          borderRadius: 3,
+          borderRadius: 0,
           overflow: "hidden",
         }}
       >
@@ -285,7 +282,7 @@ export function IndexingProgress({
             inset: "0 auto 0 0",
             display: "block",
             width: `${text.fraction * 100}%`,
-            borderRadius: 3,
+            borderRadius: 0,
             background: theme.light ? "#007aff" : "#0a84ff",
             transition: "width 600ms ease-out",
           }}
@@ -325,7 +322,7 @@ export function Swatch({ color }: { color: string }) {
         display: "inline-block",
         width: 8,
         height: 8,
-        borderRadius: 2,
+        borderRadius: 0,
         background: color,
         flexShrink: 0,
       }}
@@ -352,7 +349,7 @@ export function ModelLine({
           : `${model.provider} · ${model.name}\n${integer(model.selectedTokens)} selected tokens`
       }
     >
-      <Swatch color={modelColor(model.id)} />
+      <Swatch color={modelColor(model.id, theme)} />
       <span style={truncate}>{model.name}</span>
       <span style={{ marginLeft: "auto", ...number }}>
         {compact(model.selectedTokens)}
@@ -388,7 +385,7 @@ export function ModelBar({
         height: 5,
         overflow: "hidden",
         background: theme.track,
-        borderRadius: 3,
+        borderRadius: 0,
       }}
     >
       {models.map((model) => (
@@ -397,7 +394,7 @@ export function ModelBar({
           style={{
             flex: `${total > 0 ? model.selectedTokens / total : 0} 1 0`,
             minWidth: 0,
-            background: modelColor(model.id),
+            background: modelColor(model.id, theme),
             transition:
               "flex-grow 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease",
           }}
@@ -528,7 +525,13 @@ export function TotalSummary({
             ? "所选时间范围、智能体、模型和类型的已记录 Token 数"
             : "Recorded tokens for exactly the selected range, agents, models and kinds"
         }
-        style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.2, ...number }}
+        style={{
+          fontSize: 30,
+          fontWeight: 600,
+          lineHeight: 1.1,
+          ...number,
+          fontFamily: figures,
+        }}
       >
         {coverage.state === "unavailable" ? "—" : compact(animatedTokens)}
       </div>

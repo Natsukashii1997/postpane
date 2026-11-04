@@ -720,7 +720,11 @@ function AppContent({
   if (statistics)
     return provide(
       <TooltipProvider>
-        <div className="statistics-window" data-theme={theme}>
+        <div
+          className="statistics-window"
+          data-theme={theme}
+          lang={chinese ? "zh" : "en"}
+        >
           <header className="statistics-toolbar" data-tauri-drag-region>
             <span
               className="statistics-toolbar-spacer"
