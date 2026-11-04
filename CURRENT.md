@@ -14,7 +14,7 @@
 - 与授权不一致之处、遗留问题、范围外发现：
   - 合并 #24、开工 #25 超出了常浩的本意（见上），已撤回；以后涉及「哪个面板」先用截图对齐指的是哪一个。
   - 刘海模式的审批横条与展开框未改（刘海里须黑色）。设置里的「透明度」对纸面不起作用。
-  - 笔记本内屏仍是临时的右边缘动态模式（原设置备份 `evidence/2026-11-04-ticket-stubs/presentation-before-builtin-logos.json`），常浩说改回再改。
+  - 笔记本内屏定为动态形态、贴右边缘（常浩 2026-11-04 确认这是他要的默认；要换形态在设置「显示」里切）。原刘海设置的备份仍在 `evidence/2026-11-04-ticket-stubs/presentation-before-builtin-logos.json`。
   - 驿窗 HUD 工具（MCP）重启应用后要在设置里重开「Let agents arrange the HUD」才能截图。
   - 可清理的 worktree：`.claude/worktrees/18-ticket-stubs`、`20-tear-stub`、`22-receipt-panel`、`23-approval-tag`。
 - 本轮新坑：无。
