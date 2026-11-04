@@ -144,7 +144,7 @@ const pages: {
     label: "Agents",
     icon: Puzzle,
     color: "#30b0c7",
-    description: "Which agents Agent HUD follows, and their accounts.",
+    description: "Which agents PostPane follows, and their accounts.",
     group: "agents",
   },
   {
@@ -153,7 +153,7 @@ const pages: {
     label: "Agent plugins",
     icon: Plug,
     color: "#30b0c7",
-    description: "What Agent HUD adds to the agents on this computer.",
+    description: "What PostPane adds to the agents on this computer.",
     group: "agents",
   },
   {
@@ -178,18 +178,18 @@ const pages: {
     label: "Updates",
     icon: Download,
     color: "#007aff",
-    description: "Agent HUD updates and beta releases.",
+    description: "PostPane updates and beta releases.",
     group: "about",
   },
 ];
 const chinesePages: Record<string, [string, string]> = {
   general: ["通用", "外观、语言与启动。"],
   display: ["显示", "每块屏幕上的 HUD 和它的面板。"],
-  agents: ["智能体", "Agent HUD 关注哪些智能体，以及它们的账户。"],
-  "agent-plugins": ["智能体插件", "Agent HUD 为这台电脑上的智能体添加的功能。"],
+  agents: ["智能体", "驿窗关注哪些智能体，以及它们的账户。"],
+  "agent-plugins": ["智能体插件", "驿窗为这台电脑上的智能体添加的功能。"],
   relays: ["中转站", "智能体经过的中转站。"],
   prices: ["价格", "每个模型的价格，不对时可以自己改。"],
-  updates: ["更新", "Agent HUD 的更新与 Beta 版本。"],
+  updates: ["更新", "驿窗的更新与 Beta 版本。"],
 };
 const selectedScreenKey = storageKeys.selectedScreen;
 
@@ -286,7 +286,7 @@ export default function App(props: AppProps = {}) {
 function AppContent({
   extensionPages = [],
   agentPlugins = [],
-  productName = "Agent HUD",
+  productName = "PostPane",
   version = "0.1.0",
 }: AppProps) {
   const allPages = useMemo(
@@ -845,7 +845,7 @@ function AppContent({
                 })}
               </nav>
               <div className="sidebar-product">
-                <img src={appIcon} alt="Agent HUD" width={32} height={32} />
+                <img src={appIcon} alt="PostPane" width={32} height={32} />
                 <div>
                   <strong>{productName}</strong>
                   <span>

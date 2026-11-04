@@ -153,7 +153,7 @@ test("the MCP row asks for the one step left, and never removes from its main bu
     ],
     [
       "Unavailable",
-      "Adding HUD tools requires Agent HUD at its approved installation location and its MCP components.",
+      "Adding HUD tools requires PostPane at its approved installation location and its MCP components.",
       [],
     ],
   );

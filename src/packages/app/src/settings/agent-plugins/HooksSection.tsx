@@ -51,8 +51,8 @@ export function HooksSection({
         )
       : status.installable !== true
         ? t(
-            "Needs Agent HUD at its approved installation location.",
-            "需要从指定安装位置运行 Agent HUD。",
+            "Needs PostPane at its approved installation location.",
+            "需要从指定安装位置运行驿窗。",
           )
         : null;
   const toggle = (

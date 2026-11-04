@@ -717,7 +717,7 @@ export function HUDScene({
           data-hover={state.phase}
           data-pinned={pinned}
           data-appearance={light ? "light" : "dark"}
-          aria-label={`Agent HUD ${config.mode === "notch" ? "Classic" : config.mode === "logos" ? "Dynamic" : "Simple"} preview`}
+          aria-label={`PostPane ${config.mode === "notch" ? "Classic" : config.mode === "logos" ? "Dynamic" : "Simple"} preview`}
           style={{
             position: "relative",
             height: safeSceneHeight,

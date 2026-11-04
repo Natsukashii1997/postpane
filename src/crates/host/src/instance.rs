@@ -50,9 +50,9 @@ fn launch(result: Result<CollectorLocks, CollectorError>, executable: Option<&Pa
 pub(crate) fn unavailable(error: &str) {
     let chinese = crate::shell::system_prefers_chinese();
     let title = if chinese {
-        "Agent HUD 无法启动"
+        "驿窗无法启动"
     } else {
-        "Agent HUD could not start"
+        "PostPane could not start"
     };
     let body = if chinese {
         format!("无法准备数据目录或客户端回调，采集未启动。\n{error}")
@@ -92,12 +92,12 @@ pub(crate) fn refuse(holder: Option<&Path>) {
             )
         }
         None => text(
-            "请先退出正在运行的 Agent HUD，再打开这一个。",
-            "Quit the Agent HUD that is running first, then open this one.",
+            "请先退出正在运行的驿窗，再打开这一个。",
+            "Quit the PostPane that is running first, then open this one.",
         ),
     };
     crate::shell::alert(
-        &text("Agent HUD 已在运行", "Agent HUD is already running"),
+        &text("驿窗已在运行", "PostPane is already running"),
         &body,
         &text("好", "OK"),
     );
@@ -137,7 +137,7 @@ mod tests {
             "the same executable comes forward"
         );
         drop(lock);
-        let other = Path::new("/Applications/Agent HUD.app/Contents/MacOS/Agent HUD");
+        let other = Path::new("/Applications/PostPane.app/Contents/MacOS/PostPane");
         let _other = instance::claim_collector(&data, None, Some(other)).unwrap();
         match take() {
             Launch::Refused(Some(holder)) => assert_eq!(holder, other),

@@ -376,7 +376,7 @@ fn configure(
                 .into(),
             );
             host::panel_builder(app, &owner.label, url)
-                .title("Agent HUD")
+                .title("PostPane")
                 .decorations(false)
                 .resizable(false)
                 .maximizable(false)

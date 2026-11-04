@@ -242,7 +242,7 @@ export function KnownClientCard({
     >
       {plugin && pluginState && (
         <StatusRow
-          title={t("Agent HUD plugin", "Agent HUD 插件")}
+          title={t("PostPane plugin", "驿窗插件")}
           subtitle={
             client.id === "claudeCode"
               ? t(
