@@ -1,6 +1,25 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-4 打包安装与本机切换（需常浩在场）；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-4 收尾——把 Claude、Codex 的 HUD 工具（MCP）重新指向驿窗，核对插件与图标，经常浩同意后把旧 Agent HUD.app 移到废纸篓；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 2-4（进行中）：打包安装驿窗与本机切换（2026-11-04，Claude，常浩同意由 Claude 用屏幕操控代点设置；无需发布）
+
+- 时间：开工 `2026-11-04 16:51`（打包开始前用 `date` 记录的最近时刻；本节写于 `2026-11-04 17:02`）。来由：阶段 2 最后一批。
+- 改了哪些文件：仓库只改本文件。本机：安装 `/Applications/PostPane.app`；`~/.claude/settings.json`、`~/.codex/hooks.json` 的钩子由驿窗重写；`~/.claude/plugins/known_marketplaces.json` 插件来源由驿窗改到 `app.postpane.mac`。
+- 测试：未跑新测试（本批不改代码）。核对命令 `grep -c` 原样结果：Claude 钩子 `old=0 new=5`，Codex 钩子 `old=0 new=3`，设置 `clientHooks` 为 `True`。
+- 验证：
+  - 打包 `pnpm --filter @agent-hud/desktop exec tauri build --bundles app` 成功，`PostPane.app` 标识 `app.postpane.mac`，中转程序 `codesign -v` 通过。
+  - 退出旧 Agent HUD 后安装启动驿窗：`app.agenthud.mac` 整个迁到 `app.postpane.mac`（账本、账户读数、设置都在，旧目录已不存在）。
+  - 驿窗启动时自动改了 Codex 钩子和插件来源；Claude 钩子没自动改，用屏幕操控在「智能体插件」页把「客户端回调」关掉再打开后，5 处全部指向驿窗。
+- 截图：无存档。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - HUD 工具（MCP）还指着旧应用：`~/.claude.json`、`~/.codex/config.toml` 里 `agent-hud` 的命令仍是 `/Applications/Agent HUD.app/...`；设置页显示「HUD 工具：可以使用」，但它只认名字，需要在设置里移除后重新添加，或核对新应用的添加逻辑。
+  - 正在运行的 Claude、Codex 会话还挂着旧的 `agent-hud-mcp` 进程，会话结束后自行退出。
+  - 插件实际能否加载、审批卡真实往返、程序坞图标效果、侧栏显示设置是否随网页存储丢失，都未核对。
+  - 旧 `/Applications/Agent HUD.app` 仍在，未删。
+  - 切换前备份：`~/Library/Application Support/postpane/evidence/2026-11-04-switch/`（配置文件与整个旧数据目录，三个运行中的套接字文件未复制）。
+- 本轮新坑：无。
 
 ## 阶段 2-3：应用图标换成驿灯（2026-11-04，Claude，常浩从第二轮三版里选定「驿灯」；测试全过直接合并、未安装）
 
