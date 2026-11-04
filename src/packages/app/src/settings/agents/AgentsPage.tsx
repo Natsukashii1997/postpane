@@ -44,7 +44,9 @@ export default function AgentsPage({
     (a, b) => Number(b.detected) - Number(a.detected),
   );
   const source =
-    providers.find((provider) => provider.id === selectedID) ?? providers[0];
+    providers.find((provider) => provider.id === selectedID) ??
+    providers.find((provider) => provider.id === "claude") ??
+    providers[0];
   const select = (id: string) => {
     setSelected(id);
     // Show the new agent from its top, wherever the last one was scrolled.
