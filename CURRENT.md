@@ -1,6 +1,25 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成，基线小尾巴已清，审批卡批准与拒绝都已实测，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：ROADMAP 阶段 4（阶段 3 豆包先放着）。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏已改为「贴纸票根」（PR #19 已合并），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：常浩在外接屏上看贴纸票根实物，确认后做阶段 4 的悬停面板（先出 3 版）。
+
+## 阶段 4：动态模式静止侧栏改为贴纸票根（2026-11-04，Claude，常浩选定方向「票根」→ 变体乙 → 小人适配「乙 贴纸票」，并说「按计划开工」；PR #19 测试全过已 squash 合并 `1808d76`、已打包安装）
+
+- 时间：开工 `2026-11-04 17:41`（`date` 记录；本节写于 `2026-11-04 20:10`）。来由：ROADMAP 阶段 4「UI 方向与小人形象」。
+- 设计过程（预览都在同一链接 https://claude.ai/artifact/X8wnGDprGnyhjSAYJ2BumP ，现为第 4 版「小人适配三做法」）：
+  - 侧栏+面板五版（玻璃/刻度/白瓷/时刻表/驿卫）→ 常浩认为偏离，改为只看静止侧栏。
+  - 侧栏外框五式第一轮（同一套处理逻辑）被否；第二轮五种视觉语言（长虹玻璃/抖动/雾玻叠片/精工器物/驿站票根），常浩选票根。
+  - 票根三变体（整张票/分票/素票），选「分票」；发现会裁切小人动效，再出三种适配（底座票/贴纸票/侧挂签），选「贴纸票」。
+  - 常浩要求：多样式一律做进同一 HTML 可切换、只发一个链接——已写进 `~/.claude/CLAUDE.md` 第 9 节与 `~/.codex/AGENTS.md`；Vault P-08 未改（只读）。
+- 改了哪些文件（PR #19）：`src/packages/hud/src/ticket-stub.ts`（新：票尺寸 42×62 随 logoSize、打孔/印章/红字判定）、`src/packages/hud/test/ticket-stub.test.ts`（新）、`src/packages/hud/src/scene/HUDMarkStrip.tsx`（logos 模式画纸票：纸面独立一层带齿孔与纸纹、小人不裁切且按浅色底绘制、票底读数、打孔、「批」字章；删 logos 绿色光边）、`src/packages/hud/src/HUDScene.tsx`（删 glowColors 与相关 props）、`src/packages/hud/src/geometry.ts`（logos 尺寸改票）、`src/crates/host/src/hud/plans.rs`（`strip_width` 同步与测试）。issue #18。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 637 通过、`ℹ pass 113` / `ℹ fail 0`、MCP `ℹ pass 14`、插件 `ℹ pass 6`）；最后一处改动（读数层级、小人浅色底、去下划线）后重跑 `pnpm --filter @agent-hud/hud run typecheck` 通过、`pnpm run test:ts` `ℹ pass 113` / `ℹ fail 0`，未再跑全套 Rust（该改动不涉 Rust）。
+- 验证：本地临时检查页直接渲染 `HUDMarkStrip`（平静/在跑/等批准/告急 92%，logoSize 20 与 30）截图核对，读数、打孔、印章、红字正确，Claude 在跑时道具完整；检查页已删、未提交。外接屏未连接，笔记本屏是刘海模式，真实右边缘实物未看到；常浩拒绝了屏幕操控授权，未打开设置页预览。
+- 截图：本会话临时目录，未存档。
+- 发布与回读：打包 `PostPane.app` 已 ditto 到 `/Applications` 并重启（进程在）。回滚：旧版在 `~/Library/Application Support/postpane/evidence/2026-11-04-ticket-stubs/PostPane-before.app`，退出后 ditto 回去。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 设置里「标志离边距离」在 logos 模式下已不起作用（票总贴边），设置项未改。
+  - 驿窗 HUD 工具（MCP）重启应用后连不上（提示打开「Let agents arrange the HUD」），未处理。
+  - 悬停面板未做；票根在左/上/下边的实物未看。
+- 本轮新坑：无。
 
 ## 审批卡拒绝路径实测（2026-11-04，Claude，常浩给了全屏操控、后来说重新测；纯文档提交 main、无需发布）
 
