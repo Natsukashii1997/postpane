@@ -41,7 +41,6 @@ import { useHoverMachine } from "./hover";
 import {
   defaultHUDConfig,
   HUD_METRICS,
-  statusColor,
   configuredVendors,
   type HUDConfig,
   type HUDDecision,
@@ -339,15 +338,6 @@ export function HUDScene({
 
   // Paused detection draws the still grey rim, as no readings do.
   const detectionPaused = Boolean(snapshot.status?.paused);
-  const glowColors = useMemo(
-    () =>
-      detectionPaused
-        ? []
-        : vendors
-            .filter((vendor) => vendor.used != null)
-            .map((vendor) => statusColor(vendor.level)),
-    [vendors, detectionPaused],
-  );
   const metrics = useMemo(
     () => stripMetrics(config, vendors, snapshot.settings.quotaDisplay),
     [
@@ -992,9 +982,6 @@ export function HUDScene({
               strip={strip}
               metrics={metrics}
               vendors={vendors}
-              glowColors={glowColors}
-              glowAlert={glowFlash}
-              glowHidden={glowHidden}
               cardVisible={cardVisible}
               detached={detached}
               light={light}

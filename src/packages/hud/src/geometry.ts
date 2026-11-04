@@ -6,6 +6,7 @@ import {
   type HUDEdge,
   type HUDVendor,
 } from "./model";
+import { stubSize } from "./ticket-stub";
 import {
   isRingStyle,
   simpleLogoSize,
@@ -133,10 +134,13 @@ export function stripMetrics(
       centers: [],
     };
   if (config.mode === "logos") {
+    // Each mark is an upright ticket stub, flush with the edge.
     const logo = clamp(config.logoSize, 20, 60),
-      gap = logo * clamp(config.gapScale, 0.1, 0.6);
-    const thick = logo + clamp(config.logoEdgeDistance, 0, 20) * 2;
-    const run = n ? n * logo + (n - 1) * gap : Math.max(32, logo);
+      gap = logo * clamp(config.gapScale, 0.1, 0.6),
+      stub = stubSize(logo);
+    const along = horizontal ? stub.width : stub.height,
+      thick = horizontal ? stub.height : stub.width;
+    const run = n ? n * along + (n - 1) * gap : Math.max(32, along);
     return {
       width: horizontal ? run : thick,
       height: horizontal ? thick : run,
@@ -148,7 +152,7 @@ export function stripMetrics(
       bar: 0,
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
       radius: 10,
-      centers: vendors.map((_, i) => i * (logo + gap) + logo / 2),
+      centers: vendors.map((_, i) => i * (along + gap) + along / 2),
     };
   }
   const size = clamp(config.simpleSize, 20, 60),

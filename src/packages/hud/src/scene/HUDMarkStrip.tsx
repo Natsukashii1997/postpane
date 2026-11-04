@@ -1,6 +1,5 @@
 import type { CSSProperties, MutableRefObject } from "react";
 import { BotMark } from "../BotMark";
-import HUDGlow, { type GlowAlert } from "../HUDGlow";
 import { botState, facingFromEdge, isAttention } from "../bots/bot-state";
 import { DockMemory, type Direction } from "../bots/mark-director";
 import { labelWidth, type HUDRect, type stripMetrics } from "../geometry";
@@ -19,10 +18,28 @@ import { quotaDisplayLabel } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
+import { stubBotTop, stubMarks, stubSize } from "../ticket-stub";
 
 const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
+
+// A faint paper grain for the Dynamic stubs, tiled.
+const PAPER_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .2 0 0 0 0 .19 0 0 0 0 .17 0 0 0 .14 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>',
+)}")`;
+const STUB_INK = "#2a2925",
+  STUB_RED = "rgba(196,38,30,.92)";
+
+/** A stub's perforated side: the one facing into the screen. */
+const perforatedSide = (edge: HUDEdge) =>
+  edge === "right"
+    ? "left"
+    : edge === "left"
+      ? "right"
+      : edge === "top"
+        ? "bottom"
+        : "top";
 
 export function HUDMarkStrip({
   id,
@@ -31,9 +48,6 @@ export function HUDMarkStrip({
   strip,
   metrics,
   vendors,
-  glowColors,
-  glowAlert,
-  glowHidden,
   cardVisible,
   detached,
   light,
@@ -64,9 +78,6 @@ export function HUDMarkStrip({
   strip: HUDRect;
   metrics: ReturnType<typeof stripMetrics>;
   vendors: HUDVendor[];
-  glowColors: string[];
-  glowAlert?: GlowAlert | null;
-  glowHidden: boolean;
   cardVisible: boolean;
   detached: boolean;
   light: boolean;
@@ -96,88 +107,51 @@ export function HUDMarkStrip({
   const zh = format.language === "zh";
   // A ring's figure is text: on a see-through ground, its level's see-through shade.
   const figureColor = useMarkLevelText(light);
-  // ScreenHUD.surface: a Dynamic backdrop is a flat lip, clipped to the marks' column.
-  const backdropOverhang = config.glowRange + config.glowBlur * 3 + 200;
-  const backdropReach =
-    config.glowStyle === "blur"
-      ? config.glowRange + config.glowBlur * 3
-      : (config.glowGridCore + config.glowGridFade + 1) * config.glowGridPitch;
-  // The glow is drawn for a top dock and turned to the edge so its agent
-  // colours stay in mark order: left to right on a bottom dock (a vertical
-  // flip, not a half turn), top to bottom on the side docks (Open
-  // GlowWindowController's canvas orientation).
-  const backdropTransform =
-    edge === "bottom"
-      ? `matrix(1,0,0,-1,0,${strip.height})`
-      : edge === "left"
-        ? "matrix(0,1,1,0,0,0)"
-        : edge === "right"
-          ? `matrix(0,1,-1,0,${strip.width},0)`
-          : undefined;
+  const stubbed = config.mode === "logos";
+  const stub = stubSize(metrics.logo),
+    unit = metrics.logo / 20,
+    side = perforatedSide(edge),
+    botTop = stubBotTop(metrics.logo);
+  const perforation = horizontal(edge)
+    ? `radial-gradient(circle at ${5 * unit}px ${side === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
+    : `radial-gradient(circle at ${side === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
+  // The bot sits on the stub like a sticker: the paper is its own layer
+  // behind it, so the bot's moves and props are never clipped by the paper.
+  const stubStyle: CSSProperties = {
+    width: stub.width,
+    height: stub.height,
+    boxSizing: "border-box",
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    paddingTop: botTop + (side === "top" ? 3 * unit : 0),
+    paddingLeft: side === "left" ? 3 * unit : 0,
+    paddingRight: side === "right" ? 3 * unit : 0,
+    paddingBottom: 7 * unit + (side === "bottom" ? 3 * unit : 0),
+  };
+  const paper = (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        filter:
+          "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `${PAPER_GRAIN} 0 0 / 160px 160px, ${light ? "#f3f1eb" : "#e9e6de"}`,
+          WebkitMask: perforation,
+          mask: perforation,
+        }}
+      />
+    </span>
+  );
 
   return (
     <>
-      {config.mode === "logos" && !glowHidden && (!cardVisible || detached) && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            clipPath: horizontal(edge)
-              ? `inset(-${backdropReach}px 0 -${backdropReach}px 0)`
-              : `inset(0 -${backdropReach}px 0 -${backdropReach}px)`,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              transformOrigin: "0 0",
-              transform: backdropTransform,
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                left: -backdropOverhang,
-                top: -2,
-              }}
-            >
-              <HUDGlow
-                outwardOnly={config.glowOutwardOnly}
-                style={config.glowStyle}
-                effect={config.glowEffect}
-                width={
-                  (horizontal(edge) ? strip.width : strip.height) +
-                  backdropOverhang * 2
-                }
-                height={2}
-                radius={0}
-                attached
-                colors={glowColors}
-                alert={glowAlert}
-                active={vendors.some((v) => v.working > 0)}
-                period={
-                  vendors.some((v) => v.working > 0)
-                    ? config.breathSeconds
-                    : config.idleBreathSeconds
-                }
-                amplitude={config.breathAmplitude}
-                brightness={config.glowBrightness}
-                range={config.glowRange}
-                blur={config.glowBlur}
-                pitch={config.glowGridPitch}
-                core={config.glowGridCore}
-                fade={config.glowGridFade}
-                density={config.glowGridDensity}
-                reduceMotion={reduceMotion}
-              />
-            </div>
-          </div>
-        </div>
-      )}
       {config.mode === "notch" ? (
         <div
           className="hud-classic-silhouette"
@@ -284,8 +258,10 @@ export function HUDMarkStrip({
                   config.mode === "logos" && !config.showsLogos
                     ? "hidden"
                     : "visible",
+                ...(stubbed ? stubStyle : null),
               }}
             >
+              {stubbed && paper}
               <span
                 style={{
                   width: metrics.mark,
@@ -313,7 +289,8 @@ export function HUDMarkStrip({
                 <BotMark
                   source={vendor.name}
                   size={metrics.logo}
-                  light={light}
+                  // On a stub the bot stands on light paper, whatever the theme.
+                  light={stubbed || light}
                   enabled={config.botLogos}
                   hovered={
                     ((hovered === vendor.key && pointerInside) ||
@@ -361,16 +338,25 @@ export function HUDMarkStrip({
                   aim={
                     nativePointer?.point
                       ? (() => {
+                          // A stub's bot sits near its top, not at its centre.
+                          const across = stubbed
+                              ? botTop + metrics.mark / 2
+                              : metrics.padding.top + metrics.mark / 2,
+                            along = stubbed
+                              ? metrics.centers[index] -
+                                stub.height / 2 +
+                                botTop +
+                                metrics.mark / 2
+                              : metrics.centers[index];
                           const centerX =
                             strip.x +
                             (horizontal(edge)
                               ? metrics.centers[index]
-                              : metrics.padding.left + metrics.mark / 2);
+                              : stubbed
+                                ? strip.width / 2
+                                : metrics.padding.left + metrics.mark / 2);
                           const centerY =
-                            strip.y +
-                            (horizontal(edge)
-                              ? metrics.padding.top + metrics.mark / 2
-                              : metrics.centers[index]);
+                            strip.y + (horizontal(edge) ? across : along);
                           const dx = nativePointer.point!.x - centerX,
                             dy = nativePointer.point!.y - centerY,
                             distance = Math.hypot(dx, dy);
@@ -384,7 +370,7 @@ export function HUDMarkStrip({
                       : undefined
                   }
                 />
-                {vendor.waiting > 0 && (
+                {!stubbed && vendor.waiting > 0 && (
                   <span
                     aria-hidden="true"
                     style={{
@@ -400,6 +386,16 @@ export function HUDMarkStrip({
                   />
                 )}
               </span>
+              {stubbed && (
+                <StubFace
+                  vendor={vendor}
+                  label={meterLabel(vendor, quotaDisplay)}
+                  unit={unit}
+                  side={side}
+                  vertical={!horizontal(edge)}
+                  zh={zh}
+                />
+              )}
               {config.mode === "simple" && metrics.bar > 0 && (
                 <MarkBars
                   items={markItems(vendor, quotaDisplay, config.panelLayout)}
@@ -439,6 +435,91 @@ export function HUDMarkStrip({
             </button>
           ))}
         </div>
+      )}
+    </>
+  );
+}
+
+/** What a stub prints under its bot: the reading, or a seal; and a punch hole. */
+function StubFace({
+  vendor,
+  label,
+  unit,
+  side,
+  vertical,
+  zh,
+}: {
+  vendor: HUDVendor;
+  label: string;
+  unit: number;
+  side: "left" | "right" | "top" | "bottom";
+  vertical: boolean;
+  zh: boolean;
+}) {
+  const marks = stubMarks({
+    working: vendor.working,
+    waiting: vendor.waiting,
+    used: markUsed(vendor),
+  });
+  return (
+    <>
+      {marks.sealed ? (
+        <span
+          aria-hidden="true"
+          style={{
+            marginTop: "auto",
+            display: "grid",
+            placeItems: "center",
+            width: 17 * unit,
+            height: 17 * unit,
+            boxSizing: "border-box",
+            border: `${1.5 * unit}px solid ${STUB_RED}`,
+            borderRadius: 3 * unit,
+            color: STUB_RED,
+            font: `900 ${11 * unit}px/1 "Songti SC", "STSong", serif`,
+            transform: "rotate(-10deg)",
+          }}
+        >
+          {zh ? "批" : "!"}
+        </span>
+      ) : (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "relative",
+            marginTop: "auto",
+            maxWidth: "100%",
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            font: `600 ${10.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
+            letterSpacing: 0.2 * unit,
+            fontVariantNumeric: "tabular-nums",
+            color: marks.warn ? STUB_RED : STUB_INK,
+          }}
+        >
+          {label}
+        </span>
+      )}
+      {marks.punched && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            width: 7 * unit,
+            height: 7 * unit,
+            borderRadius: "50%",
+            background: "rgba(18,22,30,.88)",
+            boxShadow: `inset 0 ${1.2 * unit}px ${1.5 * unit}px rgba(0,0,0,.6)`,
+            top: vertical ? 5 * unit : side === "top" ? 6 * unit : undefined,
+            bottom: side === "bottom" ? 6 * unit : undefined,
+            left: vertical
+              ? side === "left"
+                ? 6 * unit
+                : undefined
+              : 5 * unit,
+            right: side === "right" ? 6 * unit : undefined,
+          }}
+        />
       )}
     </>
   );
