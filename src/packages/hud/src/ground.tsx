@@ -31,19 +31,7 @@ export function HUDGroundProvider({
  * on the look's see-through or opaque ground. */
 export function useGround(light: boolean): Ground {
   const seeThrough = useContext(LookGround);
-  const paper = useContext(PaperGround);
-  return useMemo(
-    () => (paper ? { light, paper } : { light, seeThrough }),
-    [light, seeThrough, paper],
-  );
-}
-
-const PaperGround = createContext(false);
-
-/** What lies on the hover panel's receipt: opaque paper, whatever the look,
- * so its ink is the paper's (`panel/theme.ts` palette). */
-export function OnPaper({ children }: { children: ReactNode }) {
-  return <PaperGround.Provider value>{children}</PaperGround.Provider>;
+  return useMemo(() => ({ light, seeThrough }), [light, seeThrough]);
 }
 
 /** A mark's level as text on the ground of a piece drawn `light` or dark: the

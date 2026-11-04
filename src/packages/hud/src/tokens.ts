@@ -14,8 +14,6 @@ export interface Ground {
   light: boolean;
   /** A solid look with transparency. */
   seeThrough?: boolean;
-  /** The hover panel's receipt paper, opaque whatever the look. */
-  paper?: boolean;
 }
 
 /** The ground a screen's look gives the HUD drawn on it (Open's

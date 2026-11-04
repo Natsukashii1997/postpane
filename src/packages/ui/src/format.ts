@@ -425,11 +425,7 @@ function weekdayTime(
 }
 
 /** "11月20日 周五 09:00" / "Fri 20 Nov at 09:00". */
-export function dateTime(
-  instant: number,
-  calendar: WeekCalendar,
-  language: Language,
-) {
+function dateTime(instant: number, calendar: WeekCalendar, language: Language) {
   const clock = wallClock(instant, calendar.timeZone);
   const time = `${two(clock.hour)}:${two(clock.minute)}`;
   const weekday = weekdays[language][clock.weekday - 1];

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { DollarSign, Flame, Percent } from "lucide-react";
 import type { PanelBlockLayout, Quota, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
@@ -20,7 +20,6 @@ import {
 } from "@agent-hud/ui/format";
 import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
 import { recentUsage } from "../recent-usage";
-import { receiptRows } from "../receipt";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice, serviceNotice } from "./account-labels";
@@ -30,21 +29,15 @@ import { useGround } from "../ground";
 import { agentVendorName } from "../agent-artwork";
 import { visibleBalances } from "../balance-rows";
 import {
-  condensed,
   measures,
   noButtonChrome,
   palette,
-  paperColors,
   tabular,
   type Logo,
   type Measure,
 } from "./theme";
 import { SourceTokenChart } from "./TokenChartSection";
 import { QuotaRingCard } from "./QuotaRingCard";
-
-/** The receipt (#22) prints no measure buttons beside an agent or a
- * balance; the pickers stay for when they come back. */
-const MEASURE_PICKERS = false;
 
 export function MetricPicker({
   selected,
@@ -341,151 +334,6 @@ export function SourceQuotaRow({
   );
 }
 
-/** One line of the receipt: its label, a dotted leader, the figure in the
- * stubs' condensed face and, after it, when it resets. */
-export function LeaderRow({
-  label,
-  value,
-  detail,
-  valueColor,
-  title,
-  light,
-  onActivate,
-}: {
-  label: ReactNode;
-  value: ReactNode;
-  detail?: ReactNode;
-  valueColor?: string;
-  title?: string;
-  light: boolean;
-  onActivate?: () => void;
-}) {
-  const colors = palette(useGround(light));
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      className="hud-source-leader-row"
-      title={title}
-      role={onActivate ? "button" : undefined}
-      tabIndex={onActivate ? 0 : undefined}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onActivate}
-      onKeyDown={
-        onActivate
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onActivate();
-              }
-            }
-          : undefined
-      }
-      style={{
-        display: "flex",
-        alignItems: "baseline",
-        gap: 6,
-        padding:
-          "var(--hud-row-padding, 4px) 4px var(--hud-row-padding, 4px) 26px",
-        fontSize: 12.5,
-        lineHeight: "16px",
-        color: colors.text,
-        borderRadius: 3,
-        cursor: onActivate ? "pointer" : undefined,
-        background: hovered && onActivate ? colors.selected : "transparent",
-        transition: "background 0.12s ease",
-      }}
-    >
-      <span style={{ flex: "0 1 auto", minWidth: 0 }}>{label}</span>
-      <span
-        aria-hidden="true"
-        style={{
-          flex: "1 1 12px",
-          minWidth: 12,
-          borderBottom: `1.2px dotted ${colors.divider}`,
-          transform: "translateY(-3px)",
-        }}
-      />
-      <span
-        style={{
-          ...tabular,
-          flexShrink: 0,
-          font: `700 14px/16px ${condensed}`,
-          letterSpacing: "0.03em",
-          whiteSpace: "nowrap",
-          color: valueColor ?? colors.text,
-        }}
-      >
-        {value}
-      </span>
-      {detail != null && (
-        <span
-          style={{
-            ...tabular,
-            flex: "0 0 auto",
-            minWidth: 70,
-            textAlign: "right",
-            font: `500 12px/16px ${condensed}`,
-            letterSpacing: "0.03em",
-            whiteSpace: "nowrap",
-            color: colors.secondary,
-          }}
-        >
-          {detail}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** A quota window as a receipt line: printed in red once it is nearly
- * spent (warning or critical), dim while unread or stale. */
-function ReceiptQuotaRow({
-  row,
-  measure,
-  now,
-  light,
-  showReset,
-  onStats,
-}: {
-  row: Quota;
-  measure: Measure;
-  now: number;
-  light: boolean;
-  showReset: boolean;
-  onStats?: () => void;
-}) {
-  const colors = palette(useGround(light));
-  const services = usePanelServices();
-  const format = useFormat();
-  const reading = quotaMetric(row, measure, now, format);
-  const known = reading.available && row.status !== "stale";
-  const tight =
-    measure === "quota"
-      ? row.status === "warning" || row.status === "critical"
-      : measure === "burn" && reading.runsOut;
-  return (
-    <LeaderRow
-      light={light}
-      title={`${row.name} · ${reading.hint}`}
-      label={<FittingName name={row.name} short={quotaShortName(row)} />}
-      value={reading.value}
-      valueColor={
-        !known ? colors.secondary : tight ? paperColors(light).red : colors.text
-      }
-      detail={showReset || measure !== "quota" ? reading.detail : undefined}
-      onActivate={
-        services?.selectProvider || onStats
-          ? () => {
-              services?.selectProvider?.(row.vendor);
-              onStats?.();
-            }
-          : undefined
-      }
-    />
-  );
-}
-
 /** QuotaCell.swift: centered equal-width ring/number lines, fixed 40/46/60 pt rings. */
 export function QuotaWidgets({
   rows,
@@ -518,12 +366,11 @@ export function QuotaWidgets({
         {...{ rows, measure, now, light, showReset, onStats }}
       />
     );
-  // On the receipt a bar is a printed line; SourceQuotaRow stays unused.
   if (widget === "bar")
     return (
       <>
         {rows.map((row) => (
-          <ReceiptQuotaRow
+          <SourceQuotaRow
             key={row.id}
             {...{ row, measure, now, light, showReset, onStats }}
           />
@@ -695,11 +542,6 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
     ? recentUsage(snapshot, vendorKey(vendor))
     : null;
   const countdown = layout.countdown ?? showReset;
-  // The receipt names no account (#22): its plan stands beside the agent,
-  // and only an agent with several accounts keeps a line for each.
-  const single = sections.length === 1;
-  const plan = single ? sections[0].account?.planLabel : null;
-  const leaders = (layout.widget ?? "bar") === "bar";
   return (
     <section
       className="hud-source-provider"
@@ -739,19 +581,8 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         >
           {agentVendorName(vendor)}
         </strong>
-        {plan && (
-          <small
-            style={{
-              fontSize: 11.5,
-              fontWeight: 500,
-              color: colors.secondary,
-            }}
-          >
-            {plan}
-          </small>
-        )}
         <span style={{ flex: 1 }} />
-        {MEASURE_PICKERS && layout.widget !== "chart" && !missingReading && (
+        {layout.widget !== "chart" && !missingReading && (
           <MetricPicker
             selected={measure}
             choose={setMeasure}
@@ -787,21 +618,33 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         <>
           {missingNotice && <BlockNotice text={missingNotice} light={light} />}
           {recent ? (
-            <LeaderRow
-              light={light}
-              label={
-                format.language === "zh" ? "最近 24 小时" : "Last 24 hours"
-              }
-              value={tokensShort(recent.tokens)}
-              detail="Token"
-            />
+            <div
+              className="hud-source-recent"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                color: colors.secondary,
+              }}
+            >
+              <span>
+                {format.language === "zh" ? "最近 24 小时" : "Last 24 hours"}
+              </span>
+              <strong style={{ color: colors.text }}>
+                {`${tokensShort(recent.tokens)} Token`}
+              </strong>
+            </div>
           ) : (
-            <LeaderRow
-              light={light}
-              label={format.language === "zh" ? "额度" : "Quota"}
-              value="--"
-              valueColor={colors.secondary}
-            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: colors.secondary,
+              }}
+            >
+              <span>{format.language === "zh" ? "额度" : "Quota"}</span>
+              <strong>--</strong>
+            </div>
           )}
         </>
       ) : (
@@ -823,18 +666,9 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
                 gap: "var(--hud-block-gap, 8px)",
               }}
             >
-              {account && !single && (
+              {account && (
                 <AccountHeader account={account} now={now} light={light} />
               )}
-              {account && single && account.warning && (
-                <BlockNotice text={account.warning} light={light} warning />
-              )}
-              {account &&
-                single &&
-                account.notice &&
-                account.notice !== account.warning && (
-                  <BlockNotice text={account.notice} light={light} />
-                )}
               <div
                 style={{
                   display: "grid",
@@ -843,9 +677,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
                 }}
               >
                 <QuotaWidgets
-                  rows={
-                    leaders ? receiptRows(sectionRows, layout) : sectionRows
-                  }
+                  rows={sectionRows}
                   layout={layout}
                   measure={measure}
                   now={now}
@@ -964,7 +796,7 @@ export function SourceBalances({
               <strong style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>
                 {agentVendorName(account.vendor)}
               </strong>
-              {MEASURE_PICKERS && !layout.measures?.length && (
+              {!layout.measures?.length && (
                 <div
                   role="group"
                   aria-label={language === "zh" ? "余额指标" : "Balance metric"}
@@ -1024,34 +856,30 @@ export function SourceBalances({
                 {account.notice}
               </div>
             )}
-            {layout.widget === "chart" && (
-              <div
-                role="group"
-                aria-label={
-                  language === "zh" ? "消耗时段" : "Consumption period"
-                }
-                style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}
-              >
-                {(["day", "week", "month"] as const).map((value) => (
-                  <button
-                    key={value}
-                    aria-pressed={period === value}
-                    onClick={() => setPeriod(value)}
-                    style={{
-                      ...noButtonChrome,
-                      fontSize: 10,
-                      padding: "2px 5px",
-                      borderRadius: 4,
-                      color: period === value ? colors.text : colors.tertiary,
-                      background:
-                        period === value ? colors.selected : "transparent",
-                    }}
-                  >
-                    {{ day: "24h", week: "7d", month: "30d" }[value]}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div
+              role="group"
+              aria-label={language === "zh" ? "消耗时段" : "Consumption period"}
+              style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}
+            >
+              {(["day", "week", "month"] as const).map((value) => (
+                <button
+                  key={value}
+                  aria-pressed={period === value}
+                  onClick={() => setPeriod(value)}
+                  style={{
+                    ...noButtonChrome,
+                    fontSize: 10,
+                    padding: "2px 5px",
+                    borderRadius: 4,
+                    color: period === value ? colors.text : colors.tertiary,
+                    background:
+                      period === value ? colors.selected : "transparent",
+                  }}
+                >
+                  {{ day: "24h", week: "7d", month: "30d" }[value]}
+                </button>
+              ))}
+            </div>
             {layout.widget === "chart" ? (
               <div
                 aria-label={
@@ -1089,26 +917,47 @@ export function SourceBalances({
                 )}
               </div>
             ) : (
-              // The receipt prints the balance alone; another measure its two figures.
-              (selected === "quota" ? columns.slice(0, 1) : columns).map(
-                (column) => (
-                  <LeaderRow
+              <div
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={
+                  clickable
+                    ? () => {
+                        services?.selectProvider?.(account.vendor);
+                        onStats?.();
+                      }
+                    : undefined
+                }
+                style={{
+                  display: "flex",
+                  gap: 24,
+                  paddingLeft: 26,
+                  paddingRight: 6,
+                  cursor: clickable ? "pointer" : undefined,
+                }}
+              >
+                {columns.map((column) => (
+                  <div
                     key={column.name}
-                    light={light}
                     title={metrics?.coverage.notice ?? undefined}
-                    label={column.name}
-                    value={column.value}
-                    onActivate={
-                      clickable
-                        ? () => {
-                            services?.selectProvider?.(account.vendor);
-                            onStats?.();
-                          }
-                        : undefined
-                    }
-                  />
-                ),
-              )
+                    style={{ flex: 1, display: "grid", gap: 3 }}
+                  >
+                    <span style={{ fontSize: 11, color: colors.secondary }}>
+                      {column.name}
+                    </span>
+                    <span
+                      style={{
+                        ...tabular,
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: colors.text,
+                      }}
+                    >
+                      {column.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </section>
         );
