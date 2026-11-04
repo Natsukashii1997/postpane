@@ -1,6 +1,19 @@
 # 当前状态
 
-更新：2026-11-04。阶段 0 至阶段 2 全部完成（审批卡真实往返已验证），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：ROADMAP 阶段 3。
+更新：2026-11-04。阶段 0 至阶段 2 全部完成，基线小尾巴已清，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：审批卡「拒绝」路径实测（后台屏幕操控点不到卡片，需常浩点或给全屏操控）；之后进 ROADMAP 阶段 4（阶段 3 豆包先放着）。
+
+## 清基线小尾巴（2026-11-04，Claude，常浩选「先清小尾巴」；PR #17 测试全过已 squash 合并、无需发布）
+
+- 时间：开工 `2026-11-04 17:20`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 17:30`）。来由：阶段 0 基线与各批交接里留下的不阻塞项。
+- 改了哪些文件：`src/crates/host/src/lib.rs`（两处 `Service::start` 调用按 rustfmt 合成一行，PR #17）；本文件。本机：`rustup component add rustfmt clippy`；旧残留 `~/Library/WebKit/app.agenthud.mac`、`~/Library/Caches/app.agenthud`、`~/Library/Caches/app.agenthud.mac` 经访达移到废纸篓。
+- 测试：`cargo fmt --all --check` 首跑报 `host/src/lib.rs` 2 处差异，修后 `pnpm run format:check` 通过（`All matched files use Prettier code style!`）；`cargo clippy --workspace --tests --locked -- -D warnings` 退出码 0、0 条警告；`cargo test --workspace` 637 项通过、0 失败。
+- 验证：局域网遗留依赖核对——工作区 `[workspace.dependencies]` 每一项都有模块引用；`qrcode` 已不在锁文件，`rustls`、`ring`、`flate2`、`security-framework`、`uuid` 仍在锁文件但属其他依赖的传递依赖，无可清理项。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 拒绝路径没测成：用屏幕操控点「拒绝」时侧栏卡片已收起，后台点击落空；请求随后被批准（终端 `Allowed by PermissionRequest hook`），证据文件 `evidence/approval-deny.txt` 内容 `Wed Nov  4 17:21:31 CST 2026`。驿窗设置里没有自动批准开关（只有 `approvalWaitMinutes 10`），推断是常浩在侧栏点的批准，未核实。
+  - 提问卡、Codex 审批仍未实测；上游对照表 494 条 open 只作参考，不处理。
+- 本轮新坑：无。
 
 ## 审批卡真实往返验证（2026-11-04，Claude，常浩让继续并同意用屏幕操控点审批卡；纯文档提交 main、无需发布）
 
