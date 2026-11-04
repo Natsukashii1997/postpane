@@ -6,7 +6,11 @@
 
 ## 已拍板（2026-11-04）
 
-1. **保留的助手**：Claude Code、Codex、Hermes，另保留 Grok（客户端与它的小人，以后可能接入），其余全部裁掉。iPhone/局域网、中转站、价格、更新器一并裁掉；每个模块直接删代码，一个模块一个 PR，出问题撤回该 PR（2026-11-04 改，原定先关后删）。
+1. **旧功能背后保留、界面收拢**（2026-11-04 晚些时候改定，取代早先的“裁掉”）：上游的旧功能只要不影响，代码都留着，界面上不显示，需要时常浩再提。
+   - 助手全部照常显示：Claude Code、Codex、Hermes、Grok Bot 置顶，其余进入默认折叠的“其他助手”；各助手开关保持现状，关掉的不在后台读取。
+   - 中转站、价格、更新三个设置页藏起来，代码保留。
+   - 统计里不显示成本数字。
+   - iPhone/局域网已删（1-1），不恢复。
 2. **改名范围**：标识定为 `app.postpane.mac`；历史数据迁到新目录保留；内部代码名 `agent_hud_*`、`@agent-hud/*` 暂不改。
 3. **自建应用接入暂缓**：先做阶段 0–2，自建应用（牛马之家、数码世界）以后再议，已有的调研结论记在文末。
 
@@ -23,18 +27,17 @@
 - 验收：基线有记录；`pnpm --filter @agent-hud/desktop exec tauri build --bundles app` 产物能启动；审批卡往返一次成功。
 - 风险：测试原本就有失败的，只记录不修；审批卡不通时先修它，其余阶段顺延。
 
-### 阶段 1 裁剪
+### 阶段 1 界面收拢
 
-- 目标：只留 Claude Code、Codex、Hermes、Grok 和驿窗要用的部分。
-- 裁掉：
-  - iPhone/局域网：`src/crates/lan`、`src/crates/share`、设置页 `LocalNetworkPane`。
-  - 中转站：`src/crates/agents/src/relays.rs`、`RelaysPane`、`RelayForms`。
-  - 价格：`PricesPane`、`PriceFields`，以及依赖价格的成本显示。
-  - 更新器：`UpdatesPane`。
-  - 其余助手：`src/crates/agents/src/` 下除 `claude`、`codex`、`hermes`、`grok` 外的客户端目录，以及对应的钩子格式、账户读取、设置页、图片素材；Grok 的小人造型（`src/packages/hud/src/bots/` 里的 Grok 定义）一并保留。
-- 做法：每个模块直接删，一个模块一个 issue、一个 PR，删前删后都跑全套测试。批次：1-0 修 MCP 测试签名；1-1 局域网；1-2 中转站；1-3 价格与成本；1-4 更新器；1-5a Antigravity、DeepSeek 及其专属通道；1-5b 其余助手；1-6 文档收尾。
-- 验收：每步构建和测试全过；设置页不再出现；`lsof -i` 查不到局域网端口；Claude/Codex 的额度、会话状态、审批卡回归通过，Hermes 会话和用量照常显示。
-- 风险：成本统计依赖价格表；`check:clients` 会校验 agents 目录；`docs/parity/` 会过时，裁完后归档。
+- 目标：界面上只突出常用的部分，旧功能背后保留。
+- 批次：
+  - 1-0 修 MCP 测试签名（已合并，PR #4）。
+  - 1-1 删 iPhone/局域网 `lan`、`share`（已合并，PR #6）。
+  - 1-2 助手页四个置顶、其余折叠；设置导航藏起中转站、价格、更新。
+  - 1-3 统计、会话页、侧栏去掉成本数字（牵连约 10 个前端文件）。
+  - 1-4 文档收尾：上游文档里已删的局域网等内容。
+- 验收：构建和全套测试通过；实际打开设置、统计页核对；Claude/Codex 额度、会话状态、审批卡、Hermes 用量不受影响。
+- 注意：隐藏的设置页靠 `src/packages/app/src/App.tsx` 的 `hiddenPages`；置顶名单在 `src/packages/app/src/settings/agents/AgentList.tsx` 的 `PINNED`。
 - 说明：Hermes 在代码里只读会话和用量（`~/.hermes/state.db`），没有钩子、审批和额度读取；要更多能力另立事项。
 
 ### 阶段 2 改名与本机切换

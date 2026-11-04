@@ -226,26 +226,30 @@ type SidebarPage = {
   group: PageGroup;
   customIcon?: ReactNode;
 };
+/** Built-in pages PostPane keeps but does not show (docs/ROADMAP.md, stage 1). */
+const hiddenPages = ["relays", "prices", "updates"];
 /** The sidebar's pages in order: a product page that replaces a built-in
  * one takes its slot; the others join their group, before the page they
  * name or at the group's end. */
 function sidebarPages(extensionPages: AppExtensionPage[]): SidebarPage[] {
-  const list: SidebarPage[] = pages.map((page) => {
-    const replacement = extensionPages.find(
-      (item) => item.replaces === page.id,
-    );
-    return replacement
-      ? {
-          id: replacement.id,
-          label: replacement.title,
-          icon: page.icon,
-          color: replacement.color ?? page.color,
-          description: replacement.description ?? page.description,
-          group: page.group,
-          customIcon: replacement.icon,
-        }
-      : { ...page };
-  });
+  const list: SidebarPage[] = pages
+    .filter((page) => !hiddenPages.includes(page.id))
+    .map((page) => {
+      const replacement = extensionPages.find(
+        (item) => item.replaces === page.id,
+      );
+      return replacement
+        ? {
+            id: replacement.id,
+            label: replacement.title,
+            icon: page.icon,
+            color: replacement.color ?? page.color,
+            description: replacement.description ?? page.description,
+            group: page.group,
+            customIcon: replacement.icon,
+          }
+        : { ...page };
+    });
   for (const page of extensionPages) {
     if (page.replaces) continue;
     const entry: SidebarPage = {
