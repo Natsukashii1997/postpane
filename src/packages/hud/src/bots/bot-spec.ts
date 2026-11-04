@@ -75,6 +75,11 @@ export interface BotSpec {
   stays?: boolean;
   /** Petals open, close and turn with the work. */
   petals?: boolean;
+  /**
+   * Acts as its own artwork instead of a drawn bot: the portrait tilts, nods
+   * and closes its eyes. Eyes are ellipses [x, y, rx, ry] in artwork shares.
+   */
+  avatar?: { eyes: [number, number, number, number][] };
   keeps?: Box;
   ownEyes?: Box[];
   limbs?: { arms: Box[]; legs: Box[]; pixel: number };
@@ -276,6 +281,13 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
     }),
     hermes: spec({
       crossesEyes: true,
+      stays: true,
+      avatar: {
+        eyes: [
+          [0.392, 0.436, 0.066, 0.039],
+          [0.223, 0.453, 0.03, 0.036],
+        ],
+      },
       radius: 0.35,
       reach: 0.5,
       paint: mono(light, "#f8f8f9"),

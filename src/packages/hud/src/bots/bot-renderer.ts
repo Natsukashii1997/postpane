@@ -88,6 +88,8 @@ export function botRenderLook(motion: BotMotion) {
     s(motion.petal, 60),
     s(motion.dim, 20),
     motion.ring === null ? -1 : s(motion.ring, 120),
+    motion.prop,
+    motion.prop ? s(motion.propAge, 24) : 0,
     motion.limbs,
     motion.flap,
     motion.sign,
@@ -719,12 +721,128 @@ function drawBody(
     );
   eyes(context, s, face, yaw, pitch, m.dressed);
 }
+const STICKER = "#fdfdfa",
+  STICKER_INK = "#141414";
+/** A portrait drawn as itself: lids close over its own eyes, and a prop sits beside it. */
+function drawAvatar(
+  context: CanvasRenderingContext2D,
+  form: BotForm,
+  motion: BotMotion,
+) {
+  context.drawImage(form.artwork, 0, 0, 1, 1);
+  const lid = 1 - Math.max(0, Math.min(1, motion.face.open));
+  if (lid > 0.04)
+    for (const [x, y, rx, ry] of form.spec.avatar!.eyes) {
+      const top = y - ry,
+        edge = top + 2 * ry * lid;
+      context.save();
+      context.beginPath();
+      context.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI);
+      context.clip();
+      context.globalCompositeOperation = "destination-out";
+      context.fillRect(x - rx, top, 2 * rx, edge - top);
+      context.restore();
+      const half = rx * Math.sqrt(Math.max(0, 1 - ((edge - y) / ry) ** 2));
+      context.strokeStyle = form.ink;
+      context.lineWidth = 0.011;
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(x - half - 0.006, edge);
+      context.quadraticCurveTo(
+        x,
+        edge + (lid > 0.9 ? 0.012 : 0.003),
+        x + half + 0.006,
+        edge,
+      );
+      context.stroke();
+    }
+  if (motion.prop) drawAvatarProp(context, motion.prop, motion.propAge);
+}
+function drawAvatarProp(
+  context: CanvasRenderingContext2D,
+  prop: NonNullable<BotMotion["prop"]>,
+  age: number,
+) {
+  const clamp = (v: number) => Math.max(0, Math.min(1, v)),
+    swing = (v: number) => Math.sin(Math.PI * clamp(v));
+  context.save();
+  context.fillStyle = STICKER;
+  context.strokeStyle = STICKER_INK;
+  context.lineWidth = 0.016;
+  context.lineJoin = context.lineCap = "round";
+  if (prop === "letter") {
+    const pop = 1 + 0.25 * swing(age / 0.5),
+      w = 0.26 * pop,
+      h = 0.18 * pop,
+      x = 0.05 - w / 2,
+      y = 0.06 - h / 2 - 0.06 * swing(age / 0.6);
+    context.globalAlpha = clamp(age / 0.35);
+    context.beginPath();
+    context.rect(x, y, w, h);
+    context.fill();
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x + w / 2, y + h * 0.58);
+    context.lineTo(x + w, y);
+    context.stroke();
+    context.fillStyle = "#d6453d";
+    context.beginPath();
+    context.arc(x + w, y, 0.04, 0, 2 * Math.PI);
+    context.fill();
+  } else {
+    const w = 0.36,
+      h = 0.22,
+      x = -0.14,
+      y = 0.58;
+    if (prop === "sent") {
+      const q = clamp(age / 1.6),
+        rise = q < 0.5 ? 4 * q ** 3 : 1 - (-2 * q + 2) ** 3 / 2;
+      context.globalAlpha = 1 - q;
+      context.translate(0, -0.35 * rise);
+    }
+    context.beginPath();
+    context.roundRect(x, y, w, h, h * 0.45);
+    context.moveTo(x + w * 0.7, y + h);
+    context.lineTo(x + w * 0.82, y + h * 1.35);
+    context.lineTo(x + w * 0.85, y + h);
+    context.fill();
+    context.stroke();
+    context.fillStyle = STICKER_INK;
+    if (prop === "sent") {
+      context.lineWidth = 0.03;
+      context.beginPath();
+      context.moveTo(x + w * 0.32, y + h * 0.52);
+      context.lineTo(x + w * 0.46, y + h * 0.7);
+      context.lineTo(x + w * 0.7, y + h * 0.3);
+      context.stroke();
+    } else
+      for (let i = 0; i < 3; i++) {
+        const beat = (((age * 2.2 - i * 0.18) % 1) + 1) % 1,
+          hop = swing(beat / 0.5);
+        context.beginPath();
+        context.arc(
+          x + w * (0.28 + 0.22 * i),
+          y + h * 0.5 - hop * h * 0.18,
+          0.022,
+          0,
+          2 * Math.PI,
+        );
+        context.fill();
+      }
+  }
+  context.restore();
+}
 function bare(
   context: CanvasRenderingContext2D,
   form: BotForm,
   motion: BotMotion,
   cache = false,
 ) {
+  if (form.spec.avatar) {
+    drawAvatar(context, form, motion);
+    return;
+  }
   if (form.spec.ownEyes) {
     context.globalAlpha = 1 - motion.morph;
     context.drawImage(form.artwork, ...box);

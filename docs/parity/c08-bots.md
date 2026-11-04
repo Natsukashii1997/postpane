@@ -24,7 +24,7 @@ The pure engines are faithful line-for-line ports. That covers BotMotion, BotMov
 
 The problems sit at the edges: the hosts and call sites (BotMark/ReminderMark/HUDMarkStrip), one light-ground spec entry, the still-logo path, and the live-facts derivation that Next re-implements inside the director (`bots.rs` since 2026-10-21, mark-director.ts before).
 
-**Status counts (50 rows):**
+**Status counts (51 rows):**
 
 | Status     | Rows |
 | ---------- | ---- |
@@ -32,7 +32,7 @@ The problems sit at the edges: the hosts and call sites (BotMark/ReminderMark/HU
 | differs    | 13   |
 | missing    | 0    |
 | unclear    | 1    |
-| deliberate | 1    |
+| deliberate | 2    |
 | better     | 0    |
 
 Row 36 is fixed (2026-10-21).
@@ -110,6 +110,7 @@ The Clawd sign halo (row 26) is also off, but only faintly.
 | 48  | DockMemory.swift:6-29                                                                                | Fresh cue as is; a missed failure/limit whose badge stands is replayed once, re-dated                                                                                                                      | mark-director.ts:465-491; HUDMarkStrip.tsx:368-378                                                          | same       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 49  | MarkDirections.swift:8-61                                                                            | One director for every screen; timer at `nextChange` (tolerance 0.1); `onChange` only when directions change; `looked`                                                                                     | bots.rs; coordinator.rs; use-bot-directions.ts                                                              | same       | The host runs it on its coordinator thread and sends the directions to the HUD windows on screen; see the architecture notes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 50  | BotSpec.swift (openai); BotMotion.swift                                                              | Codex rests as its logo in the strip and becomes a bot on hover; its petals only spin                                                                                                                      | bot-spec.ts (`stays`, `petals`); bot-motion.ts (`petalSpin`, `shapePetals`, `turnPetals`); HUDMarkStrip.tsx | deliberate | 2026-11-05, issue #42: Codex stays a bot in the side strip. Its petals open and close (closed when dozing or compacting, flared when asking or done, sagging after a limit), turn with the work (steady thought, 30° ticks while editing, racing commands, reading backwards, a progress ring for long commands), jam and darken on a failure. Other bots are unchanged.                                                                                                                                                                                                                                                                 |
+| 51  | BotSpec.swift (hermes); BotRenderer.swift                                                            | Hermes rests as its portrait and becomes a round cartoon bot when awake                                                                                                                                    | bot-spec.ts (`avatar`, `stays`); bot-motion.ts (`actAvatar`); bot-renderer.ts (`drawAvatar`)                | deliberate | 2026-11-05, issue #44: Hermes stays its portrait in the side strip and never becomes the cartoon. The portrait leans about its neck, nods, closes its eyes and fades; a typing bubble while working, a sent bubble with a tick when done, a letter at a new turn; signs as before. Other bots are unchanged.                                                                                                                                                                                                                                                                                                                             |
 
 **Count check:**
 
@@ -118,7 +119,7 @@ The Clawd sign halo (row 26) is also off, but only faintly.
 | same       | 1–7, 9–17, 19–25, 27, 40–49 |
 | differs    | 8, 18, 26, 28–38            |
 | unclear    | 39                          |
-| deliberate | 50                          |
+| deliberate | 50–51                       |
 
 ## Tests
 

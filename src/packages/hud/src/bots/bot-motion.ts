@@ -146,6 +146,7 @@ export interface MotionSpec {
   limbs?: { pixel: number } | null;
   crossesEyes?: boolean;
   petals?: boolean;
+  avatar?: unknown;
   keeps?: unknown;
   decor?: readonly { kind: string; fins?: readonly { hand: number }[] }[];
 }
@@ -171,6 +172,8 @@ export function petalRatchet(time: number) {
     part = done < ticks ? easeOut(clamp01((inner - done * 0.3) / 0.1)) : 0;
   return 30 * (cycles * ticks + done + part);
 }
+/** What an avatar holds beside it: a bubble of dots, the sent bubble, or a letter. */
+export type AvatarProp = "typing" | "sent" | "letter";
 /** Direct BotMotion.swift state machine. set/play record events even when a host skips drawing. */
 export class BotMotion {
   staysBot = false;
@@ -185,6 +188,9 @@ export class BotMotion {
   petal = 1;
   dim = 0;
   ring: number | null = null;
+  avatar = false;
+  prop: AvatarProp | null = null;
+  propAge = 0;
   pulses = false;
   finned = false;
   state = botState();
@@ -223,6 +229,8 @@ export class BotMotion {
   private fluttered: number | null = null;
   private petalGoal = 1;
   private petalLive = false;
+  private hoverAt: number | null = null;
+  private faded = 1;
   private settled = false;
   private random: SplitMix;
   constructor(seed?: bigint | number) {
@@ -232,7 +240,8 @@ export class BotMotion {
     this.spin = spec.spin ?? 0;
     this.limbed = Boolean(spec.limbs);
     this.stepShare = spec.limbs ? (spec.limbs.pixel / 2) * spec.radius : 0;
-    this.crossesEyes = Boolean(spec.crossesEyes);
+    this.avatar = Boolean(spec.avatar);
+    this.crossesEyes = Boolean(spec.crossesEyes) && !this.avatar;
     this.petals = Boolean(spec.petals);
     this.pulses = Boolean(spec.keeps);
     this.finned = Boolean(
@@ -457,6 +466,7 @@ export class BotMotion {
     else this.following = this.blinking = false;
     if (arrived) this.keep(age, now, dt);
     if (this.petals) this.shapePetals(age, now, dt, dozing);
+    if (this.avatar) this.actAvatar(age, now, dt, dozing);
     const stills =
       (this.state.holds && isWorking(this.look)) ||
       (this.turnsToCard && age >= 0.45);
@@ -509,6 +519,23 @@ export class BotMotion {
       this.greeting !== null
     )
       return every(BotPace.lively);
+    if (this.avatar && this.morph > 0) {
+      if (
+        this.prop !== null ||
+        this.event ||
+        this.pending ||
+        this.blinking ||
+        (this.hoverAt !== null && now - this.hoverAt < 0.6) ||
+        Math.abs(this.faded - this.fadeGoal) > 0.01
+      )
+        return every(BotPace.lively);
+      const steady = every(
+        isCalm(this.look) && !this.state.hovered
+          ? BotPace.calm
+          : BotPace.following,
+      );
+      return this.blinksOn ? Math.min(steady, at(this.nextBlink)) : steady;
+    }
     if (this.petals) {
       if (
         this.petalLive ||
@@ -730,6 +757,88 @@ export class BotMotion {
         ? (Math.max(0, age) % 6) / 6
         : null;
   }
+  private get fadeGoal() {
+    return this.state.badge === "limited" || this.event?.kind === "limit-hit"
+      ? 0.45
+      : 1;
+  }
+  /**
+   * A portrait cannot hop or wave, so it only leans about its neck, lifts,
+   * nods and fades, and holds a small prop beside it. Every move scales with
+   * morph, so a mark that rests as its artwork stays still.
+   */
+  private actAvatar(age: number, now: number, dt: number, dozing: boolean) {
+    const m = this.morph,
+      breath = Math.sin((2 * Math.PI * now) / 3.4),
+      event = this.event,
+      time = event ? now - event.start : 0;
+    let tilt = 0,
+      lift = 0,
+      grow = 1,
+      shake = 0,
+      breathes = true,
+      prop: AvatarProp | null = null,
+      propAge = 0;
+    if (event?.kind === "start") {
+      tilt = 3 * swing(time / 0.8);
+      lift = -0.05 * swing(time / 0.5);
+      breathes = false;
+      prop = "letter";
+      propAge = time;
+    } else if (event?.kind === "failed") {
+      shake =
+        time < 0.7 ? 0.04 * Math.sin(time * 8 * Math.PI) * (1 - time / 0.7) : 0;
+      tilt = time > 0.7 ? -2 : 0;
+    } else if (event?.kind === "limit-hit")
+      lift = 0.025 * easeOut(clamp01(time / 0.9));
+    else if (dozing) {
+      const sway = Math.sin((2 * Math.PI * now) / 4.4);
+      tilt = -4 + sway;
+      lift = 0.02 + 0.01 * sway;
+      breathes = false;
+    } else if (isAttention(this.look)) {
+      const side = this.state.facing === "right" ? 1 : -1,
+        nudge = (((now % 1.6) + 1.6) % 1.6) / 0.3;
+      tilt = side * (5 - 1.5 * swing(nudge));
+    } else if (this.look === "done" && age >= 0 && age < 1.6) {
+      tilt = -3.5 * swing(age / 0.6);
+      breathes = false;
+      prop = "sent";
+      propAge = age;
+    } else if (isWorking(this.look) && !this.state.holds) {
+      tilt = -3 - 1.2 * Math.sin((2 * Math.PI * now) / 1.6);
+      lift = 0.025;
+      prop = "typing";
+      propAge = now;
+    } else if (this.state.hovered && this.hoverAt !== null) {
+      const since = now - this.hoverAt;
+      tilt = -4.5 * easeInOut(clamp01(since / 0.35));
+      grow = 1 + 0.035 * swing(since / 0.5);
+      lift = -0.03 * swing(since / 0.4);
+    } else {
+      const beat = ((now % 9) + 9) % 9;
+      if (beat > 5 && beat < 7.2) tilt = -2.2 * swing((beat - 5) / 2.2);
+    }
+    const turn = (tilt * m * Math.PI) / 180,
+      neck = 0.45,
+      swell = breathes ? 0.008 * breath : 0;
+    this.pose = {
+      x: shake * m + neck * Math.sin(turn),
+      y:
+        (lift + (breathes ? -0.01 * breath : 0)) * m +
+        neck * (1 - Math.cos(turn)),
+      rotation: tilt * m,
+      scaleX: 1 + (grow - 1 + swell) * m,
+      scaleY: 1 + (grow - 1 + swell) * m,
+      footing: 0,
+    };
+    this.prop = m > 0.5 ? prop : null;
+    this.propAge = propAge;
+    this.faded += (this.fadeGoal - this.faded) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(this.fadeGoal - this.faded) < 0.005)
+      this.faded = this.fadeGoal;
+    this.opacity = Math.min(this.opacity, 1 + (this.faded - 1) * m);
+  }
   private moving(age: number) {
     const start = BotMoves.move(age).start;
     return (
@@ -741,6 +850,8 @@ export class BotMotion {
   private hover(on: boolean, now: number) {
     this.greetAfter = null;
     this.botInterval = null;
+    this.hoverAt = on ? now : null;
+    if (on && this.avatar) this.blinks = [now + 0.12, now + 0.36];
     if (!on) {
       this.greets = false;
       return;
@@ -958,8 +1069,10 @@ export class BotMotion {
           target.open = 1 - 0.9 * swell;
       }
     }
+    if (this.avatar && isWorking(this.look) && !this.state.hovered)
+      target.open = 0.72;
     if (this.state.holds) every = null;
-    if (this.pending?.kind === "start") target.open = 0;
+    if (this.pending?.kind === "start" && !this.avatar) target.open = 0;
     if (this.event) {
       const time = now - this.event.start;
       if (this.event.kind === "start")
@@ -1039,7 +1152,12 @@ export class BotMotion {
       : null;
     if (this.event?.kind === "failed") sign = shownSign(sign, "cross");
     if (this.state.badge) sign = shownSign(sign, badgeSign(this.state.badge));
-    if (this.morph > 0 && this.look === "thinking" && !this.limbed)
+    if (
+      this.morph > 0 &&
+      this.look === "thinking" &&
+      !this.limbed &&
+      !this.avatar
+    )
       sign = shownSign(sign, "ellipsis");
     if (this.morph > 0 && dozing) sign = shownSign(sign, "z");
     this.sign = sign;
