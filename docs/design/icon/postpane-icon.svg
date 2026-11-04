@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+    <!-- 共用：图标表面的柔光 -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".16"/>
+      <stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- 一 · 一枝春 -->
+    <linearGradient id="p-night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232838"/><stop offset="1" stop-color="#11131b"/>
+    </linearGradient>
+    <radialGradient id="p-moon" cx=".42" cy=".38" r=".7">
+      <stop offset="0" stop-color="#fbf5e9"/><stop offset=".7" stop-color="#eee2c8"/><stop offset="1" stop-color="#ddc9a2"/>
+    </radialGradient>
+    <clipPath id="p-clip"><rect width="1024" height="1024" rx="230"/></clipPath>
+    <g id="blossom">
+      <circle cx="0" cy="-26" r="24"/><circle cx="25" cy="-8" r="24"/><circle cx="15" cy="21" r="24"/>
+      <circle cx="-15" cy="21" r="24"/><circle cx="-25" cy="-8" r="24"/>
+    </g>
+    <symbol id="icon-plum" viewBox="0 0 1024 1024">
+      <g clip-path="url(#p-clip)">
+        <rect width="1024" height="1024" fill="url(#p-night)"/>
+        <circle cx="540" cy="470" r="318" fill="none" stroke="#c4a46a" stroke-width="10" opacity=".85"/>
+        <circle cx="540" cy="470" r="296" fill="url(#p-moon)"/>
+        <!-- 梅枝：从左下伸进月洞窗 -->
+        <g fill="#3d2f28"><path d="M114.0 986.8 L129.1 971.9 L143.8 957.3 L158.1 942.9 L172.0 928.7 L185.6 914.7 L198.7 900.9 L211.6 887.3 L224.1 873.8 L236.3 860.5 L248.2 847.2 L259.8 834.0 L271.2 820.9 L282.4 807.9 L293.3 794.8 L304.1 781.8 L314.7 768.7 L325.1 755.6 L335.4 742.4 L345.6 729.2 L355.6 715.8 L365.6 702.4 L375.5 688.8 L385.4 675.0 L395.1 661.3 L402.2 651.5 L409.3 642.0 L416.4 632.8 L423.5 623.9 L430.8 615.2 L438.1 606.8 L445.5 598.6 L453.0 590.6 L460.7 582.8 L468.5 575.2 L476.5 567.8 L484.7 560.5 L493.1 553.4 L501.7 546.4 L510.6 539.5 L519.8 532.7 L529.3 526.0 L539.0 519.4 L549.1 512.8 L559.6 506.3 L570.4 499.8 L581.6 493.3 L593.2 486.9 L605.3 480.4 L612.9 476.1 L620.6 471.4 L628.2 466.5 L635.7 461.3 L643.2 455.7 L650.6 449.9 L658.0 443.8 L665.3 437.5 L672.4 430.8 L679.5 423.9 L686.5 416.8 L693.3 409.3 L700.1 401.7 L706.7 393.8 L713.2 385.6 L719.5 377.2 L725.7 368.6 L731.7 359.7 L737.6 350.6 L743.2 341.3 L748.7 331.8 L754.0 322.1 L759.1 312.1 L764.0 302.1 L756.0 297.9 L750.7 307.6 L745.2 317.1 L739.5 326.3 L733.6 335.2 L727.6 344.0 L721.4 352.5 L715.1 360.7 L708.6 368.7 L702.1 376.5 L695.4 384.0 L688.6 391.2 L681.7 398.2 L674.7 404.9 L667.6 411.3 L660.5 417.4 L653.3 423.3 L646.0 428.9 L638.7 434.2 L631.4 439.1 L624.1 443.8 L616.7 448.2 L609.4 452.3 L602.1 456.1 L594.7 459.6 L582.2 465.6 L570.0 471.7 L558.2 477.8 L546.7 484.0 L535.6 490.3 L524.7 496.6 L514.2 503.0 L503.9 509.5 L493.9 516.2 L484.1 522.9 L474.6 529.9 L465.3 537.0 L456.2 544.2 L447.3 551.7 L438.5 559.3 L430.0 567.2 L421.5 575.2 L413.2 583.5 L405.0 592.1 L396.8 600.8 L388.8 609.9 L380.8 619.2 L372.9 628.8 L364.9 638.7 L354.6 652.3 L344.4 665.4 L334.2 678.4 L324.0 691.3 L313.6 704.0 L303.2 716.6 L292.7 729.1 L282.1 741.5 L271.3 753.9 L260.3 766.3 L249.1 778.7 L237.8 791.1 L226.2 803.5 L214.3 816.0 L202.2 828.6 L189.9 841.3 L177.2 854.1 L164.1 867.1 L150.8 880.2 L137.0 893.5 L122.9 907.1 L108.4 920.8 L93.5 934.9 L78.0 949.2 Z"/><circle cx="760.0" cy="300.0" r="4.5"/><path d="M494.7 542.2 L496.8 533.2 L498.6 524.1 L500.0 515.0 L501.1 506.0 L501.8 496.9 L502.2 487.8 L502.2 478.7 L501.9 469.7 L501.3 460.7 L500.3 451.7 L499.0 442.7 L497.4 433.7 L495.5 424.7 L493.2 415.8 L490.7 406.8 L487.8 397.9 L484.7 389.0 L481.3 380.1 L477.6 371.3 L473.6 362.4 L469.4 353.6 L464.8 344.8 L460.0 335.9 L455.2 327.5 L454.1 324.5 L452.7 320.9 L451.2 317.4 L449.8 313.9 L448.4 310.6 L446.9 307.4 L445.4 304.2 L443.9 301.1 L442.3 298.1 L440.7 295.1 L439.0 292.3 L437.3 289.5 L435.6 286.7 L433.8 284.1 L431.9 281.4 L430.0 278.9 L427.9 276.4 L425.9 273.9 L423.7 271.5 L421.5 269.2 L419.2 266.9 L416.8 264.6 L414.3 262.3 L411.7 260.2 L408.3 263.8 L410.6 266.2 L412.8 268.5 L414.9 270.9 L416.9 273.2 L418.9 275.6 L420.7 278.1 L422.4 280.5 L424.1 283.0 L425.7 285.6 L427.3 288.2 L428.7 290.8 L430.2 293.5 L431.5 296.3 L432.9 299.1 L434.1 302.0 L435.4 305.0 L436.6 308.0 L437.8 311.1 L438.9 314.4 L440.1 317.7 L441.2 321.0 L442.3 324.5 L443.4 328.1 L444.8 332.5 L449.7 341.6 L454.1 350.2 L458.3 358.9 L462.1 367.6 L465.7 376.2 L469.0 384.9 L472.1 393.5 L474.8 402.1 L477.3 410.7 L479.4 419.2 L481.3 427.8 L482.9 436.3 L484.1 444.8 L485.1 453.3 L485.7 461.8 L486.1 470.3 L486.1 478.8 L485.8 487.2 L485.2 495.6 L484.3 504.0 L483.1 512.5 L481.5 520.9 L479.6 529.3 L477.3 537.8 Z"/><circle cx="410.0" cy="262.0" r="2.5"/><path d="M637.9 458.7 L645.4 460.8 L652.9 463.0 L660.3 465.4 L667.7 467.9 L675.1 470.6 L682.4 473.4 L689.6 476.4 L696.9 479.6 L704.0 483.0 L711.1 486.5 L718.1 490.3 L725.0 494.3 L731.8 498.5 L738.5 502.9 L745.1 507.5 L751.5 512.4 L757.9 517.6 L764.1 523.0 L770.1 528.7 L776.0 534.6 L781.8 540.8 L787.3 547.4 L792.7 554.2 L797.9 561.4 L802.1 558.6 L797.1 551.1 L791.9 543.8 L786.4 536.9 L780.8 530.2 L775.0 523.8 L769.1 517.7 L762.9 511.8 L756.6 506.2 L750.2 500.9 L743.6 495.8 L736.9 490.9 L730.0 486.2 L723.1 481.8 L716.0 477.6 L708.9 473.5 L701.7 469.7 L694.4 466.1 L687.0 462.6 L679.6 459.4 L672.1 456.2 L664.6 453.3 L657.1 450.5 L649.6 447.8 L642.1 445.3 Z"/><circle cx="800.0" cy="560.0" r="2.5"/></g>
+        <g fill="#c73b30">
+          <use href="#blossom" transform="translate(760 300) scale(1.25)"/>
+          <use href="#blossom" transform="translate(452 330) scale(1.05)"/>
+          <use href="#blossom" transform="translate(800 560) scale(.95)"/>
+          <use href="#blossom" transform="translate(600 470) scale(.8)"/>
+        </g>
+        <g fill="#e9c27a">
+          <circle cx="760" cy="300" r="12"/><circle cx="452" cy="330" r="10"/><circle cx="800" cy="560" r="9"/><circle cx="600" cy="470" r="8"/>
+        </g>
+        <g fill="#c73b30">
+          <circle cx="410" cy="258" r="13"/><circle cx="700" cy="404" r="12"/><circle cx="520" cy="520" r="11"/>
+        </g>
+        <!-- 一片花瓣飘落到窗外 -->
+        <ellipse cx="836" cy="820" rx="20" ry="13" transform="rotate(-30 836 820)" fill="#c73b30" opacity=".9"/>
+        <rect width="1024" height="1024" fill="url(#sheen)"/>
+      </g>
+    </symbol>
+
+    <!-- 二 · 驿灯 -->
+    <linearGradient id="l-night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2a52"/><stop offset="1" stop-color="#0b0f22"/>
+    </linearGradient>
+    <radialGradient id="l-glow" cx=".5" cy=".55" r=".62">
+      <stop offset="0" stop-color="#ffe6a8"/><stop offset=".45" stop-color="#f6b25a"/><stop offset="1" stop-color="#c8662a"/>
+    </radialGradient>
+    <radialGradient id="l-spill" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#f7a64a" stop-opacity=".45"/><stop offset="1" stop-color="#f7a64a" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="l-clip"><rect width="1024" height="1024" rx="230"/></clipPath>
+    <symbol id="icon-lamp" viewBox="0 0 1024 1024">
+      <g clip-path="url(#l-clip)">
+        <rect width="1024" height="1024" fill="url(#l-night)"/>
+        <circle cx="512" cy="530" r="430" fill="url(#l-spill)"/>
+        <!-- 屋檐 -->
+        <path d="M150 268 Q512 150 874 268 L846 300 Q512 205 178 300 Z" fill="#2c1d17"/>
+        <!-- 窗：暖光 + 窗棂 -->
+        <rect x="262" y="310" width="500" height="500" rx="18" fill="url(#l-glow)"/>
+        <g fill="none" stroke="#3a2419" stroke-linecap="square">
+          <rect x="262" y="310" width="500" height="500" rx="18" stroke-width="34"/>
+          <path d="M262 476 H762 M262 644 H762 M428 310 V810 M596 310 V810" stroke-width="18"/>
+          <!-- 中间一格的回纹 -->
+          <rect x="468" y="516" width="88" height="88" stroke-width="12"/>
+        </g>
+        <!-- 灯焰 -->
+        <path d="M512 532 C540 562 546 590 528 606 C520 613 504 613 496 606 C478 590 484 562 512 532 Z" fill="#fff7dc"/>
+        <!-- 窗台 -->
+        <rect x="232" y="808" width="560" height="30" rx="8" fill="#2c1d17"/>
+        <rect width="1024" height="1024" fill="url(#sheen)"/>
+      </g>
+    </symbol>
+
+    <!-- 三 · 燕归 -->
+    <linearGradient id="s-celadon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dbeadf"/><stop offset="1" stop-color="#9dc2ad"/>
+    </linearGradient>
+    <clipPath id="s-clip"><rect width="1024" height="1024" rx="230"/></clipPath>
+    <symbol id="icon-swallow" viewBox="0 0 1024 1024">
+      <g clip-path="url(#s-clip)">
+        <rect width="1024" height="1024" fill="url(#s-celadon)"/>
+        <!-- 屏幕边上的那扇窄窗 -->
+        <rect x="796" y="150" width="70" height="724" rx="35" fill="#fbf8f1"/>
+        <rect x="796" y="150" width="70" height="724" rx="35" fill="none" stroke="#2b3a40" stroke-opacity=".12" stroke-width="4"/>
+        <!-- 飞燕：衔一枚朱红信印，向窗飞去 -->
+        <g transform="translate(452 548) rotate(-28) scale(1.12)">
+          <path d="M40 -16 C24 -110 -36 -196 -176 -268 C-104 -178 -54 -96 -34 -14 Z" fill="#1d2a30"/>
+          <path d="M40 16 C24 110 -36 196 -176 268 C-104 178 -54 96 -34 14 Z" fill="#1d2a30"/>
+          <path d="M-92 -9 L-262 -70 L-140 0 L-262 70 L-92 9 Z" fill="#1d2a30"/>
+          <path d="M148 0 C128 -30 64 -32 0 -24 C-52 -18 -84 -12 -104 -7 L-104 7 C-84 12 -52 18 0 24 C64 32 128 30 148 0 Z" fill="#1d2a30"/>
+          <circle cx="116" cy="0" r="34" fill="#1d2a30"/>
+          <path d="M134 -14 C146 -8 148 8 134 14 C140 4 140 -4 134 -14 Z" fill="#c73b30"/>
+          <rect x="160" y="-20" width="40" height="40" rx="5" fill="#c73b30"/>
+        </g>
+        <rect width="1024" height="1024" fill="url(#sheen)"/>
+      </g>
+    </symbol>
+  </defs><use href="#icon-lamp" xlink:href="#icon-lamp" x="100" y="100" width="824" height="824"/></svg>
