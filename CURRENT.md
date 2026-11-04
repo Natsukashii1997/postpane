@@ -1,6 +1,17 @@
 # 当前状态
 
-更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-3 图标出 3 版给常浩挑，然后 2-4 打包安装与本机切换（需常浩在场）；审批卡真实往返仍待常浩配合验证。
+更新：2026-11-04。阶段 1（界面收拢），批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：2-4 打包安装与本机切换（需常浩在场）；审批卡真实往返仍待常浩配合验证。
+
+## 阶段 2-3：应用图标换成驿灯（2026-11-04，Claude，常浩从第二轮三版里选定「驿灯」；测试全过直接合并、未安装）
+
+- 时间：开工 `2026-11-04 16:42`（`date '+%F %H:%M'` 记录；本节写于 `2026-11-04 16:47`）。来由：第一轮三版（窗格、驿印、小信使）被否，第二轮从“驿”“窗”本意出发出了一枝春、驿灯、燕归，常浩选驿灯。
+- 改了哪些文件：`src/apps/desktop/src-tauri/icons/icon.icns`、`icon.ico`、`icon.png`（用 `tauri icon` 从 1024 透明底图生成）；`src/packages/app/src/assets/app-icon.png`（256 像素）；新增 `docs/design/icon/postpane-icon.svg`（源文件）与 `postpane-icon-1024.png`；本文件。
+- 测试：`cargo test --workspace` 退出码 0，637 项通过；`test:ts` `ℹ pass 110` / `ℹ fail 0`；`test:mcp` `ℹ pass 6` / `ℹ fail 0`；`test:plugins` `ℹ pass 14` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；typecheck、build、check:platform、check:packages、check:clients、check:test-paths 通过。
+- 验证：1024 图四角透明已用 PIL 读像素核对（角落 alpha 0）；访达与程序坞里的样子要到 2-4 安装后看。
+- 截图：三版预览在 `.claude/previews/`（不进仓库）。
+- 发布与回读：无需发布；未安装。
+- 与授权不一致之处、遗留问题、范围外发现：qlmanage 渲染 SVG 时会铺白底，透明是靠圆角蒙版抠出来的，边缘可能有极细的白边，安装后核对。
+- 本轮新坑：无。
 
 ## 阶段 2-2：界面文字换成驿窗（2026-11-04，Claude，常浩授权测试全过的 PR 直接合并；无需发布、未安装）
 
