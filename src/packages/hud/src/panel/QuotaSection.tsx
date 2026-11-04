@@ -19,7 +19,7 @@ import {
   tokensShort,
 } from "@agent-hud/ui/format";
 import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
-import { recentCost, recentUsage } from "../recent-usage";
+import { recentUsage } from "../recent-usage";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice, serviceNotice } from "./account-labels";
@@ -541,7 +541,6 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
   const recent = missingReading
     ? recentUsage(snapshot, vendorKey(vendor))
     : null;
-  const recentMoney = recent ? recentCost(recent, format.language) : null;
   const countdown = layout.countdown ?? showReset;
   return (
     <section
@@ -621,13 +620,6 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
           {recent ? (
             <div
               className="hud-source-recent"
-              title={
-                recent.unpricedTokens > 0
-                  ? format.language === "zh"
-                    ? `其中 ${new Intl.NumberFormat("en").format(recent.unpricedTokens)} 个 Token 来自没有 API 价格的模型，未计入花费`
-                    : `${new Intl.NumberFormat("en").format(recent.unpricedTokens)} of these tokens came from models with no API list price and are not in the cost`
-                  : undefined
-              }
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -640,7 +632,6 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
               </span>
               <strong style={{ color: colors.text }}>
                 {`${tokensShort(recent.tokens)} Token`}
-                {recentMoney ? ` · ${recentMoney}` : ""}
               </strong>
             </div>
           ) : (

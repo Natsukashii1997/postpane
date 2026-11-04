@@ -34,7 +34,7 @@
   - 1-0 修 MCP 测试签名（已合并，PR #4）。
   - 1-1 删 iPhone/局域网 `lan`、`share`（已合并，PR #6）。
   - 1-2 助手页四个置顶、其余折叠；设置导航藏起中转站、价格、更新。
-  - 1-3 统计、会话页、侧栏去掉成本数字（牵连约 10 个前端文件）。
+  - 1-3 统计、会话页、侧栏去掉成本数字和套餐价值，只看 token。
   - 1-4 文档收尾：上游文档里已删的局域网等内容。
 - 验收：构建和全套测试通过；实际打开设置、统计页核对；Claude/Codex 额度、会话状态、审批卡、Hermes 用量不受影响。
 - 注意：隐藏的设置页靠 `src/packages/app/src/App.tsx` 的 `hiddenPages`；置顶名单在 `src/packages/app/src/settings/agents/AgentList.tsx` 的 `PINNED`。

@@ -4,7 +4,6 @@ import type { SessionCall, SessionTurnAgent } from "../lib/types";
 import {
   clipped,
   compact,
-  cost,
   numeric,
   plain,
   row,
@@ -723,7 +722,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
               textAlign: "right",
             }}
           >
-            {zh ? "新增 · 费用" : "New · cost"}
+            {zh ? "新增" : "New"}
           </div>
           {rows.map((lane, i) => (
             <div
@@ -740,9 +739,6 @@ export const SubagentTimeline = memo(function SubagentTimeline({
             >
               <span style={{ fontSize: 12, fontWeight: 600 }}>
                 {compact(lane.added)}
-              </span>
-              <span style={{ fontSize: 10.5, color: theme.secondary }}>
-                {cost(lane.cost, zh, lane.unpriced && lane.cost !== null)}
               </span>
             </div>
           ))}

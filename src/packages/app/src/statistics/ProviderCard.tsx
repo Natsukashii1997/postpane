@@ -12,8 +12,6 @@ import type {
 import {
   card,
   compact,
-  costHelp,
-  costText,
   Coverage,
   Heading,
   integer,
@@ -80,21 +78,6 @@ export const ProviderCard = memo(function ProviderCard({
   const providerBilling = billing.filter(
     (b) => vendorKey(b.vendor) === vendorKey(provider.id),
   );
-  // Where the price went, from Core (Open's AgentCards.moneyNote): reading
-  // context back from the cache, and sending it again after the cache lapsed.
-  const moneyNote = [
-    provider.cacheReadShare != null
-      ? (zh ? "缓存读占费用 " : "Cache reads ") +
-        `${Math.round(provider.cacheReadShare * 100)}%` +
-        (zh ? "" : " of cost")
-      : null,
-    provider.recachedCost != null
-      ? (zh ? "缓存重写 " : "Cache rewrites ") +
-        `≈${moneyAmount(provider.recachedCost, "USD", zh ? "zh" : "en")}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   const accent =
     (
       {
@@ -120,12 +103,6 @@ export const ProviderCard = memo(function ProviderCard({
     kindLabel(kind as StatisticsTokenKind, zh),
     compact(provider.tokens[kind as StatisticsTokenKind]),
   ]);
-  cells.push([
-    zh ? "费用" : "Cost",
-    <span title={costHelp(provider.cost, zh)}>
-      {costText(provider.cost, zh)}
-    </span>,
-  ]);
   const sessions = (
     <div style={{ display: "grid", gap: 7, flex: 1, minWidth: 0 }}>
       <span style={{ color: theme.secondary, fontSize: 11 }}>
@@ -139,8 +116,8 @@ export const ProviderCard = memo(function ProviderCard({
           onClick={() => onSelectSession?.(entry.session)}
           title={
             zh
-              ? `${entry.session.title}\n所选范围内 ${integer(entry.selectedTokens)} Token\n按 API 价格估算 ${costText(entry.cost, zh)}`
-              : `${entry.session.title}\n${integer(entry.selectedTokens)} tokens in the selected range\n${costText(entry.cost, zh)} at API prices`
+              ? `${entry.session.title}\n所选范围内 ${integer(entry.selectedTokens)} Token`
+              : `${entry.session.title}\n${integer(entry.selectedTokens)} tokens in the selected range`
           }
           style={{
             ...plain,
@@ -306,7 +283,7 @@ export const ProviderCard = memo(function ProviderCard({
           </div>
         ))}
       </div>
-      {(moneyNote !== "" || providerBilling.length > 0) && (
+      {providerBilling.length > 0 && (
         <div
           style={{
             ...row,
@@ -316,7 +293,7 @@ export const ProviderCard = memo(function ProviderCard({
             marginTop: -2,
           }}
         >
-          <span>{moneyNote}</span>
+          <span />
           {providerBilling.length > 0 && (
             <span style={number}>
               {zh ? "API 余额 " : "API balance "}
@@ -404,14 +381,6 @@ function RecentPeriodColumn({
             ? "—"
             : compact(animatedTokens)}
         </span>
-      </div>
-      <div
-        title={costHelp(period.totals.cost, zh)}
-        style={{ color: theme.secondary, fontSize: 11, marginBottom: 4 }}
-      >
-        {zh
-          ? `按 API 价格估算 ${costText(period.totals.cost, zh)}`
-          : `At API prices ${costText(period.totals.cost, zh)}`}
       </div>
       <div
         style={{

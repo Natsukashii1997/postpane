@@ -348,8 +348,8 @@ export function ModelLine({
       style={{ ...row, fontSize: 11 }}
       title={
         zh
-          ? `${model.provider} · ${model.name}\n${integer(model.selectedTokens)} 已选 Token\n按 API 价格估算 ${costText(model.cost, zh)}`
-          : `${model.provider} · ${model.name}\n${integer(model.selectedTokens)} selected tokens\n${costText(model.cost, zh)} at API prices`
+          ? `${model.provider} · ${model.name}\n${integer(model.selectedTokens)} 已选 Token`
+          : `${model.provider} · ${model.name}\n${integer(model.selectedTokens)} selected tokens`
       }
     >
       <Swatch color={modelColor(model.id)} />
@@ -531,14 +531,6 @@ export function TotalSummary({
         style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.2, ...number }}
       >
         {coverage.state === "unavailable" ? "—" : compact(animatedTokens)}
-      </div>
-      <div
-        title={costHelp(value.cost, zh)}
-        style={{ color: theme.secondary, fontSize: 11, marginTop: 2 }}
-      >
-        {zh
-          ? `按 API 价格估算 ${costText(value.cost, zh)}`
-          : `At API prices ${costText(value.cost, zh)}`}
       </div>
     </div>
   );
