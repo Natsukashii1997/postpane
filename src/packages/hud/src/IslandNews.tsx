@@ -10,6 +10,7 @@ import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
 import { QuotaAlertView } from "./alerts/QuotaAlertViews";
 import { queuedQuotas, shownNews } from "./alerts/quota-list";
+import { staysUntilSeen } from "./alerts/reply-stays";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -183,8 +184,13 @@ export function useIslandNews(
   const dismiss = () => setQueue(dismissIslandCard);
   const drop = (ids: readonly string[]) =>
     setQueue((previous) => dropIslandCards(previous, ids));
+  // Cards the pointer has rested on: a Hermes reply folds away only then.
+  const looked = useRef(new Set<string>());
   useEffect(() => {
+    if (current && held) looked.current.add(current.id);
     if (!current || held || current.type === "request") return;
+    if (staysUntilSeen(current.event) && !looked.current.has(current.id))
+      return;
     const timer = setTimeout(dismiss, 4000);
     return () => clearTimeout(timer);
   }, [current?.id, held]);
