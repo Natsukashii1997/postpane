@@ -14,9 +14,3 @@ export function stampFigure(bot: HermesBot): StampFigure | null {
   if (bot.id === "agumon") return "agumon";
   return null;
 }
-
-/** How far each stamp leans, so two in a row do not look printed. */
-export function stampTilt(bot: HermesBot): number {
-  const figure = stampFigure(bot);
-  return figure === "ogre" ? -5 : figure === "agumon" ? 4 : -2;
-}
