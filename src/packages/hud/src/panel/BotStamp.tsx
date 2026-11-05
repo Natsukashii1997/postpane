@@ -1,4 +1,4 @@
-import { stampFigure, stampTilt, type HermesBot } from "./bot-stamp";
+import { stampFigure, type HermesBot } from "./bot-stamp";
 import { PAPER_SEAL } from "../paper";
 
 /** Seal ink: vermilion on light paper, a lighter vermilion on dark. */
@@ -47,7 +47,7 @@ const AGUMON = (
   </>
 );
 
-/** A Hermes bot's square seal, pressed slightly askew. */
+/** A Hermes bot's square seal, upright (owner, 2026-11-05). */
 export function BotStamp({
   bot,
   size,
@@ -70,7 +70,6 @@ export function BotStamp({
         flex: "none",
         color: sealInk(light),
         opacity: 0.92,
-        transform: `rotate(${stampTilt(bot)}deg)`,
       }}
     >
       <rect
