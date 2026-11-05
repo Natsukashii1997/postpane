@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chatgptRow,
   mcpRow,
   pluginRow,
   toolsSwitch,
@@ -263,4 +264,56 @@ test("the switch explains itself only when it cannot change or the channel broke
     listening: false,
   });
   assert.deepEqual(unsupported.unavailable, unsupported.problem);
+});
+
+test("the ChatGPT row registers Chrome's manifest, then says whether the extension is connected", () => {
+  const input = {
+    manifestInstalled: false,
+    manifestCurrent: false,
+    helperFound: true,
+    supported: true,
+    connected: false,
+    running: null,
+  } as const;
+  const reading = chatgptRow({ ...input, manifestInstalled: null });
+  assert.deepEqual([reading.status[1], reading.action], ["正在检查…", null]);
+
+  const missing = chatgptRow(input);
+  assert.deepEqual(
+    [missing.tone, missing.status[1], missing.action?.label[1], missing.menu],
+    ["off", "未登记", "登记", []],
+  );
+  assert.equal(missing.action?.unavailable, undefined);
+  // A development build has no relay Chrome may start.
+  assert.equal(
+    chatgptRow({ ...input, helperFound: false }).action?.unavailable?.[1],
+    "需要从指定安装位置运行驿窗才能登记。",
+  );
+  const registering = chatgptRow({ ...input, running: "register" });
+  assert.equal(registering.busy?.[1], "正在登记…");
+
+  const elsewhere = chatgptRow({ ...input, manifestInstalled: true });
+  assert.deepEqual(
+    [elsewhere.tone, elsewhere.action?.id, elsewhere.menu[0]?.label[1]],
+    ["attention", "register", "移除"],
+  );
+  const waiting = chatgptRow({
+    ...input,
+    manifestInstalled: true,
+    manifestCurrent: true,
+  });
+  assert.deepEqual(
+    [waiting.tone, waiting.status[1], waiting.action],
+    ["installed", "未连接", null],
+  );
+  const connected = chatgptRow({
+    ...input,
+    manifestInstalled: true,
+    manifestCurrent: true,
+    connected: true,
+  });
+  assert.deepEqual(
+    [connected.tone, connected.status[1], connected.menu[0]?.id],
+    ["working", "已连接", "remove"],
+  );
 });

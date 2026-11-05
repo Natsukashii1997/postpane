@@ -9,6 +9,7 @@
 | 改需求、加功能 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | 构建、测试、打包 | [docs/development.md](docs/development.md)、[docs/platform-builds.md](docs/platform-builds.md)；下面「运行」 |
 | 接客户端、改钩子、审批卡 | [docs/agent-contract.md](docs/agent-contract.md)、[docs/client-hooks.md](docs/client-hooks.md) |
+| 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
 | 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |

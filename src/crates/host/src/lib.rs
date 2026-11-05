@@ -12,6 +12,7 @@ use agent_hud_hud::{bots, presentation, vendors};
 
 mod activity;
 mod capture;
+mod chatgpt;
 mod claude_plugin;
 mod cli;
 mod coordinator;
@@ -873,6 +874,10 @@ pub fn run_with_options(
             presentation_request,
             mcp_clients::native_mcp_clients,
             claude_plugin::native_claude_plugin,
+            chatgpt::native_chatgpt_extension,
+            chatgpt::chatgpt_open,
+            chatgpt::chatgpt_send,
+            chatgpt::chatgpt_status,
             deepseek_plugin::native_deepseek_plugin,
             picture::picture_payload,
             picture::picture_complete,
@@ -910,6 +915,12 @@ pub fn run_with_options(
             deepseek_plugin::repair_on_launch(app.handle());
             mcp_clients::repair_on_launch(app.handle());
             app.manage(picture::Pictures::default());
+            // The ChatGPT extension's socket, in the data folder; none in the demo.
+            app.manage(chatgpt::ChatGpt::start(
+                (!app.state::<AppState>().demo)
+                    .then(agent_hud_runtime::local_tools_directory)
+                    .transpose()?,
+            ));
             let directory = agent_hud_runtime::local_tools_directory()?;
             let demo_data = directory.join("demo-run");
             let legacy = if app.state::<AppState>().demo {

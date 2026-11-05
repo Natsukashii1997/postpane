@@ -6,6 +6,8 @@ import { failure, toolsSwitch } from "../../lib/agent-plugins";
 import type { Text } from "../SettingsPrimitives";
 import {
   cache,
+  type ChatGptService,
+  type ChatGptStatus,
   type ClaudePluginService,
   type ClaudePluginStatus,
   type MCPClientsService,
@@ -102,6 +104,55 @@ export function usePlugin(
   return { status, running, justInstalled, error, change };
 }
 export type PluginStatus = ReturnType<typeof usePlugin>;
+
+/** The ChatGPT extension's status, read again every 10 seconds while
+ * Settings is on screen (it connects while Chrome runs) and when the app
+ * comes to the front, and registering and removing Chrome's manifest. */
+export function useChatGpt(service: ChatGptService, active: boolean, t: Text) {
+  const [status, setStatus] = useState<ChatGptStatus | null>(cache.chatgpt);
+  const [running, setRunning] = useState<"register" | "remove" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const read = useRef(service);
+  read.current = service;
+  const apply = (next: ChatGptStatus) => {
+    cache.chatgpt = next;
+    setStatus(next);
+  };
+  useEffect(() => {
+    if (!active) return;
+    let dead = false;
+    const again = () =>
+      void read
+        .current("status")
+        .then((next) => {
+          if (!dead) apply(next);
+        })
+        .catch((failed) => {
+          if (!dead) setError(String(failed));
+        });
+    again();
+    const timer = setInterval(again, 10_000);
+    window.addEventListener("focus", again);
+    return () => {
+      dead = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", again);
+    };
+  }, [active]);
+  async function change(kind: "register" | "remove") {
+    setRunning(kind);
+    setError(null);
+    try {
+      apply(await read.current(kind === "register" ? "install" : "remove"));
+    } catch (failed) {
+      setError(t(...failure(kind, String(failed))));
+    } finally {
+      setRunning(null);
+    }
+  }
+  return { status, running, error, change };
+}
+export type ChatGpt = ReturnType<typeof useChatGpt>;
 
 /** Which clients have HUD tools, read when the page opens and when the app
  * comes to the front (so a command run in Terminal shows up), with adding,

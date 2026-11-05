@@ -6,7 +6,12 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
 import type { Snapshot } from "@agent-hud/protocol";
-import { mcpRow, pluginRow, type RowState } from "../../lib/agent-plugins";
+import {
+  chatgptRow,
+  mcpRow,
+  pluginRow,
+  type RowState,
+} from "../../lib/agent-plugins";
 import {
   Collapsible,
   Pill,
@@ -19,6 +24,7 @@ import { PluginControl, StatePill, StatusRow } from "./rows";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import {
   useBriefly,
+  type ChatGpt,
   type HudTools,
   type McpClients,
   type PluginStatus,
@@ -330,6 +336,66 @@ export function ProductClientCard({
       {items.map((item) => (
         <Fragment key={item.id}>{item.render(context)}</Fragment>
       ))}
+    </ClientCard>
+  );
+}
+
+/** ChatGPT through the PostPane Chrome extension: Chrome's manifest for the
+ * app's relay, registered here, and whether the extension is connected. It
+ * has no HUD tools. */
+export function ChatGptCard({
+  chatgpt,
+  light,
+  t,
+}: {
+  chatgpt: ChatGpt;
+  light: boolean;
+  t: Text;
+}) {
+  const { status } = chatgpt;
+  const state = chatgptRow({
+    manifestInstalled: status ? status.manifestInstalled : null,
+    manifestCurrent: Boolean(status?.manifestCurrent),
+    helperFound: Boolean(status?.helperFound),
+    supported: Boolean(status?.supported),
+    connected: Boolean(status?.connected),
+    running: chatgpt.running,
+  });
+  return (
+    <ClientCard
+      key={status ? "loaded" : "reading"}
+      name={t("ChatGPT (Chrome extension)", "ChatGPT（Chrome 插件）")}
+      logo="chatgpt"
+      light={light}
+      missing={false}
+      defaultOpen={
+        status !== null && (needsYou(state) || Boolean(chatgpt.error))
+      }
+      summary={
+        <>
+          <span className="plugins-cell">
+            <StatePill state={state} t={t} />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
+    >
+      <StatusRow
+        title={t("Chrome extension", "Chrome 插件")}
+        subtitle={t(
+          "In Chrome, open chrome://extensions, turn on Developer mode and load src/apps/chrome-extension from the repository.",
+          "在 Chrome 打开 chrome://extensions，开启开发者模式，加载仓库里的 src/apps/chrome-extension",
+        )}
+        column="plugin"
+        state={state}
+        error={chatgpt.error}
+        t={t}
+        onAction={(id) => {
+          if (id === "register" || id === "remove") void chatgpt.change(id);
+        }}
+      />
     </ClientCard>
   );
 }
