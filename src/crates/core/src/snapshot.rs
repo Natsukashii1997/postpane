@@ -404,6 +404,7 @@ impl crate::AgentHudCore {
                     .unwrap_or(true)
             }));
         }
+        sessions.extend(self.live_elsewhere());
         presentation::sort_sessions(&mut sessions);
         sessions
     }

@@ -1,8 +1,11 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { agentVendorName } from "../model";
+import { clientDisplayName } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
 import { useAlertPalette } from "./alert-palette";
+import { quotaAccent } from "./alert-tones";
+import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import {
   receiptMeterBox,
@@ -292,110 +295,114 @@ export function SignInAlertView({
   );
 }
 
-/** A quota window's news (Open's QuotaAlertDetailView): the agent with the
- * window under it, what happened in a sentence, the share used, how long
- * until empty (or what is left after a reset) and the next reset, the
- * window's bar, any other windows still empty, and the way to statistics. */
-export function QuotaAlertView({
+/** One quota notice as a strip: the agent's mark, the agent with the window
+ * and what happened, the share in the strip's colour and a close, then a thin
+ * bar (none after a reset) and a line of times. Opening it shows the usage
+ * statistics and puts it away; the close only puts it away. */
+function QuotaStrip({
   event,
-  dismiss,
+  first,
+  drop,
   onStats,
-  light = false,
-  botLogos = true,
-  zh = false,
+  light,
+  botLogos,
+  zh,
 }: {
   event: IslandEvent;
-  dismiss: () => void;
+  first: boolean;
+  drop: (ids: readonly string[]) => void;
   onStats?: () => void;
-  light?: boolean;
-  botLogos?: boolean;
-  zh?: boolean;
+  light: boolean;
+  botLogos: boolean;
+  zh: boolean;
 }) {
   const colors = useAlertPalette(light);
   const ink = colors.ink;
+  const ground = useGround(light);
   const track = usePanelPalette(light).track;
   const settings = useFormat();
   const copy = quotaAlertCopy(event, {
     ...settings,
     language: zh ? "zh" : "en",
   });
-  const isReset = event.kind === "quota-reset";
-  const tone = isReset ? "calm" : "warning";
-  const accentFill = colors.fill(tone);
-  const accentText = colors.text(tone);
-  const windowName = event.title ?? "";
+  const accent = quotaAccent(copy.tone, ground, colors.paper);
+  const red = quotaAccent("critical", ground, colors.paper);
+  const line = colors.paper ? colors.paper.line : ink(0.16);
+  const bar = copy.tone !== "reset" && copy.displayPct != null;
   return (
-    <article style={{ ...cardColumn(20), fontSize: 12, color: "inherit" }}>
-      <Heading
-        event={event}
-        name={agentVendorName(event.source)}
-        under={windowName || null}
-        news={
-          isReset ? (zh ? "已重置" : "reset") : zh ? "额度预警" : "running low"
-        }
-        accentFill={accentFill}
-        accentText={accentText}
-        light={light}
-        botLogos={botLogos}
-      />
-      <div style={{ fontSize: 12, color: ink(0.58) }}>{copy.title}</div>
-      <div
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        drop([event.id]);
+        onStats?.();
+      }}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "18px minmax(0, 1fr) auto 16px",
+        columnGap: 10,
+        alignItems: "center",
+        padding: first ? "0 0 10px" : "10px 0",
+        borderTop: first ? undefined : `1px dotted ${line}`,
+        cursor: "pointer",
+      }}
+    >
+      <ReminderMark event={event} size={18} light={light} botLogos={botLogos} />
+      <span
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 12,
+          fontSize: 13,
+          fontWeight: 600,
+          color: ink(0.94),
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
         }}
       >
-        <Metric value={copy.display} label={copy.displayLabel} light={light} />
-        <Metric
-          value={
-            isReset
-              ? settings.quotaDisplay === "remaining"
-                ? copy.used
-                : copy.remaining
-              : copy.exhaustion
-          }
-          label={
-            isReset
-              ? settings.quotaDisplay === "remaining"
-                ? zh
-                  ? "已用额度"
-                  : "used"
-                : zh
-                  ? "剩余额度"
-                  : "remaining"
-              : zh
-                ? "预计耗尽"
-                : "until empty"
-          }
-          light={light}
-        />
-        <Metric
-          value={copy.reset}
-          label={zh ? "下次重置" : "next reset"}
-          light={light}
-        />
-      </div>
-      <div style={cardColumn(7)}>
-        <div style={{ display: "flex", fontSize: 10, color: ink(0.42) }}>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {windowName}
-          </span>
-          <span style={{ flex: 1, minWidth: 8 }} />
-          <span style={{ fontVariantNumeric: "tabular-nums" }}>
-            {copy.display}
-          </span>
-        </div>
+        {clientDisplayName(event.source)}
+        <span style={{ fontWeight: 400, color: ink(0.72) }}>
+          {` · ${copy.status}`}
+        </span>
+      </span>
+      <span
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          color: accent,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {copy.display}
+      </span>
+      <button
+        type="button"
+        aria-label={zh ? "关闭" : "Dismiss"}
+        onClick={(click) => {
+          click.stopPropagation();
+          drop([event.id]);
+        }}
+        style={{
+          width: 16,
+          height: 16,
+          padding: 0,
+          display: "grid",
+          placeItems: "center",
+          border: 0,
+          background: "transparent",
+          color: ink(0.45),
+          cursor: "pointer",
+        }}
+      >
+        <X size={12} strokeWidth={2.2} />
+      </button>
+      {bar && (
         <div
           style={{
-            height: 4,
-            borderRadius: 4,
+            gridColumn: "2 / 4",
+            marginTop: 8,
+            height: 6,
+            borderRadius: 3,
             background: track,
             overflow: "hidden",
             ...(colors.paper && receiptMeterBox(colors.paper)),
@@ -405,27 +412,69 @@ export function QuotaAlertView({
             style={{
               width: `${copy.displayPct ?? 0}%`,
               height: "100%",
-              borderRadius: 4,
-              background: accentFill,
-              ...(colors.paper && receiptMeterFill(accentText)),
+              borderRadius: 3,
+              background: accent,
+              ...(colors.paper && receiptMeterFill(accent)),
             }}
           />
         </div>
-        {copy.otherLimits && (
-          <span style={{ fontSize: 10, color: accentText }}>
-            {copy.otherLimits}
-          </span>
-        )}
-      </div>
-      <StatsButton
-        fill={accentFill}
-        light={light}
-        zh={zh}
-        onClick={() => {
-          dismiss();
-          onStats?.();
-        }}
-      />
+      )}
+      {(copy.when || copy.stillEmpty) && (
+        <div
+          style={{
+            gridColumn: "2 / 4",
+            marginTop: bar ? 6 : 4,
+            fontSize: 12,
+            color: ink(0.5),
+            fontVariantNumeric: "tabular-nums",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {copy.when}
+          {copy.when && copy.stillEmpty && " · "}
+          {copy.stillEmpty && (
+            <span style={{ color: red }}>{copy.stillEmpty}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The quota news waiting (Open's QuotaAlertDetailView, drawn as strips):
+ * one strip per notice, newest first, dotted rules between them. */
+export function QuotaAlertView({
+  events,
+  drop,
+  onStats,
+  light = false,
+  botLogos = true,
+  zh = false,
+}: {
+  /** Newest first. */
+  events: IslandEvent[];
+  drop: (ids: readonly string[]) => void;
+  onStats?: () => void;
+  light?: boolean;
+  botLogos?: boolean;
+  zh?: boolean;
+}) {
+  return (
+    <article style={{ ...cardColumn(0), fontSize: 12, color: "inherit" }}>
+      {events.map((event, index) => (
+        <QuotaStrip
+          key={event.id}
+          event={event}
+          first={index === 0}
+          drop={drop}
+          onStats={onStats}
+          light={light}
+          botLogos={botLogos}
+          zh={zh}
+        />
+      ))}
     </article>
   );
 }

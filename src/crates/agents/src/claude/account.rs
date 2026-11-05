@@ -21,10 +21,10 @@ fn engine_env() -> [(&'static str, String); 1] {
     [("CLAUDE_CODE_ENTRYPOINT", "agent-hud".into())]
 }
 /// Claude Code's configuration folder: `CLAUDE_CONFIG_DIR`, or `~/.claude`.
-fn config_dir(host: &dyn Host) -> PathBuf {
+pub(super) fn config_dir(host: &dyn Host) -> PathBuf {
     variable(host, "CLAUDE_CONFIG_DIR").unwrap_or_else(|| host.home().join(".claude"))
 }
-fn profile(host: &dyn Host) -> Value {
+pub(super) fn profile(host: &dyn Host) -> Value {
     let path = variable(host, "CLAUDE_CONFIG_DIR")
         .unwrap_or_else(|| host.home().to_path_buf())
         .join(".claude.json");
@@ -426,14 +426,22 @@ fn plan_reading(
             percent,
             reset,
             family,
+            dollars,
         } = window;
         // "5h", "Weekly", and a family's weekly window by the family alone.
         let short = match family.as_deref() {
             Some(_) => window_names::leading(name.trim_start_matches("Weekly limit · ")),
             None if key == "claude-session" => window_names::Period::FiveHours.short_name(),
+            None if dollars.is_some() => "Cloud".into(),
             None => window_names::Period::Week.short_name(),
         };
-        reading.quotas.push(json!({"id":format!("{id}:{key}"),"vendor":"claude","name":name,"shortLabel":short,"usedPercent":percent,"resetAt":reset,"status":status(percent),"account":label,"accountId":account_identity,"legacyWindowId":format!("{account_identity}/{key}"),"consumerSource":"claude","windowDurationSeconds":if key=="claude-session"{5*3600}else{7*86400},"allModels":family.is_none(),"modelFamilies":family.map(|family|vec![family])}));
+        let mut row = json!({"id":format!("{id}:{key}"),"vendor":"claude","name":name,"shortLabel":short,"usedPercent":percent,"resetAt":reset,"status":status(percent),"account":label,"accountId":account_identity,"legacyWindowId":format!("{account_identity}/{key}"),"consumerSource":"claude","windowDurationSeconds":if key=="claude-session"{5*3600}else{7*86400},"allModels":family.is_none(),"modelFamilies":family.map(|family|vec![family])});
+        // Credits have no fixed cycle: `resetAt` is when they expire.
+        if let Some((used, limit)) = dollars {
+            row["windowDurationSeconds"] = Value::Null;
+            row["nativeUsage"] = json!({"used":used,"capacity":limit,"unit":"USD"});
+        }
+        reading.quotas.push(row);
     }
     reading
 }
@@ -445,6 +453,9 @@ struct Window {
     percent: f64,
     reset: Option<String>,
     family: Option<String>,
+    /// Dollars used and the limit, for a credit grant such as cloud session
+    /// credits; None for a plan window.
+    dollars: Option<(f64, f64)>,
 }
 
 /// The model families Claude names (agent-hud-native-open ClaudeModelInfo.families).
@@ -525,6 +536,7 @@ fn windows(limits: &Value) -> Option<Vec<Window>> {
                 percent,
                 reset,
                 family: None,
+                dollars: None,
             });
         }
     }
@@ -540,6 +552,33 @@ fn windows(limits: &Value) -> Option<Vec<Window>> {
             percent,
             reset,
             family: Some(family),
+            dollars: None,
+        });
+    }
+    // Cloud session credits: the service names the entry with a code word
+    // (`iguana_necktie` in November 2026), so it is found by its dollar
+    // fields, not its name. The first such grant is the one claude.ai shows.
+    let grant = limits
+        .as_object()
+        .into_iter()
+        .flatten()
+        .find_map(|(_, entry)| {
+            let limit = entry["limit_dollars"]
+                .as_f64()
+                .filter(|limit| *limit > 0.0)?;
+            let used = entry["used_dollars"]
+                .as_f64()
+                .filter(|used| used.is_finite())?;
+            Some((used.max(0.0), limit, window(entry, "utilization")?.1))
+        });
+    if let Some((used, limit, reset)) = grant {
+        rows.push(Window {
+            key: "claude-cloud-credits".into(),
+            name: "Cloud session credits".into(),
+            percent: (used / limit * 100.0).clamp(0.0, 100.0),
+            reset,
+            family: None,
+            dollars: Some((used, limit)),
         });
     }
     Some(rows)
@@ -762,6 +801,38 @@ mod tests {
             "a weekly_scoped entry wins over seven_day_<family>"
         );
         assert_eq!(rows[0].reset.as_deref(), Some("2026-10-21T15:00:00Z"));
+    }
+
+    #[test]
+    fn cloud_session_credits_follow_the_plan_windows_with_their_dollars() {
+        let usage = json!({"subtype": "success", "response": {
+            "rate_limits_available": true, "subscription_type": "max",
+            "rate_limits": {
+                "five_hour": {"utilization": 3.0, "limit_dollars": null},
+                "seven_day": {"utilization": 44.0, "limit_dollars": null},
+                "iguana_necktie": {"utilization": 43.6, "resets_at": "2026-11-05T07:59:00+00:00",
+                    "limit_dollars": 250, "used_dollars": 109.05, "remaining_dollars": 140.95},
+                "extra_usage": {"is_enabled": false, "used_credits": 0},
+                "limits": [{"kind": "weekly_scoped", "percent": 0.0, "scope": {"model": {"display_name": "Fable"}}}]
+            },
+        }});
+        let reading = read(&installed(usage)).unwrap();
+        let id = account_id("claude", &["user-1", "org-1"]);
+        assert_eq!(reading.quotas.len(), 4);
+        let credits = &reading.quotas[3];
+        assert_eq!(credits["id"], format!("{id}:claude-cloud-credits"));
+        assert_eq!(credits["name"], "Cloud session credits");
+        assert_eq!(credits["shortLabel"], "Cloud");
+        assert_eq!(credits["usedPercent"], 43.62);
+        assert_eq!(credits["resetAt"], "2026-11-05T07:59:00+00:00");
+        assert_eq!(credits["windowDurationSeconds"], Value::Null);
+        assert_eq!(credits["allModels"], true);
+        assert_eq!(
+            credits["nativeUsage"],
+            json!({"used": 109.05, "capacity": 250.0, "unit": "USD"})
+        );
+        // Without a grant there is no credits row.
+        assert_eq!(read(&installed(limits())).unwrap().quotas.len(), 2);
     }
 
     #[test]

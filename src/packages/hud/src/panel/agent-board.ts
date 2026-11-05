@@ -12,6 +12,7 @@ import {
   type WeekCalendar,
 } from "@agent-hud/ui/format";
 import { waitedText } from "../permissions/approval-list.ts";
+import { quotaCredits } from "../quota-rows.ts";
 import { quotaWindowLabel } from "./window-labels.ts";
 
 const finite = (value: number | null | undefined): value is number =>
@@ -127,7 +128,9 @@ export function boardVerdict(
     if (language === "en") words[0].text = capitalize(words[0].text);
     return { stamp: "tight", words };
   }
-  const judged = live.filter(({ outlook }) => outlook.projected != null);
+  // A credit grant has no cycle to forecast: it is left out of the count.
+  const paced = live.filter(({ row }) => !quotaCredits(row));
+  const judged = paced.filter(({ outlook }) => outlook.projected != null);
   if (!judged.length)
     return {
       stamp: "unknown",
@@ -142,7 +145,7 @@ export function boardVerdict(
       ],
     };
   const count = judged.length;
-  const rest = live.length - count;
+  const rest = paced.length - count;
   return {
     stamp: "enough",
     words: [
@@ -152,10 +155,10 @@ export function boardVerdict(
           count === 1
             ? say(
                 language,
-                live.length === 1
+                paced.length === 1
                   ? "这个额度在重置前用不完"
                   : `${name(judged[0].row)}在重置前用不完`,
-                live.length === 1
+                paced.length === 1
                   ? "this quota lasts until its reset"
                   : `${name(judged[0].row)} lasts until its reset`,
               )
@@ -199,6 +202,26 @@ export function quotaNote(
 ): { text: string; warn: boolean } | null {
   const outlook = quotaOutlook(row);
   if (!outlook.live) return null;
+  const credits = quotaCredits(row);
+  if (credits) {
+    const capacity = Math.round(credits.capacity);
+    const used = Math.round(Math.min(credits.used, credits.capacity));
+    return {
+      text:
+        display === "remaining"
+          ? say(
+              language,
+              `剩 $${capacity - used} / $${capacity}`,
+              `$${capacity - used} of $${capacity} left`,
+            )
+          : say(
+              language,
+              `已用 $${used} / $${capacity}`,
+              `$${used} of $${capacity} used`,
+            ),
+      warn: outlook.exhausted,
+    };
+  }
   if (outlook.exhausted)
     return {
       text: say(language, "已经用完，等重置", "Used up until its reset"),
@@ -257,27 +280,30 @@ export function quotaNote(
   return null;
 }
 
-/** When the window resets: "1 小时 28 分后重置", "周六 02:00 重置". */
+/** When the window resets: "1 小时 28 分后重置", "周六 02:00 重置"; for a
+ * credit grant, when it expires: "3 小时 25 分后到期". */
 export function resetText(
   resetAt: string | null,
   now: number,
   calendar: WeekCalendar,
   language: Language,
+  expires = false,
 ): string | null {
   const instant = resetAt ? Date.parse(resetAt) : NaN;
   if (!Number.isFinite(instant)) return null;
   const seconds = (instant - now) / 1000;
   if (seconds <= 0) return say(language, "等待更新", "Pending update");
+  const [zh, en] = expires ? ["到期", "Expires"] : ["重置", "Resets"];
   if (seconds < 86_400) {
-    if (language === "en") return `Resets in ${countdown(seconds)}`;
+    if (language === "en") return `${en} in ${countdown(seconds)}`;
     const minutes = Math.max(1, Math.round(seconds / 60));
     const hours = Math.floor(minutes / 60);
     return hours > 0
-      ? `${hours} 小时${minutes % 60 ? ` ${minutes % 60} 分` : ""}后重置`
-      : `${minutes} 分钟后重置`;
+      ? `${hours} 小时${minutes % 60 ? ` ${minutes % 60} 分` : ""}后${zh}`
+      : `${minutes} 分钟后${zh}`;
   }
   const when = relativeWeekdayTime(instant, now, calendar, language);
-  return say(language, `${when} 重置`, `Resets ${when}`);
+  return say(language, `${when} ${zh}`, `${en} ${when}`);
 }
 
 /** A session the panel lists: one waiting on you, or one at work. */

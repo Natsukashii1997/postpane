@@ -448,6 +448,10 @@ impl AccountService {
         {
             enabled.insert("codex".into());
         }
+        // Claude's cloud sessions are read with Claude Code's sign-in.
+        if enabled.contains("claude") {
+            enabled.insert(agents::claude::cloud::ID.into());
+        }
         // Relays are found in Claude Code's and Codex's configuration, or
         // added by hand for any agent; with none, the reader reads two
         // configuration files and asks nothing.
@@ -614,6 +618,12 @@ impl AccountService {
             result
                 .session_records
                 .extend(entry.reading.session_records.iter().cloned());
+            // Sessions running elsewhere show only while their reading is good.
+            if !entry.failed {
+                result
+                    .live_sessions
+                    .extend(entry.reading.live_sessions.iter().cloned());
+            }
             result
                 .services
                 .extend(entry.reading.services.iter().cloned());
@@ -1007,8 +1017,11 @@ fn due_after(provider: &str, entry: &Entry, state: &Control) -> Duration {
         && !entry.failed
         && !resets.is_empty()
         && resets.iter().all(|reset| *reset > entry.attempted_ms);
+    let every = facts(provider).and_then(|facts| facts.every);
     let interval = if state.force.contains(provider) {
         60
+    } else if let Some(every) = every {
+        every
     } else if running {
         150 + entry.spread
     } else if live || !local || !quiet_known_reset {

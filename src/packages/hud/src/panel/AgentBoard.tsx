@@ -27,6 +27,7 @@ import {
   type Words,
 } from "./agent-board";
 import { quotaWindowLabel } from "./window-labels";
+import { quotaCredits } from "../quota-rows";
 
 /** The board's inks where it is drawn: on the receipt's paper, or on the
  * HUD's own ground. */
@@ -238,7 +239,13 @@ function QuotaLine({
   const outlook = quotaOutlook(row);
   const note = quotaNote(row, now, format.language, format.quotaDisplay);
   const reset = countdown
-    ? resetText(row.resetAt, now, format.calendar, format.language)
+    ? resetText(
+        row.resetAt,
+        now,
+        format.calendar,
+        format.language,
+        quotaCredits(row) != null,
+      )
     : null;
   const name = quotaWindowLabel(row, format.language);
   const level =

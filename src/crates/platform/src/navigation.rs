@@ -152,6 +152,10 @@ fn session_url_on(target: &Value, os: Os, registered: impl Fn(&str) -> bool) -> 
             let section = if cowork { "cowork" } else { "epitaxy" };
             Some(format!("claude://claude.ai/{section}/{local_id}"))
         }
+        // A cloud session opens on claude.ai, where it runs.
+        "claude-cloud-session" if agent_hud_agents::claude::cloud::cloud_id(id) => {
+            Some(format!("https://claude.ai/code/{id}"))
+        }
         "iterm-session" | "iTermSession" if !id.trim().is_empty() && id.len() <= 4096 => {
             let mut url = reqwest::Url::parse("iterm2:reveal").ok()?;
             url.query_pairs_mut().append_pair("sessionid", id);

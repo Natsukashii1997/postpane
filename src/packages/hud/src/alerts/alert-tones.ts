@@ -3,6 +3,7 @@ import {
   alertFill,
   alertInk,
   alertText,
+  levelText,
   onAlertFill,
   type AlertTone,
 } from "../tokens.ts";
@@ -47,4 +48,20 @@ export function alertPalette(
           : paper.ink,
     onFill: paper.paper,
   };
+}
+
+/** A quota strip's accent, as its figure and its bar: amber running low, red
+ * used up, blue reset (on the HUD's own ground, its calm reset tone), and the
+ * dim ink with no reading. */
+export function quotaAccent(
+  tone: "warning" | "critical" | "reset" | "none",
+  ground: Parameters<typeof alertFill>[1],
+  paper: Paper | null,
+): string {
+  if (tone === "warning")
+    return paper ? paperLevel("warning", paper) : alertText("warning", ground);
+  if (tone === "critical")
+    return paper ? paper.red : levelText("critical", ground);
+  if (tone === "reset") return paper ? paper.blue : alertText("calm", ground);
+  return paper ? paper.dim : alertInk(0.55, ground);
 }

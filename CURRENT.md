@@ -1,11 +1,11 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装默认不显示的改动待审（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装默认不显示的改动待审（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
 
 ## 菜单栏图标新装默认不显示（2026-11-05，Claude 云端会话，常浩派的遗留修正，要求只开 PR 不合并；已提交并推送到 `claude/adoring-ride-pipfny`，PR #57 草稿待审，未发布）
 
 - 时间：开工 `2026-11-05 12:25`（估计：第一次 `date` 是 12:29，换算自容器的 UTC 时钟；本节写于 `2026-11-05 12:45`）。来由：「阶段 4 收尾：小人不改，菜单栏图标关掉」一节的遗留——新装默认值仍是显示。
-- 改了哪些文件：`src/crates/core/src/lib.rs`（默认设置 `showMenuBarIcon` 改 `false`，唯一决定新装默认值的地方）、`src/crates/hud/src/presentation/app_rules.rs`、`src/crates/host/src/coordinator.rs`、`src/packages/app/src/settings/GeneralPane.tsx`（三处缺值兜底统一为不显示）、`src/crates/core/src/settings.rs`（新测试：新装 false；已存 true/false 照用；旧文件缺这一项为 false；原版导入 true 照用）、`src/packages/protocol/src/index.ts`（字段注释）、`docs/parity/c04-models-logic.md` #88 改 `deliberate` 与小结、`docs/parity/README.md`（脚本重算）、`docs/ROADMAP.md` 阶段 4 状态、`docs/LESSONS.md`（L-04）、本文件。已有设置照用户的值，不迁移、不覆盖。
+- 改了哪些文件：`src/crates/core/src/lib.rs`（默认设置 `showMenuBarIcon` 改 `false`，唯一决定新装默认值的地方）、`src/crates/hud/src/presentation/app_rules.rs`、`src/crates/host/src/coordinator.rs`、`src/packages/app/src/settings/GeneralPane.tsx`（三处缺值兜底统一为不显示）、`src/crates/core/src/settings.rs`（新测试：新装 false；已存 true/false 照用；旧文件缺这一项为 false；原版导入 true 照用）、`src/packages/protocol/src/index.ts`（字段注释）、`docs/parity/c04-models-logic.md` #88 改 `deliberate` 与小结、`docs/parity/README.md`（脚本重算）、`docs/ROADMAP.md` 阶段 4 状态、`docs/LESSONS.md`（L-06）、本文件。已有设置照用户的值，不迁移、不覆盖。
 - 测试：云端 Linux，Node `v24.22.2`，先跑 `node src/tooling/package-resources.mjs`。`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 634 passed / 0 failed；`ℹ pass 166` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` 写完本节后重跑 `ℹ pass 4` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。日志在会话临时目录，未进证据目录（云端无本机路径）。
 - 验证：只有自动测试。macOS 专属代码未编译（Mac 上 Rust 是 642 项，这里 634 项）；未打包、未实机看菜单栏和设置页开关。
 - 截图：无。
@@ -14,7 +14,48 @@
   - 从代码推断、未实机核实：`src/crates/host/src/tray.rs` 的 `install()` 建图标时是显示的，等第一份快照才按设置隐藏，启动时可能闪一下；本机关图标后就已存在，未改，记在 PR 里请常浩定。
   - 手写设置文件没写 `showMenuBarIcon` 的，升级后由显示变为不显示；驿窗自己写的文件总带这一项，不受影响。
   - 云端容器为跑检查装了 GTK/WebKit 开发库、临时装了 Node 24（只在本会话容器内）。
-- 本轮新坑：L-04。
+  - 开 PR 后 main 前进了 6 个提交（PR #58、#62、#63 及交接），`CURRENT.md`、`docs/LESSONS.md` 冲突；已把 main 合入分支（不改历史），main 已用掉 L-04、L-05，本条坑改编号为 L-06，合并后重跑：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 639 passed / 0 failed；`ℹ pass 175` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。
+- 本轮新坑：L-06。
+
+## 侧栏额度预警卡改成细条（2026-11-05，Claude，常浩看过三版预览选「丙」，开工指令经 agent-hud 插件转入（与待答问题对得上），看过安装后的应用说「合并」；PR #62 测试全过已 squash 合并 `cdcb999`，已从 main 重新打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 12:55`（估计，按插件转入「开工」那条消息；本节写于 `2026-11-05 13:34`）。来由：侧栏面板逐个梳理的第五项（面板清单 14）；三版预览与定稿 https://claude.ai/artifact/5PS5DhbhkCkscx7bkc5eCq ，issue #59。
+- 改了哪些文件（PR #62，实现由子 agent 完成、我对照定稿截图和队列逻辑审核）：`src/packages/hud/src/alerts/QuotaAlertViews.tsx`（`QuotaAlertView` 改成细条列表：图标、「智能体 · 中文窗口名 + 状态」、彩色百分比、×，细进度条与时间行；点整条打开用量统计并关掉这条，× 只关这条）、`alerts/quota-alert-copy.ts`（预计用完 / 已用完 / 到 90% / 已重置四种状态句与时间行，中英文）、`alerts/quota-list.ts`（新：队列里的额度预警与重置合并、最新在上）、`alerts/alert-tones.ts`（`quotaAccent`：黄 / 红 / 蓝）、`alerts/CompactAlertView.tsx`（小签改为图标 + 窗口名 + 彩色百分比，宽度同步）、`IslandNews.tsx`、`HUDScene.tsx`、`scene/useHUDLayout.ts`；测试 `test/quota-alert-copy.test.ts`（重写）、`test/quota-list.test.ts`（新）。另本轮交接改 `docs/LESSONS.md`（L-05）。
+- 测试：在分支提交 `bf7cb61` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 643 passed / 0 failed；`ℹ pass 175` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/check.log`、`test.log`（子 agent 跑，我核对过结果行）。合并后的 main `cdcb999` 只打包、未重跑测试。
+- 验证：子 agent 用临时页面打包真实组件、无头浏览器截图（临时文件已删）；我对照定稿看过四条同时、小签、浅色英文。额度卡只在额度越过阈值或重置时才弹，实机上未见到真实弹卡。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/`（`quota-*-dark-zh.png`、`quota-light-en.png`、`quota-chip-*.png`、`quota-notch-dark-zh.png`，组件渲染图，非实机）。
+- 发布与回读：分支版 13:13:33 装过一次，13:14:07 被另一会话的 #63 安装覆盖（见 L-05），常浩说「合并」时实机里的是 #63 版。合并后从 main `cdcb999`（含 #62、#63）重新打包，13:32:31 ditto 到 `/Applications` 并重启；`shasum` 回读与打包产物一致（`2d7374bb99bd`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-quota-strip/PostPane-before-main.app /Applications/PostPane.app`（#63 版）；改版之前的版本在同目录 `PostPane-before.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：到 90% 算不出速度时写「已用到 90%」，不跟「已用 / 剩余」设置；智能体名用 `clientDisplayName`（Codex 显示「Codex」，原卡是「OpenAI」）；刘海模式没有纸面，重置用原有 calm 绿色而非蓝色（改 `quotaAccent` 一行即可）；小签只显示队首一条，不显示条数；时间行钟点不加粗。
+  - 4 秒自动消失仍只关队首那条，多条时卡片一条条变短，未改（与回复卡相同）。
+  - 可清理 worktree 增加 `.claude/worktrees/59-quota-strip`（现已检出 main `cdcb999`，分离头），清理前问常浩。
+- 本轮新坑：L-05。
+
+## 侧栏「正在进行」显示 Claude 云端会话，超过 5 条可滚动（2026-11-05，Claude，常浩问「做这个复杂么，没大问题就正常做加进去，正在进行最多显示 5 个，再多做侧边滚动条」，看过 4 批计划；按「测试全过可直接合并」的授权合并；PR #63，已打包安装）
+
+- 时间：开工 `2026-11-05 12:50`（按 issue #60 创建时间 04:50:31Z；本节写于 `2026-11-05 13:20`）。来由：常浩发现驿窗只显示 4 个在进行，实为云端会话（Anthropic 服务器上跑的）本机没有记录、读不到；issue #60。
+- 改了哪些文件：`src/crates/agents/src/claude/cloud.rs`（新：`claude-cloud` 读取器，每 60 秒用 Claude Code 登录读 `api.anthropic.com/v1/sessions`，只取 `anthropic_cloud` 中在跑 / `blocked` 等你的会话，整理成会话行）、`agents/src/account.rs`（`Reading.live_sessions`、`Provider.every`）、`agents/src/agent.rs`（读取器排在末尾）、`agents/src/claude/account.rs`（`profile`、`config_dir` 放开给同级模块）、`agents/src/{antigravity,cursor,deepseek}/account.rs`（补新字段）、`core/src/accounts.rs`（`AccountProjection.live_sessions`、`live_elsewhere` 去重）、`core/src/snapshot.rs`（快照追加云端会话）、`core/src/sessions.rs`（`session_detail` 能按 ID 找到云端会话）、`core/src/demo/mod.rs`、`platform/src/accounts/mod.rs`（Claude 启用时同时启用 `claude-cloud`；读取失败不显示；`every` 固定间隔）、`platform/src/accounts/restart_copy.rs`（重启不恢复云端会话）、`platform/src/navigation.rs`（`claude-cloud-session` 打开 `https://claude.ai/code/<id>`）、`src/packages/hud/src/panel/SessionsSection.tsx`（列出全部，超过 5 条区域内滚动；云端副标题加「云端 ·」；去掉「还有 N 个在进行」）、`docs/session-data.md`、`docs/LESSONS.md`；测试：`claude/cloud.rs` 2 个、`platform/src/navigation/tests.rs` 1 个、`core/src/tests/sessions.rs` 1 个。
+- 测试：在分支（变基到 `e0d474b` 之前的同内容提交）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 167` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。首轮 `pnpm test` 有 1 项失败（`readings_run_in_opens_source_order`：新读取器插在 claude 后面，打乱了原版顺序），改成排在末尾后重跑全过。变基只带进 main 上两个改 `CURRENT.md` 的提交，代码未变，没有重跑。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-cloud-sessions/check.log`、`test.log`。
+- 验证：接口先用脚本只读实测（2026-11-05 12:4x，返回 200，字段见 issue #60）；装机后 13:14:38 用 MCP `hud_snapshot` 取快照，没有父会话、在跑或等你的会话 4 个，其中云端 1 个（digiworld），与同一时刻接口返回的云端在跑数一致；`get_hud_screenshot` 面板截图第 4 行显示「云端 · 正在干活」。未验证：超过 5 条时的滚动（当时只有 4 个在进行）、点击云端会话打开网页。
+- 截图：无单独存档（MCP 截图只在本会话里看过，标题被打码）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（13:14:07）。注意：`osascript` 的 quit 退不掉驿窗，用 `kill -TERM` 才退出。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-cloud-sessions/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：云端会话不进统计窗口（接口没有 Token 数）；读取间隔 60 秒，云端会话结束后最多约 1 分钟才从列表消失；Claude Code 登录过期时云端会话暂时不显示，等它自己续期。
+- 本轮新坑：L-04
+
+## Claude 额度看板：每周 Fable 换成云端额度（2026-11-05，Claude，常浩要求把每周 Fable 改成 claude.ai 的 Cloud session credits，确认方案后选「设置里隐藏 Fable」；PR #58 测试全过已 squash 合并 `412d863`，已打包安装）
+
+- 时间：开工 `2026-11-05 12:32`（本会话创建时间；本节写于 `2026-11-05 12:50`）。来由：常浩截图对比 claude.ai 用量弹窗与驿窗 Claude 看板，issue #56。
+- 改了哪些文件：`src/crates/agents/src/claude/account.rs`（`get_usage` 里带 `limit_dollars`/`used_dollars` 的一项读成 `claude-cloud-credits` 行，金额进 `nativeUsage`，无周期）、`src/packages/hud/src/quota-rows.ts`（`quotaCredits` 按 `metrics.consumed.unit === "USD"` 认出）、`panel/agent-board.ts` 与 `AgentBoard.tsx`（「…后到期」、条下已用/剩余金额、不参与预测和判词计数）、`panel/window-labels.ts`（「云端额度」）、`model.ts`（静止条最紧额度不算它）；测试 `account.rs` 1 个、`test/agent-board.test.ts` 1 个。
+- 测试：分支提交 `931b56f`（与 main `412d863` 内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 643 passed / 0 failed；`ℹ pass 167` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-cloud-credits/56-check.log`。
+- 验证：本机直接调 Claude 引擎 `get_usage`，确认该项为 `iguana_necktie`：上限 250、已用 109.05、`resets_at` 2026-11-05T07:59Z，与 claude.ai 弹窗一致；装好新版后用 HUD 工具 `get_hud` 回读，Claude 块多出 `Cloud session credits` 行（`usedPercent` 55.58、`consumed` 138.95/250 USD、`windowDurationSeconds` 为空）；放好隐藏 Fable 的草稿后用 `get_hud_screenshot` 截面板，看到「云端额度 56%　3 小时 9 分后到期　已用 $139 / $250」，判词为「两个额度在重置前都用不完」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-cloud-credits/panel-draft-dark-zh.png`（应用内面板渲染，含未保存草稿，账户已遮盖）。
+- 发布与回读：`PostPane.app`（worktree 分支提交 `931b56f` 打包，内容同 main `412d863`）已 ditto 到 `/Applications` 并重启（12:49:30，按 L-03），回读见「验证」。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-cloud-credits/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 每周 Fable 未改代码，经 HUD 工具 `draft_hud` 放了草稿 `blocks.claude.hiddenRows = ["claude-weekly-fable"]`，需常浩在面板点「保存」才生效（重启前未保存会丢，安装重启后已重新放过一次）。
+  - 这笔云端额度今天 15:59 到期，之后接口不返回，这一行自动消失。
+  - 额度阈值提醒对云端额度行仍按百分比走，未单独处理。
+  - 第一次把读取层改在了主目录，随后移进 worktree `.claude/worktrees/56-cloud-credits`，主目录已还原。可清理 worktree 现共 19 个，清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏新回复通知卡改成清单回执（2026-11-05，Claude，常浩看过三版预览选甲「清单回执」，确认计划后说「开工」，装好后说「合并」；PR #55 测试全过已 squash 合并 `1315622`、已打包安装）
 

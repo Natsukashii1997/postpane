@@ -9,6 +9,7 @@ import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
+import { quotaCredits } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
 import {
@@ -153,8 +154,9 @@ export function vendorsFromSnapshot(
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
+    // A credit grant is spending money, not a plan limit: it never heads the mark.
     const measured = quotas.filter(
-      (q) => q.usedPercent != null && q.status !== "stale",
+      (q) => q.usedPercent != null && q.status !== "stale" && !quotaCredits(q),
     );
     const tightest = measured.reduce<(typeof measured)[number] | undefined>(
       (a, b) => (!a || b.usedPercent! > a.usedPercent! ? b : a),
