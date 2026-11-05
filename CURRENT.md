@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+
+## 侧栏待审批卡改成清单卡（2026-11-05，Claude，常浩经三轮预览选定丙「清单」并逐项调整，说「可以，开工」，看过实物后说「可以合并」；PR #49 测试全过已 squash 合并 `a059217`、已打包安装）
+
+- 时间：开工 `2026-11-05 09:58`（估计，按「可以，开工」那条消息；本节写于 `2026-11-05 10:32`）。来由：常浩要逐个梳理侧栏面板内容，先做待审批卡；面板清单 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，定稿预览 https://claude.ai/artifact/3PevPG5CE3DRAExnbhouoY ，issue #48。
+- 改了哪些文件（PR #49，实现由子 agent 完成、我审核）：`src/crates/agents/src/claude/transcript.rs`（读桌面会话元数据的 `effort`，读 `claude_desktop_config.json` 的侧栏分区并按修改时间缓存，读不到当未分区）、`src/crates/core/src/presentation.rs`（会话带 `effort`、`section`）、`agents/src/transcript/log.rs` 与 `codex/transcript.rs`、`core/src/database/checkpoints.rs`、`core/src/ingestion.rs`（Codex 从 `turn_context` 读推理强度）、`src/packages/protocol/src/index.ts`（`Session.effort`、`Session.section`）、`hud/src/permissions/approval-list.ts`（新：排序、分组、折叠、找会话与退回、能否回到会话）、`ApprovalTag.tsx`（新：统一画框标签）、`ApprovalContent.tsx`（重写为清单卡、删工作目录行、↗ 复用 `openSession`）、`PermissionQuestionCard.tsx`（虚线小标题、前情调亮）、`PermissionToolCard.tsx`（「批准一次」改「允许一次」）、`HUDScene.tsx`、`IslandNews.tsx`；测试 `hud/test/approval-list.test.ts`（10 个）和 Rust 4 个。
+- 测试：在合并前的分支提交 `209255a` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 19 组 `test result: ok`，合计 642 passed / 0 failed；`ℹ pass 148` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-05-approval-list/`。
+- 验证：子 agent 把真实 `ApprovalContent` 渲染成静态页截图（深色、浅色、英文超过 5 条），我对照定稿看过（`shot.png` 在证据目录）；实机由常浩看过侧栏后同意合并。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-approval-list/shot.png`（组件渲染图，非实机）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（10:30:19，按 L-03）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-approval-list/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：分组按组内等得最久的一条排序（不按 Claude 侧栏分区顺序）；全部无分区时不印组标题；「还有 N 条」点开全部展开；点 REPLY 行仍切到原回复通知卡；刘海模式也用清单卡版式（不盖印章，未看实物）。
+  - 分区读取依赖 Claude 应用内部设置格式，应用升级后可能读不到，届时退回「未分区」。
+  - 演示模式的外观设置目录 `~/Library/Application Support/app.postpane.mac/demo/presentation.json` 里放了一份常浩的真实显示设置（截面板清单用），正式版不读它；原默认值备份在 `evidence/2026-11-05-panel-inventory/demo-presentation-default.json`。
+  - 可清理 worktree 增加 `.claude/worktrees/48-approval-list`（现共 15 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏 Codex 小人第二版：打盹加强、各动作更明显（2026-11-05，Claude，常浩审核第一版动作库后说打盹不明显、其余都再明显一点；确认三批计划后说「按计划开始」，看过实物和审核页后说「同意合并」；PR #47 测试全过已 squash 合并 `c7f9ed5`、已打包安装、审核页已更新到第二版）
 
