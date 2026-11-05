@@ -30,3 +30,12 @@ pub(crate) fn system_prefers_chinese() -> bool {
 pub(crate) fn alert(title: &str, body: &str, _ok: &str) {
     eprintln!("{title}: {body}");
 }
+
+/// Opens `url` in the default browser.
+pub(crate) fn open_in_browser(url: &str) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}

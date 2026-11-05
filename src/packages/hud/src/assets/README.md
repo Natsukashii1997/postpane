@@ -29,3 +29,8 @@ this UI package.
 This asset inventory establishes the original visual sources. A React
 renderer must still reproduce original layout, tinting and animation behavior
 before visual parity can be claimed.
+
+`float-notes-ball.png` is the 随手记 (floating notes) ball, copied unchanged
+from the owner's own Digital World project
+(`digiworld/desktop/floating-notes/ball.png`); it is the notes' own entry,
+shown as it is in the resting HUD (`scene/AppPendant.tsx`).

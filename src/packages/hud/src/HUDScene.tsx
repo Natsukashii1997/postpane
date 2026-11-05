@@ -27,6 +27,7 @@ import {
   RequestDeliveryNotice,
 } from "./permissions/ApprovalContent";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
+import { AppPendant } from "./scene/AppPendant";
 import { HUDMarkStrip } from "./scene/HUDMarkStrip";
 import { FlightLayer, type HUDFlightCommand } from "./scene/FlightLayer";
 import { NotchGlow } from "./scene/NotchSurface";
@@ -80,6 +81,8 @@ export interface HUDSceneProps {
   snapshot: Snapshot;
   config: HUDConfig;
   onConfigure?: () => void;
+  /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
+  onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
   onStats?: (target?: StatsTarget) => void;
   /** The product's newer version, and the way to it (the panel footer's arrow). */
   update?: HUDUpdateNotice | null;
@@ -157,6 +160,7 @@ export function HUDScene({
   snapshot,
   config: supplied,
   onConfigure,
+  onFloatNotes,
   onStats,
   update,
   onUpdate,
@@ -1068,6 +1072,17 @@ export function HUDScene({
               pin={pin}
             />
           </div>
+          {config.mode === "logos" && onFloatNotes && !dragVisual && (
+            <AppPendant
+              strip={strip}
+              edge={edge}
+              logo={metrics.logo}
+              light={light}
+              zh={snapshotLanguage(snapshot) === "zh"}
+              room={{ width: window.innerWidth, height: window.innerHeight }}
+              onToggle={onFloatNotes}
+            />
+          )}
           {dragVisual && (
             <svg
               aria-hidden="true"
