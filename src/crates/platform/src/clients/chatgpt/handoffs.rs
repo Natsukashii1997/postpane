@@ -156,12 +156,20 @@ pub struct Handoff {
     /// open can be retried. Never in the snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brief: Option<String>,
+    /// How many times its conversation was asked to open: each try has its
+    /// own request (`request`), so an old try's late answer binds nothing.
+    #[serde(default)]
+    pub attempt: u32,
 }
 
 impl Handoff {
     /// Opening or open: the handoff a session or conversation belongs to.
     pub fn live(&self) -> bool {
         matches!(self.status, Status::Opening | Status::Open)
+    }
+    /// The request its conversation is opened under, this try's.
+    pub fn request(&self) -> String {
+        format!("{}~{}", self.id, self.attempt)
     }
     /// How many reviews were asked for.
     pub fn reviews(&self) -> u32 {
@@ -278,6 +286,7 @@ impl Book {
                 Some(summary.unwrap_or(title)),
             )],
             brief: Some(brief.to_owned()),
+            attempt: 0,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -286,9 +295,12 @@ impl Book {
     /// The review conversation opened (late, too, after a timeout): the
     /// handoff is bound to it, and any other handoff that held it lets it go.
     pub fn opened(&mut self, id: &str, conversation: &str, now: i64) -> bool {
+        // A failed one binds late only while its session has no newer handoff.
         let waiting = self.get(id).is_some_and(|handoff| {
             handoff.status == Status::Opening
-                || (handoff.status == Status::Failed && handoff.brief.is_some())
+                || (handoff.status == Status::Failed
+                    && handoff.brief.is_some()
+                    && self.for_session(&handoff.claude_session).is_none())
         });
         if !waiting {
             return false;
@@ -312,6 +324,17 @@ impl Book {
             .push(Step::new(now, StepKind::Ask, Some(&brief)).keyed(&key(&brief)));
         handoff.enter(Phase::Delivered, now);
         true
+    }
+    /// A conversation opened for `request` (`Handoff::request`), whenever
+    /// the answer came: bound only if it is the handoff's current try.
+    pub fn opened_late(&mut self, request: &str, conversation: &str, now: i64) -> bool {
+        let Some((id, attempt)) = request.rsplit_once('~') else {
+            return false;
+        };
+        let current = self
+            .get(id)
+            .is_some_and(|h| h.chatgpt_conversation.is_none() && h.attempt.to_string() == attempt);
+        current && self.opened(id, conversation, now)
     }
     /// The review conversation could not be opened; the brief stays for a retry.
     pub fn failed(&mut self, id: &str, error: &str, now: i64) -> bool {
@@ -337,6 +360,7 @@ impl Book {
         }
         let handoff = self.get_mut(id)?;
         let brief = handoff.brief.clone()?;
+        handoff.attempt += 1;
         handoff.status = Status::Opening;
         handoff.error = None;
         handoff.enter(Phase::Sending, now);
@@ -409,13 +433,35 @@ impl Book {
         handoff.enter(Phase::Working, now);
         true
     }
-    /// ChatGPT answered in `conversation`: its points and verdict are kept,
-    /// and the answer in full until a newer one comes.
-    pub fn replied(&mut self, conversation: &str, reply: &str, now: i64) -> bool {
+    /// ChatGPT answered in `conversation` while a review was asked for: its
+    /// points and verdict are kept, and the answer in full until a newer one
+    /// comes. The same message (`message`, its id) is taken once; other
+    /// turns of the conversation (the person chatting on) are not the review.
+    pub fn replied(
+        &mut self,
+        conversation: &str,
+        reply: &str,
+        message: Option<&str>,
+        now: i64,
+    ) -> bool {
         let Some(handoff) = self.conversation_mut(conversation) else {
             return false;
         };
-        if reply.trim().is_empty() {
+        if reply.trim().is_empty()
+            || !matches!(
+                handoff.phase,
+                Phase::Sending | Phase::Delivered | Phase::Working
+            )
+        {
+            return false;
+        }
+        let message = message.filter(|id| !id.is_empty());
+        if message.is_some_and(|id| {
+            handoff
+                .steps
+                .iter()
+                .any(|step| step.kind == StepKind::Reply && step.key.as_deref() == Some(id))
+        }) {
             return false;
         }
         for step in &mut handoff.steps {
@@ -432,7 +478,7 @@ impl Book {
             text: Some(excerpt(reply.trim(), REPLY_KEPT)),
             points,
             verdict,
-            key: None,
+            key: message.map(str::to_owned),
         });
         handoff.enter(Phase::Replied, now);
         true
@@ -800,7 +846,11 @@ mod tests {
         assert!(book.working("c1", 3));
         assert_eq!(book.get(&handoff.id).unwrap().phase, Phase::Working);
         let reply = "看了改动：\n\n1. **会话认不准**时不该猜；\n2. opening 要超时\n   - 子项不算\n3) 区分送到和审完\n\n结论：需修改";
-        assert!(book.replied("c1", reply, 4));
+        assert!(book.replied("c1", reply, Some("m1"), 4));
+        assert!(
+            !book.replied("c1", reply, Some("m1"), 4),
+            "the same message once"
+        );
         let kept = book.get(&handoff.id).unwrap();
         assert_eq!(kept.phase, Phase::Replied);
         let last = kept.last_reply().unwrap();
@@ -813,6 +863,10 @@ mod tests {
         assert!(
             !book.asked_already(&handoff.id, "请审核"),
             "answered: it may go again"
+        );
+        assert!(
+            !book.replied("c1", "随便聊聊", Some("m2"), 5),
+            "answered: further chat is not the review"
         );
         assert!(book.returned(&handoff.id, StepKind::Back, "意见", 5));
         assert!(book.returned_already(&handoff.id, "意见"));
@@ -867,7 +921,13 @@ mod tests {
             (Status::Failed, Phase::Failed)
         );
         assert_eq!(failed.steps.last().unwrap().kind, StepKind::Fail);
+        let old = book.get(&first.id).unwrap().request();
         assert_eq!(book.retry(&first.id, 200_000).as_deref(), Some("brief one"));
+        assert_ne!(
+            book.get(&first.id).unwrap().request(),
+            old,
+            "a retry is a new request"
+        );
         assert_eq!(book.get(&first.id).unwrap().status, Status::Opening);
         // The app restarted while it opened.
         assert!(book.interrupted(200_001, "restarted"));
@@ -875,12 +935,24 @@ mod tests {
             book.get(&first.id).unwrap().error.as_deref(),
             Some("restarted")
         );
-        // It opened late after all: bound.
-        assert!(book.opened(&first.id, "c1", 200_002));
+        // The first try's late answer binds nothing; the current try's does.
+        assert!(!book.opened_late(&old, "c0", 200_002));
+        let current = book.get(&first.id).unwrap().request();
+        assert!(book.opened_late(&current, "c1", 200_002));
         assert_eq!(book.get(&first.id).unwrap().status, Status::Open);
         assert!(
             book.retry(&first.id, 1).is_none(),
             "only a failed one retries"
         );
+    }
+
+    #[test]
+    fn a_failed_one_is_not_bound_late_once_its_session_moved_on() {
+        let mut book = Book::default();
+        let old = book.begin("s1", None, "t", None, "one", 0);
+        book.failed(&old.id, "timeout", 1);
+        let newer = book.begin("s1", None, "t", None, "two", 2);
+        assert!(!book.opened_late(&old.request(), "c-old", 3));
+        assert!(book.opened_late(&newer.request(), "c-new", 3));
     }
 }

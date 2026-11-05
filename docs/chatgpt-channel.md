@@ -63,8 +63,9 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - `status`：`opening`（新会话正在打开）→ `open`（已绑定会话）或 `failed`（打开失败，`error` 写原因）；同一个 Claude 会话发起新审核、或常浩点「结束接力」时改成 `closed`。一个 Claude 会话、一个 ChatGPT 会话同时只属于一条未结束（opening / open）的接力。
 - `phase`（批 A，#120）：`sending`（正在送，新会话在开）→ `delivered`（插件确认已送到，对方没开始）→ `working`（插件报这一轮开始）→ `replied`（回信到了，等常浩决定）→ `returned`（已转回 Claude）；另有 `ended`、`failed`。`phaseAt` 是进入这一阶段的时间。「送到了」只认插件的 `opened` / `sent` 回应，「审完了」只认 `turn complete`。
 - `steps`：每一步 `{at, kind, text?, points?, verdict?}`。`work` Claude 做完一轮（`text` 是 `summary`，没给就用标题）、`ask` 驿窗送给 ChatGPT 且已送到（`text` 是原话摘录）、`reply` ChatGPT 回信（`points` 是回信里编号列出的意见，最多 12 条；`verdict` 从最后的「结论：通过 / 需修改」读出 `pass` / `revise`；最新一条回信全文保留，最多 64 KB，供「转回 Claude」用）、`back` 转回 Claude、`again` 请 Claude 交回复审、`fail` 没送出去、`end` 结束。快照里的步骤只带 600 字以内的摘录，不带原话指纹。
-- 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。
-- 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开；打开请求用接力 id 当 `requestId`，超时后插件迟到的 `opened` 仍能把接力绑上。
+- 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。同一条接力同一时间只有一段话在路上，并排的第二次直接拒绝（「上一段还在送」）。
+- 回信只认审核中的那一轮：接力在 `sending` / `delivered` / `working` 时的 `turn complete` 才记成回信，同一 `messageId` 只记一次；回信之后常浩在 ChatGPT 里接着聊不算审核。新会话往往在插件回 `opened` 之前就开始回答，宿主先记下这次 `turn start`，绑上会话时补成 `working`。
+- 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开。打开请求的 `requestId` 是「接力 id~第几次」（`attempt`，每次重试加 1）：超时后插件迟到的 `opened` 只有属于当前这一次、且这个 Claude 会话还没开新接力时才绑上。
 - `rounds`：第一次交代之后，两边每转一次加 1。卡上的「第 n / 2 轮」按 `ask` 步数算，最多 2 轮（可以超）。
 - 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / 迟到的 `opened` 告诉宿主（`Channel::listen`），接力当场前进。
 - 新会话放进的 ChatGPT 项目存 `<数据目录>/chatgpt/config.json`：`{"project": "https://chatgpt.com/g/<id>/project"}`，只认这种项目页网址（去掉 `?`、`#` 和末尾 `/`）。在设置 · 智能体插件 ·「ChatGPT（Chrome 插件）」登记后出现「新会话放进项目」一行，粘贴保存；不填就开在 ChatGPT 首页。

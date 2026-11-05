@@ -318,12 +318,17 @@ export function HandoffCard({
       <div style={{ marginTop: 14 }}>
         <ListTear paper={paper} inks={inks} />
       </div>
+      {/* A long review scrolls here; the head and the buttons stay. */}
       <ol
+        className="hud-handoff-steps"
         style={{
           position: "relative",
           margin: "4px 0 0",
           padding: 0,
           listStyle: "none",
+          maxHeight: "max(240px, calc(100vh - 300px))",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
         }}
       >
         {rows.map((row, index) => (
@@ -597,7 +602,18 @@ function TimelineRow({
                     >
                       {index + 1}.
                     </span>
-                    <span style={{ overflowWrap: "anywhere" }}>{point}</span>
+                    <span
+                      title={point}
+                      style={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {point}
+                    </span>
                   </li>
                 ))}
               </ol>
