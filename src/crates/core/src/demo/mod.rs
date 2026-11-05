@@ -860,6 +860,7 @@ pub fn demo_projection(now: i64, used: &BTreeMap<String, f64>) -> AccountProject
         accounts,
         providers,
         session_records: Vec::new(),
+        live_sessions: Vec::new(),
         services: Vec::new(),
     }
 }

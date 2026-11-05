@@ -98,3 +98,26 @@ fn cursor_app_link_is_offered_only_where_it_is_registered() {
         );
     }
 }
+
+#[test]
+fn a_cloud_session_opens_on_claude_ai_only_by_a_session_id() {
+    let open = |id: &str| {
+        session_url_on(
+            &json!({"kind":"claude-cloud-session","id":id}),
+            Os::MacOs,
+            |_| false,
+        )
+    };
+    assert_eq!(
+        open("session_01JpADBK4xjEKVxKkrSYTrLi"),
+        Some("https://claude.ai/code/session_01JpADBK4xjEKVxKkrSYTrLi".into())
+    );
+    for odd in [
+        "session_",
+        "session_../x",
+        "local_abc",
+        "https://evil.example",
+    ] {
+        assert_eq!(open(odd), None);
+    }
+}

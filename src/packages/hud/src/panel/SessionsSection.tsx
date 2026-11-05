@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import type {
   PanelLayout,
@@ -95,7 +95,17 @@ export function SourceSessions({
     focusVendor ? selectedSources : tokenAgents,
     active && showTokens,
   );
-  const shown = live.slice(0, limit);
+  // Every session is listed; past `limit` rows the list scrolls in place.
+  const rows = useRef<HTMLDivElement>(null);
+  const [rowsHeight, setRowsHeight] = useState<number>();
+  useLayoutEffect(() => {
+    const last = rows.current?.children[limit - 1] as HTMLElement | undefined;
+    setRowsHeight(
+      live.length > limit && last
+        ? last.offsetTop + last.offsetHeight
+        : undefined,
+    );
+  }, [live.length, limit]);
   return (
     <section
       className="hud-source-sessions"
@@ -120,16 +130,28 @@ export function SourceSessions({
           {live.length}
         </span>
       </div>
-      {shown.map((entry, index) => (
-        <LiveRow
-          key={`${entry.session.source}:${entry.session.id}`}
-          entry={entry}
-          now={now}
-          light={light}
-          first={index === 0}
-          onStats={onStats}
-        />
-      ))}
+      <div
+        ref={rows}
+        className="hud-live-sessions"
+        style={{
+          position: "relative",
+          maxHeight: rowsHeight,
+          overflowY: rowsHeight ? "auto" : undefined,
+          scrollbarWidth: "thin",
+          scrollbarColor: `${inks.divider} transparent`,
+        }}
+      >
+        {live.map((entry, index) => (
+          <LiveRow
+            key={`${entry.session.source}:${entry.session.id}`}
+            entry={entry}
+            now={now}
+            light={light}
+            first={index === 0}
+            onStats={onStats}
+          />
+        ))}
+      </div>
       {!live.length && (
         <span
           style={{
@@ -171,18 +193,9 @@ export function SourceSessions({
                 : `${dayTotal} sessions in the last 24 hours`}
           </span>
           <span style={{ fontSize: 12, color: inks.secondary }}>
-            {[
-              live.length > shown.length
-                ? zh
-                  ? `还有 ${live.length - shown.length} 个在进行`
-                  : `${live.length - shown.length} more in progress`
-                : null,
-              zh
-                ? `另有 ${stopped} 个会话已停 · 去统计看全部`
-                : `${stopped} more stopped · see all in Statistics`,
-            ]
-              .filter(Boolean)
-              .join(zh ? "，" : ", ")}
+            {zh
+              ? `另有 ${stopped} 个会话已停 · 去统计看全部`
+              : `${stopped} more stopped · see all in Statistics`}
           </span>
         </span>
         {showTokens && (
@@ -328,7 +341,9 @@ function LiveRow({
           minWidth: 0,
         }}
       >
-        {liveSessionLine(entry, now, language)}
+        {session.client === "claude-cloud"
+          ? `${zh ? "云端" : "Cloud"} · ${liveSessionLine(entry, now, language)}`
+          : liveSessionLine(entry, now, language)}
       </span>
     </div>
   );

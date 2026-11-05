@@ -11,12 +11,31 @@ pub struct AccountProjection {
     pub accounts: Vec<Value>,
     pub providers: HashMap<String, Value>,
     pub session_records: Vec<Value>,
+    /// Sessions at work away from this computer, as session rows; listed
+    /// beside the local ones while their reading is good, never stored.
+    pub live_sessions: Vec<Value>,
     /// Which clients reach which vendors' plans and APIs, and on which
     /// platform (`{client, provider, product, accountId, region}`).
     pub services: Vec<Value>,
 }
 
 impl crate::AgentHudCore {
+    /// The sessions at work away from this computer, of enabled clients,
+    /// that no log here lists already.
+    pub(crate) fn live_elsewhere(&self) -> Vec<Value> {
+        let known = self.known_sessions();
+        self.accounts
+            .live_sessions
+            .iter()
+            .filter(|row| {
+                let source = row["source"].as_str().unwrap_or("");
+                let id = row["id"].as_str().unwrap_or("");
+                self.enabled.get(source).copied().unwrap_or(true)
+                    && !known.contains(&(source.to_owned(), id.to_owned()))
+            })
+            .cloned()
+            .collect()
+    }
     pub fn set_account_projection(&mut self, accounts: AccountProjection) {
         if let Some(database) = &self.database {
             let mut changed = false;

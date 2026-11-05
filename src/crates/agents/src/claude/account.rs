@@ -21,10 +21,10 @@ fn engine_env() -> [(&'static str, String); 1] {
     [("CLAUDE_CODE_ENTRYPOINT", "agent-hud".into())]
 }
 /// Claude Code's configuration folder: `CLAUDE_CONFIG_DIR`, or `~/.claude`.
-fn config_dir(host: &dyn Host) -> PathBuf {
+pub(super) fn config_dir(host: &dyn Host) -> PathBuf {
     variable(host, "CLAUDE_CONFIG_DIR").unwrap_or_else(|| host.home().join(".claude"))
 }
-fn profile(host: &dyn Host) -> Value {
+pub(super) fn profile(host: &dyn Host) -> Value {
     let path = variable(host, "CLAUDE_CONFIG_DIR")
         .unwrap_or_else(|| host.home().to_path_buf())
         .join(".claude.json");

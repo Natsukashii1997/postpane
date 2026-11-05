@@ -1,5 +1,6 @@
 //! Claude Code.
 pub mod account;
+pub mod cloud;
 mod hooks;
 pub mod jobs;
 pub mod plans;

@@ -566,6 +566,11 @@ impl AgentHudCore {
                             .copied()
                             .unwrap_or(true)
                 })
+                .or_else(|| {
+                    self.live_elsewhere()
+                        .into_iter()
+                        .find(|session| session["id"] == id)
+                })
                 .ok_or("Session was not found; refresh first")?;
             return Ok(
                 json!({"session":session,"usage":Usage::default().json(),"turns":[],"calls":[],"parent":null,"children":[]}),

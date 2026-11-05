@@ -245,6 +245,50 @@ fn a_claude_sessions_window_share_counts_cache_writes_not_cache_reads() {
     assert!((share("b") - 40.0).abs() < 1e-9, "b: 400 of 600 tokens");
 }
 
+#[test]
+fn cloud_sessions_are_listed_beside_local_ones_and_open_by_id() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let at = Utc::now().to_rfc3339();
+    fs::write(
+        root.join("here.jsonl"),
+        format!("{}\n", json!({"sessionId":"here","type":"user","timestamp":at,"message":{"content":"local work"}})),
+    )
+    .unwrap();
+    let mut backend = fixture(temp.path());
+    let cloud = |id: &str| json!({"id":id,"source":"claude","client":"claude-cloud","title":"cloud work","model":"Unknown","cwd":null,"updatedAt":at,"lastMessageAt":at,"state":"running","tokens":0,"cost":null,"contextPercent":null,"logPath":null,"parentId":null,"navigationTarget":{"kind":"claude-cloud-session","id":id}});
+    backend.set_account_projection(AccountProjection {
+        // One the logs here list already is not listed twice.
+        live_sessions: vec![cloud("session_01away"), cloud("here")],
+        ..Default::default()
+    });
+    let snapshot = backend.request("snapshot", json!({})).unwrap();
+    let ids = snapshot["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(ids.iter().filter(|id| **id == "here").count(), 1);
+    assert!(ids.contains(&"session_01away"));
+    let detail = backend
+        .request("session_detail", json!({"id":"session_01away"}))
+        .unwrap();
+    assert_eq!(
+        detail["session"]["navigationTarget"]["kind"],
+        "claude-cloud-session"
+    );
+    // Gone from the reading, gone from the list.
+    backend.set_account_projection(AccountProjection::default());
+    let snapshot = backend.request("snapshot", json!({})).unwrap();
+    assert!(!snapshot["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["id"] == "session_01away"));
+}
+
 fn rollout(id: &str, at: &str, meta: Value, rest: &[Value]) -> String {
     let mut payload =
         json!({"id":id,"timestamp":at,"cwd":"/w/repo","originator":"codex_cli_rs","source":"cli"});
