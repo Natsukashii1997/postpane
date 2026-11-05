@@ -2,6 +2,29 @@
 
 更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装或缺这项设置时默认也不显示（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）、不被别的智能体的待回答挡住（PR #97），新回复的小签和回执左侧换成机器人印章（PR #102）、印章摆正不再倾斜（PR #107）。随手记猫球轻摆幅度调大（PR #91）。DeepSeek 监听提问加开关、默认关，不再每 2 秒扫全机进程（PR #100）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
 
+## 接力 1b：ChatGPT 通道（2026-11-05，Claude，常浩说「都按推荐……按推荐直接开工」，并告知 ChatGPT 已装 GitHub 连接器、给了「驿窗审核」项目网址；PR #104、#109、#112 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e28f18d`、`e369069`、`cc5c10b`；驿窗从 `e28f18d` 打包安装、回读一致，后两个只改插件）
+
+- 时间：开工 `2026-11-05 21:45`（估计，按常浩说「按推荐直接开工」；本节写于 `2026-11-05 23:22`）。来由：#99（已关）。设计见 ROADMAP 阶段 5（`8eec2e0`）与 `docs/chatgpt-channel.md`。
+- 改了哪些文件：
+  - Chrome 插件 `src/apps/chrome-extension/`（Claude 写）：`manifest.json`（固定 key，id `fjjbgamejbdjdaddinacpbmaeokinbjl`）、`page.js`（页面结构与 Markdown 整理集中于此）、`content.js`（按会话报一轮开始 / 完成）、`background.js`（Native Messaging、名单、新开会话、按 id 送话、「驿窗接力」标签组）；测试 `test/page.test.mjs`、`test/content.test.mjs` 与样本页 `test/fixtures/conversation.html`（按探针记下的结构手写），根 `package.json` 加 `test:extension`。
+  - 驿窗端（子 agent 写、Claude 审查并补第二轮测试）：`agents/src/chatgpt/`、`agents/src/{agent,channel,lib}.rs`（`Carries::Turns`）、`core/src/hook_events.rs`（通道报的 completion、prompt/navigationTarget）、`core/src/tests/chatgpt.rs`、`platform/src/clients/chatgpt/`（本机套接字 0700/0600、分帧、名单 `watched.json`、host manifest）、`platform/src/navigation.rs`（`chatgpt-conversation`）、`platform/src/hooks/inbox.rs`（单条上限 64 KB → 4 MB）、`engine/src/main.rs`（Chrome 以 `chrome-extension://` 启动时做转接、核对插件 id）、`host/src/chatgpt.rs`、`host/src/{lib,tools}.rs`（`chatgpt_open/send/status`，与侧栏工具同一开关）、设置页 `AgentPluginsPane.tsx` 等（「ChatGPT（Chrome 插件）」登记）、`hud` 回执名 ChatGPT 且看过才收起、`AGENTS.md` 导航表、`docs/platform-architecture.md`、`src/tooling/client-literals.json`。
+- 测试：`e28f18d` 合并前（已合入当时 main）`pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 677 passed / 0 failed；`ℹ pass 208` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 3` / `ℹ fail 0`）。#112 分支 `pnpm test` 退出 0（Rust 678 / 0；`ℹ pass 213`、`6`、`14`、`7`，fail 均 0），prettier、`check-rules` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-chatgpt-channel/`（check.log、check2.log、test.log ~ test4.log、build.log）。
+- 验证（实机，常浩 Chrome + 已装驿窗，经 tools 套接字脚本 `~/Sandbox/2026-11-05-chatgpt-probe/tool.js` 调 `chatgpt_*`）：
+  - 插件连上、id 一致；host manifest 由常浩在设置里登记。
+  - `chatgpt_open` 在「驿窗审核」项目里新开会话 `6aec997d-…`（18 秒，标题「列表测试」），后台标签页、归入标签组。
+  - 首版插件在后台标签页漏报完成（去抖被持续变化推迟）→ PR #109 改定时采样 + 认新消息 id；`chatgpt_send` 第二轮 6 秒后收到完成，标题、prompt、带 `bash` 标记的代码块、「结论：通过」都对，侧栏数据里有 ChatGPT 回执。
+  - 刷新标签页后旧回复被重报 → PR #112 只在本页见过停止按钮或自己送过话时报完成；之后再刷新未重报。
+  - 后台：新开会话 `6aec9ec9-…`（状态 hidden）回复完成照常收到。
+  - 侧栏回执外观未截图核对（没有操作驿窗窗口的权限），请常浩看一眼。
+- 截图：无。
+- 发布与回读：`e28f18d` 打包，22:53 ditto 到 `/Applications`，`shasum` 回读与产物一致（`c509acb4e490`）；装前是另一会话 22:34 装的 `c36e82ac0cd1`（其改动已在 main），备份 `evidence/2026-11-05-chatgpt-channel/PostPane-before.app`。#109、#112 只改插件，常浩在 Chrome 重新加载即生效。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 测试在 ChatGPT「驿窗审核」项目里留下两个会话（「列表测试」「后台标签页测试」），可由常浩删除；探针插件已由常浩移除。
+  - 1c 前要处理：local_tools 一次只处理一个请求（`chatgpt_open` 最多占 90 秒）、MCP 侧客户端读超时 40 秒；`turn start`（运行中）未接；Windows 为桩。
+  - 静止侧栏里 ChatGPT 与 Codex 同在 OpenAI 一行（按常浩「先不加票根」）。
+  - worktree `99-chatgpt`、`99-history` 已删。
+- 本轮新坑：无。
+
 ## Hermes 印章摆正，不再倾斜（2026-11-05，Claude，常浩看了对比页 https://claude.ai/artifact/QAZrHoAAGbWwQT421tPUXh （A 方框不倾斜 / B 去掉方框）后说「用 A 不倾斜」；PR #107 测试全过，按「测试全过可直接合并」授权已 squash 合并 `809d221`，已从 main `809d221` 打包安装、回读一致）
 
 - 时间：开工 `2026-11-05 22:40`（估计，按常浩选 A 的时间；本节写于 `2026-11-05 23:13`）。来由：issue #105，接 #101 的外观调整。
