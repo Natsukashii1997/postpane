@@ -66,6 +66,24 @@ impl ChatGpt {
     }
 }
 
+/// ChatGPT has no files on this Mac: it counts as detected once its
+/// extension is registered (Settings) or connected, which turns its live
+/// status on the first time (presentation's `DETECTED_LATE`), so its
+/// replies pop up in the sidebar.
+pub(crate) fn mark_detected(app: &tauri::AppHandle, snapshot: &mut Value) {
+    let Some(state) = app.try_state::<ChatGpt>() else {
+        return;
+    };
+    if !(state.registered() || state.connected()) {
+        return;
+    }
+    for provider in snapshot["providers"].as_array_mut().into_iter().flatten() {
+        if provider["id"] == "chatgpt" {
+            provider["detected"] = json!(true);
+        }
+    }
+}
+
 /// What the app's local tools ask of the channel (`chatgpt_open`,
 /// `chatgpt_send`, `chatgpt_status`). Opening waits up to 90 s and sending
 /// up to 30 s for the extension's answer.

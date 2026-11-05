@@ -20,6 +20,10 @@ import {
 } from "./agent-board";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
+import { useHandoffCard } from "../alerts/HandoffCard";
+import { usePaper } from "../paper";
+import { handoffFor, progressLine, round } from "../alerts/handoff-card";
+import type { Handoff } from "@agent-hud/protocol";
 import {
   removedKey,
   shownSessions,
@@ -160,6 +164,11 @@ export function SourceSessions({
           <LiveRow
             key={removedKey(entry)}
             entry={entry}
+            handoff={handoffFor(
+              snapshot.handoffs,
+              entry.session.source,
+              entry.session.id,
+            )}
             now={now}
             light={light}
             first={index === 0}
@@ -251,6 +260,7 @@ const removeWidth = 72;
  * 2026-11-05); a click elsewhere or a drag right puts it back. */
 function LiveRow({
   entry,
+  handoff,
   now,
   light,
   first,
@@ -260,6 +270,8 @@ function LiveRow({
   onRemove,
 }: {
   entry: LiveSession;
+  /** The handoff it is in: its second line says how that goes. */
+  handoff?: Handoff;
   now: number;
   light: boolean;
   first: boolean;
@@ -273,6 +285,8 @@ function LiveRow({
   const services = usePanelServices();
   const listed = useListedSessions();
   const inks = useBoardInks(light);
+  const card = useHandoffCard();
+  const paper = usePaper();
   const [failed, setFailed] = useState(false);
   const [hover, setHover] = useState(false);
   const { session } = entry;
@@ -514,22 +528,80 @@ function LiveRow({
         >
           <ArrowUpRight size={13} strokeWidth={2} />
         </button>
-        <span
-          style={{
-            gridColumn: "2 / 3",
-            marginTop: 2,
-            fontSize: 12,
-            color: inks.secondary,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-          }}
-        >
-          {session.client === "claude-cloud"
-            ? `${zh ? "云端" : "Cloud"} · ${liveSessionLine(entry, now, language)}`
-            : liveSessionLine(entry, now, language)}
-        </span>
+        {handoff && card ? (
+          <span
+            style={{
+              gridColumn: "2 / 3",
+              marginTop: 2,
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              minWidth: 0,
+              fontSize: 12,
+              color: inks.secondary,
+            }}
+          >
+            <button
+              type="button"
+              title={zh ? "打开接力卡" : "Open the handoff card"}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (open) return onOpen(false);
+                card.open(handoff.id);
+              }}
+              style={{
+                ...noButtonChrome,
+                flex: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                height: 17,
+                padding: "0 5px",
+                boxSizing: "border-box",
+                border: "1.5px dashed currentColor",
+                borderRadius: 2,
+                color: paper?.blue ?? inks.secondary,
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              {zh
+                ? `接力 ${round(handoff).at}/${round(handoff).of}`
+                : `Relay ${round(handoff).at}/${round(handoff).of}`}
+            </button>
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {progressLine(handoff, now, zh)}
+            </span>
+          </span>
+        ) : (
+          <span
+            style={{
+              gridColumn: "2 / 3",
+              marginTop: 2,
+              fontSize: 12,
+              color: inks.secondary,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+          >
+            {session.client === "claude-cloud"
+              ? `${zh ? "云端" : "Cloud"} · ${liveSessionLine(entry, now, language)}`
+              : liveSessionLine(entry, now, language)}
+          </span>
+        )}
       </div>
     </div>
   );

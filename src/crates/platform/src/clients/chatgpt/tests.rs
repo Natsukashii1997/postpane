@@ -60,10 +60,20 @@ fn the_watched_list_is_kept_between_runs() {
     let data = temp.path().join("data");
     assert!(load_watched(&data).is_empty());
     let mut list = vec![];
-    assert!(add_watched(&mut list, "68a1", "", 1));
-    assert!(add_watched(&mut list, "68b2", "周报", 2));
-    assert!(!add_watched(&mut list, "68a1", "", 3));
-    assert!(add_watched(&mut list, "68a1", "方案", 4));
+    assert!(add_watched(&mut list, "68a1", "", false, 1));
+    assert!(add_watched(&mut list, "68b2", "周报", false, 2));
+    assert!(!add_watched(&mut list, "68a1", "", false, 3));
+    assert!(add_watched(&mut list, "68a1", "方案", false, 4));
+    // A name PostPane gave (a handoff's title) is not replaced by the tab's.
+    assert!(add_watched(&mut list, "68b2", "接力：修登录", true, 5));
+    assert!(!add_watched(
+        &mut list,
+        "68b2",
+        "请审核本轮改动……",
+        false,
+        6
+    ));
+    assert_eq!(list[1].title, "接力：修登录");
     save_watched(&data, &list).unwrap();
     let read = load_watched(&data);
     assert_eq!(read, list);
@@ -79,7 +89,13 @@ fn the_watched_list_is_kept_between_runs() {
 fn a_finished_turn_becomes_a_completion_event() {
     let now = 1_792_470_000_000;
     let turn = json!({"type":"turn","phase":"complete","conversation":"68a1","title":"","prompt":"问","reply":"答".repeat(5000),"messageId":"m1","at":now - 10});
-    let event = completion(&turn, Some("周报"), now).unwrap();
+    let watched = |named: bool| Watched {
+        id: "68a1".into(),
+        title: "周报".into(),
+        opened_at: 1,
+        named,
+    };
+    let event = completion(&turn, Some(&watched(false)), now).unwrap();
     assert_eq!(event.source, "chatgpt");
     assert_eq!(event.session_id, "chatgpt:68a1");
     assert_eq!(event.kind, "completion");
@@ -94,6 +110,18 @@ fn a_finished_turn_becomes_a_completion_event() {
     assert_eq!(
         event.data["navigationTarget"],
         json!({"kind":"chatgpt-conversation","id":"68a1"})
+    );
+    // The tab's title comes first, unless PostPane named the conversation.
+    let titled = json!({"conversation":"68a1","title":"Tab","reply":"答"});
+    assert_eq!(
+        completion(&titled, Some(&watched(false)), now)
+            .unwrap()
+            .data["title"],
+        "Tab"
+    );
+    assert_eq!(
+        completion(&titled, Some(&watched(true)), now).unwrap().data["title"],
+        "周报"
     );
     // A time from the future is now; no conversation, no event.
     let later = json!({"conversation":"68a1","at":now + 60_000});

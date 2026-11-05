@@ -65,6 +65,13 @@ struct State {
     /// (Open's `UsageStore.glowHidden`).
     glow_hidden: bool,
 }
+/// Clients nothing on this Mac shows until they connect (the ChatGPT
+/// extension): first seen undetected, their live status was saved off; the
+/// first time one is detected it turns on, once, and the person's choice
+/// stands after that.
+const DETECTED_LATE: &[&str] = &["chatgpt"];
+/// Beside presentation.json: the `DETECTED_LATE` clients already turned on.
+const LATE_DETECTED_FILE: &str = "late-detected.json";
 pub struct Presentation {
     path: PathBuf,
     state: Mutex<State>,
@@ -313,17 +320,30 @@ impl Presentation {
             return;
         }
         let mut added = false;
+        let mut late = self.late_detected();
+        let mut late_changed = false;
         for provider in snapshot["providers"].as_array().into_iter().flatten() {
             let Some(id) = provider["id"].as_str().map(str::to_ascii_lowercase) else {
                 continue;
             };
-            let prefs = s.saved.sources.entry(id).or_insert_with(|| json!({}));
-            if prefs.get("live").is_none() {
-                if let Some(object) = prefs.as_object_mut() {
-                    object.insert("live".into(), json!(provider["detected"] == true));
-                    added = true;
-                }
+            let detected = provider["detected"] == true;
+            let first_late =
+                detected && DETECTED_LATE.contains(&id.as_str()) && !late.contains(&id);
+            if first_late {
+                late.push(id.clone());
+                late_changed = true;
             }
+            let prefs = s.saved.sources.entry(id).or_insert_with(|| json!({}));
+            let Some(object) = prefs.as_object_mut() else {
+                continue;
+            };
+            if object.get("live").is_none() || (first_late && object["live"] == false) {
+                object.insert("live".into(), json!(detected));
+                added = true;
+            }
+        }
+        if late_changed {
+            self.save_late_detected(&late);
         }
         if !added {
             return;
@@ -340,6 +360,26 @@ impl Presentation {
         match written {
             Ok(()) => s.revision = s.revision.wrapping_add(1),
             Err(error) => eprintln!("Live status defaults could not be saved: {error}"),
+        }
+    }
+    /// The clients in `DETECTED_LATE` already seen detected once.
+    fn late_detected(&self) -> Vec<String> {
+        self.path
+            .parent()
+            .and_then(|folder| fs::read(folder.join(LATE_DETECTED_FILE)).ok())
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+    fn save_late_detected(&self, ids: &[String]) {
+        let Some(folder) = self.path.parent() else {
+            return;
+        };
+        let written = fs::create_dir_all(folder).and_then(|()| {
+            let bytes = serde_json::to_vec(ids).map_err(std::io::Error::other)?;
+            fs::write(folder.join(LATE_DETECTED_FILE), bytes)
+        });
+        if let Err(error) = written {
+            eprintln!("Late detections could not be saved: {error}");
         }
     }
     /// Shows or hides the notch glow.
@@ -604,5 +644,28 @@ mod live_status_tests {
         let mut sample = json!({"mode": "demo", "providers": [{"id": "codex", "detected": false}], "sessions": []});
         demo.project_snapshot(&mut sample);
         assert!(sample["sourcePreferences"].get("codex").is_none());
+    }
+
+    #[test]
+    fn chatgpt_turns_live_the_first_time_it_is_detected_then_keeps_the_choice() {
+        let folder = tempfile::tempdir().unwrap();
+        let owner = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let snapshot = |detected: bool| json!({"mode": "live", "providers": [{"id": "chatgpt", "detected": detected}], "sessions": []});
+        let mut first = snapshot(false);
+        owner.project_snapshot(&mut first);
+        assert_eq!(first["sourcePreferences"]["chatgpt"]["live"], false);
+        // The extension registers or connects: on, across a restart too.
+        let reopened = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let mut connected = snapshot(true);
+        reopened.project_snapshot(&mut connected);
+        assert_eq!(connected["sourcePreferences"]["chatgpt"]["live"], true);
+        // Turned off by the person afterwards: it stays off.
+        reopened
+            .source_update(json!({"source": "chatgpt", "patch": {"live": false}}))
+            .unwrap();
+        let again = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let mut later = snapshot(true);
+        again.project_snapshot(&mut later);
+        assert_eq!(later["sourcePreferences"]["chatgpt"]["live"], false);
     }
 }

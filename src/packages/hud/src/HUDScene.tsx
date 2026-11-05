@@ -24,6 +24,11 @@ import {
 import { replyChip } from "./alerts/reply-list";
 import { useCardHeld } from "./alerts/card-hold";
 import {
+  HandoffCard,
+  openHandoffCard,
+  useOpenedHandoffCard,
+} from "./alerts/HandoffCard";
+import {
   ApprovalContent,
   RequestDeliveryNotice,
 } from "./permissions/ApprovalContent";
@@ -392,6 +397,18 @@ export function HUDScene({
   );
   const event = news.event;
   const request = news.request;
+  // The handoff card opened from a reply or 「正在进行」, in place of what the
+  // sidebar showed until it closes or the sidebar folds away.
+  const cardId = useOpenedHandoffCard();
+  const cardHandoff = cardId
+    ? snapshot.handoffs?.find((handoff) => handoff.id === cardId)
+    : undefined;
+  const closeCard = useCallback(() => openHandoffCard(null), []);
+  // It closes with the sidebar: folded away with no card of news out.
+  const sidebarShown = open || Boolean(event || request);
+  useEffect(() => {
+    if (!sidebarShown) openHandoffCard(null);
+  }, [sidebarShown]);
   // The replies' folded tag: the newest reply's session and the count.
   const reply = replyChip(news.replies, snapshot.sessions, (each) =>
     clientDisplayName(each.source),
@@ -427,6 +444,7 @@ export function HUDScene({
     }
   }, [open, request, event]);
   const inUsagePanel = Boolean(
+    !cardHandoff &&
     open &&
     !request &&
     event &&
@@ -673,7 +691,7 @@ export function HUDScene({
         }}
       />
     ) : undefined;
-  const eventContent =
+  const newsContent =
     request || event ? (
       <>
         {request ? (
@@ -723,6 +741,19 @@ export function HUDScene({
         )}
       </>
     ) : null;
+  const eventContent = cardHandoff ? (
+    <PaperContext.Provider value={paper}>
+      <HandoffCard
+        handoff={cardHandoff}
+        snapshot={snapshot}
+        light={light}
+        onClose={closeCard}
+        handover={handoff}
+      />
+    </PaperContext.Provider>
+  ) : (
+    newsContent
+  );
 
   // The panel's session rows hand over as Open's ScreenHUD does: the HUD
   // collapses first, then the Statistics window opens.

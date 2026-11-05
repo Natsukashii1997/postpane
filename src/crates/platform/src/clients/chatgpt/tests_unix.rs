@@ -99,6 +99,44 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert_eq!(event.data["message"], "分三块写");
     assert_eq!(event.data["title"], "周报");
 
+    // A handoff's conversation is listed under its title, and the listener
+    // hears of its opening (under the handoff's request id) and its turns.
+    let heard = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let log = heard.clone();
+    channel.listen(Arc::new(move |message: &Value| {
+        log.lock().unwrap().push(message.clone())
+    }));
+    let opener = channel.clone();
+    let opening = std::thread::spawn(move || {
+        opener.open_as("请审核：整段背景交代……", None, Some("修登录"), Some("h1"))
+    });
+    let open = next(&mut extension);
+    assert_eq!(open["requestId"], "h1");
+    write_frame(
+        &mut extension,
+        &json!({"type":"opened","requestId":"h1","ok":true,"conversation":"68b2","title":"请审核：整段背景交代……"}),
+        OUTBOUND_LIMIT,
+    )
+    .unwrap();
+    next(&mut extension);
+    opening.join().unwrap().unwrap();
+    let listed = load_watched(&data);
+    assert_eq!(
+        (listed[1].title.as_str(), listed[1].named),
+        ("修登录", true)
+    );
+    write_frame(
+        &mut extension,
+        &json!({"type":"turn","phase":"start","conversation":"68b2"}),
+        OUTBOUND_LIMIT,
+    )
+    .unwrap();
+    wait_for(|| heard.lock().unwrap().len() == 2);
+    let heard = heard.lock().unwrap().clone();
+    assert_eq!(heard[0]["type"], "opened");
+    assert_eq!(heard[0]["requestId"], "h1");
+    assert_eq!(heard[1]["phase"], "start");
+
     // Navigation brings the tab forward through the extension.
     assert!(focus("68a1"));
     assert_eq!(
@@ -110,7 +148,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     let mut newer = connect(&data);
     assert_eq!(
         next(&mut newer),
-        json!({"type":"watch","conversations":["68a1"]})
+        json!({"type":"watch","conversations":["68a1","68b2"]})
     );
     assert_eq!(read_frame(&mut extension, INBOUND_LIMIT).unwrap(), None);
     assert_eq!(channel.status()["connected"], true);
