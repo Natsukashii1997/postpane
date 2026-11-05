@@ -2,6 +2,24 @@
 
 更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
 
+## 侧栏待审批卡改成清单卡（2026-11-05，Claude，按 issue #48 与常浩定稿（丙版 + 方案三配色）实现；已提交到分支 `claude/48-approval-list`，未推送、未开 PR、未发布，等常浩打包看实物）
+
+- 时间：开工 `2026-11-05 09:55`（估计，按本会话首个提交前的进度；本节写于 `2026-11-05 10:25`）。来由：issue #48，定稿预览 https://claude.ai/artifact/3PevPG5CE3DRAExnbhouoY 。
+- 改了哪些文件：
+  - 提交 `efc4ddc`（数据）：`src/crates/agents/src/claude/transcript.rs`（桌面应用会话元数据多读 `effort` 与所属账号；按收集节奏、改动时才重读 `claude_desktop_config.json`，`desktop_sections` 读侧栏分区，格式不对一律当未分区；`ClaudeDesktopIndex.details`）、`core/src/presentation.rs`（Claude 会话叠加 `effort`、`section`）、`agents/src/transcript/log.rs`、`agents/src/codex/transcript.rs`、`core/src/database/checkpoints.rs`、`core/src/ingestion.rs`（Codex 从 `turn_context` 读推理强度并带到会话）、`src/packages/protocol/src/index.ts`（`Session.effort`、`Session.section`）、测试 `agents` 2 个、`core/src/tests/claude_desktop.rs` 1 个、`core/src/tests/sessions.rs` 1 个。
+  - 提交 `707c166`（界面）：`src/packages/hud/src/permissions/approval-list.ts`（分组、排序、折叠、计数、找会话、回到会话、等待时长的纯逻辑）、`ApprovalTag.tsx`（统一画框标签）、`ApprovalContent.tsx`（清单卡本体，去掉路径行）、`PermissionQuestionCard.tsx`（问题小标题改虚线标签、前情调亮、问题加大）、`HUDScene.tsx`（把快照会话与排队的新回复交给清单卡；有审批时不再另列新回复）、`IslandNews.tsx`（删掉不再用的 `shortenHomePath` 与两个转出）、`src/packages/hud/test/approval-list.test.ts`（10 个测试）。
+- 测试：在提交 `707c166` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 19 组 `test result: ok`，合计 642 passed / 0 failed；`ℹ pass 148` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志在 `~/Library/Application Support/postpane/evidence/2026-11-05-approval-list/`。
+- 验证：用 bun 把真实 `ApprovalContent` 渲染成静态页、playwright 截图，看了深色纸面提问卡、跑命令单条卡、浅色纸面、英文界面超过 5 条折叠四种；实机未看（未打包安装）。截图里 Codex 图标是空的，原因是本地文件页不让加载遮罩图，实机走打包资源不受影响（未核实）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-approval-list/shot.png`。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 分组顺序按「组里等得最久的一条」排，不按 Claude 侧栏里分区的先后；这样默认展开的那条总在最上面。所有条目都没有分区时（只有 Codex 或读不到设置）不印组标题，有任何一条有分区才印「未分区」。
+  - 排序：审批在前（等得最久的在前），新回复排在后面；「还有 N 条」点一下全部展开。
+  - 新回复那一行点击仍切到原来的回复通知卡（不在清单里就地展开）。
+  - 实际设置文件的分区键是 `"<组织>/<账号>"` 一层，不是 `[组织][账号]` 两层；两种都读。
+  - 刘海（不印纸面）下也用清单卡版式，只是不盖印章。
+- 本轮新坑：无。
+
 ## 侧栏 Codex 小人第二版：打盹加强、各动作更明显（2026-11-05，Claude，常浩审核第一版动作库后说打盹不明显、其余都再明显一点；确认三批计划后说「按计划开始」，看过实物和审核页后说「同意合并」；PR #47 测试全过已 squash 合并 `c7f9ed5`、已打包安装、审核页已更新到第二版）
 
 - 时间：开工 `2026-11-05 08:23`（本会话创建时间；代码由上一个会话在分支 `claude/46-codex-clearer` 写好，本会话负责验收与合并；本节写于 `2026-11-05 08:31`）。来由：常浩审核 Codex 真实动作库 https://claude.ai/artifact/DWA9o2vomCEte2kXsd3Jbc 后的反馈，issue #46。
