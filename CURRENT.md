@@ -1,6 +1,24 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）。随手记猫球轻摆幅度调大（PR #91）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）。随手记猫球轻摆幅度调大（PR #91）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+
+## Claude 额度彻底不显示、不计入每周 Fable（2026-11-05，Claude，常浩说「我说了不看这个，工作台的所有的额度相关的都不考虑 Fable」，由另一会话交来；PR #94、#96 测试全过，按「测试全过可直接合并」授权已 squash 合并 `53e5313`、`4531d22`，已从 main `4531d22` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 20:55`（按本会话建立时间；本节写于 `2026-11-05 21:42`）。来由：issue #92。PR #58 当时没改代码，只经 HUD 工具放了 `hiddenRows` 草稿、没保存，所以悬停面板一直有「每周 · Fable」。
+- 改了哪些文件：
+  - PR #94：`src/crates/agents/src/claude/account.rs`（`windows()` 识别出 Fable 周额度——`seven_day_fable` 键或 `limits[]` 里 `weekly_scoped` 的 Fable 项——后丢掉，`IGNORED_FAMILY`）、`core/src/demo/data.rs` 与 `demo/mod.rs`（演示数据去掉 Fable 额度行）。
+  - PR #96：`agents/src/account.rs`（`Provider.dropped_windows` 与 `drops()`）、`claude/account.rs`（声明 `claude-weekly-fable`）、`platform/src/accounts/mod.rs`（`projection()` 出口过滤，挡住保留 30 天的旧行、重启副本与读失败沿用的旧读数）。
+  - 前端没改：看板行、总结句计数、「够用」印章、静止条最紧额度、预警细条、重置到账提醒、统计额度历史、设置「显示」的行开关都只用出口给的行。Fable 作为模型的 Token 用量统计不是额度，照旧。
+- 测试：PR #94 分支上 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 663 passed / 0 failed；`ℹ pass 203` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`），`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。PR #96 分支上 `pnpm test` 退出 0（Rust 合计 664 passed / 0 failed；`ℹ pass 205` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`），`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；之后只做 `cargo fmt` 和把新测试的数据目录换成子目录（`check-test-paths`），`agent-hud-platform` 156 个测试重跑全过，`pnpm run check` 退出 0。新测试：`fables_week_never_becomes_a_row`、`a_kept_or_restored_fable_week_never_reaches_the_projection`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-drop-fable/`（`check*.log`、`test*.log`、`rules*.log`、`build-main*.log`）。
+- 验证：实机 MCP `hud_snapshot`。装 #94 后（21:23）新读数已不含 Fable，但保留的旧行还在（见 L-07）；装 #96 后（21:38）Claude 额度只有 `claude-session`、`claude-weekly`、`claude-cloud-credits`，快照里没有任何 `weekly-fable`。悬停面板实物没截图，请常浩看一眼看板是否只剩 5 小时、每周、云端额度，总结句是否说「两个/三个」。
+- 截图：无。
+- 发布与回读：main `4531d22`（含另一会话的 #93、#97）打包，21:38 ditto 到 `/Applications`（AppleScript 退不掉，SIGTERM 结束旧进程）并启动，`shasum` 回读与产物一致（`5dc28f65423e`）；之后 main 只多了文档提交。21:38 看到另一会话（hermes-bots）也在打包，可能随后覆盖安装（L-05）：若它的包不含 #96，Fable 会回来，请看前核对。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-drop-fable/PostPane-before.app /Applications/PostPane.app`（21:10 另一会话装的版本，`033d56ad9ac8`）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 原计划一个 PR；装机后发现旧行被保留，补了 #96，两个 PR 都按授权直接合并。
+  - 常浩设置里若已保存过隐藏 Fable 的 `hiddenRows`，那条设置现在指向不存在的行，无害，没清。
+  - 数据库里已有的 Fable 历史读数（`quota_sample`）没删，统计只读显示中的窗口，看不到它。
+  - worktree `.claude/worktrees/92-drop-fable` 本节提交后即删。
+- 本轮新坑：L-07。
 
 ## 多智能体接力：方向改定，ChatGPT 网页插件探针（2026-11-05，Claude，常浩说审核主要靠「ChatGPT……聊天模式」、Codex 偏测试，提出「在网页保持登录……开发 Chrome 插件……回传」，确认后说「可以，开始」；只改文档与 issue，无 PR）
 

@@ -65,3 +65,11 @@
 - 正确做法：装完新包先截屏看有没有这个权限弹窗，有就请常浩点「允许」（隐私权限只能本人点）；不要误判成改动把数据读取弄坏了，也不要反复重装。
 - 证据：2026-11-05 19:32 截屏 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-gap/d1s.png`，采样 `sample.txt` 同目录。
 - 升级：未升级。
+
+## L-07 读取层去掉一个 Claude 额度窗口，旧行还会在侧栏挂 30 天（2026-11-05）
+
+- 现象：#94 让 Claude 读数不再含每周 Fable，测试全过、装机后实机快照里仍有 `claude-weekly-fable` 一行，它的 `observedAt`（13:20:40）早于新读数（13:23:42）。
+- 根因：Claude 的 `Provider.keeps_unreported_windows` 为真，`platform/src/accounts/mod.rs` 的 `retain_windows` 让「这次没报的窗口」沿用上次读数最多 30 天，重启副本（`restart_copy`）也会带回来；读取层的测试只看新读数，看不到这条路。
+- 正确做法：要让某个窗口彻底不出，除了在读取层不产出，还要在 `Provider.dropped_windows` 里列出它的键，由 `projection()` 出口统一过滤（#96）；改完以实机快照（MCP `hud_snapshot`）里没有这行为准，不只看单测。
+- 证据：2026-11-05 21:23 与 21:38 两次 `hud_snapshot`，结果文件在本会话 tool-results；PR #94、#96。
+- 升级：未升级。
