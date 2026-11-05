@@ -1,6 +1,22 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+
+## 侧栏静止条不显示金额、悬停面板改成额度看板（2026-11-05，Claude，常浩答复 PR #53 遗留四问（显示余额；合并面板不加图标；剩余模式进度条可以；无预测盖「未知」章），确认分批计划后说「按推荐开工」，看过实物后说「合并」；PR #51 squash 合并 `5837e4d`、PR #53 squash 合并 `6e84ad7`，已打包安装）
+
+- 时间：开工 `2026-11-05 11:14`（本会话创建时间；两个 PR 的主体代码由上一会话写好，本会话负责收尾、验收与合并；本节写于 `2026-11-05 11:30`）。来由：侧栏面板逐个梳理的第二、三项；预览：侧栏 https://claude.ai/artifact/4opU9NBbAXonLkfx1HfqTg ，悬停面板 https://claude.ai/artifact/F3iS2KywnVrxXashMd5fT8 （甲），issue #50、#52。
+- 改了哪些文件：
+  - PR #51：`src/packages/hud/src/model.ts`、`recent-usage.ts`、`scene/HUDMarkStrip.tsx`（没有额度窗口的 Hermes、DeepSeek 侧栏显示灰色 24 小时 Token，不显示金额）、`src/crates/hud/src/vendors.rs`（Rust 用同一文字算侧栏宽度）、`test/recent-usage.test.ts`。
+  - PR #53：新 `panel/window-labels.ts`、`panel/agent-board.ts`、`panel/AgentBoard.tsx`，改 `QuotaSection.tsx`、`SessionsSection.tsx`、`HoverPanel.tsx` 等（实现由子 agent 完成、上一会话审核）；本会话加提交 `05ef07a`：`agent-board.ts` 有额度但无预测（含读数过旧）时印章为「未知」，`AgentBoard.tsx` 印章加「未知」中性灰，`QuotaSection.tsx` 读不到额度且有掉线提示时也盖「未知」，无额度智能体不盖章；`test/agent-board.test.ts` 补对应断言。
+- 测试：PR #53 分支合入最新 main（含 #51）后的提交 `281a00c`（与 main `6e84ad7` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 642 passed / 0 failed；`ℹ pass 157` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-agent-panel/premerge-*.log`；#51 单独的结果在 `evidence/2026-11-05-strip-tokens/`。
+- 验证：两分支临时合并打包安装看实物，常浩看过后说「合并」；组件渲染截图沿用上一会话子 agent 的结果（`evidence/2026-11-05-agent-panel/*.png`），「未知」章未单独截图。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-agent-panel/`（`claude-*.png`、`hermes-dark-zh.png`、`merged-dark-zh.png`，组件渲染图，非实机，不含「未知」章）。
+- 发布与回读：`PostPane.app`（#51 加 #53 临时合并版，内容与合并后 main 相同）已 ditto 到 `/Applications` 并重启（11:26:16，按 L-03），临时合并已撤销。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-agent-panel/PostPane-before.app /Applications/PostPane.app`（两项改动之前的版本）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划写的是把 #53 变基后强推，强推被自动模式拦下，改为把 main 合进分支再 squash 合并，结果相同。
+  - 常浩定：DeepSeek 关联余额时面板保留余额块；合并面板（设置 → 显示 →「按智能体分开」关掉才出现）不加智能体图标；「剩余」模式下进度条按已用画。
+  - 可清理 worktree 增加 `.claude/worktrees/50-strip-tokens`、`52-agent-panel`（现共 17 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏待审批卡改成清单卡（2026-11-05，Claude，常浩经三轮预览选定丙「清单」并逐项调整，说「可以，开工」，看过实物后说「可以合并」；PR #49 测试全过已 squash 合并 `a059217`、已打包安装）
 
