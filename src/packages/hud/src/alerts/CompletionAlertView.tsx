@@ -116,14 +116,16 @@ export function CompletionAlertView({
             const failed = unreachable.has(entry.id);
             const bot = entry.session?.bot;
             // A reply in a handoff opens its card (查看接力).
-            const handoff = card
-              ? handoffFor(
-                  snapshot.handoffs,
-                  entry.event.source,
-                  entry.event.sessionId,
-                )
-              : undefined;
-            const title = entryTitle(entry, newsTitle(entry.event, zh));
+            const handoff = handoffFor(
+              snapshot.handoffs,
+              entry.event.source,
+              entry.event.sessionId,
+            );
+            // A handoff's reply is titled by the handoff: its question is the
+            // whole brief.
+            const title =
+              handoff?.title ?? entryTitle(entry, newsTitle(entry.event, zh));
+
             // The body lines up under the title, past the seal or the mark.
             const indent = (bot ? SEAL_COLUMN : 18) + 12;
             return (

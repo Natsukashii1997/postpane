@@ -60,6 +60,25 @@ pub(crate) enum Started {
 pub(crate) struct Desk {
     data: Option<PathBuf>,
     book: Mutex<Book>,
+    /// Conversations ChatGPT began answering before they were bound to a
+    /// handoff (a new one starts on its first words, before `opened`
+    /// answers), newest last.
+    early: Mutex<Vec<(String, i64)>>,
+    /// Handoffs with words on their way now: a second sending waits, so the
+    /// same words are not sent twice side by side.
+    sending: Mutex<HashSet<String>>,
+}
+
+/// A handoff's words on their way; let go when dropped.
+struct Sending<'a>(&'a Desk, String);
+impl Drop for Sending<'_> {
+    fn drop(&mut self) {
+        self.0
+            .sending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&self.1);
+    }
 }
 
 impl Desk {
@@ -70,6 +89,8 @@ impl Desk {
         let desk = |book| Self {
             data,
             book: Mutex::new(book),
+            early: Mutex::new(vec![]),
+            sending: Mutex::new(HashSet::new()),
         };
         if book.interrupted(now_ms(), &interrupted()) {
             let desk = desk(book);
@@ -77,6 +98,17 @@ impl Desk {
             return desk;
         }
         desk(book)
+    }
+    /// Claims `id` for sending, or says words are already on their way.
+    fn claim(&self, id: &str) -> Result<Sending<'_>, String> {
+        let mut sending = self.sending.lock().unwrap_or_else(|p| p.into_inner());
+        if !sending.insert(id.to_owned()) {
+            return Err(l10n::text(
+                "上一段还在送，等它送完再试。",
+                "Words are still on their way; try again once they arrive.",
+            ));
+        }
+        Ok(Sending(self, id.to_owned()))
     }
     fn lock(&self) -> MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(|p| p.into_inner())
@@ -165,6 +197,7 @@ impl Desk {
         if let Some(handoff) = current {
             match (handoff.status, handoff.chatgpt_conversation.as_deref()) {
                 (Status::Open, Some(conversation)) => {
+                    let _sending = self.claim(&handoff.id)?;
                     // The same words again (a retry after a slow answer) are not sent twice.
                     if self.lock().asked_already(&handoff.id, brief) {
                         return Ok(Started::Sent {
@@ -213,17 +246,37 @@ impl Desk {
         project: Option<&str>,
         now: impl Fn() -> i64,
     ) -> Result<String, String> {
-        let title = self
+        let (title, request) = self
             .lock()
             .get(id)
-            .map(|h| h.title.clone())
+            .map(|h| (h.title.clone(), h.request()))
             .unwrap_or_default();
-        let opened = lines.open(brief, project, &title, id);
+        let opened = lines.open(brief, project, &title, &request);
         self.change(|book| match &opened {
             Ok(conversation) => book.opened(id, conversation, now()),
             Err(error) => book.failed(id, error, now()),
         });
+        if let Ok(conversation) = &opened {
+            self.caught_up(conversation);
+        }
         opened
+    }
+
+    /// A conversation just bound: ChatGPT may already have begun answering.
+    fn caught_up(&self, conversation: &str) {
+        let at = {
+            let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
+            let at = early
+                .iter()
+                .rev()
+                .find(|(id, _)| id == conversation)
+                .map(|(_, at)| *at);
+            early.retain(|(id, _)| id != conversation);
+            at
+        };
+        if let Some(at) = at {
+            self.change(|book| book.working(conversation, at));
+        }
     }
 
     /// What the ChatGPT channel reports: a turn starting or finishing in a
@@ -232,17 +285,36 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
-            (Some("turn"), Some("start")) => self.change(|book| book.working(conversation, now)),
+            (Some("turn"), Some("start")) => {
+                if self.lock().for_conversation(conversation).is_none() {
+                    let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
+                    early.push((conversation.to_owned(), now));
+                    let extra = early.len().saturating_sub(8);
+                    early.drain(..extra);
+                    return false;
+                }
+                self.change(|book| book.working(conversation, now))
+            }
             (Some("turn"), Some("complete")) => {
                 let reply = message["reply"].as_str().unwrap_or("");
-                self.change(|book| book.replied(conversation, reply, now))
+                let message_id = message["messageId"].as_str();
+                self.change(|book| book.replied(conversation, reply, message_id, now))
             }
             (Some("opened"), _) if message["ok"] == true => {
-                let id = message["requestId"].as_str().unwrap_or("");
-                let waiting = self.lock().get(id).is_some_and(|h| {
-                    h.status == Status::Failed && h.chatgpt_conversation.is_none()
-                });
-                waiting && self.change(|book| book.opened(id, conversation, now))
+                // Only a try that already gave up waiting: a waited-for
+                // answer binds through `open`.
+                let request = message["requestId"].as_str().unwrap_or("");
+                let id = request.rsplit_once('~').map_or("", |(id, _)| id);
+                let gave_up = self
+                    .lock()
+                    .get(id)
+                    .is_some_and(|h| h.status == Status::Failed);
+                let bound =
+                    gave_up && self.change(|book| book.opened_late(request, conversation, now));
+                if bound {
+                    self.caught_up(conversation);
+                }
+                bound
             }
             _ => false,
         }
@@ -279,6 +351,7 @@ impl Desk {
                 } else {
                     (StepKind::Again, again_text(handoff.reviews() + 1))
                 };
+                let _sending = self.claim(id)?;
                 if self.lock().returned_already(id, &text) {
                     return Ok(Acted::Done);
                 }
@@ -796,7 +869,7 @@ mod tests {
         assert_eq!(
             lines.sent.borrow()[0].1,
             format!(
-                "https://chatgpt.com/g/g-p-1-review/project|修登录|{}",
+                "https://chatgpt.com/g/g-p-1-review/project|修登录|{}~0",
                 handoff.id
             )
         );
@@ -834,6 +907,13 @@ mod tests {
         };
         assert!(repeated);
         assert_eq!(lines.sent.borrow().len(), 2);
+        // Words already on their way: a second sending side by side waits.
+        let held = desk.claim(&handoff.id).unwrap();
+        assert!(desk
+            .start(&lines, "s1", Some("/w"), "修登录", None, "第三轮", false, 5)
+            .is_err());
+        assert_eq!(lines.sent.borrow().len(), 2, "nothing more sent");
+        drop(held);
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "open");
         assert_eq!(shown[0]["phase"], "delivered");
@@ -862,6 +942,10 @@ mod tests {
         assert_eq!(desk.projection(3)[0]["phase"], "working");
         let reply = "1. 会话认不准时不该猜\n2. opening 要超时\n结论：需修改";
         assert!(desk.observe(&turn("complete", reply), 4));
+        assert!(
+            !desk.observe(&turn("complete", reply), 4),
+            "a review answered is not answered again"
+        );
         let shown = desk.projection(4);
         assert_eq!(shown[0]["phase"], "replied");
         let last = shown[0]["steps"]
@@ -902,6 +986,24 @@ mod tests {
         assert_eq!(shown[0]["phase"], "ended");
         assert!(desk.act(&lines, &handoff.id, "back", 10).is_err());
         assert!(desk.act(&lines, &handoff.id, "nope", 10).is_err());
+    }
+
+    #[test]
+    fn chatgpt_starting_before_the_conversation_is_bound_still_counts() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "t", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!()
+        };
+        // The first words start a turn before `opened` answers.
+        assert!(!desk.observe(&turn("start", ""), 2));
+        desk.open(&lines, &handoff.id, "brief", None, || 3).unwrap();
+        let shown = desk.projection(4);
+        assert_eq!(shown[0]["phase"], "working");
+        assert_eq!(shown[0]["phaseAt"], 2);
     }
 
     #[test]
@@ -976,9 +1078,13 @@ mod tests {
         // An opening that hangs fails after two minutes.
         let later = 4 + handoffs::OPEN_TIMEOUT_MS + 1;
         assert_eq!(desk.projection(later)[0]["status"], "failed");
-        // The answer came late after all: bound.
+        // The first try's answer coming late binds nothing; this try's does.
+        assert!(!desk.observe(
+            &json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-old"}),
+            later + 1
+        ));
         assert!(desk.observe(
-            &json!({"type":"opened","requestId":handoff.id,"ok":true,"conversation":"c-late"}),
+            &json!({"type":"opened","requestId":format!("{}~1", handoff.id),"ok":true,"conversation":"c-late"}),
             later + 1
         ));
         assert_eq!(
