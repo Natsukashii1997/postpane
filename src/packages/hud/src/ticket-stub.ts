@@ -22,8 +22,6 @@ export const stubFootHeight = (logo: number) => Math.round(logo * 0.7);
 export const STUB_WARN_PERCENT = 80;
 
 export interface StubMarks {
-  /** Punched: the agent is working and not waiting on you. */
-  punched: boolean;
   /** Sealed: the agent waits for your approval or answer. */
   sealed: boolean;
   /** The seal reads 答, not 批: every request it waits on is a question. */
@@ -33,7 +31,6 @@ export interface StubMarks {
 }
 
 export function stubMarks(vendor: {
-  working: number;
   waiting: number;
   /** How many of the `waiting` requests are questions. */
   questions?: number;
@@ -41,7 +38,6 @@ export function stubMarks(vendor: {
 }): StubMarks {
   const sealed = vendor.waiting > 0;
   return {
-    punched: vendor.working > 0 && !sealed,
     sealed,
     answer: sealed && vendor.questions === vendor.waiting,
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,

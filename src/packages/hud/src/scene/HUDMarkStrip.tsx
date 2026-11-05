@@ -477,7 +477,7 @@ export function StubPaper({
 
 /**
  * What a stub prints on its tear-off foot, under a dashed tear line: the
- * reading, or a seal; and a punch hole near its top.
+ * reading, or a seal.
  */
 export function StubFace({
   vendor,
@@ -495,7 +495,6 @@ export function StubFace({
   zh: boolean;
 }) {
   const marks = stubMarks({
-    working: vendor.working,
     waiting: vendor.waiting,
     questions: vendor.questions,
     used: markUsed(vendor),
@@ -554,23 +553,6 @@ export function StubFace({
           </span>
         )}
       </span>
-      {marks.punched && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            width: 5.5 * unit,
-            height: 5.5 * unit,
-            borderRadius: "50%",
-            background: "rgba(18,22,30,.88)",
-            boxShadow: `inset 0 ${1.2 * unit}px ${1.5 * unit}px rgba(0,0,0,.6)`,
-            top: (side === "top" ? 3 * unit : 0) + 4 * unit,
-            left:
-              side === "right" ? undefined : (side === "left" ? 5 : 4) * unit,
-            right: side === "right" ? 5 * unit : undefined,
-          }}
-        />
-      )}
     </>
   );
 }

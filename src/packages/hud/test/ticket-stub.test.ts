@@ -19,29 +19,26 @@ test("the bot and the tear-off foot fit the stub", () => {
   }
 });
 
-test("a working agent is punched, a waiting one sealed instead", () => {
-  const idle = { working: 0, waiting: 0, used: 30 };
+test("a waiting agent is sealed", () => {
+  const idle = { waiting: 0, used: 30 };
   assert.deepEqual(stubMarks(idle), {
-    punched: false,
     sealed: false,
     answer: false,
     warn: false,
   });
-  assert.equal(stubMarks({ ...idle, working: 1 }).punched, true);
-  const asking = stubMarks({ ...idle, working: 1, waiting: 1 });
+  const asking = stubMarks({ ...idle, waiting: 1 });
   assert.equal(asking.sealed, true);
-  assert.equal(asking.punched, false);
 });
 
 test("the reading turns red from 80% of the tightest quota", () => {
-  const vendor = { working: 0, waiting: 0 };
+  const vendor = { waiting: 0 };
   assert.equal(stubMarks({ ...vendor, used: 79.9 }).warn, false);
   assert.equal(stubMarks({ ...vendor, used: 80 }).warn, true);
   assert.equal(stubMarks({ ...vendor, used: null }).warn, false);
 });
 
 test("the seal reads 答 only while every waiting request is a question", () => {
-  const idle = { working: 1, used: 30 };
+  const idle = { used: 30 };
   assert.equal(stubMarks({ ...idle, waiting: 2, questions: 2 }).answer, true);
   assert.equal(stubMarks({ ...idle, waiting: 2, questions: 1 }).answer, false);
   assert.equal(stubMarks({ ...idle, waiting: 1 }).answer, false);
