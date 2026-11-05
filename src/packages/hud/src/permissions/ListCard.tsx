@@ -48,6 +48,9 @@ function Waited({ createdAt, zh }: { createdAt: string; zh: boolean }) {
   return <>{waitedText(seconds, zh)}</>;
 }
 
+/** How wide a row's seal column is: a seal with its bot's name under it. */
+export const SEAL_COLUMN = 34;
+
 export function EntryRow({
   entry,
   open,
@@ -75,12 +78,11 @@ export function EntryRow({
   /** Whether the open line prints its tag under the title (the reply card's
    * open line goes straight on to the reply). */
   openTag?: boolean;
-  /** A stamp pressed at the row's end, across its two lines (a Hermes
-   * bot's seal on its reply). */
+  /** A stamp pressed in place of the agent's mark, across the row's two
+   * lines (a Hermes bot's seal on its reply). */
   seal?: ReactNode;
 }) {
   const [hover, setHover] = useState(false);
-  const lineSpan = seal ? "2 / 4" : "2 / 5";
   const tag = (
     <ApprovalTag
       label={entry.badge}
@@ -112,9 +114,7 @@ export function EntryRow({
       onPointerLeave={() => setHover(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: seal
-          ? "18px minmax(0, 1fr) auto auto 26px"
-          : "18px minmax(0, 1fr) auto 26px",
+        gridTemplateColumns: `${seal ? SEAL_COLUMN : 18}px minmax(0, 1fr) auto 26px`,
         columnGap: 12,
         alignItems: "center",
         padding: open ? "16px 0 0" : "12px 0",
@@ -122,9 +122,22 @@ export function EntryRow({
         opacity: !open && hover ? 0.78 : 1,
       }}
     >
-      <span style={{ display: "inline-flex" }}>
-        <HUDArtwork source={entryClient(entry)} size={18} light={light} />
-      </span>
+      {seal ? (
+        <span
+          style={{
+            gridRow: "1 / 3",
+            gridColumn: "1 / 2",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          {seal}
+        </span>
+      ) : (
+        <span style={{ display: "inline-flex" }}>
+          <HUDArtwork source={entryClient(entry)} size={18} light={light} />
+        </span>
+      )}
       <span
         style={{
           fontSize: 14,
@@ -155,9 +168,6 @@ export function EntryRow({
           )
         )}
       </span>
-      {seal && (
-        <span style={{ gridRow: "1 / 3", gridColumn: "4 / 5" }}>{seal}</span>
-      )}
       <button
         type="button"
         aria-label={goTitle}
@@ -189,7 +199,7 @@ export function EntryRow({
         // one line; the model is cut first.
         <div
           style={{
-            gridColumn: lineSpan,
+            gridColumn: "2 / 5",
             display: "flex",
             alignItems: "baseline",
             gap: 8,
@@ -216,7 +226,7 @@ export function EntryRow({
       {(!open || openTag) && (
         <div
           style={{
-            gridColumn: lineSpan,
+            gridColumn: "2 / 5",
             display: "flex",
             alignItems: "center",
             gap: 8,

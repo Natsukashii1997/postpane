@@ -194,3 +194,21 @@ test("the folded tag names the newest reply's session and counts them all", () =
     undefined,
   );
 });
+
+test("the reply chip carries the Hermes bot of the newest reply's session", () => {
+  const bot = { id: "agumon", name: "亚古兽" };
+  assert.deepEqual(
+    replyChip(
+      [reply("h", "2026-11-05T03:00:00Z", { source: "hermes" })],
+      [session("h", { source: "hermes", bot })],
+      () => "x",
+    )?.bot,
+    bot,
+  );
+  // Other agents' replies carry none.
+  assert.equal(
+    replyChip([reply("a", "2026-11-05T03:00:00Z")], [session("a")], () => "x")
+      ?.bot,
+    null,
+  );
+});
