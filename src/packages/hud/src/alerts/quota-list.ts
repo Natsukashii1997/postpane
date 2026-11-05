@@ -10,7 +10,8 @@ export const isQuotaWindowEvent = (event: IslandEvent) =>
 export const isQuotaEvent = (event: IslandEvent) =>
   isQuotaWindowEvent(event) ||
   event.kind === "reset-credits" ||
-  event.kind === "sign-in-needed";
+  event.kind === "sign-in-needed" ||
+  event.kind === "bot-offline";
 
 /** The quota news waiting in the queue, newest first: one card lists them
  * all. A notice without a readable time goes last. */

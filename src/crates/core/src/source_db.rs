@@ -63,6 +63,72 @@ pub(crate) fn reader_version(path: &Path, source: &str) -> u16 {
 }
 
 impl AgentHudCore {
+    /// Hermes says nothing when a turn starts or ends, but holds the
+    /// session's turn lease while it replies: a held lease is a turn at
+    /// work, and one gone since the last read is a reply written, with the
+    /// reply's words for the new-reply card.
+    fn hermes_turns(
+        &mut self,
+        db: &rusqlite::Connection,
+        path: &Path,
+        logs: &mut HashMap<PathBuf, Log>,
+        superseded: &mut HashSet<PathBuf>,
+    ) -> Result<(), String> {
+        use agent_hud_agents::hermes::transcript::{last_prompt, last_reply, leases};
+        let now = chrono::Utc::now().timestamp_millis();
+        let held = leases(db, now).unwrap_or_default();
+        let before = self.reads.hermes_turns.remove(path).unwrap_or_default();
+        let mut running = HashMap::new();
+        for lease in held {
+            let turn = format!("lease:{}", lease.acquired);
+            if let Some(log) = self.hermes_log(path, &lease.session, logs, superseded)? {
+                log.live
+                    .observe_source(&turn, true, Some(lease.acquired), now, None);
+                log.live.prompt = last_prompt(db, &lease.session);
+            }
+            running.insert(lease.session, turn);
+        }
+        for (session, turn) in before {
+            if running.contains_key(&session) {
+                continue;
+            }
+            if let Some(log) = self.hermes_log(path, &session, logs, superseded)? {
+                log.live
+                    .observe_source(&turn, false, None, now, Some("completed"));
+                if let Some(last) = log.live.turns.back_mut() {
+                    last.message = last_reply(db, &session);
+                }
+                log.live.prompt = last_prompt(db, &session);
+            }
+        }
+        if !running.is_empty() {
+            self.reads.hermes_turns.insert(path.into(), running);
+        }
+        Ok(())
+    }
+
+    /// A Hermes session's log, when it has been read already.
+    fn hermes_log<'a>(
+        &mut self,
+        path: &Path,
+        session: &str,
+        logs: &'a mut HashMap<PathBuf, Log>,
+        superseded: &mut HashSet<PathBuf>,
+    ) -> Result<Option<&'a mut Log>, String> {
+        let id = agent_hud_agents::hermes::transcript::session_id(path, session);
+        let Some(key) = self.resolve_session_path("hermes", &id, path, superseded) else {
+            return Ok(None);
+        };
+        if !logs.contains_key(&key) {
+            if !self.logs.contains_key(&key) {
+                return Ok(None);
+            }
+            let log = self.load_parser(&key)?.0;
+            logs.insert(key.clone(), log);
+        }
+        Ok(logs.get_mut(&key))
+    }
+
     fn resolve_session_path(
         &self,
         source: &str,
@@ -381,6 +447,11 @@ impl AgentHudCore {
             ));
         }
 
+        if stamp.source == "hermes" {
+            if let Some(reader) = reader.as_ref() {
+                self.hermes_turns(&reader.connection, path, &mut logs, &mut superseded)?;
+            }
+        }
         if is_bot {
             self.reads.bot_poll = bot_running.then(|| {
                 (
@@ -474,7 +545,12 @@ impl AgentHudCore {
             .commit()
             .map_err(|_| "Could not commit client database page")?;
 
-        for (mut log, _, _, bytes) in encoded {
+        for (mut log, head, _, bytes) in encoded {
+            // A Hermes reply's words live only in memory: the head read back
+            // next takes them from this one (`LogHead::keep_words`).
+            if stamp.source == "hermes" {
+                self.logs.insert(log.path.clone(), head);
+            }
             log.meter_events.clear();
             self.parser_cache.insert(log, bytes);
         }

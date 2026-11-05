@@ -19,7 +19,7 @@ import {
   type LiveSession,
 } from "./agent-board";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
-import { BotStamp } from "./BotStamp";
+import { BotSeal } from "./BotStamp";
 
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it;
@@ -301,31 +301,13 @@ function LiveRow({
           minWidth: 0,
         }}
       >
-        {session.title?.trim() ||
+        {session.liveFacts?.prompt?.trim() ||
+          session.title?.trim() ||
           (zh ? "（未命名会话）" : "(untitled session)")}
       </span>
       {bot && (
-        <span
-          title={bot.name}
-          style={{
-            gridRow: "1 / 3",
-            gridColumn: "3 / 4",
-            display: "grid",
-            justifyItems: "center",
-            gap: 1,
-          }}
-        >
-          <BotStamp bot={bot} size={30} light={light} />
-          <span
-            style={{
-              fontSize: 9.5,
-              letterSpacing: "0.05em",
-              color: inks.secondary,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {bot.name}
-          </span>
+        <span style={{ gridRow: "1 / 3", gridColumn: "3 / 4" }}>
+          <BotSeal bot={bot} light={light} color={inks.secondary} />
         </span>
       )}
       <button
