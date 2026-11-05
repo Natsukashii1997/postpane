@@ -239,6 +239,7 @@ export class BotMotion {
   private fluttered: number | null = null;
   private petalGoal = 1;
   private petalLive = false;
+  private dimGoal = 0;
   private hoverAt: number | null = null;
   private faded = 1;
   private settled = false;
@@ -462,7 +463,7 @@ export class BotMotion {
         !this.state.holds &&
         BotMoves.inBurst(now - this.beatsFrom)
       )
-        this.pose.x = 0.008 * Math.sin(now * 90) * this.morph;
+        this.pose.x = 0.012 * Math.sin(now * 90) * this.morph;
     } else if (this.morph > 0.5) this.pose.x += 0.025 * this.face.look;
     if (!this.limbed) this.played(now);
     this.limbs =
@@ -546,7 +547,7 @@ export class BotMotion {
       if (
         this.petalLive ||
         Math.abs(this.petal - this.petalGoal) > 0.005 ||
-        this.dim > 0.01 ||
+        Math.abs(this.dim - this.dimGoal) > 0.01 ||
         this.ring !== null ||
         (this.look === "done" && age < this.doneLength)
       )
@@ -559,6 +560,7 @@ export class BotMotion {
         return every(
           this.look === "thinking" ? BotPace.following : BotPace.lively,
         );
+      if (dozing) return every(BotPace.following);
     }
     let pace: number | null = this.following
         ? BotPace.following
@@ -667,13 +669,13 @@ export class BotMotion {
     const busy = BotMoves.inBurst(now - this.beatsFrom);
     switch (this.look) {
       case "thinking":
-        return 45;
+        return 60;
       case "tool-edit":
         return busy ? 100 : 0;
       case "tool-command":
         return busy ? 240 : 25;
       case "tool-read":
-        return -40;
+        return -60;
       case "tool-long-command":
         return 20;
       case "compacting":
@@ -681,7 +683,9 @@ export class BotMotion {
       case "plain":
         return busy ? BotMoves.busySpin : 0;
       default:
-        return this.state.badge === "limited" ? this.spin * 0.3 : this.spin;
+        return this.state.badge === "limited"
+          ? this.spin * 0.3
+          : this.spin * 1.6;
     }
   }
   private turnStep(now: number, dt: number, dozing: boolean) {
@@ -715,25 +719,30 @@ export class BotMotion {
     let petal = 1,
       dim = 0,
       live = false;
-    if (dozing) petal = 0.12;
-    else if (this.look === "compacting" && !this.state.holds) {
+    if (dozing) {
+      petal = 0.12;
+      dim = 0.35;
+    } else if (this.look === "compacting" && !this.state.holds) {
       petal = 1 - 0.75 * this.compactBreath(age);
       live = true;
     } else if (this.look === "permission") {
-      petal = waiting ? 1 + 0.5 * pulse(0.8) : 1.25;
+      petal = waiting ? 1 + 0.6 * pulse(0.8) : 1.3;
       live = waiting;
     } else if (this.look === "question") {
-      petal = waiting ? 1.1 + 0.15 * pulse(1.2) : 1.15;
+      petal = waiting ? 1.1 + 0.25 * pulse(1.2) : 1.2;
       live = waiting;
-    } else if (this.look === "plan") petal = this.moving(age) ? 1.5 : 1.1;
+    } else if (this.look === "plan") petal = this.moving(age) ? 1.6 : 1.15;
     else if (this.look === "done" && age < this.doneLength) {
       const card = this.state.card;
       petal =
         card === "long-done"
-          ? 1.2 + 0.3 * pulse(0.4)
-          : 1 + (card === "reset" ? 1 : 0.6) * swing(age / 0.9);
+          ? 1.25 + 0.35 * pulse(0.4)
+          : 1 + (card === "reset" ? 1.2 : 0.8) * swing(age / 0.9);
       live = true;
-    } else if (this.state.badge === "limited" && isCalm(this.look)) petal = 0.7;
+    } else if (this.state.badge === "limited" && isCalm(this.look)) {
+      petal = 0.6;
+      dim = 0.4;
+    }
     if (this.fluttered !== null) {
       const time = now - this.fluttered;
       if (time < 0.9) {
@@ -754,6 +763,7 @@ export class BotMotion {
     }
     this.petalGoal = petal;
     this.petalLive = live;
+    this.dimGoal = dim;
     this.petal += (petal - this.petal) * (1 - Math.exp(-dt * 16));
     if (Math.abs(petal - this.petal) < 0.002) this.petal = petal;
     this.dim += (dim - this.dim) * (1 - Math.exp(-dt * 10));
@@ -961,8 +971,14 @@ export class BotMotion {
         pose.y -= 0.03 * Math.abs(beat);
       }
     } else {
+      if (this.petals && dozing) {
+        // Asleep: flattened, breathing slow and deep.
+        const breath = Math.sin((2 * Math.PI * age) / 3);
+        pose.scaleX = 1.1 - 0.03 * breath;
+        pose.scaleY = 0.84 + 0.05 * breath;
+      }
       if (this.petals && this.look === "compacting" && !this.state.holds) {
-        const shrink = 1 - 0.14 * this.compactBreath(age);
+        const shrink = 1 - 0.2 * this.compactBreath(age);
         pose.scaleX *= shrink;
         pose.scaleY *= shrink;
       }
