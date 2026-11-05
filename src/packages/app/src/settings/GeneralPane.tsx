@@ -157,7 +157,7 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
         {loginNote && <Notice tone="warning">{loginNote}</Notice>}
         <ToggleRow
           title={t("Show menu bar icon", "显示菜单栏图标")}
-          checked={settings.showMenuBarIcon !== false}
+          checked={settings.showMenuBarIcon === true}
           change={setting("showMenuBarIcon")}
         />
         {problem(startupKeys)}

@@ -269,6 +269,51 @@ mod tests {
     }
 
     #[test]
+    fn menu_bar_icon_is_hidden_on_a_fresh_install_and_a_saved_choice_is_kept() {
+        // 新装：没有设置文件，菜单栏图标默认不显示。
+        let fresh = tempfile::tempdir().unwrap();
+        let core = AgentHudCore::new(vec![], fresh.path().to_owned());
+        assert_eq!(core.settings["showMenuBarIcon"], false);
+
+        // 已有设置明确写了显示：照用户的值，不迁移、不覆盖。
+        for saved in [true, false] {
+            let home = tempfile::tempdir().unwrap();
+            fs::write(
+                home.path().join("settings.json"),
+                serde_json::to_vec(
+                    &json!({"settings": {"showMenuBarIcon": saved}, "providers": {}}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let core = AgentHudCore::new(vec![], home.path().to_owned());
+            assert_eq!(core.settings["showMenuBarIcon"], saved);
+            let reopened = AgentHudCore::new(vec![], home.path().to_owned());
+            assert_eq!(reopened.settings["showMenuBarIcon"], saved);
+        }
+
+        // 已有设置没写这一项（升级前的旧文件）：按新的默认值，不显示。
+        let older = tempfile::tempdir().unwrap();
+        fs::write(
+            older.path().join("settings.json"),
+            br#"{"settings": {"appearance": "dark"}, "providers": {}}"#,
+        )
+        .unwrap();
+        let core = AgentHudCore::new(vec![], older.path().to_owned());
+        assert_eq!(core.settings["showMenuBarIcon"], false);
+
+        // 新装时从原版 Agent HUD 导入的明确选择同样照用。
+        let imported = tempfile::tempdir().unwrap();
+        let mut core = AgentHudCore::new(vec![], imported.path().to_owned());
+        assert!(core
+            .seed_initial_preferences(&json!({"showMenuBarIcon": true}))
+            .unwrap());
+        assert_eq!(core.settings["showMenuBarIcon"], true);
+        let reopened = AgentHudCore::new(vec![], imported.path().to_owned());
+        assert_eq!(reopened.settings["showMenuBarIcon"], true);
+    }
+
+    #[test]
     fn account_source_paths_persist_and_reject_invalid_entries() {
         for key in ["codexHomes", "antigravityCliSettings"] {
             let home = tempfile::tempdir().unwrap();

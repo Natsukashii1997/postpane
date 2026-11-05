@@ -24,8 +24,8 @@
 
 | Status | Count |
 |---|---|
-| same | 49 |
-| deliberate | 2 |
+| same | 48 |
+| deliberate | 3 |
 | better | 1 |
 | missing | 20 |
 | differs | 38 |
@@ -135,7 +135,7 @@
 | 85 | AgentUsage.swift:37-40,76; UsageStore+Stats.swift:159 | Statistics costs priced on each client's platform | statistics/mod.rs:164-172 | fixed | **What:** always USD. **When:** China-platform clients. **User sees:** Tokens/Statistics totals in $ instead of ¥, with different amounts. **Fixed 2026-10-20** (price regions): statistics price every bucket on its client's platform; a change of platform invalidates the cached statistics and meter view. |
 | 86 | ReportView.swift:291-300 | Balance consumers and reply rate under the balance's key | billing_metrics.rs:67-112 | same | Next binds by `deepseek-official` route and home. |
 | 87 | ReportView+Marks.swift:69-77 | When the vendor's window last began anew | mark-director.ts | missing | The input to #42. Not visible on its own. |
-| 88 | Models/Settings/Settings.swift:88-121 | Defaults: hover 400 ms, collapse 200 ms (0–1500, step 50), botLogos on, Option off, top-edge off, approval wait 10 (1/3/5/10/30/60), menu-bar icon on, hudTools off, Copilot quota off | hud-defaults.json; lib.rs:181; DisplayPane.tsx:819-835; legacy_preferences.rs:523-528 | same | |
+| 88 | Models/Settings/Settings.swift:88-121 | Defaults: hover 400 ms, collapse 200 ms (0–1500, step 50), botLogos on, Option off, top-edge off, approval wait 10 (1/3/5/10/30/60), menu-bar icon on, hudTools off, Copilot quota off | hud-defaults.json; core/src/lib.rs settings defaults; GeneralPane.tsx; legacy_preferences.rs:523-528 | deliberate | The menu-bar icon is off on a fresh install (PostPane's owner decided 2026-11-04); a saved or imported choice is kept. Every other default is the same. |
 | 89 | Settings.swift:123 | Appearance default: system | lib.rs:181 (`"dark"`) | same | **When:** fresh install. **User sees:** dark windows on a light-mode Mac. Core's default has since become `"system"` (lib.rs settings defaults). |
 | 90 | Settings.swift:127; Formatting/Localization.swift:42-45 | Language default: system (Chinese if the first preferred language is zh, else English) | lib.rs:181 (`"zh-CN"`) | same | **When:** fresh install on a non-Chinese Mac. **User sees:** the UI in Chinese. Core's default has since become `"system"`, resolved from the system's first preferred language (l10n.rs). |
 | 91 | Settings.swift:121 | Launch at login: on by default | lib.rs:181 (`false`) | fixed | **When:** fresh install. **User sees:** the app does not start at login. **Fixed 2026-10-21:** Core's default is on, so a first launch registers the login item (`register_if_never_registered`). |

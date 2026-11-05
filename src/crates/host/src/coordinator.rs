@@ -333,7 +333,7 @@ fn run(app: &tauri::AppHandle) {
                 &agents,
                 view["appDraft"]["showMenuBarIcon"]
                     .as_bool()
-                    .unwrap_or(snapshot["settings"]["showMenuBarIcon"] != false),
+                    .unwrap_or(snapshot["settings"]["showMenuBarIcon"] == true),
                 view["glowHidden"] == true,
                 appearance == "light" || appearance == "system" && light,
                 notice.as_ref().map(|notice| notice.version.as_str()),
