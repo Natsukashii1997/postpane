@@ -2,6 +2,22 @@
 
 更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
 
+## 随手记嵌入侧栏：挂件入口 + 原页面小窗（2026-11-05，Claude，常浩要求把自建应用的侧边浮窗接进驿窗、先试数码世界随手记，「保持原样只做嵌入」，区分样式选「丙 · 挂件」，看过安装后说「合并」；PR #75 测试全过已 squash 合并 `7aaafbd`，已从 main 内容重新打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:00`（估计，按「先只做随手记」那条消息；本节写于 `2026-11-05 17:45`）。来由：常浩要把自建应用的侧边浮窗收进驿窗侧栏，先接随手记；issue #70。三版预览 https://claude.ai/artifact/R3uKEDZa6Ahd7LPoWRG2tE （选丙）；更早一版「纸面重画」的预览 https://claude.ai/artifact/7As4PMe4MWB1m3dmC9T3pA 已被否（改为原样嵌入）。
+- 改了哪些文件（PR #75）：`src/crates/host/src/float_notes.rs`（新：`toggle_float_notes` 命令，建 `float-notes` 无边框透明置顶小窗加载 `127.0.0.1:5178/?floatingNotes=1#/float`，368×600 开在球旁朝屏幕内侧；`on_navigation` 只放行这一页，`on_new_window` 把「在数码世界打开」交给默认浏览器；端口不在线显示「数码世界还没有启动」+ 重试；不进任何 capability）、`host/src/lib.rs`（注册命令）、`host/src/shell/{mod,macos,linux,windows}.rs`（`open_in_browser`）、`src/packages/hud/src/app-pendant.ts`（新：挂件位置，侧边挂票根下、放不下挂上方，顶/底边跟在右侧）、`hud/src/scene/AppPendant.tsx`（新：虚线挂绳 + 纸色垫圈里的原球 + 「随手记」吊牌）、`hud/src/HUDScene.tsx`（动态形态渲染挂件，新 prop `onFloatNotes`）、`app/src/HUDSurface.tsx`（invoke 命令；点击区域与轮廓观察加 `.hud-app-pendant`）、`hud/src/assets/float-notes-ball.png`（原样复制自 digiworld）与素材 README、`docs/ROADMAP.md`（自建应用接入改为已启动，本节一并提交）。
+- 测试：变基到 `58f6816` 后的分支 `e50008b`（与 main `7aaafbd` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 189` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。新增 Rust `float_notes` 6 项、`hud/test/app-pendant.test.ts` 5 项。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-float-notes/`。
+- 验证：我申请操作驿窗窗口被常浩拒绝，点球开合、位置、样子由常浩自己看过（「看过了，合并」）；小窗拿不到 IPC、数码世界停服时的提示，均未实机验证，只有单测覆盖放行规则。注意：我 17:31:58 装的分支版 17:36:58 被另一会话的 #73 安装覆盖（L-05 又一次），常浩看的可能是两者之一，以合并后重装版为准。
+- 截图：无（未获窗口操作授权）。
+- 发布与回读：合并后从与 main `7aaafbd` 内容相同的分支打包，17:42:54 ditto 到 `/Applications` 并重启；`shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 为打包产物的 `50852e05ca07`（含 #73 与 #75）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-float-notes/PostPane-before.app /Applications/PostPane.app`（这是 17:31 前的版本，不含 #73）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 网页右上角「−」嵌入后只会把页面折起（拿不到原生桥），收窗口要点球；未写完的草稿存在驿窗网页存储，不与原随手记程序的恢复区共用。
+  - 原随手记程序 `~/Applications/随手记.app` 仍在运行并开机自启，屏幕上有两颗球；停不停用等常浩定。
+  - 刘海形态不显示挂件。
+  - 同日还做了：一键转交方案（#71，选「乙 · 转交单」，未开工）、Codex/Orca 往返实测（#72 评论里有结论与命令）。实测留下两个 Codex 测试会话（`01a1aae3…`、`01a1aaec…`）和 Orca 里注册的测试仓库 `codex-sandbox`，是否移除待常浩定。
+  - 可清理 worktree：`.claude/worktrees/70-float-notes` 本节提交后即删。
+- 本轮新坑：无（L-05 重现，未新增）。
+
 ## 设置页整体优化：统一收据外框、分组框加控件右齐、面板真实预览，HUD 改叫侧栏（2026-11-05，Claude，常浩说设置页「不太好看，也不协调」，外框选「甲 · 统一收据」，内容要「一的效果 二的规范框架」、对齐选「甲 · 控件右齐」，HUD 改叫「侧栏」、只删「显示」页页头说明，看过安装后的应用说「合并」；PR #73 测试全过已 squash 合并 `b5d650b`，已打包安装、回读一致）
 
 - 时间：开工 `2026-11-05 15:52`（按常浩提出整体优化那条消息；issue #69 建于 16:25；本节写于 `2026-11-05 17:09`）。来由：面板清单审完后对设置窗口做最后一轮整体优化。定稿页：外框 https://claude.ai/artifact/Dwtz24xPLQYtW1bqLvL6ac （甲），内容三版 https://claude.ai/artifact/MsikAFgUQnEPc6rwBaY3Wq ，合并版 https://claude.ai/artifact/LjbTbmyTt8VyTYSXP14K4P （甲 · 控件右齐）。
