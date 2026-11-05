@@ -125,7 +125,13 @@ impl crate::AgentHudCore {
         self.reads.pending.len().hash(&mut hash);
         // A Hermes gateway going down is news though no log changed.
         for gateway in self.hermes_gateways(Utc::now().timestamp_millis()) {
-            (gateway.bot.id, gateway.down).hash(&mut hash);
+            let failed = gateway.cron_jobs().map(|jobs| {
+                jobs.into_iter()
+                    .filter(|job| job.failed)
+                    .map(|job| job.id)
+                    .collect::<Vec<_>>()
+            });
+            (gateway.bot.id, gateway.down, failed).hash(&mut hash);
         }
         (
             self.usage_projection.is_none(),
@@ -252,6 +258,16 @@ impl crate::AgentHudCore {
         let relays = self.relay_rows(&relay_users);
         let gateways = self.hermes_gateways(now);
         self.island_events.gateways(&gateways, now);
+        let crons = gateways
+            .iter()
+            .map(|gateway| (gateway.bot.clone(), gateway.cron_jobs()))
+            .collect::<Vec<_>>();
+        let told_path = self
+            .settings_path
+            .parent()
+            .filter(|_| !self.demo)
+            .map(|dir| dir.join("hermes-cron-told.json"));
+        self.island_events.cron(&crons, told_path.as_deref(), now);
         let hermes_bots = hermes_bots(&gateways, now);
         let island_events = self
             .island_events

@@ -187,7 +187,54 @@ pub fn gateways(home: &Path, now: i64) -> Vec<Gateway> {
         .collect()
 }
 
+/// One Hermes scheduled task (`cron/jobs.json`) and how its last run went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CronJob {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    /// Its last run failed (`last_status` "error"); a task never run is not.
+    pub failed: bool,
+    /// When its last run was (ms).
+    pub last_run_at: Option<i64>,
+    /// When it runs next (ms).
+    pub next_run_at: Option<i64>,
+}
+
+fn millis(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_str()
+        .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.timestamp_millis())
+}
+
+/// The scheduled tasks in a `cron/jobs.json` (`{"jobs": [...]}`); None when
+/// it cannot be read, so a file caught mid-write is not taken for no tasks.
+pub fn cron_jobs(text: &str) -> Option<Vec<CronJob>> {
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    let jobs = value["jobs"].as_array()?;
+    Some(
+        jobs.iter()
+            .filter_map(|job| {
+                Some(CronJob {
+                    id: job["id"].as_str()?.to_string(),
+                    name: job["name"].as_str().unwrap_or_default().to_string(),
+                    enabled: job["enabled"].as_bool().unwrap_or(true),
+                    failed: job["last_status"] == "error",
+                    last_run_at: millis(&job["last_run_at"]),
+                    next_run_at: millis(&job["next_run_at"]),
+                })
+            })
+            .collect(),
+    )
+}
+
 impl Gateway {
+    /// Its scheduled tasks; None when its `cron/jobs.json` cannot be read.
+    pub fn cron_jobs(&self) -> Option<Vec<CronJob>> {
+        cron_jobs(&std::fs::read_to_string(self.home.join("cron").join("jobs.json")).ok()?)
+    }
+
     /// Its bot's Feishu activity since `since` (ms); none when its database
     /// cannot be read.
     pub fn activity(&self, since: i64) -> transcript::Activity {
@@ -246,6 +293,31 @@ mod gateway_tests {
             down(&state("running", "connected", false, SILENT_MS + 1), NOW),
             Some(Down::Stopped)
         );
+    }
+
+    #[test]
+    fn a_cron_job_failed_only_when_its_last_run_errored() {
+        let text = json!({"jobs": [
+            {"id": "a", "name": "周报", "enabled": true, "last_status": "error",
+             "last_run_at": "2026-11-02T09:14:01.841135+08:00",
+             "next_run_at": "2026-11-09T07:45:00+08:00"},
+            {"id": "b", "name": "日报", "enabled": true, "last_status": "ok",
+             "last_run_at": "2026-11-05T07:36:39+08:00"},
+            {"id": "c", "name": "卡片", "enabled": true, "last_status": null, "last_run_at": null},
+            {"name": "没有 id"}
+        ], "updated_at": "2026-11-05T09:50:50+08:00"})
+        .to_string();
+        let jobs = cron_jobs(&text).unwrap();
+        assert_eq!(
+            jobs.iter()
+                .map(|j| (j.id.as_str(), j.failed))
+                .collect::<Vec<_>>(),
+            vec![("a", true), ("b", false), ("c", false)]
+        );
+        assert_eq!(jobs[0].last_run_at, Some(1_793_582_041_841));
+        assert_eq!(jobs[0].next_run_at, Some(1_794_181_500_000));
+        assert_eq!(jobs[2].last_run_at, None);
+        assert_eq!(cron_jobs("{\"jobs\": [{\"id\""), None);
     }
 
     #[test]

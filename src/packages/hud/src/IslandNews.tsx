@@ -237,13 +237,15 @@ export const newsTitle = (event: IslandEvent, zh = false) =>
           : "Usage resets added"
         : event.kind === "bot-offline"
           ? `${event.title ?? "Hermes"} · ${event.message ?? (zh ? "断线" : "Offline")}`
-          : event.kind === "sign-in-needed"
-            ? zh
-              ? "需要重新登录"
-              : "Sign in again"
-            : zh
-              ? "额度预警"
-              : "Running low";
+          : event.kind === "cron-failed"
+            ? `${event.title ?? "Hermes"} · ${event.message ?? (zh ? "没跑成" : "Did not run")}`
+            : event.kind === "sign-in-needed"
+              ? zh
+                ? "需要重新登录"
+                : "Sign in again"
+              : zh
+                ? "额度预警"
+                : "Running low";
 
 export const compactDuration = (seconds: number) => {
   const total = Math.max(0, Math.round(seconds)),

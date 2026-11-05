@@ -710,12 +710,17 @@ export interface IslandEvent {
     /** The agent signed out; `message` is what its account reading says. */
     | "sign-in-needed"
     /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
-    | "bot-offline";
+    | "bot-offline"
+    /** A Hermes scheduled task's last run failed; `title` is the task. */
+    | "cron-failed";
   at: string;
+  /** For `cron-failed`: when the failed run was, and when it runs next. */
+  failedAt?: string | null;
+  nextRunAt?: string | null;
   /** For a completion: the words that started the turn, when the session
    * names them apart from its title (Hermes). */
   prompt?: string | null;
-  /** For `bot-offline`: the Hermes bot whose gateway went down. */
+  /** For `bot-offline` and `cron-failed`: the Hermes bot it is about. */
   bot?: { id: string; name: string } | null;
   startedAt?: string | null;
   source: string;

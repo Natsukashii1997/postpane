@@ -33,6 +33,9 @@ pub(super) struct Tracker {
     credits: HashMap<String, Credits>,
     sign_ins: HashMap<String, SignIn>,
     gateways: HashMap<String, SignIn>,
+    /// The failed Hermes scheduled tasks already told (`bot:job`), kept on
+    /// disk so a restart does not tell them again; loaded on first look.
+    cron_told: Option<HashSet<String>>,
     revision: u64,
     events: VecDeque<Value>,
 }
@@ -53,6 +56,7 @@ impl Tracker {
             credits: HashMap::new(),
             sign_ins: HashMap::new(),
             gateways: HashMap::new(),
+            cron_told: None,
             revision: 0,
             events: VecDeque::new(),
         }
@@ -301,6 +305,52 @@ impl Tracker {
         }
     }
 
+    /// A Hermes scheduled task whose last run failed is told once, as a
+    /// strip, and not again until a run of it succeeds (owner, issue #114).
+    /// What was told is kept in `told_path`, so a failure from while the app
+    /// was closed is told once at the next look, and a restart tells nothing
+    /// new. A bot whose `jobs.json` cannot be read is left as it was.
+    pub fn cron(
+        &mut self,
+        bots: &[(
+            agent_hud_agents::hermes::Bot,
+            Option<Vec<agent_hud_agents::hermes::CronJob>>,
+        )],
+        told_path: Option<&std::path::Path>,
+        now: i64,
+    ) {
+        let mut told = self.cron_told.take().unwrap_or_else(|| {
+            told_path
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(|text| serde_json::from_str::<HashSet<String>>(&text).ok())
+                .unwrap_or_default()
+        });
+        let before = told.clone();
+        for (bot, jobs) in bots {
+            let Some(jobs) = jobs else { continue };
+            let prefix = format!("{}:", bot.id);
+            told.retain(|key| {
+                key.strip_prefix(&prefix)
+                    .is_none_or(|id| jobs.iter().any(|job| job.id == id && job.failed))
+            });
+            for job in jobs.iter().filter(|job| job.failed && job.enabled) {
+                if !told.insert(format!("{prefix}{}", job.id)) {
+                    continue;
+                }
+                let id = &bot.id;
+                self.push(&format!("hermes:{id}:cron:{}:{now}", job.id),json!({"kind":"cron-failed","islandAlert":true,"at":iso(now),"source":"hermes","accountId":id,"title":job.name,"message":crate::l10n::text("没跑成", "Did not run"),"failedAt":job.last_run_at.map(iso),"nextRunAt":job.next_run_at.map(iso),"bot":{"id":id,"name":bot.name}}));
+            }
+        }
+        if told != before {
+            if let Some(path) = told_path {
+                let mut keys = told.iter().collect::<Vec<_>>();
+                keys.sort();
+                let _ = std::fs::write(path, json!(keys).to_string());
+            }
+        }
+        self.cron_told = Some(told);
+    }
+
     /// An agent whose account reading says it signed out (the agent's own
     /// state, `failure` "signedOut", not a reading that only missed an
     /// answer) is told once, on the island: at most once a day, again after
@@ -429,5 +479,87 @@ mod tests {
         let mut late = Tracker::new();
         late.gateways(&[gateway(Some(Down::Feishu))], now);
         assert_eq!(told(&late), 0, "the first look only notes");
+    }
+
+    #[test]
+    fn a_failed_hermes_cron_job_is_told_once_until_it_runs_ok() {
+        use agent_hud_agents::hermes::{Bot, CronJob};
+        let bot = Bot {
+            id: "default".into(),
+            name: "猛鬼兽".into(),
+        };
+        let job = |id: &str, failed: bool| CronJob {
+            id: id.into(),
+            name: format!("任务{id}"),
+            enabled: true,
+            failed,
+            last_run_at: Some(1_793_582_041_841),
+            next_run_at: Some(1_794_181_500_000),
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hermes-cron-told.json");
+        let told = |tracker: &Tracker| {
+            tracker
+                .events
+                .iter()
+                .filter(|e| e["kind"] == "cron-failed")
+                .count()
+        };
+        let mut tracker = Tracker::new();
+        let now = tracker.started + 1_000;
+        // A failure from before launch is told at the first look.
+        tracker.cron(
+            &[(bot.clone(), Some(vec![job("a", true), job("b", false)]))],
+            Some(&path),
+            now,
+        );
+        assert_eq!(told(&tracker), 1);
+        let event = tracker.events.back().unwrap();
+        assert_eq!(event["title"], "任务a");
+        assert_eq!(event["bot"]["name"], "猛鬼兽");
+        assert_eq!(event["failedAt"], iso(1_793_582_041_841));
+        assert_eq!(event["nextRunAt"], iso(1_794_181_500_000));
+        // Still failing, or its jobs.json unreadable a moment: not again.
+        tracker.cron(
+            &[(bot.clone(), Some(vec![job("a", true)]))],
+            Some(&path),
+            now + 1,
+        );
+        tracker.cron(&[(bot.clone(), None)], Some(&path), now + 2);
+        tracker.cron(
+            &[(bot.clone(), Some(vec![job("a", true)]))],
+            Some(&path),
+            now + 3,
+        );
+        assert_eq!(told(&tracker), 1);
+        // A restart remembers what was told.
+        let mut restarted = Tracker::new();
+        restarted.cron(
+            &[(bot.clone(), Some(vec![job("a", true)]))],
+            Some(&path),
+            now + 4,
+        );
+        assert_eq!(told(&restarted), 0);
+        // Disabled tasks are not told.
+        let mut off = job("c", true);
+        off.enabled = false;
+        restarted.cron(
+            &[(bot.clone(), Some(vec![job("a", true), off]))],
+            Some(&path),
+            now + 5,
+        );
+        assert_eq!(told(&restarted), 0);
+        // Once it runs ok, the next failure is told again.
+        restarted.cron(
+            &[(bot.clone(), Some(vec![job("a", false)]))],
+            Some(&path),
+            now + 6,
+        );
+        restarted.cron(
+            &[(bot.clone(), Some(vec![job("a", true)]))],
+            Some(&path),
+            now + 7,
+        );
+        assert_eq!(told(&restarted), 1);
     }
 }
