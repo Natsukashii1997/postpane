@@ -20,6 +20,8 @@
     "./ground": "./src/ground.tsx",
     "./model": "./src/model.ts",
     "./paper": "./src/paper.ts",
+    "./scene/HUDMarkStrip": "./src/scene/HUDMarkStrip.tsx",
+    "./ticket-stub": "./src/ticket-stub.ts",
     "./usage-meter/arcs": "./src/usage-meter/arcs.ts",
     "./usage-meter/mark-usage": "./src/usage-meter/mark-usage.tsx"
   },

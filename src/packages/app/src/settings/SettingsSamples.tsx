@@ -15,6 +15,12 @@ import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { BotMark } from "@agent-hud/hud/BotMark";
 import { botKey } from "@agent-hud/hud/bots/artwork";
 import { staysAsBot } from "@agent-hud/hud/bots/bot-spec";
+import {
+  StubFace,
+  StubPaper,
+  stubBoxStyle,
+} from "@agent-hud/hud/scene/HUDMarkStrip";
+import { stubFootHeight } from "@agent-hud/hud/ticket-stub";
 import { HUDGlow } from "@agent-hud/hud/HUDGlow";
 import {
   defaultHUDConfig,
@@ -71,6 +77,8 @@ export function SmallHUDPreview({
   );
   const metrics = stripMetrics(sample, vendors, snapshot.settings.quotaDisplay);
   const simple = sample.mode === "simple";
+  const stubbed = sample.mode === "logos";
+  const zh = useFormat().language === "zh";
   const light =
     sample.appearance === "light" ||
     (sample.appearance === "system" &&
@@ -135,7 +143,8 @@ export function SmallHUDPreview({
                 height: metrics.height,
               }}
             >
-              {!simple && (
+              {/* Only the notch glows on screen; Dynamic's stubs have none. */}
+              {sample.mode === "notch" && (
                 <HUDGlow
                   outwardOnly={sample.glowOutwardOnly}
                   width={metrics.width}
@@ -165,7 +174,8 @@ export function SmallHUDPreview({
                   position: "absolute",
                   inset: 0,
                   display: "flex",
-                  alignItems: "center",
+                  // Dynamic's stubs hang from the screen's top edge.
+                  alignItems: stubbed ? "flex-start" : "center",
                   // The marks sit in the middle of the strip, not against its left end.
                   justifyContent: simple ? undefined : "center",
                   gap: metrics.gap,
@@ -208,12 +218,22 @@ export function SmallHUDPreview({
                     <div
                       key={vendor.key}
                       style={{
+                        position: "relative",
                         display: "flex",
                         alignItems: "center",
                         gap: metrics.labelGap,
                         flexShrink: 0,
+                        // Dynamic draws each agent as the sidebar's ticket stub.
+                        ...(stubbed ? stubBoxStyle(metrics.logo, "top") : null),
                       }}
                     >
+                      {stubbed && (
+                        <StubPaper
+                          unit={metrics.logo / 20}
+                          side="top"
+                          light={light}
+                        />
+                      )}
                       <span
                         style={{
                           position: "relative",
@@ -240,7 +260,8 @@ export function SmallHUDPreview({
                         <BotMark
                           source={vendor.name}
                           size={metrics.logo}
-                          light={light}
+                          // On a stub the bot stands on light paper, whatever the theme.
+                          light={stubbed || light}
                           enabled={sample.botLogos}
                           // The same standing bots as the sidebar (Codex's petals, Hermes's portrait).
                           staysBot={staysAsBot(botKey(vendor.name))}
@@ -254,6 +275,19 @@ export function SmallHUDPreview({
                           }
                         />
                       </span>
+                      {stubbed && (
+                        <StubFace
+                          vendor={vendor}
+                          label={meterLabel(
+                            vendor,
+                            snapshot.settings.quotaDisplay,
+                          )}
+                          unit={metrics.logo / 20}
+                          foot={stubFootHeight(metrics.logo)}
+                          side="top"
+                          zh={zh}
+                        />
+                      )}
                       {simple && metrics.bar > 0 && (
                         <MarkBars
                           items={markItems(
