@@ -6,7 +6,7 @@
 
 - **构建、检查、测试在 Linux 上都能跑通。** 装好系统库、换 Node 24、先生成资源目录之后，7 条命令全部退出 0；打出的 `PostPane` 在虚拟屏上能启动、建好数据目录、连续运行 20 秒不崩。
 - **没有发现「文档写了支持却坏了」的问题。** 所有失败都来自环境准备（系统库、Node 版本、资源目录）或一条与平台无关的偶发测试。
-- **主要差距不在构建，而在功能。** Linux 宿主代码里有 12 处明写「未实现」的占位（凭据库、应用激活、显示器变化监听、全局快捷键、X11 拖动等），文档本就写明 Linux「未经验证」。能编译不等于能用。
+- **主要差距不在构建，而在功能。** Linux 宿主代码里有 11 处明写「未实现」的占位、2 项能力标为不支持，另有 1 条文档限制（凭据库、应用激活、显示器变化监听、全局快捷键、X11 拖动等），文档本就写明 Linux「未经验证」。能编译不等于能用。
 - **共用代码里找到 1 处 macOS 专属路径**，`check:platform` 查不到这类写法，Linux 上目前没有功能影响。
 
 ## 环境与做法
@@ -87,7 +87,7 @@
   ```
 
 - **验证**：同一份代码换 Node v24.22.2 直接跑这个文件，`ℹ pass 14` / `ℹ fail 0`，退出 0。
-- **建议修法**：根目录 `package.json` 加 `"engines": { "node": ">=24" }`，再加 `.npmrc` 写 `engine-strict=true`，让 `pnpm install` 在版本不对时直接报错；`AGENTS.md`「运行」一节补一句 Node 版本要求。交接里的测试行同时记 `ℹ cancelled`，或者以退出码为准。
+- **建议修法**：根目录 `package.json` 加 `"engines": { "node": ">=24" }`，再在 `pnpm-workspace.yaml` 里写 `engineStrict: true`，让 `pnpm install` 在版本不对时直接报错（复核实测：pnpm 11 下写在 `.npmrc` 的 `engine-strict=true` 只出一行警告、退出 0，不起作用）；`AGENTS.md`「运行」一节补一句 Node 版本要求。交接里的测试行同时记 `ℹ cancelled`，或者以退出码为准。
 
 ### 问题 2：Rust 核心库一条测试依赖真实时钟，偶发失败
 
@@ -112,7 +112,7 @@
 
 - **归类**：缺系统依赖或文档没写清。
 - **严重程度**：中。全新 Linux 机器上 `pnpm run check` 必失败，要自己去 Tauri 官网拼包名。
-- **位置**：`docs/platform-builds.md:151`（表格里的 Linux 一行），`docs/development.md`「Run the workspace」没提系统库。
+- **位置**：`docs/platform-builds.md:42`（表格里的 Linux 一行），`docs/development.md`「Run the workspace」没提系统库。
 - **原样报错**（`pnpm run check` 的最后一步 `cargo check --workspace`）：
 
   ```text
@@ -187,7 +187,10 @@
   | 首次运行自动登记开机启动 | `host/src/system/linux.rs:86` | 不登记，留给用户 |
   | X11 原生拖动 | `host/src/hud/linux.rs:358` | 不支持 |
   | 无 layer-shell 的 Wayland（GNOME） | `host/src/hud/linux.rs:64`、`:172` | 拒绝显示边缘 HUD |
-  | 客户端钩子 | `docs/platform-builds.md:151` | 没有固定安装路径前不安装 |
+  | 键盘交接 | `host/src/hud/linux.rs:377` | `keyboard_handoff: false`（macOS 是 true） |
+  | 显示器身份持久化 | `host/src/hud/linux.rs:404` | `persistent_display_identity: false`（macOS、Windows 都是 true），接拔显示器后 HUD 认不出是哪块屏 |
+
+  另有 1 条文档限制，不是宿主代码：客户端钩子在没有固定安装路径前不安装（`docs/platform-builds.md:74-77`）。
 
 - **建议修法**：如果哪天真要在 Linux 上用，先决定目标桌面环境（GNOME 还是 wlr 系的 Wayland 合成器），再按「凭据库 → 应用激活 → 显示器监听」的顺序补；GNOME 下边缘 HUD 被拒绝这一点决定了能不能用，应最先确认。
 
@@ -207,13 +210,13 @@
 
 | # | 问题 | 归类 | 严重程度 | 影响 Linux 独有？ | 建议 |
 |---|---|---|---|---|---|
-| 1 | Node 22 下插件测试 8 条被取消，汇总显示 `fail 0` | 缺依赖 / 文档没写清 | 中 | 否 | `engines` + `engine-strict`，AGENTS 补版本 |
+| 1 | Node 22 下插件测试 8 条被取消，汇总显示 `fail 0` | 缺依赖 / 文档没写清 | 中 | 否 | `engines` + `pnpm-workspace.yaml` 的 `engineStrict`，AGENTS 补版本 |
 | 2 | 核心库一条测试用真实时钟，偶发失败（1/12） | 平台无关的不稳定测试 | 低 | 否 | 用 `PINNED_CLOCK` 固定时钟 |
 | 3 | Linux 系统库没有可复制的安装命令 | 缺依赖 / 文档没写清 | 中 | 是 | `platform-builds.md` 补一行 apt 命令 |
 | 4 | 新目录 `pnpm run check` 缺资源目录失败，L-01 只写了 `cargo test` | 文档没写清 | 低 | 否 | 改 AGENTS 注释、L-01、development.md |
 | 5 | agents 层写死 Mac 的 Claude 桌面目录 | 共用代码混了 macOS 专属判断 | 低 | 否（Windows 同样多探一次） | 默认值挪进平台层；`check:platform` 加字面量检查 |
 | 6 | 数据目录路径过长时单实例接管静默失效 | 平台无关 | 低 | 否 | 暂不修 |
-| 7 | 12 处 Linux 能力占位未实现 | 文档本就写明不支持 | 信息 | 是 | 真要用 Linux 时先定目标桌面环境 |
+| 7 | 11 处 Linux 能力占位未实现、2 项能力不支持，另有 1 条文档限制 | 文档本就写明不支持 | 信息 | 是 | 真要用 Linux 时先定目标桌面环境 |
 | — | 文档写了支持却坏了 | — | — | — | **本次没有发现** |
 
 ## 要在 Linux 上开发需要先装什么
