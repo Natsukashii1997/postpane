@@ -652,6 +652,12 @@ export function HUDScene({
               openSettings={openSettings}
               light={light}
               language={snapshotLanguage(snapshot)}
+              sessions={snapshot.sessions}
+              replies={news.queue.flatMap((card) =>
+                card.type === "news" && card.event.kind === "completion"
+                  ? [card.event]
+                  : [],
+              )}
             />
           </PaperContext.Provider>
         ) : event ? (
@@ -667,19 +673,21 @@ export function HUDScene({
             />
           </PaperContext.Provider>
         ) : null}
-        {/* A notice's queue is printed on its receipt; a request's stays as
-            it was. */}
-        <PaperContext.Provider value={request ? null : paper}>
-          <PendingEventRows
-            queue={news.queue}
-            currentID={(request ?? event)!.id}
-            requests={requests}
-            select={news.select}
-            includeRequests={!request}
-            light={light}
-            zh={snapshotLanguage(snapshot) === "zh"}
-          />
-        </PaperContext.Provider>
+        {/* A notice's queue is printed on its receipt; a request's card
+            lists the replies waiting with it. */}
+        {!request && event && (
+          <PaperContext.Provider value={paper}>
+            <PendingEventRows
+              queue={news.queue}
+              currentID={event.id}
+              requests={requests}
+              select={news.select}
+              includeRequests
+              light={light}
+              zh={snapshotLanguage(snapshot) === "zh"}
+            />
+          </PaperContext.Provider>
+        )}
       </>
     ) : null;
 

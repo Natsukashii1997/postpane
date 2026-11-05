@@ -20,8 +20,6 @@ export {
 export {
   CompletionClosedRow,
   PendingEventRows,
-  PermissionClosedRow,
-  PermissionRowHead,
   WaitedLabel,
   permissionToolBadge,
 } from "./alerts/PendingEventRows";
@@ -225,11 +223,6 @@ export function projectName(cwd?: string | null): string | null {
   const trimmed = cwd.replace(/[\\/]+$/, "");
   const name = trimmed.split(/[\\/]/).pop();
   return name && name.length > 0 ? name : null;
-}
-
-export function shortenHomePath(path?: string | null): string | null {
-  if (!path) return null;
-  return path.replace(/^\/Users\/[^/]+/, "~").replace(/^\/home\/[^/]+/, "~");
 }
 
 export function NewsContent({

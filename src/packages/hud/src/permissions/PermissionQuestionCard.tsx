@@ -13,10 +13,11 @@ import type {
   RequestDecision,
 } from "@agent-hud/protocol";
 import { clientDisplayName } from "../IslandNews";
-import { alertFill, alertText, onAlertFill, permissionColors } from "../tokens";
+import { alertFill, onAlertFill, permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
+import { ApprovalTag } from "./ApprovalTag";
 
 /** A question's draft: the offered answers picked, the words typed, and
  * whether those words are the answer (`own`). Skipping or picking a single
@@ -130,13 +131,27 @@ export function PermissionQuestionCard({
   const allow = paper ? paper.ink : controls.allowFill;
   const onAllow = paper ? paper.paper : controls.onAllow;
   const signal = paper ? paper.ink : alertFill("warning", ground);
-  const signalText = paper ? paper.red : alertText("warning", ground);
   const onSignal = paper ? paper.paper : onAlertFill(ground);
   const accentEdge = paper ? paper.ink : "rgba(233,161,109,0.45)";
-  // A question's header (such as 下一步): a tinted chip, or a red box on paper.
-  const tag = paper
-    ? { background: "transparent", boxShadow: `inset 0 0 0 1.2px ${paper.red}` }
-    : { background: "rgba(233, 161, 109, 0.14)" };
+  // What led to the question, in readable ink; the question itself large.
+  const context = {
+    fontSize: 13,
+    lineHeight: 1.7,
+    marginBottom: 6,
+    color: paper ? paper.text(0.76) : text(0.84),
+    overflowWrap: "anywhere" as const,
+  };
+  const questionText = {
+    fontSize: 15,
+    fontWeight: 600,
+    color: primary,
+    lineHeight: 1.45,
+  };
+  // A question's heading (such as 下一步): the card's tag, dashed, in the
+  // asking red.
+  const heading = (header: string) => (
+    <ApprovalTag label={header} tone="ask" light={light} dashed />
+  );
   // An answer's row: a tinted box, or on paper a printed line over a dotted
   // rule, washed when picked.
   const answerRow = (chosen: boolean, edge = chosen) =>
@@ -222,38 +237,14 @@ export function PermissionQuestionCard({
       (fix === "installPlugin" || fix === "turnOnAnswers");
     return (
       <div style={cardColumn(8)}>
-        {detailText && (
-          <div style={{ fontSize: 11, color: secondary, lineHeight: 1.35 }}>
-            {detailText}
-          </div>
-        )}
+        {detailText && <div style={context}>{detailText}</div>}
         {questions.map((q) => (
-          <div key={q.answerKey} style={cardColumn(5)}>
-            {q.header && (
-              <span
-                style={{
-                  justifySelf: "start",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "2px 6px",
-                  borderRadius: round(4),
-                  ...tag,
-                  color: signalText,
-                }}
-              >
-                {q.header}
-              </span>
-            )}
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: primary,
-                lineHeight: 1.4,
-              }}
-            >
-              {q.question}
-            </div>
+          <div
+            key={q.answerKey}
+            style={{ ...cardColumn(6), justifyItems: "start" }}
+          >
+            {q.header && heading(q.header)}
+            <div style={questionText}>{q.question}</div>
           </div>
         ))}
         {/* Core says why this one can be answered only in the client and
@@ -386,64 +377,40 @@ export function PermissionQuestionCard({
 
   return (
     <div style={cardColumn(8)}>
-      {detailText && (
-        <div style={{ fontSize: 11, color: secondary, lineHeight: 1.35 }}>
-          {detailText}
-        </div>
-      )}
-      {(q.header || questions.length > 1) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          {q.header && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: "2px 6px",
-                borderRadius: round(4),
-                ...tag,
-                color: signalText,
-              }}
-            >
-              {q.header}
-            </span>
-          )}
-          <span style={{ flex: 1 }} />
-          {questions.length > 1 && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 500,
-                fontVariantNumeric: "tabular-nums",
-                color: tertiary,
-              }}
-            >
-              {safePage + 1} / {questions.length}
-            </span>
-          )}
-        </div>
-      )}
-      <div style={cardColumn(2)}>
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: primary,
-            lineHeight: 1.4,
-          }}
-        >
-          {q.question}
-        </div>
-        {q.multiSelect && (
-          <div style={{ fontSize: 10, color: tertiary }}>
-            {t("Choose any", "可多选")}
+      {detailText && <div style={context}>{detailText}</div>}
+      <div style={cardColumn(6)}>
+        {(q.header || questions.length > 1) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {q.header && heading(q.header)}
+            <span style={{ flex: 1 }} />
+            {questions.length > 1 && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 500,
+                  fontVariantNumeric: "tabular-nums",
+                  color: tertiary,
+                }}
+              >
+                {safePage + 1} / {questions.length}
+              </span>
+            )}
           </div>
         )}
+        <div style={cardColumn(2)}>
+          <div style={questionText}>{q.question}</div>
+          {q.multiSelect && (
+            <div style={{ fontSize: 10, color: tertiary }}>
+              {t("Choose any", "可多选")}
+            </div>
+          )}
+        </div>
       </div>
       <div style={cardColumn(4)}>
         {q.options.map((option) => {
