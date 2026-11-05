@@ -19,6 +19,7 @@ import { ApprovalTag } from "../permissions/ApprovalTag";
 import { agentVendorName } from "../agent-artwork";
 import { tabular, usePanelPalette, type Logo } from "./theme";
 import {
+  type BoardStamp,
   boardVerdict,
   quotaNote,
   quotaOutlook,
@@ -61,24 +62,39 @@ export function useBoardInks(light: boolean) {
   );
 }
 
-/** The 够用 / 吃紧 stamp: a ring tilted like a rubber stamp. */
-function Stamp({ kind, light }: { kind: "enough" | "tight"; light: boolean }) {
+const STAMP_WORDS = {
+  enough: {
+    zh: "够用",
+    en: "OK",
+    zhAria: "额度够用",
+    enAria: "Quota is enough",
+  },
+  tight: {
+    zh: "吃紧",
+    en: "TIGHT",
+    zhAria: "额度吃紧",
+    enAria: "Quota is tight",
+  },
+  unknown: {
+    zh: "未知",
+    en: "N/A",
+    zhAria: "额度情况未知",
+    enAria: "Quota outlook unknown",
+  },
+} as const;
+
+/** The 够用 / 吃紧 / 未知 stamp: a ring tilted like a rubber stamp. */
+function Stamp({ kind, light }: { kind: BoardStamp; light: boolean }) {
   const inks = useBoardInks(light);
   const zh = useFormat().language === "zh";
-  const color = kind === "tight" ? inks.red : inks.green;
-  const label = kind === "tight" ? (zh ? "吃紧" : "TIGHT") : zh ? "够用" : "OK";
+  const color =
+    kind === "tight" ? inks.red : kind === "enough" ? inks.green : inks.hatch;
+  const words = STAMP_WORDS[kind];
+  const label = zh ? words.zh : words.en;
   return (
     <span
       role="img"
-      aria-label={
-        kind === "tight"
-          ? zh
-            ? "额度吃紧"
-            : "Quota is tight"
-          : zh
-            ? "额度够用"
-            : "Quota is enough"
-      }
+      aria-label={zh ? words.zhAria : words.enAria}
       style={{
         width: 44,
         height: 44,
@@ -113,7 +129,7 @@ export function BoardHeading({
   Logo: Logo;
   light: boolean;
   plan?: string | null;
-  stamp?: "enough" | "tight" | null;
+  stamp?: BoardStamp | null;
 }) {
   const inks = useBoardInks(light);
   const paper = usePaper();

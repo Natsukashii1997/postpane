@@ -127,23 +127,24 @@ test("the stamp says enough while every forecast lasts, and tight once one runs 
     used.words!.map((w) => w.text).join(""),
     "Current session is used up.",
   );
-  // No forecast at all: no stamp, and the sentence says so.
+  // No forecast at all: the unknown stamp, and the sentence says so.
   const unknown = boardVerdict(
     [quota("Weekly", 20, { kind: "insufficient-data" })],
     now,
     "zh",
   );
-  assert.equal(unknown.stamp, null);
+  assert.equal(unknown.stamp, "unknown");
   assert.equal(unknown.words![0].text, "读数还不够，暂时没法预测。");
-  // Stale readings say nothing.
+  // Stale readings stamp unknown and say nothing; no quotas, no stamp.
   assert.deepEqual(
     boardVerdict(
       [quota("Weekly", 20, lasts(40), 50, { status: "stale" })],
       now,
       "zh",
     ),
-    { stamp: null, words: null },
+    { stamp: "unknown", words: null },
   );
+  assert.deepEqual(boardVerdict([], now, "zh"), { stamp: null, words: null });
 });
 
 test("a bar draws the pace and the steady mark only with a forecast", () => {

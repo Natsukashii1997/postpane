@@ -72,20 +72,25 @@ export function quotaOutlook(row: Quota): QuotaOutlook {
   };
 }
 
+/** What the board's stamp says. */
+export type BoardStamp = "enough" | "tight" | "unknown";
+
 /** A piece of the verdict line; `strong` pieces are set bold. */
 export type Words = { text: string; strong?: boolean }[];
 
 /** The stamp in the board's corner and the sentence under it: "tight" when
  * a quota runs out before its reset at the current pace, "enough" when every
- * quota with a forecast lasts, none while no quota has one. */
+ * quota with a forecast lasts, "unknown" while no quota has one (owner,
+ * 2026-11-05), none without quotas. */
 export function boardVerdict(
   rows: readonly Quota[],
   now: number,
   language: Language,
-): { stamp: "enough" | "tight" | null; words: Words | null } {
+): { stamp: BoardStamp | null; words: Words | null } {
   const read = rows.map((row) => ({ row, outlook: quotaOutlook(row) }));
   const live = read.filter(({ outlook }) => outlook.live);
-  if (!live.length) return { stamp: null, words: null };
+  if (!live.length)
+    return { stamp: read.length ? "unknown" : null, words: null };
   const name = (row: Quota) => quotaWindowLabel(row, language);
   const list = (items: typeof read) =>
     items.map(({ row }) => name(row)).join(say(language, "、", ", "));
@@ -125,7 +130,7 @@ export function boardVerdict(
   const judged = live.filter(({ outlook }) => outlook.projected != null);
   if (!judged.length)
     return {
-      stamp: null,
+      stamp: "unknown",
       words: [
         {
           text: say(

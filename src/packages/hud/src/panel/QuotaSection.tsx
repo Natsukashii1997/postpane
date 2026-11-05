@@ -247,7 +247,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         Logo={Logo}
         light={light}
         plan={only?.planLabel}
-        stamp={missingReading ? null : stamp}
+        stamp={missingReading ? (missingNotice ? "unknown" : null) : stamp}
       />
       {vendorStatus && (
         <BlockNotice text={vendorStatus} light={light} warning />
