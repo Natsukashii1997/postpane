@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { quotaPercent, quotaPercentLabel } from "@agent-hud/ui/format";
 import settingsWallpaper from "@agent-hud/ui/assets/settings-wallpaper.png";
@@ -13,6 +13,8 @@ import {
 import type { Snapshot } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { BotMark } from "@agent-hud/hud/BotMark";
+import { botKey } from "@agent-hud/hud/bots/artwork";
+import { staysAsBot } from "@agent-hud/hud/bots/bot-spec";
 import { HUDGlow } from "@agent-hud/hud/HUDGlow";
 import {
   defaultHUDConfig,
@@ -50,7 +52,20 @@ export function SmallHUDPreview({
   caption?: { label: string; where: string; note: string };
 }) {
   const sample = { ...defaultHUDConfig, ...config, edge: "top" as const };
-  const vendors = vendorsFromSnapshot(snapshot, sample.mode);
+  // The preview always shows DeepSeek beside the agents the sidebar shows
+  // (owner, 2026-11-05), as though its provider were turned on.
+  const shown = useMemo(
+    () => ({
+      ...snapshot,
+      providers: snapshot.providers.map((provider) =>
+        provider.id === "deepseek"
+          ? { ...provider, detected: true, enabled: true }
+          : provider,
+      ),
+    }),
+    [snapshot],
+  );
+  const vendors = vendorsFromSnapshot(shown, sample.mode);
   const hasActiveVendor = vendors.some(
     (vendor) => vendor.working > 0 || vendor.waiting > 0,
   );
@@ -151,6 +166,8 @@ export function SmallHUDPreview({
                   inset: 0,
                   display: "flex",
                   alignItems: "center",
+                  // The marks sit in the middle of the strip, not against its left end.
+                  justifyContent: simple ? undefined : "center",
                   gap: metrics.gap,
                   padding: simple
                     ? `${metrics.padding.top}px ${metrics.padding.right}px ${metrics.padding.bottom}px ${metrics.padding.left}px`
@@ -225,6 +242,8 @@ export function SmallHUDPreview({
                           size={metrics.logo}
                           light={light}
                           enabled={sample.botLogos}
+                          // The same standing bots as the sidebar (Codex's petals, Hermes's portrait).
+                          staysBot={staysAsBot(botKey(vendor.name))}
                           state={
                             vendor.waiting > 0
                               ? "asking"

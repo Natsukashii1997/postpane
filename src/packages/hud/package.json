@@ -13,6 +13,8 @@
     "./HUDScene": "./src/HUDScene.tsx",
     "./HoverPanel": "./src/HoverPanel.tsx",
     "./PanelContext": "./src/PanelContext.tsx",
+    "./bots/artwork": "./src/bots/artwork.ts",
+    "./bots/bot-spec": "./src/bots/bot-spec.ts",
     "./bots/mark-director": "./src/bots/mark-director.ts",
     "./geometry": "./src/geometry.ts",
     "./ground": "./src/ground.tsx",
