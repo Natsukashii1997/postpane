@@ -371,9 +371,6 @@
 }
 .apple-app .settings-scroll {
   padding: 22px 24px 40px;
-  /* A scrollbar that stays on screen takes its width from one side only and
-     pushes the page off the header above it; keep the same room on both. */
-  scrollbar-gutter: stable both-edges;
 }
 .apple-app .settings-pane-content {
   padding: 0;

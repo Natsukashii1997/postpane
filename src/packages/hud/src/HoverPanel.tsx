@@ -307,16 +307,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     >
       <div
         data-hud-natural-scroll
-        className={
-          snapshot.connection.platform === "windows"
-            ? "hud-windows-scroll"
-            : undefined
-        }
         style={{
           overflowY: "auto",
           minHeight: 0,
-          scrollbarWidth:
-            snapshot.connection.platform === "windows" ? "none" : "thin",
           flex: "1 1 auto",
         }}
       >
