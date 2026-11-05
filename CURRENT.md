@@ -1,6 +1,20 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装默认不显示的改动待审（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+
+## 菜单栏图标新装默认不显示（2026-11-05，Claude 云端会话，常浩派的遗留修正，要求只开 PR 不合并；已提交并推送到 `claude/adoring-ride-pipfny`，PR #57 草稿待审，未发布）
+
+- 时间：开工 `2026-11-05 12:25`（估计：第一次 `date` 是 12:29，换算自容器的 UTC 时钟；本节写于 `2026-11-05 12:45`）。来由：「阶段 4 收尾：小人不改，菜单栏图标关掉」一节的遗留——新装默认值仍是显示。
+- 改了哪些文件：`src/crates/core/src/lib.rs`（默认设置 `showMenuBarIcon` 改 `false`，唯一决定新装默认值的地方）、`src/crates/hud/src/presentation/app_rules.rs`、`src/crates/host/src/coordinator.rs`、`src/packages/app/src/settings/GeneralPane.tsx`（三处缺值兜底统一为不显示）、`src/crates/core/src/settings.rs`（新测试：新装 false；已存 true/false 照用；旧文件缺这一项为 false；原版导入 true 照用）、`src/packages/protocol/src/index.ts`（字段注释）、`docs/parity/c04-models-logic.md` #88 改 `deliberate` 与小结、`docs/parity/README.md`（脚本重算）、`docs/ROADMAP.md` 阶段 4 状态、`docs/LESSONS.md`（L-04）、本文件。已有设置照用户的值，不迁移、不覆盖。
+- 测试：云端 Linux，Node `v24.22.2`，先跑 `node src/tooling/package-resources.mjs`。`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 634 passed / 0 failed；`ℹ pass 166` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` 写完本节后重跑 `ℹ pass 4` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。日志在会话临时目录，未进证据目录（云端无本机路径）。
+- 验证：只有自动测试。macOS 专属代码未编译（Mac 上 Rust 是 642 项，这里 634 项）；未打包、未实机看菜单栏和设置页开关。
+- 截图：无。
+- 发布与回读：未发布。常浩本机设置已是 `false`，装新版后看不出变化。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 从代码推断、未实机核实：`src/crates/host/src/tray.rs` 的 `install()` 建图标时是显示的，等第一份快照才按设置隐藏，启动时可能闪一下；本机关图标后就已存在，未改，记在 PR 里请常浩定。
+  - 手写设置文件没写 `showMenuBarIcon` 的，升级后由显示变为不显示；驿窗自己写的文件总带这一项，不受影响。
+  - 云端容器为跑检查装了 GTK/WebKit 开发库、临时装了 Node 24（只在本会话容器内）。
+- 本轮新坑：L-04。
 
 ## 侧栏新回复通知卡改成清单回执（2026-11-05，Claude，常浩看过三版预览选甲「清单回执」，确认计划后说「开工」，装好后说「合并」；PR #55 测试全过已 squash 合并 `1315622`、已打包安装）
 
