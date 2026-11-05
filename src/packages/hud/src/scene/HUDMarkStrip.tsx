@@ -422,20 +422,32 @@ export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
   };
 }
 
-/** The stub's paper, perforated along the side that meets the screen edge. */
+/** The stub's paper, perforated along the side that meets the screen edge;
+ * `bothEdges` perforates the opposite side too (the joined preview ticket). */
 export function StubPaper({
   unit,
   side,
   light,
+  bothEdges = false,
 }: {
   unit: number;
   side: StubSide;
   light: boolean;
+  bothEdges?: boolean;
 }) {
-  const perforation =
-    side === "top" || side === "bottom"
-      ? `radial-gradient(circle at ${5 * unit}px ${side === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
-      : `radial-gradient(circle at ${side === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
+  const holes = (edge: StubSide) =>
+    edge === "top" || edge === "bottom"
+      ? `radial-gradient(circle at ${5 * unit}px ${edge === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
+      : `radial-gradient(circle at ${edge === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
+  const opposite = {
+    top: "bottom",
+    bottom: "top",
+    left: "right",
+    right: "left",
+  } as const;
+  const perforation = bothEdges
+    ? `${holes(side)}, ${holes(opposite[side])}`
+    : holes(side);
   return (
     <span
       aria-hidden="true"
@@ -453,6 +465,10 @@ export function StubPaper({
           background: `${PAPER_GRAIN} 0 0 / 160px 160px, ${light ? "#f3f1eb" : "#e9e6de"}`,
           WebkitMask: perforation,
           mask: perforation,
+          // Two rows of holes: the paper is what both masks keep.
+          ...(bothEdges
+            ? { WebkitMaskComposite: "source-in", maskComposite: "intersect" }
+            : null),
         }}
       />
     </span>

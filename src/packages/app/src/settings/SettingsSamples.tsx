@@ -15,12 +15,8 @@ import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { BotMark } from "@agent-hud/hud/BotMark";
 import { botKey } from "@agent-hud/hud/bots/artwork";
 import { staysAsBot } from "@agent-hud/hud/bots/bot-spec";
-import {
-  StubFace,
-  StubPaper,
-  stubBoxStyle,
-} from "@agent-hud/hud/scene/HUDMarkStrip";
-import { stubFootHeight } from "@agent-hud/hud/ticket-stub";
+import { StubPaper } from "@agent-hud/hud/scene/HUDMarkStrip";
+import { stubBotTop, stubSize } from "@agent-hud/hud/ticket-stub";
 import { HUDGlow } from "@agent-hud/hud/HUDGlow";
 import {
   defaultHUDConfig,
@@ -78,7 +74,16 @@ export function SmallHUDPreview({
   const metrics = stripMetrics(sample, vendors, snapshot.settings.quotaDisplay);
   const simple = sample.mode === "simple";
   const stubbed = sample.mode === "logos";
-  const zh = useFormat().language === "zh";
+  // Dynamic's preview joins the agents into one four-part ticket with no
+  // readings: each part a stub wide, perforated top and bottom.
+  const unit = metrics.logo / 20;
+  const ticket = stubbed
+    ? {
+        width: vendors.length * stubSize(metrics.logo).width,
+        height: stubBotTop(metrics.logo) + 3 * unit + metrics.logo + 9 * unit,
+      }
+    : null;
+  const box = ticket ?? metrics;
   const light =
     sample.appearance === "light" ||
     (sample.appearance === "system" &&
@@ -101,7 +106,7 @@ export function SmallHUDPreview({
   const margin = simple ? 24 : 0;
   const scale =
     stageWidth > 0
-      ? Math.min(1, (stageWidth - margin * 2) / Math.max(metrics.width, 1))
+      ? Math.min(1, (stageWidth - margin * 2) / Math.max(box.width, 1))
       : 1;
   return (
     <div style={{ padding: "12px 14px" }}>
@@ -139,8 +144,8 @@ export function SmallHUDPreview({
                 top: simple ? 10 : 0,
                 transform: `translateX(-50%) scale(${scale})`,
                 transformOrigin: "top center",
-                width: metrics.width,
-                height: metrics.height,
+                width: box.width,
+                height: box.height,
               }}
             >
               {/* Only the notch glows on screen; Dynamic's stubs have none. */}
@@ -174,11 +179,11 @@ export function SmallHUDPreview({
                   position: "absolute",
                   inset: 0,
                   display: "flex",
-                  // Dynamic's stubs hang from the screen's top edge.
-                  alignItems: stubbed ? "flex-start" : "center",
+                  // Dynamic's ticket hangs from the screen's top edge.
+                  alignItems: stubbed ? "stretch" : "center",
                   // The marks sit in the middle of the strip, not against its left end.
                   justifyContent: simple ? undefined : "center",
-                  gap: metrics.gap,
+                  gap: stubbed ? 0 : metrics.gap,
                   padding: simple
                     ? `${metrics.padding.top}px ${metrics.padding.right}px ${metrics.padding.bottom}px ${metrics.padding.left}px`
                     : 0,
@@ -212,6 +217,9 @@ export function SmallHUDPreview({
                     />
                   </svg>
                 )}
+                {stubbed && sample.showsLogos && (
+                  <StubPaper unit={unit} side="top" light={light} bothEdges />
+                )}
                 {sample.mode !== "notch" &&
                   (sample.mode !== "logos" || sample.showsLogos) &&
                   vendors.map((vendor, index) => (
@@ -223,15 +231,28 @@ export function SmallHUDPreview({
                         alignItems: "center",
                         gap: metrics.labelGap,
                         flexShrink: 0,
-                        // Dynamic draws each agent as the sidebar's ticket stub.
-                        ...(stubbed ? stubBoxStyle(metrics.logo, "top") : null),
+                        // Dynamic gives each agent one part of the joined ticket.
+                        ...(stubbed
+                          ? {
+                              width: stubSize(metrics.logo).width,
+                              flexDirection: "column" as const,
+                              justifyContent: "flex-start",
+                              paddingTop: stubBotTop(metrics.logo) + 3 * unit,
+                              boxSizing: "border-box" as const,
+                            }
+                          : null),
                       }}
                     >
-                      {stubbed && (
-                        <StubPaper
-                          unit={metrics.logo / 20}
-                          side="top"
-                          light={light}
+                      {stubbed && index > 0 && (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: 5 * unit,
+                            bottom: 5 * unit,
+                            borderLeft: `${unit}px dashed rgba(42,41,37,.34)`,
+                          }}
                         />
                       )}
                       <span
@@ -275,19 +296,6 @@ export function SmallHUDPreview({
                           }
                         />
                       </span>
-                      {stubbed && (
-                        <StubFace
-                          vendor={vendor}
-                          label={meterLabel(
-                            vendor,
-                            snapshot.settings.quotaDisplay,
-                          )}
-                          unit={metrics.logo / 20}
-                          foot={stubFootHeight(metrics.logo)}
-                          side="top"
-                          zh={zh}
-                        />
-                      )}
                       {simple && metrics.bar > 0 && (
                         <MarkBars
                           items={markItems(
