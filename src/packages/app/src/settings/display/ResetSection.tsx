@@ -1,9 +1,10 @@
-/* Back to defaults for the selected screen: the HUD's style, the panel's
- * layout, or just the position. Undo brings back what the last reset
- * replaced, until the page closes or another screen is picked. */
+/* Back to defaults for the selected screen, one line of buttons: the HUD's
+ * style, the panel's layout, or just the position. After a reset an Undo
+ * appears beside its button and brings back what the reset replaced, until
+ * the page closes or another screen is picked. */
 import { useRef, useState } from "react";
 import { defaultHUDConfig, type HUDConfig } from "@agent-hud/hud/model";
-import { Row, Section, SmallButton } from "../SettingsPrimitives";
+import { SmallButton } from "../SettingsPrimitives";
 import type { DisplayProps } from "./controls";
 
 /** Everything "HUD style" resets: mode, place, sizes, look and glow. */
@@ -119,47 +120,31 @@ export function ResetSection({
       JSON.stringify(value),
   );
 
-  const undo = t("Undo", "撤销"),
-    reset = t("Reset", "重置");
+  const undo = t("Undo", "撤销");
   return (
-    <Section
-      title={t("Reset", "恢复默认")}
-      footer={
-        screenName
+    <div className="settings-resetline">
+      <span className="settings-resetline-title">{t("Reset", "恢复默认")}</span>
+      <SmallButton onClick={resetStyle}>
+        {t("HUD style", "侧栏样式")}
+      </SmallButton>
+      {previousStyle.current && (
+        <SmallButton onClick={revertStyle}>{undo}</SmallButton>
+      )}
+      <SmallButton disabled={layoutIsDefault} onClick={resetLayout}>
+        {t("Panel layout", "面板布局")}
+      </SmallButton>
+      {previousLayout.current && (
+        <SmallButton onClick={revertLayout}>{undo}</SmallButton>
+      )}
+      <SmallButton onClick={resetPosition}>{t("Position", "位置")}</SmallButton>
+      <small>
+        {screenName
           ? t(`These change ${screenName} only.`, `只影响「${screenName}」。`)
-          : undefined
-      }
-    >
-      <Row
-        title={t("HUD style", "HUD 样式")}
-        subtitle={t(
-          "Mode, position, sizes, look and glow.",
-          "形态、位置、大小、外观和光晕。",
-        )}
-      >
-        <SmallButton disabled={!previousStyle.current} onClick={revertStyle}>
-          {undo}
-        </SmallButton>
-        <SmallButton onClick={resetStyle}>{reset}</SmallButton>
-      </Row>
-      <Row
-        title={t("Panel layout", "面板布局")}
-        tag={layoutIsDefault ? undefined : t("Custom", "自定义")}
-        subtitle={t("Sections, order and density.", "内容、顺序和密度。")}
-      >
-        <SmallButton disabled={!previousLayout.current} onClick={revertLayout}>
-          {undo}
-        </SmallButton>
-        <SmallButton disabled={layoutIsDefault} onClick={resetLayout}>
-          {reset}
-        </SmallButton>
-      </Row>
-      <Row
-        title={t("Position", "位置")}
-        subtitle={t("Back to the top of the screen.", "回到屏幕顶部。")}
-      >
-        <SmallButton onClick={resetPosition}>{reset}</SmallButton>
-      </Row>
-    </Section>
+          : t(
+              "Undo appears beside a button after it resets.",
+              "重置后旁边出现「撤销」",
+            )}
+      </small>
+    </div>
   );
 }

@@ -1,7 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import {
-  Menu,
   Notice,
   Page,
   Row,
@@ -75,15 +74,31 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
         ? t(login.notice, "此版本找不到登录服务。")
         : null;
 
+  const appearanceNames: Record<string, string> = {
+    system: t("System", "跟随系统"),
+    light: t("Light", "浅色"),
+    dark: t("Dark", "深色"),
+  };
+  const languageNames: Record<string, string> = {
+    system: t("System", "跟随系统"),
+    "zh-CN": "中文",
+    en: "English",
+  };
+  const language =
+    settings.language === "zh-Hans" ? "zh-CN" : (settings.language ?? "system");
+  const quotaDisplay = settings.quotaDisplay ?? "consumed";
+  const launches = login?.enabled ?? settings.launchAtLogin;
+  const menuBar = settings.showMenuBarIcon !== false;
+
   const appearance = (
     <Segments
       label={t("Appearance", "外观")}
       value={settings.appearance}
       disabled={followsScreen}
       options={[
-        ["system", t("System", "跟随系统")],
-        ["light", t("Light", "浅色")],
-        ["dark", t("Dark", "深色")],
+        ["system", appearanceNames.system],
+        ["light", appearanceNames.light],
+        ["dark", appearanceNames.dark],
       ]}
       change={setting("appearance")}
     />
@@ -91,7 +106,14 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
 
   return (
     <Page>
-      <Section title={t("Appearance & language", "外观与语言")}>
+      <Section
+        title={t("Window & language", "窗口和语言")}
+        action={`${
+          followsScreen
+            ? t("Matches screen", "跟随所在屏幕")
+            : (appearanceNames[settings.appearance] ?? settings.appearance)
+        } · ${languageNames[language] ?? language}`}
+      >
         <Row title={t("Appearance", "外观")}>
           {followsScreen ? (
             <Unavailable
@@ -106,37 +128,48 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
             appearance
           )}
         </Row>
+        <Row title={t("Language", "语言")}>
+          <Segments
+            label={t("Language", "语言")}
+            value={language}
+            options={[
+              ["system", languageNames.system],
+              ["zh-CN", languageNames["zh-CN"]],
+              ["en", languageNames.en],
+            ]}
+            change={setting("language")}
+          />
+        </Row>
         <ToggleRow
           title={t("Match screen", "跟随所在屏幕")}
           tag={t("Experimental", "实验")}
           subtitle={t(
             "Windows take the HUD look of their screen.",
-            "窗口外观跟随所在屏幕的 HUD。",
+            "窗口外观跟随所在屏幕的侧栏。",
           )}
           checked={settings.appearanceFollowsScreen ?? false}
           change={setting("appearanceFollowsScreen")}
         />
-        <Row title={t("Language", "语言")}>
-          <Menu
-            label={t("Language", "语言")}
-            value={
-              settings.language === "zh-Hans" ? "zh-CN" : settings.language
-            }
-            options={[
-              ["system", t("System", "跟随系统")],
-              ["zh-CN", "中文"],
-              ["en", "English"],
-            ]}
-            change={setting("language")}
-          />
-        </Row>
         {problem(appearanceKeys)}
       </Section>
-      <Section title={t("Usage display", "用量显示")}>
-        <Row title={t("Quota percentage", "额度百分比")}>
-          <Menu
+      <Section
+        title={t("Quota figures", "额度数字")}
+        action={
+          quotaDisplay === "remaining"
+            ? t("Showing remaining", "显示剩余")
+            : t("Showing used", "显示已用")
+        }
+      >
+        <Row
+          title={t("Quota percentage", "额度百分比")}
+          subtitle={t(
+            "The panel's and the HUD's figures both follow this: 35% used is 65% remaining.",
+            "面板和侧栏上的数字都按这个显示：35% 已用 = 65% 剩余。",
+          )}
+        >
+          <Segments
             label={t("Quota percentage", "额度百分比")}
-            value={settings.quotaDisplay ?? "consumed"}
+            value={quotaDisplay}
             options={[
               ["consumed", t("Used", "已用")],
               ["remaining", t("Remaining", "剩余")],
@@ -146,10 +179,20 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
         </Row>
         {problem(usageKeys)}
       </Section>
-      <Section title={t("Startup & menu bar", "启动与菜单栏")}>
+      <Section
+        title={t("Startup & menu bar", "开机和菜单栏")}
+        action={
+          [
+            launches ? t("Launch at login", "登录时启动") : null,
+            menuBar ? t("Menu bar icon", "菜单栏图标") : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || t("Both off", "都已关闭")
+        }
+      >
         <ToggleRow
           title={t("Launch at login", "登录时启动")}
-          checked={login?.enabled ?? settings.launchAtLogin}
+          checked={launches}
           disabled={pending || !login?.supported}
           reason={loginReason}
           change={setting("launchAtLogin")}
@@ -157,7 +200,7 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
         {loginNote && <Notice tone="warning">{loginNote}</Notice>}
         <ToggleRow
           title={t("Show menu bar icon", "显示菜单栏图标")}
-          checked={settings.showMenuBarIcon !== false}
+          checked={menuBar}
           change={setting("showMenuBarIcon")}
         />
         {problem(startupKeys)}

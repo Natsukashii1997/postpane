@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFormat } from "@agent-hud/ui/format-context";
-import { quotaPercent, quotaPercentLabel } from "@agent-hud/ui/format";
 import settingsWallpaper from "@agent-hud/ui/assets/settings-wallpaper.png";
-import {
-  DollarSign,
-  Flame,
-  Gauge,
-  MessageCircleQuestion,
-  Percent,
-  Sigma,
-} from "lucide-react";
 import type { Snapshot } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { BotMark } from "@agent-hud/hud/BotMark";
@@ -18,6 +8,8 @@ import { staysAsBot } from "@agent-hud/hud/bots/bot-spec";
 import { StubPaper } from "@agent-hud/hud/scene/HUDMarkStrip";
 import { stubBotTop, stubSize } from "@agent-hud/hud/ticket-stub";
 import { HUDGlow } from "@agent-hud/hud/HUDGlow";
+import { SourceHoverPanel } from "@agent-hud/hud/HoverPanel";
+import { HUDGroundProvider } from "@agent-hud/hud/ground";
 import {
   defaultHUDConfig,
   meterLabel,
@@ -26,14 +18,13 @@ import {
   type HUDConfig,
 } from "@agent-hud/hud/model";
 import { islandPath, stripMetrics } from "@agent-hud/hud/geometry";
-import { PAPER_FIGURES, paperFace, paperOf } from "@agent-hud/hud/paper";
+import { PaperContext, paperFace, paperOf } from "@agent-hud/hud/paper";
 import { isRingStyle } from "@agent-hud/hud/usage-meter/arcs";
 import {
   MarkBars,
   MarkRing,
   markItems,
 } from "@agent-hud/hud/usage-meter/mark-usage";
-import type { Text } from "./SettingsPrimitives";
 
 const originalWallpaper = settingsWallpaper;
 
@@ -109,7 +100,7 @@ export function SmallHUDPreview({
       ? Math.min(1, (stageWidth - margin * 2) / Math.max(box.width, 1))
       : 1;
   return (
-    <div style={{ padding: "12px 14px" }}>
+    <div style={{ padding: "12px 0 10px" }}>
       <div className="settings-hud-frame">
         {caption && (
           <span className="settings-hud-frame-label">{caption.label}</span>
@@ -341,219 +332,90 @@ export function SmallHUDPreview({
   );
 }
 
-/** A made-up slice of one panel section, in the HUD's own light or dark
- * look; faded while that section is switched off. */
-export function PartSample({
-  kind,
-  enabled,
+/** The panel itself, as the HUD would open it on this screen: the real
+ * panel drawn from the snapshot with these settings (its sections, their
+ * order, the density), shrunk into a dashed frame. It cannot be clicked. */
+export function PanelPreview({
+  snapshot,
   config,
-  t,
+  active,
+  label,
+  width = 190,
 }: {
-  kind: "sessions" | "quota" | "tokens";
-  enabled: boolean;
+  snapshot: Snapshot;
   config: HUDConfig;
-  t: Text;
+  active: boolean;
+  label: string;
+  /** The preview's width; the panel is drawn at its own width and shrunk. */
+  width?: number;
 }) {
   const light =
     config.appearance === "light" ||
     (config.appearance === "system" &&
       !matchMedia("(prefers-color-scheme: dark)").matches);
-  const { quotaDisplay } = useFormat();
-  const amounts = [4, 8, 5, 11, 16, 9, 6, 13, 20, 14, 10, 7];
-  // Printed on the panel's own paper, in the HUD's appearance.
-  const paper = paperOf(light);
-  const warning = light ? "#b7791f" : "#e0a948";
+  // Beside the dock the panel is printed on the receipt's paper; in the notch
+  // it keeps the HUD's own ground.
+  const paper = useMemo(
+    () => (config.mode === "notch" ? null : paperOf(light)),
+    [config.mode, light],
+  );
+  const inset = 16;
+  const full = config.panelWidth + inset * 2;
+  const scale = width / full;
+  const inner = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const element = inner.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setHeight(entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div
-      aria-hidden="true"
-      style={{
-        padding: "0 14px",
-        height: kind === "sessions" ? 56 : 64,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        gap: kind === "sessions" ? 8 : 10,
-        ...paperFace(paper),
-        border: `1px solid ${paper.line}`,
-        color: paper.ink,
-        opacity: enabled ? 1 : 0.25,
-        pointerEvents: "none",
-        fontSize: 11,
-      }}
-    >
-      {kind === "sessions" ? (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <strong style={{ fontWeight: 600 }}>{t("Sessions", "会话")}</strong>
-            <span style={{ opacity: 0.55 }}>
-              {t("1 running", "1 个运行中")}
-            </span>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              opacity: 0.65,
-            }}
-          >
-            <span style={{ position: "relative", width: 14, height: 14 }}>
-              <HUDLogo source="Claude" size={14} light={light} />
-              <i
-                style={{
-                  position: "absolute",
-                  width: 6,
-                  height: 6,
-                  background: paper.ink,
-                  borderRadius: "50%",
-                  bottom: -2,
-                  right: -2,
-                  boxShadow: `0 0 0 1.5px ${paper.paper}`,
-                }}
+    <div className="settings-hud-frame settings-panel-frame">
+      <span className="settings-hud-frame-label">{label}</span>
+      <div
+        aria-hidden="true"
+        inert
+        style={{
+          width,
+          height: Math.ceil(height * scale),
+          overflow: "hidden",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          ref={inner}
+          style={{
+            width: full,
+            padding: inset,
+            boxSizing: "border-box",
+            transform: `scale(${scale})`,
+            transformOrigin: "0 0",
+            colorScheme: light ? "light" : "dark",
+            ...(paper
+              ? { ...paperFace(paper), color: paper.ink }
+              : { background: light ? "#f5f5f7" : "#161618" }),
+          }}
+        >
+          <HUDGroundProvider look={config}>
+            <PaperContext.Provider value={paper}>
+              <SourceHoverPanel
+                config={config}
+                snapshot={snapshot}
+                light={light}
+                Logo={HUDLogo}
+                active={active}
+                // As tall as the HUD lets it be on a screen like this one;
+                // past that it scrolls, as on screen.
+                maxHeight={Math.round(screen.availHeight * 0.8)}
               />
-            </span>
-            <span>{t("Fix sign-in issue", "修复登录问题")}</span>
-            <span style={{ flex: 1 }} />
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 3,
-                color: warning,
-                padding: "2px 5px",
-                border: `1px solid ${warning}`,
-                fontSize: 9,
-              }}
-            >
-              <MessageCircleQuestion size={9} />1
-            </span>
-            <span style={{ fontFamily: PAPER_FIGURES }}>60k tok</span>
-          </div>
-        </>
-      ) : kind === "quota" ? (
-        <>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              opacity: 0.7,
-            }}
-          >
-            <HUDLogo source="Claude" size={12} light={light} />
-            <strong style={{ fontWeight: 600 }}>Claude</strong>
-            <span style={{ flex: 1 }} />
-            {[Percent, Flame, Sigma, Gauge, DollarSign].map((Icon, index) => (
-              <span
-                key={index}
-                style={{
-                  display: "inline-grid",
-                  placeItems: "center",
-                  width: 20,
-                  height: 18,
-                  background: index === 0 ? paper.fill : "transparent",
-                  opacity: index === 0 ? 1 : 0.5,
-                }}
-              >
-                <Icon size={10} />
-              </span>
-            ))}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              fontSize: 12,
-            }}
-          >
-            <i
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: paper.text(0.35),
-                boxShadow: "inset 0 1px 1.2px rgba(0,0,0,.5)",
-              }}
-            />
-            <strong style={{ fontWeight: 600 }}>{t("Session", "会话")}</strong>
-            <span
-              style={{
-                flex: 1,
-                height: 7,
-                border: `1px solid ${paper.ink}`,
-                boxSizing: "border-box",
-              }}
-            >
-              <i
-                style={{
-                  display: "block",
-                  width: `${quotaPercent(28, quotaDisplay)}%`,
-                  height: "100%",
-                  background: `repeating-linear-gradient(-45deg, ${paper.ink} 0 1.5px, transparent 1.5px 3.5px)`,
-                }}
-              />
-            </span>
-            <strong
-              style={{
-                fontFamily: PAPER_FIGURES,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              {quotaPercentLabel(28, quotaDisplay)}
-            </strong>
-            {config.resetCountdown && (
-              <span
-                style={{
-                  width: 78,
-                  textAlign: "right",
-                  opacity: 0.55,
-                  fontSize: 11,
-                }}
-              >
-                {t("2h 14m", "2 小时 14 分")}
-              </span>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <strong style={{ fontWeight: 600 }}>
-              {t("Tokens", "Token 消耗")}
-            </strong>
-            <span style={{ opacity: 0.55 }}>
-              {t("1hr · 46M tok", "1 小时 · 46M tok")}
-            </span>
-          </div>
-          <div
-            style={{ display: "flex", alignItems: "end", gap: 4, height: 30 }}
-          >
-            {Array.from({ length: 24 }, (_, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "end",
-                  height: `${((amounts[i % 12] + amounts[(i + 4) % 12]) / 38) * 100}%`,
-                  minHeight: 2,
-                }}
-              >
-                <i
-                  style={{
-                    background: paper.text(0.82),
-                    height: `${(amounts[(i + 4) % 12] / (amounts[i % 12] + amounts[(i + 4) % 12])) * 100}%`,
-                  }}
-                />
-                <i style={{ background: paper.text(0.32), flex: 1 }} />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+            </PaperContext.Provider>
+          </HUDGroundProvider>
+        </div>
+      </div>
     </div>
   );
 }

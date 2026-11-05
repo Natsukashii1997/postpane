@@ -203,7 +203,7 @@ test("the MCP row asks for the one step left, and never removes from its main bu
   });
   assert.deepEqual(justAdded.next?.words, [
     "Start a new Claude Code session and ask it to change the HUD.",
-    "在 Claude Code 里新开一个会话，说“把 HUD 改成……”。",
+    "在 Claude Code 里新开一个会话，说“把侧栏改成……”。",
   ]);
   // A copy confirms in place of any other next step.
   assert.equal(

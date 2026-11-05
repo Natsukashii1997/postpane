@@ -1,25 +1,36 @@
 import { useState } from "react";
-import type { Provider } from "@agent-hud/protocol";
+import type { Provider, SourcePreferences } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import type { Text } from "../SettingsPrimitives";
 
 /** PostPane's own agents, always on top in this order. */
 const PINNED = ["claude", "codex", "hermes", "grok-bot"];
 
-/** The pinned agents first; every other agent in a group that starts folded,
- * found ones first and the rest under a small label, still selectable so they
- * can be set up before they are installed. */
+/** The agents as a row of cards over the page: the pinned agents first;
+ * every other agent behind a card that starts folded, found ones first and
+ * the rest under a small label, still selectable so they can be set up
+ * before they are installed. Each card says what PostPane follows of it. */
 export function AgentList({
   t,
   providers,
+  preferences,
   selected,
   select,
 }: {
   t: Text;
   providers: Provider[];
+  preferences: Record<string, SourcePreferences>;
   selected?: string;
   select: (id: string) => void;
 }) {
+  const follows = (provider: Provider) => {
+    if (!provider.enabled) return t("Off", "已关闭");
+    if (preferences[provider.id]?.live === false)
+      return t("Quota only", "只看额度");
+    return preferences[provider.id]?.reminders === false
+      ? t("Live status", "实时状态")
+      : t("Live status · Reminders", "实时状态 · 完成提醒");
+  };
   const pinned = PINNED.flatMap((id) =>
     providers.filter((provider) => provider.id === id),
   );
@@ -37,11 +48,11 @@ export function AgentList({
       aria-current={provider.id === selected ? "true" : undefined}
       onClick={() => select(provider.id)}
     >
-      <HUDLogo source={provider.id} size={18} />
-      <span className="agents-list-name">{provider.name}</span>
-      {!provider.enabled && (
-        <span className="agents-list-state">{t("Off", "已关闭")}</span>
-      )}
+      <span className="agents-list-head">
+        <HUDLogo source={provider.id} size={16} />
+        <span className="agents-list-name">{provider.name}</span>
+      </span>
+      <span className="agents-list-state">{follows(provider)}</span>
     </button>
   );
   return (
@@ -50,11 +61,11 @@ export function AgentList({
       {others.length > 0 && (
         <button
           type="button"
-          className="agents-list-label agents-list-fold"
+          className="agents-list-fold"
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          {open ? "▾" : "▸"} {t("Other agents", "其他助手")} ({others.length})
+          {open ? "−" : "＋"} {t("Other agents", "其他助手")} {others.length}
         </button>
       )}
       {open && found.map(item)}
