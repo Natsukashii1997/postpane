@@ -12,6 +12,9 @@ pub enum Carries {
     Requests,
     /// The account's quota.
     Quota,
+    /// Turns the client reports as they finish, with the prompt and the
+    /// reply in full, as completion events (a browser extension's).
+    Turns,
 }
 
 pub struct Channel {
@@ -34,13 +37,13 @@ mod tests {
     use crate::{Os, ALL};
 
     #[test]
-    fn three_clients_have_a_native_channel() {
+    fn four_clients_have_a_native_channel() {
         let with: Vec<_> = ALL
             .iter()
             .filter(|agent| agent.channel.is_some())
             .map(|agent| agent.id)
             .collect();
-        assert_eq!(with, ["codex", "deepseek", "antigravity"]);
+        assert_eq!(with, ["codex", "deepseek", "antigravity", "chatgpt"]);
         for agent in ALL {
             if let Some(channel) = agent.channel {
                 assert!(!channel.carries.is_empty(), "{}", agent.id);
@@ -50,5 +53,9 @@ mod tests {
         let codex = crate::codex::AGENT.channel.unwrap();
         // The desktop app's IPC is a named pipe on Windows.
         assert!(codex.runs_on(Os::Windows) && codex.runs_on(Os::Linux));
+        // The extension's socket is a Unix socket.
+        let chatgpt = crate::chatgpt::AGENT.channel.unwrap();
+        assert_eq!(chatgpt.carries, [super::Carries::Turns]);
+        assert!(!chatgpt.runs_on(Os::Windows) && chatgpt.runs_on(Os::Linux));
     }
 }

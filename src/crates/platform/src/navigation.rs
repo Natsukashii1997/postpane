@@ -156,6 +156,11 @@ fn session_url_on(target: &Value, os: Os, registered: impl Fn(&str) -> bool) -> 
         "claude-cloud-session" if agent_hud_agents::claude::cloud::cloud_id(id) => {
             Some(format!("https://claude.ai/code/{id}"))
         }
+        // A ChatGPT conversation opens on chatgpt.com when the extension
+        // cannot bring its tab forward.
+        "chatgpt-conversation" if agent_hud_agents::chatgpt::conversation_id(id) => {
+            Some(format!("https://chatgpt.com/c/{id}"))
+        }
         "iterm-session" | "iTermSession" if !id.trim().is_empty() && id.len() <= 4096 => {
             let mut url = reqwest::Url::parse("iterm2:reveal").ok()?;
             url.query_pairs_mut().append_pair("sessionid", id);

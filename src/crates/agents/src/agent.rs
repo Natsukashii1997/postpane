@@ -1,8 +1,8 @@
 //! The descriptor every client has, and the registry of them all.
 use crate::hooks::{Hooks, Observer};
 use crate::{
-    antigravity, buddy, claude, codex, copilot, cursor, deepseek, devin, glm, grok, hermes, kimi,
-    openclaw, opencode, pi, qoder, qwen, zcode,
+    antigravity, buddy, chatgpt, claude, codex, copilot, cursor, deepseek, devin, glm, grok,
+    hermes, kimi, openclaw, opencode, pi, qoder, qwen, zcode,
 };
 use crate::{Channel, Discovery, PerOs, Replies, Source};
 
@@ -64,6 +64,7 @@ pub static ALL: &[&Agent] = &[
     &qoder::QODER_WORK,
     &devin::AGENT,
     &glm::AGENT,
+    &chatgpt::AGENT,
 ];
 
 /// Every account reader, in the order the engine reads them, one at a
@@ -143,6 +144,7 @@ mod tests {
                 "qoder-work",
                 "devin",
                 "glm",
+                "chatgpt",
             ]
         );
         for agent in ALL {
@@ -185,5 +187,9 @@ mod tests {
         assert_eq!(session_target("claude", "abc", Some("/w"), None), None);
         assert_eq!(session_target("grok-cli", "grok-cli:s", None, None), None);
         assert_eq!(session_target("unknown", "x", None, None), None);
+        assert_eq!(
+            session_target("chatgpt", "chatgpt:68a1", None, None),
+            Some(json!({"kind":"chatgpt-conversation","id":"68a1"}))
+        );
     }
 }

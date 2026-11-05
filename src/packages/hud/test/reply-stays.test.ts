@@ -10,8 +10,9 @@ const event = (source: string, kind: IslandEvent["kind"]): IslandEvent => ({
   source,
 });
 
-test("a Hermes reply waits until it has been looked at", () => {
+test("a Hermes or ChatGPT reply waits until it has been looked at", () => {
   assert.equal(staysUntilSeen(event("hermes", "completion")), true);
+  assert.equal(staysUntilSeen(event("chatgpt", "completion")), true);
 });
 
 test("other replies and notices fold away as before", () => {

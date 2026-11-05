@@ -55,6 +55,37 @@ export const nativeDeepSeekPlugin: ClaudePluginService = async (action) => {
   return invoke<ClaudePluginStatus>("native_deepseek_plugin", { action });
 };
 
+/** native_chatgpt_extension: whether Chrome's native host manifest names
+ * this app's relay, and whether the ChatGPT extension is connected. */
+export interface ChatGptStatus {
+  supported: boolean;
+  manifestInstalled: boolean;
+  manifestCurrent: boolean;
+  helperFound: boolean;
+  connected: boolean;
+  extensionVersion: string | null;
+  lastSeen: number | null;
+  watched: { id: string; title: string; openedAt: number }[];
+}
+export type ChatGptService = (
+  action: "status" | "install" | "remove",
+) => Promise<ChatGptStatus>;
+
+export const nativeChatGpt: ChatGptService = async (action) => {
+  if (!isTauri())
+    return {
+      supported: false,
+      manifestInstalled: false,
+      manifestCurrent: false,
+      helperFound: false,
+      connected: false,
+      extensionVersion: null,
+      lastSeen: null,
+      watched: [],
+    };
+  return invoke<ChatGptStatus>("native_chatgpt_extension", { action });
+};
+
 /** The clients the host can give HUD tools to (hud_tools::CLIENTS), in page
  * order. `plugin`: the client has an Agent HUD plugin of its own; `live`:
  * it loads the plugin into open sessions by itself. */
@@ -85,4 +116,5 @@ export const knownClients: {
 export const cache: {
   clients: MCPClientsStatus | null;
   plugins: Record<string, ClaudePluginStatus | null>;
-} = { clients: null, plugins: {} };
+  chatgpt: ChatGptStatus | null;
+} = { clients: null, plugins: {}, chatgpt: null };

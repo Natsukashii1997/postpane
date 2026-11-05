@@ -16,6 +16,7 @@ import {
   type Text,
 } from "./SettingsPrimitives";
 import {
+  ChatGptCard,
   KnownClientCard,
   OtherAgentsCard,
   ProductClientCard,
@@ -25,9 +26,11 @@ import { HooksSection } from "./agent-plugins/HooksSection";
 import { ToolsSection } from "./agent-plugins/ToolsSection";
 import {
   knownClients,
+  nativeChatGpt,
   nativeClients,
   nativeDeepSeekPlugin,
   nativePlugin,
+  type ChatGptService,
   type ClaudePluginService,
   type MCPClientsService,
 } from "./agent-plugins/services";
@@ -36,6 +39,7 @@ import type {
   AgentPluginItem,
 } from "./agent-plugins/types";
 import {
+  useChatGpt,
   useHudTools,
   useLightTheme,
   useMcpClients,
@@ -47,6 +51,8 @@ export type {
   AgentPluginItem,
 } from "./agent-plugins/types";
 export type {
+  ChatGptService,
+  ChatGptStatus,
   ClaudePluginService,
   ClaudePluginStatus,
   MCPClientsService,
@@ -93,6 +99,7 @@ export function AgentPluginsPane({
   clients = nativeClients,
   plugin = nativePlugin,
   deepseekPlugin = nativeDeepSeekPlugin,
+  chatgpt = nativeChatGpt,
 }: {
   snapshot: Snapshot;
   action: SettingsPaneProps["action"];
@@ -105,6 +112,8 @@ export function AgentPluginsPane({
   plugin?: ClaudePluginService;
   /** The DeepSeek Harness plugin's service; a fake in pictures and tests. */
   deepseekPlugin?: ClaudePluginService;
+  /** The ChatGPT extension's service; a fake in pictures and tests. */
+  chatgpt?: ChatGptService;
 }) {
   const t = useText(snapshot);
   const light = useLightTheme();
@@ -113,10 +122,13 @@ export function AgentPluginsPane({
     claudeCode: usePlugin("claudeCode", plugin, active, t),
     deepseek: usePlugin("deepseek", deepseekPlugin, active, t),
   };
+  const chatgptExtension = useChatGpt(chatgpt, active, t);
   const tools = useHudTools(snapshot, action);
   const forClient = (id: string) =>
     items.filter((item) => item.client === id && item.place !== "tools");
   const extraClients = productClients(items);
+  // ChatGPT's own card follows the clients with HUD tools.
+  const clientCount = knownClients.length + extraClients.length + 1;
   const pluginsMissing = knownClients.filter(
     (client) =>
       client.plugin && plugins[client.id]?.status?.installed === false,
@@ -128,10 +140,7 @@ export function AgentPluginsPane({
         <Section
           title={t("Clients", "各客户端")}
           action={[
-            t(
-              `${knownClients.length + extraClients.length} clients`,
-              `${knownClients.length + extraClients.length} 个`,
-            ),
+            t(`${clientCount} clients`, `${clientCount} 个`),
             pluginsMissing
               ? t(
                   `${pluginsMissing} plugin${pluginsMissing === 1 ? "" : "s"} not installed`,
@@ -183,6 +192,7 @@ export function AgentPluginsPane({
               }}
             />
           ))}
+          <ChatGptCard chatgpt={chatgptExtension} light={light} t={t} />
           <OtherAgentsCard
             json={mcp.status?.json}
             icon={<Braces size={16} strokeWidth={1.8} />}

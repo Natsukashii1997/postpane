@@ -2,6 +2,7 @@
 //! grouped by what they cover.
 use super::*;
 
+mod chatgpt;
 mod claude_desktop;
 mod conversation_feed;
 mod hermes;
