@@ -480,6 +480,7 @@ export function CompactAlertView({
         <ReminderMark
           request={request}
           event={replyTag ? reply.event : event}
+          bot={replyTag ? reply.bot : undefined}
           size={iconSize}
           light={light}
           botLogos={botLogos}
