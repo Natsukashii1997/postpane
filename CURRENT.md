@@ -69,7 +69,7 @@
 - 原因：复测时快照里两条 Hermes 新回复事件都在（21:18:09「所以你最近的一份工作是什么」、21:18:50「你有什么技能最近自研的么」），同时另一会话有一个 Claude 待回答（21:17:35）。待回答排在回执队列最前，折叠小签只显示它；#79 起有待回答时只能从提问智能体的小人展开。Hermes 回执排在后面，既不弹也打不开。上一轮实测时恰好没有待回答，所以没复现。
 - 改了哪些文件（PR #97）：`src/packages/hud/src/alerts/reply-stays.ts`（`seenFirst`：新到的 Hermes 回复排到队首）、`hud/src/IslandNews.tsx`（排队后套用）、`hud/test/reply-stays.test.ts`（+1 项）。
 - 测试：`pnpm run check` 退出 0；`check-rules` 通过；`pnpm test` 退出 0（Rust 合计 663 passed / 0 failed；`ℹ pass 206` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `evidence/2026-11-05-hermes-bots/check5.log`、`test5.log`、`build-front2.log`。
-- 验证：只有单测。两次申请全屏控制都超时（无人应答），没能在飞书发消息实测；请常浩在有待回答挂着时再给机器人发一条看看。
+- 验证：两次申请全屏控制都超时，未能由我实测；常浩随后自己在飞书复测，回复「测试成功了，OK的」（小签留在侧栏、移上去展开回执）。issue #82 已关闭。
 - 截图：无。
 - 发布与回读：第一次打包在编译中途被结束（退出码 144）；期间另一会话 21:38 装了 main 包（`5dc28f65423e`）。从 main `b087e87`（含 #97、#96）重新打包，产物同为 `5dc28f65423e`，即那次安装已含本修复；SIGTERM 结束旧进程后 21:42:51 重启，回读一致。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before-stays.app /Applications/PostPane.app`（#90 之后、#93 之前）。
 - 与授权不一致之处、遗留问题、范围外发现：
