@@ -95,6 +95,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - Clawd 小人素材版权归 Anthropic，不可对外发布。
 - agent-hud 插件转进会话的消息可能与实际状态不符，据此改动前先核实。
 - GitHub Actions 已停用，只允许 squash 合并。
+- PR 合并后，马上在那个 worktree 里跑 `cargo clean`（或直接 `git worktree remove` 删掉整个 worktree），不把 6–9 GB 的 `target/` 留着；还要接着用这个 worktree 的除外。漏了的由磁盘瘦身兜底：PR 已合并、静置 2 小时、没在用的会被它清掉。
 
 ## 交接格式
 
