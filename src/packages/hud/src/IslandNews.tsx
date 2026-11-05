@@ -10,7 +10,7 @@ import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
 import { QuotaAlertView } from "./alerts/QuotaAlertViews";
 import { queuedQuotas, shownNews } from "./alerts/quota-list";
-import { staysUntilSeen } from "./alerts/reply-stays";
+import { seenFirst, staysUntilSeen } from "./alerts/reply-stays";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -169,14 +169,17 @@ export function useIslandNews(
                     ?.reminders !== false)),
           );
     setQueue((previous) =>
-      reconcileIslandCards(
-        silenced
-          ? previous.filter((card) => card.type === "request")
-          : previous,
-        requests,
+      seenFirst(
+        reconcileIslandCards(
+          silenced
+            ? previous.filter((card) => card.type === "request")
+            : previous,
+          requests,
+          visible,
+          underPointer ? freshRequests : [],
+          inUsagePanel,
+        ),
         visible,
-        underPointer ? freshRequests : [],
-        inUsagePanel,
       ),
     );
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
