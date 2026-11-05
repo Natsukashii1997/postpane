@@ -1,4 +1,4 @@
-// What an agent with no quota window and no balance shows instead: its last
+// What an agent with no quota window shows on the strip instead: its last
 // 24 hours, as Core reports it on each provider row (`recent`). Kept free of
 // the UI so the tests can run it; crates/hud vendors.rs writes the same text.
 import type { Snapshot } from "@agent-hud/protocol";
@@ -47,11 +47,7 @@ export function recentCost(
   return `≈${moneyShort(recent.costs[shown], shown, language)}${more ? "+" : ""}`;
 }
 
-/** In a few characters: "≈$1.20" at list prices, else "1.2M" tokens; null when nothing was used. */
-export function recentLabel(
-  recent: RecentUsage | null,
-  language: Language,
-): string | null {
-  if (!recent) return null;
-  return recentCost(recent, language) ?? tokensShort(recent.tokens);
+/** In a few characters, in tokens and never money: "1.2M"; null when nothing was used. */
+export function recentLabel(recent: RecentUsage | null): string | null {
+  return recent ? tokensShort(recent.tokens) : null;
 }

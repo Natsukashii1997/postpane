@@ -155,7 +155,8 @@ pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'
                         money_amount(&b["amount"], b["currency"].as_str().unwrap_or("USD"), zh)
                     })
                 }),
-                usage: (quotas.is_empty() && balance.is_none())
+                usage: quotas
+                    .is_empty()
                     .then(|| recent_label(snapshot, &key))
                     .flatten(),
                 key,
@@ -239,61 +240,21 @@ pub fn quota_percent(used: f64, remaining: bool) -> f64 {
 pub fn meter_label(vendor: &Vendor, remaining: bool) -> String {
     match vendor.used.or(vendor.held) {
         Some(used) => format!("{}%", quota_percent(used, remaining).round()),
-        None => vendor
-            .balance
-            .clone()
-            .or_else(|| vendor.usage.clone())
-            .unwrap_or_else(|| "--".into()),
+        // No money on the strip: an agent with no window shows its last 24
+        // hours in tokens; its balance stays in the peek and the panel.
+        None => vendor.usage.clone().unwrap_or_else(|| "--".into()),
     }
 }
 
 /// What the clients behind mark `key` used in the last 24 hours, as the
-/// snapshot's provider rows report it (`recent`), in a few characters
-/// (model.ts `recentLabel`): "≈$1.20" at list prices, with "+" when some of
-/// it has no list price or is in another currency, else "1.2M" tokens. None
-/// when they used nothing.
+/// snapshot's provider rows report it (`recent`), in tokens and a few
+/// characters (model.ts `recentLabel`): "1.2M". None when they used nothing.
 pub fn recent_label(snapshot: &Value, key: &str) -> Option<String> {
-    let mut tokens = 0.0;
-    let mut unpriced = 0.0;
-    let mut costs = std::collections::BTreeMap::<String, f64>::new();
-    for recent in list(snapshot, "providers")
+    let tokens: f64 = list(snapshot, "providers")
         .filter(|provider| mark(provider["id"].as_str().unwrap_or("")) == key)
-        .map(|provider| &provider["recent"])
-        .filter(|recent| recent.is_object())
-    {
-        tokens += recent["tokens"].as_f64().unwrap_or(0.0);
-        unpriced += recent["unpricedTokens"].as_f64().unwrap_or(0.0);
-        for (currency, amount) in recent["costs"].as_object().into_iter().flatten() {
-            *costs.entry(currency.clone()).or_default() += amount.as_f64().unwrap_or(0.0);
-        }
-    }
-    if tokens <= 0.0 {
-        return None;
-    }
-    let shown = costs
-        .get_key_value("USD")
-        .or_else(|| costs.iter().next())
-        .map(|(currency, amount)| (currency.clone(), *amount));
-    Some(match shown {
-        Some((_, amount)) if amount == 0.0 && unpriced <= 0.0 && costs.len() == 1 => {
-            // Calls to a model on this computer cost nothing.
-            if snapshot["language"] == "zh" {
-                "免费"
-            } else {
-                "Free"
-            }
-            .to_owned()
-        }
-        Some((currency, amount)) => {
-            let more = unpriced > 0.0 || costs.len() > 1;
-            format!(
-                "≈{}{}",
-                money_short(amount, &currency),
-                if more { "+" } else { "" }
-            )
-        }
-        None => tokens_short(tokens),
-    })
+        .map(|provider| provider["recent"]["tokens"].as_f64().unwrap_or(0.0))
+        .sum();
+    (tokens > 0.0).then(|| tokens_short(tokens))
 }
 
 /// format.ts `tokensShort`: 48_000 → "48k", 1_260 → "1.3k", 950 → "950",
@@ -465,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn an_agent_with_no_window_or_balance_shows_its_last_24_hours() {
+    fn an_agent_with_no_window_shows_its_last_24_hours_in_tokens() {
         let snapshot = json!({
             "quotas": [{"vendor": "kimi", "usedPercent": 30.0, "status": "normal"}],
             "billing": [], "sessions": [], "approvals": [],
@@ -488,16 +449,12 @@ mod tests {
             let row = rows.iter().find(|row| row.key == key).unwrap();
             meter_label(row, false)
         };
-        assert_eq!(label("hermes"), "1.3M", "no price: its tokens");
-        assert_eq!(label("claude"), "≈$1.20", "priced: its cost");
-        assert_eq!(
-            label("openai"),
-            "≈$412+",
-            "partly priced: the priced part, then +"
-        );
+        assert_eq!(label("hermes"), "1.3M", "its tokens");
+        assert_eq!(label("claude"), "5.0k", "tokens, never its cost");
+        assert_eq!(label("openai"), "9.0k", "tokens, priced or not");
         assert_eq!(label("kimi"), "30%", "a window comes first");
         assert_eq!(label("pi"), "--", "nothing used: nothing to show");
-        assert_eq!(label("opencode"), "Free", "a local model costs nothing");
+        assert_eq!(label("opencode"), "700", "a local model: its tokens too");
     }
 
     #[test]
@@ -539,7 +496,10 @@ mod tests {
                 .into_iter()
                 .find(|vendor| vendor.key == "deepseek")
                 .unwrap();
-            (meter_label(&vendor, false), vendor.level.to_owned())
+            (
+                vendor.balance.clone().unwrap_or_else(|| "--".into()),
+                vendor.level.to_owned(),
+            )
         };
         assert_eq!(view(json!({})), ("$0.00 · ¥9.92".into(), "critical".into()));
         assert_eq!(
@@ -593,7 +553,11 @@ mod tests {
         assert_eq!(meter_label(&simple[0], false), "72%");
         assert_eq!(meter_label(&simple[0], true), "28%");
         assert_eq!(simple[0].used, Some(72.4));
-        assert_eq!(meter_label(&simple[2], false), "¥8.85");
+        assert_eq!(
+            meter_label(&simple[2], false),
+            "--",
+            "no money on the strip"
+        );
         let named = configured(
             &snapshot,
             "simple",
