@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@agent-hud/ui/components/tooltip";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
+import { useLightTheme } from "../agent-plugins/use-status";
 import {
   LinkButton,
   Notice,
@@ -61,6 +62,7 @@ export function AgentDetail({
   // `report` where the caller shows it beside its own buttons (Connection,
   // at the bottom of the page, where the top is out of view).
   const [pending, setPending] = useState(false);
+  const light = useLightTheme();
   const [error, setError] = useState<string | null>(null);
   async function perform(
     job: () => Promise<unknown>,
@@ -102,7 +104,7 @@ export function AgentDetail({
       <Section
         title={
           <span className="agents-detail-name">
-            <HUDLogo source={source.id} size={16} />
+            <HUDLogo source={source.id} size={16} light={light} />
             {source.name}
           </span>
         }

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
+import { useLightTheme } from "./agent-plugins/use-status";
 import {
   moneyAmount,
   snapshotLanguage,
@@ -31,6 +32,7 @@ import { MultiplierInput, PriceEditor } from "./PriceFields";
  */
 export function PricesPane({ snapshot, action }: SettingsPaneProps) {
   const t = useText(snapshot);
+  const light = useLightTheme();
   const language = snapshotLanguage(snapshot);
   const [list, setList] = useState<PriceList | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +163,9 @@ export function PricesPane({ snapshot, action }: SettingsPaneProps) {
             return (
               <Collapsible
                 key={client}
-                icon={<HUDLogo source={rows[0].source} size={18} />}
+                icon={
+                  <HUDLogo source={rows[0].source} size={18} light={light} />
+                }
                 title={client}
                 defaultOpen={unpriced > 0}
                 summary={

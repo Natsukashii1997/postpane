@@ -147,7 +147,7 @@ export function SmallHUDPreview({
                   height={metrics.height}
                   radius={metrics.radius}
                   attached={sample.mode === "notch"}
-                  style={sample.glowStyle}
+                  style="blur"
                   effect={sample.glowEffect}
                   colors={vendors
                     .filter((vendor) => vendor.used !== null)
