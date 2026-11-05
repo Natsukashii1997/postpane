@@ -971,14 +971,25 @@
   border-left: 1.5px dashed rgba(var(--rc-ink), 0.5);
 }
 
-/* The clients print as a table: a column for the client, one for the
-   plugin and one for HUD tools, a status in each cell. A line still opens
-   onto that client's rows. */
+/* The clients print as a table on one grid: the name column, then the
+   Plugin and HUD tools columns, the last one reaching the box's right edge.
+   Every line uses those columns: the head, a client's line (a status in each
+   column), and the lines inside a client (a status in its own column, its
+   button after it, the ⋯ menu at the column's end). Names line up by level:
+   a client's lines under the client's name, a plugin's switches one step
+   further in, each level's rules starting where its names start. */
+.apple-app .settings-card:has(> .plugins-table-head) {
+  --plugins-col: 156px;
+  --plugins-gap: 12px;
+  /* Past the chevron and the logo: where a client's name starts. */
+  --plugins-in: 52px;
+  --plugins-in2: 68px;
+}
 .apple-app .plugins-table-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 120px;
-  gap: 10px;
-  padding: 8px 0 6px;
+  grid-template-columns: minmax(0, 1fr) var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
+  padding: 8px 0 6px var(--plugins-in);
   border-bottom: 1px solid rgba(var(--rc-ink), 0.6);
   font: 500 10.5px/1.4 var(--rc-mono);
   letter-spacing: 0.1em;
@@ -988,16 +999,97 @@
   display: none;
 }
 .apple-app
-  .settings-collapsible:has(.plugins-cell)
-  > .settings-collapsible-header
+  .settings-card:has(> .plugins-table-head)
   .settings-collapsible-summary {
   display: grid;
-  grid-template-columns: 120px 120px;
-  gap: 10px;
+  grid-template-columns: var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  > .settings-collapsible.is-open
+  > .settings-collapsible-body {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > .settings-row {
+  padding-left: var(--plugins-in);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > *
+  + *::before,
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible.is-open
+  .settings-collapsible-body::before {
+  left: var(--plugins-in);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > .plugins-sub::before {
+  left: var(--plugins-in2);
+}
+.apple-app .plugins-sub > * {
+  position: relative;
+}
+.apple-app .plugins-sub > .settings-row {
+  padding-left: var(--plugins-in2);
+}
+.apple-app .plugins-sub > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--plugins-in2);
+  right: 0;
+  border-top: 1px dashed rgba(var(--rc-ink), 0.25);
+  pointer-events: none;
+}
+/* A line's control sits in a column: a status line's cells span both, a
+   plugin's switch starts the Plugin column, anything else the HUD tools
+   column. */
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control {
+  flex: 0 0 var(--plugins-col);
+  max-width: none;
+  justify-content: flex-start;
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control:has(> .plugins-cell),
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .plugins-sub
+  .settings-row-control {
+  flex-basis: calc(var(--plugins-col) * 2 + var(--plugins-gap));
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control:has(> .plugins-cell) {
+  display: grid;
+  grid-template-columns: var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
 }
 .apple-app .plugins-cell {
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.apple-app .plugins-cell > [data-slot="button"][data-size="icon-xs"] {
+  margin-left: auto;
 }
 .apple-app .plugins-cell .settings-pill-dot {
   display: none;

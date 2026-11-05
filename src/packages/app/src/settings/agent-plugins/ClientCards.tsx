@@ -250,6 +250,7 @@ export function KnownClientCard({
                   "在侧栏上回答它的提问和批准请求。",
                 )
           }
+          column="plugin"
           state={pluginState}
           error={plugin.error}
           t={t}
@@ -258,19 +259,25 @@ export function KnownClientCard({
           }}
         />
       )}
-      {installed === true && client.id === "claudeCode" && (
-        <ClaudeAnswers snapshot={snapshot} action={action} t={t} />
-      )}
       {installed === true &&
-        switches.map((item) => (
-          <Fragment key={item.id}>{item.render(context)}</Fragment>
-        ))}
+        (client.id === "claudeCode" || switches.length > 0) && (
+          // The plugin's own switches, one level in under its row.
+          <div className="plugins-sub">
+            {client.id === "claudeCode" && (
+              <ClaudeAnswers snapshot={snapshot} action={action} t={t} />
+            )}
+            {switches.map((item) => (
+              <Fragment key={item.id}>{item.render(context)}</Fragment>
+            ))}
+          </div>
+        )}
       {own.map((item) => (
         <Fragment key={item.id}>{item.render(context)}</Fragment>
       ))}
       <StatusRow
         title={t("HUD tools", "侧栏工具")}
         tag="MCP"
+        column="tools"
         state={hud.state}
         pillReason={hud.reason}
         error={error}
@@ -339,7 +346,20 @@ export function OtherAgentsCard({
 }) {
   const [copied, setCopied] = useBriefly<true>(2000);
   return (
-    <Collapsible icon={icon} title={t("Other agents", "其他智能体")}>
+    <Collapsible
+      icon={icon}
+      title={t("Other agents", "其他智能体")}
+      summary={
+        <>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
+    >
       <Row
         title={t("HUD tools", "侧栏工具")}
         tag="MCP"

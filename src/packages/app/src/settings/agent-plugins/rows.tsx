@@ -151,11 +151,14 @@ function MoreMenu({
 
 /** One thing Agent HUD adds to a client: its pill, the one action that
  * matters now, removing in its ⋯ menu, and under it what went wrong and the
- * next step (both, when there are both). `pillReason` explains a pill whose cause is elsewhere. */
+ * next step (both, when there are both). `pillReason` explains a pill whose cause is elsewhere.
+ * The row is a line of the clients table: pill, action and menu sit in
+ * `column`, under that column's head; the other column stays empty. */
 export function StatusRow({
   title,
   tag,
   subtitle,
+  column,
   state,
   error,
   pillReason,
@@ -165,6 +168,7 @@ export function StatusRow({
   title: ReactNode;
   tag?: ReactNode;
   subtitle?: ReactNode;
+  column: "plugin" | "tools";
   state: RowState;
   error?: string | null;
   pillReason?: string | null;
@@ -182,6 +186,23 @@ export function StatusRow({
       {t(...action.label)}
     </SmallButton>
   );
+  const cell = (
+    <span className="plugins-cell">
+      {pillReason ? (
+        <Unavailable reason={pillReason}>{pill}</Unavailable>
+      ) : (
+        pill
+      )}
+      {button &&
+        (action?.unavailable && !busy ? (
+          <Unavailable reason={t(...action.unavailable)}>{button}</Unavailable>
+        ) : (
+          button
+        ))}
+      <MoreMenu items={state.menu} disabled={busy} onAction={onAction} t={t} />
+    </span>
+  );
+  const empty = <span className="plugins-cell" />;
   return (
     <Row
       title={title}
@@ -202,18 +223,8 @@ export function StatusRow({
         ) : null
       }
     >
-      {pillReason ? (
-        <Unavailable reason={pillReason}>{pill}</Unavailable>
-      ) : (
-        pill
-      )}
-      {button &&
-        (action?.unavailable && !busy ? (
-          <Unavailable reason={t(...action.unavailable)}>{button}</Unavailable>
-        ) : (
-          button
-        ))}
-      <MoreMenu items={state.menu} disabled={busy} onAction={onAction} t={t} />
+      {column === "plugin" ? cell : empty}
+      {column === "tools" ? cell : empty}
     </Row>
   );
 }
