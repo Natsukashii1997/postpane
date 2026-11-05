@@ -381,6 +381,9 @@ interface BotInks {
   figures?: string;
 }
 
+/** A bot's seal in the peek, px before scale: as tall as its two lines. */
+const SEAL = 27;
+
 /** Hermes's bots, one a row: its seal, its name and state, and under them
  * when it last replied and its turns today, the question it is answering,
  * or why it is down; then the last day's tokens (issue #108). */
@@ -428,13 +431,23 @@ function BotLines({
           key={line.bot.id}
           style={{
             display: "grid",
-            gridTemplateColumns: `${22 * scale}px minmax(0, 1fr)`,
+            gridTemplateColumns: `${SEAL * scale}px minmax(0, 1fr)`,
             columnGap: 7 * scale,
             alignItems: "center",
             height: PEEK_BOT_ROW * scale,
           }}
         >
-          <BotStamp bot={line.bot} size={22 * scale} light={light} />
+          {/* The seal's frame spans the name's top to the detail's foot
+              (owner, 2026-11-05): the two lines' ink sits a little above
+              their boxes' middle. */}
+          <span
+            style={{
+              display: "grid",
+              transform: `translateY(${-0.75 * scale}px)`,
+            }}
+          >
+            <BotStamp bot={line.bot} size={SEAL * scale} light={light} />
+          </span>
           <div style={{ minWidth: 0, lineHeight: `${16 * scale}px` }}>
             <div
               style={{
