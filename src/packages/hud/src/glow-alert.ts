@@ -23,6 +23,7 @@ export function glowAlert(
       | "quota-reset"
       | "reset-credits"
       | "sign-in-needed"
+      | "bot-offline"
       | "request";
     vendor: string;
   } | null,
@@ -32,6 +33,7 @@ export function glowAlert(
   const warning =
     alert.kind === "quota-exhaustion" ||
     alert.kind === "sign-in-needed" ||
+    alert.kind === "bot-offline" ||
     alert.kind === "request";
   const color =
     alert.kind === "completion" ? "#82aaff" : warning ? "#e9a16d" : "#6cd8ac";

@@ -47,6 +47,12 @@ export function quotaChipLabels(
     const copy = resetCreditCopy(event, undefined, settings);
     return { who: copy.chipLabel, status: copy.chipValue, tone: "reset" };
   }
+  if (event.kind === "bot-offline")
+    return {
+      who: event.title ?? "",
+      status: event.message ?? (zh ? "断线" : "Offline"),
+      tone: "critical",
+    };
   if (event.kind === "sign-in-needed")
     return {
       who: "",
@@ -106,6 +112,12 @@ export function compactAlertLabels(
     return {
       who: clientDisplayName(event.source),
       status: zh ? "有新回复" : "New reply",
+    };
+  }
+  if (event.kind === "bot-offline") {
+    return {
+      who: event.title ?? agentVendorName(event.source),
+      status: event.message ?? (zh ? "断线" : "Offline"),
     };
   }
   if (event.kind === "sign-in-needed") {
@@ -303,7 +315,9 @@ export function CompactAlertView({
   // CompletionAlertCompactView opens the detail card; Quota / ResetCredit compact views open usage stats.
   const handleClick = request
     ? undefined
-    : event?.kind === "completion" || event?.kind === "sign-in-needed"
+    : event?.kind === "completion" ||
+        event?.kind === "sign-in-needed" ||
+        event?.kind === "bot-offline"
       ? onOpen
       : onDismissAndStats;
 

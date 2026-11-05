@@ -21,6 +21,7 @@ import {
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
+import { BotSeal } from "../panel/BotStamp";
 import {
   newestReply,
   replyEntries,
@@ -130,6 +131,15 @@ export function CompletionAlertView({
                   light={light}
                   zh={zh}
                   openTag={false}
+                  seal={
+                    entry.session?.bot ? (
+                      <BotSeal
+                        bot={entry.session.bot}
+                        light={light}
+                        color={inks.dim}
+                      />
+                    ) : undefined
+                  }
                 />
                 {open ? (
                   <div

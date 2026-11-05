@@ -690,8 +690,12 @@ export interface IslandEvent {
     | "quota-reset"
     | "reset-credits"
     /** The agent signed out; `message` is what its account reading says. */
-    | "sign-in-needed";
+    | "sign-in-needed"
+    /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
+    | "bot-offline";
   at: string;
+  /** For `bot-offline`: the Hermes bot whose gateway went down. */
+  bot?: { id: string; name: string } | null;
   startedAt?: string | null;
   source: string;
   sessionId?: string;

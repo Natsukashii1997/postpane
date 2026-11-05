@@ -46,13 +46,6 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
     let mut records = Vec::new();
     let mut last = scan;
     let mut seen = 0;
-    let folder = path.parent().unwrap_or(Path::new(""));
-    let profile = folder
-        .parent()
-        .and_then(Path::file_name)
-        .filter(|s| *s == "profiles")
-        .and_then(|_| folder.file_name())
-        .map(|s| s.to_string_lossy().into_owned());
     while let Some(row) = rows.next()? {
         seen += 1;
         last = row.get(0)?;
@@ -73,13 +66,7 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
         if last <= rowid_after && updated <= ts_after {
             continue;
         }
-        let id = format!(
-            "hermes:{}{raw}",
-            profile
-                .as_ref()
-                .map(|p| format!("{p}:"))
-                .unwrap_or_default()
-        );
+        let id = session_id(path, &raw);
         let title = sql_text(row, 3);
         let cwd = sql_text(row, 4);
         let title_fallback = sql_text(row, 5).map(|source| format!("Hermes · {source}"));
@@ -203,11 +190,109 @@ pub fn read(db: &Connection, path: &Path, cursor: &Value) -> rusqlite::Result<Pa
     })
 }
 
+/// The id a session of the database at `path` is listed under: a
+/// profile's sessions carry its name (`hermes:agumon:…`).
+pub fn session_id(path: &Path, raw: &str) -> String {
+    let folder = path.parent().unwrap_or(Path::new(""));
+    let profile = folder
+        .parent()
+        .and_then(Path::file_name)
+        .filter(|s| *s == "profiles")
+        .and_then(|_| folder.file_name())
+        .map(|s| format!("{}:", s.to_string_lossy()))
+        .unwrap_or_default();
+    format!("hermes:{profile}{raw}")
+}
+
+/// A turn the gateway is running: it holds the session's turn lease
+/// (`session_turn_leases`) from the user's message until the reply is
+/// written, and drops it then.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lease {
+    /// The session's own id in the database.
+    pub session: String,
+    /// When the turn took the lease (ms).
+    pub acquired: i64,
+}
+
+/// The leases held at `now` (ms). A database without the table has none.
+pub fn leases(db: &Connection, now: i64) -> rusqlite::Result<Vec<Lease>> {
+    if !sql_columns(db, "session_turn_leases")?.contains("conversation_id") {
+        return Ok(Vec::new());
+    }
+    let mut statement = db.prepare(
+        "SELECT conversation_id, acquired_at FROM session_turn_leases WHERE expires_at > ?1 LIMIT 50",
+    )?;
+    let rows = statement.query_map([now as f64 / 1000.0], |row| {
+        Ok(Lease {
+            session: row.get(0)?,
+            acquired: (row.get::<_, f64>(1)? * 1000.0) as i64,
+        })
+    })?;
+    rows.collect()
+}
+
+/// The session's latest reply with words in it, for the new-reply card.
+pub fn last_reply(db: &Connection, session: &str) -> Option<String> {
+    db.query_row(
+        "SELECT content FROM messages WHERE session_id=?1 AND role='assistant' \
+         AND content IS NOT NULL AND length(content)>0 ORDER BY id DESC LIMIT 1",
+        [session],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
 /// A Hermes model with the route its billing provider and address name
 /// (`endpoints::provider_route`), so a relay is not priced at a vendor's list.
 fn routed(model: String, provider: Option<String>, base_url: Option<String>) -> String {
     match crate::endpoints::provider_route(provider.as_deref(), base_url.as_deref()) {
         Some(route) => format!("{model}#{route}"),
         None => model,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_profiles_sessions_carry_its_name() {
+        assert_eq!(
+            session_id(
+                &std::env::temp_dir().join(".hermes").join("state.db"),
+                "20261105_1"
+            ),
+            "hermes:20261105_1"
+        );
+        assert_eq!(
+            session_id(
+                &std::env::temp_dir().join(".hermes/profiles/agumon/state.db"),
+                "20261105_1"
+            ),
+            "hermes:agumon:20261105_1"
+        );
+    }
+
+    #[test]
+    fn a_held_lease_is_a_running_turn_and_the_latest_reply_has_words() {
+        let db = Connection::open_in_memory().unwrap();
+        assert_eq!(leases(&db, 0).unwrap(), Vec::new());
+        db.execute_batch(
+            "CREATE TABLE session_turn_leases (conversation_id TEXT PRIMARY KEY, holder TEXT, acquired_at REAL, expires_at REAL);
+             INSERT INTO session_turn_leases VALUES ('a','gw',100.5,400), ('b','gw',90,95);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT);
+             INSERT INTO messages (session_id, role, content) VALUES ('a','user','问'),('a','assistant','答一'),('a','assistant','');",
+        )
+        .unwrap();
+        assert_eq!(
+            leases(&db, 200_000).unwrap(),
+            vec![Lease {
+                session: "a".into(),
+                acquired: 100_500
+            }]
+        );
+        assert_eq!(last_reply(&db, "a").as_deref(), Some("答一"));
+        assert_eq!(last_reply(&db, "b"), None);
     }
 }

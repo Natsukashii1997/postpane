@@ -103,6 +103,15 @@ impl crate::AgentHudCore {
     /// What a snapshot is rendered from, apart from the clock: the logs and
     /// the ledger, the account readings, hook facts, requests, settings, and
     /// what the collection pass noticed.
+    /// The gateways (Feishu bots) under each Hermes home read.
+    fn hermes_gateways(&self, now: i64) -> Vec<agent_hud_agents::hermes::Gateway> {
+        self.provider_roots
+            .iter()
+            .filter(|(_, source)| *source == "hermes")
+            .flat_map(|(root, _)| agent_hud_agents::hermes::gateways(root, now))
+            .collect()
+    }
+
     fn render_key(&self) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -114,6 +123,10 @@ impl crate::AgentHudCore {
         self.source_notice.hash(&mut hash);
         self.storage_issue.hash(&mut hash);
         self.reads.pending.len().hash(&mut hash);
+        // A Hermes gateway going down is news though no log changed.
+        for gateway in self.hermes_gateways(Utc::now().timestamp_millis()) {
+            (gateway.bot.id, gateway.down).hash(&mut hash);
+        }
         (
             self.usage_projection.is_none(),
             self.meters.view.is_none(),
@@ -237,6 +250,8 @@ impl crate::AgentHudCore {
         let billing = self.billing_rows(at, &pending_meter, &relay_users);
         let accounts = self.account_rows();
         let relays = self.relay_rows(&relay_users);
+        let gateways = self.hermes_gateways(now);
+        self.island_events.gateways(&gateways, now);
         let island_events = self
             .island_events
             .update(&sessions, &quotas, &accounts, &providers, now);

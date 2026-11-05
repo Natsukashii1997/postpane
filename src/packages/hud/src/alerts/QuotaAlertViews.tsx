@@ -69,6 +69,22 @@ export function stripCopy(
       opens: true,
     };
   }
+  if (event.kind === "bot-offline") {
+    const zh = settings.language === "zh";
+    return {
+      status: `${event.title ?? "Hermes"} · ${event.message ?? (zh ? "断线" : "Offline")}`,
+      display: zh ? "断线" : "Offline",
+      tone: "critical",
+      framed: true,
+      bar: null,
+      when: zh
+        ? "机器人暂时收不到飞书消息"
+        : "The bot cannot get Feishu messages",
+      stillEmpty: null,
+      note: null,
+      opens: false,
+    };
+  }
   if (event.kind === "sign-in-needed") {
     const agent = vendorKey(event.source);
     const copy = signInCopy(

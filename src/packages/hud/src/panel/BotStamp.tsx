@@ -119,3 +119,34 @@ export function BotStamp({
     </svg>
   );
 }
+
+/** The seal with the bot's name under it, at the end of a session's row. */
+export function BotSeal({
+  bot,
+  light,
+  color,
+}: {
+  bot: HermesBot;
+  light: boolean;
+  /** The name's ink. */
+  color: string;
+}) {
+  return (
+    <span
+      title={bot.name}
+      style={{ display: "grid", justifyItems: "center", gap: 1 }}
+    >
+      <BotStamp bot={bot} size={30} light={light} />
+      <span
+        style={{
+          fontSize: 9.5,
+          letterSpacing: "0.05em",
+          color,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {bot.name}
+      </span>
+    </span>
+  );
+}
