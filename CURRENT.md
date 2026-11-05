@@ -2,16 +2,16 @@
 
 更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
 
-## Claude 额度看板：每周 Fable 换成云端额度（2026-11-05，Claude，常浩要求把每周 Fable 改成 claude.ai 的 Cloud session credits，确认方案后选「设置里隐藏 Fable」；PR #58 测试全过已 squash 合并 `412d863`，打包安装见下）
+## Claude 额度看板：每周 Fable 换成云端额度（2026-11-05，Claude，常浩要求把每周 Fable 改成 claude.ai 的 Cloud session credits，确认方案后选「设置里隐藏 Fable」；PR #58 测试全过已 squash 合并 `412d863`，已打包安装）
 
 - 时间：开工 `2026-11-05 12:32`（本会话创建时间；本节写于 `2026-11-05 12:50`）。来由：常浩截图对比 claude.ai 用量弹窗与驿窗 Claude 看板，issue #56。
 - 改了哪些文件：`src/crates/agents/src/claude/account.rs`（`get_usage` 里带 `limit_dollars`/`used_dollars` 的一项读成 `claude-cloud-credits` 行，金额进 `nativeUsage`，无周期）、`src/packages/hud/src/quota-rows.ts`（`quotaCredits` 按 `metrics.consumed.unit === "USD"` 认出）、`panel/agent-board.ts` 与 `AgentBoard.tsx`（「…后到期」、条下已用/剩余金额、不参与预测和判词计数）、`panel/window-labels.ts`（「云端额度」）、`model.ts`（静止条最紧额度不算它）；测试 `account.rs` 1 个、`test/agent-board.test.ts` 1 个。
-- 测试：分支提交 `931b56f`（与 main `412d863` 内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 643 passed / 0 failed；`ℹ pass 167` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/56-check.log`。
-- 验证：本机直接调 Claude 引擎 `get_usage`，确认该项为 `iguana_necktie`：上限 250、已用 109.05、`resets_at` 2026-11-05T07:59Z，与 claude.ai 弹窗一致；界面只有单元测试，实机见下。
-- 截图：无。
-- 发布与回读：见本节末追记。
+- 测试：分支提交 `931b56f`（与 main `412d863` 内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 643 passed / 0 failed；`ℹ pass 167` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-cloud-credits/56-check.log`。
+- 验证：本机直接调 Claude 引擎 `get_usage`，确认该项为 `iguana_necktie`：上限 250、已用 109.05、`resets_at` 2026-11-05T07:59Z，与 claude.ai 弹窗一致；装好新版后用 HUD 工具 `get_hud` 回读，Claude 块多出 `Cloud session credits` 行（`usedPercent` 55.58、`consumed` 138.95/250 USD、`windowDurationSeconds` 为空）；放好隐藏 Fable 的草稿后用 `get_hud_screenshot` 截面板，看到「云端额度 56%　3 小时 9 分后到期　已用 $139 / $250」，判词为「两个额度在重置前都用不完」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-cloud-credits/panel-draft-dark-zh.png`（应用内面板渲染，含未保存草稿，账户已遮盖）。
+- 发布与回读：`PostPane.app`（worktree 分支提交 `931b56f` 打包，内容同 main `412d863`）已 ditto 到 `/Applications` 并重启（12:49:30，按 L-03），回读见「验证」。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-cloud-credits/PostPane-before.app /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：
-  - 每周 Fable 未改代码，经 HUD 工具 `draft_hud` 放了草稿 `blocks.claude.hiddenRows = ["claude-weekly-fable"]`，需常浩在面板点「保存」才生效。
+  - 每周 Fable 未改代码，经 HUD 工具 `draft_hud` 放了草稿 `blocks.claude.hiddenRows = ["claude-weekly-fable"]`，需常浩在面板点「保存」才生效（重启前未保存会丢，安装重启后已重新放过一次）。
   - 这笔云端额度今天 15:59 到期，之后接口不返回，这一行自动消失。
   - 额度阈值提醒对云端额度行仍按百分比走，未单独处理。
   - 第一次把读取层改在了主目录，随后移进 worktree `.claude/worktrees/56-cloud-credits`，主目录已还原。可清理 worktree 现共 19 个，清理前问常浩。
