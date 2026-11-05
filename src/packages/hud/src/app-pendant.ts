@@ -1,6 +1,5 @@
 // A self-built app hangs off the resting ticket strip as a pendant: a dashed
-// cord from the strip's end, the app's own ball in a paper ring, and a small
-// capsule tag with its name. It sits outside the strip, so hovering it never
+// cord from the strip's end and the app's own ball in a paper ring. It sits outside the strip, so hovering it never
 // opens the agents' panel, and the strip's size stays the agents' alone.
 // Kept free of the UI so the tests can run it.
 import { stubSize } from "./ticket-stub.ts";
@@ -23,7 +22,6 @@ export interface PendantLayout {
   cord: number;
   ring: number;
   ball: number;
-  tag: number;
 }
 
 /** The pendant's parts for a strip of `logo`-point bots, in points. */
@@ -35,7 +33,6 @@ export function pendantParts(logo: number) {
     cord: Math.round(logo * 0.55),
     ring,
     ball: ring - 2 * Math.max(3, Math.round(ring * 0.08)),
-    tag: Math.max(14, Math.round(logo * 0.6)),
   };
 }
 
@@ -52,25 +49,15 @@ export function pendantLayout(
 ): PendantLayout {
   const parts = pendantParts(logo);
   const horizontal = edge === "top" || edge === "bottom";
-  const tagGap = 4;
-  // Down a side edge the tag hangs under the ring; along the top or bottom
-  // the ring follows the cord sideways and the tag sits under it.
-  const along = horizontal
-    ? parts.cord + parts.ring
-    : parts.cord + parts.ring + tagGap + parts.tag;
-  const across = horizontal ? parts.ring + tagGap + parts.tag : parts.stub;
+  const along = parts.cord + parts.ring;
+  const across = horizontal ? parts.ring : parts.stub;
   if (horizontal) {
     const after = strip.x + strip.width;
     const reversed = after + along > room.width;
-    const middle = strip.y + strip.height / 2;
     return {
       frame: {
         x: reversed ? strip.x - along : after,
-        // On the bottom edge the tag sits above the ring, inside the screen.
-        y:
-          edge === "bottom"
-            ? middle + parts.ring / 2 - across
-            : middle - parts.ring / 2,
+        y: strip.y + strip.height / 2 - parts.ring / 2,
         width: along,
         height: across,
       },
