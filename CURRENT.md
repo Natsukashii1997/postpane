@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+
+## 侧栏重置到账、登出提醒与面板事件行并入细条（2026-11-05，Claude，常浩选 15、16「甲 · 并入细条」，02 不改、17「甲 · 细条同款」，看截图后追加待审批小签显示会话标题、侧栏去掉 Fable 并把 Cloud 改「云端」，说「开工」，看过前后对比页与安装后的应用说「合并」；PR #65 测试全过已 squash 合并 `cfa289a`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 13:58`（估计，按「开工」那条消息；本节写于 `2026-11-05 14:36`）。来由：侧栏面板逐个梳理的最后几项（面板清单 15、16、17，另确认 02 不改）；预览与定稿 https://claude.ai/artifact/TksR6Ltwp3YVo4qPaAbwQV （15、16）、https://claude.ai/artifact/82xPsuYeeRfNFZUvFfuLvr （02、17），前后对比 https://claude.ai/artifact/Li98f3MC4THoHEjKJWvANm ，issue #64。
+- 改了哪些文件（PR #65，实现由子 agent 完成、我对照定稿截图与过滤逻辑审核；都在 `src/packages/hud/`）：`src/alerts/QuotaAlertViews.tsx`（删两张大卡，新增通用细条 `AlertStrip` 与 `stripCopy`，四种额度类提醒同列）、`alerts/quota-alert-copy.ts`（重写 `resetCreditCopy`，新增 `signInCopy`：登出写原因和「额度停在 HH:MM 的读数」，取该智能体额度最晚 `observedAt`）、`alerts/quota-list.ts`（`isQuotaEvent` 扩到四种，新增 `shownNews` 过滤隐藏行的提醒）、`alerts/InlineEventRow.tsx`（看板顶部事件行改用细条）、`alerts/CompactAlertView.tsx`（重置到账、登出新小签；待审批小签先用会话标题）、`permissions/approval-list.ts`（`requestTitle`）、`quota-rows.ts`（`quotaRowShown`、`tightestWindow`）、`model.ts`（侧栏智能体先去掉面板隐藏的行再算最紧值）、`usage-meter/mark-windows.ts`、`panel/window-labels.ts`（`peekWindowName`：中文界面 Cloud →「云端」）、`scene/AgentPeek.tsx`、`IslandNews.tsx`、`HUDScene.tsx`、`scene/HUDExpandedSurface.tsx`、`scene/useHUDLayout.ts`；测试 `test/quota-alert-copy.test.ts`、`quota-list.test.ts`、`approval-list.test.ts`、`quota-rows.test.ts`。
+- 测试：在分支提交 `b0c7c51`（与 main `cfa289a` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-credit-signin/check.log`、`test.log`（子 agent 跑，我核对过结果行）。
+- 验证：子 agent 用临时页面以 vite 打包真实组件、无头浏览器截图（临时文件已删）；改版前的对照图由另一子 agent 在 `cdcb999` 上用同一脚本渲染；我对照定稿看过四种混排、悬停小卡、待审批小签、看板事件行。实机里重置到账、登出、看板事件行还没真正出现过。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-credit-signin/`（新版 `reset-*`、`signin-*`、`mix-*`、`chips-*`、`request-chip-*`、`panel-*`、`peek-*`；改版前 `old-reset-dark-zh.png`、`old-signin-dark-zh.png`、`old-panel-dark-zh.png`；均为组件渲染图，非实机）。
+- 发布与回读：分支版 14:21:54 ditto 到 `/Applications` 并重启；合并后 `shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 仍为打包产物的 `8e60e4efd71f`，分支与 main 内容相同，未被覆盖（L-05）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-credit-signin/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：隐藏行按面板设置（`hiddenRows` / `hiddenAccounts`）判断，不按 Fable 字样硬编码；待审批小签标题按 150 宽截断；刘海模式重置到账沿用原 calm 色；登出那条智能体名显示厂商名「Claude」（旧卡显示 provider 名「Claude Code」）。
+  - Rust 侧算侧栏宽度（`src/crates/hud/src/vendors.rs`）取最紧额度时仍算隐藏行和云端额度，数字变短时那一格可能略宽，未改。
+  - 旧卡把 Codex 写成「OpenAI」，新细条已改为「Codex」；额度看板里的智能体名仍是「OpenAI」，未改。
+  - 可清理 worktree 增加 `.claude/worktrees/64-credit-signin-strip`，清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏额度预警卡改成细条（2026-11-05，Claude，常浩看过三版预览选「丙」，开工指令经 agent-hud 插件转入（与待答问题对得上），看过安装后的应用说「合并」；PR #62 测试全过已 squash 合并 `cdcb999`，已从 main 重新打包安装、回读一致）
 
