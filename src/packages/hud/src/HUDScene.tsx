@@ -22,6 +22,7 @@ import {
   clientDisplayName,
 } from "./IslandNews";
 import { replyChip } from "./alerts/reply-list";
+import { useCardHeld } from "./alerts/card-hold";
 import {
   ApprovalContent,
   RequestDeliveryNotice,
@@ -226,7 +227,9 @@ export function HUDScene({
     }
     setDomTyping(true);
   }, []);
-  const typing = Boolean(textFocused || domTyping);
+  // A part of a card in use (the handoff sheet) holds it as typing does.
+  const cardHeld = useCardHeld();
+  const typing = Boolean(textFocused || domTyping || cardHeld);
   const suppressHover = useRef(false);
   const hover = useHoverMachine(config);
   const panelServices = usePanelServices();

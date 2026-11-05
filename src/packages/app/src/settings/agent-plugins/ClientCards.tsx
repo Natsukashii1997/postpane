@@ -14,12 +14,14 @@ import {
 } from "../../lib/agent-plugins";
 import {
   Collapsible,
+  Notice,
   Pill,
   Row,
   SmallButton,
   type SettingsPaneProps,
   type Text,
 } from "../SettingsPrimitives";
+import { TextInput } from "../SettingsFields";
 import { PluginControl, StatePill, StatusRow } from "./rows";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import {
@@ -396,7 +398,59 @@ export function ChatGptCard({
           if (id === "register" || id === "remove") void chatgpt.change(id);
         }}
       />
+      {status?.manifestInstalled && <ProjectRow chatgpt={chatgpt} t={t} />}
     </ClientCard>
+  );
+}
+
+/** The ChatGPT project new review conversations open in: its page's address,
+ * pasted and saved. */
+function ProjectRow({ chatgpt, t }: { chatgpt: ChatGpt; t: Text }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useBriefly<true>(1600);
+  const text = draft ?? chatgpt.project ?? "";
+  const changed = text.trim() !== (chatgpt.project ?? "");
+  const save = async () => {
+    if (!changed || chatgpt.savingProject) return;
+    if (await chatgpt.saveProject(text)) {
+      setDraft(null);
+      setSaved(true);
+    }
+  };
+  return (
+    <Row
+      title={t("New reviews go into project", "新会话放进项目")}
+      subtitle={t(
+        "Paste a ChatGPT project page's address; review conversations PostPane opens go into it.",
+        "粘贴 ChatGPT 项目页网址，驿窗新开的审核会话都放进这个项目",
+      )}
+      below={
+        chatgpt.projectError ? (
+          <Notice tone="error">{chatgpt.projectError}</Notice>
+        ) : undefined
+      }
+    >
+      <TextInput
+        label={t("ChatGPT project page", "ChatGPT 项目页网址")}
+        value={text}
+        change={setDraft}
+        placeholder="https://chatgpt.com/g/…/project"
+        width={240}
+        disabled={chatgpt.savingProject}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void save();
+          }
+        }}
+      />
+      <SmallButton
+        disabled={!changed || chatgpt.savingProject}
+        onClick={() => void save()}
+      >
+        {saved ? t("Saved", "已保存") : t("Save", "保存")}
+      </SmallButton>
+    </Row>
   );
 }
 

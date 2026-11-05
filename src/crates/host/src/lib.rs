@@ -20,6 +20,7 @@ mod deepseek_plugin;
 mod demo;
 pub mod extension;
 mod float_notes;
+mod handoff;
 mod hud;
 mod instance;
 mod mcp_clients;
@@ -49,10 +50,14 @@ impl Backend {
         if let Some(system) = app.try_state::<system::System>() {
             system.project(&mut value);
         }
+        if let Some(desk) = app.try_state::<handoff::Desk>() {
+            value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
+        }
         if let Some(tools) = &self.tools {
             value["connection"]["localTools"] = tools.configure(tools::channel_wanted(
                 value["settings"]["hudTools"].as_bool().unwrap_or(false),
                 self.extension.as_deref(),
+                chatgpt_registered(app),
             ));
         }
         let recovered = self.error.take().is_some();
@@ -111,11 +116,27 @@ impl Backend {
                 .as_ref()
                 .is_some_and(|snapshot| snapshot["settings"]["hudTools"] == true),
             self.extension.as_deref(),
+            chatgpt_registered(app),
         );
         let channel = tools.configure(wanted);
         if let Some(snapshot) = &mut self.snapshot {
             if snapshot["connection"]["localTools"] != channel {
                 Arc::make_mut(snapshot)["connection"]["localTools"] = channel;
+                self.publish_snapshot(app);
+            }
+        }
+    }
+
+    /// Handoffs change outside a collection pass: the cached snapshot takes
+    /// them at once and goes out again when they differ.
+    fn refresh_handoffs(&mut self, app: &tauri::AppHandle) {
+        let Some(desk) = app.try_state::<handoff::Desk>() else {
+            return;
+        };
+        let handoffs = desk.projection(chrono::Utc::now().timestamp_millis());
+        if let Some(snapshot) = &mut self.snapshot {
+            if snapshot["handoffs"] != handoffs {
+                Arc::make_mut(snapshot)["handoffs"] = handoffs;
                 self.publish_snapshot(app);
             }
         }
@@ -150,6 +171,13 @@ impl Backend {
             }
         }
     }
+}
+
+/// Whether the ChatGPT extension's native host is registered: the local
+/// tools channel then listens for `relay_to_chatgpt`.
+fn chatgpt_registered(app: &tauri::AppHandle) -> bool {
+    app.try_state::<chatgpt::ChatGpt>()
+        .is_some_and(|chatgpt| chatgpt.registered())
 }
 
 /// generatedAt identifies a newly built projection; it is not a fact change.
@@ -878,6 +906,10 @@ pub fn run_with_options(
             chatgpt::chatgpt_open,
             chatgpt::chatgpt_send,
             chatgpt::chatgpt_status,
+            handoff::handoff_start,
+            handoff::handoff_forward,
+            handoff::handoff_route,
+            handoff::chatgpt_project,
             deepseek_plugin::native_deepseek_plugin,
             picture::picture_payload,
             picture::picture_complete,
@@ -917,6 +949,12 @@ pub fn run_with_options(
             app.manage(picture::Pictures::default());
             // The ChatGPT extension's socket, in the data folder; none in the demo.
             app.manage(chatgpt::ChatGpt::start(
+                (!app.state::<AppState>().demo)
+                    .then(agent_hud_runtime::local_tools_directory)
+                    .transpose()?,
+            ));
+            // Handoffs between Claude Code and ChatGPT; none kept in the demo.
+            app.manage(handoff::Desk::new(
                 (!app.state::<AppState>().demo)
                     .then(agent_hud_runtime::local_tools_directory)
                     .transpose()?,

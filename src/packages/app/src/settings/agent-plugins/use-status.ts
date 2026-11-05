@@ -6,6 +6,8 @@ import { failure, toolsSwitch } from "../../lib/agent-plugins";
 import type { Text } from "../SettingsPrimitives";
 import {
   cache,
+  nativeChatGptProject,
+  type ChatGptProjectService,
   type ChatGptService,
   type ChatGptStatus,
   type ClaudePluginService,
@@ -107,13 +109,55 @@ export type PluginStatus = ReturnType<typeof usePlugin>;
 
 /** The ChatGPT extension's status, read again every 10 seconds while
  * Settings is on screen (it connects while Chrome runs) and when the app
- * comes to the front, and registering and removing Chrome's manifest. */
-export function useChatGpt(service: ChatGptService, active: boolean, t: Text) {
+ * comes to the front, and registering and removing Chrome's manifest; and the
+ * ChatGPT project new review conversations open in. */
+export function useChatGpt(
+  service: ChatGptService,
+  active: boolean,
+  t: Text,
+  projectService: ChatGptProjectService = nativeChatGptProject,
+) {
   const [status, setStatus] = useState<ChatGptStatus | null>(cache.chatgpt);
   const [running, setRunning] = useState<"register" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [project, setProject] = useState<string | null>(cache.chatgptProject);
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const read = useRef(service);
   read.current = service;
+  const projects = useRef(projectService);
+  projects.current = projectService;
+  const keepProject = (next: string | null) => {
+    cache.chatgptProject = next;
+    setProject(next);
+  };
+  useEffect(() => {
+    if (!active) return;
+    let dead = false;
+    void projects
+      .current()
+      .then((next) => {
+        if (!dead) keepProject(next.project);
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [active]);
+  /** Saves the project page pasted; whether it was taken. */
+  async function saveProject(text: string) {
+    setSavingProject(true);
+    setProjectError(null);
+    try {
+      keepProject((await projects.current(text)).project);
+      return true;
+    } catch (failed) {
+      setProjectError(String(failed));
+      return false;
+    } finally {
+      setSavingProject(false);
+    }
+  }
   const apply = (next: ChatGptStatus) => {
     cache.chatgpt = next;
     setStatus(next);
@@ -150,7 +194,16 @@ export function useChatGpt(service: ChatGptService, active: boolean, t: Text) {
       setRunning(null);
     }
   }
-  return { status, running, error, change };
+  return {
+    status,
+    running,
+    error,
+    change,
+    project,
+    savingProject,
+    projectError,
+    saveProject,
+  };
 }
 export type ChatGpt = ReturnType<typeof useChatGpt>;
 

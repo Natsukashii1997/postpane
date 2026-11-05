@@ -737,6 +737,26 @@ export interface IslandEvent {
   islandAlert?: boolean;
   navigationTarget?: unknown;
 }
+/** A Claude Code session and the ChatGPT conversation reviewing its work
+ * (relay 1c, docs/chatgpt-channel.md). From the host: the live ones and those
+ * that failed in the last day. */
+export interface Handoff {
+  id: string;
+  /** The task's name. */
+  title: string;
+  claudeSession: string;
+  cwd?: string | null;
+  /** The review conversation's chatgpt.com id, once open. */
+  chatgptConversation?: string | null;
+  status: "opening" | "open" | "failed" | "closed";
+  /** Why the conversation could not be opened. */
+  error?: string | null;
+  /** Milliseconds since the epoch. */
+  createdAt: number;
+  updatedAt: number;
+  /** How many times words went either way after the first. */
+  rounds: number;
+}
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the
    * system's preferred language; Core writes its own text in it. */
@@ -793,6 +813,8 @@ export interface Snapshot {
   relays?: RelaySource[];
   /** From Core: each Hermes bot (Feishu gateway), the default home's first. */
   hermesBots?: HermesBotStatus[];
+  /** From the host: Claude Code sessions handed to ChatGPT for review. */
+  handoffs?: Handoff[];
 }
 /** A price per million tokens; an empty cache rate takes the input's. */
 export interface CustomPrice {

@@ -3,7 +3,13 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +39,10 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
   const tools = ${state ? `JSON.parse(readFileSync(${JSON.stringify(state)}, 'utf8'))` : JSON.stringify(tools)};
   const reply = request.method === 'host_tools'
     ? (tools ? { result: { tools } } : { error: { message: 'The app is not running' } })
-    : request.method === 'host_tool' ? { result: { echoed: request.params.name } } : { error: { message: 'not here' } };
+    : request.method === 'host_tool' ? { result: { echoed: request.params.name } }
+    : request.method === 'relay_to_chatgpt'
+      ? (tools ? { result: { handoffId: 'h1', status: 'opening', message: '已交给 ChatGPT 审核' } } : { error: { message: 'Local tools are disabled' } })
+    : { error: { message: 'not here' } };
   process.stdout.write(JSON.stringify({ id: request.id, ...reply }) + '\\n');
 });
 `,
@@ -62,7 +71,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
         .map((line) => JSON.parse(line)),
   };
 }
-async function connect(engineFile, env = {}, options = {}) {
+async function connect(engineFile, env = {}, options = {}, cwd = undefined) {
   const client = new Client({ name: "relay-test", version: "0.0.0" }, options);
   const { CLAUDE_CODE_SESSION_ID: _, ...rest } = process.env;
   await client.connect(
@@ -70,6 +79,7 @@ async function connect(engineFile, env = {}, options = {}) {
       command: process.execPath,
       args: ["--import", tsx, relay],
       env: { ...rest, AGENTHUD_ENGINE: engineFile, ...env },
+      cwd,
     }),
   );
   return client;
@@ -284,5 +294,76 @@ test("on Windows the launcher names the client, which the relay gives as parent"
     } finally {
       await client.close();
     }
+  }
+});
+
+test("relay_to_chatgpt hands the Claude Code session, its folder and the brief to the app", async () => {
+  const fake = engine("relay", [tool]);
+  const client = await connect(
+    fake.file,
+    { CLAUDE_CODE_SESSION_ID: "session-9" },
+    {},
+    folder,
+  );
+  try {
+    const { tools } = await client.listTools();
+    const listed = tools.find((item) => item.name === "relay_to_chatgpt");
+    assert.ok(listed, "listed without any host group");
+    assert.match(listed.description, /结论：通过/);
+    assert.match(listed.description, /PR/);
+    assert.deepEqual(listed.inputSchema.required, ["title", "brief"]);
+    const result = await client.callTool({
+      name: "relay_to_chatgpt",
+      arguments: { title: "驿窗｜接力 1c", brief: "改动如下" },
+    });
+    assert.deepEqual(result.structuredContent, {
+      handoffId: "h1",
+      status: "opening",
+      message: "已交给 ChatGPT 审核",
+    });
+    const call = fake
+      .requests()
+      .find((request) => request.method === "relay_to_chatgpt");
+    assert.deepEqual(call.params, {
+      title: "驿窗｜接力 1c",
+      brief: "改动如下",
+      caller: { client: "claude", sessionId: "session-9", turnId: null },
+      cwd: realpathSync(folder),
+      parent: process.pid,
+    });
+  } finally {
+    await client.close();
+  }
+});
+
+test("relay_to_chatgpt without a caller leaves it to the app, and says in Chinese when the app cannot take it", async () => {
+  const fake = engine("relay-nobody", [tool]);
+  const client = await connect(fake.file);
+  try {
+    await client.callTool({
+      name: "relay_to_chatgpt",
+      arguments: { title: "t", brief: "b" },
+    });
+    const call = fake
+      .requests()
+      .find((request) => request.method === "relay_to_chatgpt");
+    assert.equal(call.params.caller, null);
+    assert.equal(call.params.parent, process.pid);
+  } finally {
+    await client.close();
+  }
+  const closed = await connect(engine("relay-closed", null).file, {
+    CLAUDE_CODE_SESSION_ID: "session-9",
+  });
+  try {
+    const result = await closed.callTool({
+      name: "relay_to_chatgpt",
+      arguments: { title: "t", brief: "b" },
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /设置 → 智能体插件/);
+    assert.match(result.content[0].text, /Local tools are disabled/);
+  } finally {
+    await closed.close();
   }
 });

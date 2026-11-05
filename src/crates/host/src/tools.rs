@@ -129,6 +129,22 @@ fn handle(
         let params = with_caller(channel, params, std::time::SystemTime::now());
         return host_request(extension.as_deref(), method, params);
     }
+    if method == super::handoff::RELAY_METHOD {
+        // Claude handing its work to ChatGPT: not a HUD tool, so not behind
+        // their switch; the ChatGPT extension must be connected instead. The
+        // snapshot's Claude sessions name the caller when its id is stale.
+        let sessions = backend
+            .lock()
+            .map_err(|_| "Application state unavailable")?
+            .snapshot
+            .as_ref()
+            .map(|snapshot| super::handoff::claude_sessions(snapshot))
+            .unwrap_or_default();
+        if !active.load(Ordering::Acquire) {
+            return Err("Local tools are disabled".into());
+        }
+        return super::handoff::relay(app, &params, &sessions);
+    }
     let mut owner = backend
         .lock()
         .map_err(|_| "Application state unavailable")?;
@@ -198,13 +214,15 @@ fn handle(
 /// and running one. Nothing else reaches the product from this channel.
 const HOST_METHODS: [&str; 2] = ["host_tools", "host_tool"];
 
-/// Whether the channel listens: for HUD tools while their switch is on, and
-/// for the product's own tools while one of its groups is on.
+/// Whether the channel listens: for HUD tools while their switch is on, for
+/// the product's own tools while one of its groups is on, and for
+/// `relay_to_chatgpt` while the ChatGPT extension is registered.
 pub(super) fn channel_wanted(
     hud_tools: bool,
     extension: Option<&dyn crate::extension::ProductExtension>,
+    chatgpt: bool,
 ) -> bool {
-    hud_tools || extension.is_some_and(|product| product.host_tools_on())
+    hud_tools || chatgpt || extension.is_some_and(|product| product.host_tools_on())
 }
 
 /// The DeepSeek Harness session that called a host tool, when the relay
@@ -344,13 +362,14 @@ mod tests {
     fn the_channel_listens_for_hud_tools_or_a_product_group_that_is_on() {
         let off = product(false);
         let on = product(true);
-        assert!(!channel_wanted(false, None));
-        assert!(!channel_wanted(false, Some(&off)));
-        assert!(channel_wanted(false, Some(&on)));
-        assert!(channel_wanted(true, None));
-        assert!(channel_wanted(true, Some(&off)));
+        assert!(!channel_wanted(false, None, false));
+        assert!(!channel_wanted(false, Some(&off), false));
+        assert!(channel_wanted(false, Some(&on), false));
+        assert!(channel_wanted(true, None, false));
+        assert!(channel_wanted(true, Some(&off), false));
+        assert!(channel_wanted(false, None, true));
         on.on.store(false, Ordering::Release);
-        assert!(!channel_wanted(false, Some(&on)));
+        assert!(!channel_wanted(false, Some(&on), false));
     }
 
     #[test]
@@ -367,8 +386,9 @@ mod tests {
             let reply =
                 extension_request(Some(product.as_ref()), "set_tools", changed.clone(), || {
                     let product_handler = product.clone();
-                    let status =
-                        state.configure(channel_wanted(false, Some(product.as_ref())), || {
+                    let status = state.configure(
+                        channel_wanted(false, Some(product.as_ref()), false),
+                        || {
                             Server::start(
                                 &directory,
                                 Arc::new(move |request, _| {
@@ -380,7 +400,8 @@ mod tests {
                                     .unwrap()
                                 }),
                             )
-                        });
+                        },
+                    );
                     assert_eq!(status["listening"], true, "{status}");
                 });
             if failed {
@@ -401,7 +422,7 @@ mod tests {
                 json!({"enabled":false}),
                 || {
                     let status = state
-                        .configure(channel_wanted(false, Some(product.as_ref())), || {
+                        .configure(channel_wanted(false, Some(product.as_ref()), false), || {
                             panic!("turning the channel off starts no listener")
                         });
                     assert_eq!(status["listening"], false);

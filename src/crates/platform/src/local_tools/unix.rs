@@ -11,7 +11,7 @@ use std::{
     },
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -19,6 +19,39 @@ use std::{
 
 fn identity(path: &Path) -> Option<(u64, u64)> {
     fs::symlink_metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+/// How many requests may run at once; past it a caller is told the app is busy.
+pub(super) const CONCURRENT: usize = 8;
+fn busy() -> Value {
+    json!({"id":null,"error":{"code":"tools_busy","message":"Local tools are busy; try again shortly"}})
+}
+/// Reads one request, has `handler` answer it, and writes the answer.
+fn serve(mut stream: UnixStream, handler: &Handler, running: &Arc<AtomicBool>) {
+    let mut bytes = Vec::new();
+    let response = if (&mut stream)
+        .take(REQUEST_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .is_err()
+        || bytes.len() as u64 > REQUEST_LIMIT
+    {
+        json!({"id":null,"error":{"message":"Local tools request is incomplete or too large"}})
+    } else {
+        match serde_json::from_slice::<Value>(&bytes) {
+            Ok(request) if running.load(Ordering::Acquire) => handler(request, running),
+            Ok(request) => {
+                json!({"id":request.get("id"),"error":{"message":"Local tools are disabled"}})
+            }
+            Err(_) => json!({"id":null,"error":{"message":"Invalid local tools request"}}),
+        }
+    };
+    answer(stream, &response);
+}
+fn answer(mut stream: UnixStream, response: &Value) {
+    let mut bytes = serde_json::to_vec(response).unwrap_or_default();
+    if bytes.len() as u64 > RESPONSE_LIMIT {
+        bytes = serde_json::to_vec(&json!({"id":response.get("id"),"error":{"message":"Local tools response is too large"}})).unwrap();
+    }
+    let _ = stream.write_all(&bytes);
 }
 fn owner_directory(directory: &Path) -> Result<(), String> {
     // The private parent prevents access even in the interval between bind and
@@ -83,49 +116,76 @@ impl Server {
             UnixStream::pair().map_err(|_| "Local tools shutdown channel unavailable")?;
         let running = Arc::new(AtomicBool::new(true));
         let worker_running = running.clone();
-        if std::thread::Builder::new().name("agenthud-local-tools".into()).spawn(move || {
-            while worker_running.load(Ordering::Acquire) {
-                let mut events = [
-                    libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
-                    libc::pollfd { fd: wake_reader.as_raw_fd(), events: libc::POLLIN, revents: 0 },
-                ];
-                let ready = unsafe { libc::poll(events.as_mut_ptr(), 2, -1) };
-                if ready < 0 {
-                    if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted { continue; }
-                    break;
-                }
-                if events[1].revents != 0 || !worker_running.load(Ordering::Acquire) { break; }
-                let mut stream = match listener.accept() {
-                    Ok((stream, _)) => stream,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
-                    Err(_) => break,
-                };
-                // Darwin accepts inherit the listener's nonblocking flag. Use
-                // bounded blocking I/O for one frame instead of treating a
-                // not-yet-arrived client write as an incomplete request.
-                if stream.set_nonblocking(false).is_err() { continue; }
-                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-                let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-                let mut bytes = Vec::new();
-                let response = if (&mut stream).take(REQUEST_LIMIT + 1).read_to_end(&mut bytes).is_err()
-                    || bytes.len() as u64 > REQUEST_LIMIT {
-                    json!({"id":null,"error":{"message":"Local tools request is incomplete or too large"}})
-                } else {
-                    match serde_json::from_slice::<Value>(&bytes) {
-                        Ok(request) if worker_running.load(Ordering::Acquire) => handler(request, &worker_running),
-                        Ok(request) => json!({"id":request.get("id"),"error":{"message":"Local tools are disabled"}}),
-                        Err(_) => json!({"id":null,"error":{"message":"Invalid local tools request"}}),
+        let active = Arc::new(AtomicUsize::new(0));
+        if std::thread::Builder::new()
+            .name("agenthud-local-tools".into())
+            .spawn(move || {
+                while worker_running.load(Ordering::Acquire) {
+                    let mut events = [
+                        libc::pollfd {
+                            fd: listener.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                        libc::pollfd {
+                            fd: wake_reader.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                    ];
+                    let ready = unsafe { libc::poll(events.as_mut_ptr(), 2, -1) };
+                    if ready < 0 {
+                        if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
+                        {
+                            continue;
+                        }
+                        break;
                     }
-                };
-                let mut bytes = serde_json::to_vec(&response).unwrap_or_default();
-                if bytes.len() as u64 > RESPONSE_LIMIT {
-                    bytes = serde_json::to_vec(&json!({"id":response.get("id"),"error":{"message":"Local tools response is too large"}})).unwrap();
+                    if events[1].revents != 0 || !worker_running.load(Ordering::Acquire) {
+                        break;
+                    }
+                    let stream = match listener.accept() {
+                        Ok((stream, _)) => stream,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
+                        Err(_) => break,
+                    };
+                    // Darwin accepts inherit the listener's nonblocking flag. Use
+                    // bounded blocking I/O for one frame instead of treating a
+                    // not-yet-arrived client write as an incomplete request.
+                    if stream.set_nonblocking(false).is_err() {
+                        continue;
+                    }
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+                    // Each request runs on its own thread, so one that waits (a
+                    // ChatGPT reply, a screenshot) does not hold up the others.
+                    // Past the cap a caller hears at once that the app is busy.
+                    if active.load(Ordering::Acquire) >= CONCURRENT {
+                        answer(stream, &busy());
+                        continue;
+                    }
+                    active.fetch_add(1, Ordering::AcqRel);
+                    let handler = handler.clone();
+                    let running = worker_running.clone();
+                    let count = active.clone();
+                    if std::thread::Builder::new()
+                        .name("agenthud-local-tool".into())
+                        .spawn(move || {
+                            serve(stream, &handler, &running);
+                            count.fetch_sub(1, Ordering::AcqRel);
+                        })
+                        .is_err()
+                    {
+                        active.fetch_sub(1, Ordering::AcqRel);
+                    }
                 }
-                let _ = stream.write_all(&bytes);
+                worker_running.store(false, Ordering::Release);
+            })
+            .is_err()
+        {
+            if identity(&path) == Some(owned) {
+                let _ = fs::remove_file(&path);
             }
-            worker_running.store(false, Ordering::Release);
-        }).is_err() {
-            if identity(&path) == Some(owned) { let _ = fs::remove_file(&path); }
             return Err("Local tools worker could not start".into());
         }
         Ok(Self {
@@ -155,6 +215,15 @@ impl Drop for Server {
 }
 
 pub fn request(data: &Path, request: &Value) -> Result<Value, String> {
+    request_with_timeout(data, request, super::READ_TIME)
+}
+/// `request`, waiting up to `timeout` for the answer: for methods that wait
+/// on something outside the app, such as the ChatGPT extension.
+pub fn request_with_timeout(
+    data: &Path,
+    request: &Value,
+    timeout: Duration,
+) -> Result<Value, String> {
     let bytes = serde_json::to_vec(request).map_err(|_| "Invalid local tools request")?;
     if bytes.len() as u64 > REQUEST_LIMIT {
         return Err("Local tools request is too large".into());
@@ -165,7 +234,7 @@ pub fn request(data: &Path, request: &Value) -> Result<Value, String> {
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|_| "Local tools timeout unavailable")?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(40)))
+        .set_read_timeout(Some(timeout))
         .map_err(|_| "Local tools timeout unavailable")?;
     stream
         .write_all(&bytes)
