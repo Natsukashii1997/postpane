@@ -119,6 +119,8 @@ pub static PROVIDER: Provider = Provider {
     // Claude reports only the windows in use; one it leaves out keeps its last reading.
     keeps_unreported_windows: true,
     status: Some(&STATUS),
+    // Fable's week from before it was left out (see `IGNORED_FAMILY`).
+    dropped_windows: &["claude-weekly-fable"],
     ..Provider::new("claude", read)
 };
 /// Claude's status page: Claude Code runs on the API.
