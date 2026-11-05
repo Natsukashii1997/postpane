@@ -496,7 +496,10 @@ mod tests {
                 .into_iter()
                 .find(|vendor| vendor.key == "deepseek")
                 .unwrap();
-            (vendor.balance.clone().unwrap_or_else(|| "--".into()), vendor.level.to_owned())
+            (
+                vendor.balance.clone().unwrap_or_else(|| "--".into()),
+                vendor.level.to_owned(),
+            )
         };
         assert_eq!(view(json!({})), ("$0.00 · ¥9.92".into(), "critical".into()));
         assert_eq!(
@@ -550,7 +553,11 @@ mod tests {
         assert_eq!(meter_label(&simple[0], false), "72%");
         assert_eq!(meter_label(&simple[0], true), "28%");
         assert_eq!(simple[0].used, Some(72.4));
-        assert_eq!(meter_label(&simple[2], false), "--", "no money on the strip");
+        assert_eq!(
+            meter_label(&simple[2], false),
+            "--",
+            "no money on the strip"
+        );
         let named = configured(
             &snapshot,
             "simple",

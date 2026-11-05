@@ -58,10 +58,7 @@ test("an agent with no window shows its last 24 hours in tokens, never money, as
 });
 
 test("the panel still prices the last 24 hours", () => {
-  assert.equal(
-    recentCost(recentUsage(snapshot, "claude")!, "en"),
-    "≈$1.20",
-  );
+  assert.equal(recentCost(recentUsage(snapshot, "claude")!, "en"), "≈$1.20");
   assert.equal(recentCost(recentUsage(snapshot, "opencode")!, "zh"), "免费");
 });
 
