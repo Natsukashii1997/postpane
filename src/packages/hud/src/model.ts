@@ -122,7 +122,7 @@ export interface HUDVendor {
   /** How many of the `waiting` requests are questions. */
   questions: number;
   balance: string | null;
-  /** What an agent with no window and no balance shows instead: its last 24 hours at list prices, else their tokens (`recentLabel`). */
+  /** What an agent with no window shows on the strip instead: its last 24 hours in tokens (`recentLabel`); its balance stays in the peek and the panel. */
   usage: string | null;
   quotas: Snapshot["quotas"];
   sessions: Snapshot["sessions"];
@@ -205,10 +205,7 @@ export function vendorsFromSnapshot(
               snapshotLanguage(snapshot),
             )
           : null,
-      usage:
-        quotas.length || balance
-          ? null
-          : recentLabel(recentUsage(snapshot, key), snapshotLanguage(snapshot)),
+      usage: quotas.length ? null : recentLabel(recentUsage(snapshot, key)),
       quotas,
       sessions,
     };
@@ -231,11 +228,11 @@ export function markUsed(vendor: HUDVendor): number | null {
   return vendor.used ?? vendor.heldUsed;
 }
 
-/** The number a Simple HUD writes beside a mark: its tightest window (`markUsed`), else its balance, else its last 24 hours (vendors.rs `meter_label`). */
+/** The number a Simple HUD writes beside a mark: its tightest window (`markUsed`), else its last 24 hours in tokens, never money (vendors.rs `meter_label`). */
 export function meterLabel(vendor: HUDVendor, display?: QuotaDisplay): string {
   const used = markUsed(vendor);
   return used == null
-    ? (vendor.balance ?? vendor.usage ?? "--")
+    ? (vendor.usage ?? "--")
     : quotaPercentLabel(used, display);
 }
 
