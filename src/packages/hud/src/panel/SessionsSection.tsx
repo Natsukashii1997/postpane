@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import type {
   PanelLayout,
@@ -107,33 +107,6 @@ export function SourceSessions({
         : undefined,
     );
   }, [live.length, limit]);
-  // The list's own thumb: shown while it scrolls, faint under the pointer,
-  // and faded out a second after it stops.
-  const [thumb, setThumb] = useState({
-    size: 1,
-    at: 0,
-    scrolling: false,
-    hover: false,
-  });
-  const stopTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const measureThumb = (scrolling: boolean) => {
-    const list = rows.current;
-    if (!list) return;
-    const room = list.scrollHeight - list.clientHeight;
-    setThumb((was) => ({
-      ...was,
-      size: list.scrollHeight ? list.clientHeight / list.scrollHeight : 1,
-      at: room > 0 ? list.scrollTop / room : 0,
-      scrolling,
-    }));
-  };
-  const showThumb = () => {
-    measureThumb(true);
-    clearTimeout(stopTimer.current);
-    stopTimer.current = setTimeout(() => measureThumb(false), 1000);
-  };
-  useLayoutEffect(() => measureThumb(false), [rowsHeight, live.length]);
-  useEffect(() => () => clearTimeout(stopTimer.current), []);
   return (
     <section
       className="hud-source-sessions"
@@ -159,49 +132,23 @@ export function SourceSessions({
         </span>
       </div>
       <div
-        style={{ position: "relative" }}
-        onPointerEnter={() => setThumb((was) => ({ ...was, hover: true }))}
-        onPointerLeave={() => setThumb((was) => ({ ...was, hover: false }))}
+        ref={rows}
+        style={{
+          position: "relative",
+          maxHeight: rowsHeight,
+          overflowY: rowsHeight ? "auto" : undefined,
+        }}
       >
-        <div
-          ref={rows}
-          className="hud-live-sessions"
-          onScroll={showThumb}
-          style={{
-            position: "relative",
-            maxHeight: rowsHeight,
-            overflowY: rowsHeight ? "auto" : undefined,
-            scrollbarWidth: "none",
-          }}
-        >
-          {live.map((entry, index) => (
-            <LiveRow
-              key={`${entry.session.source}:${entry.session.id}`}
-              entry={entry}
-              now={now}
-              light={light}
-              first={index === 0}
-              onStats={onStats}
-            />
-          ))}
-        </div>
-        {rowsHeight && thumb.size < 1 && (
-          <span
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              right: 1,
-              top: `${thumb.at * (1 - thumb.size) * 100}%`,
-              height: `${thumb.size * 100}%`,
-              width: 4,
-              borderRadius: 2,
-              background: inks.secondary,
-              opacity: thumb.scrolling ? 0.55 : thumb.hover ? 0.25 : 0,
-              transition: `opacity ${thumb.scrolling ? 0.15 : 0.6}s ease`,
-              pointerEvents: "none",
-            }}
+        {live.map((entry, index) => (
+          <LiveRow
+            key={`${entry.session.source}:${entry.session.id}`}
+            entry={entry}
+            now={now}
+            light={light}
+            first={index === 0}
+            onStats={onStats}
           />
-        )}
+        ))}
       </div>
       {!live.length && (
         <span

@@ -591,3 +591,15 @@ a:focus-visible {
       0 0 12px 3px rgba(242, 200, 121, 0.4);
   }
 }
+
+/* No system scrollbars anywhere (#85): a bar that stays on screen, or one that
+   appears while a panel grows, takes width from the content. The thumb drawn
+   while something scrolls comes from lib/scroll-thumbs.ts. */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

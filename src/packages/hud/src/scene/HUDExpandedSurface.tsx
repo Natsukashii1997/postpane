@@ -429,19 +429,10 @@ export function HUDExpandedSurface({
                       />
                     ) : (
                       <div
-                        className={
-                          snapshot.connection.platform === "windows"
-                            ? "hud-windows-scroll"
-                            : undefined
-                        }
                         style={{
                           position: "relative",
                           maxHeight: "100%",
                           overflowY: "auto",
-                          scrollbarWidth:
-                            snapshot.connection.platform === "windows"
-                              ? "none"
-                              : "thin",
                         }}
                       >
                         <motion.div

@@ -5,13 +5,3 @@
 @import "./settings/receipt.css";
 @source "../../hud/src";
 @source ".";
-
-/* WebView2 versions without scrollbar-width still scroll without the native bar. */
-.hud-windows-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* The panel's session list draws its own thumb, which fades once it stops. */
-.hud-live-sessions::-webkit-scrollbar {
-  display: none;
-}
