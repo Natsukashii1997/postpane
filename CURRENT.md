@@ -1,6 +1,20 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+
+## 侧栏额度预警卡改成细条（2026-11-05，Claude，常浩看过三版预览选「丙」，开工指令经 agent-hud 插件转入（与待答问题对得上），看过安装后的应用说「合并」；PR #62 测试全过已 squash 合并 `cdcb999`，已从 main 重新打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 12:55`（估计，按插件转入「开工」那条消息；本节写于 `2026-11-05 13:34`）。来由：侧栏面板逐个梳理的第五项（面板清单 14）；三版预览与定稿 https://claude.ai/artifact/5PS5DhbhkCkscx7bkc5eCq ，issue #59。
+- 改了哪些文件（PR #62，实现由子 agent 完成、我对照定稿截图和队列逻辑审核）：`src/packages/hud/src/alerts/QuotaAlertViews.tsx`（`QuotaAlertView` 改成细条列表：图标、「智能体 · 中文窗口名 + 状态」、彩色百分比、×，细进度条与时间行；点整条打开用量统计并关掉这条，× 只关这条）、`alerts/quota-alert-copy.ts`（预计用完 / 已用完 / 到 90% / 已重置四种状态句与时间行，中英文）、`alerts/quota-list.ts`（新：队列里的额度预警与重置合并、最新在上）、`alerts/alert-tones.ts`（`quotaAccent`：黄 / 红 / 蓝）、`alerts/CompactAlertView.tsx`（小签改为图标 + 窗口名 + 彩色百分比，宽度同步）、`IslandNews.tsx`、`HUDScene.tsx`、`scene/useHUDLayout.ts`；测试 `test/quota-alert-copy.test.ts`（重写）、`test/quota-list.test.ts`（新）。另本轮交接改 `docs/LESSONS.md`（L-05）。
+- 测试：在分支提交 `bf7cb61` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 643 passed / 0 failed；`ℹ pass 175` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/check.log`、`test.log`（子 agent 跑，我核对过结果行）。合并后的 main `cdcb999` 只打包、未重跑测试。
+- 验证：子 agent 用临时页面打包真实组件、无头浏览器截图（临时文件已删）；我对照定稿看过四条同时、小签、浅色英文。额度卡只在额度越过阈值或重置时才弹，实机上未见到真实弹卡。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/`（`quota-*-dark-zh.png`、`quota-light-en.png`、`quota-chip-*.png`、`quota-notch-dark-zh.png`，组件渲染图，非实机）。
+- 发布与回读：分支版 13:13:33 装过一次，13:14:07 被另一会话的 #63 安装覆盖（见 L-05），常浩说「合并」时实机里的是 #63 版。合并后从 main `cdcb999`（含 #62、#63）重新打包，13:32:31 ditto 到 `/Applications` 并重启；`shasum` 回读与打包产物一致（`2d7374bb99bd`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-quota-strip/PostPane-before-main.app /Applications/PostPane.app`（#63 版）；改版之前的版本在同目录 `PostPane-before.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：到 90% 算不出速度时写「已用到 90%」，不跟「已用 / 剩余」设置；智能体名用 `clientDisplayName`（Codex 显示「Codex」，原卡是「OpenAI」）；刘海模式没有纸面，重置用原有 calm 绿色而非蓝色（改 `quotaAccent` 一行即可）；小签只显示队首一条，不显示条数；时间行钟点不加粗。
+  - 4 秒自动消失仍只关队首那条，多条时卡片一条条变短，未改（与回复卡相同）。
+  - 可清理 worktree 增加 `.claude/worktrees/59-quota-strip`（现已检出 main `cdcb999`，分离头），清理前问常浩。
+- 本轮新坑：L-05。
 
 ## 侧栏「正在进行」显示 Claude 云端会话，超过 5 条可滚动（2026-11-05，Claude，常浩问「做这个复杂么，没大问题就正常做加进去，正在进行最多显示 5 个，再多做侧边滚动条」，看过 4 批计划；按「测试全过可直接合并」的授权合并；PR #63，已打包安装）
 

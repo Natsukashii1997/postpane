@@ -49,3 +49,11 @@
 - 正确做法：只取 `environment_kind = anthropic_cloud`；`running` 算在跑，`idle` 且 `blocked` 算等你，其余不进「正在进行」。核心层再按 (source, id) 跟本机记录去重兜底。
 - 证据：2026-11-05 只读实测，30 条里 `bridge` 18 条（含当时本机在跑的 3 个会话）、`anthropic_cloud` 12 条；实现见 `src/crates/agents/src/claude/cloud.rs`，issue #60。
 - 升级：已写成测试 `claude::cloud::tests::only_cloud_sessions_at_work_or_waiting_come_back`。
+
+## L-05 两个会话前后脚各自打包安装，后装的覆盖先装的（2026-11-05）
+
+- 现象：#62（额度预警细条）13:13:33 装进 `/Applications`，另一个会话的 #63（正在进行加云端会话）13:14:07 也装了一次；`/Applications/PostPane.app/Contents/MacOS/PostPane` 的 shasum（`409d0283…`）和 #62 打出的包（`c69011a6…`）对不上，实机里没有 #62 的改动，常浩看到的「实物」其实不含 #62。
+- 根因：每个 PR 从自己的分支打包，分支各自基于当时的 main，互不包含；并行会话都按 L-03 直接 `ditto` 覆盖，谁后装谁生效，装的人也不知道被覆盖了。
+- 正确做法：请常浩看实物前，比一下 `/Applications` 里的二进制和自己打的包是否一致（`shasum …/Contents/MacOS/PostPane`）；不一致就说明被覆盖，先重装再请他看。几个 PR 前后合并后，从最新 main 重新打包安装一次，让实机包含全部改动。
+- 证据：2026-11-05 13:29 比对 shasum；`CURRENT.md`「正在进行显示 Claude 云端会话」一节写的安装时间 13:14:07；合并后从 main `cdcb999` 重新打包安装，日志 `~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/build-main.log`。
+- 升级：未升级。
