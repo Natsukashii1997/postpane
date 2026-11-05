@@ -8,10 +8,11 @@
   width: 100%;
 }
 
-/* Five cards to a line; the folded others open as more cards. */
+/* Four cards to a line, wide enough for a whole name and its one-line
+   state; the folded others open as more cards. */
 .agents-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   padding-top: 10px;
 }
@@ -66,6 +67,9 @@
   color: var(--muted-foreground);
 }
 .agents-list-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10.5px;
   line-height: 1.3;
   color: var(--muted-foreground);

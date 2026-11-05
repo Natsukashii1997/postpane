@@ -136,31 +136,65 @@
     linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--rc-tooth) / 2)
       no-repeat;
 }
-/* A page's sheet is torn at both ends: its header and body are one paper. */
+/* A page's sheet is torn at both ends: its header and body are one paper.
+   The teeth are two thin strips of their own: masking (and filtering) the
+   whole page-long sheet made WebKit drop tiles of it while scrolling. */
 .apple-app .settings-sheet {
-  -webkit-mask:
-    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
-      top / var(--rc-tooth) 51% repeat-x,
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
-      bottom / var(--rc-tooth) 51% repeat-x,
-    linear-gradient(#000 0 0) center / 100% calc(100% - var(--rc-tooth))
-      no-repeat;
-  mask:
-    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
-      top / var(--rc-tooth) 51% repeat-x,
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
-      bottom / var(--rc-tooth) 51% repeat-x,
-    linear-gradient(#000 0 0) center / 100% calc(100% - var(--rc-tooth))
-      no-repeat;
+  position: relative;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.2),
+    0 8px 12px rgba(0, 0, 0, 0.14);
+}
+.apple-app[data-theme="dark"] .settings-sheet {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.6),
+    0 10px 16px rgba(0, 0, 0, 0.5);
+}
+.apple-app .settings-sheet::before,
+.apple-app .settings-sheet::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(var(--rc-tooth) / 2);
+  background: var(--rc-grain), var(--rc-paper);
+  pointer-events: none;
+}
+.apple-app .settings-sheet::before {
+  bottom: 100%;
+  -webkit-mask: conic-gradient(
+      from 135deg at top,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    top / var(--rc-tooth) 100% repeat-x;
+  mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+    top / var(--rc-tooth) 100% repeat-x;
+}
+.apple-app .settings-sheet::after {
+  top: 100%;
+  -webkit-mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    bottom / var(--rc-tooth) 100% repeat-x;
+  mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    bottom / var(--rc-tooth) 100% repeat-x;
 }
 .rc-lift,
-.apple-app .sidebar-roll-shadow,
-.apple-app .settings-scroll {
+.apple-app .sidebar-roll-shadow {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2))
     drop-shadow(0 8px 12px rgba(0, 0, 0, 0.14));
 }
-.apple-app[data-theme="dark"] .sidebar-roll-shadow,
-.apple-app[data-theme="dark"] .settings-scroll {
+.apple-app[data-theme="dark"] .sidebar-roll-shadow {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
     drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
 }
@@ -769,7 +803,7 @@
    resets, then move and show. */
 .apple-app .agents-quota-line {
   display: grid;
-  grid-template-columns: 12px 84px minmax(40px, 1fr) 40px 96px auto auto;
+  grid-template-columns: 12px 84px minmax(40px, 1fr) 40px 124px auto auto;
   align-items: center;
   gap: 10px;
   min-height: 42px;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Provider, SourcePreferences } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
+import { useLightTheme } from "../agent-plugins/use-status";
 import type { Text } from "../SettingsPrimitives";
 
 /** PostPane's own agents, always on top in this order. */
@@ -23,6 +24,7 @@ export function AgentList({
   selected?: string;
   select: (id: string) => void;
 }) {
+  const light = useLightTheme();
   const follows = (provider: Provider) => {
     if (!provider.enabled) return t("Off", "已关闭");
     if (preferences[provider.id]?.live === false)
@@ -49,7 +51,7 @@ export function AgentList({
       onClick={() => select(provider.id)}
     >
       <span className="agents-list-head">
-        <HUDLogo source={provider.id} size={16} />
+        <HUDLogo source={provider.id} size={16} light={light} />
         <span className="agents-list-name">{provider.name}</span>
       </span>
       <span className="agents-list-state">{follows(provider)}</span>
