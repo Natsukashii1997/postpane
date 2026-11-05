@@ -8,7 +8,13 @@ import {
 } from "react";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import type { HUDRect, StripMetrics } from "../geometry";
-import type { HUDConfig, HUDEdge, HUDVendor } from "../model";
+import {
+  vendorKey,
+  type HUDConfig,
+  type HUDEdge,
+  type HUDVendor,
+} from "../model";
+import { hoverMayOpen } from "../request-hover";
 import type { HUDDragPreview } from "./useHUDDrag";
 
 /** Native input is authoritative while a transparent host toggles mouse passthrough. */
@@ -215,8 +221,26 @@ export function useHUDInteraction({
     }
   }
 
-  function entered(optionDown = false) {
+  /** `point`, when given, is where the pointer is: while an agent waits on
+   * an answer, only its own mark opens the HUD (request-hover.ts). */
+  function entered(
+    optionDown = false,
+    point?: { clientX: number; clientY: number },
+  ) {
     setPointerInside(true);
+    if (
+      !open &&
+      !hoverMayOpen({
+        requestKey: request ? vendorKey(request.source) : null,
+        markKeys: vendors.map((vendor) => vendor.key),
+        pointerKey: point ? vendorUnderPointer(point) : undefined,
+        notch: config.mode === "notch",
+      })
+    ) {
+      // Off the waiting agent's mark: a hover that began opening stops.
+      if (hoverPhase === "opening") leave();
+      return;
+    }
     if (
       !suppressHover.current &&
       !dragVisual &&
@@ -243,11 +267,12 @@ export function useHUDInteraction({
     if (dragVisual || dragCandidate.current) return;
     const bounds = scene.current?.getBoundingClientRect();
     const point = nativePointer.point;
-    followMark({
+    const at = {
       clientX: point.x + (bounds?.left ?? 0),
       clientY: point.y + (bounds?.top ?? 0),
-    });
-    entered(nativePointer.altKey === true);
+    };
+    followMark(at);
+    entered(nativePointer.altKey === true, at);
     if (
       config.openImmediatelyAtTop &&
       edge === "top" &&

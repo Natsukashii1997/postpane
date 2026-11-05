@@ -995,13 +995,15 @@ export function HUDScene({
             onPointerEnter={(e) => {
               if (!nativePointer) {
                 followMark(e);
-                entered(e.altKey);
+                entered(e.altKey, e);
               }
             }}
             onPointerLeave={domExited}
             onPointerMove={(event) => {
               if (nativePointer) return;
               followMark(event);
+              // While an agent waits, moving onto its mark opens its card.
+              if (request && !open) entered(event.altKey, event);
               if (
                 config.openImmediatelyAtTop &&
                 edge === "top" &&

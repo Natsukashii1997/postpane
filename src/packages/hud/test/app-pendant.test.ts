@@ -40,9 +40,9 @@ test("along the top it follows the strip sideways, the ring level with the stubs
   assert.equal(layout.frame.y + layout.ring / 2, 35);
 });
 
-test("along the bottom its tag sits above the ring, inside the screen", () => {
+test("along the bottom the ring sits level with the stubs' middle", () => {
   const strip = { x: 600, y: 830, width: 200, height: 70 };
   const layout = pendantLayout(strip, "bottom", 28, room);
-  assert.equal(layout.frame.y + layout.frame.height - layout.ring / 2, 865);
-  assert.ok(layout.frame.y + layout.frame.height <= room.height);
+  assert.equal(layout.frame.y + layout.ring / 2, 865);
+  assert.equal(layout.frame.height, layout.ring);
 });

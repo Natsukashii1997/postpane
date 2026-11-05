@@ -4,7 +4,7 @@ import {
   type PendantEdge,
   type PendantRect,
 } from "../app-pendant";
-import { PAPER_GRAIN, PAPER_SEAL } from "../paper";
+import { PAPER_GRAIN } from "../paper";
 
 const BALL = new URL("../assets/float-notes-ball.png", import.meta.url).href;
 const SHADOW =
@@ -31,7 +31,7 @@ export function AppPendant({
 }) {
   const [open, setOpen] = useState(false);
   const layout = pendantLayout(strip, edge, logo, room);
-  const { frame, horizontal, reversed, cord, ring, ball, tag } = layout;
+  const { frame, horizontal, reversed, cord, ring, ball } = layout;
   const paper = light ? "#f3f1eb" : "#e9e6de";
   const cordColor = light ? "rgba(42,41,37,.5)" : "rgba(236,231,220,.5)";
   const name = zh ? "随手记" : "Notes";
@@ -40,7 +40,7 @@ export function AppPendant({
     ? {
         width: cord,
         height: 0,
-        marginTop: edge === "bottom" ? frame.height - ring / 2 : ring / 2,
+        marginTop: ring / 2,
         borderTop: `1.5px dashed ${cordColor}`,
       }
     : { width: 0, height: cord, borderLeft: `1.5px dashed ${cordColor}` };
@@ -84,51 +84,15 @@ export function AppPendant({
       />
     </button>
   );
-  const nameTag = (
-    <span
-      aria-hidden="true"
-      style={{
-        height: tag,
-        padding: `0 ${Math.round(tag * 0.45)}px`,
-        borderRadius: tag,
-        background: paper,
-        color: "#2a2925",
-        font: `600 ${Math.round(tag * 0.66)}px/${tag}px ${PAPER_SEAL}`,
-        letterSpacing: ".08em",
-        whiteSpace: "nowrap",
-        filter: "drop-shadow(0 1px 1px rgba(0,0,0,.2))",
-      }}
-    >
-      {name}
-    </span>
-  );
-  // The ring and its tag hang together; the cord leads to the strip.
-  const hanging = (
-    <span
-      key="hanging"
-      style={{
-        display: "flex",
-        // The tag stays on the screen's side of the ring, and the ring next
-        // to the cord.
-        flexDirection:
-          edge === "bottom" || (!horizontal && reversed)
-            ? "column-reverse"
-            : "column",
-        alignItems: "center",
-        gap: 4,
-      }}
-    >
-      {ringButton}
-      {nameTag}
-    </span>
-  );
   const parts = [
     <span
       key="cord"
       aria-hidden="true"
       style={{ flex: "none", ...cordStyle }}
     />,
-    hanging,
+    <span key="ring" style={{ display: "flex" }}>
+      {ringButton}
+    </span>,
   ];
   return (
     <div
