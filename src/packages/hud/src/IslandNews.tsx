@@ -96,6 +96,25 @@ export function dismissIslandCard(previous: IslandCard[]): IslandCard[] {
   return promoteOldestWaiting(previous.slice(1));
 }
 
+/** The queue without the cards `ids` (replies put away from the reply
+ * card); a request left in front waits longest. */
+export function dropIslandCards(
+  previous: IslandCard[],
+  ids: readonly string[],
+): IslandCard[] {
+  const next = previous.filter((card) => !ids.includes(card.id));
+  return next[0]?.id === previous[0]?.id ? next : promoteOldestWaiting(next);
+}
+
+/** The replies in the queue, as they came. */
+export function queuedReplies(queue: IslandCard[]): IslandEvent[] {
+  return queue.flatMap((card) =>
+    card.type === "news" && card.event.kind === "completion"
+      ? [card.event]
+      : [],
+  );
+}
+
 export function useIslandNews(
   snapshot: Snapshot,
   held: boolean,
@@ -157,6 +176,8 @@ export function useIslandNews(
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
   const current = queue[0];
   const dismiss = () => setQueue(dismissIslandCard);
+  const drop = (ids: readonly string[]) =>
+    setQueue((previous) => dropIslandCards(previous, ids));
   useEffect(() => {
     if (!current || held || current.type === "request") return;
     const timer = setTimeout(dismiss, 4000);
@@ -179,8 +200,10 @@ export function useIslandNews(
         ? requests.find((request) => request.id === current.id)
         : undefined,
     queue,
+    replies: queuedReplies(queue),
     select,
     dismiss,
+    drop,
   };
 }
 
@@ -229,6 +252,8 @@ export function NewsContent({
   event,
   snapshot,
   dismiss,
+  replies = [event],
+  drop = () => dismiss(),
   onStats,
   handoff,
   light = false,
@@ -237,6 +262,10 @@ export function NewsContent({
   event: IslandEvent;
   snapshot: Snapshot;
   dismiss: () => void;
+  /** Every reply in the queue: a reply's card lists them all. */
+  replies?: IslandEvent[];
+  /** Puts these replies away. */
+  drop?: (ids: readonly string[]) => void;
   onStats?: () => void;
   handoff?: (callback?: () => void) => void;
   light?: boolean;
@@ -246,13 +275,11 @@ export function NewsContent({
   if (event.kind === "completion") {
     return (
       <CompletionAlertView
-        event={event}
+        replies={replies}
         snapshot={snapshot}
-        dismiss={dismiss}
-        onStats={onStats}
+        drop={drop}
         handoff={handoff}
         light={light}
-        botLogos={botLogos}
       />
     );
   }

@@ -1,333 +1,320 @@
-import { useState } from "react";
-import {
-  ArrowUpRight,
-  ChartNoAxesColumn,
-  MessageSquareText,
-  RotateCcw,
-  X,
-} from "lucide-react";
-import type { IslandEvent, Session, Snapshot } from "@agent-hud/protocol";
+import { useState, type CSSProperties } from "react";
+import { ArrowUpRight } from "lucide-react";
+import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
-import { clientDisplayName, compactDuration, newsTitle } from "../IslandNews";
-import { ReminderMark } from "./ReminderMark";
-import { dateFormat, snapshotLanguage } from "@agent-hud/ui/format";
-import { useAlertPalette } from "./alert-palette";
+import { newsTitle } from "../IslandNews";
+import { snapshotLanguage } from "@agent-hud/ui/format";
 import { cardColumn } from "../card-column";
-import { PAPER_FIGURES, type Paper } from "../paper";
+import { usePaper } from "../paper";
+import {
+  SHOWN_ENTRIES,
+  entryTitle,
+  sessionToOpen,
+  type ApprovalEntry,
+} from "../permissions/approval-list";
+import {
+  EntryRow,
+  FoldButton,
+  ListHead,
+  ListTear,
+  SectionTitle,
+  cardInks,
+  type Inks,
+} from "../permissions/ListCard";
+import {
+  newestReply,
+  replyEntries,
+  replyFacts,
+  replyGroups,
+  replyMessage,
+} from "./reply-list";
 
+/**
+ * The replies waiting, as a list card like the waiting card's: newest first
+ * and open, grouped by sidebar section; each line goes back to its session.
+ */
 export function CompletionAlertView({
-  event,
+  replies,
   snapshot,
-  dismiss,
-  onStats,
+  drop,
   handoff,
   light = false,
-  botLogos = true,
 }: {
-  event: IslandEvent;
+  /** Every reply in the queue. */
+  replies: IslandEvent[];
   snapshot: Snapshot;
-  dismiss: () => void;
-  onStats?: () => void;
+  /** Puts these replies away. */
+  drop: (ids: readonly string[]) => void;
   handoff?: (callback?: () => void) => void;
   light?: boolean;
-  botLogos?: boolean;
 }) {
-  const services = usePanelServices(),
-    zh = snapshotLanguage(snapshot) === "zh",
-    [failed, setFailed] = useState(false),
-    [closeHover, setCloseHover] = useState(false);
-  const session = snapshot.sessions.find((s) => s.id === event.sessionId);
-  const hasSession = Boolean(
-    session?.navigationTarget || event.navigationTarget,
+  const zh = snapshotLanguage(snapshot) === "zh";
+  // Beside the dock the card is a receipt (HUDExpandedSurface prints it).
+  const paper = usePaper();
+  const inks = cardInks(paper, light);
+  const services = usePanelServices();
+  const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
-  const colors = useAlertPalette(light);
-  const ink = colors.ink;
-  const paper = colors.paper;
-  const turnAccent = colors.fill("turn");
-  const turnText = colors.text("turn");
-  const onTurnAccent = colors.onFill;
+  const [unfolded, setUnfolded] = useState(false);
 
-  const startedRaw = event.startedAt ?? session?.liveFacts?.turnStartedAt;
-  const started = startedRaw ? Date.parse(startedRaw) : NaN;
-  const ended = Date.parse(event.at);
-  const message = event.message ?? session?.liveFacts?.message;
+  const entries = replyEntries(replies, snapshot.sessions);
+  const openId = newestReply(entries)?.id;
+  const { groups, hidden, sectioned } = replyGroups(
+    entries,
+    unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
+  );
 
-  const openUsage = () => {
-    dismiss();
-    const run = () => {
-      if (session && services?.selectSession) services.selectSession(session);
-      else onStats?.();
-    };
-    if (handoff) handoff(run);
-    else run();
-  };
-  const openSession = async () => {
-    if (!hasSession) return;
-    const target: Session | undefined =
-      session ??
-      (event.sessionId
-        ? {
-            id: event.sessionId,
-            title: event.title ?? "",
-            source: event.source,
-            model: event.model ?? "",
-            cwd: null,
-            updatedAt: event.at,
-            state: "idle",
-            tokens: 0,
-            cost: null,
-            contextPercent: null,
-            logPath: null,
-            parentId: null,
-            navigationTarget: event.navigationTarget,
-          }
-        : undefined);
-    if (!target) return;
-    setFailed(false);
-    const opened = await services?.openSession?.(target);
-    if (opened === false) setFailed(true);
-    else {
-      dismiss();
-      handoff?.();
+  // Going back puts the reply away; where there is no way back, the line
+  // says so.
+  const goBack = async (entry: ApprovalEntry) => {
+    const target = sessionToOpen(entry);
+    const opened = target ? await services?.openSession?.(target) : false;
+    if (opened === false) {
+      setUnreachable((previous) => new Set(previous).add(entry.id));
+      return;
     }
+    drop([entry.id]);
+    handoff?.();
   };
+  const canOpen = (entry: ApprovalEntry) =>
+    Boolean(sessionToOpen(entry) && services?.openSession) &&
+    !unreachable.has(entry.id);
 
   return (
-    <article style={{ ...cardColumn(18), fontSize: 12, color: "inherit" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <ReminderMark
-          event={event}
-          size={24}
-          light={light}
-          botLogos={botLogos}
+    <div
+      className="hud-reply-content"
+      style={{ ...cardColumn(0), position: "relative" }}
+    >
+      <ListHead
+        label={zh ? "新回复" : "Replies"}
+        entries={entries}
+        stamp={zh ? "已回" : "DONE"}
+        stampInk="blue"
+        paper={paper}
+        inks={inks}
+        light={light}
+        zh={zh}
+      />
+      <ListTear paper={paper} inks={inks} />
+      {groups.map((group) => (
+        <div key={group.section ?? ""} style={cardColumn(0)}>
+          {sectioned && (
+            <SectionTitle inks={inks}>
+              {group.section ?? (zh ? "未分区" : "No section")}
+            </SectionTitle>
+          )}
+          {group.entries.map((entry, index) => {
+            if (entry.kind !== "reply") return null;
+            const open = entry.id === openId;
+            const failed = unreachable.has(entry.id);
+            return (
+              <div
+                key={entry.id}
+                style={{
+                  borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
+                }}
+              >
+                <EntryRow
+                  entry={entry}
+                  open={open}
+                  title={entryTitle(entry, newsTitle(entry.event, zh))}
+                  summary={
+                    replyMessage(entry.event, entry.session) ??
+                    newsTitle(entry.event, zh)
+                  }
+                  canOpen={canOpen(entry)}
+                  onSelect={() => void goBack(entry)}
+                  onOpen={() => void goBack(entry)}
+                  inks={inks}
+                  light={light}
+                  zh={zh}
+                  openTag={false}
+                />
+                {open ? (
+                  <div
+                    style={{ ...cardColumn(12), padding: "14px 0 18px 30px" }}
+                  >
+                    <ReplyBody
+                      entry={entry}
+                      inks={inks}
+                      zh={zh}
+                      failed={failed}
+                    />
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => drop(entries.map((each) => each.id))}
+                        style={{
+                          ...buttonFace,
+                          border: `1.5px solid ${inks.faint}`,
+                          background: "transparent",
+                          color: inks.ink,
+                        }}
+                      >
+                        {entries.length > 1
+                          ? zh
+                            ? "全部知道了"
+                            : "Dismiss all"
+                          : zh
+                            ? "知道了"
+                            : "Got it"}
+                      </button>
+                      <span style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        onClick={() => void goBack(entry)}
+                        style={{
+                          ...buttonFace,
+                          border: `1.5px solid ${inks.ink}`,
+                          background: inks.ink,
+                          color: paper
+                            ? paper.paper
+                            : light
+                              ? "#ffffff"
+                              : "rgba(0,0,0,0.88)",
+                          fontWeight: 600,
+                          opacity: canOpen(entry) ? 1 : 0.5,
+                        }}
+                      >
+                        <ArrowUpRight size={12} strokeWidth={2.4} />
+                        {zh ? "回到会话" : "Return to session"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  failed && (
+                    <Unreachable
+                      inks={inks}
+                      zh={zh}
+                      style={{ padding: "0 0 12px 30px", marginTop: -4 }}
+                    />
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      {hidden > 0 && (
+        <FoldButton
+          hidden={hidden}
+          onUnfold={() => setUnfolded(true)}
+          inks={inks}
+          zh={zh}
         />
-        <div style={{ flex: 1, ...cardColumn(3), minWidth: 0 }}>
-          <strong
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: ink(0.94),
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {clientDisplayName(event.source)}
-          </strong>
-          {event.model && event.model !== "Unknown" && (
-            <span
-              style={{
-                fontSize: 11,
-                color: ink(0.45),
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {event.model}
-            </span>
-          )}
-        </div>
-        {!paper && (
-          <MessageSquareText size={12} strokeWidth={2.2} color={turnText} />
-        )}
-        <span
-          style={{
-            color: turnText,
-            fontSize: 12,
-            fontWeight: paper ? 600 : 500,
-            ...(paper && {
-              border: `1.2px solid ${turnText}`,
-              borderRadius: 2,
-              padding: "1px 7px",
-              letterSpacing: "0.06em",
-            }),
-          }}
-        >
-          {zh ? "有新回复" : "New reply"}
-        </span>
-        <button
-          type="button"
-          aria-label={zh ? "关闭回复提醒" : "Dismiss reply"}
-          title={zh ? "关闭回复提醒" : "Dismiss reply"}
-          onClick={dismiss}
-          onPointerEnter={() => setCloseHover(true)}
-          onPointerLeave={() => setCloseHover(false)}
-          style={{
-            width: 24,
-            height: 24,
-            display: "grid",
-            placeItems: "center",
-            border: 0,
-            borderRadius: 6,
-            background: closeHover ? ink(0.08) : "transparent",
-            color: ink(closeHover ? 0.92 : 0.65),
-            cursor: "pointer",
-          }}
-        >
-          <X size={10} strokeWidth={2.4} />
-        </button>
-      </header>
-      {paper && <ReceiptTear paper={paper} />}
-      <div style={cardColumn(8)}>
-        <strong
-          style={{
-            fontSize: 15,
-            fontWeight: 500,
-            color: ink(0.95),
-            overflowWrap: "anywhere",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {event.title ?? newsTitle(event, zh)}
-        </strong>
-        {message && (
-          <p
-            style={{
-              margin: 0,
-              fontSize: 12,
-              lineHeight: "15px",
-              color: ink(0.68),
-              display: "-webkit-box",
-              WebkitLineClamp: 4,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              whiteSpace: "pre-wrap",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {message}
-          </p>
-        )}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          gap: 6,
-          fontSize: 11,
-          fontVariantNumeric: "tabular-nums",
-          color: ink(0.5),
-          ...(paper && {
-            fontFamily: PAPER_FIGURES,
-            fontSize: 14,
-            fontWeight: 700,
-            color: paper.ink,
-          }),
-        }}
-      >
-        <time>
-          {dateFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
-            new Date(event.at),
-          )}
-        </time>
-        {paper && (
-          <span
-            aria-hidden="true"
-            style={{
-              flex: 1,
-              borderBottom: `1px dotted ${paper.line}`,
-              transform: "translateY(-3px)",
-            }}
-          />
-        )}
-        {Number.isFinite(started) && ended > started && (
-          <span>{compactDuration((ended - started) / 1000)}</span>
-        )}
-      </div>
-      {paper && <ReceiptTear paper={paper} />}
-      <div style={cardColumn(8)}>
-        {failed && hasSession ? (
-          <span style={{ fontSize: 11, color: ink(0.65) }}>
-            {zh
-              ? "无法回到会话，请重试或查看 Token 用量"
-              : "Couldn't return to session. Retry or view token usage."}
-          </span>
-        ) : (
-          !hasSession && (
-            <span style={{ fontSize: 11, color: ink(0.5) }}>
-              {zh ? "暂时无法回到原会话" : "Session return unavailable"}
-            </span>
-          )
-        )}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button
-            type="button"
-            onClick={openUsage}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              height: 22,
-              padding: "0 9px",
-              borderRadius: paper ? 2 : 6,
-              border: `1px solid ${paper ? paper.ink : ink(0.18)}`,
-              background: "transparent",
-              color: paper ? paper.ink : ink(0.6),
-              fontSize: 11,
-              fontWeight: 500,
-              whiteSpace: "nowrap",
-              cursor: "pointer",
-            }}
-          >
-            <ChartNoAxesColumn size={9} strokeWidth={2.6} />
-            {zh ? "查看 Token 用量" : "View token usage"}
-          </button>
-          <span style={{ flex: 1, minWidth: 8 }} />
-          {hasSession && (
-            <button
-              type="button"
-              onClick={openSession}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                height: 22,
-                padding: "0 9px",
-                borderRadius: paper ? 2 : 6,
-                border: 0,
-                background: turnAccent,
-                color: onTurnAccent,
-                fontSize: 11,
-                fontWeight: 500,
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-              }}
-            >
-              {failed ? (
-                <RotateCcw size={9} strokeWidth={2.6} />
-              ) : (
-                <ArrowUpRight size={9} strokeWidth={2.6} />
-              )}
-              {failed
-                ? zh
-                  ? "重试会话跳转"
-                  : "Retry session"
-                : zh
-                  ? "回到会话"
-                  : "Return to session"}
-            </button>
-          )}
-        </div>
-      </div>
-    </article>
+      )}
+      <div style={{ height: 6 }} />
+    </div>
   );
 }
 
-/** A tear line across the whole receipt, past the card's margins. */
-function ReceiptTear({ paper }: { paper: Paper }) {
+const buttonFace = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
+  height: 30,
+  boxSizing: "border-box",
+  padding: "0 14px",
+  borderRadius: 3,
+  fontSize: 12.5,
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+} as const;
+
+/** The open reply: what it said (about three lines), how long the turn took
+ * and the session's tokens, each left out when unknown. */
+function ReplyBody({
+  entry,
+  inks,
+  zh,
+  failed,
+}: {
+  entry: Extract<ApprovalEntry, { kind: "reply" }>;
+  inks: Inks;
+  zh: boolean;
+  failed: boolean;
+}) {
+  const message = replyMessage(entry.event, entry.session);
+  const { took, tokens } = replyFacts(entry.event, entry.session, zh);
+  const figure = (text: string) => (
+    <b style={{ color: inks.ink, fontWeight: 600 }}>{text}</b>
+  );
   return (
-    <div
-      aria-hidden="true"
+    <>
+      {message && (
+        <p
+          style={{
+            margin: 0,
+            fontSize: 13,
+            lineHeight: 1.7,
+            color: inks.mid,
+            display: "-webkit-box",
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {message}
+        </p>
+      )}
+      {(took || tokens) && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "4px 14px",
+            fontSize: 12,
+            color: inks.dim,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {took && (
+            <span>
+              {zh ? "用时 " : "Took "}
+              {figure(took)}
+            </span>
+          )}
+          {tokens && (
+            <span>
+              {zh ? (
+                <>本会话 {figure(tokens)} Token</>
+              ) : (
+                <>{figure(tokens)} tokens this session</>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {failed && <Unreachable inks={inks} zh={zh} />}
+    </>
+  );
+}
+
+function Unreachable({
+  inks,
+  zh,
+  style,
+}: {
+  inks: Inks;
+  zh: boolean;
+  style?: CSSProperties;
+}) {
+  return (
+    <p
+      role="status"
       style={{
-        borderTop: `1.2px dashed ${paper.line}`,
-        marginLeft: -paper.bleed.left,
-        marginRight: -paper.bleed.right,
+        margin: 0,
+        fontSize: 11.5,
+        color: inks.dim,
+        ...style,
       }}
-    />
+    >
+      {zh ? "无法回到这个会话" : "Couldn't return to this session"}
+    </p>
   );
 }

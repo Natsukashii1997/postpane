@@ -139,8 +139,8 @@ export interface ApprovalGroup {
 export const SHOWN_ENTRIES = 5;
 
 /**
- * The list as the card prints it: the first `limit` lines in order (the open
- * one always among them), grouped by sidebar section in the order the
+ * The list as the card prints it: the first `limit` lines in `order` (the
+ * open one always among them), grouped by sidebar section in the order the
  * groups first appear, and how many lines are folded away. `sectioned` says
  * whether any line has a section, so a list with none prints no group titles.
  */
@@ -148,8 +148,9 @@ export function approvalGroups(
   entries: readonly ApprovalEntry[],
   openId: string | null,
   limit = SHOWN_ENTRIES,
+  order: (entries: readonly ApprovalEntry[]) => ApprovalEntry[] = orderEntries,
 ): { groups: ApprovalGroup[]; hidden: number; sectioned: boolean } {
-  const ordered = orderEntries(entries);
+  const ordered = order(entries);
   let shown = ordered.length > limit ? ordered.slice(0, limit) : ordered;
   const open = ordered.find((entry) => entry.id === openId);
   if (open && !shown.includes(open))

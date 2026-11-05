@@ -1,10 +1,4 @@
-import {
-  Flame,
-  Hand,
-  KeyRound,
-  MessageSquareText,
-  RotateCcw,
-} from "lucide-react";
+import { Flame, Hand, KeyRound, RotateCcw } from "lucide-react";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { labelWidth } from "../geometry";
 import { agentVendorName } from "../model";
@@ -15,6 +9,9 @@ import { systemCalendar } from "@agent-hud/ui/format";
 import { alertInk, alertText } from "../tokens";
 import { useGround } from "../ground";
 import { PAPER_FIGURES, PAPER_SEAL, paperLevel, type Paper } from "../paper";
+import { ApprovalTag } from "../permissions/ApprovalTag";
+import { REPLY_BADGE } from "../permissions/approval-list";
+import type { ReplyChip } from "./reply-list";
 
 /** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
 export function compactQuotaStatus(event: IslandEvent, zh = false): string {
@@ -29,6 +26,9 @@ export function compactAlertLabels(
   event: IslandEvent | undefined,
   requestCount: number,
   zh: boolean,
+  /** The replies waiting, for a reply's tag: the newest one's title and the
+   * count beside REPLY. */
+  reply?: ReplyChip,
 ): { who: string; status: string; badge?: string } {
   if (request) {
     const who =
@@ -54,6 +54,13 @@ export function compactAlertLabels(
     };
   }
   if (!event) return { who: "", status: "" };
+  if (event.kind === "completion" && reply) {
+    return {
+      who: reply.title,
+      status: REPLY_BADGE,
+      badge: String(reply.count),
+    };
+  }
   if (event.kind === "completion") {
     return {
       who: clientDisplayName(event.source),
@@ -81,21 +88,49 @@ export function compactAlertLabels(
   };
 }
 
+/** How wide a reply's tag lets the newest reply's title run. */
+export const replyTitleWidth = (scale: number) => Math.round(150 * scale);
+
 export function compactAlertDockWidth(
   request: Approval | undefined,
   event: IslandEvent | undefined,
   requestCount: number,
   scale: number,
   zh: boolean,
+  reply?: ReplyChip,
 ): number {
   const { who, status, badge } = compactAlertLabels(
     request,
     event,
     requestCount,
     zh,
+    reply,
   );
   const font = Math.round(9 * scale);
   const icon = Math.round(17 * scale);
+  if (!request && event?.kind === "completion" && reply) {
+    // The newest reply's title in bold, cut at replyTitleWidth, a tear, then
+    // the REPLY tag with its count (ApprovalTag: 18px high, mono 10.5px).
+    const title = Math.min(
+      Math.ceil(labelWidth(who, font) * 1.05),
+      replyTitleWidth(scale),
+    );
+    const tag =
+      15 +
+      Math.ceil(status.length * 10.5 * 0.7) +
+      5 +
+      Math.ceil((badge ?? "").length * 10.5 * 0.62);
+    return Math.ceil(
+      icon +
+        Math.round(5 * scale) +
+        title +
+        Math.round(8 * scale) +
+        2 +
+        Math.round(8 * scale) +
+        tag +
+        Math.round(20 * scale),
+    );
+  }
   if (request) {
     // Printed on paper: the name in bold, a tear, then a seal and the status
     // in spaced bold red (CompactAlertView's paper tag).
@@ -148,6 +183,7 @@ export function CompactAlertView({
   botLogos,
   zh,
   paper: printed = null,
+  reply,
   onOpen,
   onDismissAndStats,
 }: {
@@ -163,6 +199,8 @@ export function CompactAlertView({
   zh: boolean;
   /** The paper a request's tag is printed on, beside the dock. */
   paper?: Paper | null;
+  /** The replies waiting, when a reply's tag shows. */
+  reply?: ReplyChip;
   onOpen: () => void;
   onDismissAndStats: () => void;
 }) {
@@ -171,7 +209,10 @@ export function CompactAlertView({
     event,
     requestCount,
     zh,
+    reply,
   );
+  // A reply's tag names the newest reply, with that reply's mark.
+  const replyTag = !request && event?.kind === "completion" && reply;
   const font = onDock ? Math.round(9 * scale) : 12;
   const iconSize = onDock ? Math.round(17 * scale) : 17;
   const glyphSize = onDock ? Math.round(9 * scale) : 11;
@@ -180,7 +221,6 @@ export function CompactAlertView({
   // (HUDExpandedSurface prints them): a reply in blue, a warning in amber.
   const paper = printed;
   const signalText = alertText("warning", ground);
-  const turnText = paper ? paper.blue : alertText("turn", ground);
   const calmAccent = paper ? paper.ink : alertText("calm", ground);
   const warnAccent = paper
     ? paperLevel("warning", paper)
@@ -281,26 +321,15 @@ export function CompactAlertView({
       )}
     </>
   ) : event?.kind === "completion" ? (
-    <>
-      <MessageSquareText
-        size={glyphSize}
-        strokeWidth={2.2}
-        color={turnText}
-        style={{ flexShrink: 0 }}
-      />
-      <span
-        style={{
-          fontSize: font,
-          fontWeight: 500,
-          color: turnText,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {status}
-      </span>
-    </>
+    // The waiting card's REPLY tag, its count in the row's ink.
+    <ApprovalTag
+      label={REPLY_BADGE}
+      tone="reply"
+      light={light}
+      count={reply?.count ?? 1}
+      ink={paper ? paper.ink : alertInk(0.96, ground)}
+      color={paper?.blue}
+    />
   ) : event?.kind === "sign-in-needed" ? (
     <>
       <KeyRound
@@ -398,7 +427,7 @@ export function CompactAlertView({
       >
         <ReminderMark
           request={request}
-          event={event}
+          event={replyTag ? reply.event : event}
           size={iconSize}
           light={light}
           botLogos={botLogos}
@@ -406,10 +435,11 @@ export function CompactAlertView({
         <span
           style={{
             fontSize: font,
-            fontWeight: paper ? 600 : 500,
+            fontWeight: paper || replyTag ? 600 : 500,
             // The row's own ink: the scene's may be the light HUD's while the
             // row itself is drawn dark (on the notch).
             color: paper ? paper.ink : alertInk(0.96, ground),
+            maxWidth: replyTag && onDock ? replyTitleWidth(scale) : undefined,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
