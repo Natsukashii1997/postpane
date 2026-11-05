@@ -88,7 +88,7 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
     settings.language === "zh-Hans" ? "zh-CN" : (settings.language ?? "system");
   const quotaDisplay = settings.quotaDisplay ?? "consumed";
   const launches = login?.enabled ?? settings.launchAtLogin;
-  const menuBar = settings.showMenuBarIcon !== false;
+  const menuBar = settings.showMenuBarIcon === true;
 
   const appearance = (
     <Segments

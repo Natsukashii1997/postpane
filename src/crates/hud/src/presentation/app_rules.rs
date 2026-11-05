@@ -31,7 +31,7 @@ pub(super) fn saved(s: &State, snapshot: &Value) -> Value {
         "appearance": settings["appearance"],
         "matchScreen": settings["appearanceFollowsScreen"].as_bool().unwrap_or(false),
         "botLogos": flag("botLogos", true),
-        "showMenuBarIcon": settings["showMenuBarIcon"].as_bool().unwrap_or(true),
+        "showMenuBarIcon": settings["showMenuBarIcon"].as_bool().unwrap_or(false),
         "hover": {
             "delayMs": delay("hoverDelayMs", 400),
             "collapseDelayMs": delay("collapseDelayMs", 200),

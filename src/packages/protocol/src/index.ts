@@ -669,6 +669,7 @@ export interface AppSettings {
   appearanceFollowsScreen?: boolean;
   animations: boolean;
   hudVisible: boolean;
+  /** Shows the menu bar icon; off unless turned on (a fresh install hides it). */
   showMenuBarIcon?: boolean;
   hudTools?: boolean;
   /** Answer the Claude desktop app's questions on the HUD through Agent HUD's Claude Code plugin; on unless turned off. */
