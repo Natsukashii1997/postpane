@@ -29,10 +29,10 @@ test("editing clicks round 30° a tick, ten ticks a burst, then rests", () => {
   assert.equal(petalRatchet(4.6), 330);
 });
 
-test("only Codex stays a bot in the side strip", () => {
+test("only Codex and Hermes stay awake in the side strip", () => {
   assert.equal(staysAsBot("openai"), true);
+  assert.equal(staysAsBot("hermes"), true);
   assert.equal(staysAsBot("claude"), false);
-  assert.equal(staysAsBot("hermes"), false);
 });
 
 test("a dozing Codex closes its petals; a bot without petals keeps its shape", () => {
