@@ -109,6 +109,18 @@ export interface QuotaMetrics {
   /** Start of observed coverage; no usage before this timestamp is inferred. */
   observedFrom?: string | null;
 }
+/** A Hermes bot as the strip's peek shows it (issue #108). */
+export interface HermesBotStatus {
+  /** `default`, or the profile's folder name (`agumon`). */
+  id: string;
+  name: string;
+  /** Why its gateway cannot answer; null while it is up. */
+  down: "feishu" | "stopped" | null;
+  /** The person's messages to it in Feishu since local midnight. */
+  turnsToday: number;
+  /** Its latest Feishu reply. */
+  lastReplyAt: string | null;
+}
 export interface Session {
   id: string;
   title: string;
@@ -779,6 +791,8 @@ export interface Snapshot {
   billing: BillingAccount[];
   /** From Core: the relays the clients are configured with, for consent in Settings. */
   relays?: RelaySource[];
+  /** From Core: each Hermes bot (Feishu gateway), the default home's first. */
+  hermesBots?: HermesBotStatus[];
 }
 /** A price per million tokens; an empty cache rate takes the input's. */
 export interface CustomPrice {
