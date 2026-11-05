@@ -1,6 +1,21 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。唯一下一步：设置页整体再优化一轮（常浩 2026-11-05 15:5x 提出「不太好看，也不协调」，待盘点问题、出三版）；后台第 4 批「统计会话」（外观已定，待实现）与其他小人各做一版仍待做。
+
+## 设置页页头对齐、HUD 预览壁纸入框与四联票、形态去简约；正在进行滚动条淡出（2026-11-05，Claude，常浩提出 #66、#68，HUD 预览选「丙 · 壁纸入框」、DeepSeek「只加在预览」、连票选「乙 · 四联票」，看过安装后的设置页说「所有面板、所有呈现都审核过，都满足要求」；按「测试全过可直接合并」的授权合并 PR #67 `5bdcf39`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 15:08`（按 issue #66 创建时间 07:08:56Z；本节写于 `2026-11-05 15:52`）。来由：常浩看设置页时发现页头与正文没对齐、「正在进行」滚动条常显，HUD 预览壁纸太跳、预览和实际样子不一致；issue #66、#68。定稿页：壁纸入框 https://claude.ai/artifact/TWhvAhAqHcrnYuYyMLfJgS （丙），连票 https://claude.ai/artifact/KzJtyXG3xvepAjcitA6AuR （乙）。
+- 改了哪些文件（PR #67）：`src/packages/app/src/settings/receipt.css`（正文滚动区 `scrollbar-gutter: stable both-edges`；预览墨色虚线框、「预览」标签、壁纸单独降饱和、底部说明行）、`settings/display/HUDSection.tsx`（形态去掉「简约」，给预览传框上文字）、`settings/SettingsSamples.tsx`（预览用侧栏同款常驻小人、居中、预览固定多显示 DeepSeek；动态画一整张四联票：每格一张小票宽，格间竖撕线，顶边底边撕孔，不再画底部数据，票宽票高在预览里单独算；只有刘海带光晕）、`src/packages/hud/src/scene/HUDMarkStrip.tsx`（抽出 `StubPaper`、`StubFace`、`stubBoxStyle` 共用，`StubPaper` 加可选 `bothEdges`）、`hud/package.json`（新增导出 `./bots/artwork`、`./bots/bot-spec`、`./scene/HUDMarkStrip`、`./ticket-stub`）、`hud/src/panel/SessionsSection.tsx` 与 `app/src/styles.css`（「正在进行」隐藏系统滚动条，自画细滑块，滚动时出现、停下约 1 秒淡出）。
+- 测试：在分支提交 `1f4da12`（与 main `5bdcf39` 内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。首轮 check 因删底部数据时漏删几行报语法错，补删后重跑全过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-align/check-joined.log`、`test-joined.log`、`build-joined.log`。
+- 验证：装机后用 computer-use 后台截图设置「显示」页，预览为四联票、无底部数据，常浩自己的截图一致。三版连票预览页用 esbuild 打包真实 `BotMark`，本机起服务看过四个标签；发布后的链接因内置浏览器未登录 claude.ai 没打开验证。未验证：「正在进行」超过 5 条时的淡出滑块（沿用前一节的实现说明，本轮没在实机凑够 5 条）。
+- 截图：无单独存档（computer-use 截图只在本会话里看过）。
+- 发布与回读：分支版 15:41:50 ditto 到 `/Applications` 并重启；合并后 `shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 为打包产物的 `4e449f5fdbd4`，未被覆盖（L-05）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-scroll-align/PostPane-655ddcd.app /Applications/PostPane.app`（单张小票版）；改版前在同目录 `PostPane-before.app`（#65 版）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 主目录 main 上有一条别的会话 15:34 留下、未推送的本地提交（AGENTS.md 加「PR 合并后清 worktree 的 target」规则），合并后与远端分叉；我用 `git pull --rebase` 把它接到 `5bdcf39` 之后（内容未改），随本节一起推送。照这条规则已对 `66-scroll-align` 跑 `cargo clean`（释放约 6 GB）。
+  - 预览固定画四个智能体；没装或关掉某个智能体时预览仍显示它（按「只加在预览」）。
+  - Rust `vendors.rs` 算侧栏宽度仍算隐藏行和云端额度、额度看板里 Codex 仍写「OpenAI」，未改（见上节）。
+  - 可清理 worktree 增加 `.claude/worktrees/66-scroll-align`，清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏重置到账、登出提醒与面板事件行并入细条（2026-11-05，Claude，常浩选 15、16「甲 · 并入细条」，02 不改、17「甲 · 细条同款」，看截图后追加待审批小签显示会话标题、侧栏去掉 Fable 并把 Cloud 改「云端」，说「开工」，看过前后对比页与安装后的应用说「合并」；PR #65 测试全过已 squash 合并 `cfa289a`，已打包安装、回读一致）
 
