@@ -25,6 +25,10 @@ pub struct Log {
     #[serde(default, rename = "title", skip_serializing)]
     pub stored_title: Option<String>,
     pub model: String,
+    /// The reasoning effort the session's latest turn ran at, where its log
+    /// records one (a Codex rollout's `turn_context`).
+    #[serde(default)]
+    pub effort: Option<String>,
     pub cwd: Option<String>,
     /// The client that drives the session, as its log names it: Claude
     /// Code's `entrypoint`, or the Codex client a rollout's `source` and
@@ -179,6 +183,7 @@ impl Log {
             prompts: PromptStamps::default(),
             id,
             model: "Unknown".into(),
+            effort: None,
             cwd: None,
             updated: String::new(),
             usage: Usage::default(),

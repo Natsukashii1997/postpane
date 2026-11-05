@@ -1144,6 +1144,12 @@ pub fn desktop_ask_words(view: &Value, decision: &Value) -> Option<String> {
 pub struct ClaudeDesktopIndex {
     pub archived: HashSet<String>,
     pub targets: HashMap<String, Value>,
+    /// What the app shows beside each Claude Code session it holds, by the
+    /// session's id: its reasoning effort and its sidebar section.
+    pub details: HashMap<String, DesktopDetails>,
+    /// The app's settings file as last read, by its modification time and
+    /// size: the sidebar sections of each account.
+    configs: HashMap<PathBuf, DesktopConfig>,
     /// Each metadata file as last read, by its modification time and size, so
     /// a pass re-reads only the files that changed (agent-hud-native-open
     /// ClaudeDesktopSessions keeps the same cache).
@@ -1156,9 +1162,37 @@ pub struct ClaudeDesktopIndex {
 #[derive(Clone)]
 struct DesktopFile {
     stamp: (Option<std::time::SystemTime>, u64),
-    /// The tab's kind, its own id, the Claude Code session it holds and
-    /// whether it is archived; None for a file that is not such a record.
-    tab: Option<(&'static str, String, String, bool)>,
+    /// The tab the file records; None for a file that is not such a record.
+    tab: Option<DesktopTab>,
+}
+
+/// A desktop tab's record: its kind, its own id (`local_…`), the Claude Code
+/// session it holds, whether it is archived, the reasoning effort it runs at
+/// and the account (`<organization>/<account>`) whose folder holds it.
+#[derive(Clone)]
+struct DesktopTab {
+    kind: &'static str,
+    id: String,
+    cli_id: String,
+    archived: bool,
+    effort: Option<String>,
+    scope: String,
+}
+
+/// What the desktop app shows about a Claude Code session that its log does
+/// not say: the reasoning effort it runs at and the name of the sidebar
+/// section it is filed under. Either is None when the app does not say.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DesktopDetails {
+    pub effort: Option<String>,
+    pub section: Option<String>,
+}
+
+#[derive(Clone)]
+struct DesktopConfig {
+    stamp: (Option<std::time::SystemTime>, u64),
+    /// Section names by account, then by tab id (`desktop_sections`).
+    sections: HashMap<String, HashMap<String, String>>,
 }
 
 impl ClaudeDesktopIndex {
@@ -1194,7 +1228,7 @@ impl ClaudeDesktopIndex {
             }
         }
         let mut files = HashMap::new();
-        for base in bases {
+        for base in &bases {
             for (folder, kind) in [
                 ("claude-code-sessions", "claude-desktop"),
                 ("local-agent-mode-sessions", "claude-cowork"),
@@ -1220,21 +1254,24 @@ impl ClaudeDesktopIndex {
             }
         }
         self.files = files;
+        self.read_configs(&bases);
         let mut tabs: HashMap<&str, (usize, usize)> = HashMap::new();
         let mut targets: HashMap<String, Value> = HashMap::new();
+        let mut details: HashMap<String, DesktopDetails> = HashMap::new();
         let mut ambiguous: HashSet<String> = HashSet::new();
         let mut paths = self.files.keys().collect::<Vec<_>>();
         paths.sort();
         for path in paths {
-            let Some((kind, stem, cli_id, archived)) = &self.files[path].tab else {
+            let Some(tab) = &self.files[path].tab else {
                 continue;
             };
+            let cli_id = &tab.cli_id;
             let counts = tabs.entry(cli_id).or_insert((0, 0));
             counts.0 += 1;
-            if *archived {
+            if tab.archived {
                 counts.1 += 1;
             } else {
-                let target = json!({"kind": kind, "id": stem});
+                let target = json!({"kind": tab.kind, "id": tab.id});
                 if targets
                     .get(cli_id)
                     .is_some_and(|existing| existing != &target)
@@ -1242,19 +1279,130 @@ impl ClaudeDesktopIndex {
                     ambiguous.insert(cli_id.clone());
                 }
                 targets.insert(cli_id.clone(), target);
+                let section = self
+                    .configs
+                    .values()
+                    .find_map(|config| config.sections.get(&tab.scope)?.get(&tab.id))
+                    .cloned();
+                details.insert(
+                    cli_id.clone(),
+                    DesktopDetails {
+                        effort: tab.effort.clone(),
+                        section,
+                    },
+                );
             }
         }
         targets.retain(|id, _| !ambiguous.contains(id));
+        details.retain(|id, _| !ambiguous.contains(id));
         let archived = tabs
             .into_iter()
             .filter(|(_, (all, arch))| *all > 0 && all == arch)
             .map(|(id, _)| id.to_owned())
             .collect::<HashSet<_>>();
-        let changed = archived != self.archived || targets != self.targets;
+        let changed =
+            archived != self.archived || targets != self.targets || details != self.details;
         self.archived = archived;
         self.targets = targets;
+        self.details = details;
         changed
     }
+
+    /// Reads the app's settings file under each base again when it changed
+    /// since the last pass; a file missing, too large or unreadable gives no
+    /// sections, and nothing else fails with it.
+    fn read_configs(&mut self, bases: &[PathBuf]) {
+        let mut configs = HashMap::new();
+        for base in bases {
+            let path = base.join("claude_desktop_config.json");
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 16 * 1024 * 1024 {
+                continue;
+            }
+            let stamp = (meta.modified().ok(), meta.len());
+            let config = match self
+                .configs
+                .get(&path)
+                .filter(|config| config.stamp == stamp)
+            {
+                Some(config) => config.clone(),
+                None => DesktopConfig {
+                    stamp,
+                    sections: fs::read(&path)
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                        .map(|value| desktop_sections(&value))
+                        .unwrap_or_default(),
+                },
+            };
+            configs.insert(path, config);
+        }
+        self.configs = configs;
+    }
+}
+
+/// The sidebar sections the desktop app files its Code tabs under, from its
+/// settings (`preferences.epitaxyPrefs`): by account (`<organization>/<account>`),
+/// the section name of each tab id (`local_…`) assigned to a named section.
+/// This is the app's own format and may change; whatever is not as expected
+/// reads as no section.
+pub fn desktop_sections(config: &Value) -> HashMap<String, HashMap<String, String>> {
+    let prefs = &config["preferences"]["epitaxyPrefs"];
+    // An account's entry, under one `<organization>/<account>` key or under
+    // the organization and then the account.
+    fn accounts(value: &Value) -> Vec<(String, &Value)> {
+        let mut found = Vec::new();
+        for (key, entry) in value.as_object().into_iter().flatten() {
+            if key.contains('/') {
+                found.push((key.clone(), entry));
+            } else {
+                for (account, entry) in entry.as_object().into_iter().flatten() {
+                    if entry.is_object() {
+                        found.push((format!("{key}/{account}"), entry));
+                    }
+                }
+            }
+        }
+        found
+    }
+    let named = |list: &Value| -> Vec<(String, String)> {
+        list.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| {
+                let id = item["id"].as_str()?;
+                let name = item["name"].as_str()?.trim();
+                (!name.is_empty()).then(|| (id.to_owned(), name.to_owned()))
+            })
+            .collect()
+    };
+    let mut names: HashMap<String, HashMap<String, String>> = HashMap::new();
+    for (scope, entry) in accounts(&prefs["dframe-code-sections"]) {
+        names
+            .entry(scope)
+            .or_default()
+            .extend(named(&entry["sections"]));
+    }
+    let mut sections = HashMap::new();
+    for (scope, entry) in accounts(&prefs["dframe-group-scopes"]) {
+        let mut known = names.remove(&scope).unwrap_or_default();
+        known.extend(named(&entry["groups"]));
+        let assigned: HashMap<String, String> = entry["assignments"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(key, group)| {
+                let tab = key.strip_prefix("code:")?;
+                Some((tab.to_owned(), known.get(group.as_str()?)?.clone()))
+            })
+            .collect();
+        if !assigned.is_empty() {
+            sections.insert(scope, assigned);
+        }
+    }
+    sections
 }
 
 /// Exactly `<root>/<organization>/<account>/local_*.json`; symlinked
@@ -1292,8 +1440,9 @@ fn desktop_metadata_files(root: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The tab a metadata file records: only its ids and archive flag are read.
-fn desktop_tab(path: &Path, kind: &'static str) -> Option<(&'static str, String, String, bool)> {
+/// The tab a metadata file records: only its ids, archive flag and reasoning
+/// effort are read; its account is the two folders above it.
+fn desktop_tab(path: &Path, kind: &'static str) -> Option<DesktopTab> {
     let stem = path.file_stem()?.to_str()?.to_owned();
     let value = serde_json::from_slice::<Value>(&fs::read(path).ok()?).ok()?;
     if value["sessionId"].as_str() != Some(stem.as_str()) {
@@ -1303,7 +1452,31 @@ fn desktop_tab(path: &Path, kind: &'static str) -> Option<(&'static str, String,
         .as_str()
         .filter(|id| uuid(id))?
         .to_owned();
-    Some((kind, stem, cli_id, value["isArchived"] == true))
+    let folder = |path: Option<&Path>| {
+        path.and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .unwrap_or("")
+            .to_owned()
+    };
+    let account = path.parent();
+    let scope = format!(
+        "{}/{}",
+        folder(account.and_then(Path::parent)),
+        folder(account)
+    );
+    let effort = value["effort"]
+        .as_str()
+        .map(str::trim)
+        .filter(|effort| !effort.is_empty())
+        .map(str::to_owned);
+    Some(DesktopTab {
+        kind,
+        id: stem,
+        cli_id,
+        archived: value["isArchived"] == true,
+        effort,
+        scope,
+    })
 }
 
 /// The desktop tab kind a Claude Code session's client opens in: the
@@ -1607,6 +1780,89 @@ mod tests {
             offer.recap.is_none(),
             "an offer card shows its title and buttons only"
         );
+    }
+
+    #[test]
+    fn the_desktop_index_reads_each_tabs_effort_and_sidebar_section() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("Claude");
+        let account = base.join("claude-code-sessions/org/acct");
+        fs::create_dir_all(&account).unwrap();
+        let filed = "11111111-1111-4111-8111-111111111111";
+        let loose = "22222222-2222-4222-8222-222222222222";
+        let filed_tab = "local_33333333-3333-4333-8333-333333333333";
+        let loose_tab = "local_44444444-4444-4444-8444-444444444444";
+        for (tab, cli, effort) in [
+            (filed_tab, filed, json!("high")),
+            (loose_tab, loose, json!(null)),
+        ] {
+            fs::write(
+                account.join(format!("{tab}.json")),
+                json!({"sessionId":tab,"cliSessionId":cli,"isArchived":false,"effort":effort})
+                    .to_string(),
+            )
+            .unwrap();
+        }
+        let config = base.join("claude_desktop_config.json");
+        fs::write(
+            &config,
+            json!({"preferences":{"epitaxyPrefs":{
+                "dframe-code-sections":{"org/acct":{"sections":[
+                    {"id":"pinned","kind":"pinned","name":""},
+                    {"id":"cg-1","kind":"manual","name":"驿窗 | PostPane"}]}},
+                "dframe-group-scopes":{"org/acct":{"groups":[],"assignments":{
+                    format!("code:{filed_tab}"):"cg-1",
+                    "code:local_55555555-5555-4555-8555-555555555555":"cg-gone"}}}
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        let mut index = ClaudeDesktopIndex::default();
+        index.set_bases(vec![base.clone()]);
+        assert!(index.refresh(&[]));
+        assert_eq!(
+            index.details.get(filed),
+            Some(&DesktopDetails {
+                effort: Some("high".into()),
+                section: Some("驿窗 | PostPane".into()),
+            })
+        );
+        assert_eq!(index.details.get(loose), Some(&DesktopDetails::default()));
+
+        // The app's settings in a shape it no longer writes: no sections,
+        // and the tabs still read.
+        fs::write(
+            &config,
+            json!({"preferences":{"epitaxyPrefs":{"dframe-group-scopes":[1,2]}}}).to_string() + " ",
+        )
+        .unwrap();
+        assert!(index.refresh(&[]));
+        assert_eq!(index.details[filed].section, None);
+        assert_eq!(index.details[filed].effort.as_deref(), Some("high"));
+        fs::write(&config, "not json").unwrap();
+        index.refresh(&[]);
+        assert_eq!(index.details[filed].section, None);
+        assert!(index.targets.contains_key(filed));
+    }
+
+    #[test]
+    fn desktop_sections_also_read_an_account_nested_under_its_organization() {
+        let config = json!({"preferences":{"epitaxyPrefs":{
+            "dframe-code-sections":{"org":{"acct":{"sections":[{"id":"cg-1","name":"Docs"}]}}},
+            "dframe-group-scopes":{"org":{"acct":{"groups":[{"id":"cg-2","name":"Fmode"}],"assignments":{
+                "code:local_a":"cg-1","code:local_b":"cg-2","cowork:local_c":"cg-2","code:local_d":7}}}}
+        }}});
+        let sections = desktop_sections(&config);
+        let account = &sections["org/acct"];
+        assert_eq!(account.get("local_a").map(String::as_str), Some("Docs"));
+        assert_eq!(account.get("local_b").map(String::as_str), Some("Fmode"));
+        assert_eq!(
+            account.len(),
+            2,
+            "only Code tabs filed under a named section"
+        );
+        assert!(desktop_sections(&json!({})).is_empty());
+        assert!(desktop_sections(&json!({"preferences":"x"})).is_empty());
     }
 
     #[test]

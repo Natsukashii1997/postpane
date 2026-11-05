@@ -116,6 +116,14 @@ export interface Session {
   model: string;
   /** The model as people read it ("Opus 4.5"), from Core; `model` is the logged id. */
   modelName?: string | null;
+  /** From Core: the reasoning effort the session runs at ("high"), as the
+   * Claude desktop app's tab or a Codex rollout's latest turn records it;
+   * absent when the client does not say. */
+  effort?: string | null;
+  /** From Core: the name of the Claude desktop app's sidebar section the
+   * session is filed under; absent when it is in none or the app's settings
+   * cannot be read. */
+  section?: string | null;
   /** From Core: the vendor the session's calls are listed under, as Open names it ("Claude", "GitHub Copilot"). */
   vendorName?: string;
   cwd: string | null;

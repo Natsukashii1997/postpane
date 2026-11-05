@@ -57,6 +57,55 @@ fn claude_desktop_targets_only_its_own_sessions_and_archiving_there_shows_withou
 }
 
 #[test]
+fn a_claude_desktop_session_carries_its_effort_and_sidebar_section() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let desk = "77777777-7777-4777-8777-777777777777";
+    let at = Utc::now().to_rfc3339();
+    let line = json!({"sessionId":desk,"entrypoint":"claude-desktop","timestamp":at,"type":"assistant","message":{"id":"m-1","model":"claude-opus-5-5","usage":{"input_tokens":1,"output_tokens":1}}});
+    fs::write(root.join(format!("{desk}.jsonl")), format!("{line}\n")).unwrap();
+    let app = home.join("Library/Application Support/Claude");
+    let tabs = app.join("claude-code-sessions/org/acct");
+    fs::create_dir_all(&tabs).unwrap();
+    let tab = "local_99999999-9999-4999-8999-999999999999";
+    fs::write(
+        tabs.join(format!("{tab}.json")),
+        json!({"sessionId":tab,"cliSessionId":desk,"isArchived":false,"effort":"high"}).to_string(),
+    )
+    .unwrap();
+    let session = |snapshot: &Value| {
+        snapshot["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == desk)
+            .cloned()
+            .unwrap()
+    };
+    let mut backend = fixture(home);
+    let snapshot = backend.request("snapshot", json!({})).unwrap();
+    assert_eq!(session(&snapshot)["effort"], "high");
+    assert_eq!(
+        session(&snapshot)["section"],
+        Value::Null,
+        "no settings: no section"
+    );
+    fs::write(
+        app.join("claude_desktop_config.json"),
+        json!({"preferences":{"epitaxyPrefs":{
+            "dframe-code-sections":{"org/acct":{"sections":[{"id":"cg-1","name":"驿窗 | PostPane"}]}},
+            "dframe-group-scopes":{"org/acct":{"assignments":{format!("code:{tab}"):"cg-1"}}}
+        }}})
+        .to_string(),
+    )
+    .unwrap();
+    let snapshot = backend.request("refresh", json!({})).unwrap();
+    assert_eq!(session(&snapshot)["section"], "驿窗 | PostPane");
+}
+
+#[test]
 fn claude_desktop_archive_filtering_navigation_targets_and_asks() {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path();

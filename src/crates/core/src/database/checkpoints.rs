@@ -34,6 +34,9 @@ pub(crate) struct LogHead {
     pub id: String,
     pub title: String,
     pub model: String,
+    /// The reasoning effort of the session's latest turn (`Log::effort`).
+    #[serde(default)]
+    pub effort: Option<String>,
     pub cwd: Option<String>,
     /// The client that drives the session (`Log::client`).
     #[serde(default)]
@@ -108,6 +111,7 @@ impl LogHead {
             id: log.id.clone(),
             title: log.title(),
             model: log.model.clone(),
+            effort: log.effort.clone(),
             cwd: log.cwd.clone(),
             client: log.client.clone(),
             prompts: log.prompts.clone(),
@@ -166,6 +170,7 @@ impl LogHead {
         self.id.hash(&mut hash);
         self.title.hash(&mut hash);
         self.model.hash(&mut hash);
+        self.effort.hash(&mut hash);
         self.cwd.hash(&mut hash);
         self.activity_at(None).hash(&mut hash);
         self.usage.total().hash(&mut hash);
@@ -249,6 +254,9 @@ impl LogHead {
             .unwrap_or_else(|| self.updated.clone());
         let mut session = json!({"id":self.id,"title":self.title,"source":self.source,"model":self.model,"vendorName":crate::naming::model_names::vendor_name(&self.source),"modelName":(!self.model.is_empty()).then(||crate::naming::model_names::consumer_name(&format!("{}-model:{}",self.source,self.model))),"cwd":self.cwd,"updatedAt":updated,"state":self.live.session_state(now,&self.source,subagents_at),"tokens":self.usage.total(),"cost":self.list_cost_usd(),"contextPercent":null,"logPath":self.origin_path.as_ref().unwrap_or(&self.path),"parentId":self.live.parent_id});
         session["project"] = json!(crate::projects::project_id(self.cwd.as_deref()));
+        if let Some(effort) = &self.effort {
+            session["effort"] = json!(effort);
+        }
         session["lastMessageAt"] = json!(self
             .last_message_at()
             .and_then(DateTime::<Utc>::from_timestamp_millis)
