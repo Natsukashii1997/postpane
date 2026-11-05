@@ -319,6 +319,9 @@
 }
 .apple-app .settings-scroll {
   padding: 0 24px 40px;
+  /* A scrollbar that stays on screen takes its width from one side only and
+     pushes the page off the header above it; keep the same room on both. */
+  scrollbar-gutter: stable both-edges;
 }
 .apple-app .settings-pane-content {
   padding: 10px 30px calc(30px + var(--rc-tooth));
@@ -686,10 +689,37 @@
 
 /* ---- The Display page ----------------------------------------------- */
 
-/* The HUD preview stays in colour (the glow is judged by it), framed in ink. */
+/* The HUD preview: the wallpaper toned down inside a dashed ink frame
+   labelled 预览; the HUD itself keeps its colours (the glow is judged by it). */
+.apple-app .settings-hud-frame {
+  position: relative;
+  border: 1.2px dashed rgb(var(--rc-ink));
+  padding: 8px;
+}
+.apple-app .settings-hud-frame-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 6px;
+  background: var(--rc-paper);
+  font: 700 10px/16px var(--rc-mono);
+  letter-spacing: 0.2em;
+  color: rgb(var(--rc-ink));
+}
 .apple-app .settings-hud-preview {
   border-radius: 0 !important;
-  outline: 1.5px solid rgb(var(--rc-ink));
+}
+.apple-app .settings-hud-wallpaper {
+  filter: saturate(0.55) contrast(0.95);
+}
+.apple-app .settings-hud-frame-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  font: 10px/1 var(--rc-mono);
+  letter-spacing: 0.08em;
+  color: rgba(var(--rc-ink), 0.6);
 }
 .apple-app .apple-content [data-slot="button"][data-variant="ghost"]:hover {
   background: rgba(var(--rc-ink), 0.08);
