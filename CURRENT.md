@@ -1,6 +1,19 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：后台第 4 批「统计会话」（会话页列表与详情，现在是纸面里套原来的白卡），先开 issue 再做。
+
+## 侧栏 Codex 小人第二版：打盹加强、各动作更明显（2026-11-05，Claude，常浩审核第一版动作库后说打盹不明显、其余都再明显一点；确认三批计划后说「按计划开始」，看过实物和审核页后说「同意合并」；PR #47 测试全过已 squash 合并 `c7f9ed5`、已打包安装、审核页已更新到第二版）
+
+- 时间：开工 `2026-11-05 08:23`（本会话创建时间；代码由上一个会话在分支 `claude/46-codex-clearer` 写好，本会话负责验收与合并；本节写于 `2026-11-05 08:31`）。来由：常浩审核 Codex 真实动作库 https://claude.ai/artifact/DWA9o2vomCEte2kXsd3Jbc 后的反馈，issue #46。
+- 改了哪些文件（PR #47，只对 Codex 的 `petals` 开关生效）：`src/packages/hud/src/bots/bot-motion.ts`（打盹压扁、慢深呼吸、变暗 dim 0.35；待机 spin×1.6、思考 60°/s、读文件 −60°/s；跑命令抖动 0.012、压缩缩小 0.2、等批准/提问/方案/完成/重置的张合加大；额度用完 dim 0.4、花瓣收到 0.6；新增 `dimGoal`，常暗状态不再一直高帧率刷新，打盹按 12 帧）、`bot-renderer.ts`（出错变暗系数 0.28→0.38、长命令进度环外径加粗到 1.4）、`test/codex-petals.test.ts`（新增 `a dozing Codex flattens, breathes deep and darkens`）、`docs/parity/c08-bots.md`（第 50 行）。
+- 测试：在提交 `ab23566`（与合并后内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 19 组 `test result: ok`，合计 638 passed / 0 failed；`ℹ pass 138` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-05-codex-clearer/`。
+- 验证：上一个会话用本地临时页以真实 `BotMark` 看过 18 个动作（沿用其结果）；审核页用真实小人代码重新打包（产物核对含 `dimGoal`、`.38`、`.012`），常浩看过实机侧栏和审核页后同意合并。
+- 截图：无。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（08:28:54，按 L-03，用 `pgrep -f "Contents/MacOS/PostPane$"` 确认退出与重启）。审核页同一链接更新为 Version 2，只发布页面脚本和 `chatgpt-*.png`，未发布 Clawd 素材；审核页临时文件已从 worktree 删除。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-codex-clearer/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 中途试过给 Codex 加 Hermes 那套彩色光圈加彩色徽章，常浩说和 Hermes 区分不开，已撤回，未进提交；每个形象风格独立。
+  - 可清理 worktree 增加 `.claude/worktrees/46-codex-clearer`（现共 14 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏 Hermes 头像常驻并加 9 个细微动作（2026-11-05，Claude，常浩要求直接用女生头像、不改卡通、动作少而典型，看过一版预览后说「按计划开工」，实物看了三轮后说「看过了，合并」；PR #45 测试全过已 squash 合并 `622edd0`、已打包安装）
 
