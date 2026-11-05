@@ -16,6 +16,20 @@
   - 可清理 worktree 增加 `.claude/worktrees/74-glow-soft-only`（现检出 main `05988bf`，分离头），清理前问常浩。
 - 本轮新坑：无。
 
+## 侧栏有待回答时只在对应小人上展开；随手记挂件去掉吊牌；停用原随手记程序（2026-11-05，Claude，常浩要求「当侧栏有待回答时，鼠标划到对应的组件形象对应卡片再展开」「随手记的文字删掉就是那个圆形」「关闭原来的随手记，以后我就用这个侧栏带的」；PR #79 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e5e38c1`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:48`（估计，按常浩这条消息；本节写于 `2026-11-05 18:05`）。来由：有待回答时鼠标碰到侧栏任何地方都强制展开，太容易误弹；issue #78。
+- 改了哪些文件（PR #79）：`src/packages/hud/src/request-hover.ts`（新：`hoverMayOpen`，有待回答时只有指针在那个智能体的小人上才可展开；智能体不在侧栏、刘海形态、指针位置未知（从待审批小签进入）时保持原行为）、`hud/src/scene/useHUDInteraction.ts`（`entered` 带指针位置并过门控，原生指针路径同样传位置；门控不过且正在延时展开时取消）、`hud/src/HUDScene.tsx`（DOM 进入与移动都把位置传给 `entered`，有待回答时移到对应小人上即开始展开）、`hud/src/app-pendant.ts` 与 `scene/AppPendant.tsx`（去掉「随手记」吊牌，只留挂绳 + 纸圈里的球）、测试 `hud/test/request-hover.test.ts`（新 4 项）、`hud/test/app-pendant.test.ts`（底边一项改写）；本节另改 `docs/ROADMAP.md`（记原随手记停用、挂件不印名字）。
+- 测试：在分支提交 `01a5b6a` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 193` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。变基到 `38c82db`（只多一份 `docs/audit/` 文档）后复跑 `check-rules` 通过、`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hover-pendant/`。
+- 验证：只有单测。实机悬停未做（驿窗窗口操作授权此前被拒，且要等真实的待回答出现），请常浩下次有待回答时顺手看一下。
+- 截图：无。
+- 发布与回读：分支 `01a5b6a` 打包，18:01:36 ditto 到 `/Applications` 并重启；与合并后 main `e5e38c1` 的 `src/` 无差异；`shasum` 回读为打包产物的 `d374791f1a48`。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hover-pendant/PostPane-before.app /Applications/PostPane.app`。
+- 停用原随手记（常浩明确要求）：`launchctl bootout gui/$(id -u)/local.digitalworld.floatingnotes`，轮询到查不到再继续（G-18）；进程 17639 已退出；`~/Library/LaunchAgents/local.digitalworld.floatingnotes.plist` 移到 `evidence/2026-11-05-float-notes/local.digitalworld.floatingnotes.plist.disabled`（另有 `.bak` 副本），`~/Applications/随手记.app` 本身未删。恢复：把 `.disabled` 改回原名放回 `~/Library/LaunchAgents/` 后 `launchctl bootstrap gui/$(id -u) <plist>`。数码世界仓库里的说明（`desktop/floating-notes/README.md` 写着「登录后自动启动」）未改，属数码世界范围。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 展开后指针从待回答的小人移到别的小人，卡片保持展开（沿用「指针还在侧栏里就不收」）。
+  - 可清理 worktree：`.claude/worktrees/78-hover-pendant` 本节提交后即删。
+- 本轮新坑：无。
+
 ## 随手记嵌入侧栏：挂件入口 + 原页面小窗（2026-11-05，Claude，常浩要求把自建应用的侧边浮窗接进驿窗、先试数码世界随手记，「保持原样只做嵌入」，区分样式选「丙 · 挂件」，看过安装后说「合并」；PR #75 测试全过已 squash 合并 `7aaafbd`，已从 main 内容重新打包安装、回读一致）
 
 - 时间：开工 `2026-11-05 17:00`（估计，按「先只做随手记」那条消息；本节写于 `2026-11-05 17:45`）。来由：常浩要把自建应用的侧边浮窗收进驿窗侧栏，先接随手记；issue #70。三版预览 https://claude.ai/artifact/R3uKEDZa6Ahd7LPoWRG2tE （选丙）；更早一版「纸面重画」的预览 https://claude.ai/artifact/7As4PMe4MWB1m3dmC9T3pA 已被否（改为原样嵌入）。
