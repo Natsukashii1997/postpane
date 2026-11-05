@@ -59,30 +59,32 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 ### 接力记录
 
-- 存 `<数据目录>/chatgpt/handoffs.json`（目录 0700、文件 0600，整份替换写），保留最新 200 条：`{id, title, claudeSession, cwd, chatgptConversation, status, error?, createdAt, updatedAt, rounds}`，时间是毫秒时间戳。
-- `status`：`opening`（新会话正在打开）→ `open`（已绑定会话）或 `failed`（打开失败，`error` 写原因）；同一个 Claude 会话发起新审核时，旧的那条改成 `closed`。一个 Claude 会话、一个 ChatGPT 会话同时只属于一条未结束（opening / open）的接力。
-- `rounds`：第一次交代之后，两边每转一次加 1。
-- 快照 `handoffs` 带未结束的和最近一天失败的；记录一变，宿主当场重发快照，不等下一轮采集。
+- 存 `<数据目录>/chatgpt/handoffs.json`（目录 0700、文件 0600，整份替换写），保留最新 200 条：`{id, title, claudeSession, cwd, chatgptConversation, status, error?, createdAt, updatedAt, rounds, phase, phaseAt, steps, brief?}`，时间是毫秒时间戳。
+- `status`：`opening`（新会话正在打开）→ `open`（已绑定会话）或 `failed`（打开失败，`error` 写原因）；同一个 Claude 会话发起新审核、或常浩点「结束接力」时改成 `closed`。一个 Claude 会话、一个 ChatGPT 会话同时只属于一条未结束（opening / open）的接力。
+- `phase`（批 A，#120）：`sending`（正在送，新会话在开）→ `delivered`（插件确认已送到，对方没开始）→ `working`（插件报这一轮开始）→ `replied`（回信到了，等常浩决定）→ `returned`（已转回 Claude）；另有 `ended`、`failed`。`phaseAt` 是进入这一阶段的时间。「送到了」只认插件的 `opened` / `sent` 回应，「审完了」只认 `turn complete`。
+- `steps`：每一步 `{at, kind, text?, points?, verdict?}`。`work` Claude 做完一轮（`text` 是 `summary`，没给就用标题）、`ask` 驿窗送给 ChatGPT 且已送到（`text` 是原话摘录）、`reply` ChatGPT 回信（`points` 是回信里编号列出的意见，最多 12 条；`verdict` 从最后的「结论：通过 / 需修改」读出 `pass` / `revise`；最新一条回信全文保留，最多 64 KB，供「转回 Claude」用）、`back` 转回 Claude、`again` 请 Claude 交回复审、`fail` 没送出去、`end` 结束。快照里的步骤只带 600 字以内的摘录，不带原话指纹。
+- 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。
+- 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开；打开请求用接力 id 当 `requestId`，超时后插件迟到的 `opened` 仍能把接力绑上。
+- `rounds`：第一次交代之后，两边每转一次加 1。卡上的「第 n / 2 轮」按 `ask` 步数算，最多 2 轮（可以超）。
+- 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / 迟到的 `opened` 告诉宿主（`Channel::listen`），接力当场前进。
 - 新会话放进的 ChatGPT 项目存 `<数据目录>/chatgpt/config.json`：`{"project": "https://chatgpt.com/g/<id>/project"}`，只认这种项目页网址（去掉 `?`、`#` 和末尾 `/`）。在设置 · 智能体插件 ·「ChatGPT（Chrome 插件）」登记后出现「新会话放进项目」一行，粘贴保存；不填就开在 ChatGPT 首页。
-- 名单（`watched.json`）不变：接力的会话都是驿窗经 `open` 新开的，开好就在名单里。
+- 名单（`watched.json`）：接力的会话都是驿窗经 `open` 新开的，开好就在名单里，记的是接力标题（`named: true`），不是插件报的标签页标题；它的回信回执也先用接力标题。
 
 ### 从 Claude 发起：`relay_to_chatgpt`
 
-- 驿窗 MCP 的内置工具，参数 `{title, brief}`；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。
-- 宿主认调用的会话：`caller.sessionId` 在 Agent HUD 插件报的在线会话里就用它；否则（`/clear`、续会话后 id 会过时）用同目录下在线的 Claude 会话；再否则用快照认得的那个 id、同目录最近活动的会话；都没有就拒绝。别的客户端调用一律拒绝。
+- 驿窗 MCP 的内置工具，参数 `{title, summary?, brief}`（`summary` 一句话写这一轮做了什么，显示在接力卡时间线上）；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。
+- 宿主认调用的会话，不猜：`caller.sessionId` 在 Agent HUD 插件报的在线会话里就用它；否则（`/clear`、续会话后 id 会过时）同目录下只有一个在线的 Claude 会话就用它；同目录没有在线会话时用 `caller.sessionId` 原样；同目录有几个在线会话、又认不出是哪个时拒绝，不按「同目录最近活动」兜底。别的客户端调用一律拒绝。
 - 不受「让智能体整理 HUD」开关管，但 ChatGPT 插件必须连着，否则返回中文原因。登记了 ChatGPT 插件（host manifest 在）时，本机工具通道也会监听，好让这个工具够得着。
 - 这个会话已有 `open` 的接力：直接把 brief 送进那个 ChatGPT 会话（等插件回话，最多 30 秒），返回 `{handoffId, status: "sent", conversation}`；还在 `opening`：拒绝，等它打开。否则新建一条 `opening`，在后台线程 `open`（带项目），立即返回 `{handoffId, status: "opening"}`；打开后改 `open` 或 `failed`。返回里另有 `message`，一句给 Claude 看的中文。
 - 单条文字超过 768 KB 拒绝（Chrome 发往插件一帧不能超过 1 MB，超了会断开插件）。
 
-### 侧栏回执上的转交单（设计「乙」）
+### 接力卡（批 A，#120，设计「甲」时间线展开卡）
 
-- 新回复回执（Claude 或 ChatGPT）的按钮行多一个「转给…」，有地方可转时才出现。点开在回复下方展开「转交单」，同一张纸面：
-  - 从：来源（CLAUDE / CHATGPT）+ 会话标题；编号 `NO.` + 接力 id 末四位。
-  - 到：ChatGPT 回复 → 接力里的 Claude 会话；Claude 回复 → 接力里的 ChatGPT 会话（有就默认选它），以及总有的「新建 ChatGPT 审核」。
-  - 用途：请审核 / 按意见处理 / 原样转，各自在消息前加固定开头；默认到 ChatGPT 请审核、到 Claude 按意见处理。换用途只换开头，改过的正文保留。
-  - 消息全文可改；送达方式一行写怎么送，或送不到的原因。
-  - 「送进会话」/「新建并送出」、「取消」；Esc 取消，⌘↩ 送出；送出后显示结果。转交单开着时回执不收起。
-- 命令：`handoff_forward {to: "claude" | "chatgpt", target, text}`（到 Claude 走插件，先查 `reaches`，空闲时自动发；到 ChatGPT 走 `send`）、`handoff_start {session, cwd, title, text}`（新建审核，同上面的新建流程）、`handoff_route {to, target}`（送达方式一行用）、`chatgpt_project {project?}`（只限设置窗口）。
+- 设计稿 https://claude.ai/artifact/VReXNsQ2gUc6RPRmtcvdXB （第 2 版）「甲 · 卡内交接」的展开卡；源与截图在 `~/Library/Application Support/postpane/evidence/2026-11-06-handoff/design/`。
+- 打开方式：ChatGPT 或 Claude 的新回复回执上，属于某条接力的多一个「查看接力」；侧栏「正在进行」里该会话的第二行换成虚线框「接力 1/2」加一句进度，点框打开。卡占侧栏卡片位，Esc 或侧栏收起即关。
+- 卡头「接力 · 第 n / 2 轮 · 圆章」（接力 / 回信 / 需改 / 修改 / 未送 / 已结束），任务名带回到 Claude 会话的 ↗，下一行「Claude ⇄ ChatGPT · 审核 · 发起时间」；中间竖向时间线：每步时间、谁（Clawd / ChatGPT / 「驿」章）、做了什么，回信下列意见与结论，当前一步带绿点，等常浩决定的一步琥珀色，之后的步骤虚线淡出。
+- 底部按阶段：送出与处理中「结束接力」「查看 ChatGPT 对话」；回信到了加「转回 Claude」（把回信全文连同处理要求经插件送回 Claude 会话，会话在跑就排队）；已转回加「再审一轮」（请 Claude 改完调 `relay_to_chatgpt` 复审，第 2 轮后不再出现）；失败「重试」；结束「知道了」。
+- 命令：`handoff_act {id, action: "back" | "again" | "end" | "retry"}`。旧的转交单（`handoff_start`、`handoff_forward`、`handoff_route`）已撤掉。
 
 ### 本机工具通道
 

@@ -498,7 +498,7 @@ serveStdio(() => {
     "relay_to_chatgpt",
     {
       description: [
-        "把这次的工作交给 ChatGPT 审核：驿窗经 Chrome 插件把 brief 送进 chatgpt.com。同一个 Claude 会话第一次调用会新开一个 ChatGPT 审核会话（放进驿窗设置里的项目），之后再调用就接着发进同一个会话。调用后立即返回；ChatGPT 的回复出现在驿窗侧栏，常浩看过后会把意见转回这个会话。",
+        "把这次的工作交给 ChatGPT 审核：驿窗经 Chrome 插件把 brief 送进 chatgpt.com。同一个 Claude 会话第一次调用会新开一个 ChatGPT 审核会话（放进驿窗设置里的项目），之后再调用就接着发进同一个会话。调用后立即返回；ChatGPT 的回复出现在驿窗侧栏，常浩看过后会把意见转回这个会话。同样的 brief 刚送到、还没回信时不会再送一次。",
         "ChatGPT 读不到本机文件，brief 要自己写全：",
         "1. 第一行写任务名，然后写任务目标；",
         "2. 改了什么、为什么这样改；",
@@ -513,6 +513,13 @@ serveStdio(() => {
             .string()
             .min(1)
             .describe("任务名，驿窗用它标记这次接力，例如「驿窗｜接力 1c」。"),
+          summary: z
+            .string()
+            .max(120)
+            .optional()
+            .describe(
+              "一句话写这一轮做了什么，显示在驿窗接力卡的时间线上，例如「改了 6 个文件 · 测试全过」。",
+            ),
           brief: z
             .string()
             .min(1)
@@ -525,7 +532,7 @@ serveStdio(() => {
         openWorldHint: true,
       },
     },
-    async ({ title, brief }, context) => {
+    async ({ title, summary, brief }, context) => {
       const named = caller(
         context.mcpReq._meta as Record<string, unknown> | undefined,
       );
@@ -535,6 +542,7 @@ serveStdio(() => {
             "relay_to_chatgpt",
             {
               title,
+              summary,
               brief,
               caller: named,
               cwd: process.cwd(),

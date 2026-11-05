@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react";
-import { ArrowUpRight, Forward } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
@@ -24,8 +24,8 @@ import {
 } from "../permissions/ListCard";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
-import { HandoffSheet } from "./HandoffSheet";
-import { sheetTargets } from "./handoff-sheet";
+import { useHandoffCard } from "./HandoffCard";
+import { handoffFor } from "./handoff-card";
 import {
   newestReply,
   replyEntries,
@@ -62,14 +62,10 @@ export function CompletionAlertView({
     () => new Set(),
   );
   const [unfolded, setUnfolded] = useState(false);
-  // The reply whose handoff sheet is open.
-  const [sheet, setSheet] = useState<string | null>(null);
+  const card = useHandoffCard();
 
   const entries = replyEntries(replies, snapshot.sessions);
-  // A reply whose handoff sheet is open stays open when a newer one comes.
-  const openId =
-    (sheet && entries.some((entry) => entry.id === sheet) ? sheet : null) ??
-    newestReply(entries)?.id;
+  const openId = newestReply(entries)?.id;
   const { groups, hidden, sectioned } = replyGroups(
     entries,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
@@ -119,11 +115,14 @@ export function CompletionAlertView({
             const open = entry.id === openId;
             const failed = unreachable.has(entry.id);
             const bot = entry.session?.bot;
-            // Where 转给… can send this reply; it shows only where it can.
-            const targets = services?.forwardReply
-              ? sheetTargets(entry.event, snapshot.handoffs, snapshot.sessions)
-              : [];
-            const sheetOpen = open && sheet === entry.id && targets.length > 0;
+            // A reply in a handoff opens its card (查看接力).
+            const handoff = card
+              ? handoffFor(
+                  snapshot.handoffs,
+                  entry.event.source,
+                  entry.event.sessionId,
+                )
+              : undefined;
             const title = entryTitle(entry, newsTitle(entry.event, zh));
             // The body lines up under the title, past the seal or the mark.
             const indent = (bot ? SEAL_COLUMN : 18) + 12;
@@ -190,22 +189,18 @@ export function CompletionAlertView({
                             : "Got it"}
                       </button>
                       <span style={{ flex: 1 }} />
-                      {targets.length > 0 && (
+                      {handoff && card && (
                         <button
                           type="button"
-                          aria-expanded={sheetOpen}
-                          onClick={() => setSheet(sheetOpen ? null : entry.id)}
+                          onClick={() => card.open(handoff.id)}
                           style={{
                             ...buttonFace,
                             border: `1.5px solid ${inks.faint}`,
-                            background: sheetOpen
-                              ? (paper?.fill ?? inks.line)
-                              : "transparent",
+                            background: "transparent",
                             color: inks.ink,
                           }}
                         >
-                          <Forward size={12} strokeWidth={2.4} />
-                          {zh ? "转给…" : "Forward…"}
+                          {zh ? "查看接力" : "Handoff"}
                         </button>
                       )}
                       <button
@@ -228,20 +223,6 @@ export function CompletionAlertView({
                         {zh ? "回到会话" : "Return to session"}
                       </button>
                     </div>
-                    {sheetOpen && (
-                      <HandoffSheet
-                        key={entry.id}
-                        source={entry.event.source}
-                        title={title}
-                        reply={replyMessage(entry.event, entry.session) ?? ""}
-                        eventId={entry.id}
-                        targets={targets}
-                        paper={paper}
-                        inks={inks}
-                        light={light}
-                        onClose={() => setSheet(null)}
-                      />
-                    )}
                   </div>
                 ) : (
                   failed && (

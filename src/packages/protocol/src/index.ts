@@ -737,9 +737,23 @@ export interface IslandEvent {
   islandAlert?: boolean;
   navigationTarget?: unknown;
 }
+/** One step of a handoff: `work` is Claude's, `reply` ChatGPT's, the rest
+ * PostPane's (`ask` sent to ChatGPT and confirmed, `back` ChatGPT's answer
+ * sent to Claude, `again` Claude asked to hand over again, `fail` not sent,
+ * `end` ended by the person). */
+export interface HandoffStep {
+  /** Milliseconds since the epoch. */
+  at: number;
+  kind: "work" | "ask" | "reply" | "back" | "again" | "fail" | "end";
+  /** What was said, cut to a few hundred characters. */
+  text?: string | null;
+  /** A reply's numbered points. */
+  points?: string[];
+  verdict?: "pass" | "revise" | null;
+}
 /** A Claude Code session and the ChatGPT conversation reviewing its work
  * (relay 1c, docs/chatgpt-channel.md). From the host: the live ones and those
- * that failed in the last day. */
+ * that failed or ended in the last day. */
 export interface Handoff {
   id: string;
   /** The task's name. */
@@ -756,6 +770,20 @@ export interface Handoff {
   updatedAt: number;
   /** How many times words went either way after the first. */
   rounds: number;
+  /** Where it stands: words on their way to ChatGPT, arrived, being
+   * answered, answered (the person decides), back with Claude, ended, or
+   * not sent. */
+  phase?:
+    | "sending"
+    | "delivered"
+    | "working"
+    | "replied"
+    | "returned"
+    | "ended"
+    | "failed";
+  /** When the phase began, in milliseconds. */
+  phaseAt?: number;
+  steps?: HandoffStep[];
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the

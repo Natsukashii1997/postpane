@@ -117,6 +117,10 @@ pub struct Watched {
     #[serde(default)]
     pub title: String,
     pub opened_at: i64,
+    /// Whether PostPane named it (a handoff's title): that name comes before
+    /// the tab's on its replies.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub named: bool,
 }
 /// The watched list; empty when there is none or it cannot be read.
 pub fn load_watched(data: &Path) -> Vec<Watched> {
@@ -176,11 +180,17 @@ struct State {
     last_seen: Option<i64>,
     tabs: Value,
     pending: HashMap<String, mpsc::Sender<Value>>,
+    /// The names conversations being opened are to be listed under, by request.
+    names: HashMap<String, String>,
     watched: Vec<Watched>,
 }
+/// Told of what the extension reports: turns starting and finishing, and
+/// conversations opened (late ones too).
+pub type Listener = Arc<dyn Fn(&Value) + Send + Sync>;
 pub(crate) struct Shared {
     data: PathBuf,
     state: Mutex<State>,
+    listener: Mutex<Option<Listener>>,
 }
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -194,6 +204,17 @@ impl Shared {
                 watched,
                 ..State::default()
             }),
+            listener: Mutex::new(None),
+        }
+    }
+    fn tell(&self, message: &Value) {
+        let listener = self
+            .listener
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if let Some(listener) = listener {
+            listener(message);
         }
     }
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -244,27 +265,38 @@ impl Shared {
                     json!({"version":message["version"],"extensionId":message["extensionId"]});
             }
             Some("tabs") => state.tabs = message["conversations"].clone(),
+            Some("turn") if message["phase"] == "start" => {
+                drop(state);
+                self.tell(&message);
+            }
             Some("turn") if message["phase"] == "complete" => {
-                let title = state
+                let watched = state
                     .watched
                     .iter()
                     .find(|w| Some(w.id.as_str()) == message["conversation"].as_str())
-                    .map(|w| w.title.clone());
+                    .cloned();
                 drop(state);
-                if let Some(event) = completion(&message, title.as_deref(), now_ms()) {
+                if let Some(event) = completion(&message, watched.as_ref(), now_ms()) {
                     if let Err(error) = crate::hooks::record_event(&self.data, &event) {
                         eprintln!("ChatGPT reply could not be recorded: {error}");
                     }
                 }
+                self.tell(&message);
             }
             Some("opened") => {
+                let named = message["requestId"]
+                    .as_str()
+                    .and_then(|id| state.names.remove(id));
                 if message["ok"] == true {
                     if let Some(conversation) = message["conversation"]
                         .as_str()
                         .filter(|id| agent::conversation_id(id))
                     {
-                        let title = message["title"].as_str().unwrap_or("").to_owned();
-                        if add_watched(&mut state.watched, conversation, &title, now_ms()) {
+                        let (title, named) = match named {
+                            Some(name) => (name, true),
+                            None => (message["title"].as_str().unwrap_or("").to_owned(), false),
+                        };
+                        if add_watched(&mut state.watched, conversation, &title, named, now_ms()) {
                             if let Err(error) = save_watched(&self.data, &state.watched) {
                                 eprintln!("{error}");
                             }
@@ -273,7 +305,12 @@ impl Shared {
                         post_locked(&mut state, &watch);
                     }
                 }
-                answer(&mut state, message);
+                let ok = message["ok"] == true;
+                answer(&mut state, message.clone());
+                drop(state);
+                if ok {
+                    self.tell(&message);
+                }
             }
             Some("sent") => answer(&mut state, message),
             _ => {}
@@ -291,8 +328,11 @@ impl Shared {
         }
     }
     /// Sends `message` with a new request id and waits for its answer.
-    fn ask(&self, mut message: Value, timeout: Duration) -> Result<Value, String> {
-        let id = request_id();
+    fn ask(&self, message: Value, timeout: Duration) -> Result<Value, String> {
+        self.ask_as(request_id(), message, timeout)
+    }
+    /// `ask` under the caller's request id, which a late answer still carries.
+    fn ask_as(&self, id: String, mut message: Value, timeout: Duration) -> Result<Value, String> {
         message["requestId"] = json!(id);
         let (sender, receiver) = mpsc::channel();
         {
@@ -353,18 +393,21 @@ fn watch_message(list: &[Watched]) -> Value {
     json!({"type":"watch","conversations":list.iter().map(|w| &w.id).collect::<Vec<_>>()})
 }
 /// Adds a conversation to the list, or names it again; whether it changed.
-fn add_watched(list: &mut Vec<Watched>, id: &str, title: &str, at: i64) -> bool {
+/// A name PostPane gave is not replaced by the tab's.
+fn add_watched(list: &mut Vec<Watched>, id: &str, title: &str, named: bool, at: i64) -> bool {
     if let Some(entry) = list.iter_mut().find(|entry| entry.id == id) {
-        if title.is_empty() || entry.title == title {
+        if title.is_empty() || entry.title == title || (entry.named && !named) {
             return false;
         }
         entry.title = title.to_owned();
+        entry.named = named;
         return true;
     }
     list.push(Watched {
         id: id.to_owned(),
         title: title.to_owned(),
         opened_at: at,
+        named,
     });
     true
 }
@@ -394,7 +437,7 @@ fn refused(reason: &str) -> String {
 /// The completion event a finished turn becomes: the reply in full, the
 /// prompt, the conversation's title and its way back. None for a turn that
 /// names no conversation.
-pub fn completion(message: &Value, watched_title: Option<&str>, now: i64) -> Option<HookEvent> {
+pub fn completion(message: &Value, watched: Option<&Watched>, now: i64) -> Option<HookEvent> {
     let conversation = message["conversation"]
         .as_str()
         .filter(|id| agent::conversation_id(id))?;
@@ -408,10 +451,17 @@ pub fn completion(message: &Value, watched_title: Option<&str>, now: i64) -> Opt
         .filter(|id| !id.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| at.to_string());
-    let title = message["title"]
+    let watched_title = watched
+        .map(|w| w.title.as_str())
+        .filter(|title| !title.trim().is_empty());
+    let tab_title = message["title"]
         .as_str()
-        .filter(|title| !title.trim().is_empty())
-        .or(watched_title.filter(|title| !title.trim().is_empty()));
+        .filter(|title| !title.trim().is_empty());
+    let title = if watched.is_some_and(|w| w.named) {
+        watched_title.or(tab_title)
+    } else {
+        tab_title.or(watched_title)
+    };
     Some(HookEvent {
         source: agent::AGENT.id.into(),
         session_id: agent::session_id(conversation),
@@ -447,6 +497,17 @@ impl Channel {
     /// Opens a new conversation (in the project page `project` names, when
     /// given) with `text` as its first message: `{conversation, title}`.
     pub fn open(&self, text: &str, project: Option<&str>) -> Result<Value, String> {
+        self.open_as(text, project, None, None)
+    }
+    /// `open`, listed under `name` and asked as `request`: an answer that
+    /// comes after the wait still reaches the listener under that id.
+    pub fn open_as(
+        &self,
+        text: &str,
+        project: Option<&str>,
+        name: Option<&str>,
+        request: Option<&str>,
+    ) -> Result<Value, String> {
         if text.trim().is_empty() {
             return Err(l10n::text("缺少要发出的文字", "Text is required"));
         }
@@ -460,7 +521,11 @@ impl Channel {
             }
             message["project"] = json!(project);
         }
-        let reply = self.shared.ask(message, OPEN_TIME)?;
+        let id = request.map(str::to_owned).unwrap_or_else(request_id);
+        if let Some(name) = name.map(str::trim).filter(|name| !name.is_empty()) {
+            self.shared.lock().names.insert(id.clone(), name.to_owned());
+        }
+        let reply = self.shared.ask_as(id, message, OPEN_TIME)?;
         let conversation = reply["conversation"]
             .as_str()
             .filter(|id| agent::conversation_id(id))
@@ -480,6 +545,14 @@ impl Channel {
             SEND_TIME,
         )?;
         Ok(json!({"sent":true}))
+    }
+    /// Tells `listener` of turns and openings from now on.
+    pub fn listen(&self, listener: Listener) {
+        *self
+            .shared
+            .listener
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(listener);
     }
     /// Whether the extension is connected, what it said of itself and its
     /// tabs, and the watched list.

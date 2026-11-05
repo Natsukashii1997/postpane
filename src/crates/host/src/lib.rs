@@ -43,6 +43,7 @@ struct Backend {
 }
 impl Backend {
     fn install_snapshot(&mut self, app: &tauri::AppHandle, mut value: Value) {
+        chatgpt::mark_detected(app, &mut value);
         if let Some(owner) = app.try_state::<presentation::Presentation>() {
             owner.project_snapshot(&mut value);
             self.projected = Some(owner.revision());
@@ -906,9 +907,7 @@ pub fn run_with_options(
             chatgpt::chatgpt_open,
             chatgpt::chatgpt_send,
             chatgpt::chatgpt_status,
-            handoff::handoff_start,
-            handoff::handoff_forward,
-            handoff::handoff_route,
+            handoff::handoff_act,
             handoff::chatgpt_project,
             deepseek_plugin::native_deepseek_plugin,
             picture::picture_payload,
@@ -959,6 +958,7 @@ pub fn run_with_options(
                     .then(agent_hud_runtime::local_tools_directory)
                     .transpose()?,
             ));
+            handoff::listen(app.handle());
             let directory = agent_hud_runtime::local_tools_directory()?;
             let demo_data = directory.join("demo-run");
             let legacy = if app.state::<AppState>().demo {

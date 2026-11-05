@@ -2,9 +2,10 @@
 //! its work to a ChatGPT conversation for review, and words go back and forth
 //! between the two. The host owns the handoffs because it holds both ways
 //! out: the ChatGPT extension's channel and Agent HUD's Claude Code plugin.
-//! Started by Claude (the `relay_to_chatgpt` local tool) or from a reply's
-//! handoff sheet in the HUD (`handoff_start`, `handoff_forward`).
-use agent_hud_runtime::chatgpt::handoffs::{self, Book, Handoff, Status};
+//! Started by Claude (the `relay_to_chatgpt` local tool); the HUD's handoff
+//! card moves it on (`handoff_act`). Each step is kept (handoffs.rs), and
+//! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
+use agent_hud_runtime::chatgpt::handoffs::{self, Book, Handoff, Phase, Status, StepKind, Verdict};
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
 use std::{
@@ -28,8 +29,15 @@ const FAILED_SHOWN_MS: i64 = 24 * 60 * 60 * 1000;
 pub(crate) trait Lines {
     /// Whether the ChatGPT extension is connected.
     fn connected(&self) -> bool;
-    /// Opens a conversation (in `project`) with `text`: its id.
-    fn open(&self, text: &str, project: Option<&str>) -> Result<String, String>;
+    /// Opens a conversation (in `project`) with `text`, listed under
+    /// `title` and asked as `request`: its id.
+    fn open(
+        &self,
+        text: &str,
+        project: Option<&str>,
+        title: &str,
+        request: &str,
+    ) -> Result<String, String>;
     fn send(&self, conversation: &str, text: &str) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, session: &str) -> Result<(), String>;
@@ -39,8 +47,9 @@ pub(crate) trait Lines {
 /// What a start did, or leaves to do away from the caller.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Started {
-    /// The brief went into the session's review conversation.
-    Sent(Handoff),
+    /// The brief went into the session's review conversation (or had
+    /// already: `repeated`).
+    Sent { handoff: Handoff, repeated: bool },
     /// A review conversation is to be opened with the brief (`Desk::open`).
     Opening {
         handoff: Handoff,
@@ -54,13 +63,20 @@ pub(crate) struct Desk {
 }
 
 impl Desk {
-    /// The handoffs kept in `data`; none kept in the demo.
+    /// The handoffs kept in `data`; none kept in the demo. Conversations
+    /// that were opening when the app stopped count as failed, to retry.
     pub(crate) fn new(data: Option<PathBuf>) -> Self {
-        let book = data.as_deref().map(handoffs::load).unwrap_or_default();
-        Self {
+        let mut book = data.as_deref().map(handoffs::load).unwrap_or_default();
+        let desk = |book| Self {
             data,
             book: Mutex::new(book),
+        };
+        if book.interrupted(now_ms(), &interrupted()) {
+            let desk = desk(book);
+            desk.change(|_| ());
+            return desk;
         }
+        desk(book)
     }
     fn lock(&self) -> MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(|p| p.into_inner())
@@ -84,17 +100,23 @@ impl Desk {
         let data = self.data.as_deref().ok_or_else(demo)?;
         handoffs::set_project(data, text)
     }
-    /// The snapshot's `handoffs`: the live ones and those that failed lately.
+    /// The snapshot's `handoffs`: the live ones and those that failed or
+    /// ended lately, without their briefs.
     pub(crate) fn projection(&self, now: i64) -> Value {
+        if self.lock().expire(now, &timed_out()) {
+            self.change(|_| ());
+        }
         let book = self.lock();
         let shown = book
             .list
             .iter()
             .filter(|handoff| {
                 handoff.live()
-                    || (handoff.status == Status::Failed
+                    || (matches!(handoff.phase, Phase::Failed | Phase::Ended)
+                        && handoff.status != Status::Open
                         && now - handoff.updated_at < FAILED_SHOWN_MS)
             })
+            .map(Handoff::shown)
             .collect::<Vec<_>>();
         json!(shown)
     }
@@ -103,12 +125,14 @@ impl Desk {
     /// the session already has, else a new one (always a new one when
     /// `fresh`). Sending waits for the extension; opening is left to the
     /// caller, to do away from it (`Desk::open`).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn start(
         &self,
         lines: &dyn Lines,
         session: &str,
         cwd: Option<&str>,
         title: &str,
+        summary: Option<&str>,
         brief: &str,
         fresh: bool,
         now: i64,
@@ -131,16 +155,30 @@ impl Desk {
         if !lines.connected() {
             return Err(not_connected());
         }
+        if self.lock().expire(now, &timed_out()) {
+            self.change(|_| ());
+        }
         let current = (!fresh)
             .then(|| self.lock().for_session(session).cloned())
             .flatten();
+        let summary = summary.map(str::trim).filter(|text| !text.is_empty());
         if let Some(handoff) = current {
             match (handoff.status, handoff.chatgpt_conversation.as_deref()) {
                 (Status::Open, Some(conversation)) => {
+                    // The same words again (a retry after a slow answer) are not sent twice.
+                    if self.lock().asked_already(&handoff.id, brief) {
+                        return Ok(Started::Sent {
+                            handoff,
+                            repeated: true,
+                        });
+                    }
                     lines.send(conversation, brief)?;
-                    self.change(|book| book.round(&handoff.id, now));
+                    self.change(|book| book.asked(&handoff.id, summary, brief, now));
                     let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
-                    return Ok(Started::Sent(sent));
+                    return Ok(Started::Sent {
+                        handoff: sent,
+                        repeated: false,
+                    });
                 }
                 (Status::Opening, _) => {
                     return Err(l10n::text(
@@ -156,7 +194,7 @@ impl Desk {
         } else {
             title.to_owned()
         };
-        let handoff = self.change(|book| book.begin(session, cwd, &title, now));
+        let handoff = self.change(|book| book.begin(session, cwd, &title, summary, brief, now));
         Ok(Started::Opening {
             handoff,
             project: self.project(),
@@ -165,6 +203,8 @@ impl Desk {
 
     /// Opens the review conversation of an opening handoff with `brief`,
     /// and binds the handoff to it or records why it could not be opened.
+    /// It is asked under the handoff's id, so an answer that comes late
+    /// still binds it (`observe`).
     pub(crate) fn open(
         &self,
         lines: &dyn Lines,
@@ -173,7 +213,12 @@ impl Desk {
         project: Option<&str>,
         now: impl Fn() -> i64,
     ) -> Result<String, String> {
-        let opened = lines.open(brief, project);
+        let title = self
+            .lock()
+            .get(id)
+            .map(|h| h.title.clone())
+            .unwrap_or_default();
+        let opened = lines.open(brief, project, &title, id);
         self.change(|book| match &opened {
             Ok(conversation) => book.opened(id, conversation, now()),
             Err(error) => book.failed(id, error, now()),
@@ -181,62 +226,130 @@ impl Desk {
         opened
     }
 
-    /// Sends `text` on, to a Claude Code session (`to` "claude", `target`
-    /// its id) or a ChatGPT conversation (`to` "chatgpt", `target` its id),
-    /// and counts a round on the handoff it belongs to.
-    pub(crate) fn forward(
+    /// What the ChatGPT channel reports: a turn starting or finishing in a
+    /// handoff's conversation, or a conversation opened for a handoff after
+    /// its wait. Whether a handoff changed.
+    pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
+        let conversation = message["conversation"].as_str().unwrap_or("");
+        match (message["type"].as_str(), message["phase"].as_str()) {
+            (Some("turn"), Some("start")) => self.change(|book| book.working(conversation, now)),
+            (Some("turn"), Some("complete")) => {
+                let reply = message["reply"].as_str().unwrap_or("");
+                self.change(|book| book.replied(conversation, reply, now))
+            }
+            (Some("opened"), _) if message["ok"] == true => {
+                let id = message["requestId"].as_str().unwrap_or("");
+                let waiting = self.lock().get(id).is_some_and(|h| {
+                    h.status == Status::Failed && h.chatgpt_conversation.is_none()
+                });
+                waiting && self.change(|book| book.opened(id, conversation, now))
+            }
+            _ => false,
+        }
+    }
+
+    /// The handoff card's buttons: `back` (转回 Claude, with ChatGPT's
+    /// answer), `again` (再审一轮: Claude hands its changes over again),
+    /// `end` (结束接力) and `retry` (a failed opening). What to open, for a retry.
+    pub(crate) fn act(
         &self,
         lines: &dyn Lines,
-        to: &str,
-        target: &str,
-        text: &str,
+        id: &str,
+        action: &str,
         now: i64,
-    ) -> Result<Value, String> {
-        if text.trim().is_empty() {
-            return Err(l10n::text("没有要发出的文字", "There is nothing to send"));
-        }
-        if text.len() > TEXT_LIMIT {
-            return Err(too_long());
-        }
-        let handoff = match to {
-            "claude" => {
-                lines.reaches(target)?;
-                lines.reply(target, text)?;
-                self.lock().for_session(target).map(|h| h.id.clone())
+    ) -> Result<Acted, String> {
+        let handoff = self
+            .lock()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| l10n::text("找不到这次接力", "No such handoff"))?;
+        match action {
+            "back" | "again" => {
+                if !handoff.live() {
+                    return Err(l10n::text("这次接力已经结束", "This handoff has ended"));
+                }
+                let (kind, text) = if action == "back" {
+                    let reply = handoff
+                        .last_reply()
+                        .and_then(|step| step.text.clone())
+                        .ok_or_else(|| {
+                            l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
+                        })?;
+                    (StepKind::Back, back_text(&handoff, &reply))
+                } else {
+                    (StepKind::Again, again_text(handoff.reviews() + 1))
+                };
+                if self.lock().returned_already(id, &text) {
+                    return Ok(Acted::Done);
+                }
+                lines.reaches(&handoff.claude_session)?;
+                lines.reply(&handoff.claude_session, &text)?;
+                self.change(|book| book.returned(id, kind, &text, now));
+                Ok(Acted::Done)
             }
-            "chatgpt" => {
+            "end" => {
+                self.change(|book| book.end(id, now));
+                Ok(Acted::Done)
+            }
+            "retry" => {
                 if !lines.connected() {
                     return Err(not_connected());
                 }
-                lines.send(target, text)?;
-                self.lock().for_conversation(target).map(|h| h.id.clone())
+                let brief = self.change(|book| book.retry(id, now)).ok_or_else(|| {
+                    l10n::text("这次接力不能重试", "This handoff cannot be retried")
+                })?;
+                Ok(Acted::Open {
+                    brief,
+                    project: self.project(),
+                })
             }
-            _ => return Err("Unknown handoff target".into()),
-        };
-        if let Some(id) = &handoff {
-            self.change(|book| book.round(id, now));
+            _ => Err("Unknown handoff action".into()),
         }
-        Ok(json!({"delivered":to,"handoffId":handoff}))
     }
+}
 
-    /// Whether words would reach `target` now, and why not.
-    pub(crate) fn route(&self, lines: &dyn Lines, to: &str, target: &str) -> Value {
-        let reached = match to {
-            "claude" => lines.reaches(target),
-            "chatgpt" | "new-review" => {
-                if lines.connected() {
-                    Ok(())
-                } else {
-                    Err(not_connected())
-                }
-            }
-            _ => Err("Unknown handoff target".into()),
-        };
-        match reached {
-            Ok(()) => json!({"reachable":true,"reason":null}),
-            Err(reason) => json!({"reachable":false,"reason":reason}),
-        }
-    }
+/// What a card button left to do away from the caller.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Acted {
+    Done,
+    /// A retry: the conversation is to be opened again (`Desk::open`).
+    Open {
+        brief: String,
+        project: Option<String>,
+    },
+}
+
+/// 转回 Claude: ChatGPT's answer in full, and what to do with it.
+fn back_text(handoff: &Handoff, reply: &str) -> String {
+    let round = handoff.reviews().max(1);
+    let verdict = match handoff.last_reply().and_then(|step| step.verdict) {
+        Some(Verdict::Pass) => "通过",
+        Some(Verdict::Revise) => "需修改",
+        None => "未写",
+    };
+    format!(
+        "ChatGPT 对「{title}」的审核意见（第 {round} 轮，结论：{verdict}）：\n\n{reply}\n\n请按意见处理；不同意的意见说明理由即可。改完后调用 relay_to_chatgpt 交回 ChatGPT 复审（最多 {max} 轮，写「结论：通过」就停），summary 写一句这轮改了什么。",
+        title = handoff.title,
+        max = handoffs::ROUNDS,
+    )
+}
+/// 再审一轮: Claude hands its changes over again.
+fn again_text(round: u32) -> String {
+    format!(
+        "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，最后请 ChatGPT 写「结论：通过」或「结论：需修改」；summary 写一句这轮改了什么。"
+    )
+}
+fn timed_out() -> String {
+    l10n::text(
+        "ChatGPT 新会话两分钟没打开",
+        "The ChatGPT conversation did not open within two minutes",
+    )
+}
+fn interrupted() -> String {
+    l10n::text(
+        "驿窗重启时 ChatGPT 新会话还在打开",
+        "PostPane restarted while the ChatGPT conversation was opening",
+    )
 }
 
 fn too_long() -> String {
@@ -293,12 +406,11 @@ fn same_folder(a: &str, b: &str) -> bool {
     !a.is_empty() && trim(a) == trim(b)
 }
 
-/// The Claude Code session that called: the one Claude Code named
-/// (`CLAUDE_CODE_SESSION_ID`) while it runs the plugin. That id goes stale
-/// after /clear or a resume, so a session the plugin says runs now in the
-/// same folder comes first; then the named one, if the app knows it; then
-/// the folder's latest; then the named one as it is. None when nothing names
-/// one.
+/// The Claude Code session that called, never guessed: the one Claude Code
+/// named (`CLAUDE_CODE_SESSION_ID`) while it runs the plugin; else, as that
+/// id goes stale after /clear or a resume, the only session the plugin says
+/// runs now in the same folder; else the named one as it is. None when two
+/// run in the folder and neither is named, or nothing names one.
 pub(crate) fn resolve_session(
     named: Option<&str>,
     cwd: Option<&str>,
@@ -309,23 +421,20 @@ pub(crate) fn resolve_session(
     if let Some(id) = named.filter(|id| loaded.contains(*id)) {
         return Some(id.to_owned());
     }
-    let mut here = sessions
+    let running_here = sessions
         .iter()
         .filter(|session| {
-            cwd.zip(session.cwd.as_deref())
-                .is_some_and(|(cwd, theirs)| same_folder(cwd, theirs))
+            loaded.contains(&session.id)
+                && cwd
+                    .zip(session.cwd.as_deref())
+                    .is_some_and(|(cwd, theirs)| same_folder(cwd, theirs))
         })
         .collect::<Vec<_>>();
-    here.sort_by_key(|session| std::cmp::Reverse(session.at));
-    if let Some(live) = here.iter().find(|session| loaded.contains(&session.id)) {
-        return Some(live.id.clone());
+    match running_here.as_slice() {
+        [only] => Some(only.id.clone()),
+        [] => named.map(str::to_owned),
+        _ => None,
     }
-    if let Some(id) = named.filter(|id| sessions.iter().any(|s| s.id == *id)) {
-        return Some(id.to_owned());
-    }
-    here.first()
-        .map(|session| session.id.clone())
-        .or(named.map(str::to_owned))
 }
 
 /// The app's own lines: the ChatGPT channel and Agent HUD's Claude Code plugin.
@@ -336,12 +445,20 @@ impl Lines for AppLines<'_> {
             .try_state::<super::chatgpt::ChatGpt>()
             .is_some_and(|chatgpt| chatgpt.connected())
     }
-    fn open(&self, text: &str, project: Option<&str>) -> Result<String, String> {
+    fn open(
+        &self,
+        text: &str,
+        project: Option<&str>,
+        title: &str,
+        request: &str,
+    ) -> Result<String, String> {
         let state = self
             .0
             .try_state::<super::chatgpt::ChatGpt>()
             .ok_or("The ChatGPT channel is unavailable")?;
-        let opened = state.channel()?.open(text, project)?;
+        let opened = state
+            .channel()?
+            .open_as(text, project, Some(title), Some(request))?;
         opened["conversation"]
             .as_str()
             .map(str::to_owned)
@@ -394,39 +511,78 @@ fn republish(app: &tauri::AppHandle) {
 
 /// Starts a handoff and, when a conversation is to be opened, opens it on a
 /// thread of its own; the answer says which.
+#[allow(clippy::too_many_arguments)]
 fn start(
     app: &tauri::AppHandle,
     session: &str,
     cwd: Option<&str>,
     title: &str,
+    summary: Option<&str>,
     brief: &str,
     fresh: bool,
 ) -> Result<Value, String> {
     let desk = app.try_state::<Desk>().ok_or_else(demo)?;
-    let started = desk.start(&AppLines(app), session, cwd, title, brief, fresh, now_ms());
+    let started = desk.start(
+        &AppLines(app),
+        session,
+        cwd,
+        title,
+        summary,
+        brief,
+        fresh,
+        now_ms(),
+    );
     republish(app);
     match started? {
-        Started::Sent(handoff) => Ok(json!({
+        Started::Sent { handoff, repeated } => Ok(json!({
             "handoffId": handoff.id,
-            "status": "sent",
+            "status": if repeated { "repeated" } else { "sent" },
             "conversation": handoff.chatgpt_conversation,
         })),
         Started::Opening { handoff, project } => {
-            let id = handoff.id.clone();
-            let app = app.clone();
-            let brief = brief.to_owned();
-            std::thread::Builder::new()
-                .name("postpane-handoff".into())
-                .spawn(move || {
-                    if let Some(desk) = app.try_state::<Desk>() {
-                        let _ = desk.open(&AppLines(&app), &id, &brief, project.as_deref(), now_ms);
-                    }
-                    republish(&app);
-                })
-                .map_err(|error| error.to_string())?;
+            open_away(app, &handoff.id, brief, project)?;
             Ok(json!({"handoffId": handoff.id, "status": "opening", "conversation": null}))
         }
     }
+}
+
+/// Opens a handoff's conversation on a thread of its own.
+fn open_away(
+    app: &tauri::AppHandle,
+    id: &str,
+    brief: &str,
+    project: Option<String>,
+) -> Result<(), String> {
+    let (app, id, brief) = (app.clone(), id.to_owned(), brief.to_owned());
+    std::thread::Builder::new()
+        .name("postpane-handoff".into())
+        .spawn(move || {
+            if let Some(desk) = app.try_state::<Desk>() {
+                let _ = desk.open(&AppLines(&app), &id, &brief, project.as_deref(), now_ms);
+            }
+            republish(&app);
+        })
+        .map(drop)
+        .map_err(|error| error.to_string())
+}
+
+/// Hears what the ChatGPT extension reports, for the handoffs.
+pub(crate) fn listen(app: &tauri::AppHandle) {
+    let Some(chatgpt) = app.try_state::<super::chatgpt::ChatGpt>() else {
+        return;
+    };
+    let Ok(channel) = chatgpt.channel() else {
+        return;
+    };
+    let app = app.clone();
+    channel.listen(std::sync::Arc::new(move |message: &Value| {
+        let changed = app
+            .try_state::<Desk>()
+            .is_some_and(|desk| desk.observe(message, now_ms()));
+        if changed {
+            republish(&app);
+        }
+    }));
 }
 
 /// `relay_to_chatgpt`: Claude Code hands its work to ChatGPT for review.
@@ -445,6 +601,7 @@ pub(crate) fn relay(
         ));
     }
     let title = params["title"].as_str().unwrap_or("").trim();
+    let summary = params["summary"].as_str();
     let brief = params["brief"].as_str().unwrap_or("");
     let cwd = params["cwd"].as_str().filter(|cwd| !cwd.is_empty());
     let loaded = app
@@ -454,13 +611,18 @@ pub(crate) fn relay(
     let session = resolve_session(caller["sessionId"].as_str(), cwd, &loaded, sessions)
         .ok_or_else(|| {
             l10n::text(
-                "认不出是哪个 Claude Code 会话在调用：请在 Claude Code 会话里调用这个工具。",
-                "Could not tell which Claude Code session is calling: call this tool from a Claude Code session.",
+                "认不准是哪个 Claude Code 会话在调用（同一目录有几个会话在跑，或没有会话 id），没有发出。请在 Claude Code 会话里调用这个工具，或先关掉同目录多余的会话。",
+                "Could not tell for sure which Claude Code session is calling (several run in this folder, or none is named); nothing was sent. Call this tool from a Claude Code session, or close the other sessions in this folder.",
             )
         })?;
-    let mut answer = start(app, &session, cwd, title, brief, false)?;
+    let mut answer = start(app, &session, cwd, title, summary, brief, false)?;
     answer["claudeSession"] = json!(session);
-    answer["message"] = json!(if answer["status"] == "sent" {
+    answer["message"] = json!(if answer["status"] == "repeated" {
+        l10n::text(
+            "这段内容刚才已经送到 ChatGPT，还没回信，没有再送一次；回信会出现在驿窗侧栏。",
+            "These words already reached ChatGPT and await an answer; they were not sent again. The answer shows in PostPane's sidebar.",
+        )
+    } else if answer["status"] == "sent" {
         l10n::text(
             "已送进这个会话对应的 ChatGPT 审核会话；回复会出现在驿窗侧栏，常浩看过后会把意见转回这个会话。",
             "Sent into this session's ChatGPT review conversation; the reply shows in PostPane's sidebar and will be forwarded back here.",
@@ -474,51 +636,21 @@ pub(crate) fn relay(
     Ok(answer)
 }
 
-/// The handoff sheet's 「新建 ChatGPT 审核」: a new review of `session`.
+/// The handoff card's buttons (`Desk::act`).
 #[tauri::command]
-pub async fn handoff_start(
+pub async fn handoff_act(
     app: tauri::AppHandle,
-    session: String,
-    cwd: Option<String>,
-    title: String,
-    text: String,
-) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        start(&app, &session, cwd.as_deref(), &title, &text, true)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-/// The handoff sheet's 「送进会话」: words to a Claude Code session or a
-/// ChatGPT conversation.
-#[tauri::command]
-pub async fn handoff_forward(
-    app: tauri::AppHandle,
-    to: String,
-    target: String,
-    text: String,
+    id: String,
+    action: String,
 ) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let desk = app.try_state::<Desk>().ok_or_else(demo)?;
-        let result = desk.forward(&AppLines(&app), &to, &target, &text, now_ms());
+        let acted = desk.act(&AppLines(&app), &id, &action, now_ms());
         republish(&app);
-        result
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-/// The handoff sheet's way line: whether words would reach `target`.
-#[tauri::command]
-pub async fn handoff_route(
-    app: tauri::AppHandle,
-    to: String,
-    target: String,
-) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let desk = app.try_state::<Desk>().ok_or_else(demo)?;
-        Ok(desk.route(&AppLines(&app), &to, &target))
+        if let Acted::Open { brief, project } = acted? {
+            open_away(&app, &id, &brief, project)?;
+        }
+        Ok(json!({"done": true}))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -559,10 +691,18 @@ mod tests {
         fn connected(&self) -> bool {
             !self.offline
         }
-        fn open(&self, text: &str, project: Option<&str>) -> Result<String, String> {
-            self.sent
-                .borrow_mut()
-                .push(("open".into(), project.unwrap_or("").into(), text.into()));
+        fn open(
+            &self,
+            text: &str,
+            project: Option<&str>,
+            title: &str,
+            request: &str,
+        ) -> Result<String, String> {
+            self.sent.borrow_mut().push((
+                "open".into(),
+                format!("{}|{title}|{request}", project.unwrap_or("")),
+                text.into(),
+            ));
             if self.open_fails {
                 Err("timeout".into())
             } else {
@@ -594,6 +734,29 @@ mod tests {
         let desk = Desk::new(Some(temp.path().join("data")));
         (temp, desk)
     }
+    fn opened(desk: &Desk, lines: &Fake) -> Handoff {
+        let Started::Opening { handoff, project } = desk
+            .start(
+                lines,
+                "s1",
+                Some("/w"),
+                "修登录",
+                Some("改了 6 个文件"),
+                "改动如下",
+                false,
+                1,
+            )
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(lines, &handoff.id, "改动如下", project.as_deref(), || 2)
+            .unwrap();
+        handoff
+    }
+    fn turn(phase: &str, reply: &str) -> Value {
+        json!({"type":"turn","phase":phase,"conversation":"c-new","reply":reply})
+    }
 
     #[test]
     fn the_first_brief_opens_a_review_and_the_next_goes_into_it() {
@@ -602,7 +765,16 @@ mod tests {
         desk.set_project("https://chatgpt.com/g/g-p-1-review/project")
             .unwrap();
         let Started::Opening { handoff, project } = desk
-            .start(&lines, "s1", Some("/w"), "修登录", "改动如下", false, 1)
+            .start(
+                &lines,
+                "s1",
+                Some("/w"),
+                "修登录",
+                None,
+                "改动如下",
+                false,
+                1,
+            )
             .unwrap()
         else {
             panic!("a first brief opens a conversation");
@@ -613,32 +785,64 @@ mod tests {
         );
         // While it opens, another brief waits.
         assert!(desk
-            .start(&lines, "s1", Some("/w"), "修登录", "再看看", false, 2)
+            .start(&lines, "s1", Some("/w"), "修登录", None, "再看看", false, 2)
             .is_err());
         assert_eq!(
             desk.open(&lines, &handoff.id, "改动如下", project.as_deref(), || 3)
                 .unwrap(),
             "c-new"
         );
-        let Started::Sent(sent) = desk
-            .start(&lines, "s1", Some("/w"), "修登录", "第二轮", false, 4)
+        // Opened under the handoff's title and asked as the handoff.
+        assert_eq!(
+            lines.sent.borrow()[0].1,
+            format!(
+                "https://chatgpt.com/g/g-p-1-review/project|修登录|{}",
+                handoff.id
+            )
+        );
+        let Started::Sent {
+            handoff: sent,
+            repeated,
+        } = desk
+            .start(
+                &lines,
+                "s1",
+                Some("/w"),
+                "修登录",
+                Some("按意见改完"),
+                "第二轮",
+                false,
+                4,
+            )
             .unwrap()
         else {
             panic!("the next brief goes into the same conversation");
         };
+        assert!(!repeated);
         assert_eq!(sent.id, handoff.id);
-        assert_eq!(sent.rounds, 1);
+        assert_eq!(sent.reviews(), 2);
         assert_eq!(
             lines.sent.borrow().last().unwrap(),
             &("send".into(), "c-new".into(), "第二轮".into())
         );
+        // The same words again are not sent twice.
+        let Started::Sent { repeated, .. } = desk
+            .start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 5)
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert!(repeated);
+        assert_eq!(lines.sent.borrow().len(), 2);
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "open");
+        assert_eq!(shown[0]["phase"], "delivered");
         assert_eq!(shown[0]["chatgptConversation"], "c-new");
         assert_eq!(shown[0]["claudeSession"], "s1");
+        assert!(shown[0].get("brief").is_none());
         // A new review asked for opens another and closes this one.
         let Started::Opening { handoff: fresh, .. } = desk
-            .start(&lines, "s1", None, "修登录", "重新审", true, 6)
+            .start(&lines, "s1", None, "修登录", None, "重新审", true, 6)
             .unwrap()
         else {
             panic!("a fresh start opens a conversation");
@@ -647,39 +851,109 @@ mod tests {
         let shown = desk.projection(7);
         assert_eq!(shown.as_array().unwrap().len(), 1);
         assert_eq!(shown[0]["id"], fresh.id.as_str());
-        // Kept between runs.
-        let again = Desk::new(desk.data.clone());
-        assert_eq!(again.projection(7), shown);
     }
 
     #[test]
-    fn a_review_that_cannot_open_or_reach_chatgpt_says_why() {
+    fn chatgpt_starting_and_answering_moves_the_handoff_on() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        assert!(desk.observe(&turn("start", ""), 3));
+        assert_eq!(desk.projection(3)[0]["phase"], "working");
+        let reply = "1. 会话认不准时不该猜\n2. opening 要超时\n结论：需修改";
+        assert!(desk.observe(&turn("complete", reply), 4));
+        let shown = desk.projection(4);
+        assert_eq!(shown[0]["phase"], "replied");
+        let last = shown[0]["steps"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(last["kind"], "reply");
+        assert_eq!(last["verdict"], "revise");
+        assert_eq!(
+            last["points"],
+            json!(["会话认不准时不该猜", "opening 要超时"])
+        );
+        // Another conversation's turns change nothing.
+        assert!(!desk.observe(
+            &json!({"type":"turn","phase":"start","conversation":"c-other"}),
+            5
+        ));
+        // 转回 Claude: the answer in full, once.
+        desk.act(&lines, &handoff.id, "back", 6).unwrap();
+        let (kind, to, text) = lines.sent.borrow().last().unwrap().clone();
+        assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
+        assert!(
+            text.contains(reply)
+                && text.contains("结论：需修改")
+                && text.contains("relay_to_chatgpt")
+        );
+        desk.act(&lines, &handoff.id, "back", 7).unwrap();
+        assert_eq!(lines.sent.borrow().len(), 2, "not sent twice");
+        assert_eq!(desk.projection(7)[0]["phase"], "returned");
+        // 再审一轮 asks Claude to hand over round 2.
+        desk.act(&lines, &handoff.id, "again", 8).unwrap();
+        assert!(lines.sent.borrow().last().unwrap().2.contains("第 2 轮"));
+        // 结束接力.
+        desk.act(&lines, &handoff.id, "end", 9).unwrap();
+        let shown = desk.projection(9);
+        assert_eq!(shown[0]["phase"], "ended");
+        assert!(desk.act(&lines, &handoff.id, "back", 10).is_err());
+        assert!(desk.act(&lines, &handoff.id, "nope", 10).is_err());
+    }
+
+    #[test]
+    fn words_back_to_claude_wait_for_an_answer_and_a_way_there() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        assert!(
+            desk.act(&lines, &handoff.id, "back", 3).is_err(),
+            "no answer yet"
+        );
+        desk.observe(&turn("complete", "结论：通过"), 4);
+        let unreachable = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        assert_eq!(
+            desk.act(&unreachable, &handoff.id, "back", 5).unwrap_err(),
+            "这个会话还没加载 Agent HUD 插件"
+        );
+        assert!(unreachable.sent.borrow().is_empty());
+        assert_eq!(desk.projection(5)[0]["phase"], "replied");
+    }
+
+    #[test]
+    fn a_review_that_cannot_open_says_why_and_can_be_retried() {
         let (_temp, desk) = desk();
         let offline = Fake {
             offline: true,
             ..Fake::default()
         };
         assert!(desk
-            .start(&offline, "s1", None, "t", "brief", false, 1)
+            .start(&offline, "s1", None, "t", None, "brief", false, 1)
             .unwrap_err()
             .contains("ChatGPT"));
         assert!(desk
-            .start(&offline, "s1", None, "t", " ", false, 1)
+            .start(&offline, "s1", None, "t", None, " ", false, 1)
             .is_err());
         let long = "改".repeat(TEXT_LIMIT / 3 + 1);
         assert!(desk
-            .start(&Fake::default(), "s1", None, "t", &long, false, 1)
+            .start(&Fake::default(), "s1", None, "t", None, &long, false, 1)
             .unwrap_err()
             .contains("768"));
         assert!(desk
-            .start(&offline, "../x", None, "t", "b", false, 1)
+            .start(&offline, "../x", None, "t", None, "b", false, 1)
             .is_err());
         let failing = Fake {
             open_fails: true,
             ..Fake::default()
         };
         let Started::Opening { handoff, .. } = desk
-            .start(&failing, "s1", None, "", "brief", false, 1)
+            .start(&failing, "s1", None, "", None, "brief", false, 1)
             .unwrap()
         else {
             panic!()
@@ -691,70 +965,55 @@ mod tests {
         let shown = desk.projection(3);
         assert_eq!(shown[0]["status"], "failed");
         assert_eq!(shown[0]["error"], "timeout");
-        // A failed one leaves the snapshot after a day, and frees the session.
-        assert_eq!(desk.projection(2 + FAILED_SHOWN_MS), json!([]));
-        assert!(matches!(
-            desk.start(&failing, "s1", None, "t", "again", false, 4)
-                .unwrap(),
-            Started::Opening { .. }
+        // Retried: opening again with the same brief.
+        let Acted::Open { brief, .. } =
+            desk.act(&Fake::default(), &handoff.id, "retry", 4).unwrap()
+        else {
+            panic!("a retry opens again")
+        };
+        assert_eq!(brief, "brief");
+        assert_eq!(desk.projection(4)[0]["status"], "opening");
+        // An opening that hangs fails after two minutes.
+        let later = 4 + handoffs::OPEN_TIMEOUT_MS + 1;
+        assert_eq!(desk.projection(later)[0]["status"], "failed");
+        // The answer came late after all: bound.
+        assert!(desk.observe(
+            &json!({"type":"opened","requestId":handoff.id,"ok":true,"conversation":"c-late"}),
+            later + 1
         ));
+        assert_eq!(
+            desk.projection(later + 1)[0]["chatgptConversation"],
+            "c-late"
+        );
+        // A failed one leaves the snapshot after a day.
+        assert!(desk
+            .act(&Fake::default(), &handoff.id, "end", later + 2)
+            .is_ok());
+        assert_eq!(desk.projection(later + 2 + FAILED_SHOWN_MS), json!([]));
     }
 
     #[test]
-    fn forwarding_reaches_the_right_side_and_counts_the_round() {
+    fn an_opening_cut_off_by_a_restart_fails_to_retry() {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let Started::Opening { handoff, .. } = desk
-            .start(&lines, "s1", None, "t", "brief", false, 1)
+            .start(&lines, "s1", None, "t", None, "brief", false, now_ms())
             .unwrap()
         else {
             panic!()
         };
-        desk.open(&lines, &handoff.id, "brief", None, || 2).unwrap();
-        let back = desk.forward(&lines, "claude", "s1", "意见", 3).unwrap();
-        assert_eq!(back["handoffId"], handoff.id.as_str());
-        let on = desk
-            .forward(&lines, "chatgpt", "c-new", "改好了", 4)
-            .unwrap();
-        assert_eq!(on["delivered"], "chatgpt");
-        assert_eq!(desk.projection(5)[0]["rounds"], 2);
-        assert_eq!(
-            lines.sent.borrow()[1..].to_vec(),
-            [
-                ("reply".into(), "s1".into(), "意见".into()),
-                ("send".into(), "c-new".into(), "改好了".into())
-            ]
-        );
-        // Words for a session outside any handoff still go; no round counts.
-        assert_eq!(
-            desk.forward(&lines, "claude", "s2", "x", 6).unwrap()["handoffId"],
-            Value::Null
-        );
-        // A session that would not get them says why, and nothing is sent.
-        let unreachable = Fake {
-            unreachable: true,
-            ..Fake::default()
-        };
-        assert_eq!(
-            desk.forward(&unreachable, "claude", "s1", "x", 7)
-                .unwrap_err(),
-            "这个会话还没加载 Agent HUD 插件"
-        );
-        assert!(unreachable.sent.borrow().is_empty());
-        assert_eq!(
-            desk.route(&unreachable, "claude", "s1"),
-            json!({"reachable":false,"reason":"这个会话还没加载 Agent HUD 插件"})
-        );
-        assert_eq!(
-            desk.route(&lines, "chatgpt", "c-new"),
-            json!({"reachable":true,"reason":null})
-        );
-        assert!(desk.forward(&lines, "claude", "s1", "  ", 8).is_err());
-        assert!(desk.forward(&lines, "codex", "s1", "x", 8).is_err());
+        let again = Desk::new(desk.data.clone());
+        let shown = again.projection(now_ms());
+        assert_eq!(shown[0]["id"], handoff.id.as_str());
+        assert_eq!(shown[0]["status"], "failed");
+        assert!(matches!(
+            again.act(&lines, &handoff.id, "retry", now_ms()).unwrap(),
+            Acted::Open { .. }
+        ));
     }
 
     #[test]
-    fn the_caller_is_the_session_running_now() {
+    fn the_caller_is_the_session_running_now_never_a_guess() {
         let known = |id: &str, cwd: &str, at: i64| Known {
             id: id.into(),
             cwd: Some(cwd.into()),
@@ -771,29 +1030,37 @@ mod tests {
             resolve_session(Some("old"), Some("/w"), &loaded(&["old", "new"]), &sessions),
             Some("old".into())
         );
-        // The named one went stale (/clear): the one running here now.
+        // The named one went stale (/clear): the only one running here now.
         assert_eq!(
             resolve_session(Some("old"), Some("/w"), &loaded(&["new"]), &sessions),
             Some("new".into())
         );
-        // Without the plugin, the named one the app knows.
+        assert_eq!(
+            resolve_session(None, Some("/w"), &loaded(&["new"]), &sessions),
+            Some("new".into())
+        );
+        // Two run here and neither is named: no guess.
+        assert_eq!(
+            resolve_session(
+                Some("stale"),
+                Some("/w"),
+                &loaded(&["old", "new"]),
+                &sessions
+            ),
+            None
+        );
+        // Without the plugin, the named one as it is; never the folder's latest.
         assert_eq!(
             resolve_session(Some("old"), Some("/w"), &loaded(&[]), &sessions),
             Some("old".into())
         );
-        // Named by nobody: the folder's latest.
         assert_eq!(
             resolve_session(None, Some("/w"), &loaded(&[]), &sessions),
-            Some("new".into())
+            None
         );
-        // A named session the app has not listed yet is still the caller.
         assert_eq!(
             resolve_session(Some("fresh"), Some("/y"), &loaded(&[]), &sessions),
             Some("fresh".into())
-        );
-        assert_eq!(
-            resolve_session(None, Some("/y"), &loaded(&[]), &sessions),
-            None
         );
         assert_eq!(
             resolve_session(None, None, &loaded(&["new"]), &sessions),

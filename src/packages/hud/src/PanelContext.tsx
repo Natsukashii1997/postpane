@@ -31,15 +31,13 @@ export interface PanelServices {
   openSession?(session: Session): void | Promise<boolean | void>;
   /** Settings, on the page with this id, such as "agent-plugins". */
   openSettingsPage?(page: string): void;
-  /** The handoff sheet (relay 1c): sends words to a Claude Code session
-   * (`target` its id), a ChatGPT conversation (its id), or a new ChatGPT
-   * review of a Claude Code session (its id). Rejects with the reason. */
-  forwardReply?(request: HandoffRequest): Promise<unknown>;
-  /** Whether words would reach that target now, and why not. */
-  handoffRoute?(
-    to: HandoffRequest["to"],
-    target: string,
-  ): Promise<{ reachable: boolean; reason?: string | null }>;
+  /** The handoff card's buttons (relay design 甲): send ChatGPT's answer
+   * back to Claude, ask Claude to hand over again, end it, or retry a
+   * failed opening. Rejects with the reason. */
+  handoffAct?(
+    id: string,
+    action: "back" | "again" | "end" | "retry",
+  ): Promise<unknown>;
   sources?: Record<string, SourcePreferences>;
   draft?: {
     unsaved: boolean;
@@ -52,14 +50,6 @@ export interface PanelServices {
     discard(): Promise<unknown>;
     release(): void;
   };
-}
-export interface HandoffRequest {
-  to: "claude" | "chatgpt" | "new-review";
-  target: string;
-  text: string;
-  /** For a new review: the task's name and the session's folder. */
-  title?: string;
-  cwd?: string | null;
 }
 const Context = createContext<PanelServices | null>(null);
 export function PanelServicesProvider({
