@@ -236,6 +236,7 @@ impl Runtime {
         };
         let mut hooks = self.hooks.lock().unwrap_or_else(|p| p.into_inner());
         hooks.delegate_owner(context)?;
+        hooks.set_deepseek(self.core.deepseek_questions_enabled())?;
         if self.core.client_hooks_enabled() {
             hooks.set_enabled(true)?;
         }

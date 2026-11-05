@@ -59,6 +59,9 @@ pub struct Hooks {
     antigravity: Option<crate::clients::antigravity::permissions::Observer>,
     deepseek: Option<crate::clients::deepseek::questions::Observer>,
     deepseek_plugin: Option<crate::deepseek_plugin::asks::Observer>,
+    /// The owner's `deepseekQuestions` setting: off, DeepSeek's observers
+    /// never start, so nothing scans the machine's processes for a harness.
+    deepseek_wanted: bool,
     server: Option<transport::Server>,
     desktop: Option<crate::clients::codex::desktop::CodexDesktopObserver>,
 }
@@ -77,6 +80,7 @@ impl Hooks {
             antigravity: None,
             deepseek: None,
             deepseek_plugin: None,
+            deepseek_wanted: false,
             clients: clients::Clients::default(),
             data,
             requests,
@@ -166,7 +170,7 @@ impl Hooks {
         )?;
         // Each client's native channel starts only where its descriptor
         // says it runs.
-        use crate::clients::{self, antigravity, codex, deepseek};
+        use crate::clients::{self, antigravity, codex};
         use agent_hud_agents as agents;
         let desktop = clients::runs(&agents::codex::DESKTOP)
             .then(|| {
@@ -182,13 +186,38 @@ impl Hooks {
                 self.requests.clone(),
             )?);
         }
-        if clients::runs(&agents::deepseek::QUESTIONS) {
+        self.start_deepseek()?;
+        self.server = Some(server);
+        self.desktop = desktop;
+        Ok(())
+    }
+    /// Turns DeepSeek's observers on or off with the owner's setting; they
+    /// run only while the listener does.
+    pub fn set_deepseek(&mut self, wanted: bool) -> Result<(), String> {
+        self.deepseek_wanted = wanted;
+        if !wanted {
+            self.deepseek.take();
+            self.deepseek_plugin.take();
+            return Ok(());
+        }
+        if self.is_listening() {
+            self.start_deepseek()?;
+        }
+        Ok(())
+    }
+    fn start_deepseek(&mut self) -> Result<(), String> {
+        use crate::clients::{self, deepseek};
+        use agent_hud_agents as agents;
+        if !self.deepseek_wanted {
+            return Ok(());
+        }
+        if self.deepseek.is_none() && clients::runs(&agents::deepseek::QUESTIONS) {
             self.deepseek = Some(deepseek::questions::Observer::start(
                 self.requests.clone(),
                 self.wake.clone(),
             )?);
         }
-        if clients::runs(&agents::deepseek::PLUGIN) {
+        if self.deepseek_plugin.is_none() && clients::runs(&agents::deepseek::PLUGIN) {
             use crate::deepseek_plugin::{asks, channel_directory, DeepSeekChannel};
             self.deepseek_plugin = Some(asks::Observer::start(
                 DeepSeekChannel::new(channel_directory(&self.data)),
@@ -196,8 +225,6 @@ impl Hooks {
                 self.wake.clone(),
             )?);
         }
-        self.server = Some(server);
-        self.desktop = desktop;
         Ok(())
     }
     pub fn is_listening(&self) -> bool {
@@ -280,4 +307,33 @@ pub(crate) fn settles_in_transcript(source: &str) -> bool {
         .ok()
         .and_then(|(_, hooks)| hooks.permission.as_ref())
         .is_some_and(|permission| permission.settles_in_transcript)
+}
+
+#[cfg(test)]
+mod deepseek_switch_tests {
+    use super::*;
+
+    #[test]
+    fn deepseek_observers_start_only_when_wanted_and_listening() {
+        let root = tempfile::tempdir().unwrap();
+        let mut hooks = Hooks::start(
+            root.path().join("data"),
+            Requests::default(),
+            Arc::new(|| {}),
+        )
+        .unwrap();
+        // Off by default: nothing to stop, nothing started.
+        assert!(!hooks.deepseek_wanted);
+        hooks.set_deepseek(false).unwrap();
+        assert!(hooks.deepseek.is_none() && hooks.deepseek_plugin.is_none());
+        // Wanted while the listener is off: remembered, still not started.
+        hooks.set_deepseek(true).unwrap();
+        assert!(hooks.deepseek_wanted);
+        assert!(hooks.deepseek.is_none() && hooks.deepseek_plugin.is_none());
+        // Turned off again: forgotten, so the next listener start skips them.
+        hooks.set_deepseek(false).unwrap();
+        assert!(!hooks.deepseek_wanted);
+        hooks.start_deepseek().unwrap();
+        assert!(hooks.deepseek.is_none() && hooks.deepseek_plugin.is_none());
+    }
 }

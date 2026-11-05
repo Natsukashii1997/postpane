@@ -653,6 +653,8 @@ export interface AppSettings {
   appearance: "dark" | "light" | "system";
   language: string;
   clientHooks: boolean;
+  /** Watch for DeepSeek Harness's questions (off: no process scan for a harness). */
+  deepseekQuestions?: boolean;
   readCopilotQuota?: boolean;
   /** The relay hosts whose balance may be read with the key the client already sends them. */
   relayReading?: string[];

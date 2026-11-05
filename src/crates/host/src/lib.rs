@@ -554,6 +554,21 @@ async fn native_request(
             }
             return result;
         }
+        // DeepSeek's observers follow the saved setting: the setting is saved
+        // first, then they start or stop.
+        if method=="set_setting" && params["key"]=="deepseekQuestions" {
+            let wanted=params["value"].as_bool().ok_or("deepseekQuestions must be a boolean")?;
+            let result={
+                match backend.lock(){
+                    Ok(mut backend)=>backend.request(&app,&method,params),
+                    Err(_)=>Err("Runtime lock is unavailable".into())
+                }
+            };
+            if result.is_ok(){
+                hooks.lock().map_err(|_|"Hook service unavailable")?.set_deepseek(wanted)?;
+            }
+            return result;
+        }
         let _turn = matches!(method.as_str(), "snapshot" | "refresh" | "request_snapshot")
             .then(|| collection.lock().unwrap_or_else(|poisoned| poisoned.into_inner()));
         let mut backend = backend
