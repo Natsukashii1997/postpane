@@ -243,6 +243,38 @@ pub fn last_reply(db: &Connection, session: &str) -> Option<String> {
     .ok()
 }
 
+/// What the person last asked in the session: their latest message with
+/// words of their own, past the gateway's `[System note: …]` messages.
+pub fn last_prompt(db: &Connection, session: &str) -> Option<String> {
+    let mut statement = db
+        .prepare(
+            "SELECT content FROM messages WHERE session_id=?1 AND role='user' \
+             AND content IS NOT NULL ORDER BY id DESC LIMIT 10",
+        )
+        .ok()?;
+    let texts = statement
+        .query_map([session], |row| row.get::<_, String>(0))
+        .ok()?
+        .flatten()
+        .collect::<Vec<_>>();
+    texts.into_iter().find_map(|text| {
+        let own = own_words(&text);
+        (!own.is_empty()).then(|| own.to_owned())
+    })
+}
+
+/// A user message without the system notes the gateway puts before it.
+fn own_words(text: &str) -> &str {
+    let mut rest = text.trim();
+    while let Some(note) = rest.strip_prefix("[System note:") {
+        rest = match note.find(']') {
+            Some(end) => note[end + 1..].trim_start(),
+            None => "",
+        };
+    }
+    rest.trim()
+}
+
 /// A Hermes model with the route its billing provider and address name
 /// (`endpoints::provider_route`), so a relay is not priced at a vendor's list.
 fn routed(model: String, provider: Option<String>, base_url: Option<String>) -> String {
@@ -294,5 +326,12 @@ mod tests {
         );
         assert_eq!(last_reply(&db, "a").as_deref(), Some("答一"));
         assert_eq!(last_reply(&db, "b"), None);
+        db.execute_batch(
+            "INSERT INTO messages (session_id, role, content) VALUES
+               ('a','user','[System note: The previous turn was interrupted.]');",
+        )
+        .unwrap();
+        assert_eq!(last_prompt(&db, "a").as_deref(), Some("问"));
+        assert_eq!(own_words("[System note: x] 你好"), "你好");
     }
 }

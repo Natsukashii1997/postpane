@@ -100,7 +100,9 @@ export function sessionToOpen(entry: ApprovalEntry): Session | undefined {
 /** The line's title: its session's title, else `fallback` (the project or
  * the client, as the card named it before). */
 export function entryTitle(entry: ApprovalEntry, fallback: string): string {
+  // A Hermes chat lives for days: its reply is titled by what was asked.
   const own =
+    (entry.kind === "reply" ? entry.event.prompt?.trim() : undefined) ||
     entry.session?.title?.trim() ||
     (entry.kind === "reply" ? entry.event.title?.trim() : undefined);
   return own || fallback;

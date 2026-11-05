@@ -74,7 +74,7 @@ impl AgentHudCore {
         logs: &mut HashMap<PathBuf, Log>,
         superseded: &mut HashSet<PathBuf>,
     ) -> Result<(), String> {
-        use agent_hud_agents::hermes::transcript::{last_reply, leases};
+        use agent_hud_agents::hermes::transcript::{last_prompt, last_reply, leases};
         let now = chrono::Utc::now().timestamp_millis();
         let held = leases(db, now).unwrap_or_default();
         let before = self.reads.hermes_turns.remove(path).unwrap_or_default();
@@ -84,6 +84,7 @@ impl AgentHudCore {
             if let Some(log) = self.hermes_log(path, &lease.session, logs, superseded)? {
                 log.live
                     .observe_source(&turn, true, Some(lease.acquired), now, None);
+                log.live.prompt = last_prompt(db, &lease.session);
             }
             running.insert(lease.session, turn);
         }
@@ -97,6 +98,7 @@ impl AgentHudCore {
                 if let Some(last) = log.live.turns.back_mut() {
                     last.message = last_reply(db, &session);
                 }
+                log.live.prompt = last_prompt(db, &session);
             }
         }
         if !running.is_empty() {

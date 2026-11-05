@@ -220,6 +220,11 @@ pub struct LiveLog {
     /// the app runs, as the turn's message is.
     #[serde(skip)]
     pub final_answer: Option<String>,
+    /// The person's words that started the latest turn, for a client whose
+    /// session outlives its topic (a Hermes Feishu chat): its card is titled
+    /// by them. Kept only while the app runs, as the turn's message is.
+    #[serde(skip)]
+    pub prompt: Option<String>,
 }
 
 impl LiveLog {
@@ -259,6 +264,13 @@ impl LiveLog {
             && same_turn(self) == same_turn(earlier)
         {
             self.final_answer = earlier.final_answer.clone();
+            kept = true;
+        }
+        if self.prompt.is_none()
+            && earlier.prompt.is_some()
+            && same_turn(self) == same_turn(earlier)
+        {
+            self.prompt = earlier.prompt.clone();
             kept = true;
         }
         if let (Some(ask), Some(old)) = (
@@ -596,7 +608,7 @@ impl LiveLog {
             })
         });
         Some(
-            json!({"turnId":turn_id,"turnStartedAt":iso(turn.and_then(|turn|turn.started)),"outcome":turn.filter(|turn|!turn.running && !child_working).and_then(|turn|turn.outcome.as_ref()),"endedAt":iso(turn.filter(|turn|!turn.running && !child_working).map(|turn|turn.observed)),"message":turn.and_then(|turn|turn.message.as_ref()),"limitedUntil":iso(turn.and_then(|turn|turn.limited_until)),"observedAt":iso(Some(observed)),"lastEventAt":iso(Some(observed)),"activity":activity,"requests":requests}),
+            json!({"turnId":turn_id,"turnStartedAt":iso(turn.and_then(|turn|turn.started)),"outcome":turn.filter(|turn|!turn.running && !child_working).and_then(|turn|turn.outcome.as_ref()),"endedAt":iso(turn.filter(|turn|!turn.running && !child_working).map(|turn|turn.observed)),"message":turn.and_then(|turn|turn.message.as_ref()),"prompt":self.prompt,"limitedUntil":iso(turn.and_then(|turn|turn.limited_until)),"observedAt":iso(Some(observed)),"lastEventAt":iso(Some(observed)),"activity":activity,"requests":requests}),
         )
     }
 
