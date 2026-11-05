@@ -139,6 +139,62 @@ fn guardian_reviews_count_their_usage_but_list_no_session() {
 }
 
 #[test]
+fn a_codex_session_carries_the_reasoning_effort_its_latest_turn_ran_at() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join(".codex/sessions/2026/10/21");
+    fs::create_dir_all(&root).unwrap();
+    let at = Utc::now().to_rfc3339();
+    let rollout = |id: &str, contexts: &[Value]| {
+        let mut lines = vec![
+            json!({"timestamp":at,"type":"session_meta","payload":{"id":id,"timestamp":at,"cwd":"/w/repo","source":"cli","originator":"codex_cli_rs"}}),
+        ];
+        for context in contexts {
+            lines.push(json!({"timestamp":at,"type":"turn_context","payload":context}));
+        }
+        lines.push(json!({"timestamp":at,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":10}}}}));
+        lines
+            .iter()
+            .map(|line| format!("{line}\n"))
+            .collect::<String>()
+    };
+    let changed = "11111111-1111-4111-8111-111111111111";
+    let unknown = "22222222-2222-4222-8222-222222222222";
+    fs::write(
+        root.join(format!("rollout-a-{changed}.jsonl")),
+        rollout(
+            changed,
+            &[
+                json!({"model":"gpt-5.5","effort":"medium"}),
+                json!({"model":"gpt-5.5","collaboration_mode":{"settings":{"reasoning_effort":"high"}}}),
+            ],
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join(format!("rollout-b-{unknown}.jsonl")),
+        rollout(unknown, &[json!({"model":"gpt-5.5"})]),
+    )
+    .unwrap();
+    let mut backend = fixture(temp.path());
+    let snapshot = backend.request("snapshot", json!({})).unwrap();
+    let session = |id: &str| {
+        snapshot["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|session| session["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(session(changed)["effort"], "high");
+    assert_eq!(
+        session(unknown)["effort"],
+        Value::Null,
+        "none when the log says none"
+    );
+}
+
+#[test]
 fn a_claude_sessions_window_share_counts_cache_writes_not_cache_reads() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join(".claude/projects/test");

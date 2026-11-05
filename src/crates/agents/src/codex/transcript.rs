@@ -215,6 +215,14 @@ impl Log {
                 if let Some(model) = payload["model"].as_str() {
                     self.model = model.into();
                 }
+                if let Some(effort) = payload["effort"]
+                    .as_str()
+                    .or(payload["collaboration_mode"]["settings"]["reasoning_effort"].as_str())
+                    .map(str::trim)
+                    .filter(|effort| !effort.is_empty())
+                {
+                    self.effort = Some(effort.into());
+                }
             }
             Some("event_msg") if payload["type"] == "user_message" => {
                 if let Some(text) = payload["message"].as_str() {

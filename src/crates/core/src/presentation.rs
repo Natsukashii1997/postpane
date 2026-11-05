@@ -57,6 +57,21 @@ impl Presentation<'_> {
             .flatten()
             .and_then(|id| self.claude_desktop.targets.get(id))
             .cloned();
+        // What the desktop app shows beside the session: the reasoning effort
+        // it runs at and the sidebar section it is filed under.
+        if let Some(details) = claude
+            .then(|| session["id"].as_str())
+            .flatten()
+            .and_then(|id| self.claude_desktop.details.get(id))
+            .cloned()
+        {
+            if let Some(effort) = details.effort {
+                session["effort"] = json!(effort);
+            }
+            if let Some(section) = details.section {
+                session["section"] = json!(section);
+            }
+        }
         // A way back the log itself gives; a client hook's origin, overlaid
         // next, replaces it. A Claude Code session opens in the desktop app's
         // tab only when it runs there (its entrypoint), and a Codex Desktop

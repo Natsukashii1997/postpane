@@ -1302,6 +1302,9 @@ impl LogSession for Log {
             .unwrap_or_else(|| self.updated.clone());
         let mut session = json!({"id":self.id,"title":self.title(),"source":self.source,"model":self.model,"vendorName":crate::naming::model_names::vendor_name(&self.source),"modelName":(!self.model.is_empty()).then(||crate::naming::model_names::consumer_name(&format!("{}-model:{}",self.source,self.model))),"cwd":self.cwd,"updatedAt":updated,"state":self.live.session_state(now,&self.source,subagents_at),"tokens":self.usage.total(),"cost":null,"contextPercent":null,"logPath":self.origin_path.as_ref().unwrap_or(&self.path),"parentId":self.live.parent_id});
         session["project"] = json!(crate::projects::project_id(self.cwd.as_deref()));
+        if let Some(effort) = &self.effort {
+            session["effort"] = json!(effort);
+        }
         if let Some(client) =
             crate::naming::clients::client_name(&self.source, self.client.as_deref())
         {
