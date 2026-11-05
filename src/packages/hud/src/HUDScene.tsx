@@ -1082,6 +1082,7 @@ export function HUDScene({
               light={light}
               zh={snapshotLanguage(snapshot) === "zh"}
               room={{ width: window.innerWidth, height: window.innerHeight }}
+              still={reduceMotion}
               onToggle={onFloatNotes}
             />
           )}
