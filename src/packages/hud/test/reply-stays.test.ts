@@ -19,3 +19,25 @@ test("other replies and notices fold away as before", () => {
   assert.equal(staysUntilSeen(event("hermes", "bot-offline")), false);
   assert.equal(staysUntilSeen(undefined), false);
 });
+
+test("a Hermes reply that arrives goes ahead of a waiting question", async () => {
+  const { seenFirst } = await import("../src/alerts/reply-stays.ts");
+  const reply = event("hermes", "completion");
+  const queue = [
+    { type: "request" as const, id: "ask" },
+    { type: "news" as const, id: reply.id, event: reply },
+  ];
+  assert.deepEqual(
+    seenFirst(queue, [reply]).map((card) => card.id),
+    ["e", "ask"],
+  );
+  const claude = { ...event("claude", "completion"), id: "c" };
+  const other = [
+    { type: "request" as const, id: "ask" },
+    { type: "news" as const, id: "c", event: claude },
+  ];
+  assert.deepEqual(
+    seenFirst(other, [claude]).map((card) => card.id),
+    ["ask", "c"],
+  );
+});
