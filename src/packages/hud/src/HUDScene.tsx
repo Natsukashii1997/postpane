@@ -15,7 +15,13 @@ import type { Snapshot } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "./HUDArtwork";
 export { HUDArtwork as HUDLogo } from "./HUDArtwork";
 import { DockMemory, type Direction } from "./bots/mark-director";
-import { useIslandNews, NewsContent, PendingEventRows } from "./IslandNews";
+import {
+  useIslandNews,
+  NewsContent,
+  PendingEventRows,
+  clientDisplayName,
+} from "./IslandNews";
+import { replyChip } from "./alerts/reply-list";
 import {
   ApprovalContent,
   RequestDeliveryNotice,
@@ -378,6 +384,10 @@ export function HUDScene({
   );
   const event = news.event;
   const request = news.request;
+  // The replies' folded tag: the newest reply's session and the count.
+  const reply = replyChip(news.replies, snapshot.sessions, (each) =>
+    clientDisplayName(each.source),
+  );
   // The rim flashes once for each island alert, over its sender's colours.
   const glowFlash = useMemo(
     () =>
@@ -462,6 +472,7 @@ export function HUDScene({
     event,
     inUsagePanel,
     requestsCount: requests.length,
+    reply,
   });
 
   // A request beside the dock is printed on paper, its tag and its card, and
@@ -653,11 +664,7 @@ export function HUDScene({
               light={light}
               language={snapshotLanguage(snapshot)}
               sessions={snapshot.sessions}
-              replies={news.queue.flatMap((card) =>
-                card.type === "news" && card.event.kind === "completion"
-                  ? [card.event]
-                  : [],
-              )}
+              replies={news.replies}
             />
           </PaperContext.Provider>
         ) : event ? (
@@ -666,6 +673,8 @@ export function HUDScene({
               event={event}
               snapshot={snapshot}
               dismiss={news.dismiss}
+              replies={news.replies}
+              drop={news.drop}
               onStats={showPanelStats}
               handoff={handoff}
               light={light}
@@ -944,6 +953,7 @@ export function HUDScene({
             pin={pin}
             request={request}
             event={event}
+            reply={reply}
             requests={requests}
             snapshot={snapshot}
             forceOpen={forceOpen}

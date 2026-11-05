@@ -8,6 +8,7 @@ import type {
 } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "../HUDArtwork";
 import { CompactAlertView } from "../IslandNews";
+import type { ReplyChip } from "../alerts/reply-list";
 import { RequestDeliveryNotice } from "../permissions/ApprovalContent";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
@@ -62,6 +63,7 @@ export function HUDExpandedSurface({
   pin,
   request,
   event,
+  reply,
   requests,
   snapshot,
   forceOpen,
@@ -105,6 +107,8 @@ export function HUDExpandedSurface({
   pin: (key?: string) => void;
   request?: Approval;
   event?: IslandEvent;
+  /** The replies waiting, for a reply's folded tag. */
+  reply?: ReplyChip;
   requests: Approval[];
   snapshot: Snapshot;
   forceOpen: () => void;
@@ -412,6 +416,7 @@ export function HUDExpandedSurface({
                         botLogos={config.botLogos}
                         zh={snapshotLanguage(snapshot) === "zh"}
                         paper={paper}
+                        reply={reply}
                         onOpen={() => forceOpen()}
                         onDismissAndStats={() => {
                           dismissNews();

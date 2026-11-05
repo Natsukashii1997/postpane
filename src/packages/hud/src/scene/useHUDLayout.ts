@@ -6,6 +6,7 @@ import type {
   Snapshot,
 } from "@agent-hud/protocol";
 import { compactAlertDockWidth } from "../IslandNews";
+import type { ReplyChip } from "../alerts/reply-list";
 import {
   cardRect,
   dragSurfaceGeometry,
@@ -45,6 +46,8 @@ export interface UseHUDLayoutArgs {
   event?: IslandEvent;
   inUsagePanel?: boolean;
   requestsCount: number;
+  /** The replies waiting, for a reply's folded tag. */
+  reply?: ReplyChip;
 }
 
 export function useHUDLayout({
@@ -65,6 +68,7 @@ export function useHUDLayout({
   event,
   inUsagePanel = false,
   requestsCount,
+  reply,
 }: UseHUDLayoutArgs) {
   const edge: HUDEdge = config.mode === "notch" ? "top" : config.edge;
   const strip =
@@ -194,6 +198,7 @@ export function useHUDLayout({
                     requestsCount,
                     scale,
                     snapshotLanguage(snapshot) === "zh",
+                    reply,
                   ),
                   screen.width,
                 ),

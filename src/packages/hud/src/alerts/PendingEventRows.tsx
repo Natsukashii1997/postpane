@@ -388,12 +388,18 @@ export function PendingEventRows({
   const waitingRequests = includeRequests
     ? requests.filter((req) => req.id !== currentID)
     : [];
-  const otherCompletions = queue.filter(
-    (card): card is Extract<IslandCard, { type: "news" }> =>
-      card.type === "news" &&
-      card.id !== currentID &&
-      card.event.kind === "completion",
-  );
+  // A reply's card lists the other replies itself.
+  const current = queue.find((card) => card.id === currentID);
+  const repliesListed =
+    current?.type === "news" && current.event.kind === "completion";
+  const otherCompletions = repliesListed
+    ? []
+    : queue.filter(
+        (card): card is Extract<IslandCard, { type: "news" }> =>
+          card.type === "news" &&
+          card.id !== currentID &&
+          card.event.kind === "completion",
+      );
   if (waitingRequests.length === 0 && otherCompletions.length === 0)
     return null;
   const signalText = alertText("warning", ground);
