@@ -1,6 +1,7 @@
 /* "In the panel": what of one agent the hover panel shows on the screen chosen
  * on the Display page: its block and the block's place, its accounts, quota
- * windows and balances. Everything here is written to that screen's panel
+ * windows (each with a bar, its share and its reset, as the panel prints
+ * them) and balances. Everything here is written to that screen's panel
  * layout. */
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
@@ -21,12 +22,16 @@ import {
   vendorKey,
   withRowShown,
 } from "@agent-hud/hud/model";
+import { quotaOutlook, resetText } from "@agent-hud/hud/panel/agent-board";
+import { quotaWindowLabel } from "@agent-hud/hud/panel/window-labels";
+import { quotaCredits } from "@agent-hud/hud/quota-rows";
 import {
   moneyAmount,
   quotaPercentLabel,
   snapshotLanguage,
 } from "@agent-hud/ui/format";
-import { Card, Row, Section, type Text } from "../SettingsPrimitives";
+import { useFormat } from "@agent-hud/ui/format-context";
+import { Row, Section, type Text } from "../SettingsPrimitives";
 import { moveAmong, ReorderButtons } from "./Reorder";
 
 const dragType = "text/agent-hud-window";
@@ -183,33 +188,51 @@ export function PanelBlocks({
     );
   });
 
+  // The group's head names the account, or how many there are.
+  const onlyProfile =
+    accounts.length === 1
+      ? profiles.find((profile) => profile.id === accounts[0])
+      : undefined;
+  const summary =
+    accounts.length > 1
+      ? t(`${accounts.length} accounts`, `${accounts.length} 个账户`)
+      : accounts.length === 1
+        ? [
+            onlyProfile?.name ??
+              windows[0]?.account ??
+              onlyProfile?.label ??
+              null,
+            onlyProfile?.planLabel ?? onlyProfile?.plan ?? null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined
+        : undefined;
+
   return (
     <Section
-      plain
-      title={t("In the panel", "面板中显示")}
+      title={t("Quotas in the panel", "面板里显示哪些额度")}
+      action={summary}
       footer={t(
         "Applies to the screen chosen on the Display page.",
-        "作用于“显示”页面选中的屏幕。",
+        "作用于「显示」页选中的屏幕。",
       )}
     >
-      <Card>
-        {blockRow(
-          key,
-          t("Show in panel", "在面板中显示"),
-          source.name,
-          block.hidden,
-          changeBlock,
-        )}
-        {balanceKey === key && balanceRows}
-        {!windows.length && !billing.length && (
-          <Row
-            muted
-            title={t("No quota or balance read yet", "还没有读到额度或余额")}
-          />
-        )}
-      </Card>
+      {blockRow(
+        key,
+        t("Show in panel", "在面板中显示"),
+        source.name,
+        block.hidden,
+        changeBlock,
+      )}
+      {balanceKey === key && balanceRows}
+      {!windows.length && !billing.length && (
+        <Row
+          muted
+          title={t("No quota or balance read yet", "还没有读到额度或余额")}
+        />
+      )}
       {accounts.map((account) => (
-        <AccountCard
+        <AccountRows
           key={account || "unknown"}
           t={t}
           snapshot={snapshot}
@@ -224,7 +247,7 @@ export function PanelBlocks({
         />
       ))}
       {balanceKey && balanceKey !== key && (
-        <Card>
+        <>
           {blockRow(
             balanceKey,
             t("Balances", "余额"),
@@ -233,15 +256,15 @@ export function PanelBlocks({
             changeBalanceBlock,
           )}
           {balanceRows}
-        </Card>
+        </>
       )}
     </Section>
   );
 }
 
-/** One account's card: the account, then its quota windows, which can be
+/** One account's rows: the account, then its quota windows, which can be
  * dragged or moved with the arrows within the account. */
-function AccountCard({
+function AccountRows({
   t,
   snapshot,
   account,
@@ -265,6 +288,8 @@ function AccountCard({
   pending: boolean;
 }) {
   const [target, setTarget] = useState<string | null>(null);
+  const format = useFormat();
+  const now = Date.parse(snapshot.generatedAt);
   const accountWindows = windows.filter(
     (quota) => quotaAccountKey(quota) === account,
   );
@@ -301,7 +326,7 @@ function AccountCard({
   };
 
   return (
-    <Card>
+    <>
       <Row
         title={name}
         subtitle={profile?.planLabel ?? profile?.plan ?? undefined}
@@ -315,6 +340,16 @@ function AccountCard({
       </Row>
       {ordered.map((window, index) => {
         const id = quotaRowKey(window);
+        const shown = !quotaRowHidden(window, block.hiddenRows ?? []);
+        const label = quotaWindowLabel(window, format.language);
+        const outlook = quotaOutlook(window);
+        const reset = resetText(
+          window.resetAt,
+          now,
+          format.calendar,
+          format.language,
+          quotaCredits(window) != null,
+        );
         return (
           <div
             key={id}
@@ -338,17 +373,28 @@ function AccountCard({
               void changeBlock({ rows: values });
             }}
           >
-            <Row
-              icon={<GripVertical size={13} className="agents-grip" />}
-              title={window.name}
-              tag={quotaPercentLabel(
-                window.usedPercent,
-                snapshot.settings.quotaDisplay,
-              )}
+            <div
+              className={`settings-row agents-quota-line${shown ? "" : " is-off"}`}
             >
+              <GripVertical size={12} className="agents-grip" />
+              <span className="agents-quota-name" title={window.name}>
+                {label}
+              </span>
+              <span className="agents-quota-bar">
+                <i style={{ width: `${outlook.used ?? 0}%` }} />
+              </span>
+              <b>
+                {outlook.live || window.usedPercent != null
+                  ? quotaPercentLabel(
+                      window.usedPercent,
+                      snapshot.settings.quotaDisplay,
+                    )
+                  : "--"}
+              </b>
+              <small>{reset ?? "—"}</small>
               <ReorderButtons
                 t={t}
-                name={window.name}
+                name={label}
                 first={index === 0}
                 last={index === ordered.length - 1}
                 disabled={pending}
@@ -359,9 +405,9 @@ function AccountCard({
                 }
               />
               <Switch
-                checked={!quotaRowHidden(window, block.hiddenRows ?? [])}
+                checked={shown}
                 disabled={pending}
-                aria-label={`${t("Show", "显示")} ${window.name}`}
+                aria-label={`${t("Show", "显示")} ${label}`}
                 onCheckedChange={(show) =>
                   void changeBlock({
                     hiddenRows: show
@@ -370,10 +416,10 @@ function AccountCard({
                   })
                 }
               />
-            </Row>
+            </div>
           </div>
         );
       })}
-    </Card>
+    </>
   );
 }

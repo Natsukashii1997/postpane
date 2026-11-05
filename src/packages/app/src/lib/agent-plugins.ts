@@ -192,7 +192,7 @@ export function mcpRow(input: McpInput): RowState {
     const unavailable: Words | undefined = !input.setupReady
       ? [
           "Adding HUD tools requires PostPane at its approved installation location and its MCP components.",
-          "添加 HUD 工具需要指定安装位置的驿窗和完整的 MCP 组件。",
+          "添加侧栏工具需要指定安装位置的驿窗和完整的 MCP 组件。",
         ]
       : !input.clientFound
         ? [`Install ${client} first.`, `请先安装 ${client}。`]
@@ -242,7 +242,7 @@ export function mcpRow(input: McpInput): RowState {
         ? {
             words: [
               `Start a new ${client} session and ask it to change the HUD.`,
-              `在 ${client} 里新开一个会话，说“把 HUD 改成……”。`,
+              `在 ${client} 里新开一个会话，说“把侧栏改成……”。`,
             ],
           }
         : null),
@@ -267,7 +267,7 @@ export function toolsSwitch(input: ToolsSwitchInput): {
     : !input.supported
       ? [
           "This system can't serve HUD tools yet.",
-          "这个系统暂时不能提供 HUD 工具。",
+          "这个系统暂时不能提供侧栏工具。",
         ]
       : null;
   const problem: Words | null =

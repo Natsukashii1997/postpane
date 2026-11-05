@@ -1,6 +1,7 @@
-// One folding card per client: its logo and name, a pill for each thing Agent
-// HUD adds to it, and inside, the plugin row with its switches and the HUD
-// tools row. A card opens by itself only when something in it needs you.
+// One folding card per client, printed as a line of the clients table: its
+// logo and name, then a status in the Plugin column and one in the HUD tools
+// column; inside, the plugin row with its switches and the HUD tools row. A
+// card opens by itself only when something in it needs you.
 import { Fragment, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
@@ -71,7 +72,7 @@ function hudToolsState(
       ? t(...tools.state.unavailable)
       : t(
           "Turn on “Let agents arrange the HUD” under Agent tools.",
-          "在下方「智能体工具」里打开「允许智能体调整 HUD」。",
+          "在下方「让智能体调整侧栏」里打开「允许智能体调整侧栏」。",
         ),
   };
 }
@@ -217,27 +218,22 @@ export function KnownClientCard({
       missing={missing}
       defaultOpen={loaded && open}
       summary={
-        missing ? (
-          <Pill tone="gray" dot>
-            {t("Not found", "未发现")}
-          </Pill>
-        ) : (
-          <>
-            {pluginState && (
-              <StatePill state={pluginState} label={["Plugin", "插件"]} t={t} />
+        <>
+          <span className="plugins-cell">
+            {missing ? (
+              <Pill tone="gray">{t("Not found", "未发现")}</Pill>
+            ) : answersOff ? (
+              <Pill tone="orange">{t("Answers off", "回答已关闭")}</Pill>
+            ) : pluginState ? (
+              <StatePill state={pluginState} t={t} />
+            ) : (
+              <NoCell />
             )}
-            {answersOff && (
-              <Pill tone="orange" dot>
-                {t("Answers off", "回答已关闭")}
-              </Pill>
-            )}
-            <StatePill
-              state={hud.state}
-              label={["HUD tools", "HUD 工具"]}
-              t={t}
-            />
-          </>
-        )
+          </span>
+          <span className="plugins-cell">
+            {missing ? <NoCell /> : <StatePill state={hud.state} t={t} />}
+          </span>
+        </>
       }
     >
       {plugin && pluginState && (
@@ -247,11 +243,11 @@ export function KnownClientCard({
             client.id === "claudeCode"
               ? t(
                   "Answer Claude's questions in the HUD.",
-                  "在 HUD 上回答 Claude 的提问。",
+                  "在侧栏上回答 Claude 的提问。",
                 )
               : t(
                   "Answer its questions and approvals in the HUD.",
-                  "在 HUD 上回答它的提问和批准请求。",
+                  "在侧栏上回答它的提问和批准请求。",
                 )
           }
           state={pluginState}
@@ -273,7 +269,7 @@ export function KnownClientCard({
         <Fragment key={item.id}>{item.render(context)}</Fragment>
       ))}
       <StatusRow
-        title={t("HUD tools", "HUD 工具")}
+        title={t("HUD tools", "侧栏工具")}
         tag="MCP"
         state={hud.state}
         pillReason={hud.reason}
@@ -288,6 +284,11 @@ export function KnownClientCard({
       />
     </ClientCard>
   );
+}
+
+/** An empty cell of the clients table. */
+function NoCell() {
+  return <span className="plugins-cell-none">—</span>;
 }
 
 /** A card for a client only a product build knows, holding its rows. */
@@ -307,7 +308,16 @@ export function ProductClientCard({
       name={name}
       light={light}
       missing={false}
-      summary={null}
+      summary={
+        <>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
       defaultOpen={false}
     >
       {items.map((item) => (
@@ -331,7 +341,7 @@ export function OtherAgentsCard({
   return (
     <Collapsible icon={icon} title={t("Other agents", "其他智能体")}>
       <Row
-        title={t("HUD tools", "HUD 工具")}
+        title={t("HUD tools", "侧栏工具")}
         tag="MCP"
         subtitle={t(
           "Paste into the agent's MCP settings.",

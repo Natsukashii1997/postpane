@@ -1,6 +1,6 @@
-/* Settings → Display: the HUD and its panel on the screen picked at the top,
- * then what every screen shares, then the resets. Each section lives in
- * ./display. */
+/* Settings → Display: on the screen picked at the top, what the HUD looks
+ * like, when its panel opens, what the panel holds and the glow; then one
+ * line of resets. Each section lives in ./display. */
 import { defaultHUDConfig } from "@agent-hud/hud/model";
 import type { NativeHUDMonitor } from "../lib/use-hud-geometry";
 import {
@@ -47,7 +47,7 @@ export function DisplayPane({
             title={t("Screen", "屏幕")}
             subtitle={t(
               "The screen whose HUD you're setting up.",
-              "正在设置哪块屏幕上的 HUD。",
+              "正在设置哪块屏幕上的侧栏。",
             )}
           >
             <Menu
@@ -64,9 +64,9 @@ export function DisplayPane({
         </Section>
       )}
       <HUDSection snapshot={snapshot} active={active} {...shared} />
-      <GlowSection {...shared} />
-      <PanelSection snapshot={snapshot} {...shared} />
       <AllScreensSection {...shared} />
+      <PanelSection snapshot={snapshot} active={active} {...shared} />
+      <GlowSection {...shared} />
       <ResetSection
         {...shared}
         screenName={selected ? screenName(selected) : undefined}

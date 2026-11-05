@@ -1,5 +1,5 @@
-/* Settings → Agents: the list of agents on the left, the chosen one's
- * settings on the right. */
+/* Settings → Agents: the agents as a row of cards on top, the chosen one's
+ * settings under them. */
 import { useRef, useState } from "react";
 import type {
   NativeMethod,
@@ -58,6 +58,7 @@ export default function AgentsPage({
       <AgentList
         t={t}
         providers={providers}
+        preferences={preferences}
         selected={source?.id}
         select={select}
       />

@@ -13,26 +13,35 @@ export function GlowSection({ config, update, t }: DisplayProps) {
   });
   // Every style but Soft draws a grid of marks, with its own sliders.
   const grid = config.glowStyle !== "blur";
+  const styles: [HUDConfig["glowStyle"], string][] = [
+    ["blur", t("Soft", "柔光")],
+    ["dots", t("Dots", "点阵")],
+    ["ascii", t("ASCII  .:-=+*#%@", "字符  .:-=+*#%@")],
+    ["blocks", t("Blocks  ░▒▓█", "色块  ░▒▓█")],
+    ["braille", t("Braille  ⠁⠃⠇⡇⣿", "盲文  ⠁⠃⠇⡇⣿")],
+    ["binary", t("Binary  0 1", "二进制  0 1")],
+  ];
+  const effects: [HUDConfig["glowEffect"], string][] = [
+    ["breathe", t("Breathe", "呼吸")],
+    ["flow", t("Flow", "流光")],
+    ["scan", t("Scan", "扫描")],
+    ["ripple", t("Ripple", "涟漪")],
+    ["shimmer", t("Shimmer", "闪烁")],
+    ["boot", t("Boot", "启动")],
+  ];
+  // The head names the style and effect alone, without the sample marks.
+  const named = (list: [string, string][], key: string) =>
+    (list.find(([value]) => value === key)?.[1] ?? key).split("  ")[0];
   return (
     <Section
-      title={
-        config.mode === "logos"
-          ? t("Backdrop glow", "背景光晕")
-          : t("Notch glow", "刘海光晕")
-      }
+      title={t("Glow", "光晕")}
+      action={`${named(styles, config.glowStyle)} · ${named(effects, config.glowEffect)}`}
     >
       <Row title={t("Style", "样式")}>
         <Menu
           label={t("Glow style", "光晕样式")}
           value={config.glowStyle}
-          options={[
-            ["blur", t("Soft", "柔光")],
-            ["dots", t("Dots", "点阵")],
-            ["ascii", t("ASCII  .:-=+*#%@", "字符  .:-=+*#%@")],
-            ["blocks", t("Blocks  ░▒▓█", "色块  ░▒▓█")],
-            ["braille", t("Braille  ⠁⠃⠇⡇⣿", "盲文  ⠁⠃⠇⡇⣿")],
-            ["binary", t("Binary  0 1", "二进制  0 1")],
-          ]}
+          options={styles}
           change={(value) =>
             update({ glowStyle: value as HUDConfig["glowStyle"] })
           }
@@ -43,21 +52,26 @@ export function GlowSection({ config, update, t }: DisplayProps) {
         <Menu
           label={t("Glow effect", "光晕动效")}
           value={config.glowEffect}
-          options={[
-            ["breathe", t("Breathe", "呼吸")],
-            ["flow", t("Flow", "流光")],
-            ["scan", t("Scan", "扫描")],
-            ["ripple", t("Ripple", "涟漪")],
-            ["shimmer", t("Shimmer", "闪烁")],
-            ["boot", t("Boot", "启动")],
-          ]}
+          options={effects}
           change={(value) =>
             update({ glowEffect: value as HUDConfig["glowEffect"] })
           }
           width={160}
         />
       </Row>
-      <MoreRows label={t("Fine-tune", "微调")}>
+      <MoreRows
+        label={
+          grid
+            ? t(
+                "Fine-tune the marks, brightness and breathing",
+                "微调点阵、亮度和呼吸",
+              )
+            : t(
+                "Fine-tune brightness, range, feather and breathing",
+                "微调亮度、范围、羽化和呼吸",
+              )
+        }
+      >
         {grid && (
           <>
             {slider("glowGridPitch", t("Grid pitch", "点距"), 4, 12, 1, pt)}

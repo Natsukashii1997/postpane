@@ -40,7 +40,7 @@ export function ReorderButtons({
   move: (direction: -1 | 1) => void;
 }) {
   return (
-    <>
+    <span className="settings-move">
       <Button
         variant="ghost"
         size="icon-xs"
@@ -59,6 +59,6 @@ export function ReorderButtons({
       >
         <ChevronDown size={13} />
       </Button>
-    </>
+    </span>
   );
 }
