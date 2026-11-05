@@ -7,8 +7,11 @@
 
   let conversation = page.conversationId(location.href);
   let wasStreaming = page.streaming(document);
-  // Replies already on the page when it loaded are not news.
+  // Replies that render without a turn here (the history loading after the
+  // page) are not news: a reply counts once this page saw a stop button or
+  // sent something itself.
   let reported = page.lastReply(document)?.messageId ?? null;
+  let expecting = wasStreaming;
   let timer = null;
 
   function report() {
@@ -22,12 +25,14 @@
       report();
     }
     const streaming = page.streaming(document);
+    if (streaming) expecting = true;
+    if (!expecting && !streaming) reported = page.lastReply(document)?.messageId ?? reported;
     if (streaming && !wasStreaming) {
       tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), at: Date.now() });
     }
     // A finished turn is a stop button that went away, or a reply this page has
     // not reported yet: a background tab may never be sampled mid-stream.
-    const fresh = !streaming && (page.lastReply(document)?.messageId ?? null) !== reported;
+    const fresh = expecting && !streaming && (page.lastReply(document)?.messageId ?? null) !== reported;
     if (!streaming && (wasStreaming || fresh)) {
       // The last chunk may still be rendering when the stop button goes away.
       setTimeout(() => {
@@ -35,6 +40,7 @@
         const reply = page.lastReply(document);
         if (!reply || (reply.messageId && reply.messageId === reported)) return;
         reported = reply.messageId;
+        expecting = false;
         tell({
           type: "turn",
           phase: "complete",
@@ -63,7 +69,10 @@
 
   chrome.runtime.onMessage.addListener((command, _sender, reply) => {
     if (command.op === "submit") {
-      page.submit(document, command.text).then(reply, (error) => reply({ ok: false, reason: "send-failed", detail: String(error) }));
+      page.submit(document, command.text).then((result) => {
+        if (result.ok) expecting = true;
+        reply(result);
+      }, (error) => reply({ ok: false, reason: "send-failed", detail: String(error) }));
       return true;
     }
     if (command.op === "state") {

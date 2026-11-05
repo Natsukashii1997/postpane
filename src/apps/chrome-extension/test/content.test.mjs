@@ -31,7 +31,11 @@ async function open() {
           window.told.push(message),
           Promise.resolve()
         ),
-        onMessage: { addListener() {} },
+        onMessage: {
+          addListener(listener) {
+            window.listener = listener;
+          },
+        },
       },
     };
   });
@@ -72,9 +76,17 @@ test("a reply streamed without pause is reported once when it ends", async () =>
   assert.ok((await turns(page)).some((m) => m.phase === "start"));
 });
 
-test("a reply that appears without a seen stop button still counts", async () => {
+test("after its own send, a reply counts even if no stop button was seen", async () => {
   const page = await open();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const result = await new Promise((resolve) =>
+      window.listener({ op: "submit", text: "请审核" }, {}, resolve),
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    // Streaming ended before any sample saw it, as in a slow background tab.
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
     document
       .querySelector("main")
       .insertAdjacentHTML(
@@ -88,6 +100,23 @@ test("a reply that appears without a seen stop button still counts", async () =>
     done.map((m) => [m.messageId, m.reply]),
     [["m4", "好的"]],
   );
+});
+
+test("history rendering after the page loads is not news", async () => {
+  const page = await open();
+  await page.evaluate(async () => {
+    for (const id of ["h1", "h2"]) {
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="x:${id}:assistant" data-chatgpt-search-message-ids="${id}"><p data-d-component="text">旧回复</p></div>`,
+        );
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  });
+  await page.waitForTimeout(1500);
+  assert.deepEqual(await turns(page), []);
 });
 
 test("replies already on the page are not news", async () => {
