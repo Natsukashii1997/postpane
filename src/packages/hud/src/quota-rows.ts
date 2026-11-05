@@ -20,6 +20,21 @@ export function quotaRowMatches(row: Quota, key: string): boolean {
   );
 }
 
+/** A credit grant's dollars, such as Claude's cloud session credits: a
+ * one-off amount with no fixed cycle, whose `resetAt` is when it expires.
+ * Null for a plan window. */
+export function quotaCredits(
+  row: Quota,
+): { used: number; capacity: number } | null {
+  const consumed = row.metrics?.consumed;
+  return consumed?.unit === "USD" &&
+    Number.isFinite(consumed.used) &&
+    consumed.capacity != null &&
+    Number.isFinite(consumed.capacity)
+    ? { used: consumed.used, capacity: consumed.capacity }
+    : null;
+}
+
 /** Whether a layout's hidden rows name this row by any of its keys. */
 export function quotaRowHidden(
   row: Quota,

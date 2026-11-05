@@ -353,3 +353,49 @@ test("an agent with no quota window shows its day's tokens instead", () => {
     "a layout that sets up the chart keeps it",
   );
 });
+
+/** Cloud session credits as Core hands them over: dollars in `consumed`, no
+ * cycle, `resetAt` the expiry. */
+function credits(used: number, capacity = 250): Quota {
+  const row = quota("Cloud session credits", (used / capacity) * 100, {
+    kind: "no-estimate",
+  });
+  row.metrics!.consumed = { used, capacity, unit: "USD" };
+  row.resetAt = "2026-11-05T14:00:00Z";
+  return row;
+}
+
+test("cloud credits show their dollars and expiry, outside the pace count", () => {
+  assert.equal(
+    quotaWindowLabel({ name: "Cloud session credits" }, "zh"),
+    "云端额度",
+  );
+  assert.equal(
+    quotaNote(credits(109.05), now, "zh", "remaining")?.text,
+    "剩 $141 / $250",
+  );
+  assert.equal(quotaNote(credits(109.05), now, "zh")?.text, "已用 $109 / $250");
+  assert.equal(
+    quotaNote(credits(109.05), now, "en", "remaining")?.text,
+    "$141 of $250 left",
+  );
+  assert.equal(quotaNote(credits(250), now, "zh")?.warn, true);
+  assert.equal(
+    resetText("2026-11-05T14:00:00Z", now, utc, "zh", true),
+    "1 小时 28 分后到期",
+  );
+  assert.equal(
+    resetText("2026-11-07T02:00:00Z", now, utc, "en", true),
+    "Expires Sat 02:00",
+  );
+  const verdict = boardVerdict(
+    [quota("Weekly", 41, lasts(68)), credits(109.05)],
+    now,
+    "zh",
+  );
+  assert.equal(verdict.stamp, "enough");
+  assert.equal(
+    verdict.words!.map((word) => word.text).join(""),
+    "照现在的速度，这个额度在重置前用不完。",
+  );
+});

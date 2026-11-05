@@ -13,6 +13,7 @@ const PERIODS: [RegExp, string][] = [
   [/^(annual|annual (usage )?limit|annual quota)$/i, "每年"],
   [/^(usage limit|quota)$/i, "额度"],
   [/^secondary usage limit$/i, "第二额度"],
+  [/^cloud session credits$/i, "云端额度"],
 ];
 
 const UNITS: [RegExp, string][] = [
