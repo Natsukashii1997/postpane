@@ -354,7 +354,8 @@ function LiveRow({
           minWidth: 0,
         }}
       >
-        {session.title?.trim() ||
+        {session.liveFacts?.prompt?.trim() ||
+          session.title?.trim() ||
           (zh ? "（未命名会话）" : "(untitled session)")}
       </span>
       {bot && (

@@ -60,6 +60,7 @@ fn a_held_turn_lease_runs_and_its_release_is_a_written_reply() {
     assert_ne!(row["state"], "running");
     assert_eq!(row["liveFacts"]["outcome"], "completed");
     assert_eq!(row["liveFacts"]["message"], "分三块写");
+    assert_eq!(row["liveFacts"]["prompt"], "周报怎么写");
     let reply = second["islandEvents"]["items"]
         .as_array()
         .unwrap()
@@ -70,4 +71,5 @@ fn a_held_turn_lease_runs_and_its_release_is_a_written_reply() {
         "a written reply is news: {}",
         second["islandEvents"]
     );
+    assert_eq!(reply.unwrap()["prompt"], "周报怎么写");
 }

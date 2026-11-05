@@ -192,6 +192,9 @@ export interface AttentionFact {
   at: string;
 }
 export interface SessionLiveFacts {
+  /** The person's words that started the latest turn, where the session
+   * outlives its topic (a Hermes Feishu chat); kept only while the app runs. */
+  prompt?: string | null;
   turnId: string | null;
   turnStartedAt: string | null;
   outcome: "completed" | "interrupted" | "failed" | "limited" | null;
@@ -694,6 +697,9 @@ export interface IslandEvent {
     /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
     | "bot-offline";
   at: string;
+  /** For a completion: the words that started the turn, when the session
+   * names them apart from its title (Hermes). */
+  prompt?: string | null;
   /** For `bot-offline`: the Hermes bot whose gateway went down. */
   bot?: { id: string; name: string } | null;
   startedAt?: string | null;
