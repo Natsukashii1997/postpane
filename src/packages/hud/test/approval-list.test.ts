@@ -6,6 +6,7 @@ import {
   entryTitle,
   findSession,
   modelLine,
+  requestTitle,
   sessionToOpen,
   tagColor,
   tagCounts,
@@ -228,4 +229,34 @@ test("waiting reads in seconds, minutes, then hours", () => {
   assert.equal(waitedText(3900, true), "1 小时 5 分");
   assert.equal(waitedText(3900, false), "1h05m");
   assert.equal(waitedText(-3, true), "0 秒");
+});
+
+test("a request's folded tag names its session's title, else the folder", () => {
+  const sessions = [
+    session("s1", { title: "侧栏重置到账细条" }),
+    session("s2", { title: "  " }),
+  ];
+  const at = "2026-11-05T00:00:00Z";
+  assert.equal(
+    requestTitle(
+      request("a", at, { sessionId: "s1" }),
+      sessions,
+      "scratch-2026-11-05-e0d0b1",
+    ),
+    "侧栏重置到账细条",
+  );
+  // No session, or one without a title: the folder the tag used before.
+  assert.equal(
+    requestTitle(
+      request("b", at, { sessionId: "s9" }),
+      sessions,
+      "scratch-2026-11-05-e0d0b1",
+    ),
+    "scratch-2026-11-05-e0d0b1",
+  );
+  assert.equal(
+    requestTitle(request("c", at, { sessionId: "s2" }), sessions, "postpane"),
+    "postpane",
+  );
+  assert.equal(requestTitle(request("d", at), sessions, "Claude"), "Claude");
 });

@@ -4,7 +4,19 @@ use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(status) = agent_hud_runtime::hooks::entry(&std::env::args().collect::<Vec<_>>()) {
+    let arguments = std::env::args().collect::<Vec<_>>();
+    // Chrome starts this program as the ChatGPT extension's native host, with
+    // the caller's origin first: a relay to the app, nothing else.
+    if arguments
+        .get(1)
+        .is_some_and(|origin| origin.starts_with("chrome-extension://"))
+    {
+        let data = agent_hud_runtime::local_tools_directory()?;
+        if let Some(status) = agent_hud_runtime::chatgpt::bridge(&arguments, &data) {
+            std::process::exit(status);
+        }
+    }
+    if let Some(status) = agent_hud_runtime::hooks::entry(&arguments) {
         std::process::exit(status);
     }
     let app_channel = std::env::args().any(|arg| arg == "--app-channel");

@@ -54,6 +54,26 @@ fn observation_state(event: &HookEvent, now: i64) -> Option<&'static str> {
         _ => None,
     }
 }
+/// Whether the client's native channel reports finished turns itself (the
+/// ChatGPT extension), each a completion event.
+fn reports_turns(source: &str) -> bool {
+    agent_hud_agents::by_id(source)
+        .and_then(|agent| agent.channel)
+        .is_some_and(|channel| channel.carries.contains(&agent_hud_agents::Carries::Turns))
+}
+/// What a completion the client reported itself says beyond the turn: the
+/// prompt and its way back. A channel's reply is kept in full.
+fn completion_details(session: &mut Value, completion: &HookEvent) {
+    if !completion.data["navigationTarget"].is_null() {
+        session["navigationTarget"] = completion.data["navigationTarget"].clone();
+    }
+    let facts = facts(session);
+    for key in ["message", "prompt"] {
+        if facts[key].is_null() && !completion.data[key].is_null() {
+            facts[key] = completion.data[key].clone();
+        }
+    }
+}
 fn newer(slot: &mut Option<HookEvent>, event: &HookEvent) -> bool {
     if slot.as_ref().is_some_and(|old| {
         old.at_ms > event.at_ms || (old.at_ms == event.at_ms && old.data == event.data)
@@ -191,7 +211,10 @@ impl HookEvidence {
                 }
                 "attention" => hooks.is_some_and(|hooks| hooks.attention),
                 "compaction" => hooks.is_some_and(|hooks| hooks.compaction.is_some()),
-                "completion" => COMPLETION_SOURCES.contains(&event.source.as_str()),
+                "completion" => {
+                    COMPLETION_SOURCES.contains(&event.source.as_str())
+                        || reports_turns(&event.source)
+                }
                 _ => false,
             };
             if !supported {
@@ -472,9 +495,7 @@ impl HookEvidence {
             facts["endedAt"] = iso(completion.at_ms);
             facts["activity"] = Value::Null;
             facts["requests"] = json!([]);
-            if facts["message"].is_null() && !completion.data["message"].is_null() {
-                facts["message"] = completion.data["message"].clone();
-            }
+            completion_details(session, completion);
         }
         let own_line = last_log_line_ms.or(last_event);
         if let Some(attention) = entry
@@ -533,6 +554,11 @@ impl HookEvidence {
                     session_title::display(&event.source, &event.session_id, &naming, cwd, None);
                 let at = iso(event.at_ms);
                 let mut session = json!({"id":event.session_id,"source":event.source,"title":label,"model":event.data["model"].as_str().unwrap_or("Unknown"),"cwd":cwd,"updatedAt":at,"lastMessageAt":at,"state":"idle","tokens":0,"cost":null,"contextPercent":null,"logPath":null,"parentId":null,"usageStatus":"unavailable","evidence":"completion-hook","liveFacts":{"turnId":event.data["turnId"],"turnStartedAt":null,"outcome":"completed","endedAt":at,"limitedUntil":null,"observedAt":at,"lastEventAt":at,"activity":null,"requests":[]}});
+                // The overlay takes only what is newer than the row's own
+                // clock, which this completion set: its details go in here.
+                if event.kind == "completion" {
+                    completion_details(&mut session, event);
+                }
                 self.overlay(&mut session, now, Some(event.at_ms), None);
                 // No log names its prompts: the reports do, else the client's
                 // one interface.

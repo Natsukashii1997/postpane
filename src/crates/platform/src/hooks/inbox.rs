@@ -15,7 +15,8 @@ use std::{
         Arc, Mutex,
     },
 };
-const RECORD_LIMIT: u64 = 64 * 1024;
+// A completion may carry a ChatGPT reply in full.
+const RECORD_LIMIT: u64 = 4 * 1024 * 1024;
 const ACCOUNT_LOCK: &str = ".accounts.lock";
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 

@@ -191,7 +191,8 @@ export const NotchGlow = memo(function NotchGlow({
         flare={size.flare}
         attached
         outwardOnly={config.glowOutwardOnly}
-        style={config.glowStyle}
+        // Always the soft glow; older settings may still name another style.
+        style="blur"
         effect={config.glowEffect}
         colors={vendors
           .filter((vendor) => vendor.used != null)

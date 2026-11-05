@@ -1,8 +1,8 @@
 // Settings → Agent plugins: what Agent HUD adds to the agents on this computer.
-// Top to bottom: client hooks; one folding card per client (Agent HUD's plugin
-// for it with its switches, and HUD tools), then the settings to add HUD tools
-// to any other agent by hand; the app-wide Agent tools switches; and Details,
-// folded. A product build adds switches, rows and tool groups through
+// Top to bottom: client hooks; the clients as a table, one folding line per
+// client (Agent HUD's plugin for it with its switches, and HUD tools), then the
+// settings to add HUD tools to any other agent by hand; the app-wide Agent
+// tools switches, with Details folded under them. A product build adds switches, rows and tool groups through
 // `AgentPluginItem`, drawn with `PluginControl` and `ToolSwitchRow`, so both
 // builds read the same. The pieces live in ./agent-plugins/.
 import { Braces } from "lucide-react";
@@ -16,6 +16,7 @@ import {
   type Text,
 } from "./SettingsPrimitives";
 import {
+  ChatGptCard,
   KnownClientCard,
   OtherAgentsCard,
   ProductClientCard,
@@ -25,9 +26,11 @@ import { HooksSection } from "./agent-plugins/HooksSection";
 import { ToolsSection } from "./agent-plugins/ToolsSection";
 import {
   knownClients,
+  nativeChatGpt,
   nativeClients,
   nativeDeepSeekPlugin,
   nativePlugin,
+  type ChatGptService,
   type ClaudePluginService,
   type MCPClientsService,
 } from "./agent-plugins/services";
@@ -36,6 +39,7 @@ import type {
   AgentPluginItem,
 } from "./agent-plugins/types";
 import {
+  useChatGpt,
   useHudTools,
   useLightTheme,
   useMcpClients,
@@ -47,6 +51,8 @@ export type {
   AgentPluginItem,
 } from "./agent-plugins/types";
 export type {
+  ChatGptService,
+  ChatGptStatus,
   ClaudePluginService,
   ClaudePluginStatus,
   MCPClientsService,
@@ -62,14 +68,14 @@ function setupNote(snapshot: Snapshot, t: Text) {
   return platform === "windows"
     ? t(
         "Adding HUD tools needs PostPane in its standard Windows location.",
-        "需要从 Windows 标准安装位置运行驿窗，才能添加 HUD 工具。",
+        "需要从 Windows 标准安装位置运行驿窗，才能添加侧栏工具。",
       )
     : platform === "macos"
       ? t(
           "Adding HUD tools needs PostPane in an approved macOS location.",
-          "需要从 macOS 指定安装位置运行驿窗，才能添加 HUD 工具。",
+          "需要从 macOS 指定安装位置运行驿窗，才能添加侧栏工具。",
         )
-      : t("This build can't add HUD tools.", "当前版本无法添加 HUD 工具。");
+      : t("This build can't add HUD tools.", "当前版本无法添加侧栏工具。");
 }
 
 /** Clients only a product build knows: those its rows name, once each. */
@@ -93,6 +99,7 @@ export function AgentPluginsPane({
   clients = nativeClients,
   plugin = nativePlugin,
   deepseekPlugin = nativeDeepSeekPlugin,
+  chatgpt = nativeChatGpt,
 }: {
   snapshot: Snapshot;
   action: SettingsPaneProps["action"];
@@ -105,6 +112,8 @@ export function AgentPluginsPane({
   plugin?: ClaudePluginService;
   /** The DeepSeek Harness plugin's service; a fake in pictures and tests. */
   deepseekPlugin?: ClaudePluginService;
+  /** The ChatGPT extension's service; a fake in pictures and tests. */
+  chatgpt?: ChatGptService;
 }) {
   const t = useText(snapshot);
   const light = useLightTheme();
@@ -113,18 +122,41 @@ export function AgentPluginsPane({
     claudeCode: usePlugin("claudeCode", plugin, active, t),
     deepseek: usePlugin("deepseek", deepseekPlugin, active, t),
   };
+  const chatgptExtension = useChatGpt(chatgpt, active, t);
   const tools = useHudTools(snapshot, action);
   const forClient = (id: string) =>
     items.filter((item) => item.client === id && item.place !== "tools");
+  const extraClients = productClients(items);
+  // ChatGPT's own card follows the clients with HUD tools.
+  const clientCount = knownClients.length + extraClients.length + 1;
+  const pluginsMissing = knownClients.filter(
+    (client) =>
+      client.plugin && plugins[client.id]?.status?.installed === false,
+  ).length;
   return (
     <TooltipProvider delayDuration={300}>
       <Page>
         <HooksSection snapshot={snapshot} action={action} t={t} />
         <Section
-          title={t("Clients", "客户端")}
-          plain
+          title={t("Clients", "各客户端")}
+          action={[
+            t(`${clientCount} clients`, `${clientCount} 个`),
+            pluginsMissing
+              ? t(
+                  `${pluginsMissing} plugin${pluginsMissing === 1 ? "" : "s"} not installed`,
+                  `${pluginsMissing} 个插件未安装`,
+                )
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
           footer={mcp.status?.ready === false ? setupNote(snapshot, t) : null}
         >
+          <div className="plugins-table-head" aria-hidden="true">
+            <span>{t("Client", "客户端")}</span>
+            <span>{t("Plugin", "插件")}</span>
+            <span>{t("HUD tools", "侧栏工具")}</span>
+          </div>
           {knownClients.map((client) => (
             <KnownClientCard
               key={client.id}
@@ -141,7 +173,7 @@ export function AgentPluginsPane({
               t={t}
             />
           ))}
-          {productClients(items).map((client) => (
+          {extraClients.map((client) => (
             <ProductClientCard
               key={client.id}
               name={client.name}
@@ -160,6 +192,7 @@ export function AgentPluginsPane({
               }}
             />
           ))}
+          <ChatGptCard chatgpt={chatgptExtension} light={light} t={t} />
           <OtherAgentsCard
             json={mcp.status?.json}
             icon={<Braces size={16} strokeWidth={1.8} />}
@@ -173,13 +206,14 @@ export function AgentPluginsPane({
           request={request}
           active={active}
           t={t}
-        />
-        <DetailsSection
-          snapshot={snapshot}
-          clients={mcp.status}
-          tools={tools}
-          t={t}
-        />
+        >
+          <DetailsSection
+            snapshot={snapshot}
+            clients={mcp.status}
+            tools={tools}
+            t={t}
+          />
+        </ToolsSection>
       </Page>
     </TooltipProvider>
   );

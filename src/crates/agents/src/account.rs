@@ -202,6 +202,9 @@ pub struct Provider {
     /// A fixed interval in seconds between readings, whatever this computer
     /// does: for readings of what runs elsewhere and changes by the minute.
     pub every: Option<u64>,
+    /// Window keys never shown or counted, even a row an earlier reading kept
+    /// or a restart copy restored (row ids end `:<key>`).
+    pub dropped_windows: &'static [&'static str],
 }
 impl Provider {
     pub const fn new(id: &'static str, read: Read) -> Self {
@@ -214,7 +217,16 @@ impl Provider {
             reported: None,
             status: None,
             every: None,
+            dropped_windows: &[],
         }
+    }
+    /// Whether a quota row is one of `dropped_windows`.
+    pub fn drops(&self, row: &Value) -> bool {
+        row["id"].as_str().is_some_and(|id| {
+            self.dropped_windows
+                .iter()
+                .any(|key| id.strip_suffix(key).is_some_and(|head| head.ends_with(':')))
+        })
     }
     /// The session sources whose work is this provider's.
     pub fn sources(&self) -> &[&'static str] {

@@ -129,6 +129,9 @@ export interface Session {
   cwd: string | null;
   /** From Core: the client that drives the session ("Codex Desktop", "Claude Code IDE extension"). */
   client?: string | null;
+  /** From Core, for Hermes: the Feishu bot whose home the session was read
+   * from (`default`, or a profile's folder) and what its SOUL.md calls it. */
+  bot?: { id: string; name: string } | null;
   /** From Core: where the session's first (`init`) and latest prompts were typed, as `category:source` tags ("cli:iterm", "desktop:claude", "mobile:iphone"). Categories: desktop, cli, ide, mobile, mcp, sdk, others; a source nobody can tell is `others`. Null when unknown. */
   origins?: { init: string | null; latest: string | null };
   /** From Core: the project id, the repository its worktrees share written with ~ ("unassigned" filters match none). */
@@ -189,6 +192,9 @@ export interface AttentionFact {
   at: string;
 }
 export interface SessionLiveFacts {
+  /** The person's words that started the latest turn, where the session
+   * outlives its topic (a Hermes Feishu chat); kept only while the app runs. */
+  prompt?: string | null;
   turnId: string | null;
   turnStartedAt: string | null;
   outcome: "completed" | "interrupted" | "failed" | "limited" | null;
@@ -647,6 +653,8 @@ export interface AppSettings {
   appearance: "dark" | "light" | "system";
   language: string;
   clientHooks: boolean;
+  /** Watch for DeepSeek Harness's questions (off: no process scan for a harness). */
+  deepseekQuestions?: boolean;
   readCopilotQuota?: boolean;
   /** The relay hosts whose balance may be read with the key the client already sends them. */
   relayReading?: string[];
@@ -688,8 +696,15 @@ export interface IslandEvent {
     | "quota-reset"
     | "reset-credits"
     /** The agent signed out; `message` is what its account reading says. */
-    | "sign-in-needed";
+    | "sign-in-needed"
+    /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
+    | "bot-offline";
   at: string;
+  /** For a completion: the words that started the turn, when the session
+   * names them apart from its title (Hermes). */
+  prompt?: string | null;
+  /** For `bot-offline`: the Hermes bot whose gateway went down. */
+  bot?: { id: string; name: string } | null;
   startedAt?: string | null;
   source: string;
   sessionId?: string;

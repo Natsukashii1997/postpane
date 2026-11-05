@@ -94,8 +94,7 @@
 }
 .rc-paper,
 .apple-app .sidebar-roll,
-.apple-app .settings-header .settings-column,
-.apple-app .settings-pane-content {
+.apple-app .settings-sheet {
   color: rgb(var(--rc-ink));
   background:
     linear-gradient(
@@ -113,8 +112,7 @@
 }
 /* Torn edges: a row of teeth cut into the paper. */
 .rc-torn-bottom,
-.apple-app .sidebar-roll,
-.apple-app .settings-pane-content {
+.apple-app .sidebar-roll {
   -webkit-mask:
     conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg)
       bottom / var(--rc-tooth) 51% repeat-x,
@@ -126,8 +124,7 @@
     linear-gradient(#000 0 0) top / 100% calc(100% - var(--rc-tooth) / 2)
       no-repeat;
 }
-.rc-torn-top,
-.apple-app .settings-header .settings-column {
+.rc-torn-top {
   -webkit-mask:
     conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
       top / var(--rc-tooth) 51% repeat-x,
@@ -138,20 +135,68 @@
       top / var(--rc-tooth) 51% repeat-x,
     linear-gradient(#000 0 0) bottom / 100% calc(100% - var(--rc-tooth) / 2)
       no-repeat;
+}
+/* A page's sheet is torn at both ends: its header and body are one paper.
+   The teeth are two thin strips of their own: masking (and filtering) the
+   whole page-long sheet made WebKit drop tiles of it while scrolling. */
+.apple-app .settings-sheet {
+  position: relative;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.2),
+    0 8px 12px rgba(0, 0, 0, 0.14);
+}
+.apple-app[data-theme="dark"] .settings-sheet {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.6),
+    0 10px 16px rgba(0, 0, 0, 0.5);
+}
+.apple-app .settings-sheet::before,
+.apple-app .settings-sheet::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(var(--rc-tooth) / 2);
+  background: var(--rc-grain), var(--rc-paper);
+  pointer-events: none;
+}
+.apple-app .settings-sheet::before {
+  bottom: 100%;
+  -webkit-mask: conic-gradient(
+      from 135deg at top,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    top / var(--rc-tooth) 100% repeat-x;
+  mask: conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg)
+    top / var(--rc-tooth) 100% repeat-x;
+}
+.apple-app .settings-sheet::after {
+  top: 100%;
+  -webkit-mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    bottom / var(--rc-tooth) 100% repeat-x;
+  mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    bottom / var(--rc-tooth) 100% repeat-x;
 }
 .rc-lift,
-.apple-app .sidebar-roll-shadow,
-.apple-app .settings-scroll {
+.apple-app .sidebar-roll-shadow {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2))
     drop-shadow(0 8px 12px rgba(0, 0, 0, 0.14));
 }
-.apple-app[data-theme="dark"] .sidebar-roll-shadow,
-.apple-app[data-theme="dark"] .settings-scroll {
+.apple-app[data-theme="dark"] .sidebar-roll-shadow {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
     drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
-}
-.apple-app .settings-header {
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.18));
 }
 
 /* ---- The page list: a strip out of the printer slot ----------------- */
@@ -179,8 +224,10 @@
   display: flex;
   flex-direction: column;
 }
+/* The strip reaches down past the page list, its foot printed at the end;
+   its top lines up with the page's sheet. */
 .apple-app .sidebar-roll {
-  min-height: 0;
+  min-height: min(430px, calc(100vh - 80px));
   display: flex;
   flex-direction: column;
   padding: 18px 12px 24px;
@@ -249,7 +296,7 @@
   font-size: 9px;
 }
 .apple-app .sidebar-product {
-  margin-top: 0;
+  margin-top: auto;
   padding: 10px 4px 0;
   border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
   font-family: var(--rc-mono);
@@ -277,18 +324,23 @@
 
 /* ---- The page: one receipt, its header printed at the top ----------- */
 
-.apple-app .apple-content {
+/* Every page prints on a sheet of the same width. */
+.apple-app .apple-content,
+.apple-app .apple-content.is-wide {
   background: transparent;
+  --settings-column: 620px;
 }
-.apple-app .settings-header {
-  padding: 26px 24px 0;
-}
-.apple-app .settings-header .settings-column {
-  padding: 24px 30px 14px;
-  text-align: center;
+.apple-app .settings-sheet {
+  padding: 26px 30px calc(22px + var(--rc-tooth));
   box-sizing: border-box;
 }
-.apple-app .settings-header .settings-column::before {
+.apple-app .settings-header {
+  padding: 0 0 12px;
+  margin-bottom: 6px;
+  text-align: center;
+  border-bottom: 1.5px dashed rgba(var(--rc-ink), 0.5);
+}
+.apple-app .settings-header::before {
   content: "驿 窗 · POSTPANE";
   display: block;
   font: 500 10px/1 var(--rc-mono);
@@ -318,45 +370,53 @@
   opacity: 0.8;
 }
 .apple-app .settings-scroll {
-  padding: 0 24px 40px;
+  padding: 22px 24px 40px;
 }
 .apple-app .settings-pane-content {
-  padding: 10px 30px calc(30px + var(--rc-tooth));
-  box-sizing: border-box;
+  padding: 0;
 }
 
-/* ---- Sections and rows ---------------------------------------------- */
+/* ---- Groups and rows ------------------------------------------------ */
 
+/* A section is a group in a thin box: its name on the left of a shaded head,
+   what it is set to now on the right; its rows below, the name and the line
+   under it on the left and the control flush right. */
 .apple-app .settings-page {
-  gap: 10px;
+  gap: 16px;
+  padding-top: 10px;
 }
 .apple-app .settings-section {
-  gap: 4px;
+  gap: 0;
+  border: 1px solid rgba(var(--rc-ink), 0.55);
 }
 .apple-app .settings-section-header {
-  padding-inline: 0;
-  display: block;
-  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 9px 14px;
+  background: rgba(var(--rc-ink), 0.06);
+  border-bottom: 1px solid rgba(var(--rc-ink), 0.55);
 }
 .apple-app .settings-section-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 700 11.5px/18px var(--rc-mono);
-  letter-spacing: 4px;
-}
-.apple-app .settings-section-header h2::before,
-.apple-app .settings-section-header h2::after {
-  content: "";
-  flex: 1;
-  border-top: 1.5px solid rgba(var(--rc-ink), 0.8);
+  font: 700 13.5px/18px var(--font-sans);
 }
 .apple-app .settings-section-header p {
-  text-align: center;
+  margin-top: 2px;
 }
 .apple-app .settings-section-action {
-  justify-content: center;
-  margin-top: 4px;
+  min-width: 0;
+  font: 400 11px/18px var(--rc-mono);
+  color: rgba(var(--rc-ink), 0.65);
+}
+.apple-app .settings-section > .settings-card {
+  padding: 0 14px;
+}
+.apple-app .settings-section > .settings-footnote {
+  padding: 8px 14px;
+  border-top: 1px dashed rgba(var(--rc-ink), 0.25);
 }
 .apple-app .settings-card {
   border: 0;
@@ -370,42 +430,75 @@
   right: 0;
   height: 0;
   background: none;
-  border-top: 1.5px dashed rgba(var(--rc-ink), 0.28);
+  border-top: 1px dashed rgba(var(--rc-ink), 0.25);
 }
 .apple-app .settings-row {
+  min-height: 46px;
   padding: 9px 0;
 }
 .apple-app .settings-row-title {
-  font-size: 13.5px;
+  font-size: 13px;
 }
 .apple-app .settings-row-subtitle,
 .apple-app .settings-row-detail {
   font-size: 11px;
+  line-height: 1.45;
+  color: rgba(var(--rc-ink), 0.6);
 }
 .apple-app .settings-collapsible-header {
   padding-inline: 0;
   border-radius: 0;
 }
+.apple-app .settings-field {
+  padding-inline: 0;
+}
+.apple-app .settings-tag {
+  font: 500 10px/16px var(--rc-mono);
+  padding: 0 5px;
+  border: 1px solid rgba(var(--rc-ink), 0.6);
+  border-radius: 0;
+  background: transparent;
+  color: rgb(var(--rc-ink));
+}
+
+/* What folds away: a small boxed sign, then its name. */
+.apple-app .settings-more {
+  min-height: 38px;
+  padding: 8px 0;
+  gap: 8px;
+  font-size: 12.5px;
+  color: rgba(var(--rc-ink), 0.8);
+}
+.apple-app .settings-more .settings-chevron,
+.apple-app .settings-collapsible-header .settings-chevron {
+  box-sizing: content-box;
+  width: 12px;
+  height: 12px;
+  padding: 1px;
+  border: 1px solid rgba(var(--rc-ink), 0.5);
+  color: rgb(var(--rc-ink));
+}
 
 /* ---- Controls ------------------------------------------------------- */
 
-/* On and off: two boxes, the chosen one printed solid. */
+/* One set of ink boxes, 24 high: on and off, choices, menus, buttons and
+   the move arrows. */
 .apple-app [data-slot="switch"] {
   position: relative;
   isolation: isolate;
-  width: 54px;
-  height: 22px;
+  width: 60px;
+  height: 24px;
   border-radius: 0;
-  border: 1.3px solid rgb(var(--rc-ink));
+  border: 1px solid rgb(var(--rc-ink));
   background: var(--rc-paper) !important;
   box-shadow: none;
   padding: 0;
-  font: 600 11px/1 var(--font-sans);
+  font: 400 12px/1 var(--font-sans);
 }
 .apple-app [data-slot="switch"][data-size="sm"] {
-  width: 44px;
-  height: 18px;
-  font-size: 10px;
+  width: 48px;
+  height: 20px;
+  font-size: 11px;
 }
 /* The chosen half is the switch's own fill; the shared sliding thumb is
    not used (it lands outside the box in WebKit). */
@@ -422,6 +515,9 @@
     var(--rc-paper) 0 50%,
     rgb(var(--rc-ink)) 50%
   ) !important;
+}
+.apple-app [data-slot="switch"]:disabled {
+  opacity: 0.4;
 }
 .apple-app [data-slot="switch-thumb"] {
   display: none;
@@ -461,94 +557,86 @@
   outline-offset: 2px;
 }
 
-/* A slider is a hatched bar in a thin box, like the quota panel's: a solid
-   upright block marks the value, and the two ends print the range. The
-   block is only sized, never moved, so WebKit keeps it on the bar. */
+/* A slider is a fine rule with a round knob; the value is printed over the
+   knob (placed by Slide where Radix places the knob), not at either end. */
+.apple-app .settings-slide {
+  position: relative;
+  display: block;
+  width: 240px;
+  padding-top: 16px;
+}
 .apple-app [data-slot="slider"] {
-  height: 28px;
-}
-.apple-app [data-slot="slider"]::before,
-.apple-app [data-slot="slider"]::after {
-  position: absolute;
-  top: -6px;
-  font: 500 9px/1 var(--rc-mono);
-  color: rgba(var(--rc-ink), 0.5);
-  pointer-events: none;
-}
-.apple-app [data-slot="slider"]::before {
-  content: attr(data-min);
-  left: 0;
-}
-.apple-app [data-slot="slider"]::after {
-  content: attr(data-max);
-  right: 0;
+  height: 14px;
 }
 .apple-app [data-slot="slider-track"] {
-  height: 10px !important;
-  box-sizing: border-box;
+  height: 3px !important;
   border-radius: 0;
-  border: 1.4px solid rgb(var(--rc-ink));
-  background: transparent;
+  background: rgba(var(--rc-ink), 0.18);
 }
 .apple-app [data-slot="slider-range"] {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgb(var(--rc-ink)) 0 1.4px,
-    transparent 1.4px 4px
-  );
+  background: rgb(var(--rc-ink));
 }
 .apple-app [data-slot="slider-thumb"] {
-  width: 12px;
-  height: 22px;
-  border: 0;
-  border-radius: 0;
-  background: rgb(var(--rc-ink));
-  box-shadow: 0 0 0 2px var(--rc-paper);
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid rgb(var(--rc-ink));
+  border-radius: 50%;
+  background: var(--rc-paper);
+  box-shadow: none;
 }
 .apple-app [data-slot="slider-thumb"]:hover,
 .apple-app [data-slot="slider-thumb"]:focus-visible {
-  box-shadow: 0 0 0 2px var(--rc-paper);
+  box-shadow: none;
   outline: 1.5px dashed rgb(var(--rc-ink));
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 .apple-app .settings-slider-value {
-  font: 600 17px/1 var(--rc-num);
-  letter-spacing: 0.3px;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font: 700 12px/14px var(--rc-mono);
+  white-space: nowrap;
   color: rgb(var(--rc-ink));
+  pointer-events: none;
 }
 
-/* Segments: printed choices, the picked one solid. */
+/* Choices: boxes side by side under one rule, the picked one solid. */
 .apple-app .settings-segments [data-slot="tabs-list"] {
-  gap: 2px;
+  gap: 0;
   padding: 0;
-  height: auto;
+  height: 24px;
+  border: 1px solid rgb(var(--rc-ink));
   border-radius: 0;
   background: transparent;
 }
 .apple-app .settings-segments [data-slot="tabs-trigger"] {
-  height: 24px;
-  padding: 0 8px;
+  flex: none;
+  height: 22px;
+  min-height: 22px;
+  min-width: 30px;
+  padding: 0 10px;
   border: 0;
   border-radius: 0;
   box-shadow: none !important;
   background: transparent !important;
   color: rgb(var(--rc-ink)) !important;
-  font-size: 12.5px;
+  font-size: 12px;
+  line-height: 22px;
   font-weight: 400;
 }
-.apple-app .settings-segments [data-slot="tabs-trigger"]::before {
-  content: "□";
-  font-family: var(--rc-mono);
-  margin-right: 4px;
+.apple-app
+  .settings-segments
+  [data-slot="tabs-trigger"]
+  + [data-slot="tabs-trigger"] {
+  border-left: 1px solid rgb(var(--rc-ink));
 }
 .apple-app .settings-segments [data-slot="tabs-trigger"][data-state="active"] {
   background: rgb(var(--rc-ink)) !important;
   color: var(--rc-paper) !important;
 }
-.apple-app
-  .settings-segments
-  [data-slot="tabs-trigger"][data-state="active"]::before {
-  content: "■";
+.apple-app .settings-segments [data-slot="tabs-trigger"]:disabled {
+  opacity: 0.4;
 }
 
 /* Buttons and fields: square, inked. */
@@ -563,32 +651,71 @@
 .apple-app .apple-content [data-slot="select-trigger"],
 .apple-app .apple-content [data-slot="input"],
 .apple-app .settings-field textarea {
-  border: 1.2px solid rgb(var(--rc-ink));
+  border: 1px solid rgb(var(--rc-ink));
   background: var(--rc-paper);
   color: rgb(var(--rc-ink));
 }
 .apple-app .apple-content [data-slot="button"][data-variant="default"] {
+  border: 1px solid rgb(var(--rc-ink));
   background: rgb(var(--rc-ink));
   color: var(--rc-paper);
 }
 .apple-app .apple-content [data-slot="button"][data-variant="destructive"] {
+  border: 1px solid var(--rc-red);
   background: var(--rc-red);
   color: var(--rc-paper);
 }
 .apple-app .apple-content [data-slot="button"][data-variant="outline"]:hover {
   background: rgba(var(--rc-ink), 0.08);
 }
-
-/* Small marks: a tag is a solid stamp, a pill an outlined one. */
-.apple-app .settings-tag {
-  border-radius: 0;
-  background: rgb(var(--rc-ink));
-  color: var(--rc-paper);
+.apple-app .settings-button[data-slot="button"] {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 12px;
+  font-size: 12px;
 }
-.apple-app .settings-pill {
+.apple-app .settings-select[data-slot="select-trigger"] {
+  height: 24px;
+  min-height: 24px;
+  min-width: 120px;
+  font-size: 12px;
+}
+.apple-app .settings-button[data-slot="button"]:disabled,
+.apple-app .settings-select[data-slot="select-trigger"]:disabled {
+  opacity: 0.35;
+}
+/* Move up and down: two cells in one lighter box. */
+.apple-app .settings-move {
+  display: inline-flex;
+  flex: none;
+  height: 24px;
+  border: 1px solid rgba(var(--rc-ink), 0.45);
+}
+.apple-app .settings-move > [data-slot="button"] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
   border-radius: 0;
-  border: 1.2px solid currentColor;
+  color: rgba(var(--rc-ink), 0.8);
+}
+.apple-app .settings-move > [data-slot="button"] + [data-slot="button"] {
+  border-left: 1px solid rgba(var(--rc-ink), 0.45);
+}
+
+/* Small marks: a status is a mono label in a thin box. */
+.apple-app .settings-pill {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 0;
+  border: 1px solid currentColor;
   background: transparent;
+  font: 400 11px/18px var(--rc-mono);
+}
+.apple-app .settings-pill.is-gray {
+  color: rgba(var(--rc-ink), 0.7);
+  border-color: rgba(var(--rc-ink), 0.45);
+  border-style: dashed;
 }
 .apple-app .settings-pill.is-green {
   color: var(--rc-green);
@@ -607,59 +734,110 @@
   border: 1.2px dashed currentColor;
   background: transparent;
 }
+/* A problem is one line of red (a warning, amber) after a solid square. */
+.apple-app .settings-notice.is-error,
+.apple-app .settings-notice.is-warning,
+.apple-app .settings-card > .settings-notice.is-warning {
+  border: 0;
+  padding: 8px 0;
+  font-size: 11.5px;
+  background: transparent;
+}
+.apple-app .settings-notice.is-error {
+  color: var(--rc-red);
+}
+.apple-app .settings-notice.is-warning,
+.apple-app .settings-card > .settings-notice.is-warning {
+  color: var(--rc-amber);
+}
+.apple-app .settings-notice.is-error > div:first-child::before,
+.apple-app .settings-notice.is-warning > div:first-child::before {
+  content: "■";
+  margin-right: 6px;
+}
+.apple-app .settings-footnote {
+  padding-inline: 0;
+  color: rgba(var(--rc-ink), 0.6);
+}
 
 /* ---- The Agents page ------------------------------------------------ */
 
-/* The agent list prints like the page list: square rows, the chosen one
-   solid with a pointer, a dashed rule under the pinned ones. */
-.apple-app .agents-list {
-  gap: 0;
-  padding-right: 14px;
-  border-right: 1.5px dashed rgba(var(--rc-ink), 0.5);
-}
-.apple-app .agents-list-item {
+/* The agent cards print in thin ink boxes; the chosen one has a heavier
+   rule. */
+.apple-app .agents-list-item,
+.apple-app .agents-list-fold {
+  border: 1px solid rgba(var(--rc-ink), 0.45);
   border-radius: 0;
   color: rgb(var(--rc-ink));
 }
-.apple-app .agents-list-item:hover {
-  background: rgba(var(--rc-ink), 0.07);
+.apple-app .agents-list-fold {
+  border-style: dashed;
+  color: rgba(var(--rc-ink), 0.6);
+}
+.apple-app .agents-list-item:hover,
+.apple-app .agents-list-fold:hover {
+  background: rgba(var(--rc-ink), 0.06);
 }
 .apple-app .agents-list-item.is-selected {
-  background: rgb(var(--rc-ink));
-  color: var(--rc-paper);
-}
-.apple-app .agents-list-item.is-selected::after {
-  content: "◀";
-  margin-left: auto;
-  font-size: 9px;
+  border: 2px solid rgb(var(--rc-ink));
+  padding: 7px;
 }
 .apple-app .agents-list-item.is-off .agents-list-name,
 .apple-app .agents-list-state {
-  color: rgba(var(--rc-ink), 0.5);
+  color: rgba(var(--rc-ink), 0.6);
 }
-.apple-app .agents-list-item.is-selected .agents-list-name,
-.apple-app .agents-list-item.is-selected .agents-list-state {
-  color: var(--rc-paper);
-  opacity: 0.75;
-}
-.apple-app .agents-list-item.is-selected:not(.is-off) .agents-list-name {
-  opacity: 1;
-}
-.apple-app .agents-list-item:focus-visible {
+.apple-app .agents-list-item:focus-visible,
+.apple-app .agents-list-fold:focus-visible {
   outline: 1.5px dashed rgb(var(--rc-ink));
-  outline-offset: -3px;
+  outline-offset: 2px;
 }
 .apple-app .agents-list-label {
   font-family: var(--rc-mono);
   color: rgba(var(--rc-ink), 0.6);
 }
-.apple-app .agents-list-fold {
-  margin-top: 6px;
-  border-top: 1.5px dashed rgba(var(--rc-ink), 0.5);
+
+/* A quota window: its name, a bar like the panel's, the share, when it
+   resets, then move and show. */
+.apple-app .agents-quota-line {
+  display: grid;
+  grid-template-columns: 12px 84px minmax(40px, 1fr) 40px 124px auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  font-size: 12.5px;
 }
-.apple-app .agents-detail-title h2 {
-  font: 700 13.5px/18px var(--rc-mono);
-  letter-spacing: 2px;
+.apple-app .agents-quota-line.is-off {
+  color: rgba(var(--rc-ink), 0.45);
+}
+.apple-app .agents-quota-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apple-app .agents-quota-bar {
+  height: 5px;
+  background: rgba(var(--rc-ink), 0.14);
+}
+.apple-app .agents-quota-bar > i {
+  display: block;
+  height: 100%;
+  background: rgb(var(--rc-ink));
+}
+.apple-app .agents-quota-line.is-off .agents-quota-bar > i {
+  background: rgba(var(--rc-ink), 0.35);
+}
+.apple-app .agents-quota-line b {
+  font: 700 12.5px var(--rc-mono);
+  text-align: right;
+}
+.apple-app .agents-quota-line small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: rgba(var(--rc-ink), 0.6);
 }
 
 /* A dragged quota row shows where it lands with a dashed box. */
@@ -686,13 +864,91 @@
 
 /* ---- The Display page ----------------------------------------------- */
 
-/* The HUD preview stays in colour (the glow is judged by it), framed in ink. */
+/* The HUD preview: the wallpaper toned down inside a dashed ink frame
+   labelled 预览; the HUD itself keeps its colours (the glow is judged by it). */
+.apple-app .settings-hud-frame {
+  position: relative;
+  border: 1.2px dashed rgb(var(--rc-ink));
+  padding: 8px;
+}
+.apple-app .settings-hud-frame-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 6px;
+  background: var(--rc-paper);
+  font: 700 10px/16px var(--rc-mono);
+  letter-spacing: 0.2em;
+  color: rgb(var(--rc-ink));
+}
 .apple-app .settings-hud-preview {
   border-radius: 0 !important;
-  outline: 1.5px solid rgb(var(--rc-ink));
+}
+.apple-app .settings-hud-wallpaper {
+  filter: saturate(0.55) contrast(0.95);
+}
+.apple-app .settings-hud-frame-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  font: 10px/1 var(--rc-mono);
+  letter-spacing: 0.08em;
+  color: rgba(var(--rc-ink), 0.6);
 }
 .apple-app .apple-content [data-slot="button"][data-variant="ghost"]:hover {
   background: rgba(var(--rc-ink), 0.08);
+}
+
+/* What the panel holds: the parts and their switches on the left, the panel
+   drawn small on the right; the reset countdown hangs under the board. */
+.apple-app .settings-panel-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding-bottom: 12px;
+}
+.apple-app .settings-panel-parts > * + * {
+  border-top: 1px dashed rgba(var(--rc-ink), 0.25);
+}
+.apple-app .settings-panel-subpart {
+  position: relative;
+  padding-left: 22px;
+}
+.apple-app .settings-panel-subpart::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 9px;
+  height: 22px;
+  border-left: 1px solid rgba(var(--rc-ink), 0.4);
+  border-bottom: 1px solid rgba(var(--rc-ink), 0.4);
+}
+.apple-app .settings-panel-frame {
+  margin-top: 14px;
+}
+
+/* Back to defaults: one line of buttons under a rule, after the groups. */
+.apple-app .settings-resetline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1.5px solid rgba(var(--rc-ink), 0.75);
+}
+.apple-app .settings-resetline-title {
+  margin-right: 6px;
+  font: 700 11px/1 var(--rc-mono);
+  letter-spacing: 0.3em;
+}
+.apple-app .settings-resetline small {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(var(--rc-ink), 0.55);
 }
 
 /* ---- The Agent plugins page ---------------------------------------- */
@@ -712,10 +968,138 @@
   border-left: 1.5px dashed rgba(var(--rc-ink), 0.5);
 }
 
-/* ---- The page's foot: a total, a barcode, the tear ------------------ */
+/* The clients print as a table on one grid: the name column, then the
+   Plugin and HUD tools columns, the last one reaching the box's right edge.
+   Every line uses those columns: the head, a client's line (a status in each
+   column), and the lines inside a client (a status in its own column, its
+   button after it, the ⋯ menu at the column's end). Names line up by level:
+   a client's lines under the client's name, a plugin's switches one step
+   further in, each level's rules starting where its names start. */
+.apple-app .settings-card:has(> .plugins-table-head) {
+  --plugins-col: 156px;
+  --plugins-gap: 12px;
+  /* Past the chevron and the logo: where a client's name starts. */
+  --plugins-in: 52px;
+  --plugins-in2: 68px;
+}
+.apple-app .plugins-table-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
+  padding: 8px 0 6px var(--plugins-in);
+  border-bottom: 1px solid rgba(var(--rc-ink), 0.6);
+  font: 500 10.5px/1.4 var(--rc-mono);
+  letter-spacing: 0.1em;
+  color: rgba(var(--rc-ink), 0.6);
+}
+.apple-app .settings-card > .plugins-table-head + *::before {
+  display: none;
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-summary {
+  display: grid;
+  grid-template-columns: var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  > .settings-collapsible.is-open
+  > .settings-collapsible-body {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > .settings-row {
+  padding-left: var(--plugins-in);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > *
+  + *::before,
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible.is-open
+  .settings-collapsible-body::before {
+  left: var(--plugins-in);
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  > .plugins-sub::before {
+  left: var(--plugins-in2);
+}
+.apple-app .plugins-sub > * {
+  position: relative;
+}
+.apple-app .plugins-sub > .settings-row {
+  padding-left: var(--plugins-in2);
+}
+.apple-app .plugins-sub > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--plugins-in2);
+  right: 0;
+  border-top: 1px dashed rgba(var(--rc-ink), 0.25);
+  pointer-events: none;
+}
+/* A line's control sits in a column: a status line's cells span both, a
+   plugin's switch starts the Plugin column, anything else the HUD tools
+   column. */
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control {
+  flex: 0 0 var(--plugins-col);
+  max-width: none;
+  justify-content: flex-start;
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control:has(> .plugins-cell),
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .plugins-sub
+  .settings-row-control {
+  flex-basis: calc(var(--plugins-col) * 2 + var(--plugins-gap));
+}
+.apple-app
+  .settings-card:has(> .plugins-table-head)
+  .settings-collapsible-body
+  .settings-row-control:has(> .plugins-cell) {
+  display: grid;
+  grid-template-columns: var(--plugins-col) var(--plugins-col);
+  gap: var(--plugins-gap);
+}
+.apple-app .plugins-cell {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.apple-app .plugins-cell > [data-slot="button"][data-size="icon-xs"] {
+  margin-left: auto;
+}
+.apple-app .plugins-cell .settings-pill-dot {
+  display: none;
+}
+.apple-app .plugins-cell-none {
+  font-family: var(--rc-mono);
+  color: rgba(var(--rc-ink), 0.35);
+}
 
-/* Counts the rows printed on this page; folded rows are not printed. The
-   barcode is a fixed pattern and carries nothing. */
+/* ---- The page's foot ------------------------------------------------ */
+
+/* One line under a rule: the page, and how many rows it prints; folded rows
+   are not printed. */
 .apple-app .settings-pane-content {
   counter-reset: rc-item;
 }
@@ -723,101 +1107,18 @@
   counter-increment: rc-item;
 }
 .apple-app .settings-pane-content:has(.settings-row)::after {
-  content: "Total " counter(rc-item) " items";
+  content: "— " attr(data-page) " · " counter(rc-item) " items —";
   display: block;
-  margin-top: 22px;
-  padding: 10px 0 48px;
-  border-top: 3px double rgba(var(--rc-ink), 0.75);
-  font: 700 13px/1 var(--rc-mono);
-  letter-spacing: 1px;
-  background: linear-gradient(
-      90deg,
-      rgb(var(--rc-ink)) 0% 1.4%,
-      transparent 1.4% 2.7%,
-      rgb(var(--rc-ink)) 2.7% 3.4%,
-      transparent 3.4% 4.2%,
-      rgb(var(--rc-ink)) 4.2% 5.5%,
-      transparent 5.5% 6.7%,
-      rgb(var(--rc-ink)) 6.7% 7.4%,
-      transparent 7.4% 9.1%,
-      rgb(var(--rc-ink)) 9.1% 10.7%,
-      transparent 10.7% 11.7%,
-      rgb(var(--rc-ink)) 11.7% 12.7%,
-      transparent 12.7% 14.3%,
-      rgb(var(--rc-ink)) 14.3% 16%,
-      transparent 16% 16.6%,
-      rgb(var(--rc-ink)) 16.6% 18%,
-      transparent 18% 18.9%,
-      rgb(var(--rc-ink)) 18.9% 20.6%,
-      transparent 20.6% 21.3%,
-      rgb(var(--rc-ink)) 21.3% 22.8%,
-      transparent 22.8% 24%,
-      rgb(var(--rc-ink)) 24% 24.8%,
-      transparent 24.8% 25.4%,
-      rgb(var(--rc-ink)) 25.4% 27.6%,
-      transparent 27.6% 29.4%,
-      rgb(var(--rc-ink)) 29.4% 30.1%,
-      transparent 30.1% 31.3%,
-      rgb(var(--rc-ink)) 31.3% 33.5%,
-      transparent 33.5% 34.2%,
-      rgb(var(--rc-ink)) 34.2% 35.5%,
-      transparent 35.5% 36.8%,
-      rgb(var(--rc-ink)) 36.8% 38.5%,
-      transparent 38.5% 39.4%,
-      rgb(var(--rc-ink)) 39.4% 40.2%,
-      transparent 40.2% 42.1%,
-      rgb(var(--rc-ink)) 42.1% 43.4%,
-      transparent 43.4% 44.2%,
-      rgb(var(--rc-ink)) 44.2% 45.7%,
-      transparent 45.7% 46.6%,
-      rgb(var(--rc-ink)) 46.6% 47.4%,
-      transparent 47.4% 49%,
-      rgb(var(--rc-ink)) 49% 50.1%,
-      transparent 50.1% 51.1%,
-      rgb(var(--rc-ink)) 51.1% 51.8%,
-      transparent 51.8% 53.5%,
-      rgb(var(--rc-ink)) 53.5% 54.5%,
-      transparent 54.5% 56.2%,
-      rgb(var(--rc-ink)) 56.2% 57.6%,
-      transparent 57.6% 58.4%,
-      rgb(var(--rc-ink)) 58.4% 60%,
-      transparent 60% 61%,
-      rgb(var(--rc-ink)) 61% 62.9%,
-      transparent 62.9% 64.3%,
-      rgb(var(--rc-ink)) 64.3% 65.1%,
-      transparent 65.1% 65.9%,
-      rgb(var(--rc-ink)) 65.9% 67.2%,
-      transparent 67.2% 67.8%,
-      rgb(var(--rc-ink)) 67.8% 68.4%,
-      transparent 68.4% 69.5%,
-      rgb(var(--rc-ink)) 69.5% 71.2%,
-      transparent 71.2% 72.6%,
-      rgb(var(--rc-ink)) 72.6% 74.8%,
-      transparent 74.8% 75.8%,
-      rgb(var(--rc-ink)) 75.8% 77.1%,
-      transparent 77.1% 78.3%,
-      rgb(var(--rc-ink)) 78.3% 79.6%,
-      transparent 79.6% 81.2%,
-      rgb(var(--rc-ink)) 81.2% 82.5%,
-      transparent 82.5% 83.7%,
-      rgb(var(--rc-ink)) 83.7% 84.6%,
-      transparent 84.6% 85.5%,
-      rgb(var(--rc-ink)) 85.5% 87.3%,
-      transparent 87.3% 88%,
-      rgb(var(--rc-ink)) 88% 89%,
-      transparent 89% 90.5%,
-      rgb(var(--rc-ink)) 90.5% 92.6%,
-      transparent 92.6% 94.4%,
-      rgb(var(--rc-ink)) 94.4% 96.6%,
-      transparent 96.6% 98.3%,
-      rgb(var(--rc-ink)) 98.3% 100%,
-      transparent 100% 100%
-    )
-    center bottom / 82% 34px no-repeat;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 2px solid rgba(var(--rc-ink), 0.8);
+  text-align: center;
+  font: 400 11px/1.4 var(--rc-mono);
+  letter-spacing: 0.12em;
+  color: rgba(var(--rc-ink), 0.6);
 }
 .apple-app:lang(zh) .settings-pane-content:has(.settings-row)::after {
-  content: "共 " counter(rc-item) " 项";
-  letter-spacing: 2px;
+  content: "— " attr(data-page) " · 共 " counter(rc-item) " 项 —";
 }
 
 /* ---- The statistics window ------------------------------------------ */

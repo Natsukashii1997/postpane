@@ -162,21 +162,10 @@
   background: var(--muted);
 }
 
-.settings-slider-row .settings-row-main {
-  gap: 12px;
-}
-.settings-slider-label {
-  flex: 0 0 140px;
-  font-size: 13px;
-  line-height: 18px;
-}
 .settings-slider {
-  flex: 1;
-  min-width: 80px;
+  width: 100%;
 }
 .settings-slider-value {
-  flex: 0 0 64px;
-  text-align: right;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--muted-foreground);
@@ -450,6 +439,10 @@
 }
 .sidebar-drag-space {
   height: 44px;
+  flex-shrink: 0;
+}
+.settings-drag-space {
+  height: 26px;
   flex-shrink: 0;
 }
 .apple-sidebar nav {

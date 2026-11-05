@@ -33,7 +33,7 @@ const outsidePointer: HUDNativePointer = {
 /** Only outer HUD geometry wakes native reports; animated bot descendants never do. */
 function observeHUDContours(report: () => void) {
   const selector =
-    ".hud-scene, .hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor";
+    ".hud-scene, .hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant";
   let timer: ReturnType<typeof setTimeout> | null = null,
     last = 0;
   const queue = () => {
@@ -368,6 +368,11 @@ export default function NativeHUDSurface({
   const configure = useCallback(() => {
     void invoke("hud_show_main");
   }, []);
+  const floatNotes = useCallback(
+    (anchor: { x: number; y: number; width: number; height: number }) =>
+      invoke<boolean>("toggle_float_notes", { anchor }),
+    [],
+  );
   // Statistics opens on Tokens (Open's footer button), or where a session row points.
   const stats = useCallback((target?: { tab?: string; sessionId?: string }) => {
     void invoke("open_statistics", {
@@ -525,7 +530,7 @@ export default function NativeHUDSurface({
         if (disposed) return;
         const regions = [
           ...document.querySelectorAll(
-            ".hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor",
+            ".hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant",
           ),
         ]
           .map((element) => {
@@ -628,6 +633,7 @@ export default function NativeHUDSurface({
       notchFrame={notchFrame}
       height={geometry?.canvas.height ?? window.innerHeight}
       onConfigure={configure}
+      onFloatNotes={floatNotes}
       onStats={stats}
       update={update}
       onUpdate={openUpdate}

@@ -1,21 +1,270 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装默认不显示的改动待审（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」、每周 Fable 用看板设置隐藏（PR #58）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）、不被别的智能体的待回答挡住（PR #97），新回复的小签和回执左侧换成机器人印章（PR #102）。随手记猫球轻摆幅度调大（PR #91）。DeepSeek 监听提问加开关、默认关，不再每 2 秒扫全机进程（PR #100）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
 
-## 菜单栏图标新装默认不显示（2026-11-05，Claude 云端会话，常浩派的遗留修正，要求只开 PR 不合并；已提交并推送到 `claude/adoring-ride-pipfny`，PR #57 草稿待审，未发布）
+## Hermes 新回复：小签和回执左侧换成机器人印章（2026-11-05，Claude，常浩附两张截图要求小签图标和回执头像换成对应飞书机器人的印章、右侧印章挪到左边，问后选「直接改」「保留名字」；PR #102 测试全过，按「测试全过可直接合并」授权已 squash 合并 `aef5489`，已从 main `aef5489` 打包安装、回读一致）
 
-- 时间：开工 `2026-11-05 12:25`（估计：第一次 `date` 是 12:29，换算自容器的 UTC 时钟；本节写于 `2026-11-05 12:45`）。来由：「阶段 4 收尾：小人不改，菜单栏图标关掉」一节的遗留——新装默认值仍是显示。
-- 改了哪些文件：`src/crates/core/src/lib.rs`（默认设置 `showMenuBarIcon` 改 `false`，唯一决定新装默认值的地方）、`src/crates/hud/src/presentation/app_rules.rs`、`src/crates/host/src/coordinator.rs`、`src/packages/app/src/settings/GeneralPane.tsx`（三处缺值兜底统一为不显示）、`src/crates/core/src/settings.rs`（新测试：新装 false；已存 true/false 照用；旧文件缺这一项为 false；原版导入 true 照用）、`src/packages/protocol/src/index.ts`（字段注释）、`docs/parity/c04-models-logic.md` #88 改 `deliberate` 与小结、`docs/parity/README.md`（脚本重算）、`docs/ROADMAP.md` 阶段 4 状态、`docs/LESSONS.md`（L-06）、本文件。已有设置照用户的值，不迁移、不覆盖。
-- 测试：云端 Linux，Node `v24.22.2`，先跑 `node src/tooling/package-resources.mjs`。`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 634 passed / 0 failed；`ℹ pass 166` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` 写完本节后重跑 `ℹ pass 4` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。日志在会话临时目录，未进证据目录（云端无本机路径）。
-- 验证：只有自动测试。macOS 专属代码未编译（Mac 上 Rust 是 642 项，这里 634 项）；未打包、未实机看菜单栏和设置页开关。
+- 时间：开工 `2026-11-05 21:57`（按本会话建立时间）。来由：issue #101，由 hermes-bots 会话交来。
+- 改了哪些文件：`hud/src/alerts/reply-list.ts`（`ReplyChip` 加 `bot`，取最新回复所属会话的 `session.bot`）、`alerts/ReminderMark.tsx` 与 `alerts/CompactAlertView.tsx`（小签上 Hermes 回复画 `BotStamp`，尺寸同断线细条）、`permissions/ListCard.tsx`（`EntryRow` 的 `seal` 改占第一列 34px、跨两行，替代 `HUDArtwork`，去掉右侧第 4 列）、`alerts/CompletionAlertView.tsx`（正文与「无法回到会话」缩进随左列：印章 46px，头像仍 30px）、`hud/test/reply-list.test.ts`（新测试：小签带上 Hermes 会话的 bot，非 Hermes 为 null）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（`ℹ pass 207` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`，Rust 全部 ok）。第一次跑 `card-column.test.ts` 失败（左列外层用了不定列宽的 grid），改成 flex 后重跑全过。
+- 验证：只有单测与类型检查；实机还没等到 Hermes 新回复，小签和展开回执的实物没看过，请常浩下次收到猛鬼兽 / 亚古兽回复时看一眼：小签左侧是印章、回执左侧是「印章 + 名字」、右侧没有章；Claude、Codex 的回执仍是原头像。
 - 截图：无。
-- 发布与回读：未发布。常浩本机设置已是 `false`，装新版后看不出变化。
+- 发布与回读：main `aef5489` 打包（日志 `~/Library/Application Support/postpane/evidence/2026-11-05-reply-stamp/build-main.log`），22:15:47 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`f1f0d27ef08b`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-reply-stamp/PostPane-before.app /Applications/PostPane.app`（`adea14b75fe0`，#100 装的版本）。
+- 与授权不一致之处、遗留问题、范围外发现：小签宽度估算 `compactAlertDockWidth` 没为印章多出的 4px 加宽（断线细条一直如此），右侧留白够用，没动。worktree `.claude/worktrees/101-reply-stamp` 本节提交后删掉。
+- 本轮新坑：无。
+
+## DeepSeek 监听提问加开关，默认关（2026-11-05，Claude，常浩排查「用驿窗时电脑很卡」后说「DeepSeek 观察器可以关掉」并选「设置里加开关，默认关」，回「开工」；PR #100 测试全过，按「测试全过可直接合并」授权已 squash 合并 `dfc3b3d`，已从 main `dfc3b3d` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 21:39`（按 issue #98 创建时间）。来由：实测驿窗空闲时主进程加三个 WebKit 进程约 40–66% CPU，DeepSeek 观察器每 2 秒拉起两次 `ps` 扫全机约 1200 个进程，常浩不用 harness。
+- 改了哪些文件：`platform/src/hooks/mod.rs`（`deepseek_wanted`、`set_deepseek()`、`start_deepseek()`，两个 DeepSeek 观察器只在开关打开且监听在跑时启动）、`core/src/lib.rs` 与 `core/src/settings.rs`（`deepseekQuestions` 默认 false、校验、读取）、`runtime/src/lib.rs`（启动时先定开关再开监听）、`host/src/lib.rs`（`set_setting deepseekQuestions` 先存再启停）、`packages/protocol`、`app/src/settings/agent-plugins/HooksSection.tsx`（插件页「在侧栏上回答」加「DeepSeek Harness 提问」开关）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 665 passed / 0 failed；`ℹ pass 206` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；新测试 `deepseek_observers_start_only_when_wanted_and_listening` 1 passed。日志 `~/Library/Application Support/postpane/evidence/98-check.log`、`98-test.log`、`98-build.log`。
+- 验证：浏览器预览（隔离数据目录 `evidence/2026-11-05-deepseek-switch/data`）插件页开关默认关，点开后 `settings.json` 回读 `"deepseekQuestions": true`。实机装新版后：40 次采样（10 秒）没看到 PostPane 拉起 `ps`（旧版 10 次采样见到 2 次）；`sample` 里不再有 `DeepSeek questions`、`DeepSeek plugin asks` 线程；主进程 CPU 约 12.8%（单次 15 秒采样）。
+- 截图：无（浏览器里看过插件页，未存图）。
+- 发布与回读：main `dfc3b3d` 打包，21:54 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`adea14b75fe0`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-deepseek-switch/PostPane-before.app /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：
-  - 从代码推断、未实机核实：`src/crates/host/src/tray.rs` 的 `install()` 建图标时是显示的，等第一份快照才按设置隐藏，启动时可能闪一下；本机关图标后就已存在，未改，记在 PR 里请常浩定。
-  - 手写设置文件没写 `showMenuBarIcon` 的，升级后由显示变为不显示；驿窗自己写的文件总带这一项，不受影响。
-  - 云端容器为跑检查装了 GTK/WebKit 开发库、临时装了 Node 24（只在本会话容器内）。
-  - 开 PR 后 main 前进了 6 个提交（PR #58、#62、#63 及交接），`CURRENT.md`、`docs/LESSONS.md` 冲突；已把 main 合入分支（不改历史），main 已用掉 L-04、L-05，本条坑改编号为 L-06，合并后重跑：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 639 passed / 0 failed；`ℹ pass 175` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。
+  - 同次排查（只读）发现的其他空闲开销没动：统计 `metering::recached` 每次查询对 10 万多行全表跑窗口函数（单次 0.4–0.8 秒，随 `statisticsRevision` 约 2 秒重查）、快照全量推送与 3 秒时钟整树重渲染、侧栏可见时 32 ms 指针轮询、小人 24/12/6 fps 与吊坠滤镜无限动画、每个 Claude 会话一套 `agent-hud-mcp` + `engine --app-channel` 并每 15 秒轮询。等常浩定是否开第一批。
+  - 卡顿主因在驿窗之外：48 个 Claude Code 会话（远程控制开着就常驻）把 swap 用到 24 GB；已按常浩同意归档 43 个空闲会话（swap 降到 10 GB），并打开「不活跃 2 天自动归档」「PR 关闭后自动归档」。
+- 本轮新坑：无。
+
+## Claude 额度彻底不显示、不计入每周 Fable（2026-11-05，Claude，常浩说「我说了不看这个，工作台的所有的额度相关的都不考虑 Fable」，由另一会话交来；PR #94、#96 测试全过，按「测试全过可直接合并」授权已 squash 合并 `53e5313`、`4531d22`，已从 main `4531d22` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 20:55`（按本会话建立时间；本节写于 `2026-11-05 21:42`）。来由：issue #92。PR #58 当时没改代码，只经 HUD 工具放了 `hiddenRows` 草稿、没保存，所以悬停面板一直有「每周 · Fable」。
+- 改了哪些文件：
+  - PR #94：`src/crates/agents/src/claude/account.rs`（`windows()` 识别出 Fable 周额度——`seven_day_fable` 键或 `limits[]` 里 `weekly_scoped` 的 Fable 项——后丢掉，`IGNORED_FAMILY`）、`core/src/demo/data.rs` 与 `demo/mod.rs`（演示数据去掉 Fable 额度行）。
+  - PR #96：`agents/src/account.rs`（`Provider.dropped_windows` 与 `drops()`）、`claude/account.rs`（声明 `claude-weekly-fable`）、`platform/src/accounts/mod.rs`（`projection()` 出口过滤，挡住保留 30 天的旧行、重启副本与读失败沿用的旧读数）。
+  - 前端没改：看板行、总结句计数、「够用」印章、静止条最紧额度、预警细条、重置到账提醒、统计额度历史、设置「显示」的行开关都只用出口给的行。Fable 作为模型的 Token 用量统计不是额度，照旧。
+- 测试：PR #94 分支上 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 663 passed / 0 failed；`ℹ pass 203` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`），`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。PR #96 分支上 `pnpm test` 退出 0（Rust 合计 664 passed / 0 failed；`ℹ pass 205` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`），`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；之后只做 `cargo fmt` 和把新测试的数据目录换成子目录（`check-test-paths`），`agent-hud-platform` 156 个测试重跑全过，`pnpm run check` 退出 0。新测试：`fables_week_never_becomes_a_row`、`a_kept_or_restored_fable_week_never_reaches_the_projection`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-drop-fable/`（`check*.log`、`test*.log`、`rules*.log`、`build-main*.log`）。
+- 验证：实机 MCP `hud_snapshot`。装 #94 后（21:23）新读数已不含 Fable，但保留的旧行还在（见 L-07）；装 #96 后（21:38）Claude 额度只有 `claude-session`、`claude-weekly`、`claude-cloud-credits`，快照里没有任何 `weekly-fable`。悬停面板实物没截图，请常浩看一眼看板是否只剩 5 小时、每周、云端额度，总结句是否说「两个/三个」。
+- 截图：无。
+- 发布与回读：main `4531d22`（含另一会话的 #93、#97）打包，21:38 ditto 到 `/Applications`（AppleScript 退不掉，SIGTERM 结束旧进程）并启动，`shasum` 回读与产物一致（`5dc28f65423e`）；之后 main 只多了文档提交。21:38 看到另一会话（hermes-bots）也在打包，可能随后覆盖安装（L-05）：若它的包不含 #96，Fable 会回来，请看前核对。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-drop-fable/PostPane-before.app /Applications/PostPane.app`（21:10 另一会话装的版本，`033d56ad9ac8`）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 原计划一个 PR；装机后发现旧行被保留，补了 #96，两个 PR 都按授权直接合并。
+  - 常浩设置里若已保存过隐藏 Fable 的 `hiddenRows`，那条设置现在指向不存在的行，无害，没清。
+  - 数据库里已有的 Fable 历史读数（`quota_sample`）没删，统计只读显示中的窗口，看不到它。
+  - worktree `.claude/worktrees/92-drop-fable` 本节提交后即删。
+- 本轮新坑：L-07。
+
+## 多智能体接力：方向改定，ChatGPT 网页插件探针（2026-11-05，Claude，常浩说审核主要靠「ChatGPT……聊天模式」、Codex 偏测试，提出「在网页保持登录……开发 Chrome 插件……回传」，确认后说「可以，开始」；只改文档与 issue，无 PR）
+
+- 时间：开工 `2026-11-05 21:15`（估计，按常浩说「可以，开始」；本节写于 `2026-11-05 21:40`）。来由：#71、#72，批 0 开 #95（已关）。
+- 结论与改动：
+  - ROADMAP 阶段 5 改写为「多智能体接力」（`8dee17f`）：Claude 做事、ChatGPT 聊天审核、Codex 测试；驿窗自己当中转，不走 Orca。#71、#72 各加了方向说明，#72 去掉 needs-info。
+  - Codex 通道：ChatGPT.app（26.1029，包名 `com.openai.codex`，Codex 与 ChatGPT 聊天合一）的本地通道有 `thread-follower-start-turn`（空闲开新一轮）、`steer-turn`（驿窗回答 Codex 提问已在用）、`interrupt-turn` 等；聊天会话内容在 chatgpt.com 服务器，本地通道不管聊天。
+  - ChatGPT 通道：常浩 Chrome 里登录的 chatgpt.com + 驿窗插件，批 1 走 Native Messaging。探针实测填字发送、判断完成（「停止」按钮出现与消失）、读回复（含列表、表格、代码块、末行结论）都可行；新版页面选择器与两处待补（加粗、`pre` 代码块）记在 #95。
+- 测试：未跑仓库测试（没改代码）。探针三轮发送全部成功，turn-complete 分别 2.0 s、3.6 s、5.7 s；日志 `~/Library/Application Support/postpane/evidence/2026-11-05-chatgpt-probe/probe.jsonl`，插件与服务源码同目录。
+- 验证：后台标签页未测成（两次请常浩切走，页面仍报 visible），留到批 1 正式插件。
+- 截图：无。
+- 发布与回读：无发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - Claude in Chrome 未连上，改为写探针插件请常浩开发者模式加载（`~/Sandbox/2026-11-05-chatgpt-probe/extension`），常浩重新加载了 3 次；探针在测试聊天 `6aec83b7-…` 里发了 3 条测试话。本机临时服务（127.0.0.1:8796）已停；插件可由常浩移除。
+  - 批 1（#71 一键转交）范围大：Native Messaging 转接程序、正式插件、Codex `start-turn` 送话、转交单（乙），开工前先给常浩分批计划。
+  - 上一轮的 Codex 测试会话 `01a1aae3…`、`01a1aaec…` 与 Orca 仓库 `codex-sandbox` 仍未清理，等常浩定。
+- 本轮新坑：无。
+
+## 随手记猫球轻摆幅度调大（2026-11-05，Claude，常浩说「摇晃的幅度可以稍微大一点点吗？显得明显一点」；PR #91 测试全过，按「测试全过可直接合并」授权已 squash 合并 `a676b55`；没有单独打包，安装的包已含此改动）
+
+- 时间：开工 `2026-11-05 20:25`（估计，按常浩发消息；本节写于 `2026-11-05 20:55`）。来由：issue #89。
+- 改了哪些文件：`src/packages/ui/src/global.css` 的 `hud-pendant-sway` 关键帧，最大偏角 2.6° → 4.5°，回摆 -1.8° → -3°，余摆 0.8° → 1.3°；7 秒一次的节奏、减少动态时全停都不变。
+- 测试：分支上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 662 passed / 0 failed；`ℹ pass 198` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`check-rules` 通过。日志未留存（只改一处 CSS）。
+- 验证：未实机看摆动效果，请常浩看一眼是否合适。
+- 截图：无。
+- 发布与回读：合并后 main 上已有另一会话的 #87；我本想从最新 main 打包，发现 `/Applications` 已是另一会话 20:44:39 从 main `8491afa`（含 #91）在 worktree `85-scroll-thumbs` 打出的包（`shasum` 前 12 位 `1c9d1e66ea43`，与该包一致），进程 20:44:56 启动，故停掉自己的打包，没有重装。
+- 与授权不一致之处、遗留问题、范围外发现：worktree `.claude/worktrees/89-sway` 已删。
+- 本轮新坑：无。
+
+## 全应用滚动条静止隐藏、滚动时出现后淡出；修侧栏展开时侧边空隙（2026-11-05，Claude，常浩截图说「侧边滚动条明显，然后一直在……不滚动时看不见，滚动时显示然后滚完淡化消失」，又补「鼠标移到侧栏上时能明显看到侧边有个空隙……1s 之内再恢复正常」，问答确认空隙在「面板与屏幕边缘之间」；常浩说「看过了，合并」，PR #87 已 squash 合并 `8491afa`，已从 main `8491afa` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 18:17`（估计，按常浩第一条消息；本节写于 `2026-11-05 20:46`）。来由：issue #85。录屏逐帧看到（`evidence/2026-11-05-scroll-gap/hover.mov`、`pair.png`）：面板展开的 0.4 秒里高度从小变大、内容暂时放不下，系统滚动条冒出来占掉面板靠屏幕边一侧约 10 像素，高度够了才消失，就是「侧边空隙」；和「滚动条一直在」同一根因。
+- 改了哪些文件（PR #87）：`src/packages/ui/src/global.css`（全局隐藏系统滚动条）、`ui/src/lib/scroll-thumbs.ts`（新：监听整页滚动，给正在滚的那块画 4px 浮层细条，颜色取该处文字色、45% 透明，停 1 秒后 0.6 秒淡出并移除；不占宽度、不接鼠标）、`apps/desktop/src/main.tsx`（装一次）、`hud/src/HoverPanel.tsx` 与 `scene/HUDExpandedSurface.tsx`（去掉 `scrollbarWidth` 和 Windows 隐藏类）、`hud/src/panel/SessionsSection.tsx`（去掉 #66 自画滑块与悬停淡显）、`app/src/styles.css`（删两条旧隐藏规则）、`app/src/settings/receipt.css`（删 `scrollbar-gutter`）、`docs/LESSONS.md`（L-06）。新测试 `ui/test/scroll-thumbs.test.ts`。
+- 测试：合入 main `8d9bd4b`（#90）后的 `88a2527` 上 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 19 组 `test result: ok`、0 组 FAILED；`ℹ pass 203` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；此前分支上 `node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`，`check-rules` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-gap/`（`check3.log`、`test3.log`、`build-main.log`）。
+- 验证：修改前在实机录屏确认根因（上面）。修改后我没在实机复看：分支包装上后卡在「访问文稿」权限弹窗（L-06），全屏控制授权也没等到回应，悬停展开和滚动淡出都没录到。常浩说「看过了」，但 19:45、20:34 两次被别的会话从不含本改动的 main 覆盖安装（L-05），他看到的可能不是本改动；20:44 已从含本改动的 main 重装，请常浩再看一次。
+- 截图：无（录屏与逐帧拼图在 evidence 目录）。
+- 发布与回读：main `8491afa` 打包，20:44:56 ditto 到 `/Applications` 并重启，`shasum` 回读与产物一致（`26673965d0fa`；另一会话装的也是这个值）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-scroll-gap/PostPane-before.app /Applications/PostPane.app`（与当前同一个包；更早的不含本改动的版本见 `evidence/2026-11-05-hermes-bots/PostPane-before.app`）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 滑块只显示、不能拖动；触控板和滚轮不受影响。
+  - 「正在进行」列表原来鼠标悬停时淡显滑块，按「不滚动时看不见」一并去掉。
+  - 强推分支被自动模式拦下，改为把 main 合并进分支后普通推送，最终 squash 合并效果相同。
+  - 卡在权限弹窗的旧进程 AppleScript 退不掉，用 SIGTERM 结束。worktree `.claude/worktrees/85-scroll-thumbs` 本节提交后即删。
 - 本轮新坑：L-06。
+
+## Hermes 新回复不被别的智能体的待回答挡住（2026-11-05，Claude，#93 装上后常浩复测「还是没有任何的消息弹窗……也没有展开」；PR #97 测试全过，按「测试全过可直接合并」授权已 squash 合并 `4ae1993`，已从 main `b087e87` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 21:19`（估计，按常浩复测那条消息；本节写于 `2026-11-05 21:46`）。来由：issue #82 复测。
+- 原因：复测时快照里两条 Hermes 新回复事件都在（21:18:09「所以你最近的一份工作是什么」、21:18:50「你有什么技能最近自研的么」），同时另一会话有一个 Claude 待回答（21:17:35）。待回答排在回执队列最前，折叠小签只显示它；#79 起有待回答时只能从提问智能体的小人展开。Hermes 回执排在后面，既不弹也打不开。上一轮实测时恰好没有待回答，所以没复现。
+- 改了哪些文件（PR #97）：`src/packages/hud/src/alerts/reply-stays.ts`（`seenFirst`：新到的 Hermes 回复排到队首）、`hud/src/IslandNews.tsx`（排队后套用）、`hud/test/reply-stays.test.ts`（+1 项）。
+- 测试：`pnpm run check` 退出 0；`check-rules` 通过；`pnpm test` 退出 0（Rust 合计 663 passed / 0 failed；`ℹ pass 206` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `evidence/2026-11-05-hermes-bots/check5.log`、`test5.log`、`build-front2.log`。
+- 验证：两次申请全屏控制都超时，未能由我实测；常浩随后自己在飞书复测，回复「测试成功了，OK的」（小签留在侧栏、移上去展开回执）。issue #82 已关闭。
+- 截图：无。
+- 发布与回读：第一次打包在编译中途被结束（退出码 144）；期间另一会话 21:38 装了 main 包（`5dc28f65423e`）。从 main `b087e87`（含 #97、#96）重新打包，产物同为 `5dc28f65423e`，即那次安装已含本修复；SIGTERM 结束旧进程后 21:42:51 重启，回读一致。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before-stays.app /Applications/PostPane.app`（#90 之后、#93 之前）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 没看过的 Hermes 回执在队首时，别的智能体的待回答不显示折叠小签，只靠它自己小人的等待状态提示；Hermes 回执收起后待回答回到队首。新来的待回答也排在没看过的 Hermes 回执后面。
+  - worktree `.claude/worktrees/82-hermes-reply-front` 本节提交后即删。
+- 本轮新坑：无。
+
+## Hermes 新回复看过才收起（2026-11-05，Claude，常浩说「能看到它在处理消息，但是没有消息的弹出以及没有消息的整个的展开面板。你接手我的电脑自己去操作实验一下……请一定要修复」；PR #93 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e55a555`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 20:45`（估计，按常浩这条消息；本节写于 `2026-11-05 21:13`）。来由：issue #82 实测。
+- 实测（computer-use，飞书、驿窗两个应用授权；在飞书打字用了一次全屏控制，事后已交还）：给猛鬼兽发 3 条测试消息（第一条因后台写入生效过一次而文字重复）。鼠标在飞书里时，回完后 Hermes 小人旁弹出折叠小签（标题是这次的问题、`REPLY 1`），约 4 秒自动收起；鼠标停在小人或小签位置时，回执完整展开并停住（问题、回复、猛鬼兽方印、用时、Token、知道了 / 回到会话）。结论：展开正常；Hermes 几秒就回完，人在看飞书，4 秒小签等不到人转头。另：快照里事件一度为空，是另一会话 20:44 重装并重启了驿窗、内存事件清空，不是缺陷。
+- 改了哪些文件（PR #93）：`src/packages/hud/src/alerts/reply-stays.ts`（新：`staysUntilSeen`，Hermes 的新回复）、`hud/src/IslandNews.tsx`（自动收起前先看是否被鼠标停留过）、测试 `hud/test/reply-stays.test.ts`（2 项）。
+- 测试：`pnpm run check` 退出 0；`check-rules` 通过；`pnpm test` 退出 0（Rust 合计 662 passed / 0 failed；`ℹ pass 205` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hermes-bots/check4.log`、`test4.log`、`build-stays.log`。
+- 验证：改后实机未验证（第二次全屏授权超时，常浩当时正在用飞书，没有在后台抢着切聊天），请常浩发一条后把鼠标留在飞书、20 秒后看侧栏小签还在不在。
+- 截图：无存档（实测截图只在会话里看过）。
+- 发布与回读：从 main `e55a555` 打包，SIGTERM 结束旧进程后 21:10:59 启动，`shasum` 回读与产物一致（`033d56ad9ac8`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before-stays.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 只对 Hermes 的新回复生效；Claude、Codex 回复与各类细条仍 4 秒收起。没看过的 Hermes 回执排在队首时，后面的额度细条要等它被看过才轮到（回复会合并进同一张回执）。
+  - 小签上的「REPLY 1」是英文（原有文案，未改）。
+  - 实测在猛鬼兽聊天里留下 3 条测试消息（「测试：用一句话讲个冷笑话」重复两遍、「再讲一个」、「第三个」）及其回复。
+  - worktree `.claude/worktrees/82-hermes-reply-stays` 本节提交后即删。
+- 本轮新坑：无。
+
+## Hermes 回执用这一轮的问题当标题（2026-11-05，Claude，常浩在飞书实测两个机器人后说「侧边栏根本没有弹出消息」，排查后再试说「弹了，但是不太对。没有准确识别到我的问题」，确认是「标题不是我的问题」；PR #90 测试全过，按「测试全过可直接合并」授权已 squash 合并 `8d9bd4b`，已从 main `8491afa` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 20:00`（估计，按常浩说没弹出那条消息；本节写于 `2026-11-05 20:38`）。来由：issue #82 实测。
+- 排查「没弹出」：驿窗对两边每一轮都标了在跑 / 完成，快照里有 4 条 Hermes 新回复事件（猛鬼兽 19:48:38，亚古兽 19:52:01、:15、:39）和一条 19:52:00「亚古兽 · 断线」（当时另一会话在重启亚古兽网关）；前端过滤 Hermes 都能过。结论是回执弹出 4 秒后自动收起（鼠标不在侧栏时），Hermes 一轮只有 4–6 秒，常浩看飞书时错过了；再试时看到了。为看实时快照，常浩开了设置里「让智能体调整侧栏」（MCP），排查完可以关回去。
+- 改了哪些文件（PR #90）：`src/crates/agents/src/hermes/transcript.rs`（`last_prompt`：最近一条用户消息，跳过网关的 `[System note: …]`）、`agents/src/transcript/live.rs`（`LiveLog.prompt` 只在内存，`keep_words` 同一轮保留，`liveFacts.prompt` 输出）、`core/src/source_db.rs`（回合开始与结束时写入）、`core/src/island_events.rs`（新回复事件带 `prompt`）、`protocol/src/index.ts`、`hud/src/permissions/approval-list.ts`（回复标题优先用 `prompt`）、`hud/src/panel/SessionsSection.tsx`（正在进行行同上）；测试 `core/src/tests/hermes.rs`、`hud/test/reply-title.test.ts`。会话本身标题不变。
+- 测试：分支上 `pnpm test` 退出 0（Rust 合计 662 passed / 0 failed；`ℹ pass 200` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；之后只改新测试的类型标注，单独重跑 `ℹ pass 2` / `ℹ fail 0`，`pnpm run check` 退出 0，`check-rules` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hermes-bots/check3.log`、`test3.log`、`build-prompt.log`、`build-main2.log`。
+- 验证：只有单测；新标题未实机看，请常浩再发一条看回执标题是不是自己那句话。
+- 截图：无。
+- 发布与回读：先从 `8d9bd4b` 打包 20:35 装过一次（`ec7ea7537c0f`）；发现 main 已多出另一会话的 #91（以及随后的 #87），为免覆盖它们，从 main `8491afa` 重新打包，SIGTERM 结束旧进程后 20:36:50 启动，`shasum` 回读与产物一致（`26673965d0fa`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before-prompt.app /Applications/PostPane.app`（`5b64d3483aa9`，#88 版）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 这一批开头的改动误落在主目录 main 上（前一个 worktree 已删），发现后转成补丁移到 worktree `claude/82-hermes-prompt`，主目录已还原干净，没有提交到 main。
+  - 回执 4 秒自动收起是全局行为，没改；常浩若要 Hermes 回执停久一点或不自动收起，另说。
+  - worktree `.claude/worktrees/82-hermes-prompt` 本节提交后即删。
+- 本轮新坑：无。
+
+## 侧栏 Hermes 接两个飞书机器人：猛鬼兽、亚古兽（2026-11-05，Claude，常浩要求「把侧栏的 hermes 接到我飞书的两个 hermes 机器人上……同时出现在这一个栏上」，三项「标明是哪个、在线与忙闲、飞书新回复通知」都要、头像保持一个，标识要「像印章一样的形式，结合真实形象」，三版里选「乙 · 方印朱泥」；PR #86、#88 测试全过，按「测试全过可直接合并」授权已 squash 合并 `d8fb8bc`、`8e658a1`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 18:09`（按会话建立时间，即常浩第一条消息；本节写于 `2026-11-05 19:48`）。来由：猛鬼兽（`~/.hermes`）与亚古兽（`~/.hermes/profiles/agumon`）各跑一个飞书网关；驿窗本来已读两边 `state.db` 合在一个 Hermes 栏，但看不出是谁、没有实时状态和回复通知。issue #82。印章三版预览 https://claude.ai/artifact/8vhLKimQBxjq4YpeZ7ekGg （第 1 版是抽象线条图标，常浩改成按真实形象的印章；选乙）。
+- 改了哪些文件：
+  - PR #86：`src/crates/agents/src/hermes/mod.rs`（`bot()` 按 state.db 所在目录认机器人，名字取 SOUL.md 首行）、`core/src/presentation.rs`（Hermes 会话加 `bot`）、`protocol/src/index.ts`（`Session.bot`）、`hud/src/panel/BotStamp.tsx` 与 `bot-stamp.ts`（方印朱泥，猛鬼兽幽灵、亚古兽恐龙侧脸线描；其他 profile 印名字首字）、`panel/SessionsSection.tsx`（正在进行行尾盖章）。
+  - PR #88：`agents/src/hermes/transcript.rs`（`session_id`、`leases`、`last_reply`）、`core/src/source_db.rs`（读完一页后按 `session_turn_leases` 标在跑 / 完成并挂回复正文；Hermes 新头部先进内存再读回，正文才不丢）、`core/src/ingestion.rs`（`Reads::hermes_turns`）、`agents/src/hermes/mod.rs`（`gateways`、`down`：飞书未连上或需处理、网关不在 running 或 10 分钟没更新）、`core/src/island_events.rs`（`bot-offline` 提醒，照登出提醒：首看只记、一天一次、恢复重计）、`core/src/snapshot.rs`（传入网关、`render_key` 计入）、`hud/src/permissions/ListCard.tsx`（`EntryRow` 可选 `seal` 列）、`alerts/CompletionAlertView.tsx`（回执盖章）、`alerts/{QuotaAlertViews,CompactAlertView,ReminderMark}.tsx`、`alerts/quota-list.ts`、`glow-alert.ts`、`IslandNews.tsx`（断线细条各处分支，细条开头盖章）、`docs/ROADMAP.md`（Hermes 说明）。新测试：`core/src/tests/hermes.rs`、`hud/test/bot-stamp.test.ts`、`hud/test/bot-offline.test.ts` 等。
+- 测试：PR #86 提交 `49bd644` 上 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 656 passed / 0 failed；`ℹ pass 196` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。PR #88：`pnpm test` 退出 0（Rust 合计 662 passed / 0 failed；`ℹ pass 198` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`），之后只把一条测试的路径改成临时目录（`check-test-paths` 报 Unix 根路径），该测试单独重跑通过，`pnpm run check` 退出 0，`check-rules` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hermes-bots/`（`check.log`、`test.log`、`check2.log`、`test2.log`、`build-main.log`）。
+- 验证：开发引擎（独立数据目录 `evidence/2026-11-05-hermes-bots/dev-data`，端口 1430）用真实数据核对猛鬼兽会话 `bot` 为 `{"id":"default","name":"猛鬼兽"}`；亚古兽的会话在新数据目录首轮读入时没等到，只有单测覆盖。印章线描在本机渲染成 PNG 看过。侧栏实物、正在回复、新回复回执、断线细条都未实机看过：要在飞书给机器人发消息才会出现，请常浩试一下。实机 MCP 查会话没开（设置里「让智能体调整侧栏」关着）。
+- 截图：无（印章线稿渲染图只在会话草稿目录）。
+- 发布与回读：从 main `8e658a1`（含另一会话的 #83、#84）打包，19:45 ditto 到 `/Applications`；AppleScript 退不掉旧进程，改用 SIGTERM 结束后重启，新进程 19:45:32 启动；`shasum` 回读与打包产物一致（`5b64d3483aa9`）。装前 `/Applications` 是 `7d9180e3f59e`。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 原计划三批各一个 PR；第一批单独装上看不到（Hermes 会话没有回合事件，只在更新后 2 分钟内算在跑），第二、三批合成一个 PR #88；第一批合并后没单独装机。
+  - 朱红印章和「等你」「断线」的红色接近，预览里已提示，常浩仍选乙。
+  - 租约键是压缩链的根会话：压缩出的子会话在回复时，亮的是根会话那行。应用在一轮回复中途重启，这一轮不会标完成（最多 30 分钟后变空闲）。网关在应用启动时已经断着不提醒（与登出提醒一致）。
+  - 猛鬼兽、亚古兽是《数码宝贝》角色，印章线描只在本机驿窗用，不对外发布（同 Clawd 素材）。统计窗口的会话页没有盖章（没要求）。
+  - 主目录 `.claude/launch.json` 里临时加的开发页配置已删。worktree `.claude/worktrees/82-hermes-bots` 本节提交后即删。
+- 本轮新坑：无。
+
+## 插件页「各客户端」表格统一三列网格、按层级对齐（2026-11-05，Claude，常浩截图圈出表格错位，看了三版方案后说「还是乱……不用做3版，就一版改好」；「对齐了，合并」经 agent-hud 插件转入，核对 `/Applications` 仍是本节的包、PR 干净后照办；PR #83 已 squash 合并 `9e4b44b`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:53`（估计，按上一会话交来的任务；本节写于 `2026-11-05 18:42`）。来由：子行状态和按钮整体贴右，不对齐表头两列，子行状态带「●」；issue #80。
+- 改了哪些文件（PR #83）：`src/packages/app/src/settings/agent-plugins/rows.tsx`（`StatusRow` 加必填的 `column`，状态、按钮、⋯ 放进所属列的单元格，另一列留空）、`agent-plugins/ClientCards.tsx`（驿窗插件行传 `plugin`、侧栏工具行传 `tools`；插件自己的开关包进 `plugins-sub` 缩一级；「其他智能体」补两列「—」）、`settings/receipt.css`（表格一套变量：列宽 156、列距 12、名称起点 52、二级 68；表头、客户端行、子行共用两列，侧栏工具列贴分组框右边；去掉展开后的左侧虚线竖栏；各层分隔线从该层名称起；单元格里 ⋯ 在列尾、放不下时换行）。
+- 测试：分支 `ce95e33` 上 `pnpm run check` 退出 0、`pnpm test` 退出 0、`node --test tests/*.test.mjs` 退出 0。变基后的 `a0b580e`（`src/` 与 main `9e4b44b` 无差异）上重跑 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 193` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-plugins-table/`。
+- 验证：浏览器开发页（`settings-80`，独立数据目录，中文，960×720）全部收起、全部展开实测坐标：表头与每行单元格都在 220/376、388/544，子行名称与客户端名称都在 66，表格右边 544 与下一组开关右边一致。「回答提问」开关一级和「未发现」灰行开发页造不出，常浩在实机上看过说「对齐了」。
+- 截图：无存档（浏览器截图只在本会话里看过；常浩实机截图在对话里）。
+- 发布与回读：18:30:05 第一次装（`c0ed1fb30680`），18:35:03 被随手记猫球那一轮覆盖（`1f202579fa7b`），常浩据此看到的是旧表格。分支变基到 `d91110a`（含 #84）后重打，18:38:20 ditto 到 `/Applications` 并重启，`shasum` 回读与打包产物一致（`418298f8fb5d`）；合并前再查仍一致。main `9e4b44b` 与这个包的 `src/` 相同，没有再装。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-plugins-table/PostPane-before.app /Applications/PostPane.app`（#77 后、不含 #84 的版本）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 先按交接要求出了三版预览（https://claude.ai/artifact/CntA3SGAojuNSstrnX3Zoz），常浩否掉，改为直接做一版。
+  - 名称列较窄，子行说明（如「在侧栏上回答 Claude 的提问。」）会折成两行；英文界面下「未安装 + 安装 + ⋯」放不下一列时 ⋯ 换到下一行。
+  - 主目录 `.claude/launch.json` 加了 `settings-80`（不进仓库）。worktree `80-plugins-table` 本节提交后删除。
+- 本轮新坑：无。
+
+## 光晕只留柔光；设置页修纸面分块错位、Hermes 图标、智能体卡片截断（2026-11-05，Claude，常浩要求光晕「样式默认都是柔光」、删掉样式（先提的换颜色方案自己撤回），截图指出 Hermes 图标是白色、设置页「bug 还挺多，审查修复下」；「合并」经 agent-hud 插件转入，与待答的合并问题对得上；PR #77 测试全过已 squash 合并 `05988bf`，已从 main 重新打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:12`（按常浩说「样式默认都是柔光」那条消息；issue #74 建于 17:18；本节写于 `2026-11-05 17:48`）。来由：设置页整体优化（PR #73）装机后常浩看实物提出；issue #74、#76。
+- 改了哪些文件：`src/packages/app/src/settings/display/GlowSection.tsx`（删「样式」和点距 / 密度 / 实心 / 渐隐，组头只写动效）、`src/packages/hud/src/scene/NotchSurface.tsx` 与 `app/src/settings/SettingsSamples.tsx`（光晕一律 `style="blur"`，存的旧样式值不删）、`app/src/settings/receipt.css`（`.settings-sheet` 撕边改 `::before` / `::after` 两条细边、投影改 box-shadow，`.settings-scroll` 去掉 drop-shadow 滤镜；额度行重置时间列 96 → 124）、`settings/agents/agents.css`（卡片一行四张、说明单行）、`settings/agents/AgentList.tsx`、`AgentDetail.tsx`、`settings/PricesPane.tsx`（图标按 `useLightTheme` 传 `light`，Hermes 等模板图标在浅纸上为黑色）。
+- 测试：分支提交 `16288b9` 上 `pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。合并后在 main `05988bf`（含另一会话的 #75）上重跑：`pnpm run check` 退出 0、`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 189` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-glow-soft/check.log`、`test.log`、`check-main.log`、`test-main.log`、`build-main.log`。
+- 验证：浏览器开发页（独立数据目录，960×720）四页逐页展开、滚到底；看到并修了智能体卡片名字截断（Claude C…）、说明挤两行、重置时间截断；Hermes 图标变黑已看到。纸面分块错位是 WebKit 分块绘制丢块，浏览器复现不了；按原因修了，实机效果由常浩看，他回「合并」时没有单独说是否还错位。
+- 截图：无单独存档（浏览器截图只在本会话里看过）。
+- 发布与回读：分支版 17:37:13 装过一次；之后另一会话装了 #75 的 main 版（`/Applications` 二进制变成 `50852e05ca07`，见 L-05）。合并后从 main `05988bf`（含 #75、#77）重新打包，17:46:50 ditto 到 `/Applications` 并重启，`shasum` 回读与打包产物一致（`63d6ef97312d`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-glow-soft/PostPane-before.app /Applications/PostPane.app`（#73 版，不含 #75）。已对 `74-glow-soft-only` 跑 `cargo clean`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 光晕颜色仍按额度状态绿 / 黄 / 红（常浩撤回了换颜色）。动态形态在屏幕上不画光晕，「光晕」组照样显示；提过「动态形态下收起并写明切到刘海才生效」，常浩没表态，未改。
+  - 看到没改：每页结尾「共 N 项」只数展开着的行，展开 / 收起后会变；「智能体顺序」里 Codex 仍写「OpenAI」；插件页表格状态标签不带圆点、展开后的子行带「●」。
+  - 可清理 worktree 增加 `.claude/worktrees/74-glow-soft-only`（现检出 main `05988bf`，分离头），清理前问常浩。
+- 本轮新坑：无。
+
+## 随手记挂件：猫球加 5 个简单动效（2026-11-05，Claude，常浩要求「给我的猫图标也简单做一些动态动效，场景 5 个以内，简单一点」，按「小人动效只出一版」直接做；PR #84 测试全过，按「测试全过可直接合并」授权已 squash 合并 `d91110a`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 18:10`（估计，按常浩这条消息；本节写于 `2026-11-05 18:38`）。来由：issue #81。
+- 改了哪些文件（PR #84）：`src/packages/hud/src/scene/AppPendant.tsx`（球外包 `hud-pendant-face`，叠星光、眼光、眼皮三种小层，眼睛和星星位置按 `float-notes-ball.png` 实测：眼 (0.309, 0.52)、(0.608, 0.547)，星 (0.5, 0.19)；摆动放在内层 `hud-pendant-sway`，外框和点击区域不动；新增 `still`）、`src/packages/ui/src/global.css`（`hud-pendant-*` 样式与关键帧：每 7 秒轻摆、每 6.4 秒眨眼、每 9 秒星闪、悬停放大 1.08 加眼亮、按下 0.92 回弹、打开时金色光环呼吸）、`src/packages/hud/src/HUDScene.tsx`（把现有 `reduceMotion` 传给挂件，系统减少动态或关掉动画时全部静止）。
+- 测试：在分支提交 `2125ea5`（与 main `d91110a` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 193` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-cat-motion/`。
+- 验证：用真实猫图和这份样式做临时检查页（临时加进主目录 `.claude/launch.json` 的 `catcheck`，看完已删），内置浏览器截图看过原样、闭眼、眼亮、星星亮四种状态都对得上。动起来的样子没在实机上看过（没有驿窗窗口的操作授权）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-cat-motion/overlay-check.jpg`（检查页，非实机）。
+- 发布与回读：18:35:21 ditto 到 `/Applications` 并重启，`shasum` 回读为打包产物的 `1f202579fa7b`。注意：装之前 `/Applications` 里是 `c0ed1fb30680`，不是我上一轮装的 `d374791f1a48`，说明期间另一会话装过它自己分支的版本（main 当时没有新提交），这次被我覆盖了（L-05 反向）；那一版备份在本节证据目录 `PostPane-before.app`，那个会话合并后重装即可。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-cat-motion/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 眨眼是用毛色小圆盖住眼睛，大图上看得出是深色圆片；侧栏实际约 36 点，一闪而过。
+  - 可清理 worktree：`.claude/worktrees/80-cat-motion` 本节提交后即删。
+- 本轮新坑：无。
+
+## 侧栏有待回答时只在对应小人上展开；随手记挂件去掉吊牌；停用原随手记程序（2026-11-05，Claude，常浩要求「当侧栏有待回答时，鼠标划到对应的组件形象对应卡片再展开」「随手记的文字删掉就是那个圆形」「关闭原来的随手记，以后我就用这个侧栏带的」；PR #79 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e5e38c1`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:48`（估计，按常浩这条消息；本节写于 `2026-11-05 18:05`）。来由：有待回答时鼠标碰到侧栏任何地方都强制展开，太容易误弹；issue #78。
+- 改了哪些文件（PR #79）：`src/packages/hud/src/request-hover.ts`（新：`hoverMayOpen`，有待回答时只有指针在那个智能体的小人上才可展开；智能体不在侧栏、刘海形态、指针位置未知（从待审批小签进入）时保持原行为）、`hud/src/scene/useHUDInteraction.ts`（`entered` 带指针位置并过门控，原生指针路径同样传位置；门控不过且正在延时展开时取消）、`hud/src/HUDScene.tsx`（DOM 进入与移动都把位置传给 `entered`，有待回答时移到对应小人上即开始展开）、`hud/src/app-pendant.ts` 与 `scene/AppPendant.tsx`（去掉「随手记」吊牌，只留挂绳 + 纸圈里的球）、测试 `hud/test/request-hover.test.ts`（新 4 项）、`hud/test/app-pendant.test.ts`（底边一项改写）；本节另改 `docs/ROADMAP.md`（记原随手记停用、挂件不印名字）。
+- 测试：在分支提交 `01a5b6a` 上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 193` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。变基到 `38c82db`（只多一份 `docs/audit/` 文档）后复跑 `check-rules` 通过、`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hover-pendant/`。
+- 验证：只有单测。实机悬停未做（驿窗窗口操作授权此前被拒，且要等真实的待回答出现），请常浩下次有待回答时顺手看一下。
+- 截图：无。
+- 发布与回读：分支 `01a5b6a` 打包，18:01:36 ditto 到 `/Applications` 并重启；与合并后 main `e5e38c1` 的 `src/` 无差异；`shasum` 回读为打包产物的 `d374791f1a48`。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hover-pendant/PostPane-before.app /Applications/PostPane.app`。
+- 停用原随手记（常浩明确要求）：`launchctl bootout gui/$(id -u)/local.digitalworld.floatingnotes`，轮询到查不到再继续（G-18）；进程 17639 已退出；`~/Library/LaunchAgents/local.digitalworld.floatingnotes.plist` 移到 `evidence/2026-11-05-float-notes/local.digitalworld.floatingnotes.plist.disabled`（另有 `.bak` 副本），`~/Applications/随手记.app` 本身未删。恢复：把 `.disabled` 改回原名放回 `~/Library/LaunchAgents/` 后 `launchctl bootstrap gui/$(id -u) <plist>`。数码世界仓库里的说明（`desktop/floating-notes/README.md` 写着「登录后自动启动」）未改，属数码世界范围。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 展开后指针从待回答的小人移到别的小人，卡片保持展开（沿用「指针还在侧栏里就不收」）。
+  - 可清理 worktree：`.claude/worktrees/78-hover-pendant` 本节提交后即删。
+- 本轮新坑：无。
+
+## 随手记嵌入侧栏：挂件入口 + 原页面小窗（2026-11-05，Claude，常浩要求把自建应用的侧边浮窗接进驿窗、先试数码世界随手记，「保持原样只做嵌入」，区分样式选「丙 · 挂件」，看过安装后说「合并」；PR #75 测试全过已 squash 合并 `7aaafbd`，已从 main 内容重新打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 17:00`（估计，按「先只做随手记」那条消息；本节写于 `2026-11-05 17:45`）。来由：常浩要把自建应用的侧边浮窗收进驿窗侧栏，先接随手记；issue #70。三版预览 https://claude.ai/artifact/R3uKEDZa6Ahd7LPoWRG2tE （选丙）；更早一版「纸面重画」的预览 https://claude.ai/artifact/7As4PMe4MWB1m3dmC9T3pA 已被否（改为原样嵌入）。
+- 改了哪些文件（PR #75）：`src/crates/host/src/float_notes.rs`（新：`toggle_float_notes` 命令，建 `float-notes` 无边框透明置顶小窗加载 `127.0.0.1:5178/?floatingNotes=1#/float`，368×600 开在球旁朝屏幕内侧；`on_navigation` 只放行这一页，`on_new_window` 把「在数码世界打开」交给默认浏览器；端口不在线显示「数码世界还没有启动」+ 重试；不进任何 capability）、`host/src/lib.rs`（注册命令）、`host/src/shell/{mod,macos,linux,windows}.rs`（`open_in_browser`）、`src/packages/hud/src/app-pendant.ts`（新：挂件位置，侧边挂票根下、放不下挂上方，顶/底边跟在右侧）、`hud/src/scene/AppPendant.tsx`（新：虚线挂绳 + 纸色垫圈里的原球 + 「随手记」吊牌）、`hud/src/HUDScene.tsx`（动态形态渲染挂件，新 prop `onFloatNotes`）、`app/src/HUDSurface.tsx`（invoke 命令；点击区域与轮廓观察加 `.hud-app-pendant`）、`hud/src/assets/float-notes-ball.png`（原样复制自 digiworld）与素材 README、`docs/ROADMAP.md`（自建应用接入改为已启动，本节一并提交）。
+- 测试：变基到 `58f6816` 后的分支 `e50008b`（与 main `7aaafbd` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 189` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。新增 Rust `float_notes` 6 项、`hud/test/app-pendant.test.ts` 5 项。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-float-notes/`。
+- 验证：我申请操作驿窗窗口被常浩拒绝，点球开合、位置、样子由常浩自己看过（「看过了，合并」）；小窗拿不到 IPC、数码世界停服时的提示，均未实机验证，只有单测覆盖放行规则。注意：我 17:31:58 装的分支版 17:36:58 被另一会话的 #73 安装覆盖（L-05 又一次），常浩看的可能是两者之一，以合并后重装版为准。
+- 截图：无（未获窗口操作授权）。
+- 发布与回读：合并后从与 main `7aaafbd` 内容相同的分支打包，17:42:54 ditto 到 `/Applications` 并重启；`shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 为打包产物的 `50852e05ca07`（含 #73 与 #75）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-float-notes/PostPane-before.app /Applications/PostPane.app`（这是 17:31 前的版本，不含 #73）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 网页右上角「−」嵌入后只会把页面折起（拿不到原生桥），收窗口要点球；未写完的草稿存在驿窗网页存储，不与原随手记程序的恢复区共用。
+  - 原随手记程序 `~/Applications/随手记.app` 仍在运行并开机自启，屏幕上有两颗球；停不停用等常浩定。
+  - 刘海形态不显示挂件。
+  - 同日还做了：一键转交方案（#71，选「乙 · 转交单」，未开工）、Codex/Orca 往返实测（#72 评论里有结论与命令）。实测留下两个 Codex 测试会话（`01a1aae3…`、`01a1aaec…`）和 Orca 里注册的测试仓库 `codex-sandbox`，是否移除待常浩定。
+  - 可清理 worktree：`.claude/worktrees/70-float-notes` 本节提交后即删。
+- 本轮新坑：无（L-05 重现，未新增）。
+
+## 设置页整体优化：统一收据外框、分组框加控件右齐、面板真实预览，HUD 改叫侧栏（2026-11-05，Claude，常浩说设置页「不太好看，也不协调」，外框选「甲 · 统一收据」，内容要「一的效果 二的规范框架」、对齐选「甲 · 控件右齐」，HUD 改叫「侧栏」、只删「显示」页页头说明，看过安装后的应用说「合并」；PR #73 测试全过已 squash 合并 `b5d650b`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 15:52`（按常浩提出整体优化那条消息；issue #69 建于 16:25；本节写于 `2026-11-05 17:09`）。来由：面板清单审完后对设置窗口做最后一轮整体优化。定稿页：外框 https://claude.ai/artifact/Dwtz24xPLQYtW1bqLvL6ac （甲），内容三版 https://claude.ai/artifact/MsikAFgUQnEPc6rwBaY3Wq ，合并版 https://claude.ai/artifact/LjbTbmyTt8VyTYSXP14K4P （甲 · 控件右齐）。
+- 改了哪些文件（PR #73，实现由子 agent 完成，我核对提交、截图与实机；27 个文件）：`src/packages/app/src/App.tsx`（页头与正文同一张纸一起滚动、换页回顶、页码写 `data-page`、删「显示」页中文说明）、`settings/receipt.css`、`settings/settings.css`（纸面统一 620 宽、导航票加长对齐、去条形码改页码行、分组框、24 高墨框控件、值在把手上方的滑块、一行红字提示，均限定 `.apple-app`）、`settings/SettingsPrimitives.tsx`（`Slide`）、`settings/display/*` 与 `DisplayPane.tsx`（四组加「恢复默认」一行；「按 Option 才展开」改「展开方式」单选，存值不变；「Bot 形象」移进第一组）、`settings/SettingsSamples.tsx`（删 `PartSample`，新增 `PanelPreview` 用 `SourceHoverPanel` 渲染真实面板并缩小）、`settings/GeneralPane.tsx`（三组，语言与额度百分比改单选）、`settings/agents/*`（顶部智能体卡片；额度行复用面板的 `quotaWindowLabel`、`resetText`、`quotaOutlook`）、`settings/agent-plugins/*`、`AgentPluginsPane.tsx`、`lib/agent-plugins.ts`（客户端表格，「HUD 工具」→「侧栏工具」）、`test/agent-plugins.test.ts`（期望文字同步）、`src/packages/hud/package.json`（新增三个导出，侧栏与面板代码未改）。
+- 测试：在分支提交 `e0e3b23`（与 main `b5d650b` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 各组 test result 全部 ok、0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-settings-content/check.log`、`test.log`（子 agent 跑，我核对过结果行）。
+- 验证：子 agent 在 worktree 用独立数据目录起开发页，中文界面、960×720 看了四页、刘海与动态两种形态、关掉额度看板后面板预览随之变化、统计窗口对照；我看过显示页截图。装机后用 computer-use 后台截图设置「显示」页，新版式在；后台截图时预览小人停在厂商图标，查明是 `BotMark` 画出第一帧前先显示图标、窗口被挡住时不重绘（原有行为，侧栏小人正常）。智能体、插件页在实机只看了开发页截图。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-settings-content/settings-*.png`、`statistics-unchanged.png`（开发页截图；智能体页截图露出真实账户邮箱，只在本机）。
+- 发布与回读：分支版 17:00:15 ditto 到 `/Applications` 并重启；合并后 `shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 为打包产物的 `1261935ffdf2`，未被覆盖（L-05）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-settings-content/PostPane-before.app /Applications/PostPane.app`（#67 版）。按 AGENTS.md 已对 `69-settings-content` 跑 `cargo clean`（约 7 GB）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 子 agent 自定、常浩合并时未逐条表态：面板三块改叫「额度看板 / Token 消耗 / 正在进行」；几处说明换成模型写法；语言、额度百分比、展开方式由开关或下拉改单选（存值不变）；「Bot 形象」放进「侧栏长什么样」组，但它对所有屏幕生效；插件页客户端表格行不计入「共 M 项」；重置按钮去掉了各自的说明文字。
+  - ⋯ 菜单「隐藏 HUD / 显示 HUD」与统计窗口共用，没改，是设置窗口唯一剩下的中文「HUD」。
+  - Rust `vendors.rs` 算侧栏宽度仍算隐藏行和云端额度；额度看板里 Codex 仍写「OpenAI」，未改（见前几节）。
+  - 可清理 worktree 增加 `.claude/worktrees/69-settings-content`，清理前问常浩。
+- 本轮新坑：无。
+
+## 设置页页头对齐、HUD 预览壁纸入框与四联票、形态去简约；正在进行滚动条淡出（2026-11-05，Claude，常浩提出 #66、#68，HUD 预览选「丙 · 壁纸入框」、DeepSeek「只加在预览」、连票选「乙 · 四联票」，看过安装后的设置页说「所有面板、所有呈现都审核过，都满足要求」；按「测试全过可直接合并」的授权合并 PR #67 `5bdcf39`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 15:08`（按 issue #66 创建时间 07:08:56Z；本节写于 `2026-11-05 15:52`）。来由：常浩看设置页时发现页头与正文没对齐、「正在进行」滚动条常显，HUD 预览壁纸太跳、预览和实际样子不一致；issue #66、#68。定稿页：壁纸入框 https://claude.ai/artifact/TWhvAhAqHcrnYuYyMLfJgS （丙），连票 https://claude.ai/artifact/KzJtyXG3xvepAjcitA6AuR （乙）。
+- 改了哪些文件（PR #67）：`src/packages/app/src/settings/receipt.css`（正文滚动区 `scrollbar-gutter: stable both-edges`；预览墨色虚线框、「预览」标签、壁纸单独降饱和、底部说明行）、`settings/display/HUDSection.tsx`（形态去掉「简约」，给预览传框上文字）、`settings/SettingsSamples.tsx`（预览用侧栏同款常驻小人、居中、预览固定多显示 DeepSeek；动态画一整张四联票：每格一张小票宽，格间竖撕线，顶边底边撕孔，不再画底部数据，票宽票高在预览里单独算；只有刘海带光晕）、`src/packages/hud/src/scene/HUDMarkStrip.tsx`（抽出 `StubPaper`、`StubFace`、`stubBoxStyle` 共用，`StubPaper` 加可选 `bothEdges`）、`hud/package.json`（新增导出 `./bots/artwork`、`./bots/bot-spec`、`./scene/HUDMarkStrip`、`./ticket-stub`）、`hud/src/panel/SessionsSection.tsx` 与 `app/src/styles.css`（「正在进行」隐藏系统滚动条，自画细滑块，滚动时出现、停下约 1 秒淡出）。
+- 测试：在分支提交 `1f4da12`（与 main `5bdcf39` 内容相同）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。首轮 check 因删底部数据时漏删几行报语法错，补删后重跑全过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-align/check-joined.log`、`test-joined.log`、`build-joined.log`。
+- 验证：装机后用 computer-use 后台截图设置「显示」页，预览为四联票、无底部数据，常浩自己的截图一致。三版连票预览页用 esbuild 打包真实 `BotMark`，本机起服务看过四个标签；发布后的链接因内置浏览器未登录 claude.ai 没打开验证。未验证：「正在进行」超过 5 条时的淡出滑块（沿用前一节的实现说明，本轮没在实机凑够 5 条）。
+- 截图：无单独存档（computer-use 截图只在本会话里看过）。
+- 发布与回读：分支版 15:41:50 ditto 到 `/Applications` 并重启；合并后 `shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 为打包产物的 `4e449f5fdbd4`，未被覆盖（L-05）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-scroll-align/PostPane-655ddcd.app /Applications/PostPane.app`（单张小票版）；改版前在同目录 `PostPane-before.app`（#65 版）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 主目录 main 上有一条别的会话 15:34 留下、未推送的本地提交（AGENTS.md 加「PR 合并后清 worktree 的 target」规则），合并后与远端分叉；我用 `git pull --rebase` 把它接到 `5bdcf39` 之后（内容未改），随本节一起推送。照这条规则已对 `66-scroll-align` 跑 `cargo clean`（释放约 6 GB）。
+  - 预览固定画四个智能体；没装或关掉某个智能体时预览仍显示它（按「只加在预览」）。
+  - Rust `vendors.rs` 算侧栏宽度仍算隐藏行和云端额度、额度看板里 Codex 仍写「OpenAI」，未改（见上节）。
+  - 可清理 worktree 增加 `.claude/worktrees/66-scroll-align`，清理前问常浩。
+- 本轮新坑：无。
+
+## 侧栏重置到账、登出提醒与面板事件行并入细条（2026-11-05，Claude，常浩选 15、16「甲 · 并入细条」，02 不改、17「甲 · 细条同款」，看截图后追加待审批小签显示会话标题、侧栏去掉 Fable 并把 Cloud 改「云端」，说「开工」，看过前后对比页与安装后的应用说「合并」；PR #65 测试全过已 squash 合并 `cfa289a`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 13:58`（估计，按「开工」那条消息；本节写于 `2026-11-05 14:36`）。来由：侧栏面板逐个梳理的最后几项（面板清单 15、16、17，另确认 02 不改）；预览与定稿 https://claude.ai/artifact/TksR6Ltwp3YVo4qPaAbwQV （15、16）、https://claude.ai/artifact/82xPsuYeeRfNFZUvFfuLvr （02、17），前后对比 https://claude.ai/artifact/Li98f3MC4THoHEjKJWvANm ，issue #64。
+- 改了哪些文件（PR #65，实现由子 agent 完成、我对照定稿截图与过滤逻辑审核；都在 `src/packages/hud/`）：`src/alerts/QuotaAlertViews.tsx`（删两张大卡，新增通用细条 `AlertStrip` 与 `stripCopy`，四种额度类提醒同列）、`alerts/quota-alert-copy.ts`（重写 `resetCreditCopy`，新增 `signInCopy`：登出写原因和「额度停在 HH:MM 的读数」，取该智能体额度最晚 `observedAt`）、`alerts/quota-list.ts`（`isQuotaEvent` 扩到四种，新增 `shownNews` 过滤隐藏行的提醒）、`alerts/InlineEventRow.tsx`（看板顶部事件行改用细条）、`alerts/CompactAlertView.tsx`（重置到账、登出新小签；待审批小签先用会话标题）、`permissions/approval-list.ts`（`requestTitle`）、`quota-rows.ts`（`quotaRowShown`、`tightestWindow`）、`model.ts`（侧栏智能体先去掉面板隐藏的行再算最紧值）、`usage-meter/mark-windows.ts`、`panel/window-labels.ts`（`peekWindowName`：中文界面 Cloud →「云端」）、`scene/AgentPeek.tsx`、`IslandNews.tsx`、`HUDScene.tsx`、`scene/HUDExpandedSurface.tsx`、`scene/useHUDLayout.ts`；测试 `test/quota-alert-copy.test.ts`、`quota-list.test.ts`、`approval-list.test.ts`、`quota-rows.test.ts`。
+- 测试：在分支提交 `b0c7c51`（与 main `cfa289a` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 647 passed / 0 failed；`ℹ pass 184` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-credit-signin/check.log`、`test.log`（子 agent 跑，我核对过结果行）。
+- 验证：子 agent 用临时页面以 vite 打包真实组件、无头浏览器截图（临时文件已删）；改版前的对照图由另一子 agent 在 `cdcb999` 上用同一脚本渲染；我对照定稿看过四种混排、悬停小卡、待审批小签、看板事件行。实机里重置到账、登出、看板事件行还没真正出现过。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-credit-signin/`（新版 `reset-*`、`signin-*`、`mix-*`、`chips-*`、`request-chip-*`、`panel-*`、`peek-*`；改版前 `old-reset-dark-zh.png`、`old-signin-dark-zh.png`、`old-panel-dark-zh.png`；均为组件渲染图，非实机）。
+- 发布与回读：分支版 14:21:54 ditto 到 `/Applications` 并重启；合并后 `shasum` 回读 `/Applications/PostPane.app/Contents/MacOS/PostPane` 仍为打包产物的 `8e60e4efd71f`，分支与 main 内容相同，未被覆盖（L-05）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-credit-signin/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：隐藏行按面板设置（`hiddenRows` / `hiddenAccounts`）判断，不按 Fable 字样硬编码；待审批小签标题按 150 宽截断；刘海模式重置到账沿用原 calm 色；登出那条智能体名显示厂商名「Claude」（旧卡显示 provider 名「Claude Code」）。
+  - Rust 侧算侧栏宽度（`src/crates/hud/src/vendors.rs`）取最紧额度时仍算隐藏行和云端额度，数字变短时那一格可能略宽，未改。
+  - 旧卡把 Codex 写成「OpenAI」，新细条已改为「Codex」；额度看板里的智能体名仍是「OpenAI」，未改。
+  - 可清理 worktree 增加 `.claude/worktrees/64-credit-signin-strip`，清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏额度预警卡改成细条（2026-11-05，Claude，常浩看过三版预览选「丙」，开工指令经 agent-hud 插件转入（与待答问题对得上），看过安装后的应用说「合并」；PR #62 测试全过已 squash 合并 `cdcb999`，已从 main 重新打包安装、回读一致）
 

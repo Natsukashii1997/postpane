@@ -264,7 +264,8 @@ export function Menu({
   );
 }
 
-/** A slider row: name, track, value. */
+/** A slider row: the name on the left, the slider flush right with its
+ * value printed over the knob. */
 export function Slide({
   title,
   value,
@@ -284,23 +285,38 @@ export function Slide({
   format: (value: number) => string;
   disabled?: boolean;
 }) {
+  const at =
+    max > min
+      ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))
+      : 0;
   return (
     <div className="settings-row settings-slider-row">
       <div className="settings-row-main">
-        <label className="settings-slider-label">{title}</label>
-        <Slider
-          aria-label={title}
-          min={min}
-          max={max}
-          step={step}
-          value={[value]}
-          disabled={disabled}
-          onValueChange={(values) => change(values[0])}
-          className="settings-slider"
-          data-min={format(min)}
-          data-max={format(max)}
-        />
-        <output className="settings-slider-value">{format(value)}</output>
+        <div className="settings-row-text">
+          <label className="settings-row-title">{title}</label>
+        </div>
+        <div className="settings-row-control">
+          <span className="settings-slide">
+            <Slider
+              aria-label={title}
+              min={min}
+              max={max}
+              step={step}
+              value={[value]}
+              disabled={disabled}
+              onValueChange={(values) => change(values[0])}
+              className="settings-slider"
+            />
+            {/* Where Radix puts the 14 pt knob: kept inside the track, so
+                half a knob in at either end. */}
+            <output
+              className="settings-slider-value"
+              style={{ left: `calc(${at}% + ${7 - at * 0.14}px)` }}
+            >
+              {format(value)}
+            </output>
+          </span>
+        </div>
       </div>
     </div>
   );

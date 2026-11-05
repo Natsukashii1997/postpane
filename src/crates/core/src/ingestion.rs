@@ -38,6 +38,9 @@ pub(crate) struct Reads {
     /// which file: the client says nothing when a turn ends, so quiet is only
     /// seen by looking again.
     pub(crate) bot_poll: Option<(i64, PathBuf)>,
+    /// Per Hermes database, the turns it was running at its last read
+    /// (session id → turn id): a lease gone since then is a reply written.
+    pub(crate) hermes_turns: HashMap<PathBuf, HashMap<String, String>>,
 }
 
 #[derive(Default)]

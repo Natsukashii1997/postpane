@@ -9,7 +9,7 @@ import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
-import { quotaCredits } from "./quota-rows.ts";
+import { quotaRowShown, tightestWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
 import {
@@ -154,14 +154,7 @@ export function vendorsFromSnapshot(
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
-    // A credit grant is spending money, not a plan limit: it never heads the mark.
-    const measured = quotas.filter(
-      (q) => q.usedPercent != null && q.status !== "stale" && !quotaCredits(q),
-    );
-    const tightest = measured.reduce<(typeof measured)[number] | undefined>(
-      (a, b) => (!a || b.usedPercent! > a.usedPercent! ? b : a),
-      undefined,
-    );
+    const tightest = tightestWindow(quotas);
     const sessions = snapshot.sessions.filter(
       (s) => vendorKey(s.source) === key,
     );
@@ -254,7 +247,8 @@ export function configuredVendors(
   config: HUDConfig,
 ): HUDVendor[] {
   const available = vendorsFromSnapshot(snapshot, config.mode).map((vendor) => {
-    if (vendor.key !== "deepseek" || vendor.quotas.length) return vendor;
+    if (vendor.quotas.length) return withShownRows(vendor, config.panelLayout);
+    if (vendor.key !== "deepseek") return vendor;
     const rows = snapshot.billing.filter(
       (row) => vendorKey(row.vendor) === vendor.key,
     );
@@ -275,6 +269,21 @@ export function configuredVendors(
     };
   });
   return layoutMarks(available, config.panelLayout);
+}
+
+/** An agent without the rows the hover panel hides: its peek lists, and its
+ * mark leads with, only the windows the panel shows. */
+function withShownRows(vendor: HUDVendor, layout: PanelLayout): HUDVendor {
+  const quotas = vendor.quotas.filter((row) => quotaRowShown(row, layout));
+  if (quotas.length === vendor.quotas.length) return vendor;
+  const tightest = tightestWindow(quotas);
+  return {
+    ...vendor,
+    quotas,
+    used: tightest?.usedPercent ?? null,
+    heldUsed: heldUsed(quotas, Date.now()),
+    level: tightest?.status ?? "stale",
+  };
 }
 
 function balanceLevel(

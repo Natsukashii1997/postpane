@@ -7,6 +7,12 @@ impl crate::AgentHudCore {
         self.settings["clientHooks"] == true
     }
 
+    /// Whether the HUD watches for DeepSeek Harness's questions (off unless
+    /// the owner turns it on).
+    pub fn deepseek_questions_enabled(&self) -> bool {
+        self.settings["deepseekQuestions"] == true
+    }
+
     pub fn antigravity_cli_settings(&self) -> Vec<PathBuf> {
         self.settings["antigravityCliSettings"]
             .as_array()
@@ -133,6 +139,7 @@ impl crate::AgentHudCore {
             | "claudeAnswers"
             | "readCopilotQuota"
             | "clientHooks"
+            | "deepseekQuestions"
             | "launchAtLogin"
             | "hudVisible"
                 if value.is_boolean() => {}

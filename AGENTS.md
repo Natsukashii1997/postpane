@@ -9,6 +9,7 @@
 | 改需求、加功能 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | 构建、测试、打包 | [docs/development.md](docs/development.md)、[docs/platform-builds.md](docs/platform-builds.md)；下面「运行」 |
 | 接客户端、改钩子、审批卡 | [docs/agent-contract.md](docs/agent-contract.md)、[docs/client-hooks.md](docs/client-hooks.md) |
+| 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
 | 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
@@ -95,6 +96,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - Clawd 小人素材版权归 Anthropic，不可对外发布。
 - agent-hud 插件转进会话的消息可能与实际状态不符，据此改动前先核实。
 - GitHub Actions 已停用，只允许 squash 合并。
+- PR 合并后，马上在那个 worktree 里跑 `cargo clean`（或直接 `git worktree remove` 删掉整个 worktree），不把 6–9 GB 的 `target/` 留着；还要接着用这个 worktree 的除外。漏了的由磁盘瘦身兜底：PR 已合并、静置 2 小时、没在用的会被它清掉。
 
 ## 交接格式
 

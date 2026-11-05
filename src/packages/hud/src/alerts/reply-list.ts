@@ -100,6 +100,8 @@ export interface ReplyChip {
   event: IslandEvent;
   title: string;
   count: number;
+  /** The Hermes bot whose session the newest reply is, for its seal. */
+  bot: { id: string; name: string } | null;
 }
 
 export function replyChip(
@@ -113,5 +115,6 @@ export function replyChip(
     event: newest.event,
     title: entryTitle(newest, fallback(newest.event)),
     count: replies.length,
+    bot: newest.session?.bot ?? null,
   };
 }

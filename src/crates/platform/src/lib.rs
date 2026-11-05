@@ -138,6 +138,13 @@ impl NativePlatform {
                 target["cwd"].as_str(),
             );
         }
+        // The extension brings the conversation's tab forward; without it,
+        // chatgpt.com opens in the browser below.
+        if target["kind"] == agent_hud_agents::chatgpt::NAVIGATION_KIND
+            && clients::chatgpt::focus(target["id"].as_str().unwrap_or(""))
+        {
+            return Ok(true);
+        }
         if let Some(folder) = navigation::cursor_folder(target) {
             if os::open_folder_in_app(agent_hud_agents::cursor::BUNDLE, folder) {
                 return Ok(true);

@@ -1,5 +1,6 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { BotMark } from "../BotMark";
+import { BotStamp } from "../panel/BotStamp";
 import { botState, cardForReply } from "../bots/bot-state";
 
 export function ReminderMark({
@@ -8,13 +9,20 @@ export function ReminderMark({
   size,
   light = false,
   botLogos = true,
+  bot,
 }: {
   request?: Approval;
   event?: IslandEvent;
+  /** A Hermes bot's reply wears that bot's seal. */
+  bot?: { id: string; name: string } | null;
   size: number;
   light?: boolean;
   botLogos?: boolean;
 }) {
+  if (event?.kind === "bot-offline" && event.bot)
+    return <BotStamp bot={event.bot} size={size + 4} light={light} />;
+  if (event?.kind === "completion" && bot)
+    return <BotStamp bot={bot} size={size + 4} light={light} />;
   if (request) {
     const look =
       request.kind === "plan"

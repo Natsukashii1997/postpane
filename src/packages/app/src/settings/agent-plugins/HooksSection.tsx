@@ -28,8 +28,9 @@ export function HooksSection({
   const [error, setError] = useState<string | null>(null);
   const status = snapshot.connection.clientHooks;
   const on = snapshot.settings.clientHooks;
+  const deepseek = snapshot.settings.deepseekQuestions === true;
   const configure = async (
-    key: "clientHooks" | "approvalWaitMinutes",
+    key: "clientHooks" | "approvalWaitMinutes" | "deepseekQuestions",
     value: unknown,
   ) => {
     if (pending) return;
@@ -63,9 +64,20 @@ export function HooksSection({
       onCheckedChange={(value) => void configure("clientHooks", value)}
     />
   );
+  const wait = snapshot.settings.approvalWaitMinutes ?? 10;
   return (
     <Section
-      title={t("Hooks", "回调")}
+      title={t("Answer in the HUD", "在侧栏上回答")}
+      action={[
+        status?.supported !== true
+          ? t("Not supported", "不支持")
+          : status.installed
+            ? t("Installed", "已安装")
+            : t("Not installed", "未安装"),
+        on ? t(`waits ${wait} min`, `等 ${wait} 分钟`) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}
       // A failed switch already says why in the notice below; the status
       // carries the same words, so it is not repeated as the footer.
       footer={error ? undefined : (status?.notice ?? undefined)}
@@ -74,7 +86,7 @@ export function HooksSection({
         title={t("Client hooks", "客户端回调")}
         subtitle={t(
           "For permission requests and finished turns in the HUD.",
-          "在 HUD 上回答权限请求、提示完成。",
+          "在侧栏上回答权限请求、提示完成。",
         )}
       >
         {status?.supported &&
@@ -97,12 +109,12 @@ export function HooksSection({
         title={t("Wait for an answer", "等待回答")}
         subtitle={t(
           "Then the request goes back to the client.",
-          "到时未回答，交还客户端自己询问。",
+          "到时没回答，交还客户端自己问。",
         )}
       >
         <Menu
           label={t("Wait for an answer", "等待回答")}
-          value={String(snapshot.settings.approvalWaitMinutes ?? 10)}
+          value={String(wait)}
           options={[1, 3, 5, 10, 30, 60].map((minutes) => [
             String(minutes),
             t(
@@ -118,6 +130,22 @@ export function HooksSection({
           }
           change={(value) =>
             void configure("approvalWaitMinutes", Number(value))
+          }
+        />
+      </Row>
+      <Row
+        title={t("DeepSeek Harness questions", "DeepSeek Harness 提问")}
+        subtitle={t(
+          "Off: PostPane doesn't look for a running harness.",
+          "关着时不查找正在运行的 harness，省后台开销。",
+        )}
+      >
+        <Switch
+          aria-label={t("DeepSeek Harness questions", "DeepSeek Harness 提问")}
+          checked={deepseek}
+          disabled={pending}
+          onCheckedChange={(value) =>
+            void configure("deepseekQuestions", value)
           }
         />
       </Row>

@@ -3,12 +3,8 @@ import { useFormat } from "@agent-hud/ui/format-context";
 import { quotaPercentLabel, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { PAPER_FIGURES, paperLevel, usePaper, type Paper } from "../paper";
-import {
-  quotaShortName,
-  statusColor,
-  type HUDEdge,
-  type HUDVendor,
-} from "../model";
+import { peekWindowName } from "../panel/window-labels";
+import { statusColor, type HUDEdge, type HUDVendor } from "../model";
 
 export interface PeekItem {
   id: string;
@@ -28,14 +24,14 @@ export function peekItems(
   const seen = new Set<string>();
   const items: PeekItem[] = vendor.quotas
     .filter((q) => {
-      const label = quotaShortName(q);
+      const label = peekWindowName(q, zh ? "zh" : "en");
       if (seen.has(label)) return false;
       seen.add(label);
       return true;
     })
     .map((q) => ({
       id: q.id,
-      label: quotaShortName(q),
+      label: peekWindowName(q, zh ? "zh" : "en"),
       value:
         q.usedPercent == null
           ? "--"
@@ -176,7 +172,9 @@ export function AgentPeek({
             alignItems: "center",
           }}
         >
-          <span style={{ opacity: 0.55 }}>{quotaShortName(q)}</span>
+          <span style={{ opacity: 0.55 }}>
+            {peekWindowName(q, zh ? "zh" : "en")}
+          </span>
           <strong
             style={{
               color: q.usedPercent == null ? undefined : color(q.status),
@@ -245,7 +243,7 @@ function ReceiptPeek({
   const rows: { id: string; label: string; value: string; color?: string }[] =
     vendor.quotas.map((q) => ({
       id: q.id,
-      label: quotaShortName(q),
+      label: peekWindowName(q, zh ? "zh" : "en"),
       value:
         q.usedPercent == null
           ? "--"

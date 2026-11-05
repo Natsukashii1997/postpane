@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { Approval, IslandEvent, Snapshot } from "@agent-hud/protocol";
+import type {
+  Approval,
+  IslandEvent,
+  PanelLayout,
+  Snapshot,
+} from "@agent-hud/protocol";
 import { usePanelServices } from "./PanelContext";
 import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
-import {
-  QuotaAlertView,
-  ResetCreditAlertView,
-  SignInAlertView,
-} from "./alerts/QuotaAlertViews";
-import { queuedQuotas } from "./alerts/quota-list";
+import { QuotaAlertView } from "./alerts/QuotaAlertViews";
+import { queuedQuotas, shownNews } from "./alerts/quota-list";
+import { seenFirst, staysUntilSeen } from "./alerts/reply-stays";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -125,6 +127,8 @@ export function useIslandNews(
   silenced = false,
   underPointer = true,
   inUsagePanel = false,
+  /** The hover panel's layout: news about a row it hides is not told. */
+  layout?: PanelLayout,
 ) {
   const services = usePanelServices(),
     seen = useRef<Set<string> | null>(null),
@@ -154,7 +158,7 @@ export function useIslandNews(
     const visible =
       silenced || !underPointer
         ? []
-        : fresh.filter(
+        : shownNews(fresh, snapshot.quotas, layout).filter(
             (event) =>
               event.islandAlert !== false &&
               shown.includes(vendorKey(event.source)) &&
@@ -165,14 +169,17 @@ export function useIslandNews(
                     ?.reminders !== false)),
           );
     setQueue((previous) =>
-      reconcileIslandCards(
-        silenced
-          ? previous.filter((card) => card.type === "request")
-          : previous,
-        requests,
+      seenFirst(
+        reconcileIslandCards(
+          silenced
+            ? previous.filter((card) => card.type === "request")
+            : previous,
+          requests,
+          visible,
+          underPointer ? freshRequests : [],
+          inUsagePanel,
+        ),
         visible,
-        underPointer ? freshRequests : [],
-        inUsagePanel,
       ),
     );
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
@@ -180,8 +187,13 @@ export function useIslandNews(
   const dismiss = () => setQueue(dismissIslandCard);
   const drop = (ids: readonly string[]) =>
     setQueue((previous) => dropIslandCards(previous, ids));
+  // Cards the pointer has rested on: a Hermes reply folds away only then.
+  const looked = useRef(new Set<string>());
   useEffect(() => {
+    if (current && held) looked.current.add(current.id);
     if (!current || held || current.type === "request") return;
+    if (staysUntilSeen(current.event) && !looked.current.has(current.id))
+      return;
     const timer = setTimeout(dismiss, 4000);
     return () => clearTimeout(timer);
   }, [current?.id, held]);
@@ -223,13 +235,15 @@ export const newsTitle = (event: IslandEvent, zh = false) =>
         ? zh
           ? "获得使用重置"
           : "Usage resets added"
-        : event.kind === "sign-in-needed"
-          ? zh
-            ? "需要重新登录"
-            : "Sign in again"
-          : zh
-            ? "额度预警"
-            : "Running low";
+        : event.kind === "bot-offline"
+          ? `${event.title ?? "Hermes"} · ${event.message ?? (zh ? "断线" : "Offline")}`
+          : event.kind === "sign-in-needed"
+            ? zh
+              ? "需要重新登录"
+              : "Sign in again"
+            : zh
+              ? "额度预警"
+              : "Running low";
 
 export const compactDuration = (seconds: number) => {
   const total = Math.max(0, Math.round(seconds)),
@@ -241,6 +255,8 @@ export const compactDuration = (seconds: number) => {
 export function clientDisplayName(source: string): string {
   const normalized = source.trim().toLowerCase();
   if (normalized === "codex" || normalized === "codex-cli") return "Codex";
+  // ChatGPT shares OpenAI's mark (and its strip row) but answers as itself.
+  if (normalized === "chatgpt") return "ChatGPT";
   return agentVendorName(source);
 }
 
@@ -268,7 +284,8 @@ export function NewsContent({
   dismiss: () => void;
   /** Every reply in the queue: a reply's card lists them all. */
   replies?: IslandEvent[];
-  /** Every quota notice in the queue, newest first: a quota card lists them all. */
+  /** Every quota notice in the queue (windows, resets added, sign-outs),
+   * newest first: a quota card lists them all. */
   quotas?: IslandEvent[];
   /** Puts these replies or quota notices away. */
   drop?: (ids: readonly string[]) => void;
@@ -289,33 +306,10 @@ export function NewsContent({
       />
     );
   }
-  if (event.kind === "sign-in-needed") {
-    return (
-      <SignInAlertView
-        event={event}
-        dismiss={dismiss}
-        light={light}
-        botLogos={botLogos}
-        zh={zh}
-      />
-    );
-  }
-  if (event.kind === "reset-credits") {
-    return (
-      <ResetCreditAlertView
-        event={event}
-        snapshot={snapshot}
-        dismiss={dismiss}
-        onStats={onStats}
-        light={light}
-        botLogos={botLogos}
-        zh={zh}
-      />
-    );
-  }
   return (
     <QuotaAlertView
       events={quotas.some((each) => each.id === event.id) ? quotas : [event]}
+      snapshot={snapshot}
       drop={drop}
       onStats={onStats}
       light={light}

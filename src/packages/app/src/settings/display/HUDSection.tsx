@@ -1,5 +1,5 @@
-/* The resting HUD on the selected screen: a preview, its mode and that mode's
- * own rows, then its look. */
+/* What the sidebar (the resting HUD) on the selected screen looks like: a
+ * preview, its mode and that mode's own rows, bots, then its look. */
 import type { Snapshot } from "@agent-hud/protocol";
 import type { HUDConfig } from "@agent-hud/hud/model";
 import { Row, Section, Segments } from "../SettingsPrimitives";
@@ -67,29 +67,71 @@ export function HUDSection({
     config.mode === "notch"
       ? t(
           "Drag the HUD on screen to move it. Dragging the notch switches to Dynamic.",
-          "直接拖动屏幕上的 HUD 来移动它；拖动刘海会切换为「动态」。",
+          "直接拖动屏幕上的侧栏来移动它；拖动刘海会切换为「动态」。",
         )
       : t(
           "Drag the HUD on screen to move it.",
-          "直接拖动屏幕上的 HUD 来移动它。",
+          "直接拖动屏幕上的侧栏来移动它。",
         );
+
+  const appearanceName = {
+    system: t("System", "跟随系统"),
+    light: t("Light", "浅色"),
+    dark: t("Dark", "深色"),
+  };
+  // What the group is set to now, at its head: mode, size, appearance.
+  const summary = [
+    config.mode === "notch"
+      ? t("Notch", "刘海")
+      : config.mode === "logos"
+        ? t("Dynamic", "动态")
+        : t("Simple", "简约"),
+    config.mode === "logos"
+      ? pt(config.logoSize)
+      : config.mode === "simple"
+        ? pt(config.simpleSize)
+        : null,
+    appearanceName[config.appearance],
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const separateAgents = toggle(
     "separatesAgents",
     t("Separate agents", "按智能体分开"),
-    t("Hovering a logo opens only its agent.", "悬停标志只展开该智能体。"),
+    t(
+      "Hovering an agent opens only its panel.",
+      "悬停哪个智能体，只展开它的面板。",
+    ),
   );
 
   return (
-    <Section title="HUD" footer={dragHint}>
-      <SmallHUDPreview snapshot={snapshot} config={config} active={active} />
+    <Section
+      title={t("What the sidebar looks like", "侧栏长什么样")}
+      action={summary}
+      footer={dragHint}
+    >
+      <SmallHUDPreview
+        snapshot={snapshot}
+        config={config}
+        active={active}
+        caption={{
+          label: t("PREVIEW", "预览"),
+          where:
+            config.mode === "notch"
+              ? t("Main screen · Notch", "主屏 · 刘海")
+              : config.mode === "logos"
+                ? t("Main screen · Dynamic", "主屏 · 动态")
+                : t("Main screen", "主屏"),
+          note: t("Actual look follows the screen", "实际效果以屏幕上为准"),
+        }}
+      />
       <Row title={t("Mode", "形态")} subtitle={modeSubtitle}>
         <Segments
           label={t("Mode", "形态")}
           value={config.mode}
           options={[
             ["notch", t("Notch", "刘海")],
-            ["simple", t("Simple", "简约")],
             ["logos", t("Dynamic", "动态")],
           ]}
           change={(value) =>
@@ -163,20 +205,20 @@ export function HUDSection({
         <>
           {slider("logoSize", t("Logo size", "Logo 大小"), 20, 60, 1, pt)}
           {slider(
-            "logoEdgeDistance",
-            t("Edge distance", "边缘距离"),
-            0,
-            20,
-            1,
-            pt,
-          )}
-          {slider(
             "gapScale",
             t("Logo spacing", "Logo 间距"),
             0.1,
             0.6,
             0.05,
             (value) => pt(value * config.logoSize),
+          )}
+          {slider(
+            "logoEdgeDistance",
+            t("Edge distance", "边缘距离"),
+            0,
+            20,
+            1,
+            pt,
           )}
           {toggle(
             "showsLogos",
@@ -185,6 +227,14 @@ export function HUDSection({
           )}
           {separateAgents}
         </>
+      )}
+      {toggle(
+        "botLogos",
+        t("Bot logos", "Bot 形象"),
+        t(
+          "Agents show as bots while they work.",
+          "智能体工作时 Logo 变成会动的 Bot。",
+        ),
       )}
       <Row
         title={t("Appearance", "外观")}
@@ -198,12 +248,12 @@ export function HUDSection({
         }
       >
         <Segments
-          label={t("HUD appearance", "HUD 外观")}
+          label={t("HUD appearance", "侧栏外观")}
           value={config.appearance}
           options={[
-            ["system", t("System", "跟随系统")],
-            ["light", t("Light", "浅色")],
-            ["dark", t("Dark", "深色")],
+            ["system", appearanceName.system],
+            ["light", appearanceName.light],
+            ["dark", appearanceName.dark],
           ]}
           change={(value) =>
             update({ appearance: value as HUDConfig["appearance"] })

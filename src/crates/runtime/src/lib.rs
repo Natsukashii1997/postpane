@@ -18,6 +18,7 @@ pub use agent_hud_core::projects;
 pub use agent_hud_core::replies;
 pub use agent_hud_platform::claude_plugin;
 pub use agent_hud_platform::client_executable;
+pub use agent_hud_platform::clients::chatgpt;
 pub use agent_hud_platform::deepseek_plugin;
 pub use agent_hud_platform::hooks;
 pub use agent_hud_platform::hud_tools;
@@ -236,6 +237,7 @@ impl Runtime {
         };
         let mut hooks = self.hooks.lock().unwrap_or_else(|p| p.into_inner());
         hooks.delegate_owner(context)?;
+        hooks.set_deepseek(self.core.deepseek_questions_enabled())?;
         if self.core.client_hooks_enabled() {
             hooks.set_enabled(true)?;
         }

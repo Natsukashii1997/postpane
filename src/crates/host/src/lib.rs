@@ -12,12 +12,14 @@ use agent_hud_hud::{bots, presentation, vendors};
 
 mod activity;
 mod capture;
+mod chatgpt;
 mod claude_plugin;
 mod cli;
 mod coordinator;
 mod deepseek_plugin;
 mod demo;
 pub mod extension;
+mod float_notes;
 mod hud;
 mod instance;
 mod mcp_clients;
@@ -553,6 +555,21 @@ async fn native_request(
             }
             return result;
         }
+        // DeepSeek's observers follow the saved setting: the setting is saved
+        // first, then they start or stop.
+        if method=="set_setting" && params["key"]=="deepseekQuestions" {
+            let wanted=params["value"].as_bool().ok_or("deepseekQuestions must be a boolean")?;
+            let result={
+                match backend.lock(){
+                    Ok(mut backend)=>backend.request(&app,&method,params),
+                    Err(_)=>Err("Runtime lock is unavailable".into())
+                }
+            };
+            if result.is_ok(){
+                hooks.lock().map_err(|_|"Hook service unavailable")?.set_deepseek(wanted)?;
+            }
+            return result;
+        }
         let _turn = matches!(method.as_str(), "snapshot" | "refresh" | "request_snapshot")
             .then(|| collection.lock().unwrap_or_else(|poisoned| poisoned.into_inner()));
         let mut backend = backend
@@ -857,6 +874,10 @@ pub fn run_with_options(
             presentation_request,
             mcp_clients::native_mcp_clients,
             claude_plugin::native_claude_plugin,
+            chatgpt::native_chatgpt_extension,
+            chatgpt::chatgpt_open,
+            chatgpt::chatgpt_send,
+            chatgpt::chatgpt_status,
             deepseek_plugin::native_deepseek_plugin,
             picture::picture_payload,
             picture::picture_complete,
@@ -871,6 +892,7 @@ pub fn run_with_options(
             hud::hud_drag_start,
             hud::hud_text_focus,
             hud_show_main,
+            float_notes::toggle_float_notes,
             quit_app,
             open_statistics,
             take_statistics_target,
@@ -893,6 +915,12 @@ pub fn run_with_options(
             deepseek_plugin::repair_on_launch(app.handle());
             mcp_clients::repair_on_launch(app.handle());
             app.manage(picture::Pictures::default());
+            // The ChatGPT extension's socket, in the data folder; none in the demo.
+            app.manage(chatgpt::ChatGpt::start(
+                (!app.state::<AppState>().demo)
+                    .then(agent_hud_runtime::local_tools_directory)
+                    .transpose()?,
+            ));
             let directory = agent_hud_runtime::local_tools_directory()?;
             let demo_data = directory.join("demo-run");
             let legacy = if app.state::<AppState>().demo {

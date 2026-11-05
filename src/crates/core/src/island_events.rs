@@ -32,6 +32,7 @@ pub(super) struct Tracker {
     quotas: HashMap<String, Observation>,
     credits: HashMap<String, Credits>,
     sign_ins: HashMap<String, SignIn>,
+    gateways: HashMap<String, SignIn>,
     revision: u64,
     events: VecDeque<Value>,
 }
@@ -51,6 +52,7 @@ impl Tracker {
             quotas: HashMap::new(),
             credits: HashMap::new(),
             sign_ins: HashMap::new(),
+            gateways: HashMap::new(),
             revision: 0,
             events: VecDeque::new(),
         }
@@ -96,7 +98,7 @@ impl Tracker {
             if at <= self.started || at > now || self.seen.insert(key.clone(), at).is_some() {
                 continue;
             }
-            self.push(&key,json!({"kind":"completion","at":iso(at),"startedAt":session["liveFacts"]["turnStartedAt"],"source":session["source"],"sessionId":session["id"],"turnId":session["liveFacts"]["turnId"],"title":session["title"],"model":session["model"],"message":session["liveFacts"]["message"],"navigationTarget":session["navigationTarget"],"cwd":session["cwd"],"logPath":session["logPath"]}));
+            self.push(&key,json!({"kind":"completion","at":iso(at),"startedAt":session["liveFacts"]["turnStartedAt"],"source":session["source"],"sessionId":session["id"],"turnId":session["liveFacts"]["turnId"],"title":session["title"],"model":session["model"],"message":session["liveFacts"]["message"],"prompt":session["liveFacts"]["prompt"],"navigationTarget":session["navigationTarget"],"cwd":session["cwd"],"logPath":session["logPath"]}));
         }
         let ids = quotas
             .iter()
@@ -267,6 +269,38 @@ impl Tracker {
         json!({"revision":self.revision,"items":self.events})
     }
 
+    /// A Hermes bot whose gateway goes down (its Feishu connection drops,
+    /// or the gateway stops) is told once, as a strip: at most once a day,
+    /// again after it was up in between. The first look after launch only
+    /// notes how things stand, as for sign-ins.
+    pub fn gateways(&mut self, gateways: &[agent_hud_agents::hermes::Gateway], now: i64) {
+        use agent_hud_agents::hermes::Down;
+        for gateway in gateways {
+            let out = gateway.down.is_some();
+            let Some(old) = self.gateways.get_mut(&gateway.bot.id) else {
+                self.gateways
+                    .insert(gateway.bot.id.clone(), SignIn { out, told: None });
+                continue;
+            };
+            let was_out = old.out;
+            old.out = out;
+            if !out {
+                old.told = None;
+                continue;
+            }
+            if was_out || old.told.is_some_and(|at| now - at < SIGN_IN_TOLD_EVERY_MS) {
+                continue;
+            }
+            old.told = Some(now);
+            let message = match gateway.down {
+                Some(Down::Feishu) => crate::l10n::text("飞书断线", "Feishu disconnected"),
+                _ => crate::l10n::text("网关没有运行", "Gateway not running"),
+            };
+            let id = &gateway.bot.id;
+            self.push(&format!("hermes:{id}:offline:{now}"),json!({"kind":"bot-offline","islandAlert":true,"at":iso(now),"source":"hermes","accountId":id,"title":gateway.bot.name,"message":message,"bot":{"id":id,"name":gateway.bot.name}}));
+        }
+    }
+
     /// An agent whose account reading says it signed out (the agent's own
     /// state, `failure` "signedOut", not a reading that only missed an
     /// answer) is told once, on the island: at most once a day, again after
@@ -358,5 +392,41 @@ mod tests {
             told(&mut tracker, provider("error", Some("transient")), now + 1),
             0
         );
+    }
+
+    #[test]
+    fn a_hermes_gateway_going_down_is_told_once_until_it_comes_back() {
+        use agent_hud_agents::hermes::{Bot, Down, Gateway};
+        let gateway = |down| Gateway {
+            bot: Bot {
+                id: "agumon".into(),
+                name: "亚古兽".into(),
+            },
+            down,
+        };
+        let mut tracker = Tracker::new();
+        let now = tracker.started + 1_000;
+        let told = |tracker: &Tracker| {
+            tracker
+                .events
+                .iter()
+                .filter(|e| e["kind"] == "bot-offline")
+                .count()
+        };
+        tracker.gateways(&[gateway(None)], now);
+        tracker.gateways(&[gateway(Some(Down::Feishu))], now + 1);
+        assert_eq!(told(&tracker), 1);
+        let event = tracker.events.back().unwrap();
+        assert_eq!(event["title"], "亚古兽");
+        assert_eq!(event["source"], "hermes");
+        tracker.gateways(&[gateway(Some(Down::Feishu))], now + 2);
+        assert_eq!(told(&tracker), 1);
+        tracker.gateways(&[gateway(None)], now + 3);
+        tracker.gateways(&[gateway(Some(Down::Stopped))], now + 4);
+        assert_eq!(told(&tracker), 2);
+
+        let mut late = Tracker::new();
+        late.gateways(&[gateway(Some(Down::Feishu))], now);
+        assert_eq!(told(&late), 0, "the first look only notes");
     }
 }

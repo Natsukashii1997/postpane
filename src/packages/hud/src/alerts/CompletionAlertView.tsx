@@ -15,12 +15,14 @@ import {
 import {
   EntryRow,
   FoldButton,
+  SEAL_COLUMN,
   ListHead,
   ListTear,
   SectionTitle,
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
+import { BotSeal } from "../panel/BotStamp";
 import {
   newestReply,
   replyEntries,
@@ -108,6 +110,9 @@ export function CompletionAlertView({
             if (entry.kind !== "reply") return null;
             const open = entry.id === openId;
             const failed = unreachable.has(entry.id);
+            const bot = entry.session?.bot;
+            // The body lines up under the title, past the seal or the mark.
+            const indent = (bot ? SEAL_COLUMN : 18) + 12;
             return (
               <div
                 key={entry.id}
@@ -130,10 +135,18 @@ export function CompletionAlertView({
                   light={light}
                   zh={zh}
                   openTag={false}
+                  seal={
+                    bot ? (
+                      <BotSeal bot={bot} light={light} color={inks.dim} />
+                    ) : undefined
+                  }
                 />
                 {open ? (
                   <div
-                    style={{ ...cardColumn(12), padding: "14px 0 18px 30px" }}
+                    style={{
+                      ...cardColumn(12),
+                      padding: `14px 0 18px ${indent}px`,
+                    }}
                   >
                     <ReplyBody
                       entry={entry}
@@ -189,7 +202,10 @@ export function CompletionAlertView({
                     <Unreachable
                       inks={inks}
                       zh={zh}
-                      style={{ padding: "0 0 12px 30px", marginTop: -4 }}
+                      style={{
+                        padding: `0 0 12px ${indent}px`,
+                        marginTop: -4,
+                      }}
                     />
                   )
                 )}

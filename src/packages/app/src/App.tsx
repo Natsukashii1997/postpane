@@ -184,7 +184,8 @@ const pages: {
 ];
 const chinesePages: Record<string, [string, string]> = {
   general: ["通用", "外观、语言与启动。"],
-  display: ["显示", "每块屏幕上的 HUD 和它的面板。"],
+  // The Display page prints no line under its title in Chinese.
+  display: ["显示", ""],
   agents: ["智能体", "驿窗关注哪些智能体，以及它们的账户。"],
   "agent-plugins": ["智能体插件", "驿窗为这台电脑上的智能体添加的功能。"],
   relays: ["中转站", "智能体经过的中转站。"],
@@ -417,6 +418,11 @@ function AppContent({
   };
   const glowHidden = presentation?.glowHidden ?? false;
   const [page, setPage] = useState<Page>("display");
+  // The page's header scrolls with it, so another page starts at its top.
+  const settingsScroll = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    settingsScroll.current?.scrollTo({ top: 0 });
+  }, [page]);
   // The running app's own version: a release is stamped with its version when
   // it is built (0.6.0-beta.1), which a product's front end cannot know.
   // `version` stands in outside the app.
@@ -802,6 +808,10 @@ function AppContent({
       </TooltipProvider>,
     );
   const currentPage = allPages.find((item) => item.id === page);
+  const pageNumber = allPages.findIndex((item) => item.id === page) + 1;
+  const pageOf = chinese
+    ? `第 ${pageNumber} / ${allPages.length} 页`
+    : `Page ${pageNumber} of ${allPages.length}`;
   const settingsProps = snapshot
     ? { snapshot, config, update: updateConfig, action, active: windowActive }
     : null;
@@ -880,97 +890,95 @@ function AppContent({
                 </div>
               </div>
             </aside>
-            <main
-              className={`apple-content${page === "agents" ? " is-wide" : ""}`}
-            >
-              <div className="settings-header" data-tauri-drag-region="deep">
-                <div className="settings-column">
-                  <h1>
-                    {chinese
-                      ? (chinesePages[page]?.[0] ?? currentPage?.label)
-                      : currentPage?.label}
-                  </h1>
-                  {((chinese ? chinesePages[page]?.[1] : null) ??
-                  currentPage?.description) ? (
-                    <p>
+            <main className="apple-content">
+              <div className="settings-drag-space" data-tauri-drag-region />
+              <div className="settings-scroll" ref={settingsScroll}>
+                {/* The page's header and body are one sheet that scrolls as one. */}
+                <div className="settings-sheet settings-column">
+                  <header
+                    className="settings-header"
+                    data-tauri-drag-region="deep"
+                  >
+                    <h1>
                       {chinese
-                        ? (chinesePages[page]?.[1] ?? currentPage?.description)
-                        : currentPage?.description}
-                    </p>
-                  ) : null}
-                  <div className="receipt-meta" aria-hidden="true">
-                    <span>
-                      {chinese ? "单号" : "No."}{" "}
-                      {String(
-                        allPages.findIndex((item) => item.id === page) + 1,
-                      ).padStart(4, "0")}
-                    </span>
-                    <span>
-                      {chinese
-                        ? `第 ${allPages.findIndex((item) => item.id === page) + 1} / ${allPages.length} 页`
-                        : `Page ${allPages.findIndex((item) => item.id === page) + 1} of ${allPages.length}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="settings-scroll">
-                <div className="settings-pane-content settings-column">
-                  {error && (
-                    <Alert variant="destructive">
-                      <CircleHelp />
-                      <AlertTitle>
+                        ? (chinesePages[page]?.[0] ?? currentPage?.label)
+                        : currentPage?.label}
+                    </h1>
+                    {((chinese ? chinesePages[page]?.[1] : null) ??
+                    currentPage?.description) ? (
+                      <p>
                         {chinese
-                          ? "无法连接数据服务"
-                          : "Couldn’t connect to the runtime"}
-                      </AlertTitle>
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
-                  {!settingsProps ? (
-                    <LoadingState
-                      label={
-                        loading
-                          ? chinese
-                            ? "正在读取本机活动…"
-                            : "Reading local activity…"
-                          : chinese
-                            ? "数据服务不可用"
-                            : "The runtime is unavailable"
-                      }
-                      failed={!loading}
-                      retryLabel={chinese ? "重试" : "Retry"}
-                      onRetry={() => void refresh()}
-                    />
-                  ) : (
-                    <Suspense fallback={null}>
-                      {extensionPages
-                        .find((item) => item.id === page)
-                        ?.render({ snapshot, request: extensionRequest })}
-                      {(page === "general" ||
-                        page === "prices" ||
-                        page === "relays" ||
-                        page === "display" ||
-                        page === "agents" ||
-                        page === "agent-plugins" ||
-                        page === "updates") && (
-                        <SettingsPane
-                          page={page}
-                          settingsProps={settingsProps}
-                          ready={ready}
-                          selectedId={selectedId}
-                          monitors={monitors}
-                          selectScreen={selectScreen}
-                          chinese={chinese}
-                          layout={config.panelLayout}
-                          onLayout={(layout) => setLayout(layout)}
-                          preferences={store.sources ?? {}}
-                          onPreferences={setSource}
-                          agentPlugins={agentPlugins}
-                          request={extensionRequest}
-                        />
-                      )}
-                    </Suspense>
-                  )}
+                          ? (chinesePages[page]?.[1] ??
+                            currentPage?.description)
+                          : currentPage?.description}
+                      </p>
+                    ) : null}
+                    <div className="receipt-meta" aria-hidden="true">
+                      <span>
+                        {chinese ? "单号" : "No."}{" "}
+                        {String(pageNumber).padStart(4, "0")}
+                      </span>
+                      <span>{pageOf}</span>
+                    </div>
+                  </header>
+                  <div className="settings-pane-content" data-page={pageOf}>
+                    {error && (
+                      <Alert variant="destructive">
+                        <CircleHelp />
+                        <AlertTitle>
+                          {chinese
+                            ? "无法连接数据服务"
+                            : "Couldn’t connect to the runtime"}
+                        </AlertTitle>
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+                    {!settingsProps ? (
+                      <LoadingState
+                        label={
+                          loading
+                            ? chinese
+                              ? "正在读取本机活动…"
+                              : "Reading local activity…"
+                            : chinese
+                              ? "数据服务不可用"
+                              : "The runtime is unavailable"
+                        }
+                        failed={!loading}
+                        retryLabel={chinese ? "重试" : "Retry"}
+                        onRetry={() => void refresh()}
+                      />
+                    ) : (
+                      <Suspense fallback={null}>
+                        {extensionPages
+                          .find((item) => item.id === page)
+                          ?.render({ snapshot, request: extensionRequest })}
+                        {(page === "general" ||
+                          page === "prices" ||
+                          page === "relays" ||
+                          page === "display" ||
+                          page === "agents" ||
+                          page === "agent-plugins" ||
+                          page === "updates") && (
+                          <SettingsPane
+                            page={page}
+                            settingsProps={settingsProps}
+                            ready={ready}
+                            selectedId={selectedId}
+                            monitors={monitors}
+                            selectScreen={selectScreen}
+                            chinese={chinese}
+                            layout={config.panelLayout}
+                            onLayout={(layout) => setLayout(layout)}
+                            preferences={store.sources ?? {}}
+                            onPreferences={setSource}
+                            agentPlugins={agentPlugins}
+                            request={extensionRequest}
+                          />
+                        )}
+                      </Suspense>
+                    )}
+                  </div>
                 </div>
               </div>
             </main>

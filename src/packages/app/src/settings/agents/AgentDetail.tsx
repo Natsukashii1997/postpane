@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@agent-hud/ui/components/tooltip";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
+import { useLightTheme } from "../agent-plugins/use-status";
 import {
   LinkButton,
   Notice,
@@ -61,6 +62,7 @@ export function AgentDetail({
   // `report` where the caller shows it beside its own buttons (Connection,
   // at the bottom of the page, where the top is out of view).
   const [pending, setPending] = useState(false);
+  const light = useLightTheme();
   const [error, setError] = useState<string | null>(null);
   async function perform(
     job: () => Promise<unknown>,
@@ -87,29 +89,6 @@ export function AgentDetail({
 
   return (
     <Page>
-      <header className="agents-detail-header">
-        <HUDLogo source={source.id} size={24} />
-        <div className="agents-detail-title">
-          <h2>{source.name}</h2>
-          {!source.detected && (
-            <p>{t("Not on this computer", "未在这台电脑上发现")}</p>
-          )}
-        </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={refreshLabel}
-              disabled={pending}
-              onClick={() => void perform(() => action("refresh"))}
-            >
-              <RefreshCw size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{refreshLabel}</TooltipContent>
-        </Tooltip>
-      </header>
       {error && (
         <Notice
           tone="error"
@@ -122,7 +101,41 @@ export function AgentDetail({
           {error}
         </Notice>
       )}
-      <Section footer={source.notice ?? undefined}>
+      <Section
+        title={
+          <span className="agents-detail-name">
+            <HUDLogo source={source.id} size={16} light={light} />
+            {source.name}
+          </span>
+        }
+        action={
+          <>
+            {[
+              enabled ? t("On", "已启用") : t("Off", "已关闭"),
+              source.detected
+                ? null
+                : t("Not on this computer", "未在这台电脑上发现"),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={refreshLabel}
+                  disabled={pending}
+                  onClick={() => void perform(() => action("refresh"))}
+                >
+                  <RefreshCw size={12} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{refreshLabel}</TooltipContent>
+            </Tooltip>
+          </>
+        }
+        footer={source.notice ?? undefined}
+      >
         <ToggleRow
           title={t("Enabled", "启用")}
           checked={enabled}
@@ -137,7 +150,7 @@ export function AgentDetail({
           title={t("Live status", "实时状态")}
           subtitle={t(
             "Running and waiting sessions on the HUD.",
-            "在 HUD 上显示运行和等待中的会话。",
+            "在侧栏上显示运行和等待中的会话。",
           )}
           checked={live}
           disabled={pending || !enabled}

@@ -185,6 +185,11 @@ fn handle(
             drop(owner);
             super::picture::capture(app, params)
         }
+        // Waits for the extension without the application's lock.
+        "chatgpt_open" | "chatgpt_send" | "chatgpt_status" => {
+            drop(owner);
+            super::chatgpt::tool(app, method, &params)
+        }
         _ => Err("Unknown local application tool".into()),
     }
 }

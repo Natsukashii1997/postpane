@@ -547,6 +547,7 @@ impl AccountService {
                     .quotas
                     .iter()
                     .filter(|row| !expired_report(facts, row, "observedAt", now))
+                    .filter(|row| !facts.drops(row))
                     .cloned()
                     .map(|mut row| {
                         if row["observedAt"].is_null() {
@@ -1095,6 +1096,53 @@ mod tests {
             account_homes: HashMap::new(),
             waker: None,
         }
+    }
+
+    #[test]
+    fn a_kept_or_restored_fable_week_never_reaches_the_projection() {
+        let directory = tempfile::tempdir().unwrap();
+        let data = directory.path().join("data");
+        let service = AccountService::with_readers(
+            data.clone(),
+            data,
+            HashSet::new(),
+            CollectionGate::default(),
+            &[],
+        )
+        .unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        // A Fable row read before it was left out, kept or restored since.
+        let mut reading = AccountReading::empty("claude");
+        reading.account = Some(json!({"id":"acct-a"}));
+        reading.quotas = vec![
+            json!({"id":"claude:acct-a:claude-session","usedPercent":23}),
+            json!({"id":"claude:acct-a:claude-weekly","usedPercent":61}),
+            json!({"id":"claude:acct-a:claude-weekly-fable","usedPercent":0}),
+        ];
+        {
+            let mut state = service.shared.state.lock().unwrap();
+            state.enabled.insert("claude".into());
+            state
+                .entries
+                .insert("claude", entry(reading, Some(&now), false));
+        }
+        let ids = service
+            .projection()
+            .quotas
+            .iter()
+            .filter_map(|row| row["id"].as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ids,
+            [
+                "claude:acct-a:claude-session",
+                "claude:acct-a:claude-weekly"
+            ]
+        );
+        let provider = &agents::claude::account::PROVIDER;
+        assert!(provider.drops(&json!({"id":"claude:x:claude-weekly-fable"})));
+        assert!(!provider.drops(&json!({"id":"claude:x:claude-weekly"})));
+        assert!(!provider.drops(&json!({"id":"claude:x:not-claude-weekly-fable"})));
     }
 
     #[test]

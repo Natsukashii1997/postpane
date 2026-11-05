@@ -121,3 +121,21 @@ fn a_cloud_session_opens_on_claude_ai_only_by_a_session_id() {
         assert_eq!(open(odd), None);
     }
 }
+
+#[test]
+fn a_chatgpt_conversation_opens_on_chatgpt_com_only_by_its_id() {
+    let open = |id: &str| {
+        session_url_on(
+            &json!({"kind":"chatgpt-conversation","id":id}),
+            Os::MacOs,
+            |_| false,
+        )
+    };
+    assert_eq!(
+        open("6800c1a2-1b2c-8000-9d3e-0f1a2b3c4d5e"),
+        Some("https://chatgpt.com/c/6800c1a2-1b2c-8000-9d3e-0f1a2b3c4d5e".into())
+    );
+    for odd in ["", "../x", "a/b", "https://evil.example", "a?b"] {
+        assert_eq!(open(odd), None);
+    }
+}

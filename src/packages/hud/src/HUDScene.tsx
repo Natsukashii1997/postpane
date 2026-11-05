@@ -27,6 +27,7 @@ import {
   RequestDeliveryNotice,
 } from "./permissions/ApprovalContent";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
+import { AppPendant } from "./scene/AppPendant";
 import { HUDMarkStrip } from "./scene/HUDMarkStrip";
 import { FlightLayer, type HUDFlightCommand } from "./scene/FlightLayer";
 import { NotchGlow } from "./scene/NotchSurface";
@@ -80,6 +81,8 @@ export interface HUDSceneProps {
   snapshot: Snapshot;
   config: HUDConfig;
   onConfigure?: () => void;
+  /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
+  onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
   onStats?: (target?: StatsTarget) => void;
   /** The product's newer version, and the way to it (the panel footer's arrow). */
   update?: HUDUpdateNotice | null;
@@ -157,6 +160,7 @@ export function HUDScene({
   snapshot,
   config: supplied,
   onConfigure,
+  onFloatNotes,
   onStats,
   update,
   onUpdate,
@@ -381,6 +385,7 @@ export function HUDScene({
     glowHidden || Boolean(snapshot.status?.paused),
     underPointer,
     open && allowsInlineUsageAlert,
+    config.panelLayout,
   );
   const event = news.event;
   const request = news.request;
@@ -650,6 +655,21 @@ export function HUDScene({
         : undefined,
     [openSettingsPage, endHold, handoff],
   );
+  // Quota news while the usage panel is open: a strip atop the panel.
+  const inlineAlert = (shown: Snapshot) =>
+    inUsagePanel && !request && event ? (
+      <InlineEventRow
+        event={event}
+        snapshot={shown}
+        light={light}
+        botLogos={config.botLogos}
+        zh={snapshotLanguage(shown) === "zh"}
+        onOpen={() => {
+          news.dismiss();
+          showPanelStats?.();
+        }}
+      />
+    ) : undefined;
   const eventContent =
     request || event ? (
       <>
@@ -851,23 +871,7 @@ export function HUDScene({
                                 }
                               : undefined
                           }
-                          inlineAlert={
-                            inUsagePanel && !request && event ? (
-                              <InlineEventRow
-                                event={event}
-                                snapshot={measured.snapshot}
-                                light={light}
-                                botLogos={config.botLogos}
-                                zh={
-                                  snapshotLanguage(measured.snapshot) === "zh"
-                                }
-                                onOpen={() => {
-                                  news.dismiss();
-                                  showPanelStats?.();
-                                }}
-                              />
-                            ) : undefined
-                          }
+                          inlineAlert={inlineAlert(measured.snapshot)}
                         />
                       </PaperContext.Provider>
                     )}
@@ -963,6 +967,7 @@ export function HUDScene({
             configurePanel={configurePanel}
             surfacePadding={surfacePadding}
             eventContent={eventContent}
+            inlineAlert={inlineAlert(snapshot)}
             inUsagePanel={inUsagePanel}
             delivery={delivery}
             paper={paper}
@@ -990,13 +995,15 @@ export function HUDScene({
             onPointerEnter={(e) => {
               if (!nativePointer) {
                 followMark(e);
-                entered(e.altKey);
+                entered(e.altKey, e);
               }
             }}
             onPointerLeave={domExited}
             onPointerMove={(event) => {
               if (nativePointer) return;
               followMark(event);
+              // While an agent waits, moving onto its mark opens its card.
+              if (request && !open) entered(event.altKey, event);
               if (
                 config.openImmediatelyAtTop &&
                 edge === "top" &&
@@ -1067,6 +1074,18 @@ export function HUDScene({
               pin={pin}
             />
           </div>
+          {config.mode === "logos" && onFloatNotes && !dragVisual && (
+            <AppPendant
+              strip={strip}
+              edge={edge}
+              logo={metrics.logo}
+              light={light}
+              zh={snapshotLanguage(snapshot) === "zh"}
+              room={{ width: window.innerWidth, height: window.innerHeight }}
+              still={reduceMotion}
+              onToggle={onFloatNotes}
+            />
+          )}
           {dragVisual && (
             <svg
               aria-hidden="true"

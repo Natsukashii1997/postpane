@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   quotaAlertCopy,
   resetCreditCopy,
+  signInCopy,
   waitText,
 } from "../src/alerts/quota-alert-copy.ts";
 
@@ -207,15 +208,159 @@ test("waits read in days and hours, or hours and minutes", () => {
   assert.equal(waitText(0, "zh"), "1 分");
 });
 
-test("a credit card names the first expiry as a date", () => {
+const credit = (extra: object) =>
+  ({
+    id: "c",
+    kind: "reset-credits",
+    at: "2026-11-05T01:00:00Z",
+    source: "codex",
+    accountId: "acct",
+    title: "Personal Ultra",
+    added: 1,
+    availableCount: 2,
+    ...extra,
+  }) as never;
+const beijingZh = {
+  language: "zh" as const,
+  calendar: { timeZone: "Asia/Shanghai", firstWeekday: 2 },
+};
+const beijingEn = { ...beijingZh, language: "en" as const };
+
+test("a reset-credit strip says what was added, the account's count and its first expiry", () => {
+  const account = {
+    name: "Personal Ultra",
+    resetCredits: {
+      availableCount: 3,
+      credits: [
+        { id: "a", expiresAt: "2026-12-09T08:00:00Z" },
+        // 16:00 UTC is already the next day in Beijing.
+        { id: "b", expiresAt: "2026-11-30T16:00:00Z" },
+        { id: "c", expiresAt: null },
+      ],
+    },
+  };
+  const zhCopy = resetCreditCopy(credit({}), account, beijingZh);
+  assert.deepEqual(
+    [
+      zhCopy.status,
+      zhCopy.display,
+      zhCopy.when,
+      zhCopy.chipLabel,
+      zhCopy.chipValue,
+    ],
+    [
+      "新增 1 次额度重置",
+      "共 3 次",
+      "最早 12 月 1 日到期 · Personal Ultra",
+      "重置",
+      "+1",
+    ],
+  );
+  const enCopy = resetCreditCopy(credit({ added: 2 }), account, beijingEn);
+  assert.deepEqual(
+    [
+      enCopy.status,
+      enCopy.display,
+      enCopy.when,
+      enCopy.chipLabel,
+      enCopy.chipValue,
+    ],
+    [
+      "2 usage resets added",
+      "3 total",
+      "First expires Dec 1 · Personal Ultra",
+      "Reset",
+      "+2",
+    ],
+  );
+});
+
+test("without the account a reset-credit strip counts and dates from the event", () => {
   const copy = resetCreditCopy(
-    2,
-    ["2026-11-09T08:00:00Z", "2026-11-02T08:00:00Z", null],
-    "en",
+    credit({
+      title: undefined,
+      newCredits: [
+        { id: "n", expiresAt: "2026-11-20T02:00:00Z" },
+        { id: "m", expiresAt: "2026-11-12T02:00:00Z" },
+      ],
+    }),
+    undefined,
+    beijingZh,
   );
   assert.deepEqual(
-    [copy.compactTitle, copy.title, copy.expiry],
-    ["+2 resets", "2 usage resets were added to this account.", "Nov 2"],
+    [copy.display, copy.when],
+    ["共 2 次", "最早 11 月 12 日到期"],
+  );
+  const bare = resetCreditCopy(
+    credit({ title: undefined, availableCount: undefined, added: 1 }),
+    undefined,
+    beijingEn,
+  );
+  assert.deepEqual(
+    [bare.status, bare.display, bare.when],
+    ["1 usage reset added", "1 total", null],
+  );
+});
+
+const signOut = (extra: object) =>
+  ({
+    id: "s",
+    kind: "sign-in-needed",
+    at: "2026-11-05T03:30:00Z",
+    source: "claude",
+    title: "Claude Code",
+    message: "Claude Code 未登录，读不到额度",
+    ...extra,
+  }) as never;
+
+test("a sign-out strip keeps the reason and times the quota by its latest reading", () => {
+  const copy = signInCopy(
+    signOut({}),
+    ["2026-11-05T00:40:00Z", null, "2026-11-05T01:12:00Z", "nonsense"],
+    beijingZh,
+  );
+  assert.deepEqual(
+    [copy.status, copy.tag, copy.message, copy.note, copy.chip],
+    [
+      "需要重新登录",
+      "登出",
+      "Claude Code 未登录，读不到额度",
+      "登回去之前，额度停在 09:12 的读数",
+      "需要登录",
+    ],
+  );
+  const en = signInCopy(signOut({}), ["2026-11-05T01:12:00Z"], beijingEn);
+  assert.deepEqual(
+    [en.status, en.tag, en.note, en.chip],
+    [
+      "Sign in again",
+      "Signed out",
+      "Until you sign back in, quota stays at the 09:12 reading",
+      "Sign in",
+    ],
+  );
+});
+
+test("a sign-out's reading from another day carries its date", () => {
+  assert.equal(
+    signInCopy(signOut({}), ["2026-11-04T01:12:00Z"], beijingZh).note,
+    "登回去之前，额度停在 11 月 4 日 09:12 的读数",
+  );
+  assert.equal(
+    signInCopy(signOut({}), ["2026-11-04T01:12:00Z"], beijingEn).note,
+    "Until you sign back in, quota stays at the Nov 4, 09:12 reading",
+  );
+});
+
+test("without a reading or a reason a sign-out strip says so plainly", () => {
+  const zhCopy = signInCopy(signOut({ message: null }), [], beijingZh);
+  assert.deepEqual(
+    [zhCopy.message, zhCopy.note],
+    [null, "登回去之前，额度显示上次的读数"],
+  );
+  assert.equal(
+    signInCopy(signOut({ message: "  " }), [null], beijingEn).note,
+    "Until you sign back in, quota shows the last reading",
   );
 });
 

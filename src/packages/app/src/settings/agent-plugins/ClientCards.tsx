@@ -1,11 +1,17 @@
-// One folding card per client: its logo and name, a pill for each thing Agent
-// HUD adds to it, and inside, the plugin row with its switches and the HUD
-// tools row. A card opens by itself only when something in it needs you.
+// One folding card per client, printed as a line of the clients table: its
+// logo and name, then a status in the Plugin column and one in the HUD tools
+// column; inside, the plugin row with its switches and the HUD tools row. A
+// card opens by itself only when something in it needs you.
 import { Fragment, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
 import type { Snapshot } from "@agent-hud/protocol";
-import { mcpRow, pluginRow, type RowState } from "../../lib/agent-plugins";
+import {
+  chatgptRow,
+  mcpRow,
+  pluginRow,
+  type RowState,
+} from "../../lib/agent-plugins";
 import {
   Collapsible,
   Pill,
@@ -18,6 +24,7 @@ import { PluginControl, StatePill, StatusRow } from "./rows";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import {
   useBriefly,
+  type ChatGpt,
   type HudTools,
   type McpClients,
   type PluginStatus,
@@ -71,7 +78,7 @@ function hudToolsState(
       ? t(...tools.state.unavailable)
       : t(
           "Turn on “Let agents arrange the HUD” under Agent tools.",
-          "在下方「智能体工具」里打开「允许智能体调整 HUD」。",
+          "在下方「让智能体调整侧栏」里打开「允许智能体调整侧栏」。",
         ),
   };
 }
@@ -217,27 +224,22 @@ export function KnownClientCard({
       missing={missing}
       defaultOpen={loaded && open}
       summary={
-        missing ? (
-          <Pill tone="gray" dot>
-            {t("Not found", "未发现")}
-          </Pill>
-        ) : (
-          <>
-            {pluginState && (
-              <StatePill state={pluginState} label={["Plugin", "插件"]} t={t} />
+        <>
+          <span className="plugins-cell">
+            {missing ? (
+              <Pill tone="gray">{t("Not found", "未发现")}</Pill>
+            ) : answersOff ? (
+              <Pill tone="orange">{t("Answers off", "回答已关闭")}</Pill>
+            ) : pluginState ? (
+              <StatePill state={pluginState} t={t} />
+            ) : (
+              <NoCell />
             )}
-            {answersOff && (
-              <Pill tone="orange" dot>
-                {t("Answers off", "回答已关闭")}
-              </Pill>
-            )}
-            <StatePill
-              state={hud.state}
-              label={["HUD tools", "HUD 工具"]}
-              t={t}
-            />
-          </>
-        )
+          </span>
+          <span className="plugins-cell">
+            {missing ? <NoCell /> : <StatePill state={hud.state} t={t} />}
+          </span>
+        </>
       }
     >
       {plugin && pluginState && (
@@ -247,13 +249,14 @@ export function KnownClientCard({
             client.id === "claudeCode"
               ? t(
                   "Answer Claude's questions in the HUD.",
-                  "在 HUD 上回答 Claude 的提问。",
+                  "在侧栏上回答 Claude 的提问。",
                 )
               : t(
                   "Answer its questions and approvals in the HUD.",
-                  "在 HUD 上回答它的提问和批准请求。",
+                  "在侧栏上回答它的提问和批准请求。",
                 )
           }
+          column="plugin"
           state={pluginState}
           error={plugin.error}
           t={t}
@@ -262,19 +265,25 @@ export function KnownClientCard({
           }}
         />
       )}
-      {installed === true && client.id === "claudeCode" && (
-        <ClaudeAnswers snapshot={snapshot} action={action} t={t} />
-      )}
       {installed === true &&
-        switches.map((item) => (
-          <Fragment key={item.id}>{item.render(context)}</Fragment>
-        ))}
+        (client.id === "claudeCode" || switches.length > 0) && (
+          // The plugin's own switches, one level in under its row.
+          <div className="plugins-sub">
+            {client.id === "claudeCode" && (
+              <ClaudeAnswers snapshot={snapshot} action={action} t={t} />
+            )}
+            {switches.map((item) => (
+              <Fragment key={item.id}>{item.render(context)}</Fragment>
+            ))}
+          </div>
+        )}
       {own.map((item) => (
         <Fragment key={item.id}>{item.render(context)}</Fragment>
       ))}
       <StatusRow
-        title={t("HUD tools", "HUD 工具")}
+        title={t("HUD tools", "侧栏工具")}
         tag="MCP"
+        column="tools"
         state={hud.state}
         pillReason={hud.reason}
         error={error}
@@ -288,6 +297,11 @@ export function KnownClientCard({
       />
     </ClientCard>
   );
+}
+
+/** An empty cell of the clients table. */
+function NoCell() {
+  return <span className="plugins-cell-none">—</span>;
 }
 
 /** A card for a client only a product build knows, holding its rows. */
@@ -307,12 +321,81 @@ export function ProductClientCard({
       name={name}
       light={light}
       missing={false}
-      summary={null}
+      summary={
+        <>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
       defaultOpen={false}
     >
       {items.map((item) => (
         <Fragment key={item.id}>{item.render(context)}</Fragment>
       ))}
+    </ClientCard>
+  );
+}
+
+/** ChatGPT through the PostPane Chrome extension: Chrome's manifest for the
+ * app's relay, registered here, and whether the extension is connected. It
+ * has no HUD tools. */
+export function ChatGptCard({
+  chatgpt,
+  light,
+  t,
+}: {
+  chatgpt: ChatGpt;
+  light: boolean;
+  t: Text;
+}) {
+  const { status } = chatgpt;
+  const state = chatgptRow({
+    manifestInstalled: status ? status.manifestInstalled : null,
+    manifestCurrent: Boolean(status?.manifestCurrent),
+    helperFound: Boolean(status?.helperFound),
+    supported: Boolean(status?.supported),
+    connected: Boolean(status?.connected),
+    running: chatgpt.running,
+  });
+  return (
+    <ClientCard
+      key={status ? "loaded" : "reading"}
+      name={t("ChatGPT (Chrome extension)", "ChatGPT（Chrome 插件）")}
+      logo="chatgpt"
+      light={light}
+      missing={false}
+      defaultOpen={
+        status !== null && (needsYou(state) || Boolean(chatgpt.error))
+      }
+      summary={
+        <>
+          <span className="plugins-cell">
+            <StatePill state={state} t={t} />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
+    >
+      <StatusRow
+        title={t("Chrome extension", "Chrome 插件")}
+        subtitle={t(
+          "In Chrome, open chrome://extensions, turn on Developer mode and load src/apps/chrome-extension from the repository.",
+          "在 Chrome 打开 chrome://extensions，开启开发者模式，加载仓库里的 src/apps/chrome-extension",
+        )}
+        column="plugin"
+        state={state}
+        error={chatgpt.error}
+        t={t}
+        onAction={(id) => {
+          if (id === "register" || id === "remove") void chatgpt.change(id);
+        }}
+      />
     </ClientCard>
   );
 }
@@ -329,9 +412,22 @@ export function OtherAgentsCard({
 }) {
   const [copied, setCopied] = useBriefly<true>(2000);
   return (
-    <Collapsible icon={icon} title={t("Other agents", "其他智能体")}>
+    <Collapsible
+      icon={icon}
+      title={t("Other agents", "其他智能体")}
+      summary={
+        <>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+          <span className="plugins-cell">
+            <NoCell />
+          </span>
+        </>
+      }
+    >
       <Row
-        title={t("HUD tools", "HUD 工具")}
+        title={t("HUD tools", "侧栏工具")}
         tag="MCP"
         subtitle={t(
           "Paste into the agent's MCP settings.",

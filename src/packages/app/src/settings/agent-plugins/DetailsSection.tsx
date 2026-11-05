@@ -48,7 +48,7 @@ export function DetailsSection({
         </Row>
       ))}
       <Row
-        title={t("HUD tools server", "HUD 工具服务")}
+        title={t("HUD tools server", "侧栏工具服务")}
         subtitle={local?.notice ?? undefined}
       >
         {!local?.supported ? (
@@ -70,7 +70,7 @@ export function DetailsSection({
         )}
       </Row>
       <Row
-        title={t("HUD tools setup", "HUD 工具安装")}
+        title={t("HUD tools setup", "侧栏工具安装")}
         subtitle={clients?.notice ?? undefined}
       >
         {clients === null ? (

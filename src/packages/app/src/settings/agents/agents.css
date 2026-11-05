@@ -1,65 +1,59 @@
-/* The Agents page: a list of agents that stays put on the left, and the
-   chosen agent's settings on the right, built from the Settings primitives. */
+/* The Agents page: the agents as a row of cards on top, and the chosen
+   agent's settings under them, built from the Settings primitives. */
 
 .agents-page {
   display: flex;
-  align-items: flex-start;
-  gap: 24px;
+  flex-direction: column;
+  gap: 4px;
   width: 100%;
 }
 
-/* The list scrolls on its own and stays in view while the detail scrolls.
-   Its height is the window less the page header and the scroll padding. */
+/* Four cards to a line, wide enough for a whole name and its one-line
+   state; the folded others open as more cards. */
 .agents-list {
-  position: sticky;
-  top: 0;
-  flex: 0 0 184px;
-  max-height: calc(100vh - 128px);
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 10px;
 }
 .agents-list-label {
-  padding: 12px 8px 4px;
+  grid-column: 1 / -1;
+  padding: 6px 2px 0;
   font-size: 11px;
   line-height: 15px;
   color: var(--muted-foreground);
 }
+.agents-list-item,
 .agents-list-fold {
-  width: 100%;
-  border: 0;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-.agents-list-item {
-  width: 100%;
-  height: 30px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
   background: none;
   color: var(--foreground);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   text-align: left;
   cursor: default;
 }
-.agents-list-item:hover {
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
+.agents-list-fold {
+  place-items: center;
+  border-style: dashed;
+  color: var(--muted-foreground);
+  cursor: pointer;
 }
-.agents-list-item.is-selected {
-  background: var(--muted);
-}
-.agents-list-item:focus-visible {
+.agents-list-item:focus-visible,
+.agents-list-fold:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline-offset: 2px;
+}
+.agents-list-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .agents-list-name {
   flex: 1;
@@ -67,13 +61,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 700;
 }
 .agents-list-item.is-off .agents-list-name {
   color: var(--muted-foreground);
 }
 .agents-list-state {
-  flex-shrink: 0;
-  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 1.3;
   color: var(--muted-foreground);
 }
 
@@ -81,35 +79,17 @@
   flex: 1;
   min-width: 0;
 }
-.agents-detail-header {
-  display: flex;
+.agents-detail-name {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding-inline: 4px;
-  min-height: 32px;
-}
-.agents-detail-title {
-  flex: 1;
-  min-width: 0;
-}
-.agents-detail-title h2 {
-  margin: 0;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-}
-.agents-detail-title p {
-  margin: 0;
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--muted-foreground);
+  gap: 8px;
 }
 
 /* What follows the switches: dimmed and out of reach while the agent is off. */
 .agents-detail-rest {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   transition: opacity 160ms ease;
 }
 .agents-detail-rest.is-off {

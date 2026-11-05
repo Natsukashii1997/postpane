@@ -19,6 +19,7 @@ import {
   type LiveSession,
 } from "./agent-board";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
+import { BotSeal } from "./BotStamp";
 
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it;
@@ -132,13 +133,10 @@ export function SourceSessions({
       </div>
       <div
         ref={rows}
-        className="hud-live-sessions"
         style={{
           position: "relative",
           maxHeight: rowsHeight,
           overflowY: rowsHeight ? "auto" : undefined,
-          scrollbarWidth: "thin",
-          scrollbarColor: `${inks.divider} transparent`,
         }}
       >
         {live.map((entry, index) => (
@@ -257,6 +255,7 @@ function LiveRow({
       ? "暂时无法回到原会话"
       : "Session return unavailable";
   const waiting = entry.status === "waiting";
+  const bot = session.bot ?? null;
   return (
     <div
       className="hud-live-session"
@@ -274,7 +273,9 @@ function LiveRow({
       onPointerLeave={() => setHover(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: "auto minmax(0, 1fr) 26px",
+        gridTemplateColumns: bot
+          ? "auto minmax(0, 1fr) auto 26px"
+          : "auto minmax(0, 1fr) 26px",
         columnGap: 10,
         alignItems: "center",
         padding: "8px 6px",
@@ -300,9 +301,15 @@ function LiveRow({
           minWidth: 0,
         }}
       >
-        {session.title?.trim() ||
+        {session.liveFacts?.prompt?.trim() ||
+          session.title?.trim() ||
           (zh ? "（未命名会话）" : "(untitled session)")}
       </span>
+      {bot && (
+        <span style={{ gridRow: "1 / 3", gridColumn: "3 / 4" }}>
+          <BotSeal bot={bot} light={light} color={inks.secondary} />
+        </span>
+      )}
       <button
         type="button"
         aria-label={goTitle}

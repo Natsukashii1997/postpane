@@ -7,6 +7,7 @@
 //!   statistics_chrome(b)      the Statistics window's title bar
 //!   system_prefers_chinese()  the system's language, before any setting is read
 //!   alert(title, body, ok)    a blocking message, before the app starts
+//!   open_in_browser(url)      a web page in the default browser
 #[cfg(target_os = "macos")]
 #[path = "macos.rs"]
 mod host;
@@ -17,6 +18,6 @@ mod host;
 #[path = "linux.rs"]
 mod host;
 pub(crate) use host::{
-    alert, install, reopened, statistics_chrome, system_prefers_chinese, window_opened,
-    windows_changed,
+    alert, install, open_in_browser, reopened, statistics_chrome, system_prefers_chinese,
+    window_opened, windows_changed,
 };
