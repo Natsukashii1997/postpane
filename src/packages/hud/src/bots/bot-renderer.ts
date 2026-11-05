@@ -93,7 +93,7 @@ export function botRenderLook(motion: BotMotion) {
     motion.glow,
     s(motion.glowLevel, 30),
     motion.avatar ? s(motion.clock, 12) : 0,
-    motion.online,
+    motion.standby,
     s(motion.shade, 40),
     motion.limbs,
     motion.flap,
@@ -762,6 +762,28 @@ function drawAvatar(
   }
   context.globalAlpha = motion.shade;
   context.drawImage(form.artwork, 0, 0, 1, 1);
+  if (motion.standby) {
+    // Standby: every six seconds a glint sweeps diagonally across the ink.
+    const sweep = (((motion.clock % 6) + 6) % 6) / 1.3;
+    if (sweep < 1) {
+      const at = -0.2 + 1.4 * sweep,
+        glint = form.light ? "255, 255, 255" : "150, 150, 170",
+        sheen = context.createLinearGradient(
+          at - 0.2,
+          at - 0.2,
+          at + 0.2,
+          at + 0.2,
+        );
+      sheen.addColorStop(0, `rgba(${glint}, 0)`);
+      sheen.addColorStop(0.5, `rgba(${glint}, 0.8)`);
+      sheen.addColorStop(1, `rgba(${glint}, 0)`);
+      context.save();
+      context.globalCompositeOperation = "source-atop";
+      context.fillStyle = sheen;
+      context.fillRect(-0.3, -0.3, 1.6, 1.6);
+      context.restore();
+    }
+  }
   const lid = 1 - Math.max(0, Math.min(1, motion.face.open));
   if (lid > 0.04)
     for (const [x, y, rx, ry] of form.spec.avatar!.eyes) {
@@ -790,22 +812,6 @@ function drawAvatar(
       context.stroke();
     }
   context.globalAlpha = 1;
-  if (motion.online) {
-    const beat = Math.abs(Math.sin((Math.PI * motion.clock) / 1.4));
-    context.save();
-    context.fillStyle = tinted(AVATAR_GREEN, 0.35 * beat);
-    context.beginPath();
-    context.arc(0.86, 0.86, 0.07 + 0.06 * beat, 0, 2 * Math.PI);
-    context.fill();
-    context.fillStyle = AVATAR_GREEN;
-    context.strokeStyle = STICKER_INK;
-    context.lineWidth = 0.03;
-    context.beginPath();
-    context.arc(0.86, 0.86, 0.075, 0, 2 * Math.PI);
-    context.fill();
-    context.stroke();
-    context.restore();
-  }
   if (motion.prop) drawAvatarProp(context, motion.prop, motion.propAge);
   if (motion.sign) drawAvatarBadge(context, motion.sign, motion.clock);
 }

@@ -71,11 +71,11 @@ test("a limit fades the avatar, hangs its head and half-closes its eyes", () => 
   assert.ok(limited.pose.rotation < -4, `rotation ${limited.pose.rotation}`);
   assert.ok(limited.face.open < 0.6, `open ${limited.face.open}`);
   assert.equal(limited.sign, "hourglass");
-  assert.equal(limited.online, false);
+  assert.equal(limited.standby, false);
   assert.ok(run(look("idle"), 2).shade > 0.99);
 });
 
-test("an idle avatar keeps swaying and shows it is online", () => {
+test("an idle avatar keeps swaying and stays on standby", () => {
   const motion = new BotMotion(1);
   motion.staysBot = true;
   motion.fit(hermes);
@@ -86,8 +86,8 @@ test("an idle avatar keeps swaying and shows it is online", () => {
     tilts.push(motion.pose.rotation);
   }
   assert.ok(Math.max(...tilts) - Math.min(...tilts) > 4);
-  assert.equal(motion.online, true);
-  assert.equal(run(look("asleep"), 2).online, false);
+  assert.equal(motion.standby, true);
+  assert.equal(run(look("asleep"), 2).standby, false);
 });
 
 test("hovering says hi for a moment", () => {

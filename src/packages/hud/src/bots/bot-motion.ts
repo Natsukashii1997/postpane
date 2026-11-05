@@ -195,8 +195,8 @@ export class BotMotion {
   propAge = 0;
   glow: AvatarGlow | null = null;
   glowLevel = 0;
-  /** Shows the breathing green dot of an avatar that is idle and online. */
-  online = false;
+  /** An idle avatar on standby: a glint sweeps across it every few seconds. */
+  standby = false;
   /** How strongly the portrait itself shows; badges stay solid when it fades. */
   shade = 1;
   /** The step's clock, for an avatar's badges and floating z. */
@@ -873,7 +873,7 @@ export class BotMotion {
     this.propAge = propAge;
     this.glow = m > 0.5 ? glow : null;
     this.glowLevel = glow ? glowLevel * m : 0;
-    this.online =
+    this.standby =
       m > 0.5 &&
       isCalm(this.look) &&
       !dozing &&
