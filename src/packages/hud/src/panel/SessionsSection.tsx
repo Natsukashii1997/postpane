@@ -19,6 +19,7 @@ import {
   type LiveSession,
 } from "./agent-board";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
+import { BotStamp } from "./BotStamp";
 
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it;
@@ -307,6 +308,7 @@ function LiveRow({
       ? "暂时无法回到原会话"
       : "Session return unavailable";
   const waiting = entry.status === "waiting";
+  const bot = session.bot ?? null;
   return (
     <div
       className="hud-live-session"
@@ -324,7 +326,9 @@ function LiveRow({
       onPointerLeave={() => setHover(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: "auto minmax(0, 1fr) 26px",
+        gridTemplateColumns: bot
+          ? "auto minmax(0, 1fr) auto 26px"
+          : "auto minmax(0, 1fr) 26px",
         columnGap: 10,
         alignItems: "center",
         padding: "8px 6px",
@@ -353,6 +357,30 @@ function LiveRow({
         {session.title?.trim() ||
           (zh ? "（未命名会话）" : "(untitled session)")}
       </span>
+      {bot && (
+        <span
+          title={bot.name}
+          style={{
+            gridRow: "1 / 3",
+            gridColumn: "3 / 4",
+            display: "grid",
+            justifyItems: "center",
+            gap: 1,
+          }}
+        >
+          <BotStamp bot={bot} size={30} light={light} />
+          <span
+            style={{
+              fontSize: 9.5,
+              letterSpacing: "0.05em",
+              color: inks.secondary,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {bot.name}
+          </span>
+        </span>
+      )}
       <button
         type="button"
         aria-label={goTitle}
