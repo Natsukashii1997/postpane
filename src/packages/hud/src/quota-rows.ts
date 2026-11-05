@@ -1,4 +1,4 @@
-import type { PanelBlockLayout, Quota } from "@agent-hud/protocol";
+import type { PanelBlockLayout, PanelLayout, Quota } from "@agent-hud/protocol";
 
 /** The key a layout writes for a quota row: the Swift app's window id where the
  * row has one, so layouts carried over from it keep naming the same row. */
@@ -101,4 +101,29 @@ export function blockRows<T extends Quota>(
     ),
     block?.rows ?? [],
   );
+}
+
+/** Whether the hover panel's layout shows this row. Every other place in the
+ * sidebar (the peek, the resting strip's figure, quota notices) leaves out a
+ * row the panel hides, by this one test. */
+export function quotaRowShown(
+  row: Quota,
+  layout: PanelLayout | undefined,
+): boolean {
+  return blockRows([row], layout?.blocks?.[row.vendor]).length > 0;
+}
+
+/** The window an agent's mark leads with: its live plan window most used. A
+ * credit grant is spending money, not a plan limit, so it never leads. */
+export function tightestWindow<T extends Quota>(
+  rows: readonly T[],
+): T | undefined {
+  return rows
+    .filter(
+      (q) => q.usedPercent != null && q.status !== "stale" && !quotaCredits(q),
+    )
+    .reduce<T | undefined>(
+      (a, b) => (!a || b.usedPercent! > a.usedPercent! ? b : a),
+      undefined,
+    );
 }

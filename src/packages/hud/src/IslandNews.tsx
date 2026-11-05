@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { Approval, IslandEvent, Snapshot } from "@agent-hud/protocol";
+import type {
+  Approval,
+  IslandEvent,
+  PanelLayout,
+  Snapshot,
+} from "@agent-hud/protocol";
 import { usePanelServices } from "./PanelContext";
 import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
-import {
-  QuotaAlertView,
-  ResetCreditAlertView,
-  SignInAlertView,
-} from "./alerts/QuotaAlertViews";
-import { queuedQuotas } from "./alerts/quota-list";
+import { QuotaAlertView } from "./alerts/QuotaAlertViews";
+import { queuedQuotas, shownNews } from "./alerts/quota-list";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -125,6 +126,8 @@ export function useIslandNews(
   silenced = false,
   underPointer = true,
   inUsagePanel = false,
+  /** The hover panel's layout: news about a row it hides is not told. */
+  layout?: PanelLayout,
 ) {
   const services = usePanelServices(),
     seen = useRef<Set<string> | null>(null),
@@ -154,7 +157,7 @@ export function useIslandNews(
     const visible =
       silenced || !underPointer
         ? []
-        : fresh.filter(
+        : shownNews(fresh, snapshot.quotas, layout).filter(
             (event) =>
               event.islandAlert !== false &&
               shown.includes(vendorKey(event.source)) &&
@@ -268,7 +271,8 @@ export function NewsContent({
   dismiss: () => void;
   /** Every reply in the queue: a reply's card lists them all. */
   replies?: IslandEvent[];
-  /** Every quota notice in the queue, newest first: a quota card lists them all. */
+  /** Every quota notice in the queue (windows, resets added, sign-outs),
+   * newest first: a quota card lists them all. */
   quotas?: IslandEvent[];
   /** Puts these replies or quota notices away. */
   drop?: (ids: readonly string[]) => void;
@@ -289,33 +293,10 @@ export function NewsContent({
       />
     );
   }
-  if (event.kind === "sign-in-needed") {
-    return (
-      <SignInAlertView
-        event={event}
-        dismiss={dismiss}
-        light={light}
-        botLogos={botLogos}
-        zh={zh}
-      />
-    );
-  }
-  if (event.kind === "reset-credits") {
-    return (
-      <ResetCreditAlertView
-        event={event}
-        snapshot={snapshot}
-        dismiss={dismiss}
-        onStats={onStats}
-        light={light}
-        botLogos={botLogos}
-        zh={zh}
-      />
-    );
-  }
   return (
     <QuotaAlertView
       events={quotas.some((each) => each.id === event.id) ? quotas : [event]}
+      snapshot={snapshot}
       drop={drop}
       onStats={onStats}
       light={light}

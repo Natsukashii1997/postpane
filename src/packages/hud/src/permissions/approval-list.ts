@@ -58,6 +58,19 @@ export function findSession(
   );
 }
 
+/** A request's title as the waiting list writes it: its session's title,
+ * else `fallback` (the folder it runs in, or the client). */
+export function requestTitle(
+  request: Approval,
+  sessions: readonly Session[],
+  fallback: string,
+): string {
+  return (
+    findSession(sessions, request.sessionId, request.source)?.title?.trim() ||
+    fallback
+  );
+}
+
 /** The session to go back to: the one found, else for a reply the way back
  * it carries; undefined when there is no way back. */
 export function sessionToOpen(entry: ApprovalEntry): Session | undefined {
