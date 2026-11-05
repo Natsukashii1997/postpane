@@ -21,10 +21,11 @@ const STAR = { x: 0.5, y: 0.19 };
 
 /** 随手记, hanging off the resting strip (app-pendant.ts). A click opens or
  * hides the notes beside it; `anchor` is the ring, in the page's points.
- * Five small motions, all in global.css (`hud-pendant-*`): the pendant sways
- * now and then, the cat blinks, its star twinkles, a hover lifts the ball
- * and lights the eyes, and a press squashes it; while the notes show, a
- * faint gold halo breathes round the ring. `still` stops them all. */
+ * Five small motions, all in global.css (`hud-pendant-*`): under the
+ * pointer the pendant sways now and then, the cat blinks and its star
+ * twinkles (at rest it stays still); a hover lifts the ball and lights the
+ * eyes, and a press squashes it; while the notes show, a faint gold halo
+ * breathes round the ring. `still` stops them all. */
 export function AppPendant({
   strip,
   edge,

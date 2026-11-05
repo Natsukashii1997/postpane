@@ -521,14 +521,17 @@ a:focus-visible {
   transform: scale(0.92);
   transition-duration: 0.08s;
 }
-.hud-app-pendant[data-motion="on"] .hud-pendant-sway {
-  animation: hud-pendant-sway 7s ease-in-out infinite;
+/* The sway, blink and twinkle play only under the pointer (#103): at rest
+ * the ball stays still and costs nothing to draw. Each starts just before
+ * its move, so a hover shows it within half a second. */
+.hud-app-pendant[data-motion="on"]:hover .hud-pendant-sway {
+  animation: hud-pendant-sway 7s ease-in-out -4.2s infinite;
 }
-.hud-app-pendant[data-motion="on"] .hud-pendant-lid {
-  animation: hud-pendant-blink 6.4s ease-in-out infinite;
+.hud-app-pendant[data-motion="on"]:hover .hud-pendant-lid {
+  animation: hud-pendant-blink 6.4s ease-in-out -5.6s infinite;
 }
-.hud-app-pendant[data-motion="on"] .hud-pendant-star {
-  animation: hud-pendant-twinkle 9s ease-in-out 2s infinite;
+.hud-app-pendant[data-motion="on"]:hover .hud-pendant-star {
+  animation: hud-pendant-twinkle 9s ease-in-out -3.2s infinite;
 }
 .hud-app-pendant[data-open="true"] .hud-app-pendant-ball {
   box-shadow: 0 0 0 2px rgba(242, 200, 121, 0.55);
