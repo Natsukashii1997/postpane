@@ -1,5 +1,4 @@
 import { useMemo, type ComponentType, type CSSProperties } from "react";
-import { DollarSign, Flame, Gauge, Percent, Sigma } from "lucide-react";
 import type { QuotaMeasure } from "@agent-hud/protocol";
 import { useGround } from "../ground";
 import { usePaper, type Paper } from "../paper";
@@ -38,15 +37,6 @@ export const SOURCE_PANEL = {
   footerButton: 28,
   compactChartHeight: 40,
 } as const;
-
-export const measures: { key: Measure; title: string; icon: typeof Percent }[] =
-  [
-    { key: "quota", title: "Quota", icon: Percent },
-    { key: "burn", title: "Burn rate", icon: Flame },
-    { key: "tokens", title: "Reply rate", icon: Gauge },
-    { key: "consumed", title: "Consumed", icon: Sigma },
-    { key: "cost", title: "Est. cost", icon: DollarSign },
-  ];
 
 export const noButtonChrome: CSSProperties = {
   border: 0,
@@ -141,9 +131,6 @@ export function usePanelPalette(light: boolean): HUDPalette {
     [paper, ground],
   );
 }
-
-/** A status dot on the receipt: punched through, not glowing. */
-export const RECEIPT_PUNCH = "inset 0 1px 1.2px rgba(0,0,0,.5)";
 
 /** A meter on the receipt: a small ruled box instead of a rounded track. */
 export function receiptMeterBox(paper: Paper): CSSProperties {

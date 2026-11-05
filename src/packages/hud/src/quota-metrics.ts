@@ -327,20 +327,3 @@ export function quotaMetric(
   }
   return result;
 }
-
-export function quotaMetricAvailability(
-  rows: readonly Quota[],
-  measure: QuotaMeasure,
-  now: number,
-  settings: FormatSettings = englishUTC,
-) {
-  const readings = rows.map((row) => quotaMetric(row, measure, now, settings));
-  const selectable = readings.some((reading) => reading.selectable);
-  return {
-    selectable,
-    hint: selectable
-      ? readings.find((reading) => reading.selectable)!.hint
-      : [...new Set(readings.map((reading) => reading.hint))].join("\n") ||
-        missing(measure, settings.language),
-  };
-}

@@ -1,235 +1,335 @@
+import { useState } from "react";
+import { ArrowUpRight } from "lucide-react";
 import type {
   PanelLayout,
   SessionsResponse,
   Snapshot,
 } from "@agent-hud/protocol";
-import { formatTokens } from "../quota-metrics";
+import { tokensShort } from "@agent-hud/ui/format";
 import { sourceID, sourcesForMark } from "../model";
 import { usePanelQuery, usePanelServices } from "../PanelContext";
-import {
-  noButtonChrome,
-  receiptTear,
-  usePanelPalette,
-  tabular,
-  type Logo,
-} from "./theme";
-import { usePaper } from "../paper";
+import { ApprovalTag } from "../permissions/ApprovalTag";
+import { noButtonChrome, tabular, type Logo } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
-import { noSessionsMatch } from "./session-filters";
+import {
+  liveSessionLine,
+  liveSessions,
+  stoppedCount,
+  type LiveSession,
+} from "./agent-board";
+import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 
+/** The panel's sessions (owner, 2026-11-05): those waiting on you, then
+ * those at work, each with what it waits on or does and a way back to it;
+ * the rest of the last day folded into one line, with its tokens, that opens
+ * the Statistics window. The Sessions page lists every session as before. */
 export function SourceSessions({
   snapshot,
   focusVendor,
   light,
-  Logo,
   onStats,
   layout = {},
+  tokenAgents,
+  showTokens = true,
   active = true,
 }: {
   snapshot: Snapshot;
   focusVendor?: string;
   light: boolean;
-  Logo: Logo;
+  Logo?: Logo;
   onStats?: () => void;
   layout?: PanelLayout["sessions"];
+  /** The agents whose tokens the folded line counts; every agent without. */
+  tokenAgents?: string[];
+  /** The folded line's tokens and chart; off where the board above shows them. */
+  showTokens?: boolean;
   active?: boolean;
 }) {
-  const zh = useFormat().language === "zh";
-  const services = usePanelServices();
+  const { language } = useFormat();
+  const zh = language === "zh";
   const listed = useListedSessions();
-  // The Sessions page: the list, or one session's usage.
-  const openSessions = (sessionId?: string) =>
-    listed ? listed.openStats({ tab: "sessions", sessionId }) : onStats?.();
+  const inks = useBoardInks(light);
+  const openList = () =>
+    listed ? listed.openStats({ tab: "sessions" }) : onStats?.();
   const limit = layout.limit ?? 5;
   const selectedSources = focusVendor
     ? sourcesForMark(snapshot, focusVendor)
     : layout.agents?.length
       ? layout.agents.map((source) => sourceID(snapshot, source))
       : undefined;
-  const week = layout.period === "week";
+  const inScope = (session: Snapshot["sessions"][number]) =>
+    (!selectedSources ||
+      selectedSources.includes(sourceID(snapshot, session.source))) &&
+    (!layout.projects?.length ||
+      layout.projects.includes(session.project ?? session.cwd ?? "unassigned"));
+  const now = Date.parse(snapshot.generatedAt);
+  const live = liveSessions(
+    snapshot.sessions.filter(inScope),
+    snapshot.approvals,
+  );
+  // The last day's sessions, only to count those stopped.
   const query = usePanelQuery<SessionsResponse>(
     "sessions",
     {
-      scope: week ? "recent" : "active",
-      limit,
+      scope: "active",
+      limit: 1,
       ...(selectedSources ? { sources: selectedSources } : {}),
       ...(layout.projects?.length ? { projects: layout.projects } : {}),
     },
     snapshot.sessionsRevision,
     active,
   );
-  const colors = usePanelPalette(light);
-  const paper = usePaper();
-  // Snapshot rows provide a first paint only; the complete-index query owns
-  // ordering and totals. Both list the newest last message first and look
-  // at no session state (owner, 2026-10-26).
-  const fallback = snapshot.sessions
-    .filter(
+  const dayTotal =
+    query.data?.total ??
+    snapshot.sessions.filter(
       (session) =>
-        (!selectedSources ||
-          selectedSources.includes(sourceID(snapshot, session.source))) &&
-        (!layout.projects?.length ||
-          layout.projects.includes(
-            session.project ?? session.cwd ?? "unassigned",
-          )),
-    )
-    .sort(
-      (a, b) =>
-        Date.parse(b.lastMessageAt ?? b.updatedAt) -
-        Date.parse(a.lastMessageAt ?? a.updatedAt),
-    );
-  const sessions = query.data?.items ?? fallback.slice(0, limit);
-  const total = query.data?.total ?? fallback.length;
-  // A filter of the layout that keeps none of the sessions there are says
-  // so, and the header then names no window it leaves them out of.
-  const own = focusVendor
-    ? snapshot.sessions.filter((session) =>
-        selectedSources!.includes(sourceID(snapshot, session.source)),
-      ).length
-    : snapshot.sessions.length;
-  const noneMatch = noSessionsMatch(
-    layout,
-    Boolean(focusVendor),
-    sessions.length,
-    own,
+        inScope(session) &&
+        !session.parentId &&
+        Date.parse(session.lastMessageAt ?? session.updatedAt) >=
+          now - 86_400_000,
+    ).length;
+  const stopped = stoppedCount(dayTotal, live.length);
+  const day = useDayTokens(
+    snapshot,
+    focusVendor ? selectedSources : tokenAgents,
+    active && showTokens,
   );
-  const status = week
-    ? zh
-      ? "近 7 天"
-      : "Last 7 days"
-    : zh
-      ? "近 24 小时"
-      : "Last 24 hours";
+  const shown = live.slice(0, limit);
   return (
     <section
       className="hud-source-sessions"
-      style={{
-        display: "grid",
-        gap: "var(--hud-session-gap, 6px)",
-        paddingTop: "var(--hud-divided-gap, 8px)",
-        ...(paper
-          ? receiptTear(paper)
-          : { boxShadow: `inset 0 1px 0 ${colors.divider}` }),
-        fontSize: 12,
-      }}
+      style={{ display: "grid", gap: 0, fontSize: 12 }}
     >
-      <button
-        title={zh ? "查看会话列表" : "Show sessions"}
-        onClick={() => openSessions()}
-        disabled={!onStats && !listed}
+      <div
         style={{
-          ...noButtonChrome,
           display: "flex",
-          alignItems: "baseline",
-          gap: 8,
-          width: "100%",
-          fontSize: 13,
-          lineHeight: "16px",
+          alignItems: "center",
+          gap: 10,
+          padding: "6px 6px 4px",
+          fontSize: 11.5,
+          letterSpacing: "0.06em",
+          color: inks.secondary,
         }}
       >
-        <strong style={{ fontWeight: 600, color: colors.text }}>
-          {zh ? "会话" : "Sessions"}
-        </strong>
+        <span>{zh ? "正在进行" : "IN PROGRESS"}</span>
+        <span
+          style={{ flex: 1, borderTop: `1px solid ${inks.divider}`, order: 1 }}
+        />
+        <span style={{ order: 2, letterSpacing: 0, ...tabular }}>
+          {live.length}
+        </span>
+      </div>
+      {shown.map((entry, index) => (
+        <LiveRow
+          key={`${entry.session.source}:${entry.session.id}`}
+          entry={entry}
+          now={now}
+          light={light}
+          first={index === 0}
+          onStats={onStats}
+        />
+      ))}
+      {!live.length && (
         <span
           style={{
-            marginLeft: "auto",
-            ...tabular,
-            fontSize: 12,
-            color: colors.secondary,
-            // Without a status the line keeps its room.
-            visibility: noneMatch ? "hidden" : undefined,
+            padding: "6px 6px 8px",
+            fontSize: 12.5,
+            color: inks.tertiary,
           }}
         >
-          {status}
+          {zh
+            ? "没有会话在跑，也没有在等你的"
+            : "Nothing running, and nothing waiting on you"}
         </span>
+      )}
+      <button
+        type="button"
+        className="hud-sessions-more"
+        title={zh ? "在统计里看全部会话" : "Show every session in Statistics"}
+        disabled={!onStats && !listed}
+        onClick={openList}
+        style={{
+          ...noButtonChrome,
+          display: "grid",
+          gridTemplateColumns: showTokens ? "minmax(0, 1fr) 150px" : "1fr",
+          columnGap: 16,
+          alignItems: "end",
+          padding: "10px 6px 4px",
+          borderTop: `1px dotted ${inks.divider}`,
+          cursor: !onStats && !listed ? undefined : "pointer",
+        }}
+      >
+        <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: 12.5, color: inks.text, opacity: 0.84 }}>
+            {showTokens
+              ? zh
+                ? `近 24 小时 ${tokensShort(day.total)} Token`
+                : `${tokensShort(day.total)} tokens in the last 24 hours`
+              : zh
+                ? `近 24 小时 ${dayTotal} 个会话`
+                : `${dayTotal} sessions in the last 24 hours`}
+          </span>
+          <span style={{ fontSize: 12, color: inks.secondary }}>
+            {[
+              live.length > shown.length
+                ? zh
+                  ? `还有 ${live.length - shown.length} 个在进行`
+                  : `${live.length - shown.length} more in progress`
+                : null,
+              zh
+                ? `另有 ${stopped} 个会话已停 · 去统计看全部`
+                : `${stopped} more stopped · see all in Statistics`,
+            ]
+              .filter(Boolean)
+              .join(zh ? "，" : ", ")}
+          </span>
+        </span>
+        {showTokens && (
+          <DayBars
+            points={day.points}
+            from={day.from}
+            height={28}
+            light={light}
+          />
+        )}
       </button>
-      {sessions.slice(0, limit).map((session) => (
-        // The whole row opens the session's page, as its heading opens the list.
-        <button
-          key={session.id}
-          disabled={!onStats && !listed}
-          title={`${session.title}\n${
-            zh ? "查看会话详情" : "Show session details"
-          }`}
-          onClick={() =>
-            listed
-              ? openSessions(session.id)
-              : services?.selectSession
-                ? services.selectSession(session)
-                : onStats?.()
-          }
-          style={{
-            ...noButtonChrome,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            width: "100%",
-            color: colors.secondary,
-            lineHeight: "15px",
-            minHeight: 15,
-          }}
-        >
-          <span
-            style={{
-              display: "block",
-              width: 14,
-              height: 14,
-              flex: "0 0 14px",
-            }}
-          >
-            <Logo source={session.source} size={14} light={light} />
-          </span>
-          <span
-            style={{
-              flex: 1,
-              minWidth: 0,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {sessionTitle(session.title, session.cwd) ||
-              (zh ? "（未命名会话）" : "(untitled session)")}
-          </span>
-          <span style={{ ...tabular, fontSize: 12, whiteSpace: "nowrap" }}>
-            {formatTokens(session.tokens)} tok
-          </span>
-        </button>
-      ))}
-      {!sessions.length && (
-        <span style={{ color: colors.secondary, lineHeight: "15px" }}>
-          {noneMatch
-            ? zh
-              ? "没有符合条件的会话"
-              : "No sessions match"
-            : zh
-              ? "还没有会话"
-              : "No sessions yet"}
-        </span>
-      )}
-      {total > limit && (
-        <button
-          style={{ ...noButtonChrome, color: colors.secondary, fontSize: 12 }}
-          disabled={!onStats && !listed}
-          onClick={() => openSessions()}
-        >
-          {zh ? `还有 ${total - limit} 个` : `+${total - limit} more`}
-        </button>
-      )}
     </section>
   );
 }
 
-/** The row's title (Open's HoverPanelView.sessionTitle): the task cut short,
- * then the session's folder, so rows of one task in different folders differ. */
-export function sessionTitle(task: string, cwd: string | null) {
-  const terminal = cwd?.split(/[\\/]/).filter(Boolean).pop();
-  if (!terminal || !task) return task;
-  const words = task.split(" ").filter(Boolean);
-  const short =
-    words.length > 3
-      ? words.slice(0, 3).join(" ")
-      : [...task].slice(0, 14).join("");
-  return `${short} · ${terminal}`;
+/** A listed session: its status tag, title and a way back to it, and under
+ * the title what it waits on or does. The row and the arrow both go back;
+ * where the way back is missing or fails, the arrow greys and says so, and
+ * the row opens the session's page in Statistics instead. */
+function LiveRow({
+  entry,
+  now,
+  light,
+  first,
+  onStats,
+}: {
+  entry: LiveSession;
+  now: number;
+  light: boolean;
+  first: boolean;
+  onStats?: () => void;
+}) {
+  const { language } = useFormat();
+  const zh = language === "zh";
+  const services = usePanelServices();
+  const listed = useListedSessions();
+  const inks = useBoardInks(light);
+  const [failed, setFailed] = useState(false);
+  const [hover, setHover] = useState(false);
+  const { session } = entry;
+  const canOpen =
+    Boolean(session.navigationTarget && services?.openSession) && !failed;
+  const goBack = async () => {
+    if (!canOpen) return;
+    const opened = await services?.openSession?.(session);
+    if (opened === false) setFailed(true);
+  };
+  const details = () =>
+    listed
+      ? listed.openStats({ tab: "sessions", sessionId: session.id })
+      : services?.selectSession
+        ? services.selectSession(session)
+        : onStats?.();
+  const goTitle = canOpen
+    ? zh
+      ? "回到会话"
+      : "Return to session"
+    : zh
+      ? "暂时无法回到原会话"
+      : "Session return unavailable";
+  const waiting = entry.status === "waiting";
+  return (
+    <div
+      className="hud-live-session"
+      role="button"
+      tabIndex={0}
+      title={session.title}
+      onClick={() => (canOpen ? void goBack() : details())}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        if (canOpen) void goBack();
+        else details();
+      }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto minmax(0, 1fr) 26px",
+        columnGap: 10,
+        alignItems: "center",
+        padding: "8px 6px",
+        borderTop: first ? undefined : `1px dotted ${inks.divider}`,
+        cursor: "pointer",
+        opacity: hover ? 0.78 : 1,
+      }}
+    >
+      <ApprovalTag
+        label={waiting ? (zh ? "等你" : "WAITING") : zh ? "在跑" : "RUNNING"}
+        tone="ask"
+        light={light}
+        color={waiting ? inks.red : inks.green}
+      />
+      <span
+        style={{
+          fontSize: 13.5,
+          fontWeight: 600,
+          color: inks.text,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {session.title?.trim() ||
+          (zh ? "（未命名会话）" : "(untitled session)")}
+      </span>
+      <button
+        type="button"
+        aria-label={goTitle}
+        title={goTitle}
+        aria-disabled={!canOpen}
+        onClick={(event) => {
+          event.stopPropagation();
+          void goBack();
+        }}
+        style={{
+          display: "inline-grid",
+          placeItems: "center",
+          width: 26,
+          height: 26,
+          boxSizing: "border-box",
+          padding: 0,
+          border: `1.5px solid ${inks.divider}`,
+          borderRadius: 3,
+          background: "transparent",
+          color: canOpen ? inks.secondary : inks.tertiary,
+          opacity: canOpen ? 1 : 0.6,
+          cursor: canOpen ? "pointer" : "default",
+        }}
+      >
+        <ArrowUpRight size={13} strokeWidth={2} />
+      </button>
+      <span
+        style={{
+          gridColumn: "2 / 3",
+          marginTop: 2,
+          fontSize: 12,
+          color: inks.secondary,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {liveSessionLine(entry, now, language)}
+      </span>
+    </div>
+  );
 }
