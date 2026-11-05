@@ -381,6 +381,7 @@ export function HUDScene({
     glowHidden || Boolean(snapshot.status?.paused),
     underPointer,
     open && allowsInlineUsageAlert,
+    config.panelLayout,
   );
   const event = news.event;
   const request = news.request;
@@ -650,6 +651,21 @@ export function HUDScene({
         : undefined,
     [openSettingsPage, endHold, handoff],
   );
+  // Quota news while the usage panel is open: a strip atop the panel.
+  const inlineAlert = (shown: Snapshot) =>
+    inUsagePanel && !request && event ? (
+      <InlineEventRow
+        event={event}
+        snapshot={shown}
+        light={light}
+        botLogos={config.botLogos}
+        zh={snapshotLanguage(shown) === "zh"}
+        onOpen={() => {
+          news.dismiss();
+          showPanelStats?.();
+        }}
+      />
+    ) : undefined;
   const eventContent =
     request || event ? (
       <>
@@ -851,23 +867,7 @@ export function HUDScene({
                                 }
                               : undefined
                           }
-                          inlineAlert={
-                            inUsagePanel && !request && event ? (
-                              <InlineEventRow
-                                event={event}
-                                snapshot={measured.snapshot}
-                                light={light}
-                                botLogos={config.botLogos}
-                                zh={
-                                  snapshotLanguage(measured.snapshot) === "zh"
-                                }
-                                onOpen={() => {
-                                  news.dismiss();
-                                  showPanelStats?.();
-                                }}
-                              />
-                            ) : undefined
-                          }
+                          inlineAlert={inlineAlert(measured.snapshot)}
                         />
                       </PaperContext.Provider>
                     )}
@@ -963,6 +963,7 @@ export function HUDScene({
             configurePanel={configurePanel}
             surfacePadding={surfacePadding}
             eventContent={eventContent}
+            inlineAlert={inlineAlert(snapshot)}
             inUsagePanel={inUsagePanel}
             delivery={delivery}
             paper={paper}

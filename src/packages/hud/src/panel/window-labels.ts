@@ -45,3 +45,14 @@ export function quotaWindowLabel(
     .filter((value): value is string => Boolean(value));
   return parts.length ? parts.join(" · ") : row.name;
 }
+
+/** A window's short name in the agent's peek: Core's short name, as the peek
+ * has always written it, with Claude's cloud session credits ("Cloud") as
+ * 「云端」 in a Chinese interface. */
+export function peekWindowName(
+  row: { name: string; shortLabel?: string },
+  language: Language,
+): string {
+  const short = row.shortLabel || row.name;
+  return language === "zh" && short === "Cloud" ? "云端" : short;
+}

@@ -1,7 +1,7 @@
 /* The windows a Simple mark draws round and beside its logo: those of one
  * account, as the panel shows them. */
 import type { PanelLayout, Quota } from "@agent-hud/protocol";
-import { blockRows, quotaAccountKey } from "../quota-rows.ts";
+import { blockRows, quotaAccountKey, quotaRowShown } from "../quota-rows.ts";
 import { MAX_USAGE_ITEMS } from "./arcs.ts";
 
 /** One item a ring or bar draws: its share from 0 to 100, and the colour of its level. */
@@ -19,9 +19,7 @@ export function markWindows(
   layout?: PanelLayout,
   now = Date.now(),
 ): Quota[] {
-  const shown = vendor.quotas.filter(
-    (row) => blockRows([row], layout?.blocks?.[row.vendor]).length,
-  );
+  const shown = vendor.quotas.filter((row) => quotaRowShown(row, layout));
   if (!shown.length) return [];
   const live = shown.filter(
     (q) => q.usedPercent != null && q.status !== "stale",

@@ -1,6 +1,6 @@
 // What a quota or reset-credit reminder says (Open's QuotaAlertCopy and
 // ResetCreditAlertCopy), kept apart from the cards so the tests can run it.
-import type { IslandEvent } from "@agent-hud/protocol";
+import type { IslandEvent, ResetCredits } from "@agent-hud/protocol";
 import {
   countdownCompact,
   dateFormat,
@@ -204,37 +204,131 @@ export function quotaAlertCopy(event: IslandEvent, settings: FormatSettings) {
   };
 }
 
-/** The reset-credit card's words. `expiresAt` are the expiries of every reset
- * the account holds, as the usage panel lists them. */
-export function resetCreditCopy(
-  added: number,
-  expiresAt: (string | null | undefined)[],
+/** A date in the settings' time zone: "12 月 1 日" / "Dec 1". */
+function dayText(instant: number, calendar: WeekCalendar, language: Language) {
+  const parts = Object.fromEntries(
+    dateFormat("en-US", {
+      timeZone: calendar.timeZone,
+      month: language === "zh" ? "numeric" : "short",
+      day: "numeric",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  return say(
+    language,
+    `${parts.month} 月 ${parts.day} 日`,
+    `${parts.month} ${parts.day}`,
+  );
+}
+
+/** A past instant as a clock time, with its date when it fell on another day
+ * than `now`: "09:12", "11 月 4 日 09:12" / "Nov 4, 09:12". */
+function pastClockText(
+  instant: number,
+  now: number,
+  calendar: WeekCalendar,
   language: Language,
 ) {
-  const first = expiresAt
+  const time = dateFormat("en-GB", {
+    timeZone: calendar.timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(instant);
+  const day = (at: number) => dayText(at, calendar, language);
+  if (day(instant) === day(now)) return time;
+  return say(language, `${day(instant)} ${time}`, `${day(instant)}, ${time}`);
+}
+
+/** A reset-credit strip's words: resets added to an account, how many it
+ * holds (the account's count, else the event's), and its first expiry with
+ * the account's name. `account` is the account the event names, if known. */
+export function resetCreditCopy(
+  event: IslandEvent,
+  account:
+    { name?: string | null; resetCredits?: ResetCredits | null } | undefined,
+  settings: FormatSettings,
+) {
+  const { language, calendar } = settings;
+  const added = event.added ?? 1;
+  const available =
+    account?.resetCredits?.availableCount ?? event.availableCount ?? added;
+  // Every reset the account holds, as the usage panel lists them; else the new ones.
+  const expiries =
+    account?.resetCredits?.credits?.map((credit) => credit.expiresAt) ??
+    (Array.isArray(event.newCredits)
+      ? event.newCredits.map((credit) => credit?.expiresAt)
+      : []);
+  const first = expiries
     .map((at) => (at ? Date.parse(at) : NaN))
     .filter(Number.isFinite)
     .sort((a, b) => a - b)[0];
+  const name = (account?.name ?? event.title)?.trim() || null;
+  const expiry =
+    first === undefined
+      ? null
+      : say(
+          language,
+          `最早 ${dayText(first, calendar, language)}到期`,
+          `First expires ${dayText(first, calendar, language)}`,
+        );
   return {
-    compactTitle: say(
+    /** The strip's sentence after the agent. */
+    status: say(
       language,
-      `+${added} 次重置`,
-      added === 1 ? "+1 reset" : `+${added} resets`,
+      `新增 ${added} 次额度重置`,
+      added === 1 ? "1 usage reset added" : `${added} usage resets added`,
     ),
-    title: say(
-      language,
-      `此账户新增了 ${added} 次额度重置。`,
-      added === 1
-        ? "A usage reset was added to this account."
-        : `${added} usage resets were added to this account.`,
-    ),
-    /** The account's earliest deadline as a date. */
-    expiry:
-      first === undefined
-        ? "—"
-        : dateFormat(language === "zh" ? "zh-CN" : "en-US", {
-            month: "short",
-            day: "numeric",
-          }).format(first),
+    /** The strip's figure, in blue. */
+    display: say(language, `共 ${available} 次`, `${available} total`),
+    /** The line under it: the first expiry and the account; null with neither. */
+    when: [expiry, name].filter(Boolean).join(" · ") || null,
+    /** The folded tag: the word in dim ink, the count added in blue. */
+    chipLabel: say(language, "重置", "Reset"),
+    chipValue: `+${added}`,
+  };
+}
+
+/** A signed-out strip's words: what the account reading says, and that the
+ * quota stays at its last reading, timed by the latest of `readAt` (when the
+ * agent's windows were last read). */
+export function signInCopy(
+  event: IslandEvent,
+  readAt: readonly (string | null | undefined)[],
+  settings: FormatSettings,
+) {
+  const { language, calendar } = settings;
+  const latest = readAt
+    .map((at) => (at ? Date.parse(at) : NaN))
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a)[0];
+  const parsedAt = Date.parse(event.at);
+  const now = Number.isFinite(parsedAt) ? parsedAt : Date.now();
+  const time =
+    latest === undefined
+      ? null
+      : pastClockText(latest, now, calendar, language);
+  return {
+    status: say(language, "需要重新登录", "Sign in again"),
+    /** The framed red tag on the right. */
+    tag: say(language, "登出", "Signed out"),
+    /** The account reading's reason; null without one. */
+    message: event.message?.trim() || null,
+    /** The faint line under it. */
+    note:
+      time == null
+        ? say(
+            language,
+            "登回去之前，额度显示上次的读数",
+            "Until you sign back in, quota shows the last reading",
+          )
+        : say(
+            language,
+            `登回去之前，额度停在 ${time} 的读数`,
+            `Until you sign back in, quota stays at the ${time} reading`,
+          ),
+    /** The folded tag, in red. */
+    chip: say(language, "需要登录", "Sign in"),
   };
 }

@@ -1,10 +1,15 @@
-import { Hand, KeyRound, RotateCcw } from "lucide-react";
-import type { Approval, IslandEvent } from "@agent-hud/protocol";
+import { Hand } from "lucide-react";
+import type { Approval, IslandEvent, Session } from "@agent-hud/protocol";
 import { labelWidth } from "../geometry";
 import { agentVendorName } from "../model";
 import { clientDisplayName, projectName } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
-import { quotaAlertCopy } from "./quota-alert-copy";
+import {
+  quotaAlertCopy,
+  resetCreditCopy,
+  signInCopy,
+  type QuotaTone,
+} from "./quota-alert-copy";
 import { systemCalendar, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { alertInk, alertText } from "../tokens";
@@ -13,7 +18,7 @@ import { isQuotaEvent } from "./quota-list";
 import { useGround } from "../ground";
 import { PAPER_FIGURES, PAPER_SEAL, paperLevel, type Paper } from "../paper";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { REPLY_BADGE } from "../permissions/approval-list";
+import { REPLY_BADGE, requestTitle } from "../permissions/approval-list";
 import type { ReplyChip } from "./reply-list";
 
 /** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
@@ -24,18 +29,31 @@ export function compactQuotaStatus(event: IslandEvent, zh = false): string {
   }).compactTitle;
 }
 
-/** A quota notice's folded tag: the window in its language and the share
- * shown (or that it reset), in the notice's colour. */
+/** A quota notice's folded tag: what it is about in dim ink, then its
+ * figure in the notice's colour. A window's name and the share shown (or that
+ * it reset); "重置" and the resets added, in blue; a sign-out's words alone, in
+ * red. */
 export function quotaChipLabels(
   event: IslandEvent,
   zh: boolean,
   quotaDisplay?: QuotaDisplay,
-) {
-  const copy = quotaAlertCopy(event, {
-    language: zh ? "zh" : "en",
+): { who: string; status: string; tone: QuotaTone } {
+  const settings = {
+    language: zh ? ("zh" as const) : ("en" as const),
     quotaDisplay,
     calendar: systemCalendar(navigator.language),
-  });
+  };
+  if (event.kind === "reset-credits") {
+    const copy = resetCreditCopy(event, undefined, settings);
+    return { who: copy.chipLabel, status: copy.chipValue, tone: "reset" };
+  }
+  if (event.kind === "sign-in-needed")
+    return {
+      who: "",
+      status: signInCopy(event, [], settings).chip,
+      tone: "critical",
+    };
+  const copy = quotaAlertCopy(event, settings);
   return { who: copy.windowName, status: copy.chipStatus, tone: copy.tone };
 }
 
@@ -47,12 +65,17 @@ export function compactAlertLabels(
   /** The replies waiting, for a reply's tag: the newest one's title and the
    * count beside REPLY. */
   reply?: ReplyChip,
+  /** The sessions, for a request's title as the waiting list writes it. */
+  sessions: readonly Session[] = [],
 ): { who: string; status: string; badge?: string } {
   if (request) {
-    const who =
+    const who = requestTitle(
+      request,
+      sessions,
       projectName(request.cwd) ??
-      request.vendor ??
-      clientDisplayName(request.source);
+        request.vendor ??
+        clientDisplayName(request.source),
+    );
     const status =
       request.kind === "question"
         ? zh
@@ -117,6 +140,7 @@ export function compactAlertDockWidth(
   zh: boolean,
   reply?: ReplyChip,
   quotaDisplay?: QuotaDisplay,
+  sessions: readonly Session[] = [],
 ): number {
   const { who, status, badge } = compactAlertLabels(
     request,
@@ -124,16 +148,17 @@ export function compactAlertDockWidth(
     requestCount,
     zh,
     reply,
+    sessions,
   );
   const font = Math.round(9 * scale);
   const icon = Math.round(17 * scale);
   if (!request && event && isQuotaEvent(event)) {
-    // The mark, the window in dim ink, then the share in bold colour.
+    // The mark, the window in dim ink, then the share in bold colour (a
+    // sign-out's tag has no dim word).
     const chip = quotaChipLabels(event, zh, quotaDisplay);
     return Math.ceil(
       icon +
-        Math.round(5 * scale) +
-        labelWidth(chip.who, font) +
+        (chip.who ? Math.round(5 * scale) + labelWidth(chip.who, font) : 0) +
         Math.round(8 * scale) +
         Math.ceil(labelWidth(chip.status, font) * 1.05) +
         Math.round(20 * scale),
@@ -163,10 +188,14 @@ export function compactAlertDockWidth(
     );
   }
   if (request) {
-    // Printed on paper: the name in bold, a tear, then a seal and the status
-    // in spaced bold red (CompactAlertView's paper tag).
+    // Printed on paper: the name in bold (a session's title cut as a reply's
+    // is), a tear, then a seal and the status in spaced bold red
+    // (CompactAlertView's paper tag).
     const bold = (text: string) => Math.ceil(labelWidth(text, font) * 1.05);
-    const leading = icon + Math.round(5 * scale) + bold(who);
+    const leading =
+      icon +
+      Math.round(5 * scale) +
+      Math.min(bold(who), replyTitleWidth(scale));
     const tear = Math.round(8 * scale) + 2;
     const trailing =
       Math.round(12 * scale) +
@@ -215,6 +244,7 @@ export function CompactAlertView({
   zh,
   paper: printed = null,
   reply,
+  sessions,
   onOpen,
   onDismissAndStats,
 }: {
@@ -232,6 +262,8 @@ export function CompactAlertView({
   paper?: Paper | null;
   /** The replies waiting, when a reply's tag shows. */
   reply?: ReplyChip;
+  /** The sessions, for a request's title. */
+  sessions?: readonly Session[];
   onOpen: () => void;
   onDismissAndStats: () => void;
 }) {
@@ -240,7 +272,14 @@ export function CompactAlertView({
     !request && event && isQuotaEvent(event)
       ? quotaChipLabels(event, zh, quotaDisplay)
       : null;
-  const labels = compactAlertLabels(request, event, requestCount, zh, reply);
+  const labels = compactAlertLabels(
+    request,
+    event,
+    requestCount,
+    zh,
+    reply,
+    sessions,
+  );
   const { badge } = labels;
   const who = quota?.who ?? labels.who;
   const status = quota?.status ?? labels.status;
@@ -254,7 +293,6 @@ export function CompactAlertView({
   // (HUDExpandedSurface prints them): a reply in blue, a warning in amber.
   const paper = printed;
   const signalText = alertText("warning", ground);
-  const calmAccent = paper ? paper.ink : alertText("calm", ground);
   const warnAccent = paper
     ? paperLevel("warning", paper)
     : alertText("warning", ground);
@@ -364,27 +402,6 @@ export function CompactAlertView({
       ink={paper ? paper.ink : alertInk(0.96, ground)}
       color={paper?.blue}
     />
-  ) : event?.kind === "sign-in-needed" ? (
-    <>
-      <KeyRound
-        size={glyphSize}
-        strokeWidth={2.4}
-        color={warnAccent}
-        style={{ flexShrink: 0 }}
-      />
-      <span
-        style={{
-          fontSize: font,
-          fontWeight: 500,
-          color: warnAccent,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {status}
-      </span>
-    </>
   ) : quota ? (
     <span
       style={{
@@ -399,27 +416,6 @@ export function CompactAlertView({
     >
       {status}
     </span>
-  ) : event?.kind === "reset-credits" ? (
-    <>
-      <RotateCcw
-        size={glyphSize}
-        strokeWidth={2.4}
-        color={calmAccent}
-        style={{ flexShrink: 0 }}
-      />
-      <span
-        style={{
-          fontSize: font,
-          fontWeight: 500,
-          color: calmAccent,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {status}
-      </span>
-    </>
   ) : (
     <>
       <span
@@ -474,21 +470,30 @@ export function CompactAlertView({
           light={light}
           botLogos={botLogos}
         />
-        <span
-          style={{
-            fontSize: font,
-            fontWeight: quota ? 500 : paper || replyTag ? 600 : 500,
-            // The row's own ink: the scene's may be the light HUD's while the
-            // row itself is drawn dark (on the notch); a quota's window is dim.
-            color: quota ? dimInk : paper ? paper.ink : alertInk(0.96, ground),
-            maxWidth: replyTag && onDock ? replyTitleWidth(scale) : undefined,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {who}
-        </span>
+        {who && (
+          <span
+            style={{
+              fontSize: font,
+              fontWeight: quota ? 500 : paper || replyTag ? 600 : 500,
+              // The row's own ink: the scene's may be the light HUD's while the
+              // row itself is drawn dark (on the notch); a quota's window is dim.
+              color: quota
+                ? dimInk
+                : paper
+                  ? paper.ink
+                  : alertInk(0.96, ground),
+              maxWidth:
+                (replyTag || request) && onDock
+                  ? replyTitleWidth(scale)
+                  : undefined,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {who}
+          </span>
+        )}
       </div>
       {!onDock && (
         <span

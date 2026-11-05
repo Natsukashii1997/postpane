@@ -72,6 +72,7 @@ export function HUDExpandedSurface({
   configurePanel,
   surfacePadding,
   eventContent,
+  inlineAlert,
   inUsagePanel,
   delivery,
   paper = null,
@@ -117,6 +118,8 @@ export function HUDExpandedSurface({
   configurePanel?: () => void;
   surfacePadding: { top: number; right: number; bottom: number; left: number };
   eventContent: ReactNode;
+  /** Quota news atop the open usage panel. */
+  inlineAlert?: ReactNode;
   inUsagePanel?: boolean;
   delivery?: RequestDelivery;
   /** The paper a request's tag and card, or the usage panel's receipt, are
@@ -417,6 +420,7 @@ export function HUDExpandedSurface({
                         zh={snapshotLanguage(snapshot) === "zh"}
                         paper={paper}
                         reply={reply}
+                        sessions={snapshot.sessions}
                         onOpen={() => forceOpen()}
                         onDismissAndStats={() => {
                           dismissNews();
@@ -488,11 +492,7 @@ export function HUDExpandedSurface({
                                   Logo={HUDLogo}
                                   onConfigure={configurePanel}
                                   onStats={showPanelStats}
-                                  inlineAlert={
-                                    inUsagePanel && !request
-                                      ? eventContent
-                                      : undefined
-                                  }
+                                  inlineAlert={inlineAlert}
                                   maxHeight={Math.max(
                                     40,
                                     frame.height -
