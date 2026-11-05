@@ -26,7 +26,7 @@
 - 测试：变基到 `d45976f` 后 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 679 passed / 0 failed；`ℹ pass 218` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`）；变基前 `node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。新测试 `a_bots_activity_counts_its_feishu_turns_and_last_reply` 与 `hermes-peek.test.ts` 5 条。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-hermes-peek/`。
 - 验证：只有单测与类型检查；摸底时用 sqlite 只读核对过实机数据（今天猛鬼兽飞书 9 轮、亚古兽 7 轮，最近回复 21:51 / 21:55）。MCP `hud_snapshot` 因设置里没开「让智能体排布侧栏」读不到；小收据实物没看过，请常浩悬停 Hermes 头像看一眼：两行机器人、方印端正、底部「24 小时」，没有「额度 --」。
 - 截图：无。
-- 发布与回读：main `e64df26` 打包（`build-main.log`），23:24:58 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`8a6ad4201a77`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-peek/PostPane-before.app /Applications/PostPane.app`（`446798688c72`）。之后 main 多了 #112，本包不含，若另一会话随后打包会覆盖（L-05），看前核对。
+- 发布与回读：main `e64df26` 打包（`build-main.log`），23:24:58 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`8a6ad4201a77`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-peek/PostPane-before.app /Applications/PostPane.app`（`446798688c72`）。最终装机由「左滑移除」会话从 main `62b8a90`（含 #110、#111、#113）打包覆盖，以那次为准（L-05）。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 摸底发现 Hermes 主模型走 `openai-codex`（ChatGPT 订阅的 Codex 通道，计费记为订阅内），备用 DeepSeek；是否与 Codex 同账号未核对（读凭证被权限拦下）。
   - Hermes 定时任务「周报」11 月 2 日那次失败，驿窗没有任何提示，可另开一单做成细条。
