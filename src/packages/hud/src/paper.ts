@@ -25,6 +25,8 @@ export interface Paper {
   red: string;
   /** A reply's mark: the one note of colour a reply's tag and card carry. */
   blue: string;
+  /** Work going on: the hover panel's "在跑" tag and "够用" stamp. */
+  green: string;
   /** A wash of ink under a command or a picked answer. */
   fill: string;
   /** Ink at `alpha`. */
@@ -47,6 +49,7 @@ export function paperOf(
     line: `rgba(${ink},${light ? 0.3 : 0.26})`,
     red: light ? "#c4261e" : "#ff6a57",
     blue: light ? "#2f5fb3" : "#8fb0ec",
+    green: light ? "#2f7d4f" : "#6cc59a",
     fill: `rgba(${ink},${light ? 0.07 : 0.08})`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,

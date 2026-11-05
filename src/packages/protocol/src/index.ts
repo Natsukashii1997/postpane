@@ -139,8 +139,9 @@ export interface Session {
    * prompt or the agent's text reply; the last event where the client
    * records no messages. Lists order sessions by it. */
   lastMessageAt?: string | null;
-  /** From Core, for its own work, agents and the phone; no list, filter or
-   * label shows it (owner, 2026-10-26). */
+  /** From Core, for its own work, agents and the phone; the Sessions page
+   * neither filters nor labels by it (owner, 2026-10-26). The hover panel
+   * lists the waiting and running sessions, tagged (owner, 2026-11-05). */
   state: SessionState;
   /** From Core: the session's tokens with its sub-agents' at any depth (decided 2026-10-21, as Open); a sub-agent's own row still counts once in every total. */
   tokens: number;

@@ -15,6 +15,7 @@ export function ApprovalTag({
   count,
   dashed = false,
   ink,
+  color: own,
 }: {
   label: string;
   tone: TagTone;
@@ -23,8 +24,11 @@ export function ApprovalTag({
   dashed?: boolean;
   /** The count's colour: the card's ink. */
   ink?: string;
+  /** A colour of its own, for a tag outside the waiting card (the hover
+   * panel's 在跑 and plan tags); the tone's otherwise. */
+  color?: string;
 }) {
-  const color = tagColor(tone, light);
+  const color = own ?? tagColor(tone, light);
   // Letters print in the narrow mono face; words such as 下一步 in the
   // card's own.
   const latin = /^[\x20-\x7e]*$/.test(label);

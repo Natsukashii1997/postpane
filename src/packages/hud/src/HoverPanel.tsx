@@ -7,11 +7,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  ChartNoAxesColumnIncreasing,
-  CircleArrowDown,
-  Settings,
-} from "lucide-react";
+import { ArrowUpRight, CircleArrowDown, Settings } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import type { Quota, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
@@ -37,6 +33,7 @@ import {
 import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
+import { boardShowsTokens } from "./panel/agent-board";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { SOURCE_PANEL } from "./panel/theme";
@@ -194,6 +191,19 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       i++;
     } else blockLines.push([block]);
   }
+  const customTokens = Object.keys(config.panelLayout.tokens ?? {}).length > 0;
+  // An agent with no quota shows its day's tokens large in its own block.
+  const tokensAbove =
+    Boolean(focusVendor) &&
+    config.quotaDetails &&
+    vendorNames.length > 0 &&
+    vendorNames.every((vendor) =>
+      boardShowsTokens(
+        snapshot.quotas,
+        vendor,
+        config.panelLayout.blocks?.[vendor]?.widget,
+      ),
+    );
   const sections = inPanelOrder<{ key: string; content: ReactNode }>(
     [
       {
@@ -242,7 +252,10 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       },
       {
         key: "tokens",
-        content: config.tokenUsage && (
+        // The day's tokens now sit in the sessions' folded line, or under an
+        // agent with no quota (owner, 2026-11-05); the chart with its periods
+        // stays for a layout that sets the chart up itself.
+        content: config.tokenUsage && customTokens && (
           <SourceTokenChart
             snapshot={snapshot}
             focusVendor={focusVendor}
@@ -263,6 +276,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             Logo={Logo}
             onStats={onStats}
             layout={config.panelLayout.sessions}
+            tokenAgents={config.panelLayout.tokens?.agents}
+            showTokens={config.tokenUsage && !tokensAbove}
             active={active}
           />
         ),
@@ -422,22 +437,15 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       >
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="sm"
           aria-label={snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
           title={snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
           disabled={!onConfigure}
           onClick={onConfigure}
-          style={{
-            width: 28,
-            height: 28,
-            minHeight: 28,
-            padding: 0,
-            borderRadius: 0,
-            color: colors.secondary,
-            background: "transparent",
-          }}
+          style={footerLink(colors.secondary)}
         >
-          <Settings style={{ width: 14, height: 14 }} strokeWidth={1.7} />
+          <Settings style={{ width: 13, height: 13 }} strokeWidth={1.7} />
+          {snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
         </Button>
         <div style={{ display: "flex", alignItems: "center" }}>
           {update && (
@@ -484,7 +492,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           )}
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="sm"
             aria-label={
               snapshotLanguage(snapshot) === "zh"
                 ? "用量统计"
@@ -497,20 +505,10 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             }
             disabled={!onStats}
             onClick={onStats}
-            style={{
-              width: 28,
-              height: 28,
-              minHeight: 28,
-              padding: 0,
-              borderRadius: 0,
-              color: colors.secondary,
-              background: "transparent",
-            }}
+            style={footerLink(colors.secondary)}
           >
-            <ChartNoAxesColumnIncreasing
-              style={{ width: 14, height: 14 }}
-              strokeWidth={1.7}
-            />
+            {snapshotLanguage(snapshot) === "zh" ? "统计" : "Statistics"}
+            <ArrowUpRight style={{ width: 13, height: 13 }} strokeWidth={1.7} />
           </Button>
         </div>
       </footer>
@@ -528,6 +526,21 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     </MotionConfig>
   );
 });
+
+/** The footer's two links: settings, and the Statistics window. */
+function footerLink(color: string): CSSProperties {
+  return {
+    height: 28,
+    minHeight: 28,
+    gap: 5,
+    padding: "0 4px",
+    borderRadius: 0,
+    fontSize: 12,
+    fontWeight: 400,
+    color,
+    background: "transparent",
+  };
+}
 
 type DraftState = NonNullable<
   NonNullable<ReturnType<typeof usePanelServices>>["draft"]

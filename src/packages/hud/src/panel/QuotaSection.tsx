@@ -1,25 +1,15 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { DollarSign, Flame, Percent } from "lucide-react";
 import type { PanelBlockLayout, Quota, Snapshot } from "@agent-hud/protocol";
-import { Button } from "@agent-hud/ui/components/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@agent-hud/ui/components/tooltip";
-import { quotaMetric, quotaMetricAvailability } from "../quota-metrics";
+import { quotaMetric } from "../quota-metrics";
 import { useFormat } from "@agent-hud/ui/format-context";
+import { dateFormat, localeDateTime, moneyAmount } from "@agent-hud/ui/format";
 import {
-  dateFormat,
-  localeDateTime,
-  moneyAmount,
-  quotaPercent,
-  quotaDisplayLabel,
-  tokensShort,
-} from "@agent-hud/ui/format";
-import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
-import { recentUsage } from "../recent-usage";
+  quotaAccountKey,
+  quotaShortName,
+  sourcesForMark,
+  vendorKey,
+} from "../model";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice, serviceNotice } from "./account-labels";
@@ -28,11 +18,7 @@ import { usePanelServices } from "../PanelContext";
 import { agentVendorName } from "../agent-artwork";
 import { visibleBalances } from "../balance-rows";
 import {
-  measures,
   noButtonChrome,
-  RECEIPT_PUNCH,
-  receiptMeterBox,
-  receiptMeterFill,
   usePanelPalette,
   tabular,
   type Logo,
@@ -41,322 +27,15 @@ import {
 import { PAPER_FIGURES, usePaper } from "../paper";
 import { SourceTokenChart } from "./TokenChartSection";
 import { QuotaRingCard } from "./QuotaRingCard";
-
-export function MetricPicker({
-  selected,
-  choose,
-  light,
-  availability,
-}: {
-  selected: Measure;
-  choose: (measure: Measure) => void;
-  light: boolean;
-  availability: Record<Measure, ReturnType<typeof quotaMetricAvailability>>;
-}) {
-  const zh = useFormat().language === "zh";
-  const colors = usePanelPalette(light);
-  return (
-    <TooltipProvider delayDuration={300}>
-      <div
-        className="hud-source-metric-picker"
-        role="group"
-        aria-label={zh ? "额度指标" : "Quota metric"}
-        style={{ display: "flex", gap: 2, paddingRight: 2 }}
-      >
-        {measures.map(({ key, title, icon: Icon }) => {
-          const status = availability[key];
-          const hint = `${title} · ${status.hint}`;
-          return (
-            <Tooltip key={key}>
-              <TooltipTrigger asChild>
-                <span
-                  title={hint}
-                  tabIndex={status.selectable ? undefined : 0}
-                  aria-label={status.selectable ? undefined : hint}
-                  style={{ display: "inline-flex" }}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={title}
-                    aria-pressed={selected === key}
-                    disabled={!status.selectable}
-                    onClick={() => choose(key)}
-                    style={{
-                      width: 20,
-                      minWidth: 20,
-                      height: 18,
-                      minHeight: 18,
-                      padding: 0,
-                      borderRadius: 5,
-                      color: selected === key ? colors.text : colors.tertiary,
-                      background:
-                        selected === key ? colors.selected : "transparent",
-                      boxShadow: "none",
-                    }}
-                  >
-                    <Icon
-                      style={{ width: 10, height: 10 }}
-                      strokeWidth={key === "burn" ? 2.6 : 2}
-                      fill={key === "burn" ? "currentColor" : "none"}
-                    />
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                style={{ maxWidth: 300, whiteSpace: "pre-line" }}
-              >
-                {hint}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </TooltipProvider>
-  );
-}
-
-export function SourceQuotaRow({
-  row,
-  measure,
-  now,
-  light,
-  showReset,
-  onStats,
-}: {
-  row: Quota;
-  measure: Measure;
-  now: number;
-  light: boolean;
-  showReset: boolean;
-  onStats?: () => void;
-}) {
-  const colors = usePanelPalette(light);
-  const paper = usePaper();
-  const services = usePanelServices();
-  const [hovered, setHovered] = useState(false);
-  const clickable = Boolean(services?.selectProvider || onStats);
-  const activate = () => {
-    services?.selectProvider?.(row.vendor);
-    onStats?.();
-  };
-  const format = useFormat();
-  const reading = quotaMetric(row, measure, now, format);
-  const pct = quotaPercent(row.usedPercent, format.quotaDisplay);
-  const projection =
-    measure === "burn" &&
-    reading.projectedPercent != null &&
-    reading.projectedPercent > (row.usedPercent ?? 0)
-      ? quotaPercent(reading.projectedPercent, format.quotaDisplay)
-      : null;
-  const solidPercent =
-    format.quotaDisplay === "remaining" && projection != null
-      ? projection
-      : pct;
-  const budget = quotaPercent(reading.budgetPercent, format.quotaDisplay);
-  const quotaLevel =
-    row.status === "critical"
-      ? colors.critical
-      : row.status === "warning"
-        ? colors.warning
-        : colors.ok;
-  const level =
-    measure === "quota"
-      ? quotaLevel
-      : measure === "burn" && reading.runsOut
-        ? colors.warning
-        : colors.ok;
-  const known = reading.available && row.status !== "stale";
-  const color = known ? level : colors.tertiary;
-  // The value is text: the level's text shade (darker on a light HUD).
-  const levelText =
-    measure === "quota"
-      ? row.status === "critical"
-        ? colors.criticalText
-        : row.status === "warning"
-          ? colors.warningText
-          : colors.okText
-      : measure === "burn" && reading.runsOut
-        ? colors.warningText
-        : colors.okText;
-  const showsTrack = measure === "quota" || measure === "burn";
-  return (
-    <div
-      className="hud-source-quota-row"
-      title={`${row.name} · ${reading.hint}`}
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={clickable ? activate : undefined}
-      onKeyDown={
-        clickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                activate();
-              }
-            }
-          : undefined
-      }
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "var(--hud-row-padding, 4px) 6px",
-        fontSize: 13,
-        lineHeight: "16px",
-        minHeight: "calc(16px + var(--hud-row-padding, 4px) * 2)",
-        borderRadius: 6,
-        cursor: clickable ? "pointer" : undefined,
-        background: hovered && clickable ? colors.selected : "transparent",
-        transition: "background 0.12s ease",
-      }}
-    >
-      <span
-        style={{
-          display: "block",
-          width: 8,
-          height: 8,
-          flex: "0 0 8px",
-          borderRadius: "50%",
-          background: color,
-          boxShadow: paper
-            ? RECEIPT_PUNCH
-            : light || !known
-              ? undefined
-              : `0 0 8px ${color}`,
-        }}
-      />
-      <FittingName
-        name={row.name}
-        short={quotaShortName(row)}
-        style={{
-          flex: "0 0 152px",
-          width: 152,
-          fontWeight: 600,
-          color: colors.text,
-        }}
-      />
-      {showsTrack ? (
-        <span
-          role="meter"
-          aria-label={`${row.name} · ${quotaDisplayLabel(format.quotaDisplay, format.language)}`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct ?? undefined}
-          style={{
-            position: "relative",
-            height: 4,
-            flex: "1 1 0",
-            minWidth: 0,
-            background: colors.track,
-            borderRadius: 4,
-            overflow: "hidden",
-            ...(paper && receiptMeterBox(paper)),
-          }}
-        >
-          {projection != null && pct != null && (
-            <i
-              style={{
-                position: "absolute",
-                top: 0,
-                left: `${Math.min(pct, projection)}%`,
-                display: "block",
-                height: 4,
-                width: `${Math.abs(projection - pct)}%`,
-                borderRadius: 4,
-                background: reading.runsOut ? colors.warning : colors.secondary,
-                opacity: 0.38,
-              }}
-            />
-          )}
-          <i
-            style={{
-              position: "absolute",
-              inset: "0 auto 0 0",
-              display: "block",
-              height: 4,
-              width: `${solidPercent ?? 0}%`,
-              borderRadius: 4,
-              background:
-                row.status === "stale" ? colors.secondary : quotaLevel,
-              ...(paper &&
-                receiptMeterFill(
-                  row.status === "stale" ? colors.secondary : quotaLevel,
-                )),
-            }}
-          />
-          {measure === "burn" && budget != null && (
-            // Where a steady pace through the cycle would have the bar now.
-            <i
-              aria-hidden
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: `calc(${budget}% - 0.75px)`,
-                display: "block",
-                width: 1.5,
-                background: colors.text,
-                opacity: 0.6,
-              }}
-            />
-          )}
-        </span>
-      ) : (
-        <span aria-hidden="true" style={{ flex: "1 1 0", minWidth: 0 }} />
-      )}
-      <span
-        style={{
-          ...tabular,
-          minWidth: 62,
-          flexShrink: 0,
-          textAlign: "right",
-          fontSize: reading.available ? 13 : 12,
-          fontWeight: 600,
-          whiteSpace: "nowrap",
-          color: known ? levelText : colors.secondary,
-          ...(paper &&
-            reading.available && {
-              fontFamily: PAPER_FIGURES,
-              fontSize: 16,
-              fontWeight: 700,
-            }),
-        }}
-      >
-        {reading.value}
-      </span>
-      {(showReset || measure !== "quota") && (
-        <span
-          style={{
-            ...tabular,
-            flex: "0 0 96px",
-            width: 96,
-            textAlign: "right",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            fontSize: 12,
-            fontWeight: 400,
-            color:
-              measure === "burn" && reading.runsOut
-                ? colors.warningText
-                : colors.secondary,
-            ...(paper && {
-              fontFamily: PAPER_FIGURES,
-              fontSize: 13,
-              fontWeight: 500,
-            }),
-          }}
-        >
-          {reading.detail}
-        </span>
-      )}
-    </div>
-  );
-}
+import {
+  BoardHeading,
+  BoardKey,
+  BoardRows,
+  BoardSentence,
+  DayTokensHero,
+  useBoardVerdict,
+} from "./AgentBoard";
+import { showsAccountNames } from "./agent-board";
 
 /** QuotaCell.swift: centered equal-width ring/number lines, fixed 40/46/60 pt rings. */
 export function QuotaWidgets({
@@ -392,14 +71,13 @@ export function QuotaWidgets({
     );
   if (widget === "bar")
     return (
-      <>
-        {rows.map((row) => (
-          <SourceQuotaRow
-            key={row.id}
-            {...{ row, measure, now, light, showReset, onStats }}
-          />
-        ))}
-      </>
+      <BoardRows
+        rows={rows}
+        now={now}
+        light={light}
+        countdown={showReset}
+        onStats={onStats}
+      />
     );
   const columns = layout.columns ?? 4;
   return (
@@ -504,24 +182,11 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
   active?: boolean;
   onStats?: () => void;
 }) {
-  const offered = layout.measures?.length
-    ? layout.measures
-    : measures.map((m) => m.key);
-  const [chosen, setMeasure] = useState<Measure>(offered[0]);
-  const measure = offered.includes(chosen) ? chosen : offered[0];
+  // The board reads the quota itself (owner, 2026-11-05: the five measure
+  // switches are gone); a layout that names measures shows its first one in
+  // rings, segments or numbers.
+  const measure: Measure = layout.measures?.[0] ?? "quota";
   const format = useFormat();
-  const availability = useMemo(
-    () =>
-      Object.fromEntries(
-        measures.map(({ key }) => [
-          key,
-          quotaMetricAvailability(rows, key, now, format),
-        ]),
-      ) as Record<Measure, ReturnType<typeof quotaMetricAvailability>>,
-    [rows, now, format],
-  );
-  const colors = usePanelPalette(light);
-  const paper = usePaper();
   // Open's ReportView.accountSections: the rows split by account in row
   // order. Only a section whose rows name an account the readers reported
   // gets a header; rows of no account stand without one.
@@ -550,6 +215,11 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
       };
     });
   }, [rows, accountInfo]);
+  // One account needs no name: its plan goes in the head (owner, 2026-11-05).
+  const named = showsAccountNames(sections);
+  const only = named
+    ? null
+    : (sections.find((s) => s.account)?.account ?? null);
   const missingReading = !snapshot.quotas.some((row) => row.vendor === vendor);
   // Without readings the block still says why, as a signed-out Claude Code
   // asks to be signed in again.
@@ -561,12 +231,8 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
     vendor,
     format.language,
   );
-  // Without a window, the block shows what the agent used in the last 24
-  // hours instead (vendors.rs `recent_label`).
-  const recent = missingReading
-    ? recentUsage(snapshot, vendorKey(vendor))
-    : null;
   const countdown = layout.countdown ?? showReset;
+  const { stamp } = useBoardVerdict(rows, now);
   return (
     <section
       className="hud-source-provider"
@@ -576,59 +242,21 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         gap: "var(--hud-block-gap, 8px)",
       }}
     >
-      <div
-        className="hud-source-provider-heading"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "1px 0",
-          minHeight: 20,
-        }}
-      >
-        <span
-          style={{
-            width: 20,
-            flex: "0 0 20px",
-            display: "inline-flex",
-            justifyContent: "center",
-          }}
-        >
-          <Logo source={vendor} size={14} light={light} />
-        </span>
-        <strong
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            lineHeight: "16px",
-            color: colors.text,
-          }}
-        >
-          {agentVendorName(vendor)}
-        </strong>
-        <span style={{ flex: 1 }} />
-        {layout.widget !== "chart" && !missingReading && (
-          <MetricPicker
-            selected={measure}
-            choose={setMeasure}
-            light={light}
-            availability={
-              Object.fromEntries(
-                Object.entries(availability).map(([key, value]) => [
-                  key,
-                  {
-                    ...value,
-                    selectable:
-                      value.selectable && offered.includes(key as Measure),
-                  },
-                ]),
-              ) as typeof availability
-            }
-          />
-        )}
-      </div>
+      <BoardHeading
+        vendor={vendor}
+        Logo={Logo}
+        light={light}
+        plan={only?.planLabel}
+        stamp={missingReading ? null : stamp}
+      />
       {vendorStatus && (
         <BlockNotice text={vendorStatus} light={light} warning />
+      )}
+      {only?.warning && (
+        <BlockNotice text={only.warning} light={light} warning />
+      )}
+      {only?.notice && only.notice !== only.warning && (
+        <BlockNotice text={only.notice} light={light} />
       )}
       {layout.widget === "chart" ? (
         <SourceTokenChart
@@ -642,94 +270,69 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
       ) : missingReading ? (
         <>
           {missingNotice && <BlockNotice text={missingNotice} light={light} />}
-          {recent ? (
-            <div
-              className="hud-source-recent"
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 8,
-                color: colors.secondary,
-              }}
-            >
-              <span>
-                {format.language === "zh" ? "最近 24 小时" : "Last 24 hours"}
-              </span>
-              <strong
-                style={{
-                  color: colors.text,
-                  ...(paper && {
-                    fontFamily: PAPER_FIGURES,
-                    fontSize: 16,
-                    fontWeight: 700,
-                  }),
-                }}
-              >
-                {`${tokensShort(recent.tokens)} Token`}
-              </strong>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                color: colors.secondary,
-              }}
-            >
-              <span>{format.language === "zh" ? "额度" : "Quota"}</span>
-              <strong>--</strong>
-            </div>
-          )}
+          {/* Without a window, the agent's last 24 hours of tokens. */}
+          <DayTokensHero
+            snapshot={snapshot}
+            providers={sourcesForMark(snapshot, vendor)}
+            light={light}
+            active={active}
+          />
         </>
       ) : (
-        sections.map(({ key, rows: sectionRows, account, current }) => {
-          // Earned resets belong to the signed-in Codex account.
-          const resets =
-            account &&
-            current &&
-            sectionRows.some((row) => vendorKey(row.vendor) === "openai")
-              ? account.resetCredits
-              : null;
-          return (
-            <div
-              key={key}
-              className="hud-source-account-section"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--hud-block-gap, 8px)",
-              }}
-            >
-              {account && (
-                <AccountHeader account={account} now={now} light={light} />
-              )}
+        <>
+          <BoardSentence rows={rows} now={now} light={light} />
+          {sections.map(({ key, rows: sectionRows, account, current }) => {
+            // Earned resets belong to the signed-in Codex account.
+            const resets =
+              account &&
+              current &&
+              sectionRows.some((row) => vendorKey(row.vendor) === "openai")
+                ? account.resetCredits
+                : null;
+            return (
               <div
+                key={key}
+                className="hud-source-account-section"
                 style={{
-                  display: "grid",
+                  display: "flex",
+                  flexDirection: "column",
                   gap: "var(--hud-block-gap, 8px)",
-                  opacity: current ? 1 : 0.55,
                 }}
               >
-                <QuotaWidgets
-                  rows={sectionRows}
-                  layout={layout}
-                  measure={measure}
-                  now={now}
-                  light={light}
-                  showReset={countdown}
-                  onStats={onStats}
-                />
+                {account && named && (
+                  <AccountHeader account={account} now={now} light={light} />
+                )}
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--hud-block-gap, 8px)",
+                    opacity: current ? 1 : 0.55,
+                  }}
+                >
+                  <QuotaWidgets
+                    rows={sectionRows}
+                    layout={layout}
+                    measure={measure}
+                    now={now}
+                    light={light}
+                    showReset={countdown}
+                    onStats={onStats}
+                  />
+                </div>
+                {resets && (
+                  <ResetCreditsRow
+                    resets={resets}
+                    showExpiry={countdown}
+                    light={light}
+                  />
+                )}
               </div>
-              {resets && (
-                <ResetCreditsRow
-                  resets={resets}
-                  showExpiry={countdown}
-                  light={light}
-                />
-              )}
-            </div>
-          );
-        })
+            );
+          })}
+          {(layout.widget ?? "bar") === "bar" && (
+            <BoardKey rows={rows} light={light} />
+          )}
+        </>
       )}
     </section>
   );
