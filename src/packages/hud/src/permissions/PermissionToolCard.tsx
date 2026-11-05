@@ -248,7 +248,7 @@ export function PermissionToolCard({
           ) : (
             <Check size={9} strokeWidth={2.6} />
           )}
-          {request.allowLabel ?? t("Allow once", "批准一次")}
+          {request.allowLabel ?? t("Allow once", "允许一次")}
         </button>
       </div>
     </div>
