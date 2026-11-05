@@ -28,8 +28,9 @@ export function HooksSection({
   const [error, setError] = useState<string | null>(null);
   const status = snapshot.connection.clientHooks;
   const on = snapshot.settings.clientHooks;
+  const deepseek = snapshot.settings.deepseekQuestions === true;
   const configure = async (
-    key: "clientHooks" | "approvalWaitMinutes",
+    key: "clientHooks" | "approvalWaitMinutes" | "deepseekQuestions",
     value: unknown,
   ) => {
     if (pending) return;
@@ -129,6 +130,22 @@ export function HooksSection({
           }
           change={(value) =>
             void configure("approvalWaitMinutes", Number(value))
+          }
+        />
+      </Row>
+      <Row
+        title={t("DeepSeek Harness questions", "DeepSeek Harness 提问")}
+        subtitle={t(
+          "Off: PostPane doesn't look for a running harness.",
+          "关着时不查找正在运行的 harness，省后台开销。",
+        )}
+      >
+        <Switch
+          aria-label={t("DeepSeek Harness questions", "DeepSeek Harness 提问")}
+          checked={deepseek}
+          disabled={pending}
+          onCheckedChange={(value) =>
+            void configure("deepseekQuestions", value)
           }
         />
       </Row>

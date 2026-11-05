@@ -1,6 +1,30 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）。随手记猫球轻摆幅度调大（PR #91）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）、不被别的智能体的待回答挡住（PR #97），新回复的小签和回执左侧换成机器人印章（PR #102）。随手记猫球轻摆幅度调大（PR #91）。DeepSeek 监听提问加开关、默认关，不再每 2 秒扫全机进程（PR #100）。唯一下一步：后台第 4 批「统计会话」（外观已定，待实现）；其他小人各做一版仍待做。
+
+## Hermes 新回复：小签和回执左侧换成机器人印章（2026-11-05，Claude，常浩附两张截图要求小签图标和回执头像换成对应飞书机器人的印章、右侧印章挪到左边，问后选「直接改」「保留名字」；PR #102 测试全过，按「测试全过可直接合并」授权已 squash 合并 `aef5489`，已从 main `aef5489` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 21:57`（按本会话建立时间）。来由：issue #101，由 hermes-bots 会话交来。
+- 改了哪些文件：`hud/src/alerts/reply-list.ts`（`ReplyChip` 加 `bot`，取最新回复所属会话的 `session.bot`）、`alerts/ReminderMark.tsx` 与 `alerts/CompactAlertView.tsx`（小签上 Hermes 回复画 `BotStamp`，尺寸同断线细条）、`permissions/ListCard.tsx`（`EntryRow` 的 `seal` 改占第一列 34px、跨两行，替代 `HUDArtwork`，去掉右侧第 4 列）、`alerts/CompletionAlertView.tsx`（正文与「无法回到会话」缩进随左列：印章 46px，头像仍 30px）、`hud/test/reply-list.test.ts`（新测试：小签带上 Hermes 会话的 bot，非 Hermes 为 null）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（`ℹ pass 207` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`，Rust 全部 ok）。第一次跑 `card-column.test.ts` 失败（左列外层用了不定列宽的 grid），改成 flex 后重跑全过。
+- 验证：只有单测与类型检查；实机还没等到 Hermes 新回复，小签和展开回执的实物没看过，请常浩下次收到猛鬼兽 / 亚古兽回复时看一眼：小签左侧是印章、回执左侧是「印章 + 名字」、右侧没有章；Claude、Codex 的回执仍是原头像。
+- 截图：无。
+- 发布与回读：main `aef5489` 打包（日志 `~/Library/Application Support/postpane/evidence/2026-11-05-reply-stamp/build-main.log`），22:15:47 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`f1f0d27ef08b`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-reply-stamp/PostPane-before.app /Applications/PostPane.app`（`adea14b75fe0`，#100 装的版本）。
+- 与授权不一致之处、遗留问题、范围外发现：小签宽度估算 `compactAlertDockWidth` 没为印章多出的 4px 加宽（断线细条一直如此），右侧留白够用，没动。worktree `.claude/worktrees/101-reply-stamp` 本节提交后删掉。
+- 本轮新坑：无。
+
+## DeepSeek 监听提问加开关，默认关（2026-11-05，Claude，常浩排查「用驿窗时电脑很卡」后说「DeepSeek 观察器可以关掉」并选「设置里加开关，默认关」，回「开工」；PR #100 测试全过，按「测试全过可直接合并」授权已 squash 合并 `dfc3b3d`，已从 main `dfc3b3d` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 21:39`（按 issue #98 创建时间）。来由：实测驿窗空闲时主进程加三个 WebKit 进程约 40–66% CPU，DeepSeek 观察器每 2 秒拉起两次 `ps` 扫全机约 1200 个进程，常浩不用 harness。
+- 改了哪些文件：`platform/src/hooks/mod.rs`（`deepseek_wanted`、`set_deepseek()`、`start_deepseek()`，两个 DeepSeek 观察器只在开关打开且监听在跑时启动）、`core/src/lib.rs` 与 `core/src/settings.rs`（`deepseekQuestions` 默认 false、校验、读取）、`runtime/src/lib.rs`（启动时先定开关再开监听）、`host/src/lib.rs`（`set_setting deepseekQuestions` 先存再启停）、`packages/protocol`、`app/src/settings/agent-plugins/HooksSection.tsx`（插件页「在侧栏上回答」加「DeepSeek Harness 提问」开关）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 665 passed / 0 failed；`ℹ pass 206` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；新测试 `deepseek_observers_start_only_when_wanted_and_listening` 1 passed。日志 `~/Library/Application Support/postpane/evidence/98-check.log`、`98-test.log`、`98-build.log`。
+- 验证：浏览器预览（隔离数据目录 `evidence/2026-11-05-deepseek-switch/data`）插件页开关默认关，点开后 `settings.json` 回读 `"deepseekQuestions": true`。实机装新版后：40 次采样（10 秒）没看到 PostPane 拉起 `ps`（旧版 10 次采样见到 2 次）；`sample` 里不再有 `DeepSeek questions`、`DeepSeek plugin asks` 线程；主进程 CPU 约 12.8%（单次 15 秒采样）。
+- 截图：无（浏览器里看过插件页，未存图）。
+- 发布与回读：main `dfc3b3d` 打包，21:54 ditto 到 `/Applications` 并启动，`shasum` 回读与产物一致（`adea14b75fe0`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-deepseek-switch/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 同次排查（只读）发现的其他空闲开销没动：统计 `metering::recached` 每次查询对 10 万多行全表跑窗口函数（单次 0.4–0.8 秒，随 `statisticsRevision` 约 2 秒重查）、快照全量推送与 3 秒时钟整树重渲染、侧栏可见时 32 ms 指针轮询、小人 24/12/6 fps 与吊坠滤镜无限动画、每个 Claude 会话一套 `agent-hud-mcp` + `engine --app-channel` 并每 15 秒轮询。等常浩定是否开第一批。
+  - 卡顿主因在驿窗之外：48 个 Claude Code 会话（远程控制开着就常驻）把 swap 用到 24 GB；已按常浩同意归档 43 个空闲会话（swap 降到 10 GB），并打开「不活跃 2 天自动归档」「PR 关闭后自动归档」。
+- 本轮新坑：无。
 
 ## Claude 额度彻底不显示、不计入每周 Fable（2026-11-05，Claude，常浩说「我说了不看这个，工作台的所有的额度相关的都不考虑 Fable」，由另一会话交来；PR #94、#96 测试全过，按「测试全过可直接合并」授权已 squash 合并 `53e5313`、`4531d22`，已从 main `4531d22` 打包安装、回读一致）
 
@@ -62,6 +86,20 @@
   - 强推分支被自动模式拦下，改为把 main 合并进分支后普通推送，最终 squash 合并效果相同。
   - 卡在权限弹窗的旧进程 AppleScript 退不掉，用 SIGTERM 结束。worktree `.claude/worktrees/85-scroll-thumbs` 本节提交后即删。
 - 本轮新坑：L-06。
+
+## Hermes 新回复不被别的智能体的待回答挡住（2026-11-05，Claude，#93 装上后常浩复测「还是没有任何的消息弹窗……也没有展开」；PR #97 测试全过，按「测试全过可直接合并」授权已 squash 合并 `4ae1993`，已从 main `b087e87` 打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 21:19`（估计，按常浩复测那条消息；本节写于 `2026-11-05 21:46`）。来由：issue #82 复测。
+- 原因：复测时快照里两条 Hermes 新回复事件都在（21:18:09「所以你最近的一份工作是什么」、21:18:50「你有什么技能最近自研的么」），同时另一会话有一个 Claude 待回答（21:17:35）。待回答排在回执队列最前，折叠小签只显示它；#79 起有待回答时只能从提问智能体的小人展开。Hermes 回执排在后面，既不弹也打不开。上一轮实测时恰好没有待回答，所以没复现。
+- 改了哪些文件（PR #97）：`src/packages/hud/src/alerts/reply-stays.ts`（`seenFirst`：新到的 Hermes 回复排到队首）、`hud/src/IslandNews.tsx`（排队后套用）、`hud/test/reply-stays.test.ts`（+1 项）。
+- 测试：`pnpm run check` 退出 0；`check-rules` 通过；`pnpm test` 退出 0（Rust 合计 663 passed / 0 failed；`ℹ pass 206` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `evidence/2026-11-05-hermes-bots/check5.log`、`test5.log`、`build-front2.log`。
+- 验证：两次申请全屏控制都超时，未能由我实测；常浩随后自己在飞书复测，回复「测试成功了，OK的」（小签留在侧栏、移上去展开回执）。issue #82 已关闭。
+- 截图：无。
+- 发布与回读：第一次打包在编译中途被结束（退出码 144）；期间另一会话 21:38 装了 main 包（`5dc28f65423e`）。从 main `b087e87`（含 #97、#96）重新打包，产物同为 `5dc28f65423e`，即那次安装已含本修复；SIGTERM 结束旧进程后 21:42:51 重启，回读一致。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-hermes-bots/PostPane-before-stays.app /Applications/PostPane.app`（#90 之后、#93 之前）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 没看过的 Hermes 回执在队首时，别的智能体的待回答不显示折叠小签，只靠它自己小人的等待状态提示；Hermes 回执收起后待回答回到队首。新来的待回答也排在没看过的 Hermes 回执后面。
+  - worktree `.claude/worktrees/82-hermes-reply-front` 本节提交后即删。
+- 本轮新坑：无。
 
 ## Hermes 新回复看过才收起（2026-11-05，Claude，常浩说「能看到它在处理消息，但是没有消息的弹出以及没有消息的整个的展开面板。你接手我的电脑自己去操作实验一下……请一定要修复」；PR #93 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e55a555`，已打包安装、回读一致）
 
