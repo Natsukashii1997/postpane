@@ -494,6 +494,67 @@ serveStdio(() => {
     },
     ({ key, value }) => guarded("set_setting", { key, value }),
   );
+  server.registerTool(
+    "relay_to_chatgpt",
+    {
+      description: [
+        "把这次的工作交给 ChatGPT 审核：驿窗经 Chrome 插件把 brief 送进 chatgpt.com。同一个 Claude 会话第一次调用会新开一个 ChatGPT 审核会话（放进驿窗设置里的项目），之后再调用就接着发进同一个会话。调用后立即返回；ChatGPT 的回复出现在驿窗侧栏，常浩看过后会把意见转回这个会话。",
+        "ChatGPT 读不到本机文件，brief 要自己写全：",
+        "1. 第一行写任务名，然后写任务目标；",
+        "2. 改了什么、为什么这样改；",
+        "3. 分支名和 PR 链接（ChatGPT 装了 GitHub 连接器，能自己打开 PR）；",
+        "4. 改动本身：git diff 原文；太长就写摘要 + 关键片段，完整改动让它看 PR；",
+        "5. 希望重点看哪里；",
+        "6. 请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」。",
+      ].join("\n"),
+      inputSchema: z
+        .object({
+          title: z
+            .string()
+            .min(1)
+            .describe("任务名，驿窗用它标记这次接力，例如「驿窗｜接力 1c」。"),
+          brief: z
+            .string()
+            .min(1)
+            .describe("发给 ChatGPT 的完整交代，按工具说明的六项写。"),
+        })
+        .strict(),
+      annotations: {
+        ...localWrite,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async ({ title, brief }, context) => {
+      const named = caller(
+        context.mcpReq._meta as Record<string, unknown> | undefined,
+      );
+      try {
+        return result(
+          await engine.request(
+            "relay_to_chatgpt",
+            {
+              title,
+              brief,
+              caller: named,
+              cwd: process.cwd(),
+              parent: launchedBy,
+            },
+            // Continuing a review waits for the extension to send (≤ 30 s).
+            { timeoutMs: 55_000 },
+          ),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Engine operation failed.";
+        // The app's own refusals are in Chinese; a transport failure is not.
+        const text = /[\u4e00-\u9fff]/.test(message)
+          ? message
+          : `连不上驿窗的本机工具通道：请确认驿窗在运行，并在设置 → 智能体插件里登记「ChatGPT（Chrome 插件）」。（${message}）`;
+        return { isError: true, content: [{ type: "text" as const, text }] };
+      }
+    },
+  );
   const hosted = new Map<
     string,
     { tool: HostTool; registered: RegisteredTool }

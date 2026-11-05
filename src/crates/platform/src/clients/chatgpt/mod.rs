@@ -16,6 +16,7 @@ use std::{
     time::Duration,
 };
 
+pub mod handoffs;
 mod manifest;
 pub use manifest::{
     install_manifest, manifest, manifest_directory, manifest_path, manifest_state, remove_manifest,
@@ -138,18 +139,24 @@ pub fn load_watched(data: &Path) -> Vec<Watched> {
 }
 /// Replaces the watched list, privately and at once.
 pub fn save_watched(data: &Path, list: &[Watched]) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(list).map_err(|_| "Watched list unavailable")?;
+    write_private(data, "watched", &bytes, &watched_path(data))
+        .map_err(|_| "The watched list could not be saved".into())
+}
+/// Replaces `path` in the channel's private folder with `bytes`, at once:
+/// written beside it under a name made from `stem`, then moved over it.
+fn write_private(data: &Path, stem: &str, bytes: &[u8], path: &Path) -> Result<(), String> {
     let directory = folder(data);
     crate::os::private_directory(&directory)?;
-    let bytes = serde_json::to_vec_pretty(list).map_err(|_| "Watched list unavailable")?;
-    let temporary = directory.join(format!(".watched.{}.tmp", std::process::id()));
+    let temporary = directory.join(format!(".{stem}.{}.tmp", std::process::id()));
     let _ = fs::remove_file(&temporary);
     let result = crate::os::private_file(&temporary, true)
-        .and_then(|mut file| file.write_all(&bytes))
-        .and_then(|()| fs::rename(&temporary, watched_path(data)));
+        .and_then(|mut file| file.write_all(bytes))
+        .and_then(|()| fs::rename(&temporary, path));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    result.map_err(|_| "The watched list could not be saved".into())
+    result.map_err(|error| error.to_string())
 }
 
 /// The extension's end of one connection, as the host transport gives it.

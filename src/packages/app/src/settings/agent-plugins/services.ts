@@ -86,6 +86,19 @@ export const nativeChatGpt: ChatGptService = async (action) => {
   return invoke<ChatGptStatus>("native_chatgpt_extension", { action });
 };
 
+/** chatgpt_project: the ChatGPT project page new review conversations open
+ * in, read (no argument) or set (an empty text clears it). */
+export type ChatGptProjectService = (
+  project?: string,
+) => Promise<{ project: string | null }>;
+
+export const nativeChatGptProject: ChatGptProjectService = async (project) => {
+  if (!isTauri()) return { project: null };
+  return invoke<{ project: string | null }>("chatgpt_project", {
+    project: project ?? null,
+  });
+};
+
 /** The clients the host can give HUD tools to (hud_tools::CLIENTS), in page
  * order. `plugin`: the client has an Agent HUD plugin of its own; `live`:
  * it loads the plugin into open sessions by itself. */
@@ -117,4 +130,5 @@ export const cache: {
   clients: MCPClientsStatus | null;
   plugins: Record<string, ClaudePluginStatus | null>;
   chatgpt: ChatGptStatus | null;
-} = { clients: null, plugins: {}, chatgpt: null };
+  chatgptProject: string | null;
+} = { clients: null, plugins: {}, chatgpt: null, chatgptProject: null };

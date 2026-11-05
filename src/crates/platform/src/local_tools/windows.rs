@@ -18,13 +18,20 @@ impl Server {
     }
 }
 pub fn request(data: &Path, request: &Value) -> Result<Value, String> {
+    request_with_timeout(data, request, super::READ_TIME)
+}
+pub fn request_with_timeout(
+    data: &Path,
+    request: &Value,
+    timeout: Duration,
+) -> Result<Value, String> {
     crate::os::pipe::request(
         data,
         "tools",
         request,
         REQUEST_LIMIT as usize,
         RESPONSE_LIMIT as usize,
-        Duration::from_secs(40),
+        timeout,
         || false,
     )?
     .ok_or_else(|| "The local tools response did not complete".into())

@@ -91,9 +91,12 @@ export class EngineClient {
     });
     return child;
   }
+  /** `timeoutMs`: how long to wait before giving up on the engine (45 s by
+   * default), for methods that wait on something outside the app. */
   async request<T = unknown>(
     method: NativeMethod | string,
     params: Record<string, unknown> = {},
+    { timeoutMs = 45000 }: { timeoutMs?: number } = {},
   ): Promise<T> {
     const child = this.start();
     const id = ++this.sequence;
@@ -103,7 +106,7 @@ export class EngineClient {
           "Engine request timed out. The last operation was not retried.",
         );
         this.close();
-      }, 45000);
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,

@@ -9,6 +9,9 @@ use std::{
 /// As large as a response: a tool's arguments can carry a whole text or file.
 pub const REQUEST_LIMIT: u64 = 16 * 1024 * 1024;
 pub const RESPONSE_LIMIT: u64 = 16 * 1024 * 1024;
+/// How long a caller waits for an answer, unless the method says otherwise
+/// (`request_with_timeout`).
+pub const READ_TIME: std::time::Duration = std::time::Duration::from_secs(40);
 pub type Handler = Arc<dyn Fn(Value, &AtomicBool) -> Value + Send + Sync>;
 
 pub fn socket_path(data: &Path) -> PathBuf {
@@ -22,8 +25,11 @@ pub fn supported() -> bool {
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub use unix::{request, Server};
+pub use unix::{request, request_with_timeout, Server};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{request, Server};
+pub use windows::{request, request_with_timeout, Server};
+
+#[cfg(test)]
+mod tests;

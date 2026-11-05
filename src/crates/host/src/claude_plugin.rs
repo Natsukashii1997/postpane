@@ -42,6 +42,11 @@ impl ClaudePlugin {
         })
     }
 
+    /// The sessions running the plugin now.
+    pub(crate) fn loaded(&self) -> std::collections::HashSet<String> {
+        self.channel.loaded(SystemTime::now())
+    }
+
     /// The HUD's way to answer Claude's questions in a session running the plugin.
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
         let claude_config = super::mcp_clients::home()

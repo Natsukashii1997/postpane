@@ -27,9 +27,11 @@ import { ToolsSection } from "./agent-plugins/ToolsSection";
 import {
   knownClients,
   nativeChatGpt,
+  nativeChatGptProject,
   nativeClients,
   nativeDeepSeekPlugin,
   nativePlugin,
+  type ChatGptProjectService,
   type ChatGptService,
   type ClaudePluginService,
   type MCPClientsService,
@@ -100,6 +102,7 @@ export function AgentPluginsPane({
   plugin = nativePlugin,
   deepseekPlugin = nativeDeepSeekPlugin,
   chatgpt = nativeChatGpt,
+  chatgptProject = nativeChatGptProject,
 }: {
   snapshot: Snapshot;
   action: SettingsPaneProps["action"];
@@ -114,6 +117,8 @@ export function AgentPluginsPane({
   deepseekPlugin?: ClaudePluginService;
   /** The ChatGPT extension's service; a fake in pictures and tests. */
   chatgpt?: ChatGptService;
+  /** The ChatGPT review project's service; a fake in pictures and tests. */
+  chatgptProject?: ChatGptProjectService;
 }) {
   const t = useText(snapshot);
   const light = useLightTheme();
@@ -122,7 +127,7 @@ export function AgentPluginsPane({
     claudeCode: usePlugin("claudeCode", plugin, active, t),
     deepseek: usePlugin("deepseek", deepseekPlugin, active, t),
   };
-  const chatgptExtension = useChatGpt(chatgpt, active, t);
+  const chatgptExtension = useChatGpt(chatgpt, active, t, chatgptProject);
   const tools = useHudTools(snapshot, action);
   const forClient = (id: string) =>
     items.filter((item) => item.client === id && item.place !== "tools");

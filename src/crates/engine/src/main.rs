@@ -2,6 +2,19 @@
 use agent_hud_runtime::Runtime;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
+use std::time::Duration;
+
+/// How long the app may take to answer `method`: longer for the ones that
+/// wait on the ChatGPT extension (`chatgpt::OPEN_TIME`, `SEND_TIME`).
+fn wait_for(method: &str) -> Duration {
+    use agent_hud_runtime::chatgpt::{OPEN_TIME, SEND_TIME};
+    let margin = Duration::from_secs(10);
+    match method {
+        "chatgpt_open" => OPEN_TIME + margin,
+        "chatgpt_send" | "relay_to_chatgpt" => SEND_TIME + margin,
+        _ => agent_hud_runtime::local_tools::READ_TIME,
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments = std::env::args().collect::<Vec<_>>();
@@ -47,9 +60,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let response = match serde_json::from_str::<Value>(&line?) {
             Ok(request) if app_channel => {
                 let id = request.get("id").cloned().unwrap_or(Value::Null);
-                match agent_hud_runtime::local_tools::request(directory.as_ref().unwrap(), &request)
-                {
-                    Ok(response) => response,
+                match agent_hud_runtime::local_tools::request_with_timeout(
+                    directory.as_ref().unwrap(),
+                    &request,
+                    wait_for(request["method"].as_str().unwrap_or("")),
+                ) {
+                    // An answer the app could not tie to a request (a busy
+                    // or unreadable one) still goes back to the caller's.
+                    Ok(mut response) => {
+                        if response.get("id").is_none_or(Value::is_null) {
+                            response["id"] = id;
+                        }
+                        response
+                    }
                     Err(error) => {
                         json!({"id":id,"error":{"code":"tools_unavailable","message":error}})
                     }
@@ -93,4 +116,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         output.flush()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn methods_that_wait_on_chatgpt_are_given_longer() {
+        assert_eq!(
+            wait_for("snapshot"),
+            agent_hud_runtime::local_tools::READ_TIME
+        );
+        assert!(wait_for("chatgpt_open") > Duration::from_secs(90));
+        assert!(wait_for("relay_to_chatgpt") > Duration::from_secs(30));
+        assert!(wait_for("chatgpt_send") > Duration::from_secs(30));
+    }
 }

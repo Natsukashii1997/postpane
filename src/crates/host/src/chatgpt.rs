@@ -33,7 +33,7 @@ impl ChatGpt {
             owner: Mutex::new(()),
         }
     }
-    fn channel(&self) -> Result<&Channel, String> {
+    pub(crate) fn channel(&self) -> Result<&Channel, String> {
         self.channel.as_ref().ok_or_else(|| {
             let reason = self.error.as_deref().unwrap_or("");
             if l10n::chinese() {
@@ -42,6 +42,19 @@ impl ChatGpt {
                 format!("The ChatGPT channel is not open: {reason}")
             }
         })
+    }
+    /// Whether the extension is connected now.
+    pub(crate) fn connected(&self) -> bool {
+        self.channel
+            .as_ref()
+            .is_some_and(|channel| channel.status()["connected"] == true)
+    }
+    /// Whether the user registered the extension's native host (Settings),
+    /// so Claude may reach it through the local tools channel.
+    pub(crate) fn registered(&self) -> bool {
+        self.channel.is_some()
+            && channel::manifest_directory()
+                .is_ok_and(|directory| channel::manifest_path(&directory).is_file())
     }
     fn status(&self) -> Value {
         match &self.channel {
@@ -141,6 +154,14 @@ pub async fn native_chatgpt_extension(
             }
             "remove" => channel::remove_manifest(directory.as_ref().map_err(Clone::clone)?)?,
             _ => return Err("Unknown ChatGPT extension action".into()),
+        }
+        if action != "status" {
+            // Registering opens the local tools channel for relay_to_chatgpt.
+            if let Some(service) = app.try_state::<super::Service>() {
+                if let Ok(mut backend) = service.backend.lock() {
+                    backend.refresh_tools(&app);
+                }
+            }
         }
         Ok(settings_status(
             directory.as_deref().ok(),

@@ -650,6 +650,29 @@ function AppContent({
     openSettingsPage: (page) => {
       if (isTauri()) void invoke("hud_show_main", { page });
     },
+    // The handoff sheet's ways out (relay 1c, docs/chatgpt-channel.md).
+    forwardReply: async (request) => {
+      if (!isTauri()) throw new Error("只能在驿窗里转交");
+      if (request.to === "new-review")
+        return invoke("handoff_start", {
+          session: request.target,
+          cwd: request.cwd ?? null,
+          title: request.title ?? "",
+          text: request.text,
+        });
+      return invoke("handoff_forward", {
+        to: request.to,
+        target: request.target,
+        text: request.text,
+      });
+    },
+    handoffRoute: async (to, target) =>
+      isTauri()
+        ? invoke<{ reachable: boolean; reason?: string | null }>(
+            "handoff_route",
+            { to, target },
+          )
+        : { reachable: false, reason: null },
     selectSession: (session) => {
       setSelectedSession(session);
       if (isTauri()) {
