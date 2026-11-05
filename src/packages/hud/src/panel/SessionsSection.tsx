@@ -429,10 +429,16 @@ function LiveRow({
         }}
         onWheel={(event) => {
           if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-          const base = drag !== null ? offset.current : open ? -removeWidth : 0;
-          slide(base - event.deltaX);
+          // One swipe is many wheel events, faster than renders: add them up
+          // from where the swipe began until it rests.
+          if (wheelEnd.current === undefined)
+            offset.current = open ? -removeWidth : 0;
+          slide(offset.current - event.deltaX);
           clearTimeout(wheelEnd.current);
-          wheelEnd.current = setTimeout(settle, 140);
+          wheelEnd.current = setTimeout(() => {
+            wheelEnd.current = undefined;
+            settle();
+          }, 140);
         }}
         onPointerEnter={() => setHover(true)}
         onPointerLeave={() => setHover(false)}
