@@ -199,6 +199,7 @@ export function useHUDLayout({
                     scale,
                     snapshotLanguage(snapshot) === "zh",
                     reply,
+                    snapshot.settings.quotaDisplay,
                   ),
                   screen.width,
                 ),

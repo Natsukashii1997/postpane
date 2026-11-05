@@ -8,6 +8,7 @@ import {
   ResetCreditAlertView,
   SignInAlertView,
 } from "./alerts/QuotaAlertViews";
+import { queuedQuotas } from "./alerts/quota-list";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -97,7 +98,8 @@ export function dismissIslandCard(previous: IslandCard[]): IslandCard[] {
 }
 
 /** The queue without the cards `ids` (replies put away from the reply
- * card); a request left in front waits longest. */
+ * card, quota notices from the quota card); a request left in front waits
+ * longest. */
 export function dropIslandCards(
   previous: IslandCard[],
   ids: readonly string[],
@@ -201,6 +203,7 @@ export function useIslandNews(
         : undefined,
     queue,
     replies: queuedReplies(queue),
+    quotas: queuedQuotas(queue),
     select,
     dismiss,
     drop,
@@ -253,6 +256,7 @@ export function NewsContent({
   snapshot,
   dismiss,
   replies = [event],
+  quotas = [event],
   drop = () => dismiss(),
   onStats,
   handoff,
@@ -264,7 +268,9 @@ export function NewsContent({
   dismiss: () => void;
   /** Every reply in the queue: a reply's card lists them all. */
   replies?: IslandEvent[];
-  /** Puts these replies away. */
+  /** Every quota notice in the queue, newest first: a quota card lists them all. */
+  quotas?: IslandEvent[];
+  /** Puts these replies or quota notices away. */
   drop?: (ids: readonly string[]) => void;
   onStats?: () => void;
   handoff?: (callback?: () => void) => void;
@@ -309,8 +315,8 @@ export function NewsContent({
   }
   return (
     <QuotaAlertView
-      event={event}
-      dismiss={dismiss}
+      events={quotas.some((each) => each.id === event.id) ? quotas : [event]}
+      drop={drop}
       onStats={onStats}
       light={light}
       botLogos={botLogos}

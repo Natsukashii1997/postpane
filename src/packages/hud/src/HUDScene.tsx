@@ -674,6 +674,7 @@ export function HUDScene({
               snapshot={snapshot}
               dismiss={news.dismiss}
               replies={news.replies}
+              quotas={news.quotas}
               drop={news.drop}
               onStats={showPanelStats}
               handoff={handoff}
