@@ -82,14 +82,27 @@ export function HUDSection({
 
   return (
     <Section title="HUD" footer={dragHint}>
-      <SmallHUDPreview snapshot={snapshot} config={config} active={active} />
+      <SmallHUDPreview
+        snapshot={snapshot}
+        config={config}
+        active={active}
+        caption={{
+          label: t("PREVIEW", "预览"),
+          where:
+            config.mode === "notch"
+              ? t("Main screen · Notch", "主屏 · 刘海")
+              : config.mode === "logos"
+                ? t("Main screen · Dynamic", "主屏 · 动态")
+                : t("Main screen", "主屏"),
+          note: t("Actual look follows the screen", "实际效果以屏幕上为准"),
+        }}
+      />
       <Row title={t("Mode", "形态")} subtitle={modeSubtitle}>
         <Segments
           label={t("Mode", "形态")}
           value={config.mode}
           options={[
             ["notch", t("Notch", "刘海")],
-            ["simple", t("Simple", "简约")],
             ["logos", t("Dynamic", "动态")],
           ]}
           change={(value) =>
