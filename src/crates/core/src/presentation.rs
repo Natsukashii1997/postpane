@@ -51,6 +51,15 @@ impl Presentation<'_> {
             .hooks
             .reports(&source, session["id"].as_str().unwrap_or(""));
         session["origins"] = surfaces::resolve(&source, prompts, client, &reports).json();
+        // Each Hermes home is its own Feishu bot; the sidebar stamps its rows.
+        if source == "hermes" {
+            if let Some(bot) = session["logPath"]
+                .as_str()
+                .and_then(agent_hud_agents::hermes::bot)
+            {
+                session["bot"] = json!({"id": bot.id, "name": bot.name});
+            }
+        }
         let claude = session["source"].as_str() == Some("claude");
         let desktop = claude
             .then(|| session["id"].as_str())
