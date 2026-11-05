@@ -21,7 +21,8 @@ import {
   type HUDEdge,
   type HUDVendor,
 } from "../model";
-import { PEEK_TEAR, peekLineWidth } from "./AgentPeek";
+import { peekLineWidth } from "./AgentPeek";
+import { peekBubbleHeight } from "./peek-size";
 import { SIMPLE_EDGE_MARGIN } from "./simple-panel";
 import { useNotchGeometry } from "./NotchSurface";
 import { RECEIPT_EXTRA, receiptSheetInset } from "./receipt-sheet";
@@ -214,17 +215,7 @@ export function useHUDLayout({
             width: peekWidth,
             height: simplePeek
               ? 26 * scale
-              : (20 +
-                  // The name, then each reading, or one "--" row with none.
-                  (1 +
-                    Math.max(
-                      1,
-                      focusedVendor.quotas.length +
-                        (focusedVendor.balance ? 1 : 0),
-                    )) *
-                    18) *
-                  scale +
-                PEEK_TEAR * 2,
+              : peekBubbleHeight(focusedVendor, scale),
           }
         : {
             width: fullWidth,

@@ -252,6 +252,7 @@ impl crate::AgentHudCore {
         let relays = self.relay_rows(&relay_users);
         let gateways = self.hermes_gateways(now);
         self.island_events.gateways(&gateways, now);
+        let hermes_bots = hermes_bots(&gateways, now);
         let island_events = self
             .island_events
             .update(&sessions, &quotas, &accounts, &providers, now);
@@ -261,7 +262,7 @@ impl crate::AgentHudCore {
             .as_ref()
             .expect("usage projection prepared");
         Ok(
-            json!({"islandEvents":island_events,"schemaVersion":1,"statisticsRevision":self.statistics.revision,"sessionsRevision":self.sessions_revision,"sessionScope":"recent","indexing":indexing,"generatedAt":Utc::now().to_rfc3339(),"mode":if self.demo{"demo"}else{"live"},"connection":{"status":"connected","platform":self.platform,"message":notice.unwrap_or_else(|| l10n::text("本机会话日志与客户端事件；回调连接状态另行显示", "Local transcripts and client events; hook connection status is reported separately."))},"totals":projection.totals.json(),"quotas":quotas,"accounts":accounts,"sessions":sessions,"timeline":projection.timeline,"providers":providers,"approvals":approvals,"requestDeliveries":deliveries,"settings":self.settings,"language":if crate::l10n::chinese(){"zh"}else{"en"},"capabilities":serde_json::from_str::<Value>(include_str!("../../../packages/protocol/capabilities.json")).expect("checked-in capability manifest"),"billing":billing,"relays":relays}),
+            json!({"islandEvents":island_events,"schemaVersion":1,"statisticsRevision":self.statistics.revision,"sessionsRevision":self.sessions_revision,"sessionScope":"recent","indexing":indexing,"generatedAt":Utc::now().to_rfc3339(),"mode":if self.demo{"demo"}else{"live"},"connection":{"status":"connected","platform":self.platform,"message":notice.unwrap_or_else(|| l10n::text("本机会话日志与客户端事件；回调连接状态另行显示", "Local transcripts and client events; hook connection status is reported separately."))},"totals":projection.totals.json(),"quotas":quotas,"accounts":accounts,"sessions":sessions,"timeline":projection.timeline,"providers":providers,"approvals":approvals,"requestDeliveries":deliveries,"settings":self.settings,"language":if crate::l10n::chinese(){"zh"}else{"en"},"capabilities":serde_json::from_str::<Value>(include_str!("../../../packages/protocol/capabilities.json")).expect("checked-in capability manifest"),"billing":billing,"relays":relays,"hermesBots":hermes_bots}),
         )
     }
 
@@ -813,4 +814,38 @@ mod relay_balance_tests {
         let own = json!({"id": "deepseek:a:CNY", "vendor": "deepseek", "amount": 1.0});
         assert_eq!(under_agents(&own, &users), std::slice::from_ref(&own));
     }
+}
+
+/// Each Hermes bot for the strip's peek: whether its gateway is down, how
+/// many turns the person asked it today (local day) and when it last
+/// replied in Feishu. The default home's bot first, then by id.
+fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Value {
+    use agent_hud_agents::hermes::Down;
+    use chrono::{Local, TimeZone};
+    let today = Local
+        .timestamp_millis_opt(now)
+        .single()
+        .and_then(|at| at.date_naive().and_hms_opt(0, 0, 0))
+        .and_then(|midnight| midnight.and_local_timezone(Local).earliest())
+        .map_or(now, |midnight| midnight.timestamp_millis());
+    let mut bots = gateways.iter().collect::<Vec<_>>();
+    bots.sort_by_key(|g| (g.bot.id != "default", g.bot.id.clone()));
+    let iso = |at: i64| chrono::DateTime::from_timestamp_millis(at).map(|at| at.to_rfc3339());
+    Value::Array(
+        bots.into_iter()
+            .map(|gateway| {
+                let activity = gateway.activity(today);
+                json!({
+                    "id": gateway.bot.id,
+                    "name": gateway.bot.name,
+                    "down": gateway.down.map(|down| match down {
+                        Down::Feishu => "feishu",
+                        Down::Stopped => "stopped",
+                    }),
+                    "turnsToday": activity.turns,
+                    "lastReplyAt": activity.last_reply.and_then(iso),
+                })
+            })
+            .collect(),
+    )
 }

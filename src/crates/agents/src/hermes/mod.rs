@@ -159,6 +159,8 @@ pub enum Down {
 pub struct Gateway {
     pub bot: Bot,
     pub down: Option<Down>,
+    /// Its Hermes home, where its `state.db` is.
+    pub home: std::path::PathBuf,
 }
 
 /// A running gateway rewrites its state every few seconds.
@@ -179,9 +181,20 @@ pub fn gateways(home: &Path, now: i64) -> Vec<Gateway> {
             Some(Gateway {
                 bot: bot(&dir.join("state.db").to_string_lossy())?,
                 down: down(&state, now),
+                home: dir,
             })
         })
         .collect()
+}
+
+impl Gateway {
+    /// Its bot's Feishu activity since `since` (ms); none when its database
+    /// cannot be read.
+    pub fn activity(&self, since: i64) -> transcript::Activity {
+        crate::sqlite::ReadOnlyDatabase::open(&self.home.join("state.db"))
+            .and_then(|db| transcript::activity(&db.connection, since))
+            .unwrap_or_default()
+    }
 }
 
 /// Whether a gateway state says it is down at `now` (ms).

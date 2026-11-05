@@ -403,6 +403,7 @@ mod tests {
                 name: "亚古兽".into(),
             },
             down,
+            home: std::path::PathBuf::new(),
         };
         let mut tracker = Tracker::new();
         let now = tracker.started + 1_000;

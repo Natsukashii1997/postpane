@@ -127,6 +127,8 @@ export interface HUDVendor {
   usage: string | null;
   quotas: Snapshot["quotas"];
   sessions: Snapshot["sessions"];
+  /** Hermes's Feishu bots, which its peek shows instead of a quota. */
+  bots?: NonNullable<Snapshot["hermesBots"]>;
 }
 
 /** Artwork identity is authoritative: Codex and ChatGPT use one OpenAI mark. */
@@ -203,6 +205,7 @@ export function vendorsFromSnapshot(
       usage: quotas.length ? null : recentLabel(recentUsage(snapshot, key)),
       quotas,
       sessions,
+      bots: key === "hermes" ? (snapshot.hermesBots ?? []) : [],
     };
   });
   if (!byMode) vendorProjections.set(snapshot, (byMode = new Map()));

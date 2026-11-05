@@ -263,6 +263,45 @@ pub fn last_prompt(db: &Connection, session: &str) -> Option<String> {
     })
 }
 
+/// What a bot has done in Feishu: the person's turns since a moment, and
+/// when it last replied. Its cron and one-shot sessions are not counted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Activity {
+    /// The person's messages with words of their own since `since`.
+    pub turns: u32,
+    /// The bot's latest Feishu reply with words in it (ms).
+    pub last_reply: Option<i64>,
+}
+
+/// The bot's Feishu activity since `since` (ms). A database without the
+/// columns it needs has none.
+pub fn activity(db: &Connection, since: i64) -> rusqlite::Result<Activity> {
+    let s = sql_columns(db, "sessions")?;
+    let m = sql_columns(db, "messages")?;
+    if !s.contains("source") || !m.contains("timestamp") || !m.contains("session_id") {
+        return Ok(Activity::default());
+    }
+    let mut statement = db.prepare(
+        "SELECT m.content FROM messages m JOIN sessions s ON s.id=m.session_id \
+         WHERE s.source='feishu' AND m.role='user' AND m.timestamp>=?1 AND m.content IS NOT NULL",
+    )?;
+    let turns = statement
+        .query_map([since as f64 / 1000.0], |row| row.get::<_, String>(0))?
+        .flatten()
+        .filter(|text| !own_words(text).is_empty())
+        .count() as u32;
+    let last_reply = db.query_row(
+        "SELECT max(m.timestamp) FROM messages m JOIN sessions s ON s.id=m.session_id \
+         WHERE s.source='feishu' AND m.role='assistant' AND m.content IS NOT NULL AND length(m.content)>0",
+        [],
+        |row| row.get::<_, Option<f64>>(0),
+    )?;
+    Ok(Activity {
+        turns,
+        last_reply: last_reply.map(|at| (at * 1000.0) as i64),
+    })
+}
+
 /// A user message without the system notes the gateway puts before it.
 fn own_words(text: &str) -> &str {
     let mut rest = text.trim();
@@ -287,6 +326,37 @@ fn routed(model: String, provider: Option<String>, base_url: Option<String>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bots_activity_counts_its_feishu_turns_and_last_reply() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, started_at REAL);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+             INSERT INTO sessions VALUES ('chat','feishu',0),('job','cron',0);
+             INSERT INTO messages (session_id,role,content,timestamp) VALUES
+               ('chat','user','昨天的话',90),
+               ('chat','user','周报为什么没发',110),
+               ('chat','user','[System note: 群里]  再看一下',120),
+               ('chat','user','[System note: 只有提示]',130),
+               ('chat','assistant','好的',140),
+               ('chat','assistant','',150),
+               ('job','user','日报',160),
+               ('job','assistant','日报写好了',170);",
+        )
+        .unwrap();
+        assert_eq!(
+            activity(&db, 100_000).unwrap(),
+            Activity {
+                turns: 2,
+                last_reply: Some(140_000)
+            }
+        );
+        let bare = Connection::open_in_memory().unwrap();
+        bare.execute_batch("CREATE TABLE sessions (id TEXT); CREATE TABLE messages (id INTEGER);")
+            .unwrap();
+        assert_eq!(activity(&bare, 0).unwrap(), Activity::default());
+    }
 
     #[test]
     fn a_profiles_sessions_carry_its_name() {
