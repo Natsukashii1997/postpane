@@ -546,7 +546,7 @@ function stillPart(
     context.stroke(path);
   }
   if (dim > 0) {
-    context.fillStyle = `rgba(0, 0, 0, ${0.28 * dim})`;
+    context.fillStyle = `rgba(0, 0, 0, ${0.38 * dim})`;
     context.fillRect(-0.3, -0.3, 1.6, 1.6);
   }
   context.restore();
@@ -620,7 +620,7 @@ function progressRing(
 ) {
   const s = form.spec,
     [cx, cy] = s.center,
-    outer = s.radius * 1.34,
+    outer = s.radius * 1.4,
     inner = s.radius * 1.2,
     from = -Math.PI / 2,
     band = (to: number) => {

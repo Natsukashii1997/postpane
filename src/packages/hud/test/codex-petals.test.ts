@@ -8,7 +8,12 @@ import {
 import { botState, type BotLook } from "../src/bots/bot-state.ts";
 import { staysAsBot } from "../src/bots/bot-spec.ts";
 
-const codex = { radius: 0.37, spin: 7, crossesEyes: true, petals: true };
+const codex = {
+  radius: 0.37,
+  spin: 7,
+  crossesEyes: true,
+  petals: true,
+};
 const plain = { radius: 0.37, spin: 7, crossesEyes: true };
 
 function run(spec: MotionSpec, look: BotLook, seconds: number, from = 10) {
@@ -70,5 +75,21 @@ test("a failed call jams the petals and darkens the body", () => {
 test("an idle Codex stays a bot and keeps moving", () => {
   const motion = run(codex, "idle", 2);
   assert.equal(motion.morph, 1);
+  assert.notEqual(motion.wait, null);
+});
+
+test("a dozing Codex flattens, breathes deep and darkens", () => {
+  const motion = new BotMotion(1);
+  motion.staysBot = true;
+  motion.fit(codex);
+  motion.set(botState({ look: "asleep" }), 10);
+  const heights: number[] = [];
+  for (let t = 10; t <= 14; t += 1 / 24) {
+    motion.step(t);
+    if (t >= 11) heights.push(motion.pose.scaleY);
+  }
+  assert.ok(Math.max(...heights) < 0.95, `tallest ${Math.max(...heights)}`);
+  assert.ok(Math.max(...heights) - Math.min(...heights) > 0.05);
+  assert.ok(motion.dim > 0.25, `dim ${motion.dim}`);
   assert.notEqual(motion.wait, null);
 });
