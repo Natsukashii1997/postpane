@@ -543,13 +543,13 @@ a:focus-visible {
     transform: rotate(0deg);
   }
   70% {
-    transform: rotate(2.6deg);
+    transform: rotate(4.5deg);
   }
   80% {
-    transform: rotate(-1.8deg);
+    transform: rotate(-3deg);
   }
   90% {
-    transform: rotate(0.8deg);
+    transform: rotate(1.3deg);
   }
 }
 @keyframes hud-pendant-blink {
