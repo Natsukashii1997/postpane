@@ -68,6 +68,8 @@ pub(super) fn load(data_dir: &Path, readers: Providers) -> Restored {
                 notice: saved["notice"].as_str().map(str::to_owned),
                 session_records: rows(&saved["sessionRecords"]),
                 services: rows(&saved["services"]),
+                // What ran elsewhere before the restart is read again, not kept.
+                live_sessions: Vec::new(),
             };
             Some((reading, checked_at))
         })

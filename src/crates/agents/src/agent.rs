@@ -85,6 +85,8 @@ pub static ACCOUNTS: &[&crate::account::Provider] = &[
     &crate::coding_plans::GLM,
     &crate::coding_plans::OPENCODE_GO,
     &crate::relays::PROVIDER,
+    // Claude's cloud sessions, after the readers Open has.
+    &claude::cloud::PROVIDER,
 ];
 
 /// Where a session of `source` opens, as its agent says (`Discovery::session_target`):

@@ -41,3 +41,11 @@
 - 证据：2026-11-04 本轮安装，补跑 `ditto` 后成功，应用 22:25:58 重新启动；旧版备份在 `evidence/2026-11-04-receipt-quota/PostPane-before.app`。
 - 升级：未升级。
 
+
+## L-04 云端会话列表里也有本机会话，不过滤会重复（2026-11-05）
+
+- 现象：`api.anthropic.com/v1/sessions` 返回的会话里，除了在 Anthropic 服务器上跑的云端会话，还有本机开着远程控制的会话（标题与本机会话相同），直接全取会和本机记录读出的会话重复。
+- 根因：远程控制把本机会话也登记到同一个会话服务；两者靠 `environment_kind` 区分：云端是 `anthropic_cloud`，本机远程控制是 `bridge`。另外 `session_status` 只有 `running` / `idle`，等你确认要看 `status_bucket = blocked`；`review_ready` 是已经做完待看。
+- 正确做法：只取 `environment_kind = anthropic_cloud`；`running` 算在跑，`idle` 且 `blocked` 算等你，其余不进「正在进行」。核心层再按 (source, id) 跟本机记录去重兜底。
+- 证据：2026-11-05 只读实测，30 条里 `bridge` 18 条（含当时本机在跑的 3 个会话）、`anthropic_cloud` 12 条；实现见 `src/crates/agents/src/claude/cloud.rs`，issue #60。
+- 升级：已写成测试 `claude::cloud::tests::only_cloud_sessions_at_work_or_waiting_come_back`。

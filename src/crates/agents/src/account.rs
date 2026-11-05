@@ -24,6 +24,10 @@ pub struct Reading {
     /// Which clients reach this provider's plans or APIs, and on which
     /// platform: `{client, provider, product, accountId, region}`.
     pub services: Vec<Value>,
+    /// Sessions at work away from this computer (Claude's cloud sessions),
+    /// as session rows: shown while the reading that found them is good,
+    /// never kept in the usage ledger.
+    pub live_sessions: Vec<Value>,
 }
 impl Reading {
     pub fn empty(provider: &'static str) -> Self {
@@ -36,6 +40,7 @@ impl Reading {
             notice: None,
             session_records: vec![],
             services: vec![],
+            live_sessions: vec![],
         }
     }
 }
@@ -194,6 +199,9 @@ pub struct Provider {
     pub reported: Option<Reported>,
     /// The vendor's public status page.
     pub status: Option<&'static StatusPage>,
+    /// A fixed interval in seconds between readings, whatever this computer
+    /// does: for readings of what runs elsewhere and changes by the minute.
+    pub every: Option<u64>,
 }
 impl Provider {
     pub const fn new(id: &'static str, read: Read) -> Self {
@@ -205,6 +213,7 @@ impl Provider {
             keeps_unreported_windows: false,
             reported: None,
             status: None,
+            every: None,
         }
     }
     /// The session sources whose work is this provider's.

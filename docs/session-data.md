@@ -60,3 +60,20 @@ use committed local facts and do not start collection or provider requests.
 Local MCP exposes the same queries as `hud_sessions` and `hud_session`. Synthetic
 responses are available only after explicit `--demo`; failures never activate
 sample data.
+
+## Claude cloud sessions
+
+Sessions that run on Anthropic's servers leave no transcript on this computer.
+The `claude-cloud` account reader (`src/crates/agents/src/claude/cloud.rs`)
+lists them every 60 s from `api.anthropic.com/v1/sessions` with Claude Code's
+own sign-in (the `Claude Code-credentials` keychain item, read through
+`/usr/bin/security`) and the `ccr-byoc-2025-07-29` beta header. Only
+`environment_kind: anthropic_cloud` sessions that are `running`, or whose
+`status_bucket` is `blocked` (waiting on the user), come back; a session this
+computer runs with Remote Control is listed as `bridge` and is read from its
+transcript instead. They reach the snapshot as `Reading.live_sessions` →
+`AccountProjection.live_sessions`, are added to `sessions` (and found by
+`session_detail`) only while the reading is good, and are never written to the
+usage ledger, so Statistics does not list them. Their rows carry
+`client: "claude-cloud"` and a `claude-cloud-session` navigation target that
+opens `https://claude.ai/code/<id>`.
