@@ -16,6 +16,19 @@
   - 可清理 worktree 增加 `.claude/worktrees/74-glow-soft-only`（现检出 main `05988bf`，分离头），清理前问常浩。
 - 本轮新坑：无。
 
+## 随手记挂件：猫球加 5 个简单动效（2026-11-05，Claude，常浩要求「给我的猫图标也简单做一些动态动效，场景 5 个以内，简单一点」，按「小人动效只出一版」直接做；PR #84 测试全过，按「测试全过可直接合并」授权已 squash 合并 `d91110a`，已打包安装、回读一致）
+
+- 时间：开工 `2026-11-05 18:10`（估计，按常浩这条消息；本节写于 `2026-11-05 18:38`）。来由：issue #81。
+- 改了哪些文件（PR #84）：`src/packages/hud/src/scene/AppPendant.tsx`（球外包 `hud-pendant-face`，叠星光、眼光、眼皮三种小层，眼睛和星星位置按 `float-notes-ball.png` 实测：眼 (0.309, 0.52)、(0.608, 0.547)，星 (0.5, 0.19)；摆动放在内层 `hud-pendant-sway`，外框和点击区域不动；新增 `still`）、`src/packages/ui/src/global.css`（`hud-pendant-*` 样式与关键帧：每 7 秒轻摆、每 6.4 秒眨眼、每 9 秒星闪、悬停放大 1.08 加眼亮、按下 0.92 回弹、打开时金色光环呼吸）、`src/packages/hud/src/HUDScene.tsx`（把现有 `reduceMotion` 传给挂件，系统减少动态或关掉动画时全部静止）。
+- 测试：在分支提交 `2125ea5`（与 main `d91110a` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 653 passed / 0 failed；`ℹ pass 193` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-cat-motion/`。
+- 验证：用真实猫图和这份样式做临时检查页（临时加进主目录 `.claude/launch.json` 的 `catcheck`，看完已删），内置浏览器截图看过原样、闭眼、眼亮、星星亮四种状态都对得上。动起来的样子没在实机上看过（没有驿窗窗口的操作授权）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-cat-motion/overlay-check.jpg`（检查页，非实机）。
+- 发布与回读：18:35:21 ditto 到 `/Applications` 并重启，`shasum` 回读为打包产物的 `1f202579fa7b`。注意：装之前 `/Applications` 里是 `c0ed1fb30680`，不是我上一轮装的 `d374791f1a48`，说明期间另一会话装过它自己分支的版本（main 当时没有新提交），这次被我覆盖了（L-05 反向）；那一版备份在本节证据目录 `PostPane-before.app`，那个会话合并后重装即可。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-cat-motion/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 眨眼是用毛色小圆盖住眼睛，大图上看得出是深色圆片；侧栏实际约 36 点，一闪而过。
+  - 可清理 worktree：`.claude/worktrees/80-cat-motion` 本节提交后即删。
+- 本轮新坑：无。
+
 ## 侧栏有待回答时只在对应小人上展开；随手记挂件去掉吊牌；停用原随手记程序（2026-11-05，Claude，常浩要求「当侧栏有待回答时，鼠标划到对应的组件形象对应卡片再展开」「随手记的文字删掉就是那个圆形」「关闭原来的随手记，以后我就用这个侧栏带的」；PR #79 测试全过，按「测试全过可直接合并」授权已 squash 合并 `e5e38c1`，已打包安装、回读一致）
 
 - 时间：开工 `2026-11-05 17:48`（估计，按常浩这条消息；本节写于 `2026-11-05 18:05`）。来由：有待回答时鼠标碰到侧栏任何地方都强制展开，太容易误弹；issue #78。
