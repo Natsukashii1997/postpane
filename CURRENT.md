@@ -1,6 +1,20 @@
 # 当前状态
 
-更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+更新：2026-11-05。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。唯一下一步：按常浩挑的顺序继续梳理下一个侧栏面板的内容（先出预览，定稿后再开 issue 实现）；后台第 4 批「统计会话」仍待做。
+
+## 侧栏新回复通知卡改成清单回执（2026-11-05，Claude，常浩看过三版预览选甲「清单回执」，确认计划后说「开工」，装好后说「合并」；PR #55 测试全过已 squash 合并 `1315622`、已打包安装）
+
+- 时间：开工 `2026-11-05 11:45`（估计，按「开工」那条消息；本节写于 `2026-11-05 12:02`）。来由：侧栏面板逐个梳理的第四项（面板清单 12、13）；三版预览与定稿 https://claude.ai/artifact/EqDRpN1LFCWPaBr82o7w16 ，issue #54。
+- 改了哪些文件（PR #55，实现由子 agent 完成、我对照定稿截图和关闭/排队逻辑审核）：`src/packages/hud/src/alerts/CompletionAlertView.tsx`（重写为清单回执卡：顶部「新 回 复」+ REPLY 计数 + 纸面「已回」章，按侧栏分区分组，最新一条展开显示模型　推理强度、摘要、用时与本会话 Token、「知道了 / 全部知道了」与「↗ 回到会话」，其余折两行）、`alerts/reply-list.ts`（新：排序、分组、用时与 Token 文字、小签数据）、`permissions/ListCard.tsx`（新：审批卡与回复卡共用的取色、行、头部、撕线、分组标题、折叠按钮）、`permissions/ApprovalContent.tsx`（改用共用部件，外观不变）、`permissions/approval-list.ts`（`approvalGroups` 可传排序）、`IslandNews.tsx`（`dropIslandCards`、`queuedReplies`，回复卡拿到全部回复）、`alerts/PendingEventRows.tsx`（当前是回复卡时不再重复列其他回复）、`alerts/CompactAlertView.tsx`（小签改为图标 + 最新会话标题 + REPLY 计数，侧栏宽度同步）、`HUDScene.tsx`、`scene/HUDExpandedSurface.tsx`、`scene/useHUDLayout.ts`；测试 `test/reply-list.test.ts`（9 个）。
+- 测试：在分支提交 `923084a`（与 main `1315622` 内容相同，`git diff` 为空）上 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 642 passed / 0 failed；`ℹ pass 166` / `ℹ fail 0`、`ℹ pass 6` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-05-reply-list/check.log`、`test.log`（子 agent 跑，我核对过结果行）。
+- 验证：子 agent 用临时页面打包真实组件、无头浏览器截图（临时文件已删）；我对照定稿看过三条排队和小签；实机由常浩看过后说「合并」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-05-reply-list/`（`reply-single-dark-zh.png`、`reply-three-dark-zh.png`、`reply-chip-dark-zh.png`、`reply-extra-light-en-notch.png`，组件渲染图，非实机）。
+- 发布与回读：`PostPane.app` 已 ditto 到 `/Applications` 并重启（12:01:08，按 L-03）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-05-reply-list/PostPane-before.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 实现时自定：「已回」章只在纸面印，刘海里只有 REPLY 计数；英文章为 DONE；回复卡最新一条在最上，审批卡里的 REPLY 行仍按先来先列；回到会话成功只关那一条；摘要不保留换行。
+  - 4 秒自动消失仍只关队首那条，多条时卡片一条条变短，未改。小签里的 REPLY 标签不随侧栏缩放。
+  - 可清理 worktree 增加 `.claude/worktrees/54-reply-list`（现共 18 个），清理前问常浩。
+- 本轮新坑：无。
 
 ## 侧栏静止条不显示金额、悬停面板改成额度看板（2026-11-05，Claude，常浩答复 PR #53 遗留四问（显示余额；合并面板不加图标；剩余模式进度条可以；无预测盖「未知」章），确认分批计划后说「按推荐开工」，看过实物后说「合并」；PR #51 squash 合并 `5837e4d`、PR #53 squash 合并 `6e84ad7`，已打包安装）
 
