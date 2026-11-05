@@ -259,12 +259,15 @@ mod tests {
     #[test]
     fn a_profiles_sessions_carry_its_name() {
         assert_eq!(
-            session_id(Path::new("/h/.hermes/state.db"), "20261105_1"),
+            session_id(
+                &std::env::temp_dir().join(".hermes").join("state.db"),
+                "20261105_1"
+            ),
             "hermes:20261105_1"
         );
         assert_eq!(
             session_id(
-                Path::new("/h/.hermes/profiles/agumon/state.db"),
+                &std::env::temp_dir().join(".hermes/profiles/agumon/state.db"),
                 "20261105_1"
             ),
             "hermes:agumon:20261105_1"
