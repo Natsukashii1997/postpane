@@ -476,6 +476,122 @@ a:focus-visible {
   }
 }
 
+/* 随手记 pendant on the resting HUD (hud/src/scene/AppPendant.tsx). */
+.hud-app-pendant-ball {
+  transition: transform 0.18s ease;
+}
+.hud-pendant-star,
+.hud-pendant-eyeglow,
+.hud-pendant-lid {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hud-pendant-star {
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    rgba(255, 246, 214, 0.95) 0,
+    rgba(255, 214, 128, 0.5) 22%,
+    transparent 60%
+  );
+}
+.hud-pendant-eyeglow {
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    rgba(255, 214, 110, 0.75) 0,
+    rgba(255, 190, 80, 0.3) 40%,
+    transparent 70%
+  );
+  transition: opacity 0.2s ease;
+}
+.hud-pendant-lid {
+  background: #2c2624;
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+}
+.hud-app-pendant-ball:hover .hud-pendant-eyeglow {
+  opacity: 1;
+}
+.hud-app-pendant[data-motion="on"] .hud-app-pendant-ball:hover {
+  transform: scale(1.08);
+}
+.hud-app-pendant[data-motion="on"] .hud-app-pendant-ball:active {
+  transform: scale(0.92);
+  transition-duration: 0.08s;
+}
+.hud-app-pendant[data-motion="on"] .hud-pendant-sway {
+  animation: hud-pendant-sway 7s ease-in-out infinite;
+}
+.hud-app-pendant[data-motion="on"] .hud-pendant-lid {
+  animation: hud-pendant-blink 6.4s ease-in-out infinite;
+}
+.hud-app-pendant[data-motion="on"] .hud-pendant-star {
+  animation: hud-pendant-twinkle 9s ease-in-out 2s infinite;
+}
+.hud-app-pendant[data-open="true"] .hud-app-pendant-ball {
+  box-shadow: 0 0 0 2px rgba(242, 200, 121, 0.55);
+}
+.hud-app-pendant[data-motion="on"][data-open="true"] .hud-app-pendant-ball {
+  animation: hud-pendant-halo 2.6s ease-in-out infinite;
+}
+@keyframes hud-pendant-sway {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0deg);
+  }
+  70% {
+    transform: rotate(2.6deg);
+  }
+  80% {
+    transform: rotate(-1.8deg);
+  }
+  90% {
+    transform: rotate(0.8deg);
+  }
+}
+@keyframes hud-pendant-blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(0);
+  }
+  94% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0);
+  }
+}
+@keyframes hud-pendant-twinkle {
+  0%,
+  40%,
+  56%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  47% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+@keyframes hud-pendant-halo {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(242, 200, 121, 0.45),
+      0 0 6px 1px rgba(242, 200, 121, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(242, 200, 121, 0.8),
+      0 0 12px 3px rgba(242, 200, 121, 0.4);
+  }
+}
+
 /* No system scrollbars anywhere (#85): a bar that stays on screen, or one that
    appears while a panel grows, takes width from the content. The thumb drawn
    while something scrolls comes from lib/scroll-thumbs.ts. */

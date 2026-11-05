@@ -345,3 +345,29 @@ fn a_session_lists_where_its_first_and_latest_prompts_were_typed() {
         json!({"init":"cli:iterm","latest":"mobile:iphone"})
     );
 }
+
+#[test]
+fn a_hermes_session_names_the_bot_whose_home_it_was_read_from() {
+    let temp = tempfile::tempdir().unwrap();
+    let core = core(temp.path());
+    let hermes = temp.path().join(".hermes");
+    let profile = hermes.join("profiles").join("agumon");
+    fs::create_dir_all(&profile).unwrap();
+    fs::write(hermes.join("SOUL.md"), "# 猛鬼兽 · SOUL\n").unwrap();
+    fs::write(profile.join("SOUL.md"), "# 亚古兽 · SOUL\n").unwrap();
+    let presentation = core.presentation(Utc::now().timestamp_millis());
+    let mut agumon = json!({"source":"hermes","id":"hermes:agumon:1",
+        "logPath":format!("{}#hud-session-31", profile.join("state.db").display())});
+    presentation.overlay(&mut agumon, None, None, &Default::default());
+    assert_eq!(agumon["bot"], json!({"id":"agumon","name":"亚古兽"}));
+
+    let mut ogre = json!({"source":"hermes","id":"hermes:1",
+        "logPath":hermes.join("state.db").to_string_lossy()});
+    presentation.overlay(&mut ogre, None, None, &Default::default());
+    assert_eq!(ogre["bot"], json!({"id":"default","name":"猛鬼兽"}));
+
+    let mut codex =
+        json!({"source":"codex","id":"c","logPath":hermes.join("state.db").to_string_lossy()});
+    presentation.overlay(&mut codex, None, None, &Default::default());
+    assert_eq!(codex["bot"], Value::Null);
+}
