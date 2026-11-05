@@ -33,6 +33,8 @@ const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
 const STUB_INK = "#2a2925",
+  // Tokens on a stub with no window: what was used, not what is left.
+  STUB_DIM = "rgba(42,41,37,.5)",
   STUB_RED = "rgba(196,38,30,.92)";
 
 export function HUDMarkStrip({
@@ -501,7 +503,12 @@ function StubFace({
               font: `600 ${9.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
               letterSpacing: 0.15 * unit,
               fontVariantNumeric: "tabular-nums",
-              color: marks.warn ? STUB_RED : STUB_INK,
+              color:
+                markUsed(vendor) == null
+                  ? STUB_DIM
+                  : marks.warn
+                    ? STUB_RED
+                    : STUB_INK,
             }}
           >
             {label}

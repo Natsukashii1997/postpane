@@ -46,24 +46,23 @@ const snapshot = {
   ],
 } as never;
 
-const label = (key: string) => recentLabel(recentUsage(snapshot, key), "en");
+const label = (key: string) => recentLabel(recentUsage(snapshot, key));
 
-test("an agent with no window or balance shows its last 24 hours, as vendors.rs writes them", () => {
-  assert.equal(label("hermes"), "1.3M", "no price: its tokens");
-  assert.equal(label("claude"), "≈$1.20", "priced: its cost");
-  assert.equal(
-    label("openai"),
-    "≈$412+",
-    "Codex under the OpenAI mark, partly priced: the priced part, then +",
-  );
-  assert.equal(
-    label("kimi"),
-    "≈$0.50+",
-    "two currencies: US dollars first, then + for the other",
-  );
+test("an agent with no window shows its last 24 hours in tokens, never money, as vendors.rs writes them", () => {
+  assert.equal(label("hermes"), "1.3M");
+  assert.equal(label("claude"), "5.0k", "priced: still its tokens");
+  assert.equal(label("openai"), "9.0k", "Codex under the OpenAI mark");
+  assert.equal(label("kimi"), "9.0k", "two currencies: still its tokens");
   assert.equal(label("pi"), null, "nothing used: nothing to show");
-  assert.equal(label("opencode"), "Free", "a local model costs nothing");
-  assert.equal(recentLabel(recentUsage(snapshot, "opencode"), "zh"), "免费");
+  assert.equal(label("opencode"), "700", "a local model: its tokens");
+});
+
+test("the panel still prices the last 24 hours", () => {
+  assert.equal(
+    recentCost(recentUsage(snapshot, "claude")!, "en"),
+    "≈$1.20",
+  );
+  assert.equal(recentCost(recentUsage(snapshot, "opencode")!, "zh"), "免费");
 });
 
 test("recent usage sums the providers behind one mark", () => {
