@@ -34,6 +34,7 @@ export function AppPendant({
   zh,
   room,
   still,
+  carried = false,
   onToggle,
 }: {
   strip: PendantRect;
@@ -44,6 +45,9 @@ export function AppPendant({
   room: { width: number; height: number };
   /** Reduced motion, or animations turned off. */
   still: boolean;
+  /** The strip is being dragged: the pendant rides along with it and takes
+   * no pointer. */
+  carried?: boolean;
   onToggle: (anchor: PendantRect) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
@@ -174,6 +178,7 @@ export function AppPendant({
         height: frame.height,
         zIndex: 3,
         userSelect: "none",
+        pointerEvents: carried ? "none" : undefined,
       }}
     >
       <div
