@@ -622,16 +622,38 @@ a:focus-visible {
   }
 }
 
-/* The line along a peek's foot that runs out until it grows into the whole
-   board (「停久看全」). */
+/* The line along a peek's foot that spreads from the middle until the peek
+   grows into the whole board (「停久看全」). It has no way to run: it opens
+   from the centre, fast then slow, with soft ends that firm up only in the
+   last quarter (owner's 甲, 2026-11-06, #142). The wait comes in as
+   --hud-peek-expand-ms. */
 .hud-peek-expand-meter {
   transform: scaleX(0);
-  animation-name: hud-peek-expand;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
+  transform-origin: center;
+  -webkit-mask: linear-gradient(
+      90deg,
+      transparent,
+      #000 9%,
+      #000 91%,
+      transparent
+    )
+    center / 100% 100% no-repeat;
+  mask: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent)
+    center / 100% 100% no-repeat;
+  animation:
+    hud-peek-expand var(--hud-peek-expand-ms) cubic-bezier(0.3, 0.7, 0.4, 1)
+      forwards,
+    hud-peek-expand-settle calc(var(--hud-peek-expand-ms) * 0.25) linear
+      calc(var(--hud-peek-expand-ms) * 0.75) forwards;
 }
 @keyframes hud-peek-expand {
   to {
     transform: scaleX(1);
+  }
+}
+@keyframes hud-peek-expand-settle {
+  to {
+    -webkit-mask-size: 300% 100%;
+    mask-size: 300% 100%;
   }
 }
