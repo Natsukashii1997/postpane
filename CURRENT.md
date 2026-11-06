@@ -4,6 +4,19 @@
 
 
 
+## 磁盘瘦身挂件去掉号码牌、扫帚颜色表示空间（2026-11-06，Claude，常浩发截图说「侧边这个形式还是不满意，能不能用那个刷子表示空间情况」，看三版后说「选丙，在此基础上然后偏紧用黄刷子，直接改」，看装机版后又说「扫把不用一直动，鼠标移上去动就行了……红色太红……扫把的把手需要改色适配么……就做一版……直接做」；PR #161 本地全量通过，按授权 squash 合并 `a7446d1`；已从与该 main 同树的分支打包安装、回读一致）
+
+- 时间：开工 `2026-11-06 16:52`（按本会话记录）；本节写于 `2026-11-06 17:34`。来由：#159 刚装的号码牌（左上角「28G」）常浩不满意，要用球里的扫帚表示空间。issue #160。三版预览与定稿：https://claude.ai/artifact/6mds6Yoo7J6xLTyt4rGSab （甲刷毛变色 / 乙灰堆 / 丙扫帚自己扫 → 定稿）。
+- 改了哪些文件（PR #161）：`hud/src/assets/disk-slim-{base,broom,bristles,handle}.png`（新：原球拆成去掉扫帚补好底的底图、单独扫帚层、刷毛与把手遮罩；遮罩收紧在扫帚不透明像素内）、删 `disk-slim-ball.png`、素材 README；`hud/src/scene/DiskPendant.tsx`（去号码牌，底图 + 可摆动扫帚层 + 两层染色 + 三颗灰）、`hud/src/disk-slim.ts`（`diskBadge` → `diskReading`，读屏名仍带可用 GB）、`hud/src/scene/PendantShell.tsx`（去掉没人用的 `badge`）、`ui/src/global.css`（偏紧刷毛 `#ffd34d` multiply + 把手 `#e39b12` color 混合；告急刷毛 `#f5937c` + 把手 `#d9604c`；平时静止，悬停扫两下扬起同色灰；删号码牌与告急整球跳）、`hud/test/disk-slim.test.ts`（改测 `diskReading`，先红后绿）。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 721 passed / 0 failed；`ℹ pass 280` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`；`node scripts/check-rules.mjs` 退出 0。日志 `~/Library/Application Support/postpane/evidence/2026-11-06-disk-broom/`（check.log、test.log、check-2.log、test-2.log、build.log、build-2.log）。
+- 验证：用 esbuild 把真实 `DiskPendant` 渲染成静态页、套真实 `global.css`，无头 Chrome 截静止与强制悬停：三档颜色对、静止不动、把手与刷毛同色系。真实桌面截图未做（常浩拒绝了电脑控制授权）；`get_hud_screenshot` 不画挂件。悬停扫动实机待常浩试。
+- 截图：在本会话工具结果里，未落盘。
+- 发布与回读：第一版（一直扫、正红）17:09 装过一次，常浩看后要求改；定稿从分支打包（与合并后 `a7446d1` 内容树一致），装前备份 `evidence/2026-11-06-disk-broom/PostPane-10a4908a3ccb.app`（第一版）与 `PostPane-5775129c76b0.app`（#159 号码牌版）；17:32:07 退出旧应用后 `ditto` 安装并启动，主程序 `shasum` 回读 `c4298753c667` 与产物一致，文件清单一致，签名 `PostPane Local Signing`。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-06-disk-broom/PostPane-5775129c76b0.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 扫帚摆动时会露出底图里补过的那一小块（扩散填补，略糊），只在悬停扫的约 1 秒内可见。
+  - worktree `disk-broom` 合并后删除。
+- 本轮新坑：无
+
 ## 磁盘瘦身挂件串挂在随手记猫球下（2026-11-06，Claude，常浩定稿「串挂同款」、悬停动效一版、空间提示「丙 号码牌」，说「按计划开工」；PR #159 本地全量通过，按授权 squash 合并 `cbca109`；已从合并后的 main 打包安装、回读一致）
 
 - 时间：开工 `2026-11-06 14:43`（按本会话记录，接上一会话写好的代码 `0643112`）；本节写于 `2026-11-06 17:05`。来由：把本机另一个应用「磁盘瘦身」的扫帚浮游兽球挂进驿窗侧栏，issue #155。
