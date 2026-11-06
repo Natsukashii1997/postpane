@@ -45,20 +45,7 @@ export function SmallHUDPreview({
   caption?: { label: string; where: string; note: string };
 }) {
   const sample = { ...defaultHUDConfig, ...config, edge: "top" as const };
-  // The preview always shows DeepSeek beside the agents the sidebar shows
-  // (owner, 2026-11-05), as though its provider were turned on.
-  const shown = useMemo(
-    () => ({
-      ...snapshot,
-      providers: snapshot.providers.map((provider) =>
-        provider.id === "deepseek"
-          ? { ...provider, detected: true, enabled: true }
-          : provider,
-      ),
-    }),
-    [snapshot],
-  );
-  const vendors = vendorsFromSnapshot(shown, sample.mode);
+  const vendors = vendorsFromSnapshot(snapshot, sample.mode);
   const hasActiveVendor = vendors.some(
     (vendor) => vendor.working > 0 || vendor.waiting > 0,
   );
