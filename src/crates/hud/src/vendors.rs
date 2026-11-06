@@ -105,6 +105,17 @@ fn held(quotas: &[&Value], now_ms: i64) -> Option<f64> {
         })
 }
 
+/// Relays (docs/chatgpt-channel.md) ChatGPT is answering right now, for the
+/// mark ChatGPT shares: ChatGPT on the web has no session to count.
+fn relays_answering(snapshot: &Value, key: &str) -> usize {
+    if mark("chatgpt") != key {
+        return 0;
+    }
+    list(snapshot, "handoffs")
+        .filter(|handoff| handoff["phase"] == "working")
+        .count()
+}
+
 /// Every agent a resting HUD in `mode` shows without a list, one per mark.
 pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'a>> {
     let zh = snapshot["language"] == "zh";
@@ -149,7 +160,8 @@ pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'
                 working: sessions
                     .iter()
                     .filter(|s| matches!(s["state"].as_str(), Some("running" | "waiting")))
-                    .count(),
+                    .count()
+                    + relays_answering(snapshot, &key),
                 balance: deepseek.and_then(|(label, _)| label).or_else(|| {
                     balance.map(|b| {
                         money_amount(&b["amount"], b["currency"].as_str().unwrap_or("USD"), zh)
@@ -514,6 +526,36 @@ mod tests {
             view(json!({"blocks":{"api:deepseek":{"hiddenRows":["ds:USD", "ds:CNY"]}}})),
             ("--".into(), "stale".into())
         );
+    }
+
+    #[test]
+    fn a_relay_chatgpt_is_answering_keeps_the_openai_mark_working() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-06T02:00:00Z")
+            .unwrap()
+            .timestamp_millis();
+        let snapshot = |phase: &str| {
+            json!({
+                "language": "zh",
+                "quotas": [{"vendor": "codex", "name": "5h", "usedPercent": 4.0, "status": "normal", "resetAt": null}],
+                "billing": [], "providers": [], "approvals": [],
+                "sessions": [{"id": "c", "source": "codex", "state": "idle", "updatedAt": "2026-11-06T01:00:00Z"}],
+                "handoffs": [
+                    {"id": "h1", "status": "open", "phase": phase},
+                    {"id": "h0", "status": "closed", "phase": "ended"}
+                ]
+            })
+        };
+        let working = |phase: &str| {
+            let snapshot = snapshot(phase);
+            vendors(&snapshot, "logos", now)
+                .into_iter()
+                .find(|v| v.key == "openai")
+                .map(|v| v.working)
+        };
+        // Only while ChatGPT answers: not before it starts, nor once it replied.
+        assert_eq!(working("working"), Some(1));
+        assert_eq!(working("delivered"), Some(0));
+        assert_eq!(working("replied"), Some(0));
     }
 
     #[test]
