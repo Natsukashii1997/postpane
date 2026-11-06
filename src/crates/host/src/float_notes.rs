@@ -17,6 +17,17 @@ const HEIGHT: f64 = 600.0;
 /// From the ball to the panel, and from the panel to the screen's edges.
 const GAP: f64 = 8.0;
 const MARGIN: f64 = 12.0;
+/// The page asks for this address when its 收起 is pressed; the window hides.
+const COLLAPSE: &str = "postpane-notes://collapse";
+/// The page tells only Digital World's own shell that it was folded away;
+/// anywhere else it fills the window with an "打开便签栏" button. This keeps
+/// that button unpainted and, each time the page folds, asks that the window
+/// hide. It hides by class, not on the element: the page reuses that element
+/// for the panel. The observer changes no nodes: WebKit keeps delivering
+/// records until none are left, so a change made there would loop forever.
+const COLLAPSE_SCRIPT: &str = r#"(()=>{const sheet=new CSSStyleSheet();sheet.replaceSync(".fn-standalone-collapsed{visibility:hidden}");document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];let folded=false;new MutationObserver(()=>{const now=!!document.querySelector(".fn-standalone-collapsed");if(now&&!folded)location.href="postpane-notes://collapse";folded=now;}).observe(document,{childList:true,subtree:true});})();"#;
+/// The page's own call for its host showing it again: the panel comes back.
+const RESTORE_SCRIPT: &str = "window.floatingNotesHost?.focus?.()";
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub(crate) struct Rect {
@@ -72,6 +83,10 @@ pub(crate) fn allowed(url: &tauri::Url) -> bool {
 /// browser, never inside the notes window.
 fn is_digital_world(url: &tauri::Url) -> bool {
     url.scheme() == "http" && url.host_str() == Some(HOST) && url.port() == Some(PORT)
+}
+
+fn is_collapse(url: &tauri::Url) -> bool {
+    url.as_str() == COLLAPSE
 }
 
 fn reachable() -> bool {
@@ -180,7 +195,23 @@ pub(crate) async fn toggle_float_notes(
             .always_on_top(true)
             .visible_on_all_workspaces(true)
             .visible(false)
-            .on_navigation(allowed)
+            .initialization_script(COLLAPSE_SCRIPT)
+            .on_navigation({
+                let app = app.clone();
+                move |url| {
+                    if is_collapse(url) {
+                        let handle = app.clone();
+                        let _ = app.run_on_main_thread(move || {
+                            if let Some(notes) = handle.get_webview_window(LABEL) {
+                                let _ = notes.hide();
+                                let _ = notes.eval(RESTORE_SCRIPT);
+                            }
+                        });
+                        return false;
+                    }
+                    allowed(url)
+                }
+            })
             .on_new_window(|url, _| {
                 if is_digital_world(&url) {
                     let _ = crate::shell::open_in_browser(url.as_str());
@@ -270,6 +301,15 @@ mod tests {
         assert!(!ok("http://localhost:5178/?floatingNotes=1"));
         assert!(!ok("https://example.com/?floatingNotes=1"));
         assert!(!ok("file:///etc/hosts"));
+    }
+
+    #[test]
+    fn folding_the_page_away_asks_to_hide_and_never_loads() {
+        let collapse: tauri::Url = COLLAPSE.parse().unwrap();
+        assert!(is_collapse(&collapse));
+        assert!(!allowed(&collapse));
+        assert!(COLLAPSE_SCRIPT.contains(COLLAPSE));
+        assert!(!is_collapse(&PAGE.parse().unwrap()));
     }
 
     #[test]
