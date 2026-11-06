@@ -26,7 +26,8 @@ export interface Row {
   state: "done" | "cur" | "await" | "todo";
 }
 
-export type Action = "end" | "open" | "back" | "again" | "retry" | "close";
+export type Action =
+  "end" | "open" | "back" | "again" | "retry" | "close" | "pause" | "resume";
 
 const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
@@ -129,8 +130,23 @@ export function stamp(
   }
 }
 
+/** Beside 「接力」: the auto round trip going, or stopped (with a reason to
+ * show); nothing for a handoff from before it. */
+export function autoLabel(handoff: Handoff, zh: boolean): string | null {
+  if (!live(handoff)) return null;
+  if (handoff.auto) return zh ? "自动往返" : "AUTO";
+  if (handoff.halt) return zh ? "自动已停" : "AUTO OFF";
+  return null;
+}
+
 /** One line for 「正在进行」, after the 「接力 1/2」 tag. */
 export function progressLine(handoff: Handoff, now: number, zh: boolean) {
+  const line = progress(handoff, now, zh);
+  return handoff.halt && live(handoff)
+    ? `${line} · ${zh ? "自动已停" : "auto off"}`
+    : line;
+}
+function progress(handoff: Handoff, now: number, zh: boolean) {
   const at = handoff.phaseAt ?? handoff.updatedAt;
   switch (phaseOf(handoff)) {
     case "sending":
@@ -230,9 +246,13 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         rows.push({
           who: "post",
           time,
-          title: zh
-            ? "驿窗转回 Claude「按意见处理」"
-            : "PostPane sent it back to Claude",
+          title: step.auto
+            ? zh
+              ? "驿窗自动转回 Claude「按意见处理」"
+              : "PostPane sent it back to Claude by itself"
+            : zh
+              ? "驿窗转回 Claude「按意见处理」"
+              : "PostPane sent it back to Claude",
           sub: zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
           state: "done",
         });
@@ -251,7 +271,13 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         rows.push({
           who: "post",
           time,
-          title: zh ? "没送出去" : "Not sent",
+          title: step.auto
+            ? zh
+              ? "自动往返出错"
+              : "The auto round trip ran into trouble"
+            : zh
+              ? "没送出去"
+              : "Not sent",
           sub: oneLine(step.text) || undefined,
           state: "done",
         });
@@ -260,7 +286,36 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         rows.push({
           who: "post",
           time,
-          title: zh ? "结束接力" : "Handoff ended",
+          title: step.auto
+            ? zh
+              ? "审核通过，自动结束接力"
+              : "Passed: the handoff ended by itself"
+            : zh
+              ? "结束接力"
+              : "Handoff ended",
+          state: "done",
+        });
+        break;
+      case "stop":
+        rows.push({
+          who: "post",
+          time,
+          title: step.auto
+            ? zh
+              ? "自动往返停下"
+              : "The auto round trip stopped"
+            : zh
+              ? "你暂停了自动往返"
+              : "You paused the auto round trip",
+          sub: oneLine(step.text) || undefined,
+          state: "done",
+        });
+        break;
+      case "resume":
+        rows.push({
+          who: "post",
+          time,
+          title: zh ? "你打开了自动往返" : "You turned the auto round trip on",
           state: "done",
         });
         break;
@@ -362,7 +417,19 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
 /** The buttons along the card's foot, the main one last. */
 export function actions(handoff: Handoff): Action[] {
   const phase = phaseOf(handoff);
-  const open: Action[] = handoff.chatgptConversation ? ["open"] : [];
+  // The auto round trip's switch, after 「结束接力」: pause it while on,
+  // turn it back on once it stopped.
+  const toggle: Action[] = !live(handoff)
+    ? []
+    : handoff.auto
+      ? ["pause"]
+      : handoff.halt
+        ? ["resume"]
+        : [];
+  const open: Action[] = [
+    ...toggle,
+    ...(handoff.chatgptConversation ? (["open"] as const) : []),
+  ];
   switch (phase) {
     case "ended":
       return ["close"];

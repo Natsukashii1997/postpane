@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import {
   actions,
+  autoLabel,
   handoffFor,
   progressLine,
   round,
@@ -181,4 +182,83 @@ test("failed and ended handoffs offer what is left", () => {
     at: 1,
     of: 2,
   });
+});
+
+test("the auto round trip: its own steps, why it stopped, and a button to pause or resume it", () => {
+  const steps = [
+    ...handoff().steps!,
+    reply,
+    step("fail", T + 12 * minute, {
+      text: "自动转回 Claude 失败：写不进；马上重试一次",
+      auto: true,
+    }),
+    step("back", T + 12 * minute, { auto: true }),
+  ];
+  const going = handoff({ phase: "returned", auto: true, steps });
+  const titles = timeline(going, T + 13 * minute, true).map((row) => [
+    row.title,
+    row.sub,
+  ]);
+  assert.deepEqual(titles.slice(3, 5), [
+    ["自动往返出错", "自动转回 Claude 失败：写不进；马上重试一次"],
+    ["驿窗自动转回 Claude「按意见处理」", "附 ChatGPT 的回信全文"],
+  ]);
+  assert.deepEqual(actions(going), ["end", "pause", "open", "again"]);
+  assert.equal(autoLabel(going, true), "自动往返");
+  // Stopped by itself at the last round: why, and a way to turn it back on.
+  const stopped = handoff({
+    phase: "replied",
+    auto: false,
+    halt: "已审 2 轮仍需修改，自动往返停下，交还常浩",
+    steps: [
+      ...steps,
+      step("ask", T + 20 * minute),
+      { ...reply, at: T + 25 * minute },
+      step("stop", T + 25 * minute, {
+        text: "已审 2 轮仍需修改，自动往返停下，交还常浩",
+        auto: true,
+      }),
+    ],
+  });
+  const last = timeline(stopped, T + 26 * minute, true).filter(
+    (row) => row.state === "done",
+  );
+  assert.deepEqual(
+    [last.at(-1)?.title, last.at(-1)?.sub],
+    ["自动往返停下", "已审 2 轮仍需修改，自动往返停下，交还常浩"],
+  );
+  assert.deepEqual(actions(stopped), ["end", "resume", "open", "back"]);
+  assert.equal(autoLabel(stopped, true), "自动已停");
+  assert.equal(
+    progressLine(stopped, T, true),
+    "回信到了 · 需修改 · 3 条意见 · 自动已停",
+  );
+  // Paused by the person, then turned back on.
+  const paused = timeline(
+    handoff({
+      steps: [
+        ...handoff().steps!,
+        step("stop", T + 2 * minute, { text: "常浩暂停" }),
+        step("resume", T + 3 * minute),
+      ],
+    }),
+    T + 4 * minute,
+    true,
+  ).map((row) => row.title);
+  assert.ok(paused.includes("你暂停了自动往返"));
+  assert.ok(paused.includes("你打开了自动往返"));
+  // A pass ended it by itself.
+  const passed = timeline(
+    handoff({
+      status: "closed",
+      phase: "ended",
+      steps: [...handoff().steps!, step("end", T + 9 * minute, { auto: true })],
+    }),
+    T + 10 * minute,
+    true,
+  );
+  assert.equal(passed.at(-1)?.title, "审核通过，自动结束接力");
+  // Handoffs from before the auto round trip offer no switch.
+  assert.deepEqual(actions(handoff()), ["end", "open"]);
+  assert.equal(autoLabel(handoff(), true), null);
 });
