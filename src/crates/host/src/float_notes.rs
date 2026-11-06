@@ -20,11 +20,14 @@ const MARGIN: f64 = 12.0;
 /// The page asks for this address when its 收起 is pressed; the window hides.
 const COLLAPSE: &str = "postpane-notes://collapse";
 /// The page tells only Digital World's own shell that it was folded away;
-/// anywhere else it fills the window with an "打开便签栏" button. This spots
-/// that button before it is painted, presses it so the panel is back for the
-/// next opening, and asks the window to hide. Pressing comes first: a hidden
-/// window's timers stop, so nothing can be left for later.
-const COLLAPSE_SCRIPT: &str = r#"(()=>{new MutationObserver(()=>{const folded=document.querySelector(".fn-standalone-collapsed");if(!folded)return;folded.style.visibility="hidden";folded.querySelector("button")?.click();location.href="postpane-notes://collapse";}).observe(document,{childList:true,subtree:true});})();"#;
+/// anywhere else it fills the window with an "打开便签栏" button. This keeps
+/// that button unpainted and, each time the page folds, asks that the window
+/// hide. It hides by class, not on the element: the page reuses that element
+/// for the panel. The observer changes no nodes: WebKit keeps delivering
+/// records until none are left, so a change made there would loop forever.
+const COLLAPSE_SCRIPT: &str = r#"(()=>{const sheet=new CSSStyleSheet();sheet.replaceSync(".fn-standalone-collapsed{visibility:hidden}");document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];let folded=false;new MutationObserver(()=>{const now=!!document.querySelector(".fn-standalone-collapsed");if(now&&!folded)location.href="postpane-notes://collapse";folded=now;}).observe(document,{childList:true,subtree:true});})();"#;
+/// The page's own call for its host showing it again: the panel comes back.
+const RESTORE_SCRIPT: &str = "window.floatingNotesHost?.focus?.()";
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub(crate) struct Rect {
@@ -201,6 +204,7 @@ pub(crate) async fn toggle_float_notes(
                         let _ = app.run_on_main_thread(move || {
                             if let Some(notes) = handle.get_webview_window(LABEL) {
                                 let _ = notes.hide();
+                                let _ = notes.eval(RESTORE_SCRIPT);
                             }
                         });
                         return false;
