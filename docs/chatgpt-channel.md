@@ -50,6 +50,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 - ChatGPT 作为一个客户端（`agents/src/chatgpt`，id `chatgpt`），会话 id 为 `chatgpt:<会话id>`，回跳目标 `chatgpt-conversation`（交给插件 `focus`，插件不通时用浏览器打开 `https://chatgpt.com/c/<id>`）。
 - `turn complete` 变成一条 completion 事件，侧栏照常弹「新回复」回执；回复全文不截断。
+- 新会话在首页发出，ChatGPT 开始回答时地址里还没有会话 id，那次 `turn start` 不带 `conversation`；地址变成 `/c/<id>` 时若仍在生成，插件带上新 id 再报一次 `turn start`，接力才会进入 `working`。
 - 名单 = 驿窗经 `open` 新开过的会话，存 `<数据目录>/chatgpt/watched.json`（1c 的接力会话也在其中，见下）。
 - 设置 · 智能体插件页有「ChatGPT（Chrome 插件）」一行：登记 host manifest、显示是否连上。
 
@@ -62,6 +63,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 存 `<数据目录>/chatgpt/handoffs.json`（目录 0700、文件 0600，整份替换写），保留最新 200 条：`{id, title, claudeSession, cwd, chatgptConversation, status, error?, createdAt, updatedAt, rounds, phase, phaseAt, steps, brief?}`，时间是毫秒时间戳。
 - `status`：`opening`（新会话正在打开）→ `open`（已绑定会话）或 `failed`（打开失败，`error` 写原因）；同一个 Claude 会话发起新审核、或常浩点「结束接力」时改成 `closed`。一个 Claude 会话、一个 ChatGPT 会话同时只属于一条未结束（opening / open）的接力。
 - `phase`（批 A，#120）：`sending`（正在送，新会话在开）→ `delivered`（插件确认已送到，对方没开始）→ `working`（插件报这一轮开始）→ `replied`（回信到了，等常浩决定）→ `returned`（已转回 Claude）；另有 `ended`、`failed`。`phaseAt` 是进入这一阶段的时间。「送到了」只认插件的 `opened` / `sent` 回应，「审完了」只认 `turn complete`。
+- 侧栏小人：网页 ChatGPT 没有会话可数，接力处于 `working`（ChatGPT 正在回答）时，算作 ChatGPT 所在那一格（与 Codex 共用的 OpenAI 小人）在工作，播「工作中」；回信到了、失败或结束就停（`crates/hud/src/vendors.rs` 的 `relays_answering`、前端 `packages/hud/src/relays-answering.ts`）。
 - `steps`：每一步 `{at, kind, text?, points?, verdict?}`。`work` Claude 做完一轮（`text` 是 `summary`，没给就用标题）、`ask` 驿窗送给 ChatGPT 且已送到（`text` 是原话摘录）、`reply` ChatGPT 回信（`points` 是回信里编号列出的意见，最多 12 条；`verdict` 从最后的「结论：通过 / 需修改」读出 `pass` / `revise`；最新一条回信全文保留，最多 64 KB，供「转回 Claude」用）、`back` 转回 Claude、`again` 请 Claude 交回复审、`fail` 没送出去、`end` 结束。快照里的步骤只带 600 字以内的摘录，不带原话指纹。
 - 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。同一条接力同一时间只有一段话在路上，并排的第二次直接拒绝（「上一段还在送」）；同一个 Claude 会话同一时间只能发起一次，「结束接力」也要等路上那段送完。
 - 回信只认审核中的那一轮：接力在 `sending` / `delivered` / `working` 时的 `turn complete` 才记成回信，同一 `messageId` 只记一次；回信之后常浩在 ChatGPT 里接着聊不算审核。ChatGPT 常在宿主拿到 `opened` / `sent` 回应之前就开始、甚至答完：会话还没绑上，或这条接力的那段话还在路上时，`turn start` / `turn complete` 先整条记下（最多 16 条），绑上或送完后按顺序补录；已绑定、没在送的会话直接记，所以回信之后的闲聊不会补成回信。

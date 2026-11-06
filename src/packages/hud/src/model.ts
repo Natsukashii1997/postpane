@@ -9,6 +9,7 @@ import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
+import { relaysAnswering } from "./relays-answering.ts";
 import { quotaRowShown, tightestWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
@@ -178,10 +179,12 @@ export function vendorsFromSnapshot(
         balanceLevel(deepseekBalances) ??
         balance?.level ??
         "stale",
-      // In flight, as Open counts working: running or waiting on a request.
-      working: sessions.filter(
-        (s) => s.state === "running" || s.state === "waiting",
-      ).length,
+      // In flight, as Open counts working: running or waiting on a request;
+      // ChatGPT's mark also counts the relays it is answering.
+      working:
+        sessions.filter((s) => s.state === "running" || s.state === "waiting")
+          .length +
+        (key === vendorKey("chatgpt") ? relaysAnswering(snapshot) : 0),
       waiting: snapshot.approvals.filter((a) => vendorKey(a.source) === key)
         .length,
       questions: snapshot.approvals.filter(

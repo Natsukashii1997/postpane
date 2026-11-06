@@ -18,18 +18,24 @@
     tell({ type: "page", conversation, hidden: document.visibilityState === "hidden", streaming: wasStreaming });
   }
 
+  function tellStart() {
+    tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), at: Date.now() });
+  }
+
   function settle() {
     const now = page.conversationId(location.href);
+    const streaming = page.streaming(document);
     if (now !== conversation) {
       conversation = now;
       report();
+      // A new conversation (a relay opens one) gets its address after the
+      // reply began on the home page, where the start had no conversation to
+      // name: tell it again now that it has one.
+      if (now && streaming && wasStreaming) tellStart();
     }
-    const streaming = page.streaming(document);
     if (streaming) expecting = true;
     if (!expecting && !streaming) reported = page.lastReply(document)?.messageId ?? reported;
-    if (streaming && !wasStreaming) {
-      tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), at: Date.now() });
-    }
+    if (streaming && !wasStreaming) tellStart();
     // A finished turn is a stop button that went away, or a reply this page has
     // not reported yet: a background tab may never be sampled mid-stream.
     const fresh = expecting && !streaming && (page.lastReply(document)?.messageId ?? null) !== reported;

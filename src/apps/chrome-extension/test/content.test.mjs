@@ -125,3 +125,42 @@ test("replies already on the page are not news", async () => {
   await page.waitForTimeout(1200);
   assert.deepEqual(await turns(page), []);
 });
+
+test("a new conversation's start is told again once its address has an id", async () => {
+  // A relay opens a new conversation on the home page: the reply starts
+  // before the address turns into /c/<id>.
+  const page = await browser.newPage();
+  await page.route("https://chatgpt.com/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: fixture }),
+  );
+  await page.goto("https://chatgpt.com/");
+  await page.evaluate(() => {
+    window.told = [];
+    window.chrome = {
+      runtime: {
+        sendMessage: (message) => (
+          window.told.push(message),
+          Promise.resolve()
+        ),
+        onMessage: { addListener() {} },
+      },
+    };
+  });
+  for (const path of scripts) await page.addScriptTag({ path });
+  await page.evaluate(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    history.pushState({}, "", "/c/6aed31aa-e880-83ee-9327-cd83363c9020");
+    document.querySelector("main").append(document.createElement("div"));
+  });
+  await page.waitForTimeout(700);
+  const starts = (await turns(page)).filter((m) => m.phase === "start");
+  assert.deepEqual(
+    starts.map((m) => m.conversation),
+    [null, "6aed31aa-e880-83ee-9327-cd83363c9020"],
+  );
+});
