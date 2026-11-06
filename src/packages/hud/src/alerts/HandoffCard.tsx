@@ -10,6 +10,7 @@ import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
 import {
   actions,
+  autoLabel,
   chatgptSession,
   claudeSession,
   clock,
@@ -109,6 +110,7 @@ export function HandoffCard({
   const rows = timeline(handoff, now, zh);
   const { at, of } = round(handoff);
   const mark = stamp(handoff, zh);
+  const autoMark = autoLabel(handoff, zh);
   const claude = claudeSession(handoff, snapshot.sessions);
   const chatgpt: Session | undefined =
     chatgptSession(handoff, snapshot.sessions) ??
@@ -175,6 +177,21 @@ export function HandoffCard({
         >
           {zh ? "接力" : "HANDOFF"}
         </span>
+        {autoMark && (
+          <span
+            title={handoff.halt ?? undefined}
+            style={{
+              fontSize: 11.5,
+              color: handoff.auto ? inks.ink : tones.amber,
+              border: `1.2px solid ${handoff.auto ? inks.faint : tones.amber}`,
+              borderRadius: 3,
+              padding: "1px 6px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {autoMark}
+          </span>
+        )}
         <span
           style={{
             marginLeft: "auto",
@@ -684,6 +701,8 @@ function Foot({
     again: zh ? "再审一轮" : "Review again",
     retry: zh ? "重试" : "Retry",
     close: zh ? "知道了" : "Got it",
+    pause: zh ? "暂停自动" : "Pause auto",
+    resume: zh ? "继续自动" : "Resume auto",
   };
   const main = list.length > 1 ? list[list.length - 1] : null;
   const { at, of } = round(handoff);
@@ -695,7 +714,8 @@ function Foot({
         </span>
       )}
       {list.map((action, index) => {
-        const ghost = action === "end";
+        const ghost =
+          action === "end" || action === "pause" || action === "resume";
         const primary = action === main && action !== "open";
         return (
           <span key={action} style={{ display: "contents" }}>

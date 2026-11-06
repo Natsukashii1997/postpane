@@ -19,6 +19,11 @@ pub const KEEP: usize = 200;
 pub const OPEN_TIMEOUT_MS: i64 = 120_000;
 /// How many reviews a handoff is meant to take; more are allowed.
 pub const ROUNDS: u32 = 2;
+/// How long the auto round trip waits for ChatGPT's answer before it hands
+/// the handoff back to the person (#72).
+pub const REPLY_WAIT_MS: i64 = 30 * 60 * 1000;
+/// How long it waits for Claude to hand its changes over again.
+pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
 /// The longest excerpt a step keeps of what was said.
 const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.
@@ -83,8 +88,12 @@ pub enum StepKind {
     Again,
     /// The words could not be sent (`text` says why).
     Fail,
-    /// The person ended the handoff.
+    /// The person ended the handoff, or a pass ended it (`auto`).
     End,
+    /// The auto round trip stopped (`text` says why) and left it to the person.
+    Stop,
+    /// The person turned the auto round trip back on.
+    Resume,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -102,6 +111,9 @@ pub struct Step {
     /// What was sent, hashed: the same words are not sent twice in a row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// Done by the auto round trip, not by the person (#72).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
 }
 impl Step {
     fn new(at: i64, kind: StepKind, text: Option<&str>) -> Self {
@@ -115,7 +127,12 @@ impl Step {
             points: vec![],
             verdict: None,
             key: None,
+            auto: false,
         }
+    }
+    fn by_auto(mut self) -> Self {
+        self.auto = true;
+        self
     }
     fn keyed(mut self, key: &str) -> Self {
         self.key = Some(key.to_owned());
@@ -160,6 +177,26 @@ pub struct Handoff {
     /// own request (`request`), so an old try's late answer binds nothing.
     #[serde(default)]
     pub attempt: u32,
+    /// The auto round trip (#72) is on: a 「需修改」 answer goes back to
+    /// Claude by itself, a pass ends it, at most `ROUNDS` reviews.
+    #[serde(default)]
+    pub auto: bool,
+    /// Why the auto round trip stopped, while it is off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub halt: Option<String>,
+}
+
+/// What the auto round trip does with an answer that came in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Next {
+    /// 「需修改」 with rounds to go: back to Claude.
+    Back,
+    /// 「结论：通过」: the handoff ends.
+    Pass,
+    /// 「需修改」 after the last round: the person decides.
+    Limit,
+    /// No verdict written: the person decides.
+    NoVerdict,
 }
 
 impl Handoff {
@@ -203,6 +240,19 @@ impl Handoff {
         self.phase = phase;
         self.phase_at = now;
         self.updated_at = now;
+    }
+    /// What the auto round trip is to do now, if anything: only while it is
+    /// on and an answer waits.
+    pub fn next(&self) -> Option<Next> {
+        if !self.auto || !self.live() || self.phase != Phase::Replied {
+            return None;
+        }
+        Some(match self.last_reply().and_then(|step| step.verdict) {
+            Some(Verdict::Pass) => Next::Pass,
+            Some(Verdict::Revise) if self.reviews() < ROUNDS => Next::Back,
+            Some(Verdict::Revise) => Next::Limit,
+            None => Next::NoVerdict,
+        })
     }
     /// Whether the newest step of `kinds` sent these same words.
     fn just_sent(&self, kinds: &[StepKind], key: &str) -> bool {
@@ -287,6 +337,8 @@ impl Book {
             )],
             brief: Some(brief.to_owned()),
             attempt: 0,
+            auto: true,
+            halt: None,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -490,19 +542,19 @@ impl Book {
             points,
             verdict,
             key: message.map(str::to_owned),
+            auto: false,
         });
         handoff.enter(Phase::Replied, now);
         true
     }
     /// Words went back to Claude: ChatGPT's answer (`back`) or the ask to
     /// hand over again (`again`).
-    pub fn returned(&mut self, id: &str, kind: StepKind, text: &str, now: i64) -> bool {
+    pub fn returned(&mut self, id: &str, kind: StepKind, text: &str, auto: bool, now: i64) -> bool {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
-        handoff
-            .steps
-            .push(Step::new(now, kind, Some(text)).keyed(&key(text)));
+        let step = Step::new(now, kind, Some(text)).keyed(&key(text));
+        handoff.steps.push(if auto { step.by_auto() } else { step });
         handoff.rounds += 1;
         handoff.enter(Phase::Returned, now);
         true
@@ -520,6 +572,93 @@ impl Book {
         handoff.steps.push(Step::new(now, StepKind::End, None));
         handoff.enter(Phase::Ended, now);
         true
+    }
+    /// A pass ended the handoff, by the auto round trip.
+    pub fn passed(&mut self, id: &str, text: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff.status = Status::Closed;
+        handoff.brief = None;
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::End, Some(text)).by_auto());
+        handoff.enter(Phase::Ended, now);
+        true
+    }
+    /// The auto round trip met an error (`text`: what failed and what it did
+    /// about it); the phase stays.
+    pub fn trouble(&mut self, id: &str, text: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Fail, Some(text)).by_auto());
+        handoff.updated_at = now;
+        true
+    }
+    /// The auto round trip stops for `reason`; the person carries on. `auto`
+    /// when it stopped itself, not paused by the person.
+    pub fn stop(&mut self, id: &str, reason: &str, auto: bool, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id).filter(|h| h.auto) else {
+            return false;
+        };
+        handoff.auto = false;
+        handoff.halt = Some(reason.to_owned());
+        let step = Step::new(now, StepKind::Stop, Some(reason));
+        handoff.steps.push(if auto { step.by_auto() } else { step });
+        handoff.updated_at = now;
+        true
+    }
+    /// The person turns the auto round trip back on.
+    pub fn resume(&mut self, id: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id).filter(|h| !h.auto) else {
+            return false;
+        };
+        handoff.auto = true;
+        handoff.halt = None;
+        handoff.steps.push(Step::new(now, StepKind::Resume, None));
+        handoff.updated_at = now;
+        true
+    }
+    /// Auto round trips waiting too long stop: ChatGPT not answering within
+    /// `REPLY_WAIT_MS` (`no_answer`), Claude not handing over again within
+    /// `FIX_WAIT_MS` (`no_handover`).
+    pub fn overdue(&mut self, now: i64, no_answer: &str, no_handover: &str) -> bool {
+        let late = self
+            .list
+            .iter()
+            .filter(|h| h.auto && h.status == Status::Open)
+            .filter_map(|h| {
+                let waited = now - h.phase_at;
+                match h.phase {
+                    Phase::Delivered | Phase::Working if waited > REPLY_WAIT_MS => {
+                        Some((h.id.clone(), no_answer))
+                    }
+                    Phase::Returned if waited > FIX_WAIT_MS => Some((h.id.clone(), no_handover)),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        for (id, reason) in &late {
+            self.stop(id, reason, true, now);
+        }
+        !late.is_empty()
+    }
+    /// The app started again: auto round trips that were on pause, so
+    /// nothing is sent twice across the restart.
+    pub fn restarted(&mut self, now: i64, reason: &str) -> bool {
+        let on = self
+            .list
+            .iter()
+            .filter(|h| h.auto && h.live())
+            .map(|h| h.id.clone())
+            .collect::<Vec<_>>();
+        for id in &on {
+            self.stop(id, reason, true, now);
+        }
+        !on.is_empty()
     }
     /// Words went across once more.
     pub fn round(&mut self, id: &str, now: i64) -> bool {
@@ -879,7 +1018,7 @@ mod tests {
             !book.replied("c1", "随便聊聊", Some("m2"), 5),
             "answered: further chat is not the review"
         );
-        assert!(book.returned(&handoff.id, StepKind::Back, "意见", 5));
+        assert!(book.returned(&handoff.id, StepKind::Back, "意见", false, 5));
         assert!(book.returned_already(&handoff.id, "意见"));
         assert_eq!(book.get(&handoff.id).unwrap().phase, Phase::Returned);
         assert!(book.asked(&handoff.id, Some("按意见改完"), "第二轮", 6));
@@ -907,6 +1046,114 @@ mod tests {
         let ended = book.get(&handoff.id).unwrap();
         assert_eq!((ended.status, ended.phase), (Status::Closed, Phase::Ended));
         assert!(book.for_conversation("c1").is_none());
+    }
+
+    /// An open handoff, its first review asked at 3.
+    fn asked_once(book: &mut Book) -> String {
+        let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
+        book.opened(&handoff.id, "c1", 2);
+        handoff.id
+    }
+
+    #[test]
+    fn the_auto_round_trip_sends_back_a_revise_ends_at_a_pass_and_stops_at_the_limit() {
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        let kept = book.get(&id).unwrap();
+        assert!(kept.auto, "a new handoff goes round by itself");
+        assert_eq!(kept.next(), None, "nothing to do before an answer");
+        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Back));
+        assert!(book.returned(&id, StepKind::Back, "意见", true, 5));
+        let back = book.get(&id).unwrap().steps.last().unwrap().clone();
+        assert!(back.auto, "the step says the machine did it");
+        assert_eq!(book.get(&id).unwrap().next(), None);
+        // Round 2 still needs changes: the last round, the person decides.
+        book.asked(&id, Some("按意见改完"), "第二轮", 6);
+        book.replied("c1", "1. 还差一点\n结论：需修改", Some("m2"), 7);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Limit));
+        assert!(book.stop(&id, "已审 2 轮仍需修改", true, 8));
+        let kept = book.get(&id).unwrap();
+        assert!(!kept.auto && kept.live());
+        assert_eq!(kept.halt.as_deref(), Some("已审 2 轮仍需修改"));
+        assert_eq!(kept.steps.last().unwrap().kind, StepKind::Stop);
+        assert_eq!(kept.next(), None, "stopped: nothing by itself");
+        assert!(!book.stop(&id, "again", true, 9), "stops once");
+        // The person turns it back on.
+        assert!(book.resume(&id, 9));
+        let kept = book.get(&id).unwrap();
+        assert!(kept.auto && kept.halt.is_none());
+        assert_eq!(kept.steps.last().unwrap().kind, StepKind::Resume);
+
+        // A pass ends it; no verdict leaves it to the person.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pass));
+        assert!(book.passed(&id, "通过", 5));
+        let ended = book.get(&id).unwrap();
+        assert_eq!((ended.status, ended.phase), (Status::Closed, Phase::Ended));
+        assert!(ended.steps.last().unwrap().auto);
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "我看了一下，挺好的", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::NoVerdict));
+    }
+
+    #[test]
+    fn an_auto_round_trip_waiting_too_long_or_across_a_restart_stops() {
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        // Asked at 2 (opened): ChatGPT has REPLY_WAIT_MS to answer.
+        assert!(!book.overdue(2 + REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(book.overdue(3 + REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        let kept = book.get(&id).unwrap();
+        assert!(!kept.auto);
+        assert!(kept.halt.as_deref().unwrap().contains("30 分钟没回信"));
+        assert!(kept.steps.last().unwrap().auto);
+        // Back with Claude: FIX_WAIT_MS to hand over again.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "结论：需修改", Some("m1"), 4);
+        book.returned(&id, StepKind::Back, "意见", true, 5);
+        assert!(!book.overdue(5 + FIX_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(book.overdue(6 + FIX_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(book
+            .get(&id)
+            .unwrap()
+            .halt
+            .as_deref()
+            .unwrap()
+            .contains("2 小时"));
+        // A handoff paused by the person is not overdue.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.stop(&id, "常浩暂停", false, 3);
+        assert!(!book.overdue(10 * REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(!book.get(&id).unwrap().steps.last().unwrap().auto);
+        // A restart pauses those still on, and only those.
+        let mut book = Book::default();
+        let on = asked_once(&mut book);
+        let off = book.begin("s2", None, "别的", None, "请审核", 1).id;
+        book.opened(&off, "c2", 2);
+        book.stop(&off, "常浩暂停", false, 3);
+        assert!(book.restarted(4, "驿窗重启"));
+        assert!(book
+            .get(&on)
+            .unwrap()
+            .halt
+            .as_deref()
+            .unwrap()
+            .contains("重启"));
+        assert_eq!(book.get(&off).unwrap().halt.as_deref(), Some("常浩暂停"));
+        assert!(!book.restarted(5, "驿窗重启"));
+        // Records from before #72 load with it off.
+        let old: Handoff = serde_json::from_value(serde_json::json!({
+            "id":"h1","title":"t","claudeSession":"s","status":"open",
+            "createdAt":1,"updatedAt":1
+        }))
+        .unwrap();
+        assert!(!old.auto && old.halt.is_none());
     }
 
     #[test]

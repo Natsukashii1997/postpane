@@ -8,14 +8,14 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 ## 固定标识
 
-| 项 | 值 |
-|---|---|
-| 插件目录 | `src/apps/chrome-extension/`（开发者模式「加载已解压的扩展程序」） |
-| 插件 id | `fjjbgamejbdjdaddinacpbmaeokinbjl`（manifest 的 `key` 固定，换目录加载 id 不变） |
-| Native host 名 | `com.postpane.chatgpt` |
+| 项                     | 值                                                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 插件目录               | `src/apps/chrome-extension/`（开发者模式「加载已解压的扩展程序」）                                                                                                          |
+| 插件 id                | `fjjbgamejbdjdaddinacpbmaeokinbjl`（manifest 的 `key` 固定，换目录加载 id 不变）                                                                                            |
+| Native host 名         | `com.postpane.chatgpt`                                                                                                                                                      |
 | host manifest（macOS） | `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.postpane.chatgpt.json`，`allowed_origins` 只写 `chrome-extension://fjjbgamejbdjdaddinacpbmaeokinbjl/` |
-| 转接程序 | 随驿窗打包；Chrome 启动它时第一个参数是 `chrome-extension://<id>/` |
-| 驿窗套接字 | `<数据目录>/chatgpt/extension.sock`（目录 0700、套接字 0600，同 local_tools） |
+| 转接程序               | 随驿窗打包；Chrome 启动它时第一个参数是 `chrome-extension://<id>/`                                                                                                          |
+| 驿窗套接字             | `<数据目录>/chatgpt/extension.sock`（目录 0700、套接字 0600，同 local_tools）                                                                                               |
 
 ## 分帧
 
@@ -27,22 +27,22 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 ### 插件 → 驿窗
 
-| type | 字段 | 说明 |
-|---|---|---|
-| `hello` | `version`, `extensionId` | 插件后台连上后第一条 |
-| `tabs` | `conversations: [{id, open, hidden}]` | 名单里各会话标签页状态，变化时发 |
-| `turn` | `phase: "start" \| "complete"`, `conversation`, `title`, `prompt`, `reply`, `messageId`, `at` | 任一会话一轮开始 / 完成（#145 起不限名单；还没有会话 id 的新会话不报）。`complete` 时 `reply` 是整理好的 Markdown 全文，`prompt` 是这一轮用户消息全文，`title` 是会话标题（标签页标题去掉「 - ChatGPT」等后缀，可能为空） |
-| `opened` | `requestId`, `ok`, `conversation?`, `title?`, `reason?` | 回应 `open` |
-| `sent` | `requestId`, `ok`, `reason?` | 回应 `send` |
+| type     | 字段                                                                                          | 说明                                                                                                                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`  | `version`, `extensionId`                                                                      | 插件后台连上后第一条                                                                                                                                                                                                      |
+| `tabs`   | `conversations: [{id, open, hidden}]`                                                         | 名单里各会话标签页状态，变化时发                                                                                                                                                                                          |
+| `turn`   | `phase: "start" \| "complete"`, `conversation`, `title`, `prompt`, `reply`, `messageId`, `at` | 任一会话一轮开始 / 完成（#145 起不限名单；还没有会话 id 的新会话不报）。`complete` 时 `reply` 是整理好的 Markdown 全文，`prompt` 是这一轮用户消息全文，`title` 是会话标题（标签页标题去掉「 - ChatGPT」等后缀，可能为空） |
+| `opened` | `requestId`, `ok`, `conversation?`, `title?`, `reason?`                                       | 回应 `open`                                                                                                                                                                                                               |
+| `sent`   | `requestId`, `ok`, `reason?`                                                                  | 回应 `send`                                                                                                                                                                                                               |
 
 ### 驿窗 → 插件
 
-| type | 字段 | 说明 |
-|---|---|---|
-| `watch` | `conversations: [id]` | 名单整体替换。名单只决定哪些会话能送话、算「审核」 |
-| `open` | `requestId`, `text`, `project?` | 新开会话（`project` 是 ChatGPT 项目页网址，给了就在项目里新建），填 `text` 发出，拿到 `/c/<id>` 后回 `opened`，并把它自行加进名单（不等下一条 `watch`） |
-| `send` | `requestId`, `conversation`, `text` | 给名单里的会话送话；标签页没开就在后台打开 `https://chatgpt.com/c/<id>` 再送 |
-| `focus` | `conversation` | 把这个会话的标签页切到前台（没开就打开） |
+| type    | 字段                                | 说明                                                                                                                                                    |
+| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `watch` | `conversations: [id]`               | 名单整体替换。名单只决定哪些会话能送话、算「审核」                                                                                                      |
+| `open`  | `requestId`, `text`, `project?`     | 新开会话（`project` 是 ChatGPT 项目页网址，给了就在项目里新建），填 `text` 发出，拿到 `/c/<id>` 后回 `opened`，并把它自行加进名单（不等下一条 `watch`） |
+| `send`  | `requestId`, `conversation`, `text` | 给名单里的会话送话；标签页没开就在后台打开 `https://chatgpt.com/c/<id>` 再送                                                                            |
+| `focus` | `conversation`                      | 把这个会话的标签页切到前台（没开就打开）                                                                                                                |
 
 `reason` 取值：`not-watched`、`no-composer`、`busy`（正在生成）、`send-failed`、`timeout`、`tab-closed`。
 
@@ -90,7 +90,17 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 打开方式：ChatGPT 或 Claude 的新回复回执上，属于某条接力的多一个「查看接力」；侧栏「正在进行」里该会话的第二行换成虚线框「接力 1/2」加一句进度，点框打开。卡占侧栏卡片位，Esc 或侧栏收起即关。
 - 卡头「接力 · 第 n / 2 轮 · 圆章」（接力 / 回信 / 需改 / 修改 / 未送 / 已结束），任务名带回到 Claude 会话的 ↗，下一行「Claude ⇄ ChatGPT · 审核 · 发起时间」；中间竖向时间线：每步时间、谁（Clawd / ChatGPT / 「驿」章）、做了什么，回信下列意见与结论，当前一步带绿点，等常浩决定的一步琥珀色，之后的步骤虚线淡出。
 - 底部按阶段：送出与处理中「结束接力」「查看 ChatGPT 对话」；回信到了加「转回 Claude」（把回信全文连同处理要求经插件送回 Claude 会话，会话在跑就排队）；已转回加「再审一轮」（请 Claude 改完调 `relay_to_chatgpt` 复审，第 2 轮后不再出现）；失败「重试」；结束「知道了」。
-- 命令：`handoff_act {id, action: "back" | "again" | "end" | "retry"}`。旧的转交单（`handoff_start`、`handoff_forward`、`handoff_route`）已撤掉。
+- 命令：`handoff_act {id, action: "back" | "again" | "end" | "retry" | "pause" | "resume"}`。旧的转交单（`handoff_start`、`handoff_forward`、`handoff_route`）已撤掉。
+
+### 自动往返（批 2，#72）
+
+- 开关：新接力默认开（`auto: true`）；#72 之前的记录读进来是关的。卡头「接力」旁标「自动往返」，停了标琥珀色「自动已停」（悬停看原因），底部多一个「暂停自动」/「继续自动」。
+- 回信到了（`replied`）且开着时，驿窗按结论自己走（`Desk::drive`，插件报 `turn complete` 后立即跑）：
+  - 「结论：通过」：自动结束接力，`end` 步带 `auto`；
+  - 「结论：需修改」且审过不到 `ROUNDS`（2）轮：把回信全文转回 Claude（与「转回 Claude」同一段话），`back` 步带 `auto`；Claude 改完自己调 `relay_to_chatgpt`，进入下一轮；
+  - 第 2 轮仍「需修改」，或回信没写结论：停下交还常浩（`stop` 步，`halt` 写原因），卡上照常可「转回 Claude」「结束接力」。
+- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）；两次都失败就停下交还常浩。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。
+- 记录：每一步的 `at`、谁做的（`auto` 表示驿窗自动做的，没有就是常浩点的）、出错原文与处理方式（`fail` / `stop` 的 `text`）都在 `handoffs.json`，每轮耗时由相邻步骤的时间相减得出。
 
 ### 本机工具通道
 

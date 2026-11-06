@@ -33,10 +33,11 @@ export interface PanelServices {
   openSettingsPage?(page: string): void;
   /** The handoff card's buttons (relay design 甲): send ChatGPT's answer
    * back to Claude, ask Claude to hand over again, end it, or retry a
-   * failed opening. Rejects with the reason. */
+   * failed opening, or pause / resume the auto round trip (#72). Rejects
+   * with the reason. */
   handoffAct?(
     id: string,
-    action: "back" | "again" | "end" | "retry",
+    action: "back" | "again" | "end" | "retry" | "pause" | "resume",
   ): Promise<unknown>;
   /** 左滑发起 (relay batch B): ask a Claude Code session to hand its work
    * to ChatGPT for review or discussion. Rejects with the reason. */

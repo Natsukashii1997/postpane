@@ -776,12 +776,23 @@ export interface IslandEvent {
 export interface HandoffStep {
   /** Milliseconds since the epoch. */
   at: number;
-  kind: "work" | "ask" | "reply" | "back" | "again" | "fail" | "end";
+  kind:
+    | "work"
+    | "ask"
+    | "reply"
+    | "back"
+    | "again"
+    | "fail"
+    | "end"
+    | "stop"
+    | "resume";
   /** What was said, cut to a few hundred characters. */
   text?: string | null;
   /** A reply's numbered points. */
   points?: string[];
   verdict?: "pass" | "revise" | null;
+  /** Done by the auto round trip, not by the person (#72). */
+  auto?: boolean;
 }
 /** A Claude Code session and the ChatGPT conversation reviewing its work
  * (relay 1c, docs/chatgpt-channel.md). From the host: the live ones and those
@@ -816,6 +827,11 @@ export interface Handoff {
   /** When the phase began, in milliseconds. */
   phaseAt?: number;
   steps?: HandoffStep[];
+  /** The auto round trip is on (#72): 「需修改」 goes back to Claude by
+   * itself, a pass ends it, at most two reviews. */
+  auto?: boolean;
+  /** Why the auto round trip stopped, while it is off. */
+  halt?: string | null;
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the
