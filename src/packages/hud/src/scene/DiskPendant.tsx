@@ -1,13 +1,18 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import type { PendantLayout, PendantRect } from "../app-pendant";
 import { PendantShell } from "./PendantShell";
-import { diskBadge, type DiskSlimState } from "../disk-slim";
+import { diskReading, type DiskSlimState } from "../disk-slim";
 
 export type { DiskSlimState } from "../disk-slim";
 
-const BALL = new URL("../assets/disk-slim-ball.png", import.meta.url).href;
+// The ball in layers (#160): the ball without its broom, the broom alone in
+// place, and the bristles' shape for tinting them.
+const BASE = new URL("../assets/disk-slim-base.png", import.meta.url).href;
+const BROOM = new URL("../assets/disk-slim-broom.png", import.meta.url).href;
+const BRISTLES = new URL("../assets/disk-slim-bristles.png", import.meta.url)
+  .href;
 /** Where things sit on the broom ghost's ball, as shares of its side
- * (measured on disk-slim-ball.png, 192 px): each [x, y, size] of the centre. */
+ * (measured on the 192 px ball): each [x, y, size] of the centre. */
 const LIDS = [
   ["l", 0.31, 0.279, 0.098],
   ["r", 0.56, 0.307, 0.108],
@@ -17,6 +22,12 @@ const SPARKS = [
   ["b", 0.51, 0.82, 0.15],
 ] as const;
 const BUBBLE = [0.665, 0.64, 0.12] as const;
+/** Dust the broom kicks up at its bristles' tips while it sweeps. */
+const PUFFS = [
+  ["a", 0.62, 0.8, 0.052],
+  ["b", 0.69, 0.785, 0.04],
+  ["c", 0.56, 0.815, 0.032],
+] as const;
 
 function spot(x: number, y: number, size: number): CSSProperties {
   return {
@@ -31,10 +42,11 @@ function spot(x: number, y: number, size: number): CSSProperties {
  * open its own panel beside the ring, or hide it. Under the pointer: the ball
  * lifts, light sweeps the glass, the ghost blinks twice, two stars twinkle, a
  * bubble rises off the broom and the pendant sways; a press squashes it; an
- * ice halo breathes while the panel shows. Low space pins an orange badge with
- * the GiB left, critical a red one, and then the ghost hops every six seconds
- * even untouched. All motions are in global.css (`hud-disk-*`); `still` stops
- * them. */
+ * ice halo breathes while the panel shows. The broom tells the space left
+ * (#160, owner's pick 丙 with a yellow broom): low turns its bristles yellow
+ * and it sweeps twice every eight seconds, critical turns them red and it
+ * sweeps on, kicking up dust either way, even untouched. All motions are in
+ * global.css (`hud-disk-*`); `still` stops them, the colours stay. */
 export function DiskPendant({
   layout,
   state,
@@ -64,17 +76,14 @@ export function DiskPendant({
     return () => clearTimeout(timer);
   }, [guess]);
   const open = guess ?? state.panelOpen;
-  const badge = diskBadge(state);
-  const level =
-    badge && (state.level === "low" || state.level === "critical")
-      ? state.level
-      : "ok";
+  const reading = diskReading(state);
+  const level = reading?.level ?? "ok";
   const name = zh
-    ? badge
-      ? `磁盘瘦身，可用 ${badge.replace("G", " GB")}`
+    ? reading
+      ? `磁盘瘦身，可用 ${reading.gib} GB`
       : "磁盘瘦身"
-    : badge
-      ? `Disk Slim, ${badge.replace("G", " GB")} free`
+    : reading
+      ? `Disk Slim, ${reading.gib} GB free`
       : "Disk Slim";
   return (
     <PendantShell
@@ -86,24 +95,13 @@ export function DiskPendant({
       carried={carried}
       open={open}
       data={{ level }}
-      badge={
-        badge ? (
-          <span
-            className="hud-disk-badge"
-            aria-hidden="true"
-            style={{ "--hud-disk-s": layout.ring / 49 } as CSSProperties}
-          >
-            {badge}
-          </span>
-        ) : null
-      }
       onPress={(anchor) => {
         setGuess(!open);
         void onToggle(anchor).catch(() => setGuess(null));
       }}
     >
       <img
-        src={BALL}
+        src={BASE}
         alt=""
         draggable={false}
         style={{
@@ -113,6 +111,27 @@ export function DiskPendant({
           borderRadius: "50%",
         }}
       />
+      <span className="hud-disk-sweep" aria-hidden="true">
+        <span className="hud-disk-broom">
+          <img src={BROOM} alt="" draggable={false} />
+          <span
+            className="hud-disk-bristles"
+            style={
+              {
+                WebkitMaskImage: `url("${BRISTLES}")`,
+                maskImage: `url("${BRISTLES}")`,
+              } as CSSProperties
+            }
+          />
+        </span>
+        {PUFFS.map(([which, x, y, size]) => (
+          <span
+            key={which}
+            className={`hud-disk-puff hud-disk-puff-${which}`}
+            style={spot(x, y, size)}
+          />
+        ))}
+      </span>
       {LIDS.map(([side, x, y, size]) => (
         <span
           key={side}
