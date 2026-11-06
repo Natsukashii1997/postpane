@@ -848,6 +848,19 @@ export interface Snapshot {
   hermesBots?: HermesBotStatus[];
   /** From the host: Claude Code sessions handed to ChatGPT for review. */
   handoffs?: Handoff[];
+  /** From the host: 左滑发起 words still waiting for their session, or that
+   * it refused or let expire lately (shown half an hour). */
+  relayLaunches?: RelayLaunch[];
+}
+/** A swipe's words for a Claude Code session, as the plugin has them. */
+export interface RelayLaunch {
+  session: string;
+  kind: "review" | "discuss";
+  at: number;
+  /** Queued until the session takes them up (then the row gives way to its
+   * handoff); refused or expired when they never reached it. */
+  state: "queued" | "refused" | "expired";
+  reason: string | null;
 }
 /** A price per million tokens; an empty cache rate takes the input's. */
 export interface CustomPrice {

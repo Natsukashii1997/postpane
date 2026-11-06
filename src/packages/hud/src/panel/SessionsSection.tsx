@@ -31,14 +31,16 @@ import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { usePaper } from "../paper";
 import { handoffFor, progressLine, round } from "../alerts/handoff-card";
-import type { Handoff } from "@agent-hud/protocol";
+import type { Handoff, RelayLaunch } from "@agent-hud/protocol";
 import {
   removedKey,
   shownSessions,
   useRemovedSessions,
 } from "./removed-sessions";
 import {
+  alreadyQueuedText,
   launchKind,
+  launchLine,
   stepBlock,
   TRAY_BLOCK,
   trayKinds,
@@ -186,6 +188,13 @@ export function SourceSessions({
               entry.session.source,
               entry.session.id,
             )}
+            waits={
+              entry.session.source === "claude"
+                ? snapshot.relayLaunches?.find(
+                    (launch) => launch.session === entry.session.id,
+                  )
+                : undefined
+            }
             now={now}
             light={light}
             first={index === 0}
@@ -294,6 +303,7 @@ const TRAY: Record<
 function LiveRow({
   entry,
   handoff,
+  waits,
   now,
   light,
   first,
@@ -306,6 +316,8 @@ function LiveRow({
   entry: LiveSession;
   /** The handoff it is in: its second line says how that goes. */
   handoff?: Handoff;
+  /** Its swipe's words not taken up yet: said before any handoff. */
+  waits?: RelayLaunch;
   now: number;
   light: boolean;
   first: boolean;
@@ -405,18 +417,12 @@ function LiveRow({
         throw new Error(
           zh ? "只能在驿窗里发起接力" : "Only PostPane can start a handoff",
         );
-      await services.relayLaunch(session.id, launch);
-      setNotice({
-        ok: true,
-        text:
-          launch === "review"
-            ? zh
-              ? "已请它整理改动，交给 ChatGPT 审核"
-              : "Asked it to hand its changes to ChatGPT for review"
-            : zh
-              ? "已请它整理思路，交给 ChatGPT 讨论"
-              : "Asked it to take its options to ChatGPT",
-      });
+      const left = await services.relayLaunch(session.id, launch);
+      // Words left now show as queued on the second line (`waits`), until the
+      // session takes them up; nothing to say before that is known.
+      setNotice(
+        left?.already ? { ok: true, text: alreadyQueuedText(zh) } : null,
+      );
     } catch (reason) {
       setNotice({
         ok: false,
@@ -700,6 +706,22 @@ function LiveRow({
               }}
             >
               {notice.text}
+            </span>
+          ) : waits ? (
+            <span
+              role="status"
+              style={{
+                gridColumn: "2 / 3",
+                marginTop: 2,
+                fontSize: 12,
+                color: launchLine(waits, zh).ok ? inks.secondary : inks.red,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {launchLine(waits, zh).text}
             </span>
           ) : handoff && card ? (
             <span
