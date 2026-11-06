@@ -4,12 +4,7 @@ import type { PanelBlockLayout, Quota, Snapshot } from "@agent-hud/protocol";
 import { quotaMetric } from "../quota-metrics";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat, localeDateTime, moneyAmount } from "@agent-hud/ui/format";
-import {
-  quotaAccountKey,
-  quotaShortName,
-  sourcesForMark,
-  vendorKey,
-} from "../model";
+import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
 import { missingReadingNotice, serviceNotice } from "./account-labels";
@@ -32,7 +27,6 @@ import {
   BoardKey,
   BoardRows,
   BoardSentence,
-  DayTokensHero,
   useBoardVerdict,
 } from "./AgentBoard";
 import { showsAccountNames } from "./agent-board";
@@ -268,16 +262,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
           active={active}
         />
       ) : missingReading ? (
-        <>
-          {missingNotice && <BlockNotice text={missingNotice} light={light} />}
-          {/* Without a window, the agent's last 24 hours of tokens. */}
-          <DayTokensHero
-            snapshot={snapshot}
-            providers={sourcesForMark(snapshot, vendor)}
-            light={light}
-            active={active}
-          />
-        </>
+        missingNotice && <BlockNotice text={missingNotice} light={light} />
       ) : (
         <>
           <BoardSentence rows={rows} now={now} light={light} />
