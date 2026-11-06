@@ -120,6 +120,30 @@ export interface HermesBotStatus {
   turnsToday: number;
   /** Its latest Feishu reply. */
   lastReplyAt: string | null;
+  /** Since when it has been down, as its gateway's state says. */
+  downSince?: string | null;
+  /** Its scheduled tasks (`cron/jobs.json`), in Hermes' order. */
+  jobs?: HermesCronJob[];
+  /** The latest three things it was asked in Feishu, newest first. */
+  asks?: HermesAsk[];
+}
+export interface HermesCronJob {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** Its last run failed. */
+  failed: boolean;
+  /** Its cron expression (`45 7 * * 1`), or the schedule as Hermes prints it. */
+  schedule: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+}
+export interface HermesAsk {
+  /** Feishu's chat type: `dm`, `group` or `thread`. */
+  chat: string | null;
+  title: string;
+  at: string | null;
+  answer: "answered" | "replying" | "waiting";
 }
 export interface Session {
   id: string;

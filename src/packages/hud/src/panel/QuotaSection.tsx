@@ -30,6 +30,8 @@ import {
   useBoardVerdict,
 } from "./AgentBoard";
 import { showsAccountNames } from "./agent-board";
+import { HermesBoard } from "./HermesBoard";
+import { hermesStamp } from "./hermes-board";
 
 /** QuotaCell.swift: centered equal-width ring/number lines, fixed 40/46/60 pt rings. */
 export function QuotaWidgets({
@@ -226,6 +228,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
     format.language,
   );
   const countdown = layout.countdown ?? showReset;
+  const hermes = vendorKey(vendor) === "hermes";
   const { stamp } = useBoardVerdict(rows, now);
   return (
     <section
@@ -241,7 +244,15 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         Logo={Logo}
         light={light}
         plan={only?.planLabel}
-        stamp={missingReading ? (missingNotice ? "unknown" : null) : stamp}
+        stamp={
+          hermes
+            ? hermesStamp(snapshot.hermesBots ?? [])
+            : missingReading
+              ? missingNotice
+                ? "unknown"
+                : null
+              : stamp
+        }
       />
       {vendorStatus && (
         <BlockNotice text={vendorStatus} light={light} warning />
@@ -262,7 +273,10 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
           active={active}
         />
       ) : missingReading ? (
-        missingNotice && <BlockNotice text={missingNotice} light={light} />
+        <>
+          {missingNotice && <BlockNotice text={missingNotice} light={light} />}
+          {hermes && <HermesBoard snapshot={snapshot} light={light} />}
+        </>
       ) : (
         <>
           <BoardSentence rows={rows} now={now} light={light} />

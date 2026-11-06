@@ -453,6 +453,7 @@ mod tests {
                 name: "亚古兽".into(),
             },
             down,
+            down_since: None,
             home: std::path::PathBuf::new(),
         };
         let mut tracker = Tracker::new();
@@ -495,6 +496,7 @@ mod tests {
             failed,
             last_run_at: Some(1_793_582_041_841),
             next_run_at: Some(1_794_181_500_000),
+            schedule: None,
         };
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("hermes-cron-told.json");
