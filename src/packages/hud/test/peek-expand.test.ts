@@ -6,19 +6,19 @@ import {
   peekExpandWait,
 } from "../src/peek-expand.ts";
 
-test("a peek grows into the board 2 s after it shows, 2.4 s after the mark", () => {
+test("a peek grows into the board 1.5 s after it shows, 1.9 s after the mark", () => {
   // Pointer came to the mark at 1000; the peek showed at 1400.
-  assert.equal(peekExpandWait(400, 1000, 1400), 2000);
-  assert.equal(peekExpandWait(400, 1000, 3300), 100);
-  assert.equal(peekExpandWait(400, 1000, 3800), 0);
+  assert.equal(peekExpandWait(400, 1000, 1400), 1500);
+  assert.equal(peekExpandWait(400, 1000, 2800), 100);
+  assert.equal(peekExpandWait(400, 1000, 3300), 0);
 });
 
-test("moving to another mark counts the whole 2.4 s again from there", () => {
-  assert.equal(peekExpandWait(400, 5000, 5000), 2400);
+test("moving to another mark counts the whole 1.9 s again from there", () => {
+  assert.equal(peekExpandWait(400, 5000, 5000), 1900);
 });
 
-test("a longer hover delay keeps the 2 s between peek and board", () => {
-  assert.equal(peekExpandWait(600, 0, 600), 2000);
+test("a longer hover delay keeps the 1.5 s between peek and board", () => {
+  assert.equal(peekExpandWait(600, 0, 600), 1500);
 });
 
 test("the open sidebar shows the hovered agent's peek, or the board once grown", () => {
