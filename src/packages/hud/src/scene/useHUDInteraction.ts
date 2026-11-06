@@ -56,6 +56,7 @@ export interface UseHUDInteractionArgs {
   collapse: () => void;
   setHovered: (value: string | null) => void;
   setPinned: (value: boolean) => void;
+  setExpanded: (value: boolean) => void;
   setPointerInside: (value: boolean) => void;
   request?: Approval;
   event?: IslandEvent;
@@ -94,6 +95,7 @@ export function useHUDInteraction({
   collapse,
   setHovered,
   setPinned,
+  setExpanded,
   setPointerInside,
   request,
   event,
@@ -123,14 +125,17 @@ export function useHUDInteraction({
   }, [typing]);
 
   useEffect(() => {
-    if (!open) setPinned(false);
-  }, [open, setPinned]);
+    if (open) return;
+    setPinned(false);
+    setExpanded(false);
+  }, [open, setPinned, setExpanded]);
 
   useEffect(() => {
     collapse();
     setPinned(false);
+    setExpanded(false);
     setHovered(null);
-  }, [config.mode, config.edge, config.separatesAgents]);
+  }, [config.mode, config.edge]);
 
   useEffect(() => {
     const previousId = lastAlertId.current;
@@ -142,16 +147,6 @@ export function useHUDInteraction({
       if (!open) {
         collapse();
         if (pointerInside && !suppressHover.current && !dragVisual) enter();
-      }
-      // On a separated dock, only permission requests force open; completion/quota/reset-credits
-      // start collapsed as a compact pill until hovered or clicked.
-      if (
-        request &&
-        !dragCandidate.current?.started &&
-        config.mode !== "notch" &&
-        config.separatesAgents
-      ) {
-        forceOpen();
       }
     } else if (previousId !== null) {
       if (lastAlertInUsagePanel.current) {
@@ -171,7 +166,6 @@ export function useHUDInteraction({
     activeAlertId,
     Boolean(request),
     config.mode,
-    config.separatesAgents,
     open,
     pointerInside,
     typing,
@@ -330,9 +324,9 @@ export function useHUDInteraction({
       suppressDragClick.current
     )
       return;
-    if (!config.separatesAgents || config.mode === "notch" || request || event)
-      return;
+    if (config.mode === "notch" || request || event) return;
     if (key) setHovered(key);
+    setExpanded(false);
     setPinned(true);
     forceOpen();
   }

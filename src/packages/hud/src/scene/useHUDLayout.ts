@@ -27,6 +27,7 @@ import { SIMPLE_EDGE_MARGIN } from "./simple-panel";
 import { useNotchGeometry } from "./NotchSurface";
 import { RECEIPT_EXTRA, receiptSheetInset } from "./receipt-sheet";
 import { snapshotLanguage } from "@agent-hud/ui/format";
+import { cardAgent } from "../peek-expand";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 export interface UseHUDLayoutArgs {
@@ -40,6 +41,8 @@ export interface UseHUDLayoutArgs {
   systemLight: boolean;
   open: boolean;
   pinned: boolean;
+  /** The hovered mark's peek has grown into the whole board. */
+  expanded: boolean;
   dragging: boolean;
   reduceMotion: boolean;
   hovered: string | null;
@@ -62,6 +65,7 @@ export function useHUDLayout({
   systemLight,
   open,
   pinned,
+  expanded,
   dragging,
   reduceMotion,
   hovered,
@@ -96,12 +100,16 @@ export function useHUDLayout({
   // its marks up to an event, so hovering another mark does not move an event's card (ScreenHUD.focus).
   const sender = request ?? event;
   const standaloneAlert = Boolean(request || (event && !inUsagePanel));
-  const focusedVendor =
-    sender && config.mode !== "notch" && !inUsagePanel
-      ? vendors.find((v) => v.key === vendorKey(sender.source))
-      : config.separatesAgents && config.mode !== "notch"
-        ? vendors.find((v) => v.key === hovered)
-        : undefined;
+  const focusedKey = cardAgent({
+    notch: config.mode === "notch",
+    sender: sender ? vendorKey(sender.source) : undefined,
+    inUsagePanel,
+    expanded,
+    hovered,
+  });
+  const focusedVendor = focusedKey
+    ? vendors.find((v) => v.key === focusedKey)
+    : undefined;
 
   const delivery = useMemo(() => {
     const now = Date.parse(snapshot.generatedAt);

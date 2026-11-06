@@ -96,15 +96,6 @@ export function HUDSection({
     .filter(Boolean)
     .join(" · ");
 
-  const separateAgents = toggle(
-    "separatesAgents",
-    t("Separate agents", "按智能体分开"),
-    t(
-      "Hovering an agent opens only its panel.",
-      "悬停哪个智能体，只展开它的面板。",
-    ),
-  );
-
   return (
     <Section
       title={t("What the sidebar looks like", "侧栏长什么样")}
@@ -198,7 +189,6 @@ export function HUDSection({
                 "标志旁写出用得最多那项的百分比。",
               ),
             )}
-          {separateAgents}
         </>
       )}
       {config.mode === "logos" && (
@@ -225,7 +215,6 @@ export function HUDSection({
             t("Show logos", "显示 Logo"),
             t("Off keeps only the backdrop.", "关闭后只留背景。"),
           )}
-          {separateAgents}
         </>
       )}
       {toggle(
