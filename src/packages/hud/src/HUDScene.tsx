@@ -34,6 +34,7 @@ import {
 } from "./permissions/ApprovalContent";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
+import { clearOf } from "./scene/side-tag-stack";
 import { AppPendant } from "./scene/AppPendant";
 import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
 import { pendantChain } from "./app-pendant";
@@ -576,8 +577,11 @@ export function HUDScene({
     [Boolean(cardHandoff), paper, light],
   );
 
-  // The other agents' tags, each by its own mark (#162). The card or panel
-  // out in front covers any it would overlap, and the notch has one place.
+  // The other agents' tags, each by its own mark (#162). Beside the first
+  // tag they step clear of it and of each other; a card or panel out in
+  // front covers any it would overlap; the notch has one place.
+  const mainTag = cardVisible && !open && Boolean(request || event);
+  const sideHung: HUDRect[] = mainTag ? [frame] : [];
   const sideTags =
     config.mode === "notch" || dragging
       ? []
@@ -590,7 +594,12 @@ export function HUDScene({
           zh: snapshotLanguage(snapshot) === "zh",
           quotaDisplay: snapshot.settings.quotaDisplay,
           sessions: snapshot.sessions,
-        }).filter(({ rect }) => !cardVisible || !rectsMeet(rect, frame));
+        }).flatMap(({ side, rect }) => {
+          const placed = clearOf(rect, sideHung, edge);
+          if (cardVisible && !mainTag && rectsMeet(placed, frame)) return [];
+          sideHung.push(placed);
+          return [{ side, rect: placed }];
+        });
   const sidePaper = useMemo(() => paperOf(light), [light]);
   // Resting on another agent's tag or mark brings it to the front before the
   // card opens, so the card that opens there is that agent's own.
