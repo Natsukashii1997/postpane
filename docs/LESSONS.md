@@ -81,3 +81,11 @@
 - 正确做法：云端 Linux 先 `apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libgtk-layer-shell-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libxdo-dev`；Node 不是 24 时在临时目录 `npm i node@24`，把它的 `node_modules/node/bin` 放到 PATH 最前再跑。
 - 证据：PR #57 会话，装库后 `pnpm run check` 退出 0；Node 24.22.2 下插件测试 `ℹ pass 14` / `ℹ fail 0`，`pnpm test` 退出 0。
 - 升级：未升级。
+
+## L-09 电脑控制在侧栏悬停面板里点按钮，点击不生效（2026-11-06）
+
+- 现象：#128 装机后用电脑控制复验左滑托盘。悬停能打开面板，两指左划（scroll right）能拉开托盘，鼠标停在色块上说明浮条也会出来；但点「审核」「移除」只会让托盘收起，色块的动作没执行：行内没有提示，行也没被移除。后台点击（app_click）、全屏点击（left_click）、先停半秒再按下松开都一样。点面板底部「统计」时，点击穿到了下面的 Claude 窗口（菜单栏变成 Claude），统计窗口没开；从侧栏拖动会选中面板里的文字，打不开托盘。浏览器预览里同样的组件点击正常。
+- 根因：未核实。面板窗口平时让鼠标穿透，只有上报的区域收点击（`host/src/hud/mod.rs` 的 `set_ignore_cursor`），指针靠原生轮询；电脑控制瞬移光标后马上按下，推测与穿透区域、窗口激活或面板重挂载有关。
+- 正确做法：侧栏悬停面板里要点的东西（托盘色块、按钮、链接）不靠电脑控制实机验证；逻辑在浏览器预览里用真实组件点，实机这一步请常浩用鼠标或触控板点一次，交接里写明哪些是常浩点的。展开卡、设置窗口这类普通窗口不受影响（#121–#123 在展开卡上点「转回 Claude」「结束接力」都成功了）。
+- 证据：2026-11-06 09:37–09:43 本会话电脑控制记录；截图 `~/Library/Application Support/postpane/evidence/2026-11-06-merge-all/screens/`。
+- 升级：未升级。
