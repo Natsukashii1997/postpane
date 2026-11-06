@@ -69,7 +69,7 @@ import {
   type StatsTarget,
 } from "./panel/listed-sessions";
 import { HUDGroundProvider } from "./ground";
-import { PaperContext, paperOf } from "./paper";
+import { PaperContext, paperOf, relayPaperOf } from "./paper";
 
 export type {
   HUDConfig,
@@ -524,6 +524,11 @@ export function HUDScene({
       receiptInset.right,
     ],
   );
+  // The handoff card is printed on airmail paper, apart from the receipts.
+  const cardPaper = useMemo(
+    () => (cardHandoff && paper ? relayPaperOf(light, paper.bleed) : null),
+    [Boolean(cardHandoff), paper, light],
+  );
 
   const [heldFrame, setHeldFrame] = useState<HUDRect | null>(null);
   const lastFrameRef = useRef<HUDRect | null>(null);
@@ -742,11 +747,11 @@ export function HUDScene({
       </>
     ) : null;
   const eventContent = cardHandoff ? (
-    <PaperContext.Provider value={paper}>
+    <PaperContext.Provider value={cardPaper ?? paper}>
       <HandoffCard
         handoff={cardHandoff}
         snapshot={snapshot}
-        light={light}
+        light={cardPaper ? cardPaper.light : light}
         onClose={closeCard}
         handover={handoff}
       />
@@ -1004,7 +1009,7 @@ export function HUDScene({
             inlineAlert={inlineAlert(snapshot)}
             inUsagePanel={inUsagePanel}
             delivery={delivery}
-            paper={paper}
+            paper={cardPaper ?? paper}
             paperInset={receiptInset}
           />
           <div

@@ -161,7 +161,8 @@ export function HandoffCard({
           alignItems: "center",
           gap: 10,
           minHeight: 44,
-          padding: "0 2px 8px 0",
+          // Clear of the airmail stripe along the top.
+          padding: `${paper?.airmail ? 6 : 0}px 2px 8px 0`,
         }}
       >
         <span
