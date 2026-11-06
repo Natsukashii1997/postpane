@@ -34,6 +34,7 @@ import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
 import { blockListed, panelHidesTokens } from "./panel/agent-board";
+import { agentVendorName } from "./agent-artwork";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
@@ -246,15 +247,21 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   // A panel on an agent with no quota shows no day's tokens (owner, 2026-11-06).
   const tokensAbove =
     Boolean(focusVendor) &&
-    config.quotaDetails &&
-    vendorNames.length > 0 &&
-    vendorNames.every((vendor) =>
-      panelHidesTokens(
-        snapshot.quotas,
-        vendor,
-        config.panelLayout.blocks?.[vendor]?.widget,
-      ),
-    );
+    ((config.quotaDetails &&
+      vendorNames.length > 0 &&
+      vendorNames.every((vendor) =>
+        panelHidesTokens(
+          snapshot.quotas,
+          vendor,
+          config.panelLayout.blocks?.[vendor]?.widget,
+        ),
+      )) ||
+      // An agent with no block at all (ChatGPT's web channel) has no tokens
+      // to show either (#145).
+      (!vendorNames.length &&
+        !snapshot.quotas.some(
+          (row) => vendorKey(row.vendor) === vendorKey(focusVendor ?? ""),
+        )));
   const sections = inPanelOrder<{ key: string; content: ReactNode }>(
     [
       {
@@ -416,7 +423,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           )}
           {focusVendor && !vendorNames.length && (
             <strong style={{ fontSize: 13, fontWeight: 600 }}>
-              {focusVendor}
+              {agentVendorName(focusVendor)}
             </strong>
           )}
           {sections.map((section) =>

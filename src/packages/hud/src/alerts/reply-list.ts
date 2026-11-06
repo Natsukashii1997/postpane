@@ -1,4 +1,5 @@
-import type { IslandEvent, Session } from "@agent-hud/protocol";
+import type { Handoff, IslandEvent, Session } from "@agent-hud/protocol";
+import { isReview } from "../chatgpt-desk.ts";
 import { tokensShort } from "@agent-hud/ui/format";
 import {
   REPLY_BADGE,
@@ -40,13 +41,37 @@ export function newestReply(
 }
 
 /** The card's list: newest first, grouped by sidebar section as the waiting
- * list is, the newest open. */
-export function replyGroups(entries: readonly ApprovalEntry[], limit?: number) {
+ * list is, the newest open; the owner's own ChatGPT chats under their own
+ * heading (#145). */
+export function replyGroups(
+  entries: readonly ApprovalEntry[],
+  limit?: number,
+  zh = true,
+) {
   return approvalGroups(
     entries,
     newestReply(entries)?.id ?? null,
     limit,
     newestFirst,
+    (entry) =>
+      entry.kind === "reply" && entry.event.source === "chatgpt"
+        ? zh
+          ? "ChatGPT 对话"
+          : "ChatGPT chats"
+        : entry.session?.section?.trim() || null,
+  );
+}
+
+/** Whether a reply is a review's (#145): a ChatGPT reply in a relay, or in a
+ * conversation PostPane opened. Those go on the card's lower slip. */
+export function isReviewReply(
+  entry: ApprovalEntry,
+  handoffs: readonly Handoff[],
+): boolean {
+  if (entry.kind !== "reply" || entry.event.source !== "chatgpt") return false;
+  const id = entry.event.sessionId ?? entry.session?.id;
+  return Boolean(
+    id && isReview({ id, review: entry.session?.review }, handoffs),
   );
 }
 

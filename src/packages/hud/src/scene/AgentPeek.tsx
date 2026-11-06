@@ -12,6 +12,7 @@ import { statusColor, type HUDEdge, type HUDVendor } from "../model";
 import { BotStamp } from "../panel/BotStamp";
 import { peekBots, replyTime, type PeekBotState } from "./hermes-peek";
 import { PEEK_BOT_ROW, PEEK_RULE, PEEK_TEAR, showsBots } from "./peek-size";
+import { DeskLines } from "./DeskLines";
 
 export interface PeekItem {
   id: string;
@@ -52,6 +53,19 @@ export function peekItems(
       value: vendor.balance,
       color: color(vendor.level),
     });
+  if (!items.length && vendor.desk) {
+    items.push({
+      id: "chats",
+      label: zh ? "对话" : "Chats",
+      value: String(vendor.desk.today),
+    });
+    if (vendor.desk.reviews.length)
+      items.push({
+        id: "reviews",
+        label: zh ? "审核" : "Reviews",
+        value: String(vendor.desk.reviews.length),
+      });
+  }
   if (!items.length)
     items.push({ id: "quota", label: zh ? "额度" : "Quota", value: "--" });
   return items;
@@ -194,7 +208,22 @@ export function AgentPeek({
           </strong>
         </div>
       ))}
-      {showsBots(vendor) ? (
+      {vendor.desk ? (
+        <DeskLines
+          desk={vendor.desk}
+          scale={scale}
+          zh={zh}
+          bleed={{ left: 12 * scale, right: 12 * scale, bottom: 10 * scale }}
+          inks={{
+            ink: "inherit",
+            dim: "inherit",
+            line: "currentColor",
+            dimOpacity: 0.55,
+            answering: "#7fa8f0",
+            replied: color("normal"),
+          }}
+        />
+      ) : showsBots(vendor) ? (
         <BotLines
           vendor={vendor}
           scale={scale}
@@ -277,7 +306,7 @@ function ReceiptPeek({
       color: q.usedPercent == null ? paper.dim : paperLevel(q.status, paper),
     }));
   const bots = showsBots(vendor);
-  if (!bots && !vendor.quotas.length && !vendor.balance)
+  if (!bots && !vendor.desk && !vendor.quotas.length && !vendor.balance)
     rows.push({ id: "quota", label: zh ? "额度" : "Quota", value: "--" });
   if (vendor.balance)
     rows.push({
@@ -312,6 +341,21 @@ function ReceiptPeek({
       >
         {vendor.name}
       </div>
+      {vendor.desk && (
+        <DeskLines
+          desk={vendor.desk}
+          scale={scale}
+          zh={zh}
+          bleed={{ left: 16 * scale, right: 12 * scale, bottom: 10 * scale }}
+          inks={{
+            ink: paper.ink,
+            dim: paper.dim,
+            line: paper.line,
+            answering: paper.blue,
+            replied: paper.green,
+          }}
+        />
+      )}
       {bots && (
         <BotLines
           vendor={vendor}

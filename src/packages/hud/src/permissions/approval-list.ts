@@ -164,6 +164,8 @@ export function approvalGroups(
   openId: string | null,
   limit = SHOWN_ENTRIES,
   order: (entries: readonly ApprovalEntry[]) => ApprovalEntry[] = orderEntries,
+  sectionOf: (entry: ApprovalEntry) => string | null = (entry) =>
+    entry.session?.section?.trim() || null,
 ): { groups: ApprovalGroup[]; hidden: number; sectioned: boolean } {
   const ordered = order(entries);
   let shown = ordered.length > limit ? ordered.slice(0, limit) : ordered;
@@ -172,7 +174,7 @@ export function approvalGroups(
     shown = [...shown.slice(0, Math.max(0, limit - 1)), open];
   const groups: ApprovalGroup[] = [];
   for (const entry of shown) {
-    const section = entry.session?.section?.trim() || null;
+    const section = sectionOf(entry);
     const group = groups.find((group) => group.section === section);
     if (group) group.entries.push(entry);
     else groups.push({ section, entries: [entry] });

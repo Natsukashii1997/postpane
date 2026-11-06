@@ -144,7 +144,10 @@ fn any_conversation_reports_its_turns_and_whether_postpane_opened_it() {
     };
     // A finished turn says whether it is one of PostPane's (a review).
     let done = json!({"conversation":"68a1","reply":"答","messageId":"m1","at":now});
-    assert_eq!(completion(&done, Some(&watched), now).unwrap().data["review"], true);
+    assert_eq!(
+        completion(&done, Some(&watched), now).unwrap().data["review"],
+        true
+    );
     let own = json!({"conversation":"77b2","title":"杭州两日行程","reply":"答","messageId":"m2","at":now});
     assert_eq!(completion(&own, None, now).unwrap().data["review"], false);
     // A turn that starts is a running observation of its conversation.
@@ -164,9 +167,13 @@ fn any_conversation_reports_its_turns_and_whether_postpane_opened_it() {
         json!({"kind":"chatgpt-conversation","id":"77b2"})
     );
     assert_eq!(
-        started(&json!({"conversation":"68a1","at":now}), Some(&watched), now)
-            .unwrap()
-            .data["title"],
+        started(
+            &json!({"conversation":"68a1","at":now}),
+            Some(&watched),
+            now
+        )
+        .unwrap()
+        .data["title"],
         "审核"
     );
     // A new chat's first start, before it has an address, is not one.

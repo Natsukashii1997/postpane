@@ -13,6 +13,30 @@ export const PEEK_BOT_ROW = 36;
 /** The dashed rule between the bots and their tokens, with its room. */
 export const PEEK_RULE = PEEK_TEAR * 2 + 2;
 
+/** ChatGPT's peek (#145), px before scale: the 对话 label, a chat's row,
+ * the line for none or for the rest of today's, and on the lower slip its
+ * padding, the 审核 label and a review's two lines. */
+export const DESK_LABEL = 18;
+export const DESK_CHAT = 20;
+export const DESK_NOTE = 18;
+export const DESK_SLIP_PAD = 10;
+export const DESK_REVIEW = 36;
+
+/** How tall ChatGPT's desk is under the peek's name. */
+export function deskHeight(
+  desk: NonNullable<HUDVendor["desk"]>,
+  scale: number,
+): number {
+  const upper =
+    DESK_LABEL +
+    desk.chats.length * DESK_CHAT +
+    (desk.chats.length === 0 || desk.more > 0 ? DESK_NOTE : 0);
+  const lower = desk.reviews.length
+    ? DESK_SLIP_PAD * 2 + DESK_LABEL + desk.reviews.length * DESK_REVIEW
+    : 0;
+  return (upper + lower) * scale;
+}
+
 /** Whether the peek shows Hermes's bots: an agent with bots and no quota
  * or balance to print. */
 export function showsBots(
@@ -27,9 +51,18 @@ export function showsBots(
  * the last day's tokens under a rule, or each reading, or one "--" row
  * with none. */
 export function peekBubbleHeight(
-  vendor: Pick<HUDVendor, "bots" | "quotas" | "balance" | "usage">,
+  vendor: Pick<HUDVendor, "bots" | "quotas" | "balance" | "usage" | "desk">,
   scale: number,
 ): number {
+  if (vendor.desk)
+    // The padding and the name over its tear, then the desk; a lower slip
+    // runs to the foot over the bottom padding.
+    return (
+      38 * scale +
+      PEEK_TEAR * 2 +
+      deskHeight(vendor.desk, scale) -
+      (vendor.desk.reviews.length ? 10 * scale : 0)
+    );
   if (showsBots(vendor))
     return (
       (20 +

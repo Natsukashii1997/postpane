@@ -58,22 +58,23 @@ export function paperOf(
   };
 }
 
-/** A handoff's paper (relay card, owner 2026-11-06): pale-blue airmail paper
- * with dark ink in either appearance, so a relay between agents reads apart
- * from the receipts of one's own work. */
+/** A handoff's paper (relay card, owner 2026-11-06): old letter paper, a
+ * dimmed grey-blue with dark ink in either appearance, so a review reads
+ * apart from the receipts of one's own work without glaring beside them
+ * (#145: every review, the ChatGPT peek's lower slip included). */
 export function relayPaperOf(
-  light: boolean,
+  _light: boolean,
   bleed: Paper["bleed"] = { left: 0, right: 0 },
 ): Paper {
-  const ink = "30,40,58";
+  const ink = "38,48,63";
   return {
     light: true,
-    paper: light ? "#d9e3f0" : "#e3e9f1",
+    paper: "#cdd4dc",
     ink: `rgb(${ink})`,
-    dim: "#5d6a7d",
-    line: `rgba(${ink},0.3)`,
+    dim: "#566273",
+    line: `rgba(${ink},0.26)`,
     red: "#c4261e",
-    blue: "#2f5fb3",
+    blue: "#3a5c96",
     green: "#2a7a4c",
     fill: `rgba(${ink},0.07)`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
@@ -84,8 +85,8 @@ export function relayPaperOf(
 
 /** Airmail stripes, red and blue, for a band `width` wide. */
 export function airmailStripes(width: number): string {
-  const red = "#c8473e",
-    blue = "#2f5fb3";
+  const red = "#b0574b",
+    blue = "#46679f";
   // Each stripe as long as the band is wide again, as on an envelope.
   const a = width * 1.33,
     b = a * 1.5;
