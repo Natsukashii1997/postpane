@@ -34,6 +34,8 @@ export interface Paper {
   /** How far the card's content sits in from its sides, for tear lines
    * drawn edge to edge. */
   bleed: { left: number; right: number };
+  /** Airmail stripes along the sides without holes: a handoff's paper. */
+  airmail?: boolean;
 }
 
 export function paperOf(
@@ -54,6 +56,40 @@ export function paperOf(
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,
   };
+}
+
+/** A handoff's paper (relay card, owner 2026-11-06): pale-blue airmail paper
+ * with dark ink in either appearance, so a relay between agents reads apart
+ * from the receipts of one's own work. */
+export function relayPaperOf(
+  light: boolean,
+  bleed: Paper["bleed"] = { left: 0, right: 0 },
+): Paper {
+  const ink = "30,40,58";
+  return {
+    light: true,
+    paper: light ? "#d9e3f0" : "#e3e9f1",
+    ink: `rgb(${ink})`,
+    dim: "#5d6a7d",
+    line: `rgba(${ink},0.3)`,
+    red: "#c4261e",
+    blue: "#2f5fb3",
+    green: "#2a7a4c",
+    fill: `rgba(${ink},0.07)`,
+    text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
+    bleed,
+    airmail: true,
+  };
+}
+
+/** Airmail stripes, red and blue, for a band `width` wide. */
+export function airmailStripes(width: number): string {
+  const red = "#c8473e",
+    blue = "#2f5fb3";
+  // Each stripe as long as the band is wide again, as on an envelope.
+  const a = width * 1.33,
+    b = a * 1.5;
+  return `repeating-linear-gradient(-45deg, ${red} 0 ${a}px, transparent ${a}px ${b}px, ${blue} ${b}px ${a + b}px, transparent ${a + b}px ${2 * b}px)`;
 }
 
 /** The paper a request is printed on; null where it keeps the HUD's own
