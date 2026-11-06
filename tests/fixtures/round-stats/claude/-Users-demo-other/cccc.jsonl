@@ -1,0 +1,1 @@
+{"type":"assistant","cwd":"/Users/demo/other","timestamp":"2026-11-06T01:00:00.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"v1","name":"Bash","input":{"command":"gh pr merge 9 --squash"}}]}}

@@ -15,6 +15,7 @@
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
 | 开需求、拆任务、实现、审查 | 下面「Agent skills」一节 |
 | 写交接、验收别人的交接 | [docs/templates/handoff.md](docs/templates/handoff.md) 骨架；[OPERATIONS](docs/OPERATIONS.md)「交接写法」「报告与验收」 |
+| 一轮从开工到收尾：worktree、测试、装机回读、交接、合并清理、复盘进化 | [.agents/skills/postpane-round/SKILL.md](.agents/skills/postpane-round/SKILL.md)（Claude `/postpane-round`，Codex `$postpane-round`） |
 
 项目长出接口、样式、发布等文档后，在这张表里加一行。
 
@@ -44,6 +45,7 @@ node scripts/check-rules.mjs             # 只跑通用规则检查
 
 ```
 AGENTS.md            入口（本文件）
+.agents/skills/       项目内 skill（postpane-round）；.claude/skills/ 软链接到同一份
 CURRENT.md           当前状态与唯一下一步；每轮交接写在顶部
 NOTICE               来源与许可说明
 src/

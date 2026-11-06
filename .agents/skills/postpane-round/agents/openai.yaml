@@ -1,0 +1,6 @@
+interface:
+  display_name: "驿窗一轮"
+  short_description: "驿窗每轮改动从开工、测试、装机回读、交接到合并清理与复盘进化"
+  default_prompt: "Use $postpane-round to run this PostPane change from start to wrap-up."
+policy:
+  allow_implicit_invocation: true
