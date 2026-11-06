@@ -81,3 +81,12 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：第 3 步后加「3a. 实机出问题怎么查」：先 `log show`、再 `sample` 卡住的线程、注入脚本用标题通道；调用全局 `diagnosing-bugs` 的诊断循环，不另写一套。
 - 证据：`round-stats.mjs`（2026-11-06 18:48）不属于任何一步：`lsof` 10、`log` 8、`curl` 8、`sample` 7；L-06、L-10。
 - 状态：待批
+
+## E-09 接着做的下一张 issue，可在刚合并的 worktree 上从 main 切新分支，保留构建缓存（2026-11-07）
+
+- 步骤：start
+- 发生了什么：#164 刚合并，`120-relay-card` 里有 10 GB 构建缓存，紧接着做 #72。按第 1 步新开 worktree 要从头编一遍，于是在原 worktree 里 `git switch -c claude/72-auto-relay main`。打包约 4 分钟，全量测试一次就过。
+- 建议：第 1 步加一句：同一会话接着做下一张、上一张已合并且 worktree 干净时，可以在原 worktree 里从最新 main 切新分支，代替新开；合并后照第 5 步清理。并行会话仍然各开各的（G-04）。
+- 证据：PR #164（`f6cd22b`）合并后在同一 worktree 起 PR #168（`b15f3c3`）；CURRENT.md「接力自动往返上线」一节；日志 `evidence/2026-11-06-auto-relay/build.log`。
+- 状态：待批
+
