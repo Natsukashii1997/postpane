@@ -19,7 +19,10 @@ export function ReminderMark({
   light?: boolean;
   botLogos?: boolean;
 }) {
-  if (event?.kind === "bot-offline" && event.bot)
+  if (
+    (event?.kind === "bot-offline" || event?.kind === "cron-failed") &&
+    event.bot
+  )
     return <BotStamp bot={event.bot} size={size + 4} light={light} />;
   if (event?.kind === "completion" && bot)
     return <BotStamp bot={bot} size={size + 4} light={light} />;

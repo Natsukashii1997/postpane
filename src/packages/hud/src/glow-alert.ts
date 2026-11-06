@@ -24,6 +24,7 @@ export function glowAlert(
       | "reset-credits"
       | "sign-in-needed"
       | "bot-offline"
+      | "cron-failed"
       | "request";
     vendor: string;
   } | null,
@@ -34,6 +35,7 @@ export function glowAlert(
     alert.kind === "quota-exhaustion" ||
     alert.kind === "sign-in-needed" ||
     alert.kind === "bot-offline" ||
+    alert.kind === "cron-failed" ||
     alert.kind === "request";
   const color =
     alert.kind === "completion" ? "#82aaff" : warning ? "#e9a16d" : "#6cd8ac";

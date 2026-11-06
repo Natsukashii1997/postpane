@@ -16,6 +16,7 @@ import {
 import { useFormat } from "@agent-hud/ui/format-context";
 import {
   quotaAlertCopy,
+  cronFailedCopy,
   resetCreditCopy,
   signInCopy,
   type QuotaTone,
@@ -26,6 +27,8 @@ import {
  * the bar's share, the lines under it, and whether opening it shows the
  * usage statistics. */
 export interface StripCopy {
+  /** Who the strip is about, in bold; the agent's name when absent. */
+  who?: string;
   status: string;
   display: string;
   tone: QuotaTone;
@@ -80,6 +83,21 @@ export function stripCopy(
       when: zh
         ? "机器人暂时收不到飞书消息"
         : "The bot cannot get Feishu messages",
+      stillEmpty: null,
+      note: null,
+      opens: false,
+    };
+  }
+  if (event.kind === "cron-failed") {
+    const copy = cronFailedCopy(event, settings);
+    return {
+      who: copy.who,
+      status: copy.status,
+      display: copy.tag,
+      tone: "critical",
+      framed: true,
+      bar: null,
+      when: copy.when,
       stillEmpty: null,
       note: null,
       opens: false,
@@ -206,7 +224,7 @@ export function AlertStrip({
           minWidth: 0,
         }}
       >
-        {clientDisplayName(event.source)}
+        {copy.who ?? clientDisplayName(event.source)}
         <span style={{ fontWeight: 400, color: ink(0.72) }}>
           {` · ${copy.status}`}
         </span>

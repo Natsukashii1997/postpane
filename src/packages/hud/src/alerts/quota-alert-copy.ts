@@ -4,6 +4,8 @@ import type { IslandEvent, ResetCredits } from "@agent-hud/protocol";
 import {
   countdownCompact,
   dateFormat,
+  dateTime,
+  monthDayTime,
   percent,
   quotaPercent,
   relativeWeekdayTime,
@@ -330,5 +332,44 @@ export function signInCopy(
           ),
     /** The folded tag, in red. */
     chip: say(language, "需要登录", "Sign in"),
+  };
+}
+
+/** A task's name without its note in brackets, for the folded tag:
+ * "周报（新结构·并跑）" → "周报". */
+export const cronShortName = (name: string) =>
+  name.split(/[（(]/)[0]?.trim() || name;
+
+/** A failed Hermes scheduled task's strip (owner's pick 甲, issue #114): the
+ * task, a framed red "失败", then when the run failed and when it runs next. */
+export function cronFailedCopy(event: IslandEvent, settings: FormatSettings) {
+  const { language, calendar } = settings;
+  const at = (iso: string | null | undefined) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const failed = at(event.failedAt);
+  const next = at(event.nextRunAt);
+  const parts = [
+    failed == null
+      ? null
+      : say(
+          language,
+          `${dateTime(failed, calendar, language)} 失败`,
+          `Failed ${dateTime(failed, calendar, language)}`,
+        ),
+    next == null
+      ? null
+      : say(
+          language,
+          `下次 ${monthDayTime(next, calendar, language)}`,
+          `Next ${monthDayTime(next, calendar, language)}`,
+        ),
+  ].filter((part): part is string => part != null);
+  return {
+    who: event.title || "Hermes",
+    status: event.message?.trim() || say(language, "没跑成", "Did not run"),
+    tag: say(language, "失败", "Failed"),
+    when: parts.length ? parts.join(" · ") : null,
   };
 }

@@ -5,6 +5,7 @@ import { agentVendorName } from "../model";
 import { clientDisplayName, projectName } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
 import {
+  cronShortName,
   quotaAlertCopy,
   resetCreditCopy,
   signInCopy,
@@ -51,6 +52,12 @@ export function quotaChipLabels(
     return {
       who: event.title ?? "",
       status: event.message ?? (zh ? "断线" : "Offline"),
+      tone: "critical",
+    };
+  if (event.kind === "cron-failed")
+    return {
+      who: cronShortName(event.title ?? ""),
+      status: zh ? "失败" : "Failed",
       tone: "critical",
     };
   if (event.kind === "sign-in-needed")
@@ -118,6 +125,12 @@ export function compactAlertLabels(
     return {
       who: event.title ?? agentVendorName(event.source),
       status: event.message ?? (zh ? "断线" : "Offline"),
+    };
+  }
+  if (event.kind === "cron-failed") {
+    return {
+      who: cronShortName(event.title ?? agentVendorName(event.source)),
+      status: zh ? "失败" : "Failed",
     };
   }
   if (event.kind === "sign-in-needed") {
@@ -317,7 +330,8 @@ export function CompactAlertView({
     ? undefined
     : event?.kind === "completion" ||
         event?.kind === "sign-in-needed" ||
-        event?.kind === "bot-offline"
+        event?.kind === "bot-offline" ||
+        event?.kind === "cron-failed"
       ? onOpen
       : onDismissAndStats;
 
