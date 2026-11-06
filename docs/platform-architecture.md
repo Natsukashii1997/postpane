@@ -82,6 +82,7 @@ stubs are the list of open work for that operating system.
 | MCP relay | `crates/host/src/cli.rs` | `cli/unix.rs` (exec), `cli/windows.rs` (waits on the server) | `serve` |
 | Picture capture | `crates/host/src/capture.rs` | `capture/macos.rs`, `capture/windows.rs`, `capture/linux.rs` | `capture` |
 | Display changes | `crates/host/src/screens.rs` | `screens/macos.rs`, `screens/windows.rs`, `screens/linux.rs` | `install`, `shutdown` |
+| 磁盘瘦身 pendant | `crates/host/src/disk_slim/mod.rs` | `disk_slim/macos.rs` (status file under Application Support, the app in `/Applications`, `open -g` for its link), `disk_slim/windows.rs` and `disk_slim/linux.rs` (no such app: nothing hangs) | `status_file`, `installed`, `open_link` |
 
 `pnpm run check:platform` (`src/tooling/check-platform-boundary.mjs`) enforces
 the rule. Outside files and folders named `macos`, `windows`, `linux` or

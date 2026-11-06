@@ -476,7 +476,8 @@ a:focus-visible {
   }
 }
 
-/* 随手记 pendant on the resting HUD (hud/src/scene/AppPendant.tsx). */
+/* 随手记 pendant on the resting HUD (hud/src/scene/AppPendant.tsx); its shell
+ * (PendantShell.tsx) and these lift / press / sway rules serve every pendant. */
 .hud-app-pendant-ball {
   transition: transform 0.18s ease;
 }
@@ -592,6 +593,239 @@ a:focus-visible {
     box-shadow:
       0 0 0 2px rgba(242, 200, 121, 0.8),
       0 0 12px 3px rgba(242, 200, 121, 0.4);
+  }
+}
+
+/* 磁盘瘦身 pendant, hung under 随手记 the same way (hud/src/scene/DiskPendant.tsx,
+ * #155; owner's design 2026-11-06). The cat's shell rules above (lift, press,
+ * motions only under the pointer) apply; these are the broom ghost's own. */
+.hud-disk-lid,
+.hud-disk-spark,
+.hud-disk-bubble,
+.hud-disk-sheen {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+/* Its eyes close to curved slits: a lid of the ghost's white over each eye,
+ * a dark arc across it. */
+.hud-disk-lid {
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+}
+.hud-disk-lid-l {
+  background: radial-gradient(circle at 50% 30%, #ffffff, #f2f4f8);
+}
+.hud-disk-lid-r {
+  background: radial-gradient(circle at 50% 30%, #f4f8fe, #e2edfb);
+}
+.hud-disk-lid::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  top: 28%;
+  height: 34%;
+  border-bottom: 1px solid #1c2633;
+  border-radius: 0 0 50% 50% / 0 0 100% 100%;
+}
+.hud-disk-spark {
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    #ffffff 0,
+    rgba(214, 246, 255, 0.75) 20%,
+    rgba(120, 220, 250, 0.25) 42%,
+    transparent 62%
+  );
+}
+.hud-disk-bubble {
+  opacity: 0;
+  background:
+    radial-gradient(
+      circle at 34% 30%,
+      rgba(255, 255, 255, 0.95) 0 10%,
+      rgba(255, 255, 255, 0) 24%
+    ),
+    radial-gradient(
+      circle,
+      rgba(200, 240, 255, 0.3) 0 50%,
+      rgba(255, 255, 255, 0.98) 62%,
+      rgba(150, 225, 255, 0.55) 70%,
+      transparent 74%
+    );
+}
+.hud-disk-sheen {
+  inset: 0;
+  overflow: hidden;
+}
+.hud-disk-sheen::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 46%;
+  background: linear-gradient(
+    100deg,
+    transparent 0,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 80%,
+    transparent 100%
+  );
+  transform: translateX(-140%) skewX(-12deg);
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-pendant-sway {
+  animation: hud-pendant-sway 7s ease-in-out -1.6s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-lid {
+  animation: hud-disk-blink 5.2s ease-in-out -4.6s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-spark-a {
+  animation: hud-pendant-twinkle 8s ease-in-out -3.4s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-spark-b {
+  animation: hud-pendant-twinkle 8s ease-in-out -7.4s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-bubble {
+  animation: hud-disk-bubble 4.6s ease-out -4.2s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]
+  .hud-app-pendant-ball:hover
+  .hud-disk-sheen::before {
+  animation: hud-disk-sheen 5s ease-in-out -4.3s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-open="true"] .hud-app-pendant-ball {
+  box-shadow: 0 0 0 2px rgba(110, 214, 240, 0.55);
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-open="true"]
+  .hud-app-pendant-ball {
+  animation: hud-disk-halo 2.6s ease-in-out infinite;
+}
+/* Space left (丙 号码牌): a small plate on the ring's top-left with the GiB
+ * left, orange when low, red when critical; critical also makes the ghost
+ * hop now and then while nobody touches it. */
+.hud-disk-badge {
+  --s: var(--hud-disk-s, 1);
+  position: absolute;
+  left: calc(-5px * var(--s));
+  top: calc(-4px * var(--s));
+  z-index: 2;
+  box-sizing: border-box;
+  height: calc(14px * var(--s));
+  min-width: calc(22px * var(--s));
+  padding: 0 calc(3.5px * var(--s));
+  border-radius: calc(7px * var(--s));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family:
+    "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: calc(11px * var(--s));
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    0 0 0 calc(1.5px * var(--s)) #ffffff,
+    0 calc(1px * var(--s)) calc(3px * var(--s)) rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.hud-app-pendant[data-level="low"] .hud-disk-badge {
+  background: #ff9e0a;
+}
+.hud-app-pendant[data-level="critical"] .hud-disk-badge {
+  background: #ff453b;
+}
+.hud-app-pendant[data-app="disk"][data-level="critical"][data-motion="on"]:not(
+    :hover
+  )
+  .hud-pendant-sway {
+  animation: hud-disk-hop 6s ease-in-out -5s infinite;
+}
+/* Twice, quicker than the cat and out of step with it. */
+@keyframes hud-disk-blink {
+  0%,
+  86%,
+  92%,
+  100% {
+    transform: scaleY(0);
+  }
+  88.5%,
+  94.5% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0);
+  }
+}
+/* Off the broom's head, up and right, popping by the big bubble. */
+@keyframes hud-disk-bubble {
+  0%,
+  52% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.35);
+  }
+  58% {
+    opacity: 1;
+    transform: translate(4%, -20%) scale(0.7);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(42%, -160%) scale(1);
+  }
+  90% {
+    opacity: 0.95;
+    transform: translate(56%, -215%) scale(1.05);
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: translate(60%, -230%) scale(1.5);
+  }
+}
+@keyframes hud-disk-sheen {
+  0%,
+  80%,
+  100% {
+    transform: translateX(-140%) skewX(-12deg);
+  }
+  98% {
+    transform: translateX(330%) skewX(-12deg);
+  }
+}
+@keyframes hud-disk-halo {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(110, 214, 240, 0.45),
+      0 0 6px 1px rgba(110, 214, 240, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(110, 214, 240, 0.85),
+      0 0 12px 3px rgba(110, 214, 240, 0.42);
+  }
+}
+@keyframes hud-disk-hop {
+  0%,
+  84%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  87% {
+    transform: translateY(-4px) rotate(-6deg);
+  }
+  90% {
+    transform: translateY(0) rotate(4deg);
+  }
+  93% {
+    transform: translateY(-2px) rotate(-2deg);
+  }
+  96% {
+    transform: translateY(0) rotate(0);
   }
 }
 

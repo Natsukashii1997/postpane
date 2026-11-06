@@ -3,6 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { HUDScene } from "@agent-hud/hud/HUDScene";
 import type {
+  DiskSlimState,
   HUDDragStartArgs,
   HUDFlight,
   HUDFlightCommand,
@@ -373,6 +374,52 @@ export default function NativeHUDSurface({
       invoke<boolean>("toggle_float_notes", { anchor }),
     [],
   );
+  // 磁盘瘦身's status file (#155): read every 30 s, and every second for a
+  // while after its pendant is clicked or while its panel shows, so the halo
+  // follows the panel when it is closed with Esc or a click elsewhere.
+  const [diskSlim, setDiskSlim] = useState<DiskSlimState | null>(null);
+  const diskSlimPoll = useRef({ fastUntil: 0, open: false, now: () => {} });
+  useEffect(() => {
+    if (!isTauri()) return;
+    const poll = diskSlimPoll.current;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let last = "";
+    const read = () => {
+      clearTimeout(timer);
+      void invoke<DiskSlimState>("disk_slim_status")
+        .then((status) => {
+          if (stopped) return;
+          poll.open = status.panelOpen;
+          const key = JSON.stringify(status);
+          if (key !== last) {
+            last = key;
+            setDiskSlim(status);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (stopped) return;
+          const fast = poll.open || performance.now() < poll.fastUntil;
+          timer = setTimeout(read, fast ? 1000 : 30000);
+        });
+    };
+    poll.now = read;
+    read();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      poll.now = () => {};
+    };
+  }, []);
+  const toggleDiskSlim = useCallback(
+    async (anchor: { x: number; y: number; width: number; height: number }) => {
+      await invoke("toggle_disk_slim", { anchor });
+      diskSlimPoll.current.fastUntil = performance.now() + 10000;
+      setTimeout(() => diskSlimPoll.current.now(), 600);
+    },
+    [],
+  );
   // Statistics opens on Tokens (Open's footer button), or where a session row points.
   const stats = useCallback((target?: { tab?: string; sessionId?: string }) => {
     void invoke("open_statistics", {
@@ -634,6 +681,8 @@ export default function NativeHUDSurface({
       height={geometry?.canvas.height ?? window.innerHeight}
       onConfigure={configure}
       onFloatNotes={floatNotes}
+      diskSlim={diskSlim}
+      onDiskSlim={toggleDiskSlim}
       onStats={stats}
       update={update}
       onUpdate={openUpdate}

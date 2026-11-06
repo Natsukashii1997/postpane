@@ -18,6 +18,7 @@ mod cli;
 mod coordinator;
 mod deepseek_plugin;
 mod demo;
+mod disk_slim;
 pub mod extension;
 mod float_notes;
 mod handoff;
@@ -929,6 +930,8 @@ pub fn run_with_options(
             hud::hud_text_focus,
             hud_show_main,
             float_notes::toggle_float_notes,
+            disk_slim::disk_slim_status,
+            disk_slim::toggle_disk_slim,
             quit_app,
             open_statistics,
             take_statistics_target,
