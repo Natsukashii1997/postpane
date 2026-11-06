@@ -243,7 +243,8 @@ impl Desk {
     pub(crate) fn projection(&self, now: i64) -> Value {
         let late = {
             let mut book = self.lock();
-            book.expire(now, &timed_out()) | book.overdue(now, &no_answer(), &no_handover())
+            book.expire(now, &timed_out())
+                | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
         };
         if late {
             self.change(|_| ());
@@ -702,9 +703,18 @@ impl Desk {
         if let Err(first) = send() {
             self.change(|book| book.trouble(id, &back_retry(&first), now));
             if let Err(again) = send() {
+                // A session Claude paused once its turn was over cannot take
+                // words now: they wait in its queue and go in once it is
+                // opened (L5 run 1, 2026-11-07).
+                if lines.leave(&handoff.claude_session, &text).is_err() {
+                    return self.change(|book| {
+                        book.trouble(id, &retry_failed(&again), now);
+                        book.stop(id, &back_failed(), true, now)
+                    });
+                }
                 return self.change(|book| {
-                    book.trouble(id, &retry_failed(&again), now);
-                    book.stop(id, &back_failed(), true, now)
+                    book.trouble(id, &queued_instead(&again), now);
+                    book.returned(id, StepKind::Back, &text, true, now) && book.queued(id, now)
                 });
             }
         }
@@ -879,6 +889,23 @@ fn retry_failed(error: &str) -> String {
     l10n::text(
         &format!("重试仍失败：{error}"),
         &format!("Failed again: {error}"),
+    )
+}
+fn queued_instead(error: &str) -> String {
+    l10n::text(
+        &format!("重试仍失败：{error}；改为排进这个会话的待发送队列，打开会话就会继续"),
+        &format!(
+            "Failed again: {error}; queued for the session instead, to go in once it is opened"
+        ),
+    )
+}
+fn no_wake() -> String {
+    l10n::text(
+        &format!(
+            "转回的意见排队 {} 分钟没被会话领走，自动往返停下，交还常浩",
+            handoffs::QUEUE_WAIT_MS / 60_000
+        ),
+        "The queued answer was not taken up within an hour; left to you",
     )
 }
 fn no_answer() -> String {
@@ -1830,6 +1857,8 @@ mod tests {
         let fail = &shown[0]["steps"].as_array().unwrap()[steps.len() - 2];
         assert_eq!(fail["text"], back_retry("会话的待发送目录写不进"));
 
+        // A session Claude paused (its turn over, the plugin quiet): the
+        // words wait in its queue and go in once it is opened (#72, L5 run 1).
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         lines.reply_fails.set(2);
@@ -1837,6 +1866,52 @@ mod tests {
         desk.observe(&turn("complete", "结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         assert_eq!(replies(&lines), 0);
+        let left = lines
+            .sent
+            .borrow()
+            .iter()
+            .filter(|s| s.0 == "leave")
+            .count();
+        assert_eq!(left, 1, "queued for the session");
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["auto"], true, "still going by itself");
+        assert_eq!(shown[0]["queuedAt"], 5);
+        let steps = kinds(&desk, 5);
+        assert_eq!(
+            steps[steps.len() - 3..],
+            [
+                ("fail".to_owned(), true),
+                ("fail".to_owned(), true),
+                ("back".to_owned(), true)
+            ]
+        );
+        let shown = desk.projection(5);
+        let second = &shown[0]["steps"].as_array().unwrap()[steps.len() - 2];
+        assert_eq!(second["text"], queued_instead("会话的待发送目录写不进"));
+        assert!(!desk.drive(&lines, 6), "queued once");
+        // Claude hands the next round over: no longer waiting in the queue.
+        desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            Some("按意见改完"),
+            "第二轮",
+            false,
+            7,
+        )
+        .unwrap();
+        assert!(desk.projection(7)[0].get("queuedAt").is_none());
+
+        // Not even queued: left to the person.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        lines.reply_fails.set(2);
+        lines.leave_fails.set(true);
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
         let shown = desk.projection(5);
         assert_eq!(shown[0]["phase"], "replied");
         assert_eq!(shown[0]["halt"], back_failed());
@@ -1849,6 +1924,18 @@ mod tests {
                 ("stop".to_owned(), true)
             ]
         );
+
+        // Queued and never taken up within the hour: left to the person.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        lines.reply_fails.set(2);
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        assert!(desk.projection(5 + handoffs::QUEUE_WAIT_MS)[0]["halt"].is_null());
+        let shown = desk.projection(6 + handoffs::QUEUE_WAIT_MS);
+        assert_eq!(shown[0]["halt"], no_wake());
+        assert_eq!(shown[0]["phase"], "returned");
     }
 
     #[test]

@@ -41,7 +41,6 @@
 - 证据：2026-11-04 本轮安装，补跑 `ditto` 后成功，应用 22:25:58 重新启动；旧版备份在 `evidence/2026-11-04-receipt-quota/PostPane-before.app`。
 - 升级：未升级。
 
-
 ## L-04 云端会话列表里也有本机会话，不过滤会重复（2026-11-05）
 
 - 现象：`api.anthropic.com/v1/sessions` 返回的会话里，除了在 Anthropic 服务器上跑的云端会话，还有本机开着远程控制的会话（标题与本机会话相同），直接全取会和本机记录读出的会话重复。
@@ -115,7 +114,6 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-launch-attribution/test.log`（第一次，失败）、`test2.log`（第二次，Rust 734 passed / 0 failed）；PR #170 描述。
 - 升级：未升级。
 
-
 ## L-13 不提交的自查页放在 `src/` 下，`pnpm run check` 卡在格式检查（2026-11-07）
 
 - 现象：#171 收尾跑 `pnpm run check` 退出 1，只报 `src/apps/desktop/relay-real/main.tsx`、`vite.config.ts` 两个文件格式不对；这两个是不提交的真实组件自查页，本 PR 的改动全都格式化过。
@@ -123,3 +121,13 @@
 - 正确做法：跑全量前先 `git status --short` 看 `src/` 下有没有未跟踪的文件；自查页用完先备份到证据目录再删，或在跑测试前对它也 `prettier --write`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-relay-toss/check-2.log`（删页后重跑的那次覆盖了失败那次，失败输出见本条现象）；自查页备份在同目录 `relay-real-page/`。
 - 升级：未升级。
+
+## L-14 自动转回 Claude 时，会话一轮做完就被桌面版结束了，直接送话必败（2026-11-07）
+
+- 现象：L5 第一批真实任务里，ChatGPT 回信「需修改」，驿窗自动转回 Claude，两单都是重试一次仍失败，按规则停下交还常浩。
+  - C（github-center #3，接力 `h1a1b1e9404a00`）01:34:42 失败，原因写「这个会话有一阵没回应 Agent HUD 插件了，可能被 Claude 暂停了」；
+  - D（my-skills PR #16，接力 `h1a1b1f62cc701`）01:49:42 失败，原因写「这个会话还没加载 Agent HUD 插件」。
+- 根因：直接送话（`reaches` + `reply`）要求会话 20 秒内签到过（`CHECK_IN_LIFETIME`）。桌面版会话一轮做完后不久，进程就结束了：D 的签到文件 01:46:37 被写成 `{"ended": …}`，它的那一轮 01:45 做完；C 的签到也停了，01:58 会话再被打开时才又签到。ChatGPT 审一轮要几分钟，回信到的时候，做事的会话几乎总是已经结束。D 的提示说「还没加载插件」不准确：`last_check_in` 遇到已结束的会话返回空，`unreachable` 就落到了「没加载」这一支。
+- 正确做法：自动转回两次失败后，不直接停，改为把同一段话排进该会话的待发送队列（`Lines::leave`，与左滑发起同一机制），记 `queuedAt`，卡上提示「打开 Claude 会话继续」；排队也失败、或排了 1 小时没人领，才交还常浩。插件在会话再次运行时会领走排队的话。
+- 证据：`~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里上面两条接力的 `fail` / `stop` 步；`~/Library/Application Support/app.postpane.mac/claude-channel/sessions/7c4b4704-….json` 的 `ended`；修复 PR 见本条之后的交接。
+- 升级：已写成测试 `handoff::tests::words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person`（改为排队，排队失败或 1 小时没人领才交还）。

@@ -99,7 +99,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
   - 「结论：通过」：自动结束接力，`end` 步带 `auto`；
   - 「结论：需修改」且审过不到 `ROUNDS`（2）轮：把回信全文转回 Claude（与「转回 Claude」同一段话），`back` 步带 `auto`；Claude 改完自己调 `relay_to_chatgpt`，进入下一轮；
   - 第 2 轮仍「需修改」，或回信没写结论：停下交还常浩（`stop` 步，`halt` 写原因），卡上照常可「转回 Claude」「结束接力」。
-- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）；两次都失败就停下交还常浩。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。
+- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）。两次都失败（最常见的是 Claude 桌面版在会话一轮做完、空闲几分钟后把它暂停了，插件不再签到；2026-11-07 L5 第一单实测碰到），改为把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt`，阶段照常是 `returned`、自动往返不停。常浩在 Claude 里打开那个会话，插件就会提交，卡上和「正在进行」写「意见已排队 · 打开 Claude 会话继续」。排队失败才停下交还常浩；排队 `QUEUE_WAIT_MS`（1 小时，与插件的留话寿命一致）没被领走也停下交还常浩。Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。
 - 记录：每一步的 `at`、谁做的（`auto` 表示驿窗自动做的，没有就是常浩点的）、出错原文与处理方式（`fail` / `stop` 的 `text`）都在 `handoffs.json`，每轮耗时由相邻步骤的时间相减得出。
 
 ### 本机工具通道

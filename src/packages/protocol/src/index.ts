@@ -832,6 +832,9 @@ export interface Handoff {
   auto?: boolean;
   /** Why the auto round trip stopped, while it is off. */
   halt?: string | null;
+  /** When ChatGPT's answer was queued for a Claude session paused once its
+   * turn was over: it goes in once the session is opened. */
+  queuedAt?: number | null;
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the
