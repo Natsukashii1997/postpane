@@ -1145,7 +1145,7 @@ export function HUDScene({
               pin={pin}
             />
           </div>
-          {config.mode === "logos" && onFloatNotes && !dragVisual && (
+          {config.mode === "logos" && onFloatNotes && (
             <AppPendant
               strip={strip}
               edge={edge}
@@ -1153,7 +1153,8 @@ export function HUDScene({
               light={light}
               zh={snapshotLanguage(snapshot) === "zh"}
               room={{ width: window.innerWidth, height: window.innerHeight }}
-              still={reduceMotion}
+              still={reduceMotion || dragVisual}
+              carried={dragVisual}
               onToggle={onFloatNotes}
             />
           )}
