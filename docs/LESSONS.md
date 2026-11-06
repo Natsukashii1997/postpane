@@ -98,3 +98,11 @@
 - 正确做法：注入脚本只观察、不在 MutationObserver 回调里改 DOM（也不改 `document.title`）；要藏页面元素用按类名生效的样式表（`document.adoptedStyleSheets`），不写元素的行内样式；需要页面做事时由壳在回调之外 `eval` 页面自带的接口。验证顺序：先用 `swiftc` 写个最小 WKWebView 探针跑一遍（同一套 WebKit，几秒出结果），再打包装机；装机诊断用标题通道，页面有 `connect-src 'self'` 时往本机端口上报会被拦。
 - 证据：2026-11-06 14:41–15:16 本会话；诊断日志 `~/Library/Application Support/postpane/evidence/2026-11-06-notes-collapse/diag.log`、`diag2.log`。
 - 升级：未升级（跨项目也成立，可提议提升为全局坑）。
+
+## L-11 真屏点击测试中途锁屏或换了显示器，坐标点到别的应用（2026-11-06）
+
+- 现象：#155 用 CGEvent 发真实点击测挂件。第一轮点开后屏幕锁了，后面几步 `screencapture` 报 `could not create image from rect`，状态回读前后矛盾；解锁后外接屏已拔，接着按外接屏坐标点「面板外」和按 Esc，点到了笔记本屏上的 Chrome 窗口、Esc 也发给了 Chrome。
+- 根因：坐标和截图区域是按开测前那块屏写死的；常浩远程控制、人不在电脑前，屏幕会自动锁，也可能随时插拔显示器。CGEvent 不管屏幕状态，照样发到当时光标下的应用。
+- 正确做法：每一组真实点击前回读两件事，任一不符就停：锁屏 `Quartz.CGSessionCopyCurrentDictionary().get('CGSSessionScreenIsLocked')` 为空；显示器 `CGGetActiveDisplayList` 的尺寸和窗口位置（`CGWindowListCopyWindowInfo`）与写坐标时一致。「面板外」的点击点到菜单栏空白处（如 `(1100, 10)`），不点别的应用窗口；动鼠标前先问常浩能否接管约 1 分钟。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-06-disk-pendant/`（`screens/`、`windows.swift`、`click.swift`）；本会话 2026-11-06 16:0x–16:45。
+- 升级：未升级（与 disk-slim L-11 同属「真屏点击」一类，可一起提议提升为全局坑）。

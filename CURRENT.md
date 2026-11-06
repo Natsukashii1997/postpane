@@ -4,6 +4,22 @@
 
 
 
+## 磁盘瘦身挂件串挂在随手记猫球下（2026-11-06，Claude，常浩定稿「串挂同款」、悬停动效一版、空间提示「丙 号码牌」，说「按计划开工」；PR #159 本地全量通过，按授权 squash 合并 `cbca109`；已从合并后的 main 打包安装、回读一致）
+
+- 时间：开工 `2026-11-06 14:43`（按本会话记录，接上一会话写好的代码 `0643112`）；本节写于 `2026-11-06 17:05`。来由：把本机另一个应用「磁盘瘦身」的扫帚浮游兽球挂进驿窗侧栏，issue #155。
+- 改了哪些文件（PR #159）：`host/src/disk_slim/{mod,macos,windows,linux}.rs`（读 `~/Library/Application Support/disk-slim/status.json`，超 1 小时不显示号码牌；点挂件 `open -g diskslim://panel/toggle?x=&y=&w=&h=` 并查退出码）、`host/src/lib.rs`（注册两个 async 命令）；`hud/src/scene/PendantShell.tsx`（从随手记挂件抽出的共用外壳，猫球 DOM 不变）、`DiskPendant.tsx`、`AppPendant.tsx`、`disk-slim.ts`（号码牌数字）、`app-pendant.ts`（`pendantChain` 整串排布）、`HUDScene.tsx`、`app/src/HUDSurface.tsx`（每 30 秒读状态，点击后 10 秒内和面板开着时每秒读）、`ui/src/global.css`（`hud-disk-*`）、`docs/platform-architecture.md`；测试 `hud/test/app-pendant.test.ts`、`disk-slim.test.ts`。
+- 测试：变基到 `848d58b` 后 `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 721 passed / 0 failed，含 `disk_slim::tests` 5 项；`ℹ pass 280` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 4` / `ℹ fail 0`。合并前 main 只多了两节交接（CURRENT.md），代码与测过的一致。
+- 验证：装机后真屏（外接 1920×1080 与笔记本 1470×956 都看过），CGEvent 发真实点击、`CGWindowListCopyWindowInfo` 与 status.json 回读：① 静止：扫帚球串在猫球下，同款虚线挂绳与纸色垫圈，红牌随可用空间「28G」→「25G」；② 悬停录屏逐帧：上浮放大、晃动、眨眼、星光、扫帚泡泡可见，反光与「连眨两下」在 1 倍屏上只有几个像素，没逐一认清；③ 点挂件面板开在挂件左侧、冰蓝光圈亮、前台应用不变；再点挂件、点菜单栏空白处、按 Esc 三种收起都回读面板窗口 0 个、`panelOpen:false`，截图光圈熄灭；面板开着时退出磁盘瘦身，`panelOpen` 写回 false，光圈熄灭；④ 告急时不碰它，录屏约每 6 秒跳一下。CPU（主进程 + GPU + 两个 WebContent + Networking，30 秒平均，脚本 `cpu.sh`）：告急跳动 29.0%、27.9%；同一包把状态临时改成充足（无号码牌、不跳）29.6%。跳动本身的开销在误差内。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-06-disk-pendant/screens/`（`01-rest`、`21-laptop-pendant`、`hover-video-sheet`、`02-open`、`35-halo-sheet`、`36-hop-sheet`、`42-quit-halo-off`、`50-main-installed` 等）；CPU 结果 `cpu-hop-*.txt`、`cpu-ok-nohop.txt`。
+- 发布与回读：从合并后的 main `cbca109` 打包；16:59 退出旧应用后 `ditto` 安装并启动，主程序 `shasum` 回读 `5775129c76b0` 与产物一致，签名 `certificate leaf = H"b773068e…"`；装前备份 `evidence/2026-11-06-disk-pendant/PostPane-before2.app`（#158 的 main 版）。回滚：退出后 `ditto` 该备份到 `/Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 磁盘瘦身那一半在 disk-slim 仓库 `feat/postpane-pendant`（`d1110ad`、`751ae8f`、`36f0aee` 退出前收起面板、`249c663` 悬浮球默认关），按约定不合并、不推送；已重装，本机悬浮球开关按常浩要求设为关。磁盘瘦身每次重装签名都变，「完全磁盘访问权限」要删掉重加。
+  - 本轮装机两次被并行会话覆盖（#154 15:01、#158 15:43），按 L-05 等它们合并后从最新 main 重打。
+  - 真屏测试中途锁屏、拔了外接屏，按旧坐标点到 Chrome 一次、对 Chrome 发了一次 Esc，已告知常浩（新坑 L-11）。
+  - 审查留下未改：L1 号码牌伸出外框几个点点不到；L2 多块屏的挂件都亮光圈、都每秒轮询；L4 锚点带悬停放大的变形（与猫球一致）；L6 混合 DPI 未实测。
+  - worktree `155-disk-pendant` 本节推送后删除。
+- 本轮新坑：L-11
+
 ## 小收据等待线改为 1.5 秒（2026-11-06，Claude，常浩看了 #156 的 2 秒后说「改成1.5s」；PR #158 本地全量通过，按授权 squash 合并 `848d58b`；已从合并后的 main 打包安装、回读一致）
 
 - 时间：开工 `2026-11-06 15:20`（按本会话记录）；本节写于 `2026-11-06 15:46`。来由：#156 把等待线从 0.8 秒拉到 2 秒，常浩定为 1.5 秒。
