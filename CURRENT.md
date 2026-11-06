@@ -4,6 +4,18 @@
 
 
 
+## 接力批 C 传信动效「纸飞机 + 票根印章」合并装机（2026-11-07，Claude，常浩定稿「乙的纸飞机 + 甲的票根印章」后看分批计划说「按计划开工」；PR #172 全量通过，按授权 squash 合并 `936850a`；已从与该 main 同树的分支打包安装、回读一致）
+
+- 时间：开工 `2026-11-07 01:14`（本会话接手收尾；代码由会话「驿窗接力｜传信动效梳理与优化」在 WIP 提交 `1d7b42b` 写完）。来由：#171，设计稿 https://claude.ai/artifact/1VZALBQ4q2HuPJdiDoVbhp 第 2 版「定稿」，取代原「乙 · 侧栏传信弹出卡」；常浩定时长约 2.5 秒、航线收窄，「回」蜡封只在「已回复」时显示，不做进度细票签。
+- 改了哪些文件：`src/crates/host/src/handoff.rs`（`Toss` / `toss(steps, seen)` 按接力新步骤决定飞行：ask 时 Claude→ChatGPT，reply 时飞回，fail 按去向半路掉落；`Desk.tossed` 启动时预填，重启不重飞）、`src/crates/host/src/lib.rs`（`fly_tosses` 发 `hud:flight`）、`src/packages/hud/src/scene/flight-plan.ts` 与 `FlightLayer.tsx`（约 2.5 秒、航线收窄；停在侧栏只动小人，起飞甩手、送达接住；刘海模式不变）、`src/packages/hud/src/relay-stamps.ts`、`scene/RelayStamps.tsx`、`scene/HUDMarkStrip.tsx`、`model.ts`（ChatGPT 票根「审」章、Claude 票根左上角「回」蜡封；「答 / 批」红章 > 「审」 > 读数）、测试 `flight-plan.test.ts`、`relay-stamps.test.ts`；`docs/ROADMAP.md`、本文件摘要行改为本定稿；`docs/LESSONS.md` 新增 L-13。
+- 测试：`pnpm run check` exit 0（第一次 exit 1，只因未跟踪的自查页 `relay-real/` 没格式化，备份后删掉重跑，见 L-13）；`pnpm test` exit 0：Rust 合计 737 passed / 0 failed，前端 `ℹ pass 299` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 8` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-07-relay-toss/check-2.log`、`test-2.log`、`node-test-2.log`。
+- 验证：真实组件自查页（`HUDScene` 原样）用无头浏览器逐帧截图：四条边的送出、回信、送不到（前一会话做，沿用其结果，`frames/`）；本会话补看停在上边、下边时的「回」蜡封（在票根左上角、完整可见、不压读数）与刘海模式送出、回信、送不到、飞完收回（`frames2/`）。实机：装机后本会话调一次 `relay_to_chatgpt`（`h1a1b1fed89e00`），侧栏右边 ChatGPT 票根由「待你看」换成蓝色「审」章，Claude 小人出「!」；Claude 票根左上角的「回」蜡封实机可见（来自另几单仍处于「已回复」的接力）。**未验证**：Claude→ChatGPT 那一趟纸飞机，截图约 1.6 秒一帧没拍到；回信飞回，因为 ChatGPT 从 01:54 到 02:19 一直没回，本单停在「已送达」，没等到。
+- 截图：`evidence/2026-11-07-relay-toss/frames2/`、`real/send-zoom.png`（「审」章盖上前后）、`real/now.png`、`real/reply-sheet.png`（等回信的录屏抽帧）。
+- 发布与回读：装前 `98ea78960937`，已装 `0719f477cba0`，产物与已装一致，签名 leaf `H"b773068e`；没有「想访问文稿」弹窗。之后 main 又合了 #173（`1852338`），已装的这份不含它；#173 的会话已打好包含 #172 的产物、为不打断本单实测暂缓装机，见下一节。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-relay-toss/PostPane-98ea78960937.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：① 实机回信飞回与「回」蜡封随本单出现未看到，等 ChatGPT 回了再看一眼，或常浩下次接力时顺手看。② 范围外：ChatGPT 对本单 25 分钟无回信、Chrome 在运行；快照里另两单（GitHub 快速中心 #3、my-skills PR #16）回信后紧跟两次 fail 和 stop，与常浩在会话里反映的「需修改没自动转回 Claude」可能同源，侧栏已有会话「驿窗接力｜需修改自动转回 Claude」在查，本单没碰。③ 「回」蜡封按整份快照里有没有处于「已回复」的接力来显示，不分是哪个 Claude 会话的接力；多单并行时 Claude 票根上的「回」不说明是哪一单。④ ChatGPT 票根回信后读数恢复成「待你看」（#145），未改。⑤ 已清理：自查页 `relay-real/`（备份在 `evidence/2026-11-07-relay-toss/relay-real-page/`）、预览 worktree `relay-toss-preview` 与分支（预览补丁备份在同目录 `preview-worktree/`）、`.claude/launch.json` 的 `relay-toss`、`relay-real` 两条配置、1452 / 1454 端口的两个预览服务。
+- skill 进化：无。
+- 本轮新坑：L-13。
+
 ## 自动转回失败改排队；L5 批 3 真实任务跑到一半（2026-11-07，Claude，常浩选「排队等唤醒」；PR #173 全量通过，按授权 squash 合并 `1852338`；已打包、未装机）
 
 - 时间：开工 `2026-11-07 01:55`（按本会话记录，常浩回「排队等唤醒」）；本节写于 `2026-11-07 02:20`。来由：L5 批 3 里，C、D 两单的「自动转回 Claude」都失败停下。原因是做事的 Claude 会话一轮做完后很快被桌面版结束，插件不再签到（L-14）。
