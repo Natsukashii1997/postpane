@@ -97,7 +97,7 @@ test("a dozing cloud breathes full size with a snot bubble and no Z", () => {
   assert.equal(motion.puffs.length, 0);
   assert.equal(motion.sign, null);
   assert.ok(motion.face.open < 0.05);
-  assert.equal(motion.lids, true);
+  assert.equal(motion.lids, "curve");
   assert.ok(Math.max(...radii) > 0.12, `largest ${Math.max(...radii)}`);
   assert.ok(Math.min(...radii) < 0.04, `smallest ${Math.min(...radii)}`);
   assert.ok(popped > 0, "the bubble pops every third breath");
@@ -106,7 +106,42 @@ test("a dozing cloud breathes full size with a snot bubble and no Z", () => {
 test("a hovered sleeper wakes: no bubble, open eyes", () => {
   const motion = run(cloud, { look: "asleep", hovered: true }, 3);
   assert.equal(motion.snot, null);
-  assert.equal(motion.lids, false);
+  assert.equal(motion.lids, null);
+});
+
+test("a thinking cloud wears a thought bubble instead of rising puffs", () => {
+  const motion = run(cloud, { look: "thinking" }, 3);
+  assert.equal(motion.sign, "ellipsis");
+  assert.equal(motion.puffs.length, 0);
+});
+
+test("no news is a haze over a solid cloud, not a fade", () => {
+  let bands = 0;
+  const motion = run(cloud, { look: "no-news" }, 8, 10, (m) => {
+    bands = Math.max(bands, m.mist.length);
+  });
+  assert.ok(motion.opacity > 0.99, `opacity ${motion.opacity}`);
+  assert.ok(motion.haze > 0.2, `haze ${motion.haze}`);
+  assert.equal(bands, 2);
+  assert.ok(motion.face.open < 0.6, `open ${motion.face.open}`);
+  assert.ok(motion.shape!.billow <= 0.03);
+});
+
+test("a long command grows a ring of sixteen light puffs", () => {
+  const motion = run(cloud, { look: "tool-long-command" }, 5.8);
+  assert.equal(motion.puffs.length, 16);
+  assert.ok(motion.puffs.every((puff) => puff.light));
+});
+
+test("editing stamps once every 0.75 s: four stamps a burst", () => {
+  let stamps = 0,
+    down = false;
+  run(cloud, { look: "tool-edit" }, 2.95, 10, (m) => {
+    const pressed = m.pose.scaleY < 0.95;
+    if (pressed && !down) stamps++;
+    down = pressed;
+  });
+  assert.equal(stamps, 4);
 });
 
 test("thinking heaps the top up instead of tilting", () => {
@@ -181,6 +216,6 @@ test("ChatGPT's flower keeps its petals and none of the weather", () => {
     assert.equal(motion.drops.length, 0);
     assert.equal(motion.gray, 0);
     assert.equal(motion.snot, null);
-    assert.equal(motion.lids, false);
+    assert.equal(motion.mist.length, 0);
   }
 });
