@@ -63,6 +63,7 @@
 - 现象：#85 打包装进 `/Applications` 后启动，设置页一直显示「正在读取本机活动…」，屏幕边上的侧栏也没出现；`osascript` 让应用退出也不理。
 - 根因：每次打包是临时签名，签名一变，系统把它当新应用，在读 `~/Documents` 下的项目文件时弹「"PostPane"想访问"文稿"文件夹中的文件」；弹窗没点之前，数据线程卡在 `open()` 系统调用里（`sample <pid>` 可见 `agenthud-data` 线程停在 `projects::project_id → read_to_string → open`），出快照的线程都在等它的锁。
 - 正确做法：装完新包先截屏看有没有这个权限弹窗，有就请常浩点「允许」（隐私权限只能本人点）；不要误判成改动把数据读取弄坏了，也不要反复重装。
+- 根治（2026-11-06，#134）：`tauri.macos.conf.json` 改用登录钥匙串里的本机自用证书 `PostPane Local Signing` 签名，系统改按「标识 `app.postpane.mac` + 证书」认应用（`codesign -d -r- /Applications/PostPane.app` 应显示 `certificate leaf = H"b773068e…"`，不再是 `cdhash`）。换签名后第一次装还要点一次「允许」，之后重装不再弹。证书没信任设置，`security find-identity -v` 不列它属正常，签名照样可用。换电脑或证书丢了打包会报找不到身份：用 openssl 生成带 `extendedKeyUsage = critical,codeSigning` 的自签证书，`security import <p12> -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign` 导入，名字仍叫 `PostPane Local Signing`；证书一换，要再点一次「允许」。
 - 证据：2026-11-05 19:32 截屏 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-gap/d1s.png`，采样 `sample.txt` 同目录。
 - 升级：未升级。
 
