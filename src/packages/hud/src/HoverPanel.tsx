@@ -309,6 +309,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
         data-hud-natural-scroll
         style={{
           overflowY: "auto",
+          // The agents' headings run out to the paper's edges, past this box;
+          // without this a sideways swipe on a row scrolls the whole panel.
+          overflowX: "hidden",
           minHeight: 0,
           flex: "1 1 auto",
         }}
