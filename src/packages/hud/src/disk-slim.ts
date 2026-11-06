@@ -13,8 +13,8 @@ export interface DiskSlimState {
 
 const GIB = 1024 ** 3;
 
-/** The band the broom shows (yellow and sweeping now and then when low, red
- * and sweeping on when critical) with whole GiB left, as 磁盘瘦身's menu bar
+/** The band the broom's colour shows (honey when low, coral when critical)
+ * with whole GiB left, as 磁盘瘦身's menu bar
  * prints it; none while space is fine or the status is unknown (low is under
  * 60 GB, critical under 30 GB, as the app decides). */
 export function diskReading(

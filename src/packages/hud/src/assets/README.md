@@ -41,4 +41,5 @@ disk-slim app, split in three so its broom can show the space left
 (`scene/DiskPendant.tsx`, #160): `disk-slim-base.png` is the ball with the
 broom taken out and the gap filled in, `disk-slim-broom.png` the broom alone
 in place (both 192 px, laid over each other they give the original ball),
-and `disk-slim-bristles.png` the bristles' shape, a mask for tinting them.
+and `disk-slim-bristles.png` and `disk-slim-handle.png` the shapes of its
+bristles and of its handle and band, masks for tinting them.

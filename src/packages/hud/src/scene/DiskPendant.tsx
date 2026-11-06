@@ -6,11 +6,16 @@ import { diskReading, type DiskSlimState } from "../disk-slim";
 export type { DiskSlimState } from "../disk-slim";
 
 // The ball in layers (#160): the ball without its broom, the broom alone in
-// place, and the bristles' shape for tinting them.
+// place, and the shapes of its bristles and of its handle for tinting them.
 const BASE = new URL("../assets/disk-slim-base.png", import.meta.url).href;
 const BROOM = new URL("../assets/disk-slim-broom.png", import.meta.url).href;
 const BRISTLES = new URL("../assets/disk-slim-bristles.png", import.meta.url)
   .href;
+const HANDLE = new URL("../assets/disk-slim-handle.png", import.meta.url).href;
+
+function masked(url: string): CSSProperties {
+  return { WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")` };
+}
 /** Where things sit on the broom ghost's ball, as shares of its side
  * (measured on the 192 px ball): each [x, y, size] of the centre. */
 const LIDS = [
@@ -41,12 +46,12 @@ function spot(x: number, y: number, size: number): CSSProperties {
 /** 磁盘瘦身, hung under 随手记 the same way (#155). A click asks the app to
  * open its own panel beside the ring, or hide it. Under the pointer: the ball
  * lifts, light sweeps the glass, the ghost blinks twice, two stars twinkle, a
- * bubble rises off the broom and the pendant sways; a press squashes it; an
- * ice halo breathes while the panel shows. The broom tells the space left
- * (#160, owner's pick 丙 with a yellow broom): low turns its bristles yellow
- * and it sweeps twice every eight seconds, critical turns them red and it
- * sweeps on, kicking up dust either way, even untouched. All motions are in
- * global.css (`hud-disk-*`); `still` stops them, the colours stay. */
+ * bubble rises off the broom, the broom sweeps twice kicking up dust and the
+ * pendant sways; a press squashes it; an ice halo breathes while the panel
+ * shows. The broom's colour alone tells the space left (#160): honey bristles
+ * on an amber handle when low, light coral on deep coral when critical, the
+ * cyan and white it is drawn in otherwise. All motions are in global.css
+ * (`hud-disk-*`); `still` stops them, the colours stay. */
 export function DiskPendant({
   layout,
   state,
@@ -114,15 +119,8 @@ export function DiskPendant({
       <span className="hud-disk-sweep" aria-hidden="true">
         <span className="hud-disk-broom">
           <img src={BROOM} alt="" draggable={false} />
-          <span
-            className="hud-disk-bristles"
-            style={
-              {
-                WebkitMaskImage: `url("${BRISTLES}")`,
-                maskImage: `url("${BRISTLES}")`,
-              } as CSSProperties
-            }
-          />
+          <span className="hud-disk-bristles" style={masked(BRISTLES)} />
+          <span className="hud-disk-handle" style={masked(HANDLE)} />
         </span>
         {PUFFS.map(([which, x, y, size]) => (
           <span

@@ -703,15 +703,16 @@ a:focus-visible {
   .hud-app-pendant-ball {
   animation: hud-disk-halo 2.6s ease-in-out infinite;
 }
-/* Space left (#160, owner's pick 丙 with a yellow broom): the broom is its
- * own layer over the ball. Low turns the bristles yellow and the broom sweeps
- * twice every eight seconds; critical turns them red and it sweeps on, about
- * once a second; each stroke kicks dust off the bristles. The sweeping runs
- * untouched too; with motion off only the colour shows. */
+/* Space left (#160): the broom is its own layer over the ball and its colour
+ * alone tells the space: honey bristles on an amber handle when low, light
+ * coral on deep coral when critical; the bristles take the colour over their
+ * white, the handle and band take its hue over their cyan. It sweeps only
+ * under the pointer, twice, kicking up dust of its colour. */
 .hud-disk-sweep,
 .hud-disk-broom,
 .hud-disk-broom > img,
-.hud-disk-bristles {
+.hud-disk-bristles,
+.hud-disk-handle {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -729,49 +730,54 @@ a:focus-visible {
 .hud-disk-broom {
   transform-origin: 87% 38.5%;
 }
-.hud-disk-bristles {
+.hud-disk-bristles,
+.hud-disk-handle {
   opacity: 0;
-  mix-blend-mode: multiply;
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
 }
+.hud-disk-bristles {
+  mix-blend-mode: multiply;
+}
+.hud-disk-handle {
+  mix-blend-mode: color;
+}
 .hud-app-pendant[data-app="disk"][data-level="low"] .hud-disk-bristles {
   opacity: 1;
-  background: #ffcc1f;
+  background: #ffd34d;
+}
+.hud-app-pendant[data-app="disk"][data-level="low"] .hud-disk-handle {
+  opacity: 1;
+  background: #e39b12;
 }
 .hud-app-pendant[data-app="disk"][data-level="critical"] .hud-disk-bristles {
   opacity: 1;
-  background: #ff4a36;
+  background: #f5937c;
+}
+.hud-app-pendant[data-app="disk"][data-level="critical"] .hud-disk-handle {
+  opacity: 1;
+  background: #d9604c;
 }
 .hud-disk-puff {
   position: absolute;
   border-radius: 50%;
   opacity: 0;
   pointer-events: none;
+  background: #e6f6fb;
 }
 .hud-app-pendant[data-level="low"] .hud-disk-puff {
-  background: #d9b24a;
+  background: #e0b84a;
 }
 .hud-app-pendant[data-level="critical"] .hud-disk-puff {
-  background: #d6634a;
+  background: #e08670;
 }
-.hud-app-pendant[data-app="disk"][data-level="low"][data-motion="on"]
-  .hud-disk-broom {
-  animation: hud-disk-sweep-now 8s ease-in-out -6.4s infinite;
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-broom {
+  animation: hud-disk-sweep 4.6s ease-in-out -3.4s infinite;
 }
-.hud-app-pendant[data-app="disk"][data-level="low"][data-motion="on"]
-  .hud-disk-puff {
-  animation: hud-disk-puff-now 8s ease-out -6.4s infinite;
-}
-.hud-app-pendant[data-app="disk"][data-level="critical"][data-motion="on"]
-  .hud-disk-broom {
-  animation: hud-disk-sweep-on 1.1s ease-in-out infinite;
-}
-.hud-app-pendant[data-app="disk"][data-level="critical"][data-motion="on"]
-  .hud-disk-puff {
-  animation: hud-disk-puff-on 1.1s ease-out infinite;
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-puff {
+  animation: hud-disk-puff 4.6s ease-out -3.4s infinite;
 }
 /* Twice, quicker than the cat and out of step with it. */
 @keyframes hud-disk-blink {
@@ -838,7 +844,7 @@ a:focus-visible {
   }
 }
 /* Two strokes, then rest. */
-@keyframes hud-disk-sweep-now {
+@keyframes hud-disk-sweep {
   0%,
   74%,
   100% {
@@ -857,7 +863,7 @@ a:focus-visible {
     transform: rotate(0);
   }
 }
-@keyframes hud-disk-puff-now {
+@keyframes hud-disk-puff {
   0%,
   78% {
     opacity: 0;
@@ -881,30 +887,6 @@ a:focus-visible {
   100% {
     opacity: 0;
     transform: translate(-170%, -70%) scale(1.3);
-  }
-}
-@keyframes hud-disk-sweep-on {
-  0%,
-  100% {
-    transform: rotate(-3deg);
-  }
-  45% {
-    transform: rotate(14deg);
-  }
-}
-@keyframes hud-disk-puff-on {
-  0%,
-  30% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.4);
-  }
-  42% {
-    opacity: 0.95;
-  }
-  85%,
-  100% {
-    opacity: 0;
-    transform: translate(-190%, -90%) scale(1.4);
   }
 }
 
