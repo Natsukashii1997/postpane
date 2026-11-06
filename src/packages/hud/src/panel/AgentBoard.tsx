@@ -2,8 +2,7 @@
 // agent's name, plan and a stamp saying whether its quotas last until their
 // resets; a sentence under it; and one row per quota with its share, when it
 // resets, a bold bar marking where the pace takes it by the reset (hatched)
-// and where a steady pace would have it now (amber). An agent with no quota
-// window shows its last 24 hours of tokens instead.
+// and where a steady pace would have it now (amber).
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { Quota, Snapshot, StatisticsResponse } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
@@ -11,16 +10,16 @@ import {
   dateFormat,
   quotaPercentLabel,
   systemTimeZone,
-  tokensShort,
 } from "@agent-hud/ui/format";
 import { usePanelQuery, usePanelServices } from "../PanelContext";
 import { PAPER_FIGURES, PAPER_SEAL, paperLevel, usePaper } from "../paper";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { agentVendorName } from "../agent-artwork";
+import { agentArtworkKey, agentVendorName } from "../agent-artwork";
 import { tabular, usePanelPalette, type Logo } from "./theme";
 import {
   type BoardStamp,
   boardVerdict,
+  quotaLevel,
   quotaNote,
   quotaOutlook,
   resetText,
@@ -62,6 +61,9 @@ export function useBoardInks(light: boolean) {
     [colors, paper],
   );
 }
+
+/** The resting strip's stub paper on a dark screen (HUDMarkStrip). */
+const STUB_PAPER = "#e9e6de";
 
 const STAMP_WORDS = {
   enough: {
@@ -134,6 +136,8 @@ export function BoardHeading({
 }) {
   const inks = useBoardInks(light);
   const paper = usePaper();
+  const portraitChip =
+    agentArtworkKey(vendor) === "hermes" && !(paper ? paper.light : light);
   return (
     <div
       className="hud-source-provider-heading"
@@ -159,9 +163,27 @@ export function BoardHeading({
             }),
       }}
     >
-      <span style={{ display: "inline-flex", flex: "none" }}>
-        <Logo source={vendor} size={20} light={light} />
-      </span>
+      {portraitChip ? (
+        // Hermes is a black-haired girl drawn in ink: on dark paper she sits
+        // on a slip of the strip's light stub paper (owner, 2026-11-06).
+        <span
+          style={{
+            display: "inline-grid",
+            placeItems: "center",
+            flex: "none",
+            width: 24,
+            height: 24,
+            borderRadius: 5,
+            background: STUB_PAPER,
+          }}
+        >
+          <Logo source={vendor} size={20} light />
+        </span>
+      ) : (
+        <span style={{ display: "inline-flex", flex: "none" }}>
+          <Logo source={vendor} size={20} light={light} />
+        </span>
+      )}
       <strong style={{ fontSize: 15, fontWeight: 600, color: inks.text }}>
         {agentVendorName(vendor)}
       </strong>
@@ -248,14 +270,15 @@ function QuotaLine({
       )
     : null;
   const name = quotaWindowLabel(row, format.language);
+  const ink = quotaLevel(row);
   const level =
-    !outlook.live || row.status === "normal"
-      ? outlook.live
-        ? inks.text
-        : inks.secondary
-      : row.status === "critical"
-        ? inks.criticalText
-        : inks.warningText;
+    ink === "critical"
+      ? inks.criticalText
+      : ink === "warning"
+        ? inks.warningText
+        : outlook.live
+          ? inks.text
+          : inks.secondary;
   const used = outlook.used ?? 0;
   return (
     <div
@@ -625,58 +648,6 @@ export function DayBars({
           <span>{language === "zh" ? "现在" : "Now"}</span>
         </div>
       )}
-    </div>
-  );
-}
-
-/** An agent with no quota window: its last 24 hours of tokens, large, over
- * an hour-by-hour chart. */
-export function DayTokensHero({
-  snapshot,
-  providers,
-  light,
-  active,
-}: {
-  snapshot: Snapshot;
-  providers: string[];
-  light: boolean;
-  active: boolean;
-}) {
-  const inks = useBoardInks(light);
-  const zh = useFormat().language === "zh";
-  const day = useDayTokens(snapshot, providers, active);
-  return (
-    <div style={{ display: "grid", gap: 10, padding: "4px 6px 0" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          gap: 14,
-        }}
-      >
-        <span
-          style={{
-            ...tabular,
-            fontSize: 30,
-            fontWeight: 600,
-            lineHeight: 1,
-            color: inks.text,
-            ...(inks.figures && { fontFamily: inks.figures, fontWeight: 700 }),
-          }}
-        >
-          {tokensShort(day.total)}
-        </span>
-        <span style={{ fontSize: 12.5, color: inks.secondary }}>
-          {zh ? "近 24 小时 Token" : "Tokens, last 24 hours"}
-        </span>
-      </div>
-      <DayBars
-        points={day.points}
-        from={day.from}
-        height={56}
-        light={light}
-        axis
-      />
     </div>
   );
 }

@@ -213,6 +213,15 @@ export function useHUDInteraction({
     return vendors[index]?.key ?? null;
   }
 
+  /** Whether the pointer is on the notes pendant hung below the strip. */
+  function onPendant(point: { clientX: number; clientY: number }) {
+    return Boolean(
+      document
+        .elementFromPoint(point.clientX, point.clientY)
+        ?.closest(".hud-app-pendant"),
+    );
+  }
+
   function followMark(event: { clientX: number; clientY: number }) {
     if (dragCandidate.current || dragPreview) return;
     const key = vendorUnderPointer(event);
@@ -235,6 +244,7 @@ export function useHUDInteraction({
         markKeys: vendors.map((vendor) => vendor.key),
         pointerKey: point ? vendorUnderPointer(point) : undefined,
         notch: config.mode === "notch",
+        onPendant: point ? onPendant(point) : false,
       })
     ) {
       // Off the waiting agent's mark: a hover that began opening stops.

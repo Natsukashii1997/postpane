@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import type { Approval, Quota, Session } from "@agent-hud/protocol";
 import { quotaWindowLabel } from "../src/panel/window-labels.ts";
 import {
-  boardShowsTokens,
+  blockListed,
+  panelHidesTokens,
   boardVerdict,
   liveSessionLine,
   liveSessions,
   quotaNote,
+  quotaLevel,
   quotaOutlook,
   resetText,
   showsAccountNames,
@@ -343,15 +345,40 @@ test("one account's header names no account; several do", () => {
   );
 });
 
-test("an agent with no quota window shows its day's tokens instead", () => {
+test("a panel on an agent with no quota window leaves its tokens out", () => {
   const quotas = [{ vendor: "claude" }];
-  assert.equal(boardShowsTokens(quotas, "hermes"), true);
-  assert.equal(boardShowsTokens(quotas, "claude"), false);
+  assert.equal(panelHidesTokens(quotas, "hermes"), true);
+  assert.equal(panelHidesTokens(quotas, "claude"), false);
+  assert.equal(panelHidesTokens(quotas, "hermes", "chart"), false);
+});
+
+test("an agent with no quota window and nothing to say has no block", () => {
+  const quotas = [{ vendor: "claude" }];
+  const listed = (vendor: string, widget?: string, notice?: string | null) =>
+    blockListed(quotas, vendor, widget, notice ?? null);
+  assert.equal(listed("claude"), true);
+  assert.equal(listed("chatgpt"), false, "ChatGPT's web channel has no quota");
+  assert.equal(listed("hermes"), true, "Hermes shows its bots");
+  assert.equal(listed("cursor", "chart"), true, "a chart layout keeps it");
+  assert.equal(listed("cursor", undefined, "请重新登录"), true);
+});
+
+test("a stale reading is coloured by how much it has used", () => {
+  const stale = (used: number | null) =>
+    quotaLevel(
+      quota("Cloud session credits", used, undefined, undefined, {
+        status: "stale",
+      }),
+    );
+  assert.equal(stale(96.7), "critical");
+  assert.equal(stale(75), "warning");
+  assert.equal(stale(20), "stale");
+  assert.equal(stale(null), "stale");
   assert.equal(
-    boardShowsTokens(quotas, "hermes", "chart"),
-    false,
-    "a layout that sets up the chart keeps it",
+    quotaLevel(quota("5h", 95, undefined, undefined, { status: "critical" })),
+    "critical",
   );
+  assert.equal(quotaLevel(quota("5h", 8)), "normal");
 });
 
 /** Cloud session credits as Core hands them over: dollars in `consumed`, no

@@ -61,3 +61,16 @@ test("a hover from outside the strip (the request's own chip) still opens", () =
     true,
   );
 });
+
+test("the notes pendant is not a mark: hovering it never opens the panel", () => {
+  const on = (requestKey: string | null) =>
+    hoverMayOpen({
+      requestKey,
+      markKeys: marks,
+      pointerKey: null,
+      notch: false,
+      onPendant: true,
+    });
+  assert.equal(on(null), false);
+  assert.equal(on("claude"), false);
+});

@@ -13,12 +13,17 @@ export function hoverMayOpen({
   markKeys,
   pointerKey,
   notch,
+  onPendant = false,
 }: {
   requestKey: string | null;
   markKeys: readonly string[];
   pointerKey: string | null | undefined;
   notch: boolean;
+  /** The pointer is on the notes pendant: not a mark, so it never opens the
+   * panel (owner, 2026-11-06). */
+  onPendant?: boolean;
 }): boolean {
+  if (onPendant) return false;
   if (!requestKey || notch || pointerKey === undefined) return true;
   if (!markKeys.includes(requestKey)) return true;
   return pointerKey === requestKey;

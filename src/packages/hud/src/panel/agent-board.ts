@@ -406,13 +406,43 @@ export function showsAccountNames(
   return sections.filter((section) => section.account).length > 1;
 }
 
-/** Whether an agent's board shows its last 24 hours of tokens instead of
- * quotas: it has no quota window (Hermes, DeepSeek without a balance), and
- * its layout does not ask for the chart with its periods. */
-export function boardShowsTokens(
+/** Whether a panel on this agent leaves tokens out: it has no quota window
+ * (Hermes, DeepSeek without a balance), and its layout does not ask for the
+ * chart with its periods. */
+export function panelHidesTokens(
   quotas: readonly Pick<Quota, "vendor">[],
   vendor: string,
   widget?: string,
 ): boolean {
   return widget !== "chart" && !quotas.some((row) => row.vendor === vendor);
+}
+
+/** Whether an agent gets a block on the board: one with quota windows, a
+ * chart layout or a notice to show, and Hermes with its bots. An agent with
+ * none of these (ChatGPT's web channel, which shares OpenAI's mark) has
+ * nothing to say there (owner, 2026-11-06: no "last 24 hours" tokens). */
+export function blockListed(
+  quotas: readonly Pick<Quota, "vendor">[],
+  vendor: string,
+  widget?: string,
+  notice?: string | null,
+): boolean {
+  return (
+    widget === "chart" ||
+    Boolean(notice) ||
+    vendor === "hermes" ||
+    quotas.some((row) => row.vendor === vendor)
+  );
+}
+
+/** How a quota's share is inked: by its status, and a reading waiting for an
+ * update by its last share, so a stale 97% still reads critical. */
+export function quotaLevel(
+  row: Pick<Quota, "status" | "usedPercent">,
+): "normal" | "warning" | "critical" | "stale" {
+  if (row.status === "warning" || row.status === "critical") return row.status;
+  if (row.status !== "stale") return "normal";
+  const used = row.usedPercent;
+  if (!finite(used)) return "stale";
+  return used >= 90 ? "critical" : used >= 70 ? "warning" : "stale";
 }

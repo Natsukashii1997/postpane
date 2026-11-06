@@ -33,7 +33,8 @@ import {
 import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
-import { boardShowsTokens } from "./panel/agent-board";
+import { blockListed, panelHidesTokens } from "./panel/agent-board";
+import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { SOURCE_PANEL } from "./panel/theme";
@@ -121,7 +122,16 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             )
             .map((provider) => provider.id),
         ]),
-      ].filter((vendor) => !config.panelLayout.blocks?.[vendor]?.hidden),
+      ].filter(
+        (vendor) =>
+          !config.panelLayout.blocks?.[vendor]?.hidden &&
+          blockListed(
+            snapshot.quotas,
+            vendor,
+            config.panelLayout.blocks?.[vendor]?.widget,
+            missingReadingNotice(snapshot.providers, vendor),
+          ),
+      ),
     [
       rows,
       snapshot.providers,
@@ -192,13 +202,13 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     } else blockLines.push([block]);
   }
   const customTokens = Object.keys(config.panelLayout.tokens ?? {}).length > 0;
-  // An agent with no quota shows its day's tokens large in its own block.
+  // A panel on an agent with no quota shows no day's tokens (owner, 2026-11-06).
   const tokensAbove =
     Boolean(focusVendor) &&
     config.quotaDetails &&
     vendorNames.length > 0 &&
     vendorNames.every((vendor) =>
-      boardShowsTokens(
+      panelHidesTokens(
         snapshot.quotas,
         vendor,
         config.panelLayout.blocks?.[vendor]?.widget,
