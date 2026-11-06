@@ -12,8 +12,9 @@ src-tauri/gen/
 test-results/
 playwright-report/
 .build/
-# Local agent worktrees and settings
-.claude/
+# Local agent worktrees and settings; project skills under .claude/skills are shared
+.claude/*
+!.claude/skills/
 # Local environments, logs and editors
 .env*
 *.log

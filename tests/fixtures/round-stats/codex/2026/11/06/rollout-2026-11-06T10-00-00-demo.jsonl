@@ -1,0 +1,4 @@
+{"timestamp":"2026-11-06T02:00:00.000Z","type":"session_meta","payload":{"id":"demo","cwd":"/Users/demo/postpane","timestamp":"2026-11-06T02:00:00.000Z"}}
+{"timestamp":"2026-11-06T02:01:00.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"bash\",\"-lc\",\"node --test tests/*.test.mjs\"]}","call_id":"c1"}}
+{"timestamp":"2026-11-06T02:02:00.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"git worktree remove .claude/worktrees/1-x\"}","call_id":"c2"}}
+{"timestamp":"2026-11-06T02:03:00.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\n*** Update File: CURRENT.md\n@@\n-a\n+b\n*** End Patch","call_id":"c3"}}

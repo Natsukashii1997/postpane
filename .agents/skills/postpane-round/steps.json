@@ -1,0 +1,158 @@
+{
+  "说明": "每一步在会话记录里留下的痕迹（正则，对工具名 + 命令 / 文件路径 / skill 名拼成的一行做匹配）。round-stats.mjs 按它数各步实际做了几次；id 与 SKILL.md 里「## 1. 开工（start）」这类标题括号里的 id 一一对应、顺序一致，tests/postpane-round.test.mjs 会查。",
+  "ignore": [
+    "cd",
+    "ls",
+    "cat",
+    "sed",
+    "grep",
+    "rg",
+    "head",
+    "tail",
+    "echo",
+    "printf",
+    "wc",
+    "find",
+    "cut",
+    "sort",
+    "uniq",
+    "awk",
+    "tr",
+    "xargs",
+    "date",
+    "pwd",
+    "sleep",
+    "true",
+    "false",
+    "test",
+    "[",
+    "which",
+    "source",
+    "export",
+    "set",
+    "for",
+    "do",
+    "done",
+    "if",
+    "then",
+    "else",
+    "fi",
+    "while",
+    "jq",
+    "python3 -",
+    "du",
+    "stat",
+    "file",
+    "diff",
+    "basename",
+    "dirname",
+    "mkdir",
+    "seq",
+    "tee",
+    "read",
+    "exit",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git add",
+    "git commit",
+    "git fetch",
+    "git rev-parse",
+    "git branch",
+    "git -C",
+    "gh pr",
+    "gh issue",
+    "gh api",
+    "break",
+    "git",
+    "continue",
+    "rm",
+    "cp",
+    "mv",
+    "git checkout",
+    "python3",
+    "ps",
+    "kill",
+    "pkill",
+    "sips",
+    "pnpm"
+  ],
+  "steps": [
+    {
+      "id": "start",
+      "title": "开工",
+      "signals": [
+        "git worktree add",
+        "^EnterWorktree",
+        "package-resources\\.mjs",
+        "gh issue create",
+        "^Skill project-starter",
+        "pnpm install"
+      ]
+    },
+    {
+      "id": "test",
+      "title": "测试",
+      "signals": [
+        "pnpm (run )?check\\b",
+        "pnpm (run )?test\\b",
+        "node --test tests/",
+        "cargo test",
+        "node scripts/check-rules\\.mjs",
+        "node --test ",
+        "pnpm (run )?typecheck",
+        "tsc --noEmit"
+      ]
+    },
+    {
+      "id": "install",
+      "title": "装机回读",
+      "signals": [
+        "tauri build",
+        "ditto [^|;]*PostPane",
+        "postpane-round/scripts/install\\.sh",
+        "shasum [^|;]*PostPane",
+        "pgrep [^|;]*PostPane",
+        "osascript[^|;]*PostPane",
+        "open (-a )?/Applications/PostPane",
+        "codesign -d",
+        "screencapture"
+      ]
+    },
+    {
+      "id": "handoff",
+      "title": "交接",
+      "signals": [
+        "^(Edit|Write) .*CURRENT\\.md$",
+        "^(Edit|Write) .*docs/LESSONS\\.md$",
+        "gh pr create",
+        "git push",
+        "python3 - <<[\\s\\S]*CURRENT\\.md"
+      ]
+    },
+    {
+      "id": "merge-clean",
+      "title": "合并与清理",
+      "signals": [
+        "gh pr merge",
+        "git worktree remove",
+        "cargo clean",
+        "worktree_sweep\\.py",
+        "^Skill worktree-sweep",
+        "git rebase",
+        "git pull[^|;&]*--ff-only"
+      ]
+    },
+    {
+      "id": "retro",
+      "title": "复盘与进化",
+      "signals": [
+        "round-stats\\.mjs",
+        "^Skill session-retro",
+        "session_retro\\.py",
+        "^(Edit|Write) .*postpane-round/EVOLUTION\\.md$"
+      ]
+    }
+  ]
+}

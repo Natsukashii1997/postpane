@@ -4,6 +4,17 @@
 
 
 
+## 项目内 skill「驿窗一轮」：开工到收尾六步串起来、能自进化（2026-11-06，Claude，常浩问「project-starter、会话复盘、worktree 清理在驿窗是否高频，是就打包成一个 skill，放项目库里，结合驿窗经验、能自进化」，看方案后说「按推荐开工」；已提交，无需发布）
+
+- 时间：开工 `2026-11-06 18:42`（`date '+%F %H:%M'` 记录）。来由：#165。统计 56 个 Claude、2 个 Codex 驿窗会话，三个全局 skill 点名调用 1 / 0 / 0 次，但开工、测试、装机回读、交接、合并清理每轮都在做（46–49 个会话），装机那串命令在 19 个会话里手敲。
+- 改了哪些文件：`.agents/skills/postpane-round/SKILL.md`（六步，每步注明来由 L-xx / G-xx，到对应步骤调用三个全局 skill，不复制）；`EVOLUTION.md`（进化记录：E-01–E-05 补记建立前已长出的规矩，E-06 建立本 skill，E-07、E-08 待批）；`steps.json`（各步在会话记录里的痕迹，按真实命令校准）；`scripts/install.sh`（装机回读：备份、退出、ditto、启动、shasum 与签名回读、打印回滚；`check` 只比对）；`scripts/round-stats.mjs`（只读会话记录，数各步实际做了几次、列不属于任何一步的高频命令）；`agents/openai.yaml`（Codex 元数据）；`.claude/skills/postpane-round`（软链接到同一份）；`.gitignore`（`.claude/` 改为 `.claude/*` + `!.claude/skills/`，worktree 与本机设置仍忽略）；`AGENTS.md`（导航表与结构各加一行）；`tests/postpane-round.test.mjs` 与 `tests/fixtures/round-stats/`（引用的坑、路径、命令存在，进化记录格式，软链接，install.sh 语法与无参数不动应用，统计脚本夹具）。
+- 测试：`pnpm run check` 退出 0（Prettier「All matched files use Prettier code style!」，cargo check 通过）；`pnpm test` 退出 0：Rust `test result` 合计 724 passed / 0 failed，`test:ts` `ℹ pass 292` / `ℹ fail 0`，`test:mcp` `ℹ pass 8` / `ℹ fail 0`，`test:plugins` `ℹ pass 14` / `ℹ fail 0`，`test:extension` `ℹ pass 8` / `ℹ fail 0`（日志 `evidence/2026-11-06-postpane-round/full.log`）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。
+- 验证：`round-stats.mjs` 在本机真实记录上跑通（约 2 秒，结果见 E-06）；故意写一个 L-99 和非法状态，`postpane-round.test.mjs` 报 2 项失败，还原后 `ℹ pass 10` / `ℹ fail 0`；一次性 `claude -p` 与 `codex exec` 在本 worktree 里都回答能看到 `postpane-round`。`install.sh` 只验了语法和无参数用法，没有真装机（本轮无界面改动）。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：E-07（测试前先格式化）、E-08（加「排障」一步）待常浩批；三个全局 skill 本身没改。`round-stats` 的痕迹是正则，换了说法的命令会漏数，靠 E-xx 继续校准。
+- 本轮新坑：无。
+- skill 进化：E-07、E-08 待批。
 ## 左滑发起复审返修收尾、交 ChatGPT 第 2 轮；清 29 个已合并 worktree、关 2 条旧接力（2026-11-06，Claude，由会话「项目盘点｜AI 六级定级」交来，常浩看分批计划后说「按推荐开工」；PR #164 本地全量通过，按授权 squash 合并 `f6cd22b`；已从与该 main 同树的分支打包安装、回读一致）
 
 - 时间：开工 `2026-11-06 18:24`（按本会话记录，常浩回「按推荐开工」）；本节写于 `2026-11-06 18:50`。来由：常浩要把驿窗从 AI 使用六级的 L3 推到 L6（L4 同事使用、L5 #72 自动往返跑 3 单真实任务、L6 前后对比与第二人复现），批 1 先收掉卡着 `handoff.rs` 的 WIP 分支。
