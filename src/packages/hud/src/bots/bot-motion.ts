@@ -208,13 +208,11 @@ export class BotMotion {
   puffs: CloudPuff[] = [];
   drops: CloudDrop[] = [];
   snot: CloudSnot | null = null;
-  /** How closed eyes are drawn while asleep: a cloud's soft curves, a flower's short bars. */
-  lids: "curve" | "bar" | null = null;
+  /** Closed eyes drawn as soft curves, while a cloud sleeps. */
+  lids: "curve" | null = null;
   /** Cloud bots: whitened by haze (0–1) and bands of mist drifting across. */
   haze = 0;
   mist: CloudMist[] = [];
-  /** The sign stays upright however the body tilts. */
-  signUpright = false;
   bolt = 0;
   dim = 0;
   ring: number | null = null;
@@ -766,8 +764,8 @@ export class BotMotion {
       dim = 0,
       live = false;
     if (dozing) {
-      petal = 0.7;
-      dim = 0.06;
+      petal = 0.12;
+      dim = 0.35;
     } else if (this.look === "compacting" && !this.state.holds) {
       petal = 1 - 0.75 * this.compactBreath(age);
       live = true;
@@ -1098,13 +1096,10 @@ export class BotMotion {
       }
     } else {
       if (this.petals && dozing) {
-        // Asleep: petals half shut, the head drooping to one side and swaying
-        // slowly like a flower at night; full size and colour. It turns about
-        // its middle, since a bot that stays in place keeps its footing.
-        const sway = Math.sin((2 * Math.PI * age) / 6),
-          breath = (1 - Math.cos((2 * Math.PI * age) / 3.5)) / 2;
-        pose.rotation = 9 + 5 * sway;
-        pose.scaleY = 1 + 0.02 * breath;
+        // Asleep: flattened, breathing slow and deep.
+        const breath = Math.sin((2 * Math.PI * age) / 3);
+        pose.scaleX = 1.1 - 0.03 * breath;
+        pose.scaleY = 0.84 + 0.05 * breath;
       }
       if (this.petals && this.look === "compacting" && !this.state.holds) {
         const shrink = 1 - 0.2 * this.compactBreath(age);
@@ -1359,8 +1354,6 @@ export class BotMotion {
     )
       sign = shownSign(sign, "ellipsis");
     if (this.morph > 0 && dozing && !this.cloud) sign = shownSign(sign, "z");
-    if (this.petals) this.lids = dozing ? "bar" : null;
-    this.signUpright = this.petals && dozing;
     this.sign = sign;
     this.lit =
       sign === "ellipsis" && !this.state.holds

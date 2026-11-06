@@ -102,7 +102,6 @@ export function botRenderLook(motion: BotMotion) {
     motion.lids,
     s(motion.haze, 40),
     motion.mist.map((band) => [s(band.x, 200), s(band.alpha, 20)]),
-    motion.signUpright ? s(motion.pose.rotation, 2) : 0,
     motion.ring === null ? -1 : s(motion.ring, 120),
     motion.prop,
     motion.prop ? s(motion.propAge, 24) : 0,
@@ -341,7 +340,7 @@ function eyes(
   yaw: number,
   pitch: number,
   awake: number,
-  lids: "curve" | "bar" | null = null,
+  lids: "curve" | null = null,
 ) {
   const unit = context.getTransform(),
     hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b));
@@ -382,24 +381,18 @@ function eyes(
     context.save();
     context.translate(x, y);
     if (lids && face.open < 0.3) {
-      // Asleep: closed eyes a little wider than the open ones, so the face
-      // stays as full as when awake; a cloud's curve down, a flower's bar.
-      const eye = s.eye.width * r * size;
+      // Asleep: a soft downward curve a little wider than the open eye, so
+      // the face stays as full as when awake.
+      const eye = s.eye.width * r * size,
+        w = 0.92 * eye,
+        d = 0.7 * eye;
       context.globalAlpha = awake;
       context.strokeStyle = paint;
+      context.lineWidth = Math.max(0.5 * eye, 1.25 * hair);
       context.lineCap = "round";
       context.beginPath();
-      if (lids === "curve") {
-        const w = 0.92 * eye,
-          d = 0.7 * eye;
-        context.lineWidth = Math.max(0.5 * eye, 1.25 * hair);
-        context.moveTo(-w, -d * 0.35);
-        context.quadraticCurveTo(0, d * 1.25, w, -d * 0.35);
-      } else {
-        context.lineWidth = Math.max(0.55 * eye, 1.3 * hair);
-        context.moveTo(-0.85 * eye, 0.01);
-        context.lineTo(0.85 * eye, 0.01);
-      }
+      context.moveTo(-w, -d * 0.35);
+      context.quadraticCurveTo(0, d * 1.25, w, -d * 0.35);
       context.stroke();
       context.restore();
       continue;
@@ -1426,42 +1419,14 @@ export function renderBot(
   context.resetTransform();
   if (motion.sign && !form.spec.avatar && !form.spec.cloud) {
     const place = signBox(form, side, outline);
-    if (motion.signUpright && Math.abs(motion.pose.rotation) > 0.5) {
-      // The host tilts this canvas by the pose; turn the sign back so it
-      // stays upright while it follows the head.
-      const { canvas: sign, context: c } = borrowCanvas(
-        place.width + 4,
-        place.height + 4,
-      );
-      try {
-        paintSign(
-          c,
-          motion.sign,
-          { x: 2, y: 2, width: place.width, height: place.height },
-          form.light,
-          motion.lit,
-          signAlpha(motion),
-        );
-        context.save();
-        context.translate(
-          place.x + place.width / 2,
-          place.y + place.height / 2,
-        );
-        context.rotate((-motion.pose.rotation * Math.PI) / 180);
-        context.drawImage(sign, -place.width / 2 - 2, -place.height / 2 - 2);
-        context.restore();
-      } finally {
-        giveBack(sign);
-      }
-    } else
-      paintSign(
-        context,
-        motion.sign,
-        place,
-        form.light,
-        motion.lit,
-        signAlpha(motion),
-      );
+    paintSign(
+      context,
+      motion.sign,
+      place,
+      form.light,
+      motion.lit,
+      signAlpha(motion),
+    );
   }
   if (outline > 0) layHairline(context, outline, form.light);
   return canvas;
