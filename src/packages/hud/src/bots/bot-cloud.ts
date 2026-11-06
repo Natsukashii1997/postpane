@@ -11,6 +11,8 @@ export interface CloudPuff {
   r: number;
   alpha: number;
   mini?: boolean;
+  /** Painted one light lilac instead of the body's paint. */
+  light?: boolean;
 }
 /** A raindrop under the body: a short stroke from (x, y) down `length`. */
 export interface CloudDrop {
@@ -28,6 +30,13 @@ export interface CloudSnot {
   y: number;
   r: number;
   pop: number;
+}
+/** A band of mist drifting across the body: a short white stroke centred on (x, y). */
+export interface CloudMist {
+  x: number;
+  y: number;
+  length: number;
+  alpha: number;
 }
 /** How the cloud's own outline bends; the body never turns. */
 export interface CloudShape {
@@ -130,6 +139,9 @@ export interface CloudSky {
   snot: CloudSnot | null;
   /** Closed eyes drawn as soft curves, for sleep. */
   lids: boolean;
+  /** 0 clear, up to 1 whitened by haze. */
+  haze: number;
+  mist: CloudMist[];
   /** A lightning flash under the body, 0–1. */
   bolt: number;
   /** Something moves faster than a slow float, so frames come quickly. */
@@ -205,6 +217,8 @@ export function cloudSky(cue: CloudCue): CloudSky {
     drops: [],
     snot: null,
     lids: false,
+    haze: 0,
+    mist: [],
     bolt: 0,
     live: false,
     look: null,
@@ -270,9 +284,24 @@ export function cloudSky(cue: CloudCue): CloudSky {
     shape.morph = 0.09;
     shape.morphPhase = wrap(now * 30, 360);
     if (look === "no-news") {
-      // Nothing confirmed yet: a thin mist.
-      shape.billow = 0.08;
-      sky.opacity = 0.65;
+      // Nothing confirmed yet: solid but hazy, eyes half shut, two bands of
+      // mist drifting slowly across its lower half.
+      shape.morph = 0.05;
+      shape.billow = 0.02;
+      sky.haze = 0.28;
+      sky.open = 0.55;
+      for (const [y, period, length, offset] of [
+        [0.76, 7, 0.36, 0],
+        [0.88, 9, 0.28, 0.5],
+      ]) {
+        const q = wrap(now / period + offset, 1);
+        sky.mist.push({
+          x: -0.05 + 1.1 * q,
+          y,
+          length,
+          alpha: Math.sin(Math.PI * q),
+        });
+      }
     }
   } else if (look === "plain") {
     // Busy at something unnamed: floating quicker, the edge churning fast.
@@ -287,26 +316,34 @@ export function cloudSky(cue: CloudCue): CloudSky {
     shape.billow = 0.06;
     shape.phase = wrap(now * 90, 360);
     sky.y = 0.03;
-    for (let i = 0; i < 2; i++) {
-      const t = wrap(now / 1.8 + i / 2, 1);
-      sky.puffs.push({
-        x: 0.42 + 0.06 * Math.sin(TAU * (t + i * 0.3)),
-        y: 0.02 - 0.2 * t,
-        r: 0.035 + 0.035 * t,
-        alpha: t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85,
-      });
-    }
     sky.lookY = -0.6;
     sky.live = true;
   } else if (look === "tool-edit") {
-    // Stamping: each beat presses the cloud down and puffs out at its foot.
-    if (BotMoves.bob(cue.beats) > 0) {
-      sky.scaleX = 1.1;
-      sky.scaleY = 0.88;
-      for (const side of [-1, 1])
-        sky.puffs.push({ x: CX + side * 0.3, y: 0.8, r: 0.05, alpha: 0.9 });
+    // Stamping: once every 0.75 s it presses down hard and springs back
+    // slowly, two puffs squeezing out at its foot.
+    const inBurst = BotMoves.inBurst(cue.beats);
+    if (inBurst) {
+      const into = wrap(cue.beats, 0.75) / 0.75,
+        press =
+          into < 0.18
+            ? easeInOut(into / 0.18)
+            : 1 - easeInOut(clamp01((into - 0.3) / 0.7));
+      sky.scaleX = 1 + 0.16 * press;
+      sky.scaleY = 1 - 0.18 * press;
+      sky.y = 0.05 * press;
+      if (into > 0.15) {
+        const q = (into - 0.15) / 0.85;
+        for (const side of [-1, 1])
+          sky.puffs.push({
+            x: CX + side * (0.3 + 0.2 * q),
+            y: 0.84 - 0.06 * q,
+            r: 0.05 + 0.04 * q,
+            alpha: 1 - q,
+            mini: true,
+          });
+      }
     }
-    sky.live = BotMoves.inBurst(cue.beats);
+    sky.live = inBurst;
   } else if (look === "tool-command") {
     // Running a command: it rains hard while the command runs, easing off in the rests.
     const burstOn = BotMoves.inBurst(cue.beats),
@@ -321,20 +358,21 @@ export function cloudSky(cue: CloudCue): CloudSky {
     sky.lookY = 0.6;
     sky.live = true;
   } else if (look === "tool-long-command") {
-    // A ring of puffs fills clockwise every six seconds; the eyes follow the newest.
+    // A ring of sixteen light puffs grows clockwise every six seconds.
     float(0.02, 4);
     const share = wrap(age, 6) / 6,
-      count = 8,
+      count = 16,
       fade = share > 0.92 ? 1 - (share - 0.92) / 0.08 : 1;
     for (let i = 0; i < count; i++) {
-      const grown = clamp01((share - i / count) * count * 1.6);
+      const grown = clamp01((share - i / count) * count * 1.4);
       if (grown <= 0) continue;
       const a = ((-90 + (360 * i) / count) * Math.PI) / 180;
       sky.puffs.push({
-        x: CX + Math.cos(a) * R * 1.3,
-        y: CY + Math.sin(a) * R * 1.2,
-        r: 0.055 * easeOut(grown),
+        x: CX + Math.cos(a) * R * 1.2,
+        y: CY + Math.sin(a) * R * 1.14,
+        r: 0.058 * easeInOut(grown),
         alpha: fade,
+        light: true,
       });
     }
     sky.live = true;
@@ -531,6 +569,9 @@ export function cloudSky(cue: CloudCue): CloudSky {
       alpha: round(puff.alpha),
     }));
   sky.drops = sky.drops.filter((drop) => drop.alpha > 0.02);
+  sky.mist = sky.mist
+    .filter((band) => band.alpha > 0.02)
+    .map((band) => ({ ...band, x: round(band.x), alpha: round(band.alpha) }));
   if (sky.snot)
     sky.snot = {
       x: round(sky.snot.x),

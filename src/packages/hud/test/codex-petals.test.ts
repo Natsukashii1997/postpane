@@ -40,10 +40,12 @@ test("only Codex and Hermes stay awake in the side strip", () => {
   assert.equal(staysAsBot("claude"), false);
 });
 
-test("a dozing Codex closes its petals; a bot without petals keeps its shape", () => {
+test("a dozing flower half-closes its petals; a bot without petals keeps its shape", () => {
   const closed = run(codex, "asleep", 3);
-  assert.ok(closed.petal < 0.2, `petal ${closed.petal}`);
+  assert.ok(closed.petal > 0.6 && closed.petal < 0.8, `petal ${closed.petal}`);
   assert.equal(closed.sign, "z");
+  assert.equal(closed.signUpright, true);
+  assert.equal(closed.lids, "bar");
   const other = run(plain, "asleep", 3);
   assert.equal(other.petal, 1);
   assert.equal(other.ring, null);
@@ -78,18 +80,24 @@ test("an idle Codex stays a bot and keeps moving", () => {
   assert.notEqual(motion.wait, null);
 });
 
-test("a dozing Codex flattens, breathes deep and darkens", () => {
+test("a dozing flower droops its head and sways, full size and full colour", () => {
   const motion = new BotMotion(1);
   motion.staysBot = true;
   motion.fit(codex);
   motion.set(botState({ look: "asleep" }), 10);
-  const heights: number[] = [];
-  for (let t = 10; t <= 14; t += 1 / 24) {
+  const tilts: number[] = [],
+    sizes: number[] = [];
+  for (let t = 10; t <= 17; t += 1 / 24) {
     motion.step(t);
-    if (t >= 11) heights.push(motion.pose.scaleY);
+    if (t >= 11) {
+      tilts.push(motion.pose.rotation);
+      sizes.push(motion.pose.scaleX, motion.pose.scaleY);
+    }
   }
-  assert.ok(Math.max(...heights) < 0.95, `tallest ${Math.max(...heights)}`);
-  assert.ok(Math.max(...heights) - Math.min(...heights) > 0.05);
-  assert.ok(motion.dim > 0.25, `dim ${motion.dim}`);
+  assert.ok(Math.min(...tilts) > 3, `least tilt ${Math.min(...tilts)}`);
+  assert.ok(Math.max(...tilts) < 15, `most tilt ${Math.max(...tilts)}`);
+  assert.ok(Math.max(...tilts) - Math.min(...tilts) > 6, "it sways");
+  assert.ok(Math.min(...sizes) >= 1, `smallest ${Math.min(...sizes)}`);
+  assert.ok(motion.dim < 0.1, `dim ${motion.dim}`);
   assert.notEqual(motion.wait, null);
 });

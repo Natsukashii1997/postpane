@@ -15,7 +15,12 @@ import { finPath, finSilhouette } from "./bot-fins";
 import { paintSign, signBox } from "./bot-signs";
 import { layHairline } from "./bot-hairline";
 import { BotStill } from "./bot-still";
-import { cloudShapeKey, type CloudShape, type CloudSnot } from "./bot-cloud";
+import {
+  cloudShapeKey,
+  type CloudMist,
+  type CloudShape,
+  type CloudSnot,
+} from "./bot-cloud";
 import { borrowCanvas, giveBack, reuseCanvas } from "./scratch";
 const margin = 0.3,
   ink = "#0d0d0f",
@@ -95,6 +100,9 @@ export function botRenderLook(motion: BotMotion) {
     motion.bolt,
     motion.snot,
     motion.lids,
+    s(motion.haze, 40),
+    motion.mist.map((band) => [s(band.x, 200), s(band.alpha, 20)]),
+    motion.signUpright ? s(motion.pose.rotation, 2) : 0,
     motion.ring === null ? -1 : s(motion.ring, 120),
     motion.prop,
     motion.prop ? s(motion.propAge, 24) : 0,
@@ -333,7 +341,7 @@ function eyes(
   yaw: number,
   pitch: number,
   awake: number,
-  lids = false,
+  lids: "curve" | "bar" | null = null,
 ) {
   const unit = context.getTransform(),
     hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b));
@@ -374,18 +382,24 @@ function eyes(
     context.save();
     context.translate(x, y);
     if (lids && face.open < 0.3) {
-      // Asleep: a soft downward curve a little wider than the open eye, so
-      // the face stays as full as when awake.
-      const eye = s.eye.width * r * size,
-        w = 0.92 * eye,
-        d = 0.7 * eye;
+      // Asleep: closed eyes a little wider than the open ones, so the face
+      // stays as full as when awake; a cloud's curve down, a flower's bar.
+      const eye = s.eye.width * r * size;
       context.globalAlpha = awake;
       context.strokeStyle = paint;
-      context.lineWidth = Math.max(0.5 * eye, 1.25 * hair);
       context.lineCap = "round";
       context.beginPath();
-      context.moveTo(-w, -d * 0.35);
-      context.quadraticCurveTo(0, d * 1.25, w, -d * 0.35);
+      if (lids === "curve") {
+        const w = 0.92 * eye,
+          d = 0.7 * eye;
+        context.lineWidth = Math.max(0.5 * eye, 1.25 * hair);
+        context.moveTo(-w, -d * 0.35);
+        context.quadraticCurveTo(0, d * 1.25, w, -d * 0.35);
+      } else {
+        context.lineWidth = Math.max(0.55 * eye, 1.3 * hair);
+        context.moveTo(-0.85 * eye, 0.01);
+        context.lineTo(0.85 * eye, 0.01);
+      }
       context.stroke();
       context.restore();
       continue;
@@ -714,8 +728,13 @@ function weather(
     else p.arc(puff.x, puff.y, puff.r, 0, 2 * Math.PI);
     context.save();
     context.globalAlpha = puff.alpha * strength;
-    context.clip(p);
-    fillPaint(context, form, form.spec.paint);
+    if (puff.light) {
+      context.fillStyle = form.light ? CLOUD_RING : CLOUD_RING_DARK;
+      context.fill(p);
+    } else {
+      context.clip(p);
+      fillPaint(context, form, form.spec.paint);
+    }
     if (motion.gray > 0) overcast(context, motion.gray);
     context.restore();
   }
@@ -795,6 +814,15 @@ function drawBody(
     still?.keep();
   }
   if (s.cloud) {
+    if (motion.haze > 0 && m.dressed > 0) {
+      context.save();
+      context.clip(
+        formOutline(form, m.eased, motion.turn, motion.petal, motion.shape),
+      );
+      context.fillStyle = `rgba(255, 255, 255, ${motion.haze * m.dressed})`;
+      context.fillRect(-0.3, -0.3, 1.6, 1.6);
+      context.restore();
+    }
     if (m.dressed > 0) weather(context, form, motion, m.dressed);
   } else if (motion.ring !== null && m.dressed > 0)
     progressRing(context, form, motion.ring, m.dressed);
@@ -841,6 +869,142 @@ function drawBody(
     );
   eyes(context, s, face, yaw, pitch, m.dressed, motion.lids);
   if (motion.snot) snotBubble(context, motion.snot, m.dressed);
+  if (motion.mist.length) mistBands(context, motion.mist, m.dressed);
+}
+/** White bands of mist drifting across a hazy cloud. */
+function mistBands(
+  context: CanvasRenderingContext2D,
+  mist: readonly CloudMist[],
+  strength: number,
+) {
+  const unit = context.getTransform(),
+    hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b));
+  context.save();
+  context.strokeStyle = "rgba(255, 255, 255, 0.92)";
+  context.lineCap = "round";
+  context.lineWidth = Math.max(0.045, 1.6 * hair);
+  for (const band of mist) {
+    context.globalAlpha = band.alpha * strength;
+    context.beginPath();
+    context.moveTo(band.x - band.length / 2, band.y);
+    context.lineTo(band.x + band.length / 2, band.y);
+    context.stroke();
+  }
+  context.restore();
+}
+/** A small cloud of the given colour, three lumps over a fourth, centred on (x, y). */
+function signCloud(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+) {
+  context.beginPath();
+  for (const [dx, dy, k] of [
+    [-0.72, 0.18, 0.62],
+    [0, -0.12, 0.86],
+    [0.72, 0.18, 0.62],
+    [0, 0.3, 0.66],
+  ]) {
+    context.moveTo(x + dx * r + k * r, y + dy * r);
+    context.arc(x + dx * r, y + dy * r, k * r, 0, 2 * Math.PI);
+  }
+  context.fill();
+}
+/**
+ * A cloud bot's own signs, in mark shares: a white glyph on a small deep
+ * indigo cloud at the top right, or for thinking a thought bubble whose three
+ * dots light in turn. They grey with the body.
+ */
+function cloudSign(
+  context: CanvasRenderingContext2D,
+  motion: BotMotion,
+  sign: BotSign,
+  alpha: number,
+) {
+  const unit = context.getTransform(),
+    hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b)),
+    stroke = Math.max(0.034, 1.4 * hair),
+    fill = motion.gray > 0.3 ? CLOUD_SIGN_GRAY : CLOUD_SIGN;
+  context.save();
+  context.globalAlpha = alpha;
+  context.fillStyle = fill;
+  if (sign === "ellipsis") {
+    for (const [x, y, r] of [
+      [0.7, 0.13, 0.026],
+      [0.77, 0.04, 0.036],
+    ]) {
+      context.beginPath();
+      context.arc(x, y, Math.max(r, 1.2 * hair), 0, 2 * Math.PI);
+      context.fill();
+    }
+    signCloud(context, 0.9, -0.09, 0.15);
+    context.fillStyle = "#ffffff";
+    for (let i = 0; i < 3; i++) {
+      context.globalAlpha = alpha * (i === motion.lit ? 1 : 0.45);
+      context.beginPath();
+      context.arc(
+        0.84 + 0.06 * i,
+        -0.08,
+        Math.max(0.018, 1.2 * hair),
+        0,
+        2 * Math.PI,
+      );
+      context.fill();
+    }
+    context.restore();
+    return;
+  }
+  const x = 0.82,
+    y = 0.08;
+  signCloud(context, x, y, 0.15);
+  context.strokeStyle = context.fillStyle = "#ffffff";
+  context.lineWidth = stroke;
+  context.lineCap = context.lineJoin = "round";
+  const cy = y + 0.01,
+    dot = () => {
+      context.stroke();
+      context.beginPath();
+      context.arc(x, cy + 0.06, stroke * 0.62, 0, 2 * Math.PI);
+      context.fill();
+    };
+  context.beginPath();
+  if (sign === "exclamation") {
+    context.moveTo(x, cy - 0.075);
+    context.lineTo(x, cy + 0.015);
+    dot();
+  } else if (sign === "question") {
+    context.arc(x, cy - 0.04, 0.038, Math.PI * 1.05, Math.PI * 2.35);
+    context.lineTo(x, cy + 0.015);
+    dot();
+  } else if (sign === "lines") {
+    for (const dy of [-0.045, 0, 0.045]) {
+      context.moveTo(x - 0.06, cy + dy);
+      context.lineTo(x + 0.06, cy + dy);
+    }
+    context.stroke();
+  } else if (sign === "cross") {
+    context.moveTo(x - 0.045, cy - 0.045);
+    context.lineTo(x + 0.045, cy + 0.045);
+    context.moveTo(x - 0.045, cy + 0.045);
+    context.lineTo(x + 0.045, cy - 0.045);
+    context.stroke();
+  } else if (sign === "hourglass") {
+    context.lineWidth = stroke * 0.8;
+    context.moveTo(x - 0.045, cy - 0.06);
+    context.lineTo(x + 0.045, cy - 0.06);
+    context.lineTo(x - 0.045, cy + 0.06);
+    context.lineTo(x + 0.045, cy + 0.06);
+    context.closePath();
+    context.stroke();
+  } else if (sign === "z") {
+    context.moveTo(x - 0.045, cy - 0.05);
+    context.lineTo(x + 0.045, cy - 0.05);
+    context.lineTo(x - 0.045, cy + 0.05);
+    context.lineTo(x + 0.045, cy + 0.05);
+    context.stroke();
+  }
+  context.restore();
 }
 /** A sleeping cloud's snot bubble, pale with a deep outline so it reads on the body and on paper. */
 function snotBubble(
@@ -883,7 +1047,11 @@ function snotBubble(
   }
   context.restore();
 }
-const SNOT_INK = "#2e31b8";
+const SNOT_INK = "#2e31b8",
+  CLOUD_SIGN = "#4b4ee6",
+  CLOUD_SIGN_GRAY = "#5f6275",
+  CLOUD_RING = "#aaa6ff",
+  CLOUD_RING_DARK = "#8d89f5";
 const STICKER_INK = "#ffffff",
   AVATAR_BLUE = "#3370ff",
   AVATAR_GREEN = "#19a974",
@@ -1202,7 +1370,9 @@ export function drawBot(
   context.save();
   bare(context, form, motion);
   context.restore();
-  if (options.signs !== false && motion.sign && !form.spec.avatar) {
+  if (options.signs !== false && motion.sign && form.spec.cloud)
+    cloudSign(context, motion, motion.sign, signAlpha(motion));
+  else if (options.signs !== false && motion.sign && !form.spec.avatar) {
     const t = context.getTransform(),
       side = Math.hypot(t.a, t.b),
       place = signBox(form, side),
@@ -1225,6 +1395,10 @@ export function drawBot(
   }
   context.restore();
 }
+const signAlpha = (motion: BotMotion) =>
+  motion.sign === "ellipsis" || motion.sign === "z"
+    ? morph(motion.morph).dressed
+    : 1;
 function canvasFor(side: number, outline: number, into?: HTMLCanvasElement) {
   const inner = Math.ceil(side * 1.6),
     canvas = reuseCanvas(into, inner + outline * 2, inner + outline * 2);
@@ -1247,18 +1421,48 @@ export function renderBot(
   context.save();
   bare(context, form, motion, true);
   context.restore();
+  if (motion.sign && form.spec.cloud)
+    cloudSign(context, motion, motion.sign, signAlpha(motion));
   context.resetTransform();
-  if (motion.sign && !form.spec.avatar)
-    paintSign(
-      context,
-      motion.sign,
-      signBox(form, side, outline),
-      form.light,
-      motion.lit,
-      motion.sign === "ellipsis" || motion.sign === "z"
-        ? morph(motion.morph).dressed
-        : 1,
-    );
+  if (motion.sign && !form.spec.avatar && !form.spec.cloud) {
+    const place = signBox(form, side, outline);
+    if (motion.signUpright && Math.abs(motion.pose.rotation) > 0.5) {
+      // The host tilts this canvas by the pose; turn the sign back so it
+      // stays upright while it follows the head.
+      const { canvas: sign, context: c } = borrowCanvas(
+        place.width + 4,
+        place.height + 4,
+      );
+      try {
+        paintSign(
+          c,
+          motion.sign,
+          { x: 2, y: 2, width: place.width, height: place.height },
+          form.light,
+          motion.lit,
+          signAlpha(motion),
+        );
+        context.save();
+        context.translate(
+          place.x + place.width / 2,
+          place.y + place.height / 2,
+        );
+        context.rotate((-motion.pose.rotation * Math.PI) / 180);
+        context.drawImage(sign, -place.width / 2 - 2, -place.height / 2 - 2);
+        context.restore();
+      } finally {
+        giveBack(sign);
+      }
+    } else
+      paintSign(
+        context,
+        motion.sign,
+        place,
+        form.light,
+        motion.lit,
+        signAlpha(motion),
+      );
+  }
   if (outline > 0) layHairline(context, outline, form.light);
   return canvas;
 }
