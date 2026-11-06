@@ -74,7 +74,9 @@ export function quotaOutlook(row: Quota): QuotaOutlook {
 }
 
 /** What the board's stamp says. */
-export type BoardStamp = "enough" | "tight" | "unknown";
+/** The heading's stamp: whether the quotas last (够用 / 吃紧 / 未知), or for
+ * Hermes whether its bots are up (在岗 / 断线). */
+export type BoardStamp = "enough" | "tight" | "unknown" | "duty" | "down";
 
 /** A piece of the verdict line; `strong` pieces are set bold. */
 export type Words = { text: string; strong?: boolean }[];

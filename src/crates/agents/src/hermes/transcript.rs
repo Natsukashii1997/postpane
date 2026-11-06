@@ -263,6 +263,125 @@ pub fn last_prompt(db: &Connection, session: &str) -> Option<String> {
     })
 }
 
+/// Whether the bot has answered what it was last asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answer {
+    /// A reply with words came after the question.
+    Answered,
+    /// The gateway holds the session's turn lease: it is answering now.
+    Replying,
+    /// Nothing has come back yet.
+    Waiting,
+}
+
+/// Something the person (or a colleague, in a group) last asked the bot in
+/// one Feishu chat.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ask {
+    /// The session's own id in the database.
+    pub session: String,
+    /// Feishu's chat type: `dm`, `group` or `thread`.
+    pub chat: Option<String>,
+    /// The session's title, or the question's first line when it has none.
+    pub title: String,
+    /// When it was asked (ms).
+    pub at: i64,
+    pub answer: Answer,
+}
+
+/// The latest `limit` Feishu chats with a question of the person's own
+/// words, newest first, at `now` (ms). Cron and one-shot sessions are not
+/// asks; a database without the columns it needs has none.
+pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<Vec<Ask>> {
+    let s = sql_columns(db, "sessions")?;
+    let m = sql_columns(db, "messages")?;
+    if !s.contains("source") || !m.contains("timestamp") || !m.contains("session_id") {
+        return Ok(Vec::new());
+    }
+    let mut statement = db.prepare(&format!(
+        "SELECT s.id,{},{} FROM sessions s JOIN messages m ON m.session_id=s.id \
+         WHERE s.source='feishu' AND m.role='user' GROUP BY s.id ORDER BY max(m.timestamp) DESC LIMIT ?1",
+        sql_column(&s, "s", "chat_type", "NULL"),
+        sql_column(&s, "s", "title", "NULL"),
+    ))?;
+    let chats = statement
+        .query_map([(limit * 3) as i64], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .flatten()
+        .collect::<Vec<_>>();
+    let held = leases(db, now)?
+        .into_iter()
+        .map(|lease| lease.session)
+        .collect::<Vec<_>>();
+    let mut asks = chats
+        .into_iter()
+        .filter_map(|(session, chat, title)| {
+            let (id, words, at) = last_question(db, &session)?;
+            let answered = db
+                .query_row(
+                    "SELECT count(*) FROM messages WHERE session_id=?1 AND role='assistant' \
+                     AND id>?2 AND content IS NOT NULL AND length(content)>0",
+                    rusqlite::params![session, id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .ok()?
+                > 0;
+            let answer = if held.contains(&session) {
+                Answer::Replying
+            } else if answered {
+                Answer::Answered
+            } else {
+                Answer::Waiting
+            };
+            let title = title
+                .map(|title| title.trim().to_string())
+                .filter(|title| !title.is_empty())
+                .unwrap_or_else(|| words.lines().next().unwrap_or_default().trim().to_string());
+            Some(Ask {
+                session,
+                chat,
+                title,
+                at,
+                answer,
+            })
+        })
+        .collect::<Vec<_>>();
+    asks.sort_by(|a, b| b.at.cmp(&a.at));
+    asks.truncate(limit);
+    Ok(asks)
+}
+
+/// The session's latest question of the person's own words: its message
+/// id, words and time (ms).
+fn last_question(db: &Connection, session: &str) -> Option<(i64, String, i64)> {
+    let mut statement = db
+        .prepare(
+            "SELECT id, content, timestamp FROM messages WHERE session_id=?1 AND role='user' \
+             AND content IS NOT NULL ORDER BY id DESC LIMIT 10",
+        )
+        .ok()?;
+    let rows = statement
+        .query_map([session], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+            ))
+        })
+        .ok()?
+        .flatten()
+        .collect::<Vec<_>>();
+    rows.into_iter().find_map(|(id, text, at)| {
+        let own = own_words(&text);
+        (!own.is_empty()).then(|| (id, own.to_owned(), (at * 1000.0) as i64))
+    })
+}
+
 /// What a bot has done in Feishu: the person's turns since a moment, and
 /// when it last replied. Its cron and one-shot sessions are not counted.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -356,6 +475,66 @@ mod tests {
         bare.execute_batch("CREATE TABLE sessions (id TEXT); CREATE TABLE messages (id INTEGER);")
             .unwrap();
         assert_eq!(activity(&bare, 0).unwrap(), Activity::default());
+    }
+
+    #[test]
+    fn the_latest_asks_say_where_from_and_whether_answered() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+             CREATE TABLE session_turn_leases (conversation_id TEXT PRIMARY KEY, holder TEXT, acquired_at REAL, expires_at REAL);
+             INSERT INTO sessions VALUES
+               ('dm','feishu','dm','查找最近未回复的提问',0),
+               ('grp','feishu','group',NULL,0),
+               ('busy','feishu','thread','',0),
+               ('old','feishu','dm','很早的',0),
+               ('job','cron',NULL,'日报',0);
+             INSERT INTO messages (session_id,role,content,timestamp) VALUES
+               ('old','user','很早',10),
+               ('dm','user','帮我查一下',100),
+               ('dm','assistant','查到了',110),
+               ('dm','user','[System note: The previous turn was interrupted.]',120),
+               ('grp','user','[System note: 群里] 周报怎么写\n第二行',200),
+               ('grp','assistant','',210),
+               ('busy','user','带教周会改到哪天',300),
+               ('job','user','日报',400);
+             INSERT INTO session_turn_leases VALUES ('busy','gw',300,1000);",
+        )
+        .unwrap();
+        let asks = recent_asks(&db, 500_000, 3).unwrap();
+        assert_eq!(
+            asks.iter()
+                .map(|a| (
+                    a.session.as_str(),
+                    a.chat.as_deref(),
+                    a.title.as_str(),
+                    a.at,
+                    a.answer
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "busy",
+                    Some("thread"),
+                    "带教周会改到哪天",
+                    300_000,
+                    Answer::Replying
+                ),
+                ("grp", Some("group"), "周报怎么写", 200_000, Answer::Waiting),
+                (
+                    "dm",
+                    Some("dm"),
+                    "查找最近未回复的提问",
+                    100_000,
+                    Answer::Answered
+                ),
+            ]
+        );
+        let bare = Connection::open_in_memory().unwrap();
+        bare.execute_batch("CREATE TABLE sessions (id TEXT); CREATE TABLE messages (id INTEGER);")
+            .unwrap();
+        assert_eq!(recent_asks(&bare, 0, 3).unwrap(), Vec::new());
     }
 
     #[test]

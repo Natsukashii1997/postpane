@@ -84,14 +84,31 @@ const STAMP_WORDS = {
     zhAria: "额度情况未知",
     enAria: "Quota outlook unknown",
   },
+  duty: {
+    zh: "在岗",
+    en: "ON",
+    zhAria: "机器人都在线",
+    enAria: "Every bot is online",
+  },
+  down: {
+    zh: "断线",
+    en: "DOWN",
+    zhAria: "有机器人断线",
+    enAria: "A bot is down",
+  },
 } as const;
 
-/** The 够用 / 吃紧 / 未知 stamp: a ring tilted like a rubber stamp. */
+/** The 够用 / 吃紧 / 未知 (or 在岗 / 断线) stamp: a ring tilted like a rubber
+ * stamp. */
 function Stamp({ kind, light }: { kind: BoardStamp; light: boolean }) {
   const inks = useBoardInks(light);
   const zh = useFormat().language === "zh";
   const color =
-    kind === "tight" ? inks.red : kind === "enough" ? inks.green : inks.hatch;
+    kind === "tight" || kind === "down"
+      ? inks.red
+      : kind === "enough" || kind === "duty"
+        ? inks.green
+        : inks.hatch;
   const words = STAMP_WORDS[kind];
   const label = zh ? words.zh : words.en;
   return (

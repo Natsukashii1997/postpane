@@ -159,6 +159,8 @@ pub enum Down {
 pub struct Gateway {
     pub bot: Bot,
     pub down: Option<Down>,
+    /// Since when it has been down (ms), as far as its state says.
+    pub down_since: Option<i64>,
     /// Its Hermes home, where its `state.db` is.
     pub home: std::path::PathBuf,
 }
@@ -178,9 +180,11 @@ pub fn gateways(home: &Path, now: i64) -> Vec<Gateway> {
         .filter_map(|dir| {
             let text = std::fs::read_to_string(dir.join("gateway_state.json")).ok()?;
             let state = serde_json::from_str::<serde_json::Value>(&text).ok()?;
+            let down = down(&state, now);
             Some(Gateway {
                 bot: bot(&dir.join("state.db").to_string_lossy())?,
-                down: down(&state, now),
+                down,
+                down_since: down_since(&state, down),
                 home: dir,
             })
         })
@@ -199,6 +203,9 @@ pub struct CronJob {
     pub last_run_at: Option<i64>,
     /// When it runs next (ms).
     pub next_run_at: Option<i64>,
+    /// How often it runs: its cron expression (`45 7 * * 1`), or the
+    /// schedule as Hermes prints it when it has none.
+    pub schedule: Option<String>,
 }
 
 fn millis(value: &serde_json::Value) -> Option<i64> {
@@ -223,6 +230,14 @@ pub fn cron_jobs(text: &str) -> Option<Vec<CronJob>> {
                     failed: job["last_status"] == "error",
                     last_run_at: millis(&job["last_run_at"]),
                     next_run_at: millis(&job["next_run_at"]),
+                    schedule: [
+                        &job["schedule"]["expr"],
+                        &job["schedule_display"],
+                        &job["schedule"]["display"],
+                    ]
+                    .into_iter()
+                    .find_map(|text| text.as_str().filter(|text| !text.trim().is_empty()))
+                    .map(str::to_string),
                 })
             })
             .collect(),
@@ -235,12 +250,30 @@ impl Gateway {
         cron_jobs(&std::fs::read_to_string(self.home.join("cron").join("jobs.json")).ok()?)
     }
 
+    /// The latest `limit` things the person asked its bot in Feishu, at
+    /// `now` (ms); none when its database cannot be read.
+    pub fn asks(&self, now: i64, limit: usize) -> Vec<transcript::Ask> {
+        crate::sqlite::ReadOnlyDatabase::open(&self.home.join("state.db"))
+            .and_then(|db| transcript::recent_asks(&db.connection, now, limit))
+            .unwrap_or_default()
+    }
+
     /// Its bot's Feishu activity since `since` (ms); none when its database
     /// cannot be read.
     pub fn activity(&self, since: i64) -> transcript::Activity {
         crate::sqlite::ReadOnlyDatabase::open(&self.home.join("state.db"))
             .and_then(|db| transcript::activity(&db.connection, since))
             .unwrap_or_default()
+    }
+}
+
+/// Since when a gateway that is `down` has been: its Feishu connection's
+/// retries or last change, or the gateway's last word when it stopped.
+pub fn down_since(state: &serde_json::Value, down: Option<Down>) -> Option<i64> {
+    let feishu = &state["platforms"]["feishu"];
+    match down? {
+        Down::Feishu => millis(&feishu["retrying_since"]).or_else(|| millis(&feishu["updated_at"])),
+        Down::Stopped => millis(&state["updated_at"]),
     }
 }
 
@@ -318,6 +351,43 @@ mod gateway_tests {
         assert_eq!(jobs[0].next_run_at, Some(1_794_181_500_000));
         assert_eq!(jobs[2].last_run_at, None);
         assert_eq!(cron_jobs("{\"jobs\": [{\"id\""), None);
+    }
+
+    #[test]
+    fn a_cron_job_carries_its_schedule() {
+        let text = json!({"jobs": [
+            {"id": "a", "schedule": {"kind": "cron", "expr": "45 7 * * 1", "display": "45 7 * * 1"}},
+            {"id": "b", "schedule_display": "every 30m"},
+            {"id": "c"}
+        ]})
+        .to_string();
+        let jobs = cron_jobs(&text).unwrap();
+        assert_eq!(
+            jobs.iter()
+                .map(|j| j.schedule.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("45 7 * * 1"), Some("every 30m"), None]
+        );
+    }
+
+    #[test]
+    fn a_down_gateway_says_since_when() {
+        let mut feishu = state("running", "disconnected", false, 5_000);
+        let at = |ago: i64| {
+            chrono::DateTime::from_timestamp_millis(NOW - ago)
+                .unwrap()
+                .to_rfc3339()
+        };
+        feishu["platforms"]["feishu"]["updated_at"] = json!(at(720_000));
+        assert_eq!(down_since(&feishu, Some(Down::Feishu)), Some(NOW - 720_000));
+        feishu["platforms"]["feishu"]["retrying_since"] = json!(at(900_000));
+        assert_eq!(down_since(&feishu, Some(Down::Feishu)), Some(NOW - 900_000));
+        let stopped = state("running", "connected", false, SILENT_MS + 60_000);
+        assert_eq!(
+            down_since(&stopped, Some(Down::Stopped)),
+            Some(NOW - SILENT_MS - 60_000)
+        );
+        assert_eq!(down_since(&stopped, None), None);
     }
 
     #[test]

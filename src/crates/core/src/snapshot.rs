@@ -123,15 +123,15 @@ impl crate::AgentHudCore {
         self.source_notice.hash(&mut hash);
         self.storage_issue.hash(&mut hash);
         self.reads.pending.len().hash(&mut hash);
-        // A Hermes gateway going down is news though no log changed.
+        // A Hermes gateway going down, or a scheduled task running, is news
+        // though no log changed.
         for gateway in self.hermes_gateways(Utc::now().timestamp_millis()) {
-            let failed = gateway.cron_jobs().map(|jobs| {
+            let jobs = gateway.cron_jobs().map(|jobs| {
                 jobs.into_iter()
-                    .filter(|job| job.failed)
-                    .map(|job| job.id)
+                    .map(|job| (job.id, job.failed, job.last_run_at, job.next_run_at))
                     .collect::<Vec<_>>()
             });
-            (gateway.bot.id, gateway.down, failed).hash(&mut hash);
+            (gateway.bot.id, gateway.down, gateway.down_since, jobs).hash(&mut hash);
         }
         (
             self.usage_projection.is_none(),
@@ -832,11 +832,12 @@ mod relay_balance_tests {
     }
 }
 
-/// Each Hermes bot for the strip's peek: whether its gateway is down, how
-/// many turns the person asked it today (local day) and when it last
-/// replied in Feishu. The default home's bot first, then by id.
+/// Each Hermes bot for the strip's peek and the panel: whether its gateway
+/// is down and since when, how many turns the person asked it today (local
+/// day), when it last replied in Feishu, its scheduled tasks, and the latest
+/// three things it was asked. The default home's bot first, then by id.
 fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Value {
-    use agent_hud_agents::hermes::Down;
+    use agent_hud_agents::hermes::{transcript::Answer, Down};
     use chrono::{Local, TimeZone};
     let today = Local
         .timestamp_millis_opt(now)
@@ -860,8 +861,85 @@ fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Valu
                     }),
                     "turnsToday": activity.turns,
                     "lastReplyAt": activity.last_reply.and_then(iso),
+                    "downSince": gateway.down_since.and_then(iso),
+                    "jobs": gateway.cron_jobs().unwrap_or_default().into_iter().map(|job| json!({
+                        "id": job.id,
+                        "name": job.name,
+                        "enabled": job.enabled,
+                        "failed": job.failed,
+                        "schedule": job.schedule,
+                        "lastRunAt": job.last_run_at.and_then(iso),
+                        "nextRunAt": job.next_run_at.and_then(iso),
+                    })).collect::<Vec<_>>(),
+                    "asks": gateway.asks(now, 3).into_iter().map(|ask| json!({
+                        "chat": ask.chat,
+                        "title": ask.title,
+                        "at": iso(ask.at),
+                        "answer": match ask.answer {
+                            Answer::Answered => "answered",
+                            Answer::Replying => "replying",
+                            Answer::Waiting => "waiting",
+                        },
+                    })).collect::<Vec<_>>(),
                 })
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod hermes_bot_tests {
+    use super::*;
+
+    #[test]
+    fn each_bot_lists_its_scheduled_tasks_and_latest_asks() {
+        let root = std::env::temp_dir().join(format!("hermes-bots-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("cron")).unwrap();
+        std::fs::write(root.join("SOUL.md"), "# 猛鬼兽 · SOUL\n").unwrap();
+        let now = 1_793_870_000_000_i64;
+        let at = |ms: i64| {
+            chrono::DateTime::from_timestamp_millis(ms)
+                .unwrap()
+                .to_rfc3339()
+        };
+        std::fs::write(
+            root.join("gateway_state.json"),
+            json!({"gateway_state": "running", "updated_at": at(now - 1_000),
+                "platforms": {"feishu": {"state": "disconnected", "updated_at": at(now - 720_000)}}})
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("cron").join("jobs.json"),
+            json!({"jobs": [{"id": "w", "name": "周报（新结构·并跑）", "enabled": true,
+                "schedule": {"kind": "cron", "expr": "45 7 * * 1"}, "last_status": "error",
+                "last_run_at": at(now - 86_400_000), "next_run_at": at(now + 86_400_000)}]})
+            .to_string(),
+        )
+        .unwrap();
+        let db = rusqlite::Connection::open(root.join("state.db")).unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+             INSERT INTO sessions VALUES ('dm','feishu','dm','整理本周进展',0);
+             INSERT INTO messages (session_id,role,content,timestamp) VALUES ('dm','user','整理一下',1793869000);",
+        )
+        .unwrap();
+        drop(db);
+        let gateways = agent_hud_agents::hermes::gateways(&root, now);
+        let bots = hermes_bots(&gateways, now);
+        let _ = std::fs::remove_dir_all(&root);
+        let bot = &bots[0];
+        assert_eq!(bot["down"], "feishu");
+        assert_eq!(bot["downSince"], at(now - 720_000));
+        assert_eq!(
+            bot["jobs"],
+            json!([{"id": "w", "name": "周报（新结构·并跑）", "enabled": true, "failed": true,
+                "schedule": "45 7 * * 1", "lastRunAt": at(now - 86_400_000), "nextRunAt": at(now + 86_400_000)}])
+        );
+        assert_eq!(
+            bot["asks"],
+            json!([{"chat": "dm", "title": "整理本周进展", "at": at(1_793_869_000_000), "answer": "waiting"}])
+        );
+    }
 }
