@@ -86,22 +86,89 @@ export const STORY = {
   /** Around the notch, the robots come out first. */
   enter: 320,
   /** An open envelope pops up beside the sender; a letter slides in. */
-  pack: 500,
+  pack: 320,
   /** The flap closes and the envelope folds into a paper plane. */
-  fold: 600,
+  fold: 380,
   /** In the air, a dashed trail behind it. */
-  fly: 1500,
+  fly: 1000,
   /** Beside the receiver it unfolds into the envelope and opens. */
-  unfold: 600,
-  /** The letter slides into the receiver, which bounces; the envelope fades. */
-  deliver: 600,
+  unfold: 380,
+  /** The letter slides into the receiver, which catches it; the envelope fades. */
+  deliver: 420,
   /** A refused one drops from halfway and bursts open. */
-  fall: 700,
+  fall: 600,
   /** Around the notch, the robots go back in. */
   leave: 300,
   /** Reduced motion: an envelope fades in by each side in turn. */
   still: 1800,
 } as const;
+
+/** On a dock the robots themselves throw and catch the letter (#171), one
+ * move each whatever the edge: `n` points into the screen, `u` along the
+ * dock from the sender towards the receiver. The throw lets go `release` of
+ * the way in; the catch takes the hit `impact` of the way in. */
+export const THROW = { duration: 560, release: 0.52 } as const;
+export const CATCH = { duration: 700, impact: 0.48 } as const;
+const shift = (x: number, y: number) =>
+  `${Math.round(x * 100) / 100}px ${Math.round(y * 100) / 100}px`;
+/** Which way the robot leans to face the letter's way out. */
+const lean = (n: Point, u: Point) => (u.x * n.y - u.y * n.x >= 0 ? 1 : -1);
+/** Squashed across the way the letter travels. */
+const squash = (u: Point, wide: number, tall: number) =>
+  Math.abs(u.y) >= Math.abs(u.x) ? `${wide} ${tall}` : `${tall} ${wide}`;
+/** Wind up away from the screen and back along the dock, then fling. */
+export function throwFrames(n: Point, u: Point): Keyframe[] {
+  const s = lean(n, u);
+  return [
+    { translate: "0px 0px", rotate: "0deg", scale: "1 1" },
+    {
+      translate: shift(-n.x * 1 - u.x * 2, -n.y * 1 - u.y * 2),
+      rotate: `${10 * s}deg`,
+      scale: squash(u, 0.95, 1.05),
+      offset: 0.38,
+    },
+    {
+      translate: shift(n.x * 2 + u.x * 1.5, n.y * 2 + u.y * 1.5),
+      rotate: `${-13 * s}deg`,
+      scale: squash(u, 1.07, 0.93),
+      offset: THROW.release,
+    },
+    { translate: "0px 0px", rotate: `${4 * s}deg`, scale: "1 1", offset: 0.76 },
+    { translate: "0px 0px", rotate: "0deg", scale: "1 1" },
+  ];
+}
+/** Look towards the letter, take it with a squash, bounce back. */
+export function catchFrames(n: Point, u: Point): Keyframe[] {
+  const s = lean(n, u);
+  return [
+    { translate: "0px 0px", rotate: "0deg", scale: "1 1" },
+    {
+      translate: shift(n.x * 1.5 - u.x * 1.5, n.y * 1.5 - u.y * 1.5),
+      rotate: `${-7 * s}deg`,
+      scale: "1 1",
+      offset: 0.36,
+    },
+    {
+      translate: shift(u.x * 2, u.y * 2),
+      rotate: "0deg",
+      scale: squash(u, 1.15, 0.84),
+      offset: CATCH.impact,
+    },
+    {
+      translate: shift(-u.x * 3, -u.y * 3),
+      rotate: "0deg",
+      scale: squash(u, 0.94, 1.08),
+      offset: 0.66,
+    },
+    {
+      translate: "0px 0px",
+      rotate: "0deg",
+      scale: squash(u, 1.02, 0.98),
+      offset: 0.84,
+    },
+    { translate: "0px 0px", rotate: "0deg", scale: "1 1" },
+  ];
+}
 
 /** The direction away from a screen edge, into the screen. */
 export const inward: Record<HUDEdge, Point> = {
@@ -169,7 +236,7 @@ function pin(route: Cubic[], start: Point, end: Point): Cubic[] {
 }
 
 /** How far the loop reaches into the screen when there is room for it. */
-export const LOOP = 140;
+export const LOOP = 90;
 
 /** The route on a dock from beside one mark to beside another: part of an
  * ellipse through both, reaching `LOOP` points into the screen. Close marks
@@ -197,17 +264,17 @@ function arc(start: Point, end: Point, n: Point, reach: number): Cubic[] {
   const half = d / 2;
   const middle = mul(add(start, end), 0.5);
   if (d >= 2 * reach) {
-    const a = Math.min(120, 0.3 * d);
+    const a = Math.min(100, 0.3 * d);
     return pin(
       ellipse(middle, n, u, a, half, -Math.PI / 2, Math.PI / 2),
       start,
       end,
     );
   }
-  // The ellipse is 30 points wider than the marks on each side (and never
+  // The ellipse is 16 points wider than the marks on each side (and never
   // much narrower than it is deep, so a loop to the same mark stays round); its centre
   // sits inward so that both ends lie on it and its far side is `reach` in.
-  const b = Math.max(half + 30, reach * 0.4);
+  const b = Math.max(half + 16, reach * 0.4);
   const k = Math.sqrt(1 - (half / b) ** 2);
   const a = reach / (1 + k);
   const centre = add(middle, mul(n, a * k));
