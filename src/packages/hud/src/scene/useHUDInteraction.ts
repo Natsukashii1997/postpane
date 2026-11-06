@@ -207,7 +207,7 @@ export function useHUDInteraction({
     return vendors[index]?.key ?? null;
   }
 
-  /** Whether the pointer is on the notes pendant hung below the strip. */
+  /** Whether the pointer is on a pendant hung below the strip (随手记, 磁盘瘦身). */
   function onPendant(point: { clientX: number; clientY: number }) {
     return Boolean(
       document

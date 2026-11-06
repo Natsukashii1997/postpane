@@ -34,6 +34,8 @@ import {
 } from "./permissions/ApprovalContent";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { AppPendant } from "./scene/AppPendant";
+import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
+import { pendantChain } from "./app-pendant";
 import { HUDMarkStrip } from "./scene/HUDMarkStrip";
 import { FlightLayer, type HUDFlightCommand } from "./scene/FlightLayer";
 import { NotchGlow } from "./scene/NotchSurface";
@@ -83,6 +85,7 @@ export { defaultHUDConfig, HUD_METRICS } from "./model";
 export type { HUDDragPreview, HUDDragStartArgs } from "./scene/useHUDDrag";
 export type { HUDNativePointer } from "./scene/useHUDInteraction";
 export type { HUDFlight, HUDFlightCommand } from "./scene/FlightLayer";
+export type { DiskSlimState } from "./scene/DiskPendant";
 
 export interface HUDSceneProps {
   snapshot: Snapshot;
@@ -90,6 +93,10 @@ export interface HUDSceneProps {
   onConfigure?: () => void;
   /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
   onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
+  /** 磁盘瘦身's last status; it hangs under 随手记 while it is installed (#155). */
+  diskSlim?: DiskSlimState | null;
+  /** Asks 磁盘瘦身 to open or hide its panel beside its ball. */
+  onDiskSlim?: (anchor: HUDRect) => Promise<void>;
   onStats?: (target?: StatsTarget) => void;
   /** The product's newer version, and the way to it (the panel footer's arrow). */
   update?: HUDUpdateNotice | null;
@@ -168,6 +175,8 @@ export function HUDScene({
   config: supplied,
   onConfigure,
   onFloatNotes,
+  diskSlim,
+  onDiskSlim,
   onStats,
   update,
   onUpdate,
@@ -836,6 +845,23 @@ export function HUDScene({
       delivery,
     ],
   );
+  // Self-built apps hang off the resting strip one under another (#155):
+  // 随手记 first, then 磁盘瘦身 while it is installed.
+  const hung = (
+    config.mode === "logos"
+      ? [
+          ...(onFloatNotes ? (["notes"] as const) : []),
+          ...(onDiskSlim && diskSlim?.installed ? (["disk"] as const) : []),
+        ]
+      : []
+  ) as ("notes" | "disk")[];
+  const pendants = pendantChain(
+    strip,
+    edge,
+    metrics.logo,
+    { width: window.innerWidth, height: window.innerHeight },
+    hung.length,
+  ).map((layout, index) => ({ app: hung[index]!, layout }));
   return (
     <HUDGroundProvider look={config}>
       <ListedSessionsContext.Provider value={listedSessions}>
@@ -1145,18 +1171,29 @@ export function HUDScene({
               pin={pin}
             />
           </div>
-          {config.mode === "logos" && onFloatNotes && (
-            <AppPendant
-              strip={strip}
-              edge={edge}
-              logo={metrics.logo}
-              light={light}
-              zh={snapshotLanguage(snapshot) === "zh"}
-              room={{ width: window.innerWidth, height: window.innerHeight }}
-              still={reduceMotion || dragVisual}
-              carried={dragVisual}
-              onToggle={onFloatNotes}
-            />
+          {pendants.map(({ app, layout }) =>
+            app === "notes" ? (
+              <AppPendant
+                key={app}
+                layout={layout}
+                light={light}
+                zh={snapshotLanguage(snapshot) === "zh"}
+                still={reduceMotion || dragVisual}
+                carried={dragVisual}
+                onToggle={onFloatNotes!}
+              />
+            ) : (
+              <DiskPendant
+                key={app}
+                layout={layout}
+                state={diskSlim!}
+                light={light}
+                zh={snapshotLanguage(snapshot) === "zh"}
+                still={reduceMotion || dragVisual}
+                carried={dragVisual}
+                onToggle={onDiskSlim!}
+              />
+            ),
           )}
           {dragVisual && (
             <svg
