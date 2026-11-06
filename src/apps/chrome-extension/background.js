@@ -1,6 +1,6 @@
 // Bridges chatgpt.com tabs and PostPane over Chrome Native Messaging.
-// Protocol: docs/chatgpt-channel.md. Only conversations on PostPane's watch
-// list (plus a chat this extension is opening) are ever reported.
+// Protocol: docs/chatgpt-channel.md. Every conversation's turns are reported
+// (#145); only conversations on PostPane's watch list are sent to.
 const HOST = "com.postpane.chatgpt";
 const HOME = "https://chatgpt.com/";
 const GROUP = "驿窗接力";
@@ -182,8 +182,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     for (const check of waiters.get(tabId) || []) check(page);
     statusSoon();
   } else if (message.type === "turn") {
-    const known = message.conversation && watched.has(message.conversation);
-    if (known || (opening.has(tabId) && message.conversation)) post(message);
+    // A new chat's first start, before it has an address, says nothing yet.
+    if (message.conversation) post(message);
   }
 });
 

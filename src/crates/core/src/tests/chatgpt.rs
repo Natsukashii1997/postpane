@@ -82,6 +82,60 @@ fn a_finished_chatgpt_turn_is_a_reply_with_its_prompt_and_whole_message() {
 }
 
 #[test]
+fn a_chatgpt_turn_in_flight_runs_until_its_reply_and_says_whether_it_is_a_review() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut core = AgentHudCore::new(vec![], temp.path().join("app-data"));
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let now = Utc::now().timestamp_millis();
+    // A reply that has been streaming for five minutes, longer than an
+    // observer's two-minute heartbeat: ChatGPT reports a turn's start once.
+    let started = now - 5 * 60_000;
+    let start = |id: &str, review: bool| HookEvent {
+        source: "chatgpt".into(),
+        session_id: format!("chatgpt:{id}"),
+        kind: "session-observation".into(),
+        at_ms: started,
+        data: json!({
+            "state": "running",
+            "turnId": format!("start-{started}"),
+            "startedAtMs": started,
+            "title": "杭州两日行程",
+            "prompt": "帮我排两天",
+            "review": review,
+            "navigationTarget": {"kind": "chatgpt-conversation", "id": id},
+        }),
+    };
+    core.ingest_hook_events(vec![start("c1", false), start("c2", true)]);
+    let snapshot = core.request("snapshot", json!({})).unwrap();
+    let row = |snapshot: &serde_json::Value, id: &str| {
+        snapshot["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("{id} listed: {}", snapshot["sessions"]))
+    };
+    let chat = row(&snapshot, "chatgpt:c1");
+    assert_eq!(chat["state"], "running");
+    assert!(chat["title"].as_str().unwrap().contains("杭州两日行程"));
+    assert_eq!(chat["review"], false);
+    assert_eq!(row(&snapshot, "chatgpt:c2")["review"], true);
+    // Its reply ends the turn.
+    core.ingest_hook_events(vec![HookEvent {
+        source: "chatgpt".into(),
+        session_id: "chatgpt:c1".into(),
+        kind: "completion".into(),
+        at_ms: now - 1_000,
+        data: json!({"turnId": "m1", "message": "第一天……", "review": false}),
+    }]);
+    let after = core.request("snapshot", json!({})).unwrap();
+    let chat = row(&after, "chatgpt:c1");
+    assert_eq!(chat["state"], "idle");
+    assert_eq!(chat["review"], false);
+}
+
+#[test]
 fn a_completion_from_a_client_without_one_is_ignored() {
     let temp = tempfile::tempdir().unwrap();
     let mut core = AgentHudCore::new(vec![], temp.path().join("app-data"));

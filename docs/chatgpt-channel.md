@@ -31,7 +31,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 |---|---|---|
 | `hello` | `version`, `extensionId` | 插件后台连上后第一条 |
 | `tabs` | `conversations: [{id, open, hidden}]` | 名单里各会话标签页状态，变化时发 |
-| `turn` | `phase: "start" \| "complete"`, `conversation`, `title`, `prompt`, `reply`, `messageId`, `at` | 名单里的会话一轮开始 / 完成。`complete` 时 `reply` 是整理好的 Markdown 全文，`prompt` 是这一轮用户消息全文，`title` 是会话标题（标签页标题去掉「 - ChatGPT」等后缀，可能为空） |
+| `turn` | `phase: "start" \| "complete"`, `conversation`, `title`, `prompt`, `reply`, `messageId`, `at` | 任一会话一轮开始 / 完成（#145 起不限名单；还没有会话 id 的新会话不报）。`complete` 时 `reply` 是整理好的 Markdown 全文，`prompt` 是这一轮用户消息全文，`title` 是会话标题（标签页标题去掉「 - ChatGPT」等后缀，可能为空） |
 | `opened` | `requestId`, `ok`, `conversation?`, `title?`, `reason?` | 回应 `open` |
 | `sent` | `requestId`, `ok`, `reason?` | 回应 `send` |
 
@@ -39,7 +39,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 | type | 字段 | 说明 |
 |---|---|---|
-| `watch` | `conversations: [id]` | 名单整体替换。插件只读、只报名单里的会话 |
+| `watch` | `conversations: [id]` | 名单整体替换。名单只决定哪些会话能送话、算「审核」 |
 | `open` | `requestId`, `text`, `project?` | 新开会话（`project` 是 ChatGPT 项目页网址，给了就在项目里新建），填 `text` 发出，拿到 `/c/<id>` 后回 `opened`，并把它自行加进名单（不等下一条 `watch`） |
 | `send` | `requestId`, `conversation`, `text` | 给名单里的会话送话；标签页没开就在后台打开 `https://chatgpt.com/c/<id>` 再送 |
 | `focus` | `conversation` | 把这个会话的标签页切到前台（没开就打开） |
@@ -50,6 +50,8 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 - ChatGPT 作为一个客户端（`agents/src/chatgpt`，id `chatgpt`），会话 id 为 `chatgpt:<会话id>`，回跳目标 `chatgpt-conversation`（交给插件 `focus`，插件不通时用浏览器打开 `https://chatgpt.com/c/<id>`）。
 - `turn complete` 变成一条 completion 事件，侧栏照常弹「新回复」回执；回复全文不截断。
+- `turn start` 变成一条 running 的 session-observation，会话显示「在答」，直到回复完成；ChatGPT 只报一次开始，没有心跳，15 分钟还没完成（多半是标签页关了）就不再算在答。
+- 对话与审核（#145）：名单里的会话（驿窗经 `open` 开的）算「审核」，其余是常浩自己开的「对话」；两种事件都带 `review`，快照里的 ChatGPT 会话带 `review: true | false`。只读得到 Chrome 里 chatgpt.com 的对话，手机端、Mac 桌面应用看不到。
 - 新会话在首页发出，ChatGPT 开始回答时地址里还没有会话 id，那次 `turn start` 不带 `conversation`；地址变成 `/c/<id>` 时若仍在生成，插件带上新 id 再报一次 `turn start`，接力才会进入 `working`。
 - 名单 = 驿窗经 `open` 新开过的会话，存 `<数据目录>/chatgpt/watched.json`（1c 的接力会话也在其中，见下）。
 - 设置 · 智能体插件页有「ChatGPT（Chrome 插件）」一行：登记 host manifest、显示是否连上。
