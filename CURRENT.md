@@ -17,7 +17,7 @@
 - 与授权不一致之处、遗留问题、范围外发现：
   - 面板里不再有「ChatGPT」块：#138 之后它叫 ChatGPT，但网页通道没有额度，按 #135 的规则不列；常浩要在面板里看到它再说。
   - 「最近被问」的标题用 Hermes 给会话起的标题（会带人名），只在本机面板显示。
-  - worktree `.claude/worktrees/133-panel-fixes`（现在在 `claude/136-hermes-desks`）已 `cargo clean`，可以删。
+  - worktree `.claude/worktrees/133-panel-fixes` 已删。
 - 本轮新坑：无。
 
 ## 侧栏 Codex 与网页 ChatGPT 各占一个位置，Codex 换云朵小人（2026-11-06，Claude，常浩说「要求都能显示，codex的图标用这个，chatgpt就还是现在的绿色小花」，选「一直是云形小人」并说动作库之后另做；PR #138 本地全量通过后按授权 squash 合并 `68cc6c0`，已从该 main 打包安装、回读一致）
