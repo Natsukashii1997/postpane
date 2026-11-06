@@ -33,6 +33,7 @@ import {
   RequestDeliveryNotice,
 } from "./permissions/ApprovalContent";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
+import { SideTags, sideTagRects } from "./scene/SideTags";
 import { AppPendant } from "./scene/AppPendant";
 import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
 import { pendantChain } from "./app-pendant";
@@ -140,6 +141,15 @@ const position = (rect: HUDRect): CSSProperties => ({
   width: rect.width,
   height: rect.height,
 });
+
+function rectsMeet(a: HUDRect, b: HUDRect) {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
 
 function rectContains(rect: HUDRect, point: { x: number; y: number }) {
   return (
@@ -502,7 +512,7 @@ export function HUDScene({
     request,
     event,
     inUsagePanel,
-    requestsCount: requests.length,
+    requestsCount: news.requests.length,
     reply,
   });
 
@@ -565,6 +575,34 @@ export function HUDScene({
     () => (cardHandoff && paper ? relayPaperOf(light, paper.bleed) : null),
     [Boolean(cardHandoff), paper, light],
   );
+
+  // The other agents' tags, each by its own mark (#162). The card or panel
+  // out in front covers any it would overlap, and the notch has one place.
+  const sideTags =
+    config.mode === "notch" || dragging
+      ? []
+      : sideTagRects(news.sides, {
+          screen,
+          strip,
+          edge,
+          centers: metrics.centers,
+          scale,
+          zh: snapshotLanguage(snapshot) === "zh",
+          quotaDisplay: snapshot.settings.quotaDisplay,
+          sessions: snapshot.sessions,
+        }).filter(({ rect }) => !cardVisible || !rectsMeet(rect, frame));
+  const sidePaper = useMemo(() => paperOf(light), [light]);
+  // Resting on another agent's tag or mark brings it to the front before the
+  // card opens, so the card that opens there is that agent's own.
+  useLayoutEffect(() => {
+    const point = nativePointer?.inside ? nativePointer.point : undefined;
+    const under =
+      (point && sideTags.find(({ rect }) => rectContains(rect, point))?.side) ??
+      (hovered
+        ? news.sides.find((side) => side.vendor === hovered)
+        : undefined);
+    if (under) news.select(under.id);
+  }, [nativePointer?.point?.x, nativePointer?.point?.y, hovered]);
 
   const [heldFrame, setHeldFrame] = useState<HUDRect | null>(null);
   const lastFrameRef = useRef<HUDRect | null>(null);
@@ -739,7 +777,7 @@ export function HUDScene({
         {request ? (
           <PaperContext.Provider value={paper}>
             <ApprovalContent
-              requests={requests}
+              requests={news.requests}
               selected={request}
               select={news.select}
               decide={onRequestDecision}
@@ -771,9 +809,9 @@ export function HUDScene({
         {!request && event && (
           <PaperContext.Provider value={paper}>
             <PendingEventRows
-              queue={news.queue}
+              queue={news.laneQueue}
               currentID={event.id}
-              requests={requests}
+              requests={news.requests}
               select={news.select}
               includeRequests
               light={light}
@@ -1021,6 +1059,18 @@ export function HUDScene({
               }}
             />
           )}
+          <SideTags
+            tags={sideTags}
+            edge={edge}
+            scale={scale}
+            paper={sidePaper}
+            light={light}
+            botLogos={config.botLogos}
+            zh={snapshotLanguage(snapshot) === "zh"}
+            notchWidth={config.notchWidth}
+            sessions={snapshot.sessions}
+            onFront={news.select}
+          />
           <HUDExpandedSurface
             config={config}
             edge={edge}
@@ -1056,7 +1106,7 @@ export function HUDScene({
             request={request}
             event={event}
             reply={reply}
-            requests={requests}
+            requests={news.requests}
             snapshot={snapshot}
             forceOpen={forceOpen}
             dismissNews={news.dismiss}
