@@ -703,47 +703,81 @@ a:focus-visible {
   .hud-app-pendant-ball {
   animation: hud-disk-halo 2.6s ease-in-out infinite;
 }
-/* Space left (丙 号码牌): a small plate on the ring's top-left with the GiB
- * left, orange when low, red when critical; critical also makes the ghost
- * hop now and then while nobody touches it. */
-.hud-disk-badge {
-  --s: var(--hud-disk-s, 1);
+/* Space left (#160): the broom is its own layer over the ball and its colour
+ * alone tells the space: honey bristles on an amber handle when low, light
+ * coral on deep coral when critical; the bristles take the colour over their
+ * white, the handle and band take its hue over their cyan. It sweeps only
+ * under the pointer, twice, kicking up dust of its colour. */
+.hud-disk-sweep,
+.hud-disk-broom,
+.hud-disk-broom > img,
+.hud-disk-bristles,
+.hud-disk-handle {
   position: absolute;
-  left: calc(-5px * var(--s));
-  top: calc(-4px * var(--s));
-  z-index: 2;
-  box-sizing: border-box;
-  height: calc(14px * var(--s));
-  min-width: calc(22px * var(--s));
-  padding: 0 calc(3.5px * var(--s));
-  border-radius: calc(7px * var(--s));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  font-family:
-    "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif;
-  font-weight: 700;
-  font-size: calc(11px * var(--s));
-  line-height: 1;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-  box-shadow:
-    0 0 0 calc(1.5px * var(--s)) #ffffff,
-    0 calc(1px * var(--s)) calc(3px * var(--s)) rgba(0, 0, 0, 0.25);
+  inset: 0;
   pointer-events: none;
 }
-.hud-app-pendant[data-level="low"] .hud-disk-badge {
-  background: #ff9e0a;
+.hud-disk-sweep {
+  border-radius: 50%;
+  overflow: hidden;
 }
-.hud-app-pendant[data-level="critical"] .hud-disk-badge {
-  background: #ff453b;
+.hud-disk-broom > img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-.hud-app-pendant[data-app="disk"][data-level="critical"][data-motion="on"]:not(
-    :hover
-  )
-  .hud-pendant-sway {
-  animation: hud-disk-hop 6s ease-in-out -5s infinite;
+/* Swung from the handle's top. */
+.hud-disk-broom {
+  transform-origin: 87% 38.5%;
+}
+.hud-disk-bristles,
+.hud-disk-handle {
+  opacity: 0;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.hud-disk-bristles {
+  mix-blend-mode: multiply;
+}
+.hud-disk-handle {
+  mix-blend-mode: color;
+}
+.hud-app-pendant[data-app="disk"][data-level="low"] .hud-disk-bristles {
+  opacity: 1;
+  background: #ffd34d;
+}
+.hud-app-pendant[data-app="disk"][data-level="low"] .hud-disk-handle {
+  opacity: 1;
+  background: #e39b12;
+}
+.hud-app-pendant[data-app="disk"][data-level="critical"] .hud-disk-bristles {
+  opacity: 1;
+  background: #f5937c;
+}
+.hud-app-pendant[data-app="disk"][data-level="critical"] .hud-disk-handle {
+  opacity: 1;
+  background: #d9604c;
+}
+.hud-disk-puff {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: #e6f6fb;
+}
+.hud-app-pendant[data-level="low"] .hud-disk-puff {
+  background: #e0b84a;
+}
+.hud-app-pendant[data-level="critical"] .hud-disk-puff {
+  background: #e08670;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-broom {
+  animation: hud-disk-sweep 4.6s ease-in-out -3.4s infinite;
+}
+.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-puff {
+  animation: hud-disk-puff 4.6s ease-out -3.4s infinite;
 }
 /* Twice, quicker than the cat and out of step with it. */
 @keyframes hud-disk-blink {
@@ -809,23 +843,50 @@ a:focus-visible {
       0 0 12px 3px rgba(110, 214, 240, 0.42);
   }
 }
-@keyframes hud-disk-hop {
+/* Two strokes, then rest. */
+@keyframes hud-disk-sweep {
   0%,
-  84%,
+  74%,
   100% {
-    transform: translateY(0) rotate(0);
+    transform: rotate(0);
   }
-  87% {
-    transform: translateY(-4px) rotate(-6deg);
+  79% {
+    transform: rotate(13deg);
+  }
+  84% {
+    transform: rotate(-4deg);
+  }
+  89% {
+    transform: rotate(13deg);
+  }
+  94% {
+    transform: rotate(0);
+  }
+}
+@keyframes hud-disk-puff {
+  0%,
+  78% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  80% {
+    opacity: 0.9;
+  }
+  86% {
+    opacity: 0;
+    transform: translate(-170%, -70%) scale(1.3);
+  }
+  88% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
   }
   90% {
-    transform: translateY(0) rotate(4deg);
+    opacity: 0.9;
   }
-  93% {
-    transform: translateY(-2px) rotate(-2deg);
-  }
-  96% {
-    transform: translateY(0) rotate(0);
+  96%,
+  100% {
+    opacity: 0;
+    transform: translate(-170%, -70%) scale(1.3);
   }
 }
 

@@ -35,3 +35,11 @@ before visual parity can be claimed.
 from the owner's own Digital World project
 (`digiworld/desktop/floating-notes/ball.png`); it is the notes' own entry,
 shown as it is in the resting HUD (`scene/AppPendant.tsx`).
+
+The 磁盘瘦身 (Disk Slim) broom ghost's ball comes from the owner's own
+disk-slim app, split in three so its broom can show the space left
+(`scene/DiskPendant.tsx`, #160): `disk-slim-base.png` is the ball with the
+broom taken out and the gap filled in, `disk-slim-broom.png` the broom alone
+in place (both 192 px, laid over each other they give the original ball),
+and `disk-slim-bristles.png` and `disk-slim-handle.png` the shapes of its
+bristles and of its handle and band, masks for tinting them.

@@ -7,8 +7,8 @@ const SHADOW =
 
 /** The part every self-built app's pendant shares (串挂同款, #155): the dashed
  * cord, the paper ring holding the app's ball, the sway from where the cord
- * is tied. The app brings its ball's face (`children`), anything pinned on
- * the ring (`badge`) and its own motions, keyed in global.css on `app`. */
+ * is tied. The app brings its ball's face (`children`) and its own motions,
+ * keyed in global.css on `app`. */
 export function PendantShell({
   app,
   layout,
@@ -18,7 +18,6 @@ export function PendantShell({
   carried = false,
   open,
   data,
-  badge,
   onPress,
   children,
 }: {
@@ -37,7 +36,6 @@ export function PendantShell({
   open: boolean;
   /** More data-* attributes for the app's styles (its state). */
   data?: Record<string, string | undefined>;
-  badge?: ReactNode;
   /** A click on the ball, with the ring's box in the page's points. */
   onPress: (anchor: PendantRect) => void;
   children: ReactNode;
@@ -88,7 +86,6 @@ export function PendantShell({
       >
         {children}
       </span>
-      {badge}
     </button>
   );
   const parts = [
