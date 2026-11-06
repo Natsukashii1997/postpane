@@ -82,7 +82,7 @@ Agent HUD adds its tools to this client as an MCP server named `agent-hud`. This
   - `mode`: `notch` (only on a display with a notch), `dynamic` or `simple`
   - `appearance`: `dark`, `light` or `system`
   - `transparency`: 0–1
-- **`dynamic` and `simple`:** `edge` (top, right, bottom or left), `position` (0–1) and `separateAgents`.
+- **`dynamic` and `simple`:** `edge` (top, right, bottom or left), `position` (0–1).
 - **`dynamic` only:** `logoSize` (20–60), `logoGap` (0.1–0.6), `edgeDistance` (0–20) and `showLogos`.
 - **`simple` only:** `simpleSize` (20–60), `simpleGap` (0.1–0.6), `ringWidth` (1–4), `simpleStyle` and `showNumbers`. `simpleStyle` is how each logo shows its usage: `rings` (concentric rings round it), `segments` (one ring split per window, the default), `bars` (bars beside it) or `numbers` (the most used window's percentage alone). `ringWidth` is also the bars' thickness, and `showNumbers` adds the percentage beside rings, segments or bars.
 - **`reset: true`:** restores the default look. Send it alone, with no other style field.
@@ -132,7 +132,7 @@ Agent HUD adds its tools to this client as an MCP server named `agent-hud`. This
 
 - **What it shows:** the app's own panel, or one display's resting HUD, with drafts included. It renders offscreen and never captures the desktop.
 - **Masking:** accounts are masked, and session titles and notices are left out.
-- **Display key required:** `show: "hud"` and `agent` need one. `agent` also needs a `dynamic` or `simple` HUD with `separateAgents` on.
+- **Display key required:** `show: "hud"` and `agent` need one. `agent` also needs a `dynamic` or `simple` HUD, not the notch.
 - **One at a time:** it renders one picture at a time and times out after 25 s.
 - **Motion:** an animated glow may not show in a still picture.
 

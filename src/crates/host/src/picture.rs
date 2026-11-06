@@ -43,8 +43,8 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
             .and_then(|screens| screens.iter().find(|s| s["id"] == screen));
         if let Some(agent) = params["agent"].as_str() {
             let screen = selected.ok_or("The selected screen is not attached")?;
-            if screen["hud"]["mode"] == "notch" || screen["hud"]["separateAgents"] != true {
-                return Err("This screen does not separate its agents".into());
+            if screen["hud"]["mode"] == "notch" {
+                return Err("A notch shows only the whole panel, not one agent's".into());
             }
             if agent.is_empty() {
                 return Err("Agent must be a mark listed by get_hud".into());

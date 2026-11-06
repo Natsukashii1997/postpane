@@ -621,3 +621,17 @@ a:focus-visible {
     box-shadow: 0 0 0 4px rgba(108, 197, 154, 0);
   }
 }
+
+/* The line along a peek's foot that runs out until it grows into the whole
+   board (「停久看全」). */
+.hud-peek-expand-meter {
+  transform: scaleX(0);
+  animation-name: hud-peek-expand;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes hud-peek-expand {
+  to {
+    transform: scaleX(1);
+  }
+}

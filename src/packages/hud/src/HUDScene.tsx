@@ -62,6 +62,7 @@ import {
 } from "./model";
 import { glowAlert } from "./HUDGlow";
 import { InlineEventRow } from "./alerts/InlineEventRow";
+import { inlineAlertAllowed, peekExpandWait } from "./peek-expand";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import {
   ListedSessionsContext,
@@ -210,6 +211,8 @@ export function HUDScene({
   const [systemLight, setSystemLight] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState(false);
+  // The hovered mark's peek has grown into the whole board (「停久看全」).
+  const [expanded, setExpanded] = useState(false);
   const [pointerInside, setPointerInside] = useState(false);
   const [domTyping, setDomTyping] = useState(false);
   const checkDomTyping = useCallback(() => {
@@ -269,15 +272,9 @@ export function HUDScene({
       if (wasHeld) hover.settle();
       return;
     }
-    if (
-      config.mode !== "notch" &&
-      config.separatesAgents &&
-      !hovered &&
-      vendors.length > 0
-    ) {
-      setHovered(vendors[0].key);
-      setPinned(true);
-    }
+    // A hold shows the whole board, as a hover left long enough does.
+    setPinned(false);
+    setExpanded(true);
     hover.forceOpen();
     const timer = setTimeout(() => {
       held.current = false;
@@ -294,15 +291,9 @@ export function HUDScene({
       collapse();
       return;
     }
-    // A docked HUD that separates agents opens on its first agent, as a hold does.
-    if (
-      config.mode !== "notch" &&
-      config.separatesAgents &&
-      vendors.length > 0
-    ) {
-      setHovered(vendors[0].key);
-      setPinned(true);
-    }
+    // Opened from outside (the menu, a demo), the panel is the whole board.
+    setPinned(false);
+    setExpanded(true);
     forceOpen();
   }, [panelCommand?.sequence]);
   const open = hover.open || holdActive;
@@ -352,8 +343,10 @@ export function HUDScene({
 
   useEffect(() => {
     if (open)
-      onBotLooked?.(config.separatesAgents && hovered ? [hovered] : null);
-  }, [open, hovered, config.separatesAgents]);
+      onBotLooked?.(
+        config.mode !== "notch" && !expanded && hovered ? [hovered] : null,
+      );
+  }, [open, hovered, expanded, config.mode]);
 
   // Paused detection draws the still grey rim, as no readings do.
   const detectionPaused = Boolean(snapshot.status?.paused);
@@ -382,9 +375,11 @@ export function HUDScene({
     (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
   );
   const usagePanelOpenRef = useRef(false);
-  const allowsInlineUsageAlert = !(
-    config.mode !== "notch" && config.separatesAgents
-  );
+  const allowsInlineUsageAlert = inlineAlertAllowed({
+    notch: config.mode === "notch",
+    expanded,
+    pinned,
+  });
   const news = useIslandNews(
     snapshot,
     pointerInside || typing,
@@ -491,6 +486,7 @@ export function HUDScene({
     systemLight,
     open,
     pinned,
+    expanded,
     dragging,
     reduceMotion,
     hovered,
@@ -500,6 +496,37 @@ export function HUDScene({
     requestsCount: requests.length,
     reply,
   });
+
+  // When the pointer came to the mark it is on: entering the strip, or moving
+  // to another mark. Passing a gap while the sidebar is out keeps the count.
+  const markSince = useRef(0);
+  const lastMark = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pointerInside) return;
+    if (hovered !== lastMark.current || !open)
+      markSince.current = performance.now();
+    lastMark.current = hovered;
+  }, [hovered, pointerInside]);
+  // A peek left on its mark grows into the whole board; the line along its
+  // foot runs out over the same wait.
+  const [expandMeter, setExpandMeter] = useState<{
+    key: string;
+    ms: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!peek || expanded || !hovered || focusedVendor?.key !== hovered) {
+      setExpandMeter(null);
+      return;
+    }
+    const ms = peekExpandWait(
+      config.hoverDelayMs,
+      markSince.current,
+      performance.now(),
+    );
+    setExpandMeter({ key: `${hovered}:${markSince.current}`, ms });
+    const timer = setTimeout(() => setExpanded(true), ms);
+    return () => clearTimeout(timer);
+  }, [peek, expanded, hovered, focusedVendor?.key, config.hoverDelayMs]);
 
   // A request beside the dock is printed on paper, its tag and its card, and
   // so are a notice's and the usage panel, as receipts; in the notch they
@@ -658,6 +685,7 @@ export function HUDScene({
     collapse,
     setHovered,
     setPinned,
+    setExpanded,
     setPointerInside,
     request,
     event,
@@ -973,6 +1001,10 @@ export function HUDScene({
             cardVisible={cardVisible}
             detached={detached}
             peek={peek}
+            expandMeter={peek ? expandMeter : null}
+            spotlight={
+              expanded && !focusedVendor ? (hovered ?? undefined) : undefined
+            }
             simplePeek={simplePeek}
             open={open}
             reduceMotion={reduceMotion}

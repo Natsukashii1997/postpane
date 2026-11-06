@@ -26,7 +26,6 @@
   "ringWidth": 1.5,
   "simpleStyle": "segments",
   "showsNumbers": true,
-  "separatesAgents": false,
   "appearance": "dark",
   "solidTransparency": 0,
   "hoverDelayMs": 400,

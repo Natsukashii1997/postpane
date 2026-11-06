@@ -210,11 +210,7 @@ export function HUDMarkStrip({
                 alignItems: "center",
                 gap: metrics.labelGap,
                 flexShrink: 0,
-                cursor: dragVisual
-                  ? "grabbing"
-                  : config.separatesAgents
-                    ? "pointer"
-                    : "default",
+                cursor: dragVisual ? "grabbing" : "pointer",
                 visibility:
                   config.mode === "logos" && !config.showsLogos
                     ? "hidden"

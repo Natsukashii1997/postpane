@@ -63,7 +63,6 @@ export interface HUDConfig {
   /** How a Simple mark draws its usage: rings, a segmented ring, bars, or the number alone. */
   simpleStyle: UsageStyle;
   showsNumbers: boolean;
-  separatesAgents: boolean;
   appearance: "dark" | "light" | "system";
   solidTransparency: number;
   hoverDelayMs: number;

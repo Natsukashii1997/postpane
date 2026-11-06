@@ -91,12 +91,6 @@ const FIELDS: &[Field] = &[
         range: None,
     },
     Field {
-        name: "separateAgents",
-        stored: "separatesAgents",
-        modes: DOCKS,
-        range: None,
-    },
-    Field {
         name: "appearance",
         stored: "appearance",
         modes: ALL,

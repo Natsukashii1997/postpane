@@ -117,12 +117,7 @@ fn placement(from: &Value) -> Map<String, Value> {
     copy_bool(
         &mut out,
         from,
-        &[
-            "showsLogos",
-            "showsRings",
-            "showsNumbers",
-            "separatesAgents",
-        ],
+        &["showsLogos", "showsRings", "showsNumbers"],
     );
     for (key, min, max) in [
         ("offset", 0., 1.),
