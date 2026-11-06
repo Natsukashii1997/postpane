@@ -106,3 +106,12 @@
 - 正确做法：每一组真实点击前回读两件事，任一不符就停：锁屏 `Quartz.CGSessionCopyCurrentDictionary().get('CGSSessionScreenIsLocked')` 为空；显示器 `CGGetActiveDisplayList` 的尺寸和窗口位置（`CGWindowListCopyWindowInfo`）与写坐标时一致。「面板外」的点击点到菜单栏空白处（如 `(1100, 10)`），不点别的应用窗口；动鼠标前先问常浩能否接管约 1 分钟。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-06-disk-pendant/`（`screens/`、`windows.swift`、`click.swift`）；本会话 2026-11-06 16:0x–16:45。
 - 升级：未升级（与 disk-slim L-11 同属「真屏点击」一类，可一起提议提升为全局坑）。
+
+## L-12 全量测试偶发一条 core 演示测试失败，不是本次改动造成的（2026-11-07）
+
+- 现象：PR #170 第一次跑 `pnpm test` 退出 101，Rust 只有 `agent-hud-core` 的 `demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes` 失败，断言在 `src/crates/core/src/demo/mod.rs` 1198 行。本 PR 没改 core；同一份代码单独跑这条 3 次都过，第二次全量也是 0 失败。
+- 根因：未核实。这条测试用 `Utc::now()` 起演示数据，再连做两次 `request_snapshot`，断言第二次是 `{"unchanged": true}`；推测两次之间演示数据里跟时间有关的内容变了（比如「已 N 分钟」跨过一格）。全量并行跑、机器忙的时候更容易碰上。
+- 正确做法：全量只失败这一条、改动又不碰 core 时，先单独重跑它（`cargo test -p agent-hud-core a_pass_with_nothing_new_renders_nothing_until_something_changes`），过了再重跑一次全量，以第二次全量为准；交接里两次的结果都照实写。再出现就把这条测试的时间固定下来，另开一单修。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-launch-attribution/test.log`（第一次，失败）、`test2.log`（第二次，Rust 734 passed / 0 failed）；PR #170 描述。
+- 升级：未升级。
+
