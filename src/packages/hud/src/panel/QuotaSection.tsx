@@ -286,7 +286,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
             const resets =
               account &&
               current &&
-              sectionRows.some((row) => vendorKey(row.vendor) === "openai")
+              sectionRows.some((row) => vendorKey(row.vendor) === "codex")
                 ? account.resetCredits
                 : null;
             return (

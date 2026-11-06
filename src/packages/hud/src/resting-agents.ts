@@ -5,7 +5,7 @@ import { agentArtworkKey as vendorKey } from "./agent-artwork.ts";
 
 type HUDMode = "notch" | "logos" | "simple";
 
-/** Acquisition identity stays distinct from artwork (Codex shares its OpenAI mark). */
+/** Acquisition identity stays distinct from artwork ("codex-cli" shares the Codex mark). */
 export function sourceID(snapshot: Snapshot, source: string): string {
   const normalize = (value: string) =>
     value.trim().toLowerCase().replace(/[ _]+/g, "-");

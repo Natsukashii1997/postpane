@@ -141,6 +141,18 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
       stays: true,
       petals: true,
     }),
+    // The cloud keeps its own outline and gradient; its ">_" is left out of
+    // the paint so the bot wears eyes instead.
+    codex: spec({
+      radius: 0.37,
+      shape: { kind: "outline", keep: 1, smooth: 3 },
+      crossesEyes: true,
+      stays: true,
+      unpainted: [
+        [0.22, 0.31, 0.42, 0.7],
+        [0.47, 0.58, 0.79, 0.7],
+      ],
+    }),
     antigravity: spec({
       reach: 0.75,
       shape: { kind: "outline", keep: 0.5, smooth: 16 },

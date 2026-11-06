@@ -132,7 +132,7 @@ export interface HUDVendor {
   bots?: NonNullable<Snapshot["hermesBots"]>;
 }
 
-/** Artwork identity is authoritative: Codex and ChatGPT use one OpenAI mark. */
+/** Artwork identity is authoritative: ChatGPT is the OpenAI mark, Codex its own. */
 export function vendorKey(source: string): string {
   return agentArtworkKey(source);
 }

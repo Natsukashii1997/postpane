@@ -100,22 +100,26 @@ for (const mode of ["notch", "logos", "simple"] as const) {
         { id: "cursor", name: "Cursor", enabled: true, detected: false },
       ],
     } as never;
-    assert.deepEqual(restingAgents(onlyInstalled, mode, now).order, ["codex"]);
+    // Codex and ChatGPT each keep a mark of their own.
+    assert.deepEqual(restingAgents(onlyInstalled, mode, now).order, [
+      "codex",
+      "chatgpt",
+    ]);
     assert.equal(restingAgents(onlyInstalled, mode, now).expiresAt, Infinity);
   });
 }
 
 test("marks follow the agent order set in Settings until the HUD has a list of its own", () => {
   // Open #31: Settings' agent order is the panel's block order; a balance block stands for its agent.
-  const marks = ["claude", "openai", "deepseek", "cursor"].map((key) => ({
+  const marks = ["claude", "codex", "deepseek", "cursor"].map((key) => ({
     key,
   }));
   const keys = (layout: Parameters<typeof layoutMarks>[1]) =>
     layoutMarks(marks, layout).map((mark) => mark.key);
-  assert.deepEqual(keys({}), ["claude", "openai", "deepseek", "cursor"]);
+  assert.deepEqual(keys({}), ["claude", "codex", "deepseek", "cursor"]);
   assert.deepEqual(keys({ order: ["api:deepseek", "codex", "claude"] }), [
     "deepseek",
-    "openai",
+    "codex",
     "claude",
     "cursor",
   ]);
@@ -131,7 +135,7 @@ test("marks follow the agent order set in Settings until the HUD has a list of i
   assert.deepEqual(keys({ order: ["cursor"], hud: { agents: ["kimi"] } }), [
     "cursor",
     "claude",
-    "openai",
+    "codex",
     "deepseek",
   ]);
 });

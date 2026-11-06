@@ -494,7 +494,7 @@ mod tests {
                 "5h 40% · 2h 05m",
                 "Week 73%",
                 "—",
-                "OpenAI",
+                "Codex",
                 "5h 95%",
                 "—",
                 "DeepSeek · Balance ¥8.85"
@@ -529,7 +529,7 @@ mod tests {
         let remaining = project(&remaining_snapshot, &agents, true, false, false, None, 0);
         assert_eq!(
             titles(&remaining),
-            ["Claude", "5h 100%", "Week 8%", "—", "OpenAI", "5h —"]
+            ["Claude", "5h 100%", "Week 8%", "—", "Codex", "5h —"]
         );
         assert!(remaining.remaining);
         assert_eq!(remaining.used_percent, Some(92.0));
