@@ -23,6 +23,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 
 ## 2. 测试（test）
 
+- 先格式化再测：`cargo fmt --all`，改过的前端文件 `pnpm exec prettier --write <文件>`。不先做，`pnpm run check` 常卡在格式检查（E-07）。
 - 三条全跑：`pnpm run check`、`pnpm test`、`node --test tests/*.test.mjs`。改了任何脚本也跑全量，不只验一条路径（G-03）。
 - 报告时照抄原样结果（通过数、失败数那两行），不改写成「测试通过」（`docs/OPERATIONS.md`「报告与验收」第 3 条）。
 - bun 编译出的程序在 macOS 上要 `codesign --force --sign -` 补签，否则一运行就被杀（L-02）。
@@ -38,6 +39,16 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 4. 装完截屏看有没有「想访问文稿」的权限弹窗，有就请常浩点允许，不要误判成改坏了、也不要反复重装（L-06）。
 5. 实机点击验证：每组真实点击前查锁屏和显示器没变（L-11）；侧栏悬停面板里的按钮电脑控制点不动，逻辑在浏览器预览里用真实组件点，实机那一下留给常浩（L-09）。往别人的页面注入脚本，浏览器里测过不算，要在驿窗的 WebKit 窗口里实测（L-10）。
 6. 请常浩看实物前再跑一次 `bash .agents/skills/postpane-round/scripts/install.sh check`：不一致说明被并行会话覆盖了，先重装（L-05）。
+
+### 实机出问题怎么查（E-08）
+
+装完不对劲时，先查实再改代码；诊断循环照全局 `diagnosing-bugs` 走，这里只列驿窗现成的手段：
+
+- 应用日志：`log show --last 5m --predicate 'process == "PostPane"' --style compact`。
+- 卡住、不响应：`sample <pid> 1 -file <证据目录>/sample.txt`，看哪个线程停在哪；L-06 就是这样查到数据线程卡在文稿权限上的。
+- 本机服务是否在听、端口对不对：`lsof -iTCP:<端口> -sTCP:LISTEN`，再用 `curl` 打 `127.0.0.1` 看返回。
+- 注入到 WebKit 窗口里的脚本：让页面把状态写进 `document.title`，壳落盘后读（L-10 的标题通道）。
+- 诊断输出一律放证据目录，不放 `/tmp`（G-01）。
 
 ## 4. 交接（handoff）
 

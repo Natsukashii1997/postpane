@@ -104,10 +104,10 @@ test("统计脚本在夹具上：按工作目录筛会话、跳过子代理、�
   assert.equal(r.claude, 2);
   assert.equal(r.codex, 1);
   const by = Object.fromEntries(r.steps.map((s) => [s.id, s.sessions]));
-  assert.deepEqual(by, { start: 1, test: 2, install: 0, handoff: 2, "merge-clean": 2, retro: 0 });
+  assert.deepEqual(by, { start: 1, test: 3, install: 0, handoff: 2, "merge-clean": 2, retro: 0 });
   assert.deepEqual(
     r.uncovered.map((e) => [e.key, e.sessions]),
-    [["cargo fmt", 2]],
+    [["xcrun", 2]],
   );
   const since = await analyze({ claudeDir: join(FIX, "claude"), codexDir: join(FIX, "codex"), match: "postpane", since: "2026-11-06" });
   assert.equal(since.steps.find((s) => s.id === "merge-clean").sessions, 1, "--since 只数当天起的调用");
