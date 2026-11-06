@@ -476,6 +476,44 @@ fn again_text(round: u32) -> String {
         "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，最后请 ChatGPT 写「结论：通过」或「结论：需修改」；summary 写一句这轮改了什么。"
     )
 }
+/// 左滑发起 (批 B, #124): what a Claude Code session is asked to do so it
+/// hands its own work to ChatGPT; None for a kind that cannot start yet.
+fn launch_text(kind: &str) -> Option<&'static str> {
+    match kind {
+        "review" => Some(
+            "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出，请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」；summary 写一句这轮做了什么。（驿窗左滑「审核」发来）",
+        ),
+        "discuss" => Some(
+            "请把眼下的方案交给 ChatGPT 讨论，只聊方案、不改代码：先自己整理背景——要解决的问题、已有的做法和限制、你考虑过的几种做法——然后调用 relay_to_chatgpt 送出，请 ChatGPT 比较可选做法，给出推荐和理由；summary 写一句要讨论什么。（驿窗左滑「讨论」发来）",
+        ),
+        _ => None,
+    }
+}
+
+/// 左滑发起: asks the Claude Code `session` to hand its work to ChatGPT
+/// (`kind`: review or discuss). Its words wait in line while it runs; it
+/// then calls `relay_to_chatgpt` itself, so the handoff is its own.
+pub(crate) fn launch(lines: &dyn Lines, session: &str, kind: &str) -> Result<(), String> {
+    if !agent_hud_runtime::claude_plugin::valid_name(session) {
+        return Err(l10n::text(
+            "Claude 会话 id 不对",
+            "Invalid Claude session id",
+        ));
+    }
+    let text = launch_text(kind).ok_or_else(|| {
+        l10n::text(
+            "这种接力还不能发起",
+            "This kind of handoff cannot start yet",
+        )
+    })?;
+    // Claude would hand its work over to nowhere.
+    if !lines.connected() {
+        return Err(not_connected());
+    }
+    lines.reaches(session)?;
+    lines.reply(session, text)
+}
+
 fn timed_out() -> String {
     l10n::text(
         "ChatGPT 新会话两分钟没打开",
@@ -719,6 +757,21 @@ pub async fn handoff_act(
         if let Acted::Open { brief, project } = acted? {
             open_away(&app, &id, &brief, project)?;
         }
+        Ok(json!({"done": true}))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// The sessions panel's 左滑发起 (`launch`).
+#[tauri::command]
+pub async fn relay_launch(
+    app: tauri::AppHandle,
+    session_id: String,
+    kind: String,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        launch(&AppLines(&app), &session_id, &kind)?;
         Ok(json!({"done": true}))
     })
     .await
@@ -1117,6 +1170,33 @@ mod tests {
             again.act(&lines, &handoff.id, "retry", now_ms()).unwrap(),
             Acted::Open { .. }
         ));
+    }
+
+    #[test]
+    fn a_swipe_asks_the_claude_session_to_hand_its_own_work_over() {
+        let lines = Fake::default();
+        launch(&lines, "s1", "review").unwrap();
+        launch(&lines, "s1", "discuss").unwrap();
+        let sent = lines.sent.borrow().clone();
+        assert_eq!(sent.len(), 2);
+        assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("reply", "s1"));
+        assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("结论：通过"));
+        assert!(sent[1].2.contains("relay_to_chatgpt") && sent[1].2.contains("不改代码"));
+        // Kinds not open yet, a bad id, no way out: nothing is sent.
+        assert!(launch(&lines, "s1", "test").is_err());
+        assert!(launch(&lines, "../x", "review").is_err());
+        let offline = Fake {
+            offline: true,
+            ..Fake::default()
+        };
+        assert!(launch(&offline, "s1", "review").is_err());
+        let unreachable = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        assert!(launch(&unreachable, "s1", "review").is_err());
+        assert!(offline.sent.borrow().is_empty() && unreachable.sent.borrow().is_empty());
+        assert_eq!(lines.sent.borrow().len(), 2);
     }
 
     #[test]

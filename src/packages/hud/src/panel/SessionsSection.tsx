@@ -1,5 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
+import {
+  ArrowUpRight,
+  CornerDownRight,
+  EyeOff,
+  FileSearch,
+  FlaskConical,
+  MessagesSquare,
+  type LucideIcon,
+} from "lucide-react";
 import type {
   PanelLayout,
   SessionsResponse,
@@ -29,6 +37,15 @@ import {
   shownSessions,
   useRemovedSessions,
 } from "./removed-sessions";
+import {
+  launchKind,
+  stepBlock,
+  TRAY_BLOCK,
+  trayKinds,
+  trayReady,
+  trayText,
+  type TrayKind,
+} from "./relay-tray";
 
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it;
@@ -172,6 +189,7 @@ export function SourceSessions({
             now={now}
             light={light}
             first={index === 0}
+            last={index === live.length - 1}
             onStats={onStats}
             open={openKey === removedKey(entry)}
             onOpen={(open) =>
@@ -249,21 +267,37 @@ export function SourceSessions({
   );
 }
 
-/** How far a row slides to show its Remove button. */
+/** How far a row slides to show its Remove button alone. */
 const removeWidth = 72;
+
+/** The swipe tray's blocks (relay design 第 2 版, 左滑发起): colour, icon,
+ * and the paler colour its name takes in the dark hint. */
+const TRAY: Record<
+  TrayKind,
+  { color?: string; tint: string; Icon: LucideIcon }
+> = {
+  review: { color: "#366657", tint: "#8fcdb9", Icon: FileSearch },
+  test: { color: "#415d7a", tint: "#9cc2ea", Icon: FlaskConical },
+  cont: { color: "#6e5635", tint: "#d9b88b", Icon: CornerDownRight },
+  disc: { color: "#69506f", tint: "#d2b0da", Icon: MessagesSquare },
+  rm: { tint: "#ffb3a8", Icon: EyeOff },
+};
 
 /** A listed session: its status tag, title and a way back to it, and under
  * the title what it waits on or does. The row and the arrow both go back;
  * where the way back is missing or fails, the arrow greys and says so, and
  * the row opens the session's page in Statistics instead. Dragged left (or
- * swiped left with two fingers) it shows a Remove button (owner,
- * 2026-11-05); a click elsewhere or a drag right puts it back. */
+ * swiped left with two fingers, or ← on the keyboard) it shows a Remove
+ * button (owner, 2026-11-05); a Claude Code session on this machine shows
+ * a tray of handoffs before it (#124). A click elsewhere, a drag right, →
+ * or Esc puts it back. */
 function LiveRow({
   entry,
   handoff,
   now,
   light,
   first,
+  last,
   onStats,
   open,
   onOpen,
@@ -275,6 +309,8 @@ function LiveRow({
   now: number;
   light: boolean;
   first: boolean;
+  /** The list's last row: its hint opens upward. */
+  last: boolean;
   onStats?: () => void;
   open: boolean;
   onOpen(open: boolean): void;
@@ -323,16 +359,71 @@ function LiveRow({
   } | null>(null);
   const dragged = useRef(false);
   const wheelEnd = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const x = drag ?? (open ? -removeWidth : 0);
+  const kinds = trayKinds(session);
+  const solo = kinds.length === 1;
+  const trayWidth = solo ? removeWidth : kinds.length * TRAY_BLOCK;
+  const x = drag ?? (open ? -trayWidth : 0);
   const slide = (to: number) => {
-    offset.current = Math.min(0, Math.max(-removeWidth * 1.6, to));
+    offset.current = Math.min(
+      0,
+      Math.max(solo ? -trayWidth * 1.6 : -trayWidth - 40, to),
+    );
     setDrag(offset.current);
   };
   const settle = () => {
     setDrag(null);
-    onOpen(offset.current < -removeWidth / 2);
+    onOpen(offset.current < -trayWidth / 2);
   };
   useEffect(() => () => clearTimeout(wheelEnd.current), []);
+  const row = useRef<HTMLDivElement>(null);
+  const blocks = useRef<(HTMLButtonElement | null)[]>([]);
+  // The block under the pointer or the keyboard: its hint shows.
+  const [hot, setHot] = useState<number | null>(null);
+  const focusBlock = (index: number) => {
+    setHot(index);
+    blocks.current[index]?.focus();
+  };
+  useEffect(() => {
+    if (!open) setHot(null);
+  }, [open]);
+  // What a handoff just asked: said in place of the second line a while.
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const pick = async (kind: TrayKind) => {
+    if (kind === "rm") return onRemove();
+    const launch = launchKind(kind);
+    if (!launch) return;
+    onOpen(false);
+    try {
+      if (!services?.relayLaunch)
+        throw new Error(
+          zh ? "只能在驿窗里发起接力" : "Only PostPane can start a handoff",
+        );
+      await services.relayLaunch(session.id, launch);
+      setNotice({
+        ok: true,
+        text:
+          launch === "review"
+            ? zh
+              ? "已请它整理改动，交给 ChatGPT 审核"
+              : "Asked it to hand its changes to ChatGPT for review"
+            : zh
+              ? "已请它整理思路，交给 ChatGPT 讨论"
+              : "Asked it to take its options to ChatGPT",
+      });
+    } catch (reason) {
+      setNotice({
+        ok: false,
+        text: reason instanceof Error ? reason.message : String(reason ?? ""),
+      });
+    }
+  };
   useEffect(() => {
     if (!open) return;
     const away = (event: PointerEvent) => {
@@ -341,268 +432,442 @@ function LiveRow({
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [open, onOpen]);
-  const removeLabel = zh ? "移除" : "Remove";
+  const hint = open && !solo && hot !== null ? trayText(kinds[hot], zh) : null;
   return (
     <div
-      ref={slot}
       style={{
         position: "relative",
-        overflow: "hidden",
         borderTop: first ? undefined : `1px dotted ${inks.divider}`,
       }}
     >
       <div
-        aria-hidden={!open}
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: -x,
-          overflow: "hidden",
-          display: "flex",
-          justifyContent: "flex-end",
-          background: inks.red,
-        }}
-      >
-        <button
-          type="button"
-          tabIndex={open ? 0 : -1}
-          title={
-            zh
-              ? "从侧栏移除，有新内容时再出现"
-              : "Remove from the sidebar until something new"
-          }
-          onClick={onRemove}
-          style={{
-            ...noButtonChrome,
-            flex: "none",
-            width: removeWidth,
-            fontSize: 13.5,
-            fontWeight: 600,
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          {removeLabel}
-        </button>
-      </div>
-      <div
-        className="hud-live-session"
-        role="button"
-        tabIndex={0}
-        title={session.title}
-        onClick={() => {
-          if (dragged.current) {
-            dragged.current = false;
-            return;
-          }
-          if (open) return onOpen(false);
-          if (canOpen) void goBack();
-          else details();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && open) return onOpen(false);
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          if (canOpen) void goBack();
-          else details();
-        }}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          dragged.current = false;
-          start.current = {
-            x: event.clientX,
-            y: event.clientY,
-            base: open ? -removeWidth : 0,
-            axis: null,
-          };
-        }}
-        onPointerMove={(event) => {
-          const from = start.current;
-          if (!from) return;
-          const dx = event.clientX - from.x;
-          const dy = event.clientY - from.y;
-          if (!from.axis && Math.hypot(dx, dy) > 6) {
-            from.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-            if (from.axis === "x")
-              event.currentTarget.setPointerCapture(event.pointerId);
-          }
-          if (from.axis !== "x") return;
-          dragged.current = true;
-          slide(from.base + dx);
-        }}
-        onPointerUp={() => {
-          const from = start.current;
-          start.current = null;
-          if (from?.axis === "x") settle();
-        }}
-        onPointerCancel={() => {
-          start.current = null;
-          if (drag !== null) settle();
-        }}
-        onWheel={(event) => {
-          if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-          // One swipe is many wheel events, faster than renders: add them up
-          // from where the swipe began until it rests.
-          if (wheelEnd.current === undefined)
-            offset.current = open ? -removeWidth : 0;
-          slide(offset.current - event.deltaX);
-          clearTimeout(wheelEnd.current);
-          wheelEnd.current = setTimeout(() => {
-            wheelEnd.current = undefined;
-            settle();
-          }, 140);
-        }}
-        onPointerEnter={() => setHover(true)}
-        onPointerLeave={() => setHover(false)}
+        ref={slot}
         style={{
           position: "relative",
-          display: "grid",
-          gridTemplateColumns: bot
-            ? "auto minmax(0, 1fr) auto 26px"
-            : "auto minmax(0, 1fr) 26px",
-          columnGap: 10,
-          alignItems: "center",
-          padding: "8px 6px",
-          cursor: "pointer",
-          opacity: hover && !x ? 0.78 : 1,
-          transform: x ? `translateX(${x}px)` : undefined,
-          transition: drag === null ? "transform 0.18s ease" : undefined,
+          overflow: "hidden",
         }}
       >
-        <ApprovalTag
-          label={waiting ? (zh ? "等你" : "WAITING") : zh ? "在跑" : "RUNNING"}
-          tone="ask"
-          light={light}
-          color={waiting ? inks.red : inks.green}
-        />
-        <span
+        <div
+          aria-hidden={!open}
           style={{
-            fontSize: 13.5,
-            fontWeight: 600,
-            color: inks.text,
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: -x,
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
+            display: "flex",
+            justifyContent: "flex-end",
           }}
         >
-          {session.liveFacts?.prompt?.trim() ||
-            session.title?.trim() ||
-            (zh ? "（未命名会话）" : "(untitled session)")}
-        </span>
-        {bot && (
-          <span style={{ gridRow: "1 / 3", gridColumn: "3 / 4" }}>
-            <BotSeal bot={bot} light={light} color={inks.secondary} />
-          </span>
-        )}
-        <button
-          type="button"
-          aria-label={goTitle}
-          title={goTitle}
-          aria-disabled={!canOpen}
-          onClick={(event) => {
-            event.stopPropagation();
+          {kinds.map((kind, index) => {
+            const text = trayText(kind, zh);
+            const ready = trayReady(kind);
+            const { color, Icon } = TRAY[kind];
+            return (
+              <button
+                key={kind}
+                ref={(element) => {
+                  blocks.current[index] = element;
+                }}
+                type="button"
+                tabIndex={open && ready ? 0 : -1}
+                aria-disabled={!ready}
+                aria-label={text.to ? `${text.label} ${text.to}` : text.label}
+                title={solo ? text.line : undefined}
+                onClick={() => {
+                  if (ready) void pick(kind);
+                }}
+                onPointerEnter={() => setHot(index)}
+                onPointerLeave={() =>
+                  setHot((at) => (at === index ? null : at))
+                }
+                onFocus={() => setHot(index)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                    event.preventDefault();
+                    focusBlock(
+                      stepBlock(
+                        kinds,
+                        index,
+                        event.key === "ArrowLeft" ? -1 : 1,
+                      ),
+                    );
+                  } else if (event.key === "Escape") {
+                    onOpen(false);
+                    row.current?.focus();
+                  }
+                }}
+                className="hud-tray-block"
+                style={{
+                  ...noButtonChrome,
+                  flex: "none",
+                  width: solo ? removeWidth : TRAY_BLOCK,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                  background: color ?? inks.red,
+                  color: kind === "rm" ? "#fff" : "#f4f0e8",
+                  filter:
+                    ready && hot === index && !solo
+                      ? "brightness(1.1)"
+                      : undefined,
+                  opacity: ready ? 1 : 0.42,
+                  cursor: ready ? "pointer" : "default",
+                }}
+              >
+                {!solo && <Icon size={20} strokeWidth={1.6} aria-hidden />}
+                <span
+                  style={{
+                    fontSize: solo ? 13.5 : 12,
+                    fontWeight: 600,
+                    letterSpacing: solo ? undefined : "0.06em",
+                    lineHeight: 1,
+                  }}
+                >
+                  {text.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div
+          ref={row}
+          className="hud-live-session"
+          role="button"
+          tabIndex={0}
+          title={session.title}
+          onClick={() => {
             if (dragged.current) {
               dragged.current = false;
               return;
             }
             if (open) return onOpen(false);
-            void goBack();
+            if (canOpen) void goBack();
+            else details();
           }}
+          onKeyDown={(event) => {
+            if ((event.key === "Escape" || event.key === "ArrowRight") && open)
+              return onOpen(false);
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              onOpen(true);
+              // The tray slides in; its first block takes the keyboard.
+              if (!solo) setTimeout(() => focusBlock(0), 0);
+              return;
+            }
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            if (canOpen) void goBack();
+            else details();
+          }}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            dragged.current = false;
+            start.current = {
+              x: event.clientX,
+              y: event.clientY,
+              base: open ? -trayWidth : 0,
+              axis: null,
+            };
+          }}
+          onPointerMove={(event) => {
+            const from = start.current;
+            if (!from) return;
+            const dx = event.clientX - from.x;
+            const dy = event.clientY - from.y;
+            if (!from.axis && Math.hypot(dx, dy) > 6) {
+              from.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+              if (from.axis === "x")
+                event.currentTarget.setPointerCapture(event.pointerId);
+            }
+            if (from.axis !== "x") return;
+            dragged.current = true;
+            slide(from.base + dx);
+          }}
+          onPointerUp={() => {
+            const from = start.current;
+            start.current = null;
+            if (from?.axis === "x") settle();
+          }}
+          onPointerCancel={() => {
+            start.current = null;
+            if (drag !== null) settle();
+          }}
+          onWheel={(event) => {
+            if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+            // One swipe is many wheel events, faster than renders: add them up
+            // from where the swipe began until it rests.
+            if (wheelEnd.current === undefined)
+              offset.current = open ? -trayWidth : 0;
+            slide(offset.current - event.deltaX);
+            clearTimeout(wheelEnd.current);
+            wheelEnd.current = setTimeout(() => {
+              wheelEnd.current = undefined;
+              settle();
+            }, 140);
+          }}
+          onPointerEnter={() => setHover(true)}
+          onPointerLeave={() => setHover(false)}
           style={{
-            display: "inline-grid",
-            placeItems: "center",
-            width: 26,
-            height: 26,
-            boxSizing: "border-box",
-            padding: 0,
-            border: `1.5px solid ${inks.divider}`,
-            borderRadius: 3,
-            background: "transparent",
-            color: canOpen ? inks.secondary : inks.tertiary,
-            opacity: canOpen ? 1 : 0.6,
-            cursor: canOpen ? "pointer" : "default",
+            position: "relative",
+            display: "grid",
+            gridTemplateColumns: bot
+              ? "auto minmax(0, 1fr) auto 26px"
+              : "auto minmax(0, 1fr) 26px",
+            columnGap: 10,
+            alignItems: "center",
+            padding: "8px 6px",
+            cursor: "pointer",
+            opacity: hover && !x ? 0.78 : 1,
+            transform: x ? `translateX(${x}px)` : undefined,
+            transition: drag === null ? "transform 0.18s ease" : undefined,
           }}
         >
-          <ArrowUpRight size={13} strokeWidth={2} />
-        </button>
-        {handoff && card ? (
+          <ApprovalTag
+            label={
+              waiting ? (zh ? "等你" : "WAITING") : zh ? "在跑" : "RUNNING"
+            }
+            tone="ask"
+            light={light}
+            color={waiting ? inks.red : inks.green}
+          />
           <span
             style={{
-              gridColumn: "2 / 3",
-              marginTop: 2,
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              minWidth: 0,
-              fontSize: 12,
-              color: inks.secondary,
-            }}
-          >
-            <button
-              type="button"
-              title={zh ? "打开接力卡" : "Open the handoff card"}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (open) return onOpen(false);
-                card.open(handoff.id);
-              }}
-              style={{
-                ...noButtonChrome,
-                flex: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                height: 17,
-                padding: "0 5px",
-                boxSizing: "border-box",
-                border: "1.5px dashed currentColor",
-                borderRadius: 2,
-                color: paper?.blue ?? inks.secondary,
-                fontSize: 10.5,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                lineHeight: 1,
-                whiteSpace: "nowrap",
-                cursor: "pointer",
-              }}
-            >
-              {zh
-                ? `接力 ${round(handoff).at}/${round(handoff).of}`
-                : `Relay ${round(handoff).at}/${round(handoff).of}`}
-            </button>
-            <span
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
-              }}
-            >
-              {progressLine(handoff, now, zh)}
-            </span>
-          </span>
-        ) : (
-          <span
-            style={{
-              gridColumn: "2 / 3",
-              marginTop: 2,
-              fontSize: 12,
-              color: inks.secondary,
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: inks.text,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               minWidth: 0,
             }}
           >
-            {session.client === "claude-cloud"
-              ? `${zh ? "云端" : "Cloud"} · ${liveSessionLine(entry, now, language)}`
-              : liveSessionLine(entry, now, language)}
+            {session.liveFacts?.prompt?.trim() ||
+              session.title?.trim() ||
+              (zh ? "（未命名会话）" : "(untitled session)")}
+          </span>
+          {bot && (
+            <span style={{ gridRow: "1 / 3", gridColumn: "3 / 4" }}>
+              <BotSeal bot={bot} light={light} color={inks.secondary} />
+            </span>
+          )}
+          <button
+            type="button"
+            aria-label={goTitle}
+            title={goTitle}
+            aria-disabled={!canOpen}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (dragged.current) {
+                dragged.current = false;
+                return;
+              }
+              if (open) return onOpen(false);
+              void goBack();
+            }}
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              width: 26,
+              height: 26,
+              boxSizing: "border-box",
+              padding: 0,
+              border: `1.5px solid ${inks.divider}`,
+              borderRadius: 3,
+              background: "transparent",
+              color: canOpen ? inks.secondary : inks.tertiary,
+              opacity: canOpen ? 1 : 0.6,
+              cursor: canOpen ? "pointer" : "default",
+            }}
+          >
+            <ArrowUpRight size={13} strokeWidth={2} />
+          </button>
+          {notice ? (
+            <span
+              role="status"
+              style={{
+                gridColumn: "2 / 3",
+                marginTop: 2,
+                fontSize: 12,
+                color: notice.ok ? inks.green : inks.red,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {notice.text}
+            </span>
+          ) : handoff && card ? (
+            <span
+              style={{
+                gridColumn: "2 / 3",
+                marginTop: 2,
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                minWidth: 0,
+                fontSize: 12,
+                color: inks.secondary,
+              }}
+            >
+              <button
+                type="button"
+                title={zh ? "打开接力卡" : "Open the handoff card"}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (open) return onOpen(false);
+                  card.open(handoff.id);
+                }}
+                style={{
+                  ...noButtonChrome,
+                  flex: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  height: 17,
+                  padding: "0 5px",
+                  boxSizing: "border-box",
+                  border: "1.5px dashed currentColor",
+                  borderRadius: 2,
+                  color: paper?.blue ?? inks.secondary,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                }}
+              >
+                {zh
+                  ? `接力 ${round(handoff).at}/${round(handoff).of}`
+                  : `Relay ${round(handoff).at}/${round(handoff).of}`}
+              </button>
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  minWidth: 0,
+                }}
+              >
+                {progressLine(handoff, now, zh)}
+              </span>
+            </span>
+          ) : (
+            <span
+              style={{
+                gridColumn: "2 / 3",
+                marginTop: 2,
+                fontSize: 12,
+                color: inks.secondary,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: 0,
+              }}
+            >
+              {session.client === "claude-cloud"
+                ? `${zh ? "云端" : "Cloud"} · ${liveSessionLine(entry, now, language)}`
+                : liveSessionLine(entry, now, language)}
+            </span>
+          )}
+        </div>
+      </div>
+      {hint && hot !== null && (
+        <TrayHint
+          hint={hint}
+          kind={kinds[hot]}
+          caret={hot * TRAY_BLOCK + TRAY_BLOCK / 2}
+          width={trayWidth}
+          above={last}
+          light={light}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The line under the tray saying where the block under the pointer or the
+ * keyboard hands the work, and what it asks. */
+function TrayHint({
+  hint,
+  kind,
+  caret,
+  width,
+  above,
+  light,
+}: {
+  hint: ReturnType<typeof trayText>;
+  kind: TrayKind;
+  /** The block's middle, from the tray's left. */
+  caret: number;
+  width: number;
+  above: boolean;
+  light: boolean;
+}) {
+  const inks = useBoardInks(light);
+  const face = light ? "#fbfaf6" : "#383530";
+  const edge = light ? "rgba(42,41,37,0.14)" : "rgba(236,231,220,0.09)";
+  return (
+    <div
+      role="tooltip"
+      style={{
+        position: "absolute",
+        right: 0,
+        ...(above
+          ? { bottom: "calc(100% + 7px)" }
+          : { top: "calc(100% + 7px)" }),
+        zIndex: 5,
+        width,
+        boxSizing: "border-box",
+        padding: "9px 12px 10px",
+        borderRadius: 3,
+        background: face,
+        boxShadow: `0 10px 24px rgba(0,0,0,${light ? 0.18 : 0.42}), inset 0 0 0 1px ${edge}`,
+        fontSize: 11.5,
+        lineHeight: 1.55,
+        color: inks.secondary,
+        pointerEvents: "none",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: caret - 4,
+          ...(above ? { bottom: -4 } : { top: -4 }),
+          width: 8,
+          height: 8,
+          background: face,
+          transform: "rotate(45deg)",
+          boxShadow: above ? `1px 1px 0 0 ${edge}` : `-1px -1px 0 0 ${edge}`,
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 3,
+          fontSize: 12,
+          fontWeight: 600,
+          // Pale on the dark hint; on the light one the block's own colour.
+          color: light ? (TRAY[kind].color ?? inks.red) : TRAY[kind].tint,
+        }}
+      >
+        {hint.label}
+        {hint.to && (
+          <span style={{ fontWeight: 400, color: inks.secondary }}>
+            {hint.to}
           </span>
         )}
       </div>
+      <div style={{ position: "relative" }}>{hint.line}</div>
     </div>
   );
 }

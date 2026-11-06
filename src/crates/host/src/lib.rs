@@ -908,6 +908,7 @@ pub fn run_with_options(
             chatgpt::chatgpt_send,
             chatgpt::chatgpt_status,
             handoff::handoff_act,
+            handoff::relay_launch,
             handoff::chatgpt_project,
             deepseek_plugin::native_deepseek_plugin,
             picture::picture_payload,

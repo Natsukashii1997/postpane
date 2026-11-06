@@ -38,6 +38,9 @@ export interface PanelServices {
     id: string,
     action: "back" | "again" | "end" | "retry",
   ): Promise<unknown>;
+  /** 左滑发起 (relay batch B): ask a Claude Code session to hand its work
+   * to ChatGPT for review or discussion. Rejects with the reason. */
+  relayLaunch?(sessionId: string, kind: "review" | "discuss"): Promise<unknown>;
   sources?: Record<string, SourcePreferences>;
   draft?: {
     unsaved: boolean;
