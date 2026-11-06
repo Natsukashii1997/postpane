@@ -100,12 +100,13 @@ fn push_unique(list: &mut Vec<String>, value: &str) {
 }
 
 /// The mark an agent is drawn with (src/packages/hud/src/agent-artwork.ts
-/// `agentArtworkKey`): "Codex", "codex" and "ChatGPT" are one mark.
+/// `agentArtworkKey`): ChatGPT is OpenAI's mark; Codex has its own.
 pub fn mark(source: &str) -> String {
     let key = collapse(source, |c| c.is_whitespace() || c == '_');
     match key.as_str() {
         "claude-code" | "anthropic" => "claude".into(),
-        "chatgpt" | "codex" | "codex-cli" => "openai".into(),
+        "chatgpt" => "openai".into(),
+        "codex-cli" => "codex".into(),
         "github-copilot" => "copilot".into(),
         "grok-cli" => "grok".into(),
         "opencode-go" | "opencode-dark" => "opencode".into(),

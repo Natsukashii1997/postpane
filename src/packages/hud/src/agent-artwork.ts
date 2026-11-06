@@ -2,6 +2,7 @@
 export const ORIGINAL_ARTWORK_FILES = {
   Claude: "claude",
   ChatGPT: "chatgpt",
+  Codex: "codex",
   Antigravity: "antigravity",
   DeepSeek: "deepseek",
   Grok: "grok",
@@ -27,6 +28,7 @@ type OriginalVendor = keyof typeof ORIGINAL_ARTWORK_FILES;
 const vendors: Readonly<Record<string, OriginalVendor>> = {
   claude: "Claude",
   openai: "ChatGPT",
+  codex: "Codex",
   antigravity: "Antigravity",
   deepseek: "DeepSeek",
   grok: "Grok",
@@ -64,8 +66,7 @@ const aliases: Readonly<Record<string, string>> = {
   "claude-code": "claude",
   anthropic: "claude",
   chatgpt: "openai",
-  codex: "openai",
-  "codex-cli": "openai",
+  "codex-cli": "codex",
   "github-copilot": "copilot",
   "grok-cli": "grok",
   "opencode-go": "opencode",
@@ -81,7 +82,7 @@ export function agentArtworkKey(source: string): string {
 }
 export function agentVendorName(source: string): string {
   const key = agentArtworkKey(source);
-  return key === "openai" ? "OpenAI" : (vendors[key] ?? source);
+  return vendors[key] ?? source;
 }
 const asset = (file: string) =>
   new URL(`./assets/${file}.png`, import.meta.url).href;

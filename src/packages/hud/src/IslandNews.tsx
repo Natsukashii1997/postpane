@@ -257,7 +257,7 @@ export const compactDuration = (seconds: number) => {
 export function clientDisplayName(source: string): string {
   const normalized = source.trim().toLowerCase();
   if (normalized === "codex" || normalized === "codex-cli") return "Codex";
-  // ChatGPT shares OpenAI's mark (and its strip row) but answers as itself.
+  // ChatGPT is the OpenAI mark but answers as itself.
   if (normalized === "chatgpt") return "ChatGPT";
   return agentVendorName(source);
 }

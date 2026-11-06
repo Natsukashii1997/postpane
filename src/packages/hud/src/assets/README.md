@@ -5,8 +5,9 @@ These files are unchanged copies from
 
 The 22 provider PNGs are the exact files named by the original desktop
 `Components/AgentLogo.swift` artwork map, including the OpenCode and Qoder dark
-variants. Codex and ChatGPT share `chatgpt.png`. In the original renderer,
-ChatGPT's mark is tinted `#10a37f`; Grok, Cursor, Kimi, Pi, GitHub Copilot, Hermes
+variants. In the original renderer, Codex and ChatGPT shared `chatgpt.png`;
+PostPane gives Codex its own `codex.png` (the Codex app icon, cut from its
+white tile). ChatGPT's mark is tinted `#10a37f`; Grok, Cursor, Kimi, Pi, GitHub Copilot, Hermes
 and ZCode are template images tinted to their foreground. The source bitmaps
 are preserved here without applying those rendering transformations.
 

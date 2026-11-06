@@ -51,7 +51,7 @@ const label = (key: string) => recentLabel(recentUsage(snapshot, key));
 test("an agent with no window shows its last 24 hours in tokens, never money, as vendors.rs writes them", () => {
   assert.equal(label("hermes"), "1.3M");
   assert.equal(label("claude"), "5.0k", "priced: still its tokens");
-  assert.equal(label("openai"), "9.0k", "Codex under the OpenAI mark");
+  assert.equal(label("codex"), "9.0k", "Codex under its own mark");
   assert.equal(label("kimi"), "9.0k", "two currencies: still its tokens");
   assert.equal(label("pi"), null, "nothing used: nothing to show");
   assert.equal(label("opencode"), "700", "a local model: its tokens");
@@ -66,14 +66,14 @@ test("recent usage sums the providers behind one mark", () => {
   const twice = {
     providers: [
       provider("codex", { tokens: 100, costs: { USD: 1 }, unpricedTokens: 0 }),
-      provider("chatgpt", {
+      provider("codex-cli", {
         tokens: 50,
         costs: { USD: 2 },
         unpricedTokens: 10,
       }),
     ],
   } as never;
-  assert.deepEqual(recentUsage(twice, "openai"), {
+  assert.deepEqual(recentUsage(twice, "codex"), {
     tokens: 150,
     costs: { USD: 3 },
     unpricedTokens: 10,

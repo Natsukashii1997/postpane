@@ -315,7 +315,8 @@ pub fn money_short(amount: f64, code: &str) -> String {
 fn vendor_name(source: &str) -> String {
     let name = match mark(source).as_str() {
         "claude" => "Claude",
-        "openai" => "OpenAI",
+        "openai" => "ChatGPT",
+        "codex" => "Codex",
         "antigravity" => "Antigravity",
         "deepseek" => "DeepSeek",
         "grok" => "Grok",
@@ -463,7 +464,7 @@ mod tests {
         };
         assert_eq!(label("hermes"), "1.3M", "its tokens");
         assert_eq!(label("claude"), "5.0k", "tokens, never its cost");
-        assert_eq!(label("openai"), "9.0k", "tokens, priced or not");
+        assert_eq!(label("codex"), "9.0k", "tokens, priced or not");
         assert_eq!(label("kimi"), "30%", "a window comes first");
         assert_eq!(label("pi"), "--", "nothing used: nothing to show");
         assert_eq!(label("opencode"), "700", "a local model: its tokens too");
@@ -537,7 +538,8 @@ mod tests {
             json!({
                 "language": "zh",
                 "quotas": [{"vendor": "codex", "name": "5h", "usedPercent": 4.0, "status": "normal", "resetAt": null}],
-                "billing": [], "providers": [], "approvals": [],
+                "billing": [], "approvals": [],
+                "providers": [{"id": "chatgpt", "detected": true, "enabled": true}],
                 "sessions": [{"id": "c", "source": "codex", "state": "idle", "updatedAt": "2026-11-06T01:00:00Z"}],
                 "handoffs": [
                     {"id": "h1", "status": "open", "phase": phase},
@@ -545,17 +547,19 @@ mod tests {
                 ]
             })
         };
-        let working = |phase: &str| {
+        let working = |phase: &str, key: &str| {
             let snapshot = snapshot(phase);
             vendors(&snapshot, "logos", now)
                 .into_iter()
-                .find(|v| v.key == "openai")
+                .find(|v| v.key == key)
                 .map(|v| v.working)
         };
         // Only while ChatGPT answers: not before it starts, nor once it replied.
-        assert_eq!(working("working"), Some(1));
-        assert_eq!(working("delivered"), Some(0));
-        assert_eq!(working("replied"), Some(0));
+        assert_eq!(working("working", "openai"), Some(1));
+        assert_eq!(working("delivered", "openai"), Some(0));
+        assert_eq!(working("replied", "openai"), Some(0));
+        // Codex has its own mark, which ChatGPT's work never moves.
+        assert_eq!(working("working", "codex"), Some(0));
     }
 
     #[test]
@@ -580,11 +584,11 @@ mod tests {
         });
         let simple = vendors(&snapshot, "simple", now);
         let keys: Vec<&str> = simple.iter().map(|v| v.key.as_str()).collect();
-        assert_eq!(keys, ["claude", "openai", "deepseek"]);
+        assert_eq!(keys, ["claude", "codex", "deepseek"]);
         assert_eq!(simple[0].used, Some(72.4));
         assert_eq!(simple[0].level, "warning");
         assert_eq!(simple[0].working, 1);
-        assert_eq!(simple[1].name, "OpenAI");
+        assert_eq!(simple[1].name, "Codex");
         // A stale reading gives no level; its mark keeps the share in grey.
         assert_eq!(simple[1].used, None);
         assert_eq!(simple[1].level, "stale");
@@ -625,18 +629,18 @@ mod tests {
         };
         assert_eq!(
             keys(json!({"order": ["api:deepseek", "codex"]})),
-            ["deepseek", "openai", "claude"]
+            ["deepseek", "codex", "claude"]
         );
         assert_eq!(
             keys(
                 json!({"order": ["api:deepseek", "codex"], "hud": {"agents": ["Claude Code", "Codex"]}})
             ),
-            ["claude", "openai"],
+            ["claude", "codex"],
             "the HUD's own list still picks and orders"
         );
         assert_eq!(
             keys(json!({"order": ["codex"], "hud": {"agents": ["kimi"]}})),
-            ["openai", "claude", "deepseek"]
+            ["codex", "claude", "deepseek"]
         );
     }
     #[test]
@@ -692,22 +696,23 @@ mod tests {
             ]
         });
         for (mode, expected) in [
-            ("notch", vec!["claude", "deepseek", "openai"]),
-            ("simple", vec!["claude", "deepseek", "openai"]),
-            ("logos", vec!["claude", "opencode", "openai"]),
+            // Codex and ChatGPT each keep a mark of their own.
+            ("notch", vec!["claude", "deepseek", "codex", "openai"]),
+            ("simple", vec!["claude", "deepseek", "codex", "openai"]),
+            ("logos", vec!["claude", "opencode", "codex", "openai"]),
         ] {
             let rows = vendors(&snapshot, mode, now);
             assert_eq!(
                 rows.iter().map(|row| row.key.as_str()).collect::<Vec<_>>(),
                 expected
             );
-            let codex = rows.iter().find(|row| row.key == "openai").unwrap();
+            let codex = rows.iter().find(|row| row.key == "codex").unwrap();
             assert_eq!(codex.used, None);
             assert!(codex.quotas.is_empty());
             assert_eq!(meter_label(codex, false), "--");
             let selected = configured(&snapshot, mode, &json!({"hud":{"agents":["codex"]}}), now);
             assert_eq!(selected.len(), 1);
-            assert_eq!(selected[0].key, "openai");
+            assert_eq!(selected[0].key, "codex");
         }
     }
 }
