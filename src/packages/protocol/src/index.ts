@@ -902,9 +902,18 @@ export interface RelayLaunch {
   at: number;
   /** Queued while waiting for the session (or taken until it is idle);
    * started once in the session, which has yet to call `relay_to_chatgpt`
-   * (its handoff then takes the row over); refused or expired when they
-   * never reached it; stalled when taken but no handoff came in the hour. */
-  state: "queued" | "started" | "refused" | "expired" | "stalled";
+   * naming this swipe's code (its handoff then takes the row over);
+   * unknown when the words went before they were seen taken; refused or
+   * expired when they never reached it; stalled when taken but no handoff
+   * came within the hour of the taking; lost when unknown for an hour. */
+  state:
+    | "queued"
+    | "started"
+    | "unknown"
+    | "refused"
+    | "expired"
+    | "stalled"
+    | "lost";
   reason: string | null;
 }
 /** A price per million tokens; an empty cache rate takes the input's. */

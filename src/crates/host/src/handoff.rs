@@ -62,19 +62,30 @@ const LAUNCH_LIFETIME_MS: i64 = 60 * 60 * 1000;
 
 /// 左滑发起 (#124): words left for a session to hand its work over, followed
 /// until it takes them up, refuses them or they expire.
-#[derive(Clone, Debug, PartialEq)]
+/// Kept in `launches.json` beside the handoffs, so words still waiting
+/// across a restart are not left a second time.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Launch {
     kind: String,
+    /// The plugin's id for the words left.
     id: String,
+    /// This swipe's own code, in its words: the session names it to
+    /// `relay_to_chatgpt` (`launch`), and only that settles the swipe.
+    #[serde(default)]
+    code: String,
     at: i64,
     /// `queued` (waiting, or taken until the session is idle), `started`
-    /// (in the session, which has yet to call `relay_to_chatgpt`), `relayed`
-    /// (it did: its handoff takes the row over), `refused`, `expired` (never
-    /// taken) or `stalled` (taken, but no handoff within the hour).
-    state: &'static str,
+    /// (in the session, which has yet to call `relay_to_chatgpt`), `unknown`
+    /// (the words went before they were seen taken), `relayed` (the session
+    /// handed its work over naming this swipe), `refused`, `expired` (never
+    /// taken), `stalled` (taken, no handoff within the hour of the taking)
+    /// or `lost` (unknown, no handoff within the hour).
+    state: String,
     reason: Option<String>,
-    /// The plugin took the words: their file may go before they start.
-    taken: bool,
+    /// When the plugin was seen taking the words.
+    #[serde(default)]
+    taken_at: Option<i64>,
     /// When it came to nothing.
     settled_at: Option<i64>,
 }
@@ -82,8 +93,18 @@ struct Launch {
 impl Launch {
     /// Words on their way or being worked on: a swipe now would ask twice.
     fn pending(&self) -> bool {
-        matches!(self.state, "queued" | "started")
+        matches!(self.state.as_str(), "queued" | "started" | "unknown")
     }
+}
+
+/// A swipe's code: when, and a count so two at once differ.
+fn launch_code(now: i64) -> String {
+    static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let count = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("L{now:x}{:02x}", count % 256)
+}
+fn launches_path(data: &std::path::Path) -> PathBuf {
+    agent_hud_runtime::chatgpt::folder(data).join("launches.json")
 }
 
 /// What a swipe did: left words now, or found words still waiting.
@@ -150,12 +171,18 @@ impl Desk {
     /// that were opening when the app stopped count as failed, to retry.
     pub(crate) fn new(data: Option<PathBuf>) -> Self {
         let mut book = data.as_deref().map(handoffs::load).unwrap_or_default();
+        // Swipes still waiting when the app stopped wait on.
+        let launches: HashMap<String, Launch> = data
+            .as_deref()
+            .and_then(|data| std::fs::read(launches_path(data)).ok())
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
         let desk = |book| Self {
             data,
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
             sending: Mutex::new(HashSet::new()),
-            launches: Mutex::new(HashMap::new()),
+            launches: Mutex::new(launches),
         };
         let now = now_ms();
         // Not `||`: both are to happen.
@@ -226,33 +253,62 @@ impl Desk {
         json!(shown)
     }
 
-    /// Whether `session` started a handoff at `at` or later: what a swipe
-    /// asked it to do.
-    fn relayed_since(&self, session: &str, at: i64) -> bool {
-        self.lock()
-            .list
-            .iter()
-            .any(|handoff| handoff.claude_session == session && handoff.created_at >= at)
-    }
     fn launches(&self) -> MutexGuard<'_, HashMap<String, Launch>> {
         self.launches.lock().unwrap_or_else(|p| p.into_inner())
+    }
+    /// Keeps the swipes (held, so a newer state is never overwritten).
+    fn keep_launches(&self, launches: &HashMap<String, Launch>) {
+        let Some(data) = &self.data else { return };
+        let path = launches_path(data);
+        let temporary = path.with_extension("json.tmp");
+        let saved = serde_json::to_vec(launches)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| {
+                std::fs::create_dir_all(agent_hud_runtime::chatgpt::folder(data))
+                    .and_then(|()| std::fs::write(&temporary, bytes))
+                    .and_then(|()| std::fs::rename(&temporary, &path))
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(error) = saved {
+            eprintln!("Relay launches {}: {error}", path.display());
+        }
+    }
+    /// `relay_to_chatgpt` came from `session` naming swipe `code`: that
+    /// swipe did what it asked, whether into a new review or one open.
+    /// Whether it settled one.
+    pub(crate) fn launch_relayed(&self, session: &str, code: &str, now: i64) -> bool {
+        let mut launches = self.launches();
+        let Some(launch) = launches
+            .get_mut(session)
+            .filter(|l| l.pending() && !l.code.is_empty() && l.code == code)
+        else {
+            return false;
+        };
+        launch.state = "relayed".into();
+        launch.settled_at = Some(now);
+        launches.remove(session);
+        self.keep_launches(&launches);
+        true
     }
     /// The snapshot's `relayLaunches`: swipes whose words still wait for
     /// their session, or that refused or expired lately. Started ones give
     /// way to the handoff the session starts.
     pub(crate) fn launch_projection(&self, lines: &dyn Lines, now: i64) -> Value {
         let mut launches = self.launches();
+        let before = launches.clone();
         for (session, launch) in launches.iter_mut() {
-            let relayed = self.relayed_since(session, launch.at);
-            follow(launch, lines, session, relayed, now);
+            follow(launch, lines, session, now);
         }
-        launches.retain(|_, launch| match launch.state {
-            "queued" | "started" => true,
-            "relayed" => false,
-            _ => launch
-                .settled_at
-                .is_some_and(|at| now - at < LAUNCH_SHOWN_MS),
+        launches.retain(|_, launch| {
+            launch.pending()
+                || launch.state != "relayed"
+                    && launch
+                        .settled_at
+                        .is_some_and(|at| now - at < LAUNCH_SHOWN_MS)
         });
+        if *launches != before {
+            self.keep_launches(&launches);
+        }
         let mut shown: Vec<Value> = launches
             .iter()
             .map(|(session, launch)| {
@@ -662,16 +718,16 @@ fn again_text(round: u32) -> String {
 }
 /// 左滑发起 (批 B, #124): what a Claude Code session is asked to do so it
 /// hands its own work to ChatGPT; None for a kind that cannot start yet.
-fn launch_text(kind: &str) -> Option<&'static str> {
-    match kind {
-        "review" => Some(
-            "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出，请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」；summary 写一句这轮做了什么。（驿窗左滑「审核」发来）",
-        ),
-        "discuss" => Some(
-            "请把眼下的方案交给 ChatGPT 讨论，只聊方案、不改代码：先自己整理背景——要解决的问题、已有的做法和限制、你考虑过的几种做法——然后调用 relay_to_chatgpt 送出，请 ChatGPT 比较可选做法，给出推荐和理由；summary 写一句要讨论什么。（驿窗左滑「讨论」发来）",
-        ),
-        _ => None,
-    }
+fn launch_text(kind: &str, code: &str) -> Option<String> {
+    let ask = match kind {
+        "review" => "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出，请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」；summary 写一句这轮做了什么。",
+        "discuss" => "请把眼下的方案交给 ChatGPT 讨论，只聊方案、不改代码：先自己整理背景——要解决的问题、已有的做法和限制、你考虑过的几种做法——然后调用 relay_to_chatgpt 送出，请 ChatGPT 比较可选做法，给出推荐和理由；summary 写一句要讨论什么。",
+        _ => return None,
+    };
+    let what = if kind == "review" { "审核" } else { "讨论" };
+    Some(format!(
+        "{ask}调用 relay_to_chatgpt 时 launch 参数填「{code}」，驿窗靠它认出这次左滑已经办了。（驿窗左滑「{what}」发来）"
+    ))
 }
 
 /// 左滑发起: asks the Claude Code `session` to hand its work to ChatGPT
@@ -691,7 +747,8 @@ pub(crate) fn launch(
             "Invalid Claude session id",
         ));
     }
-    let text = launch_text(kind).ok_or_else(|| {
+    let code = launch_code(now);
+    let text = launch_text(kind, &code).ok_or_else(|| {
         l10n::text(
             "这种接力还不能发起",
             "This kind of handoff cannot start yet",
@@ -704,63 +761,78 @@ pub(crate) fn launch(
     // Held from the look to the leaving: two swipes side by side leave one.
     let mut launches = desk.launches();
     if let Some(waiting) = launches.get_mut(session) {
-        let relayed = desk.relayed_since(session, waiting.at);
-        follow(waiting, lines, session, relayed, now);
+        follow(waiting, lines, session, now);
         if waiting.pending() {
+            desk.keep_launches(&launches);
             return Ok(Launched::AlreadyQueued);
         }
     }
     lines.reaches(session)?;
-    let id = lines.leave(session, text)?;
+    let id = lines.leave(session, &text)?;
     launches.insert(
         session.to_owned(),
         Launch {
             kind: kind.to_owned(),
             id,
+            code,
             at: now,
-            state: "queued",
+            state: "queued".into(),
             reason: None,
-            taken: false,
+            taken_at: None,
             settled_at: None,
         },
     );
+    desk.keep_launches(&launches);
     Ok(Launched::Queued)
 }
 
-/// Reads how a launch's words stand now. Only the session's own handoff
-/// (`relayed`) shows it did what was asked; until then words taken stay
-/// queued (the plugin submits them once the session is idle) or started.
-/// Taken words whose file went (the plugin's sweep drops them a minute on)
-/// keep their state. Words never taken expire with their hour; words taken
-/// but never followed by a handoff within it stall: the plugin may have
-/// stopped between taking and submitting, and it does not submit again, so
-/// the same words are never asked twice.
-fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, relayed: bool, now: i64) {
+/// Reads how a launch's words stand now. Only the session's own call
+/// naming the swipe (`Desk::launch_relayed`) shows it did what was asked;
+/// until then words taken stay queued (the plugin submits them once the
+/// session is idle) or started. Taken words whose file went (the plugin's
+/// sweep drops them a minute on) keep their state; words gone before they
+/// were seen taken are `unknown`, not said to be taken. Words never taken
+/// expire with the hour of the swipe; words taken but never followed by a
+/// handoff within the hour of the taking stall: the plugin may have stopped
+/// between taking and submitting, and it does not submit again, so the same
+/// words are never asked twice.
+fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     if !launch.pending() {
-        return;
-    }
-    if relayed {
-        launch.state = "relayed";
         return;
     }
     match lines.left(session, &launch.id) {
         Some((state, reason)) => match state.as_str() {
-            "taken" => launch.taken = true,
+            "taken" => {
+                launch.taken_at.get_or_insert(now);
+                launch.state = "queued".into();
+            }
             "started" => {
-                launch.taken = true;
-                launch.state = "started";
+                launch.taken_at.get_or_insert(now);
+                launch.state = "started".into();
             }
             "refused" => {
-                launch.state = "refused";
+                launch.state = "refused".into();
                 launch.reason = reason;
             }
-            "expired" | "cancelled" => launch.state = "expired",
+            "expired" | "cancelled" => launch.state = "expired".into(),
             _ => {}
         },
-        None => launch.taken = true,
+        None if launch.taken_at.is_none() => launch.state = "unknown".into(),
+        None => {}
     }
-    if launch.pending() && now - launch.at >= LAUNCH_LIFETIME_MS {
-        launch.state = if launch.taken { "stalled" } else { "expired" };
+    if launch.pending() {
+        let late = match launch.taken_at {
+            Some(taken) => (now - taken >= LAUNCH_LIFETIME_MS).then_some("stalled"),
+            None if now - launch.at >= LAUNCH_LIFETIME_MS => Some(if launch.state == "unknown" {
+                "lost"
+            } else {
+                "expired"
+            }),
+            None => None,
+        };
+        if let Some(state) = late {
+            launch.state = state.into();
+        }
     }
     if !launch.pending() {
         launch.settled_at = Some(now);
@@ -1087,6 +1159,15 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         )
     })?;
     let mut answer = start(app, &session, cwd, title, summary, brief, false)?;
+    // A swipe's words named here: that swipe is done (左滑发起).
+    if let Some(code) = params["launch"].as_str().filter(|code| !code.is_empty()) {
+        let settled = app
+            .try_state::<Desk>()
+            .is_some_and(|desk| desk.launch_relayed(&session, code, now_ms()));
+        if settled {
+            republish(app);
+        }
+    }
     answer["claudeSession"] = json!(session);
     answer["message"] = json!(if answer["status"] == "repeated" {
         l10n::text(
@@ -1432,6 +1513,111 @@ mod tests {
         assert_eq!(shown[0]["phase"], "ended");
         assert!(desk.act(&lines, &handoff.id, "back", 10).is_err());
         assert!(desk.act(&lines, &handoff.id, "nope", 10).is_err());
+    }
+
+    /// The code a swipe's words carry, for `relay_to_chatgpt`'s `launch`.
+    fn code_of(lines: &Fake) -> String {
+        let sent = lines.sent.borrow();
+        let text = &sent.iter().rev().find(|s| s.0 == "leave").unwrap().2;
+        let start = text.find("「L").unwrap() + "「".len();
+        let end = start + text[start..].find('」').unwrap();
+        text[start..end].to_owned()
+    }
+
+    #[test]
+    fn a_swipe_is_done_only_by_the_handoff_that_names_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        // The session already has a review open: its next round goes into it.
+        opened(&desk, &lines);
+        left_as(&lines, Some("started"), None);
+        launch(&desk, &lines, "s1", "review", 10).unwrap();
+        let code = code_of(&lines);
+        assert!(code.starts_with('L'));
+        // A handoff of the same session for something else settles nothing.
+        desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            None,
+            "别的事",
+            false,
+            11,
+        )
+        .unwrap();
+        assert!(!desk.launch_relayed("s1", "L-other", 11));
+        assert!(!desk.launch_relayed("s2", &code, 11), "another session's");
+        assert_eq!(desk.launch_projection(&lines, 11)[0]["state"], "started");
+        // The round it asked for, into the review already open, does.
+        desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            None,
+            "左滑要的这轮",
+            false,
+            12,
+        )
+        .unwrap();
+        assert!(desk.launch_relayed("s1", &code, 12));
+        assert_eq!(desk.launch_projection(&lines, 12), json!([]));
+        assert!(!desk.launch_relayed("s1", &code, 13), "once");
+    }
+
+    #[test]
+    fn swipes_waiting_across_a_restart_are_not_left_again() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let lines = Fake::default();
+        left_as(&lines, Some("taken"), None);
+        let desk = Desk::new(Some(data.clone()));
+        launch(&desk, &lines, "s1", "review", 1).unwrap();
+        desk.launch_projection(&lines, 2);
+        drop(desk);
+        let desk = Desk::new(Some(data.clone()));
+        assert_eq!(
+            launch(&desk, &lines, "s1", "review", 3).unwrap(),
+            Launched::AlreadyQueued
+        );
+        assert_eq!(
+            lines
+                .sent
+                .borrow()
+                .iter()
+                .filter(|s| s.0 == "leave")
+                .count(),
+            1
+        );
+        // Its code still settles it after the restart.
+        let code = code_of(&lines);
+        assert!(desk.launch_relayed("s1", &code, 4));
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert_eq!(desk.launch_projection(&lines, 5), json!([]));
+    }
+
+    #[test]
+    fn a_stall_counts_its_hour_from_when_the_words_were_taken() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        left_as(&lines, Some("waiting"), None);
+        launch(&desk, &lines, "s1", "review", 0).unwrap();
+        // Waiting 55 minutes, then taken.
+        let taken = 55 * 60_000;
+        left_as(&lines, Some("taken"), None);
+        desk.launch_projection(&lines, taken);
+        // The swipe's hour is up, the taking's is not.
+        left_as(&lines, None, None);
+        assert_eq!(
+            desk.launch_projection(&lines, LAUNCH_LIFETIME_MS + 1)[0]["state"],
+            "queued"
+        );
+        assert_eq!(
+            desk.launch_projection(&lines, taken + LAUNCH_LIFETIME_MS)[0]["state"],
+            "stalled"
+        );
     }
 
     fn kinds(desk: &Desk, now: i64) -> Vec<(String, bool)> {
@@ -1814,9 +2000,10 @@ mod tests {
         );
         assert_eq!(desk.launch_projection(&lines, 4)[0]["state"], "started");
         assert_eq!(lines.sent.borrow().len(), 1);
-        // Once the session handed its work over, the row gives way to its
-        // handoff and a new swipe leaves words again.
-        opened(&desk, &lines);
+        // Once the session handed its work over naming this swipe, the row
+        // gives way to its handoff and a new swipe leaves words again.
+        let code = code_of(&lines);
+        assert!(desk.launch_relayed("s1", &code, 5));
         assert_eq!(desk.launch_projection(&lines, 5), json!([]));
         left_as(&lines, Some("waiting"), None);
         assert_eq!(
@@ -1876,18 +2063,18 @@ mod tests {
             desk.launch_projection(&lines, 20 + LAUNCH_SHOWN_MS),
             json!([])
         );
-        // Taken words whose file went keep waiting for the handoff; with no
-        // handoff in the hour (the plugin may have stopped between taking
-        // and submitting) they stall, and are not left again by themselves.
+        // Words whose file went before they were seen taken: not known to
+        // be taken, so not said to be; with no handoff in the hour, lost.
         left_as(&lines, Some("waiting"), None);
         launch(&desk, &lines, "s3", "review", 0).unwrap();
+        desk.launch_projection(&lines, 1);
         left_as(&lines, None, None);
         let shown = desk.launch_projection(&lines, 60_000);
         assert!(shown
             .as_array()
             .unwrap()
             .iter()
-            .any(|l| l["session"] == "s3" && l["state"] == "queued"));
+            .any(|l| l["session"] == "s3" && l["state"] == "unknown"));
         // Words never taken expire with their hour.
         left_as(&lines, Some("waiting"), None);
         launch(&desk, &lines, "s2", "review", 0).unwrap();
@@ -1901,7 +2088,7 @@ mod tests {
                 .map(|l| l["state"].clone())
         };
         assert_eq!(state("s2"), Some(json!("expired")));
-        assert_eq!(state("s3"), Some(json!("stalled")));
+        assert_eq!(state("s3"), Some(json!("lost")));
         assert_eq!(
             lines
                 .sent

@@ -523,6 +523,13 @@ serveStdio(() => {
             .string()
             .min(1)
             .describe("发给 ChatGPT 的完整交代，按工具说明的六项写。"),
+          launch: z
+            .string()
+            .max(40)
+            .optional()
+            .describe(
+              "驿窗左滑发来的请求里写的编号（「L」开头）；照填，驿窗靠它认出这次左滑已经办了。不是左滑发来的就不填。",
+            ),
         })
         .strict(),
       annotations: {
@@ -531,7 +538,7 @@ serveStdio(() => {
         openWorldHint: true,
       },
     },
-    async ({ title, summary, brief }, context) => {
+    async ({ title, summary, brief, launch }, context) => {
       const named = caller(
         context.mcpReq._meta as Record<string, unknown> | undefined,
       );
@@ -543,6 +550,7 @@ serveStdio(() => {
               title,
               summary,
               brief,
+              launch,
               caller: named,
               cwd: process.cwd(),
               parent: launchedBy,

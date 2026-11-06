@@ -103,3 +103,18 @@ test("words in the session are not yet a handoff; an hour with none says so", ()
     "The session took the review request but started no handoff in an hour",
   );
 });
+
+test("words gone before they were seen taken are not said to be taken", () => {
+  assert.deepEqual(
+    launchLine({ kind: "review", state: "unknown", reason: null }, true),
+    { ok: true, text: "审核请求状态不明，可能还在处理" },
+  );
+  assert.deepEqual(
+    launchLine({ kind: "discuss", state: "lost", reason: null }, true),
+    { ok: false, text: "讨论请求状态不明，一小时没等到接力" },
+  );
+  assert.equal(
+    launchLine({ kind: "review", state: "lost", reason: null }, false).text,
+    "Review request unaccounted for; no handoff in an hour",
+  );
+});

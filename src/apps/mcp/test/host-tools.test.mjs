@@ -336,6 +336,28 @@ test("relay_to_chatgpt hands the Claude Code session, its folder and the brief t
   }
 });
 
+test("relay_to_chatgpt passes on the code a swipe's words carry", async () => {
+  const fake = engine("relay-launch", [tool]);
+  const client = await connect(fake.file, {
+    CLAUDE_CODE_SESSION_ID: "session-9",
+  });
+  try {
+    const { tools } = await client.listTools();
+    const listed = tools.find((item) => item.name === "relay_to_chatgpt");
+    assert.ok(listed.inputSchema.properties.launch, "an optional launch code");
+    await client.callTool({
+      name: "relay_to_chatgpt",
+      arguments: { title: "t", brief: "b", launch: "L19a5c3e0f2a01" },
+    });
+    const call = fake
+      .requests()
+      .find((request) => request.method === "relay_to_chatgpt");
+    assert.equal(call.params.launch, "L19a5c3e0f2a01");
+  } finally {
+    await client.close();
+  }
+});
+
 test("relay_to_chatgpt without a caller leaves it to the app, and says in Chinese when the app cannot take it", async () => {
   const fake = engine("relay-nobody", [tool]);
   const client = await connect(fake.file);
