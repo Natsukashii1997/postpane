@@ -295,12 +295,13 @@ impl Book {
     /// The review conversation opened (late, too, after a timeout): the
     /// handoff is bound to it, and any other handoff that held it lets it go.
     pub fn opened(&mut self, id: &str, conversation: &str, now: i64) -> bool {
-        // A failed one binds late only while its session has no newer handoff.
+        // A failed one binds late only while its session has no newer
+        // handoff, live or not.
         let waiting = self.get(id).is_some_and(|handoff| {
             handoff.status == Status::Opening
                 || (handoff.status == Status::Failed
                     && handoff.brief.is_some()
-                    && self.for_session(&handoff.claude_session).is_none())
+                    && !self.superseded(id))
         });
         if !waiting {
             return false;
@@ -324,6 +325,16 @@ impl Book {
             .push(Step::new(now, StepKind::Ask, Some(&brief)).keyed(&key(&brief)));
         handoff.enter(Phase::Delivered, now);
         true
+    }
+    /// Whether the session of `id` began another handoff after it.
+    pub fn superseded(&self, id: &str) -> bool {
+        let Some(at) = self.list.iter().position(|h| h.id == id) else {
+            return false;
+        };
+        let session = &self.list[at].claude_session;
+        self.list[at + 1..]
+            .iter()
+            .any(|h| &h.claude_session == session)
     }
     /// A conversation opened for `request` (`Handoff::request`), whenever
     /// the answer came: bound only if it is the handoff's current try.
@@ -954,5 +965,17 @@ mod tests {
         let newer = book.begin("s1", None, "t", None, "two", 2);
         assert!(!book.opened_late(&old.request(), "c-old", 3));
         assert!(book.opened_late(&newer.request(), "c-new", 3));
+    }
+
+    #[test]
+    fn a_failed_one_stays_down_once_a_newer_one_failed_too() {
+        let mut book = Book::default();
+        let old = book.begin("s1", None, "t", None, "one", 0);
+        book.failed(&old.id, "timeout", 1);
+        let newer = book.begin("s1", None, "t", None, "two", 2);
+        book.failed(&newer.id, "timeout", 3);
+        assert!(book.superseded(&old.id));
+        assert!(!book.opened_late(&old.request(), "c-old", 4));
+        assert!(book.opened_late(&newer.request(), "c-new", 4));
     }
 }
