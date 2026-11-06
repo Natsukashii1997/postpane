@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type {
   Approval,
@@ -110,7 +110,7 @@ export function HUDExpandedSurface({
   scale: number;
   peekTuck: number;
   /** The wait before the peek grows into the whole board, drawn as a line
-   * running out along its foot. */
+   * growing from the middle of its foot to both ends. */
   expandMeter?: { key: string; ms: number } | null;
   /** The agent the whole board scrolls to (see SourceHoverPanel). */
   spotlight?: string;
@@ -428,18 +428,18 @@ export function HUDExpandedSurface({
                             key={expandMeter.key}
                             className="hud-peek-expand-meter"
                             aria-hidden
-                            style={{
-                              position: "absolute",
-                              left: edge === "left" ? 8 + peekTuck : 8,
-                              right: edge === "right" ? 8 + peekTuck : 8,
-                              bottom: 3,
-                              height: 2,
-                              borderRadius: 1,
-                              background: statusColor("warning"),
-                              transformOrigin:
-                                edge === "right" ? "right" : "left",
-                              animationDuration: `${expandMeter.ms}ms`,
-                            }}
+                            style={
+                              {
+                                "--hud-peek-expand-ms": `${expandMeter.ms}ms`,
+                                position: "absolute",
+                                left: edge === "left" ? 8 + peekTuck : 8,
+                                right: edge === "right" ? 8 + peekTuck : 8,
+                                bottom: 3,
+                                height: 2,
+                                borderRadius: 1,
+                                background: statusColor("warning"),
+                              } as CSSProperties
+                            }
                           />
                         )}
                       </button>
