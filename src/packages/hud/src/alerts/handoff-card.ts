@@ -165,6 +165,10 @@ function progress(handoff: Handoff, now: number, zh: boolean) {
         : `Answered · ${verdictWord(reply?.verdict, zh)}`;
     }
     case "returned":
+      if (handoff.queuedAt)
+        return zh
+          ? "意见已排队 · 打开 Claude 会话继续"
+          : "Answer queued · open the Claude session";
       return zh
         ? `已转回，按意见修改 · ${since(at, now, zh)}`
         : `Back with Claude · ${since(at, now, zh)}`;
@@ -393,7 +397,11 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         who: "claude",
         time: clock(at),
         title: zh ? "Claude 按意见修改" : "Claude works on it",
-        sub: since(at, now, zh),
+        sub: handoff.queuedAt
+          ? zh
+            ? "意见已排队 · 在 Claude 里打开这个会话就会继续"
+            : "Answer queued · open this session in Claude to go on"
+          : since(at, now, zh),
         state: "cur",
       });
       if (more) rows.push(again);

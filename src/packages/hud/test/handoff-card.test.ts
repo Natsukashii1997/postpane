@@ -262,3 +262,26 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
   assert.deepEqual(actions(handoff()), ["end", "open"]);
   assert.equal(autoLabel(handoff(), true), null);
 });
+
+test("an answer queued for a paused Claude session says to open the session", () => {
+  const queued = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: true,
+    queuedAt: T + 12 * minute,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute, { auto: true }),
+    ],
+  });
+  const now = timeline(queued, T + 14 * minute, true).find(
+    (row) => row.state === "cur",
+  );
+  assert.equal(now?.title, "Claude 按意见修改");
+  assert.equal(now?.sub, "意见已排队 · 在 Claude 里打开这个会话就会继续");
+  assert.equal(
+    progressLine(queued, T + 14 * minute, true),
+    "意见已排队 · 打开 Claude 会话继续",
+  );
+});

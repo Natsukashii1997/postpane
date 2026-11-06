@@ -24,6 +24,9 @@ pub const ROUNDS: u32 = 2;
 pub const REPLY_WAIT_MS: i64 = 30 * 60 * 1000;
 /// How long it waits for Claude to hand its changes over again.
 pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
+/// How long words queued for a paused Claude session wait to be taken up
+/// (the plugin's own lifetime for words left).
+pub const QUEUE_WAIT_MS: i64 = 60 * 60 * 1000;
 /// The longest excerpt a step keeps of what was said.
 const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.
@@ -184,6 +187,11 @@ pub struct Handoff {
     /// Why the auto round trip stopped, while it is off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub halt: Option<String>,
+    /// When ChatGPT's answer was queued for a Claude session that could not
+    /// take it then (paused once its turn was over): it goes in once the
+    /// session is opened. Cleared when Claude hands over again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued_at: Option<i64>,
 }
 
 /// What the auto round trip does with an answer that came in.
@@ -339,6 +347,7 @@ impl Book {
             attempt: 0,
             auto: true,
             halt: None,
+            queued_at: None,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -481,6 +490,7 @@ impl Book {
         handoff
             .steps
             .push(Step::new(now, StepKind::Ask, Some(text)).keyed(&key(text)));
+        handoff.queued_at = None;
         handoff.rounds += 1;
         handoff.enter(Phase::Delivered, now);
         true
@@ -586,6 +596,14 @@ impl Book {
         handoff.enter(Phase::Ended, now);
         true
     }
+    /// The words back went into the Claude session's queue, not to it.
+    pub fn queued(&mut self, id: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff.queued_at = Some(now);
+        true
+    }
     /// The auto round trip met an error (`text`: what failed and what it did
     /// about it); the phase stays.
     pub fn trouble(&mut self, id: &str, text: &str, now: i64) -> bool {
@@ -625,7 +643,7 @@ impl Book {
     /// Auto round trips waiting too long stop: ChatGPT not answering within
     /// `REPLY_WAIT_MS` (`no_answer`), Claude not handing over again within
     /// `FIX_WAIT_MS` (`no_handover`).
-    pub fn overdue(&mut self, now: i64, no_answer: &str, no_handover: &str) -> bool {
+    pub fn overdue(&mut self, now: i64, no_answer: &str, no_handover: &str, no_wake: &str) -> bool {
         let late = self
             .list
             .iter()
@@ -635,6 +653,9 @@ impl Book {
                 match h.phase {
                     Phase::Delivered | Phase::Working if waited > REPLY_WAIT_MS => {
                         Some((h.id.clone(), no_answer))
+                    }
+                    Phase::Returned if h.queued_at.is_some_and(|at| now - at > QUEUE_WAIT_MS) => {
+                        Some((h.id.clone(), no_wake))
                     }
                     Phase::Returned if waited > FIX_WAIT_MS => Some((h.id.clone(), no_handover)),
                     _ => None,
@@ -1105,8 +1126,18 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         // Asked at 2 (opened): ChatGPT has REPLY_WAIT_MS to answer.
-        assert!(!book.overdue(2 + REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
-        assert!(book.overdue(3 + REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(!book.overdue(
+            2 + REPLY_WAIT_MS,
+            "30 分钟没回信",
+            "2 小时没交回",
+            "排队没人领"
+        ));
+        assert!(book.overdue(
+            3 + REPLY_WAIT_MS,
+            "30 分钟没回信",
+            "2 小时没交回",
+            "排队没人领"
+        ));
         let kept = book.get(&id).unwrap();
         assert!(!kept.auto);
         assert!(kept.halt.as_deref().unwrap().contains("30 分钟没回信"));
@@ -1116,8 +1147,18 @@ mod tests {
         let id = asked_once(&mut book);
         book.replied("c1", "结论：需修改", Some("m1"), 4);
         book.returned(&id, StepKind::Back, "意见", true, 5);
-        assert!(!book.overdue(5 + FIX_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
-        assert!(book.overdue(6 + FIX_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(!book.overdue(
+            5 + FIX_WAIT_MS,
+            "30 分钟没回信",
+            "2 小时没交回",
+            "排队没人领"
+        ));
+        assert!(book.overdue(
+            6 + FIX_WAIT_MS,
+            "30 分钟没回信",
+            "2 小时没交回",
+            "排队没人领"
+        ));
         assert!(book
             .get(&id)
             .unwrap()
@@ -1129,7 +1170,12 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         book.stop(&id, "常浩暂停", false, 3);
-        assert!(!book.overdue(10 * REPLY_WAIT_MS, "30 分钟没回信", "2 小时没交回"));
+        assert!(!book.overdue(
+            10 * REPLY_WAIT_MS,
+            "30 分钟没回信",
+            "2 小时没交回",
+            "排队没人领"
+        ));
         assert!(!book.get(&id).unwrap().steps.last().unwrap().auto);
         // A restart pauses those still on, and only those.
         let mut book = Book::default();
