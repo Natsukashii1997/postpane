@@ -139,6 +139,20 @@ export function launchLine(
           ? `会话领了${what}，但一小时没发起接力`
           : `The session took the ${what.toLowerCase()} but started no handoff in an hour`,
       };
+    case "unknown":
+      return {
+        ok: true,
+        text: zh
+          ? `${what}状态不明，可能还在处理`
+          : `${what} unaccounted for; may still be in hand`,
+      };
+    case "lost":
+      return {
+        ok: false,
+        text: zh
+          ? `${what}状态不明，一小时没等到接力`
+          : `${what} unaccounted for; no handoff in an hour`,
+      };
     case "refused":
       return {
         ok: false,
