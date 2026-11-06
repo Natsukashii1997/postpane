@@ -60,13 +60,26 @@ pub(crate) enum Started {
 pub(crate) struct Desk {
     data: Option<PathBuf>,
     book: Mutex<Book>,
-    /// Conversations ChatGPT began answering before they were bound to a
-    /// handoff (a new one starts on its first words, before `opened`
-    /// answers), newest last.
-    early: Mutex<Vec<(String, i64)>>,
+    /// Turns ChatGPT began or finished before the desk could take them: in a
+    /// conversation not bound yet (a new one starts on its first words,
+    /// before `opened` answers), or in one whose words are still on their
+    /// way (it may answer before `send` does). Taken in order once bound or
+    /// sent (`caught_up`); oldest first.
+    early: Mutex<Vec<Early>>,
     /// Handoffs with words on their way now: a second sending waits, so the
     /// same words are not sent twice side by side.
     sending: Mutex<HashSet<String>>,
+}
+
+/// How many early turns are kept: those of conversations never bound (the
+/// person's own chats) are dropped oldest first.
+const EARLY_KEPT: usize = 16;
+
+/// A turn the ChatGPT channel reported before the desk could take it.
+struct Early {
+    conversation: String,
+    message: Value,
+    at: i64,
 }
 
 /// A handoff's words on their way; let go when dropped.
@@ -187,6 +200,9 @@ impl Desk {
         if !lines.connected() {
             return Err(not_connected());
         }
+        // One start per session at a time, so two calls side by side cannot
+        // each begin a handoff.
+        let _starting = self.claim(&format!("session:{session}"))?;
         if self.lock().expire(now, &timed_out()) {
             self.change(|_| ());
         }
@@ -195,23 +211,15 @@ impl Desk {
             .flatten();
         let summary = summary.map(str::trim).filter(|text| !text.is_empty());
         if let Some(handoff) = current {
-            match (handoff.status, handoff.chatgpt_conversation.as_deref()) {
+            match (handoff.status, handoff.chatgpt_conversation.clone()) {
                 (Status::Open, Some(conversation)) => {
-                    let _sending = self.claim(&handoff.id)?;
-                    // The same words again (a retry after a slow answer) are not sent twice.
-                    if self.lock().asked_already(&handoff.id, brief) {
-                        return Ok(Started::Sent {
-                            handoff,
-                            repeated: true,
-                        });
-                    }
-                    lines.send(conversation, brief)?;
-                    self.change(|book| book.asked(&handoff.id, summary, brief, now));
-                    let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
-                    return Ok(Started::Sent {
-                        handoff: sent,
-                        repeated: false,
-                    });
+                    let sent = {
+                        let _sending = self.claim(&handoff.id)?;
+                        self.ask(lines, handoff, &conversation, summary, brief, now)
+                    };
+                    // ChatGPT may have begun, or finished, before `send` answered.
+                    self.caught_up(&conversation);
+                    return sent;
                 }
                 (Status::Opening, _) => {
                     return Err(l10n::text(
@@ -231,6 +239,32 @@ impl Desk {
         Ok(Started::Opening {
             handoff,
             project: self.project(),
+        })
+    }
+
+    /// Sends `brief` into the handoff's open `conversation`, once.
+    fn ask(
+        &self,
+        lines: &dyn Lines,
+        handoff: Handoff,
+        conversation: &str,
+        summary: Option<&str>,
+        brief: &str,
+        now: i64,
+    ) -> Result<Started, String> {
+        // The same words again (a retry after a slow answer) are not sent twice.
+        if self.lock().asked_already(&handoff.id, brief) {
+            return Ok(Started::Sent {
+                handoff,
+                repeated: true,
+            });
+        }
+        lines.send(conversation, brief)?;
+        self.change(|book| book.asked(&handoff.id, summary, brief, now));
+        let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
+        Ok(Started::Sent {
+            handoff: sent,
+            repeated: false,
         })
     }
 
@@ -262,21 +296,47 @@ impl Desk {
         opened
     }
 
-    /// A conversation just bound: ChatGPT may already have begun answering.
-    fn caught_up(&self, conversation: &str) {
-        let at = {
-            let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
-            let at = early
-                .iter()
-                .rev()
-                .find(|(id, _)| id == conversation)
-                .map(|(_, at)| *at);
-            early.retain(|(id, _)| id != conversation);
-            at
-        };
-        if let Some(at) = at {
-            self.change(|book| book.working(conversation, at));
+    /// A conversation just bound, or words just sent into it: the turns
+    /// ChatGPT began or finished meanwhile are taken now, in order.
+    fn caught_up(&self, conversation: &str) -> bool {
+        let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
+        let (mine, rest) = std::mem::take(&mut *early)
+            .into_iter()
+            .partition::<Vec<_>, _>(|turn| turn.conversation == conversation);
+        *early = rest;
+        // Still holding `early`, so a turn reported now waits behind these.
+        let mut changed = false;
+        for turn in mine {
+            changed |= self.take(&turn.message, conversation, turn.at);
         }
+        changed
+    }
+
+    /// A turn starting or finishing in `conversation`, into the book.
+    fn take(&self, message: &Value, conversation: &str, at: i64) -> bool {
+        if message["phase"] == "start" {
+            return self.change(|book| book.working(conversation, at));
+        }
+        let reply = message["reply"].as_str().unwrap_or("");
+        let message_id = message["messageId"].as_str();
+        self.change(|book| book.replied(conversation, reply, message_id, at))
+    }
+
+    /// Whether a turn in `conversation` must wait: it is bound to no handoff
+    /// yet, or its handoff's words are still on their way. Turns of a bound
+    /// conversation with nothing on its way are taken at once (and a reply
+    /// outside a review round is dropped by the book).
+    fn turn_waits(&self, conversation: &str) -> bool {
+        let id = self
+            .lock()
+            .for_conversation(conversation)
+            .map(|h| h.id.clone());
+        id.is_none_or(|id| {
+            self.sending
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .contains(&id)
+        })
     }
 
     /// What the ChatGPT channel reports: a turn starting or finishing in a
@@ -285,20 +345,21 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
-            (Some("turn"), Some("start")) => {
-                if self.lock().for_conversation(conversation).is_none() {
-                    let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
-                    early.push((conversation.to_owned(), now));
-                    let extra = early.len().saturating_sub(8);
+            (Some("turn"), Some("start" | "complete")) => {
+                // Held while deciding and taking, so `caught_up` and this
+                // keep the turns' order.
+                let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
+                if self.turn_waits(conversation) {
+                    early.push(Early {
+                        conversation: conversation.to_owned(),
+                        message: message.clone(),
+                        at: now,
+                    });
+                    let extra = early.len().saturating_sub(EARLY_KEPT);
                     early.drain(..extra);
                     return false;
                 }
-                self.change(|book| book.working(conversation, now))
-            }
-            (Some("turn"), Some("complete")) => {
-                let reply = message["reply"].as_str().unwrap_or("");
-                let message_id = message["messageId"].as_str();
-                self.change(|book| book.replied(conversation, reply, message_id, now))
+                self.take(message, conversation, now)
             }
             (Some("opened"), _) if message["ok"] == true => {
                 // Only a try that already gave up waiting: a waited-for
@@ -361,6 +422,9 @@ impl Desk {
                 Ok(Acted::Done)
             }
             "end" => {
+                // Not while words are on their way: they would land in an
+                // ended handoff.
+                let _sending = self.claim(id)?;
                 self.change(|book| book.end(id, now));
                 Ok(Acted::Done)
             }
@@ -441,73 +505,15 @@ fn not_connected() -> String {
     )
 }
 
-/// A Claude Code session the snapshot lists, as the caller's fallback needs it.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Known {
-    pub id: String,
-    pub cwd: Option<String>,
-    /// When it last did something, in milliseconds.
-    pub at: i64,
-}
-
-/// The snapshot's Claude Code sessions.
-pub(crate) fn claude_sessions(snapshot: &Value) -> Vec<Known> {
-    snapshot["sessions"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|session| session["source"] == CLAUDE)
-        .filter_map(|session| {
-            let at = ["lastMessageAt", "updatedAt"]
-                .iter()
-                .filter_map(|key| session[*key].as_str())
-                .filter_map(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
-                .map(|at| at.timestamp_millis())
-                .max()
-                .unwrap_or(0);
-            Some(Known {
-                id: session["id"].as_str()?.to_owned(),
-                cwd: session["cwd"].as_str().map(str::to_owned),
-                at,
-            })
-        })
-        .collect()
-}
-
-fn same_folder(a: &str, b: &str) -> bool {
-    let trim = |path: &str| path.trim_end_matches(['/', '\\']).to_owned();
-    !a.is_empty() && trim(a) == trim(b)
-}
-
-/// The Claude Code session that called, never guessed: the one Claude Code
-/// named (`CLAUDE_CODE_SESSION_ID`) while it runs the plugin; else, as that
-/// id goes stale after /clear or a resume, the only session the plugin says
-/// runs now in the same folder; else the named one as it is. None when two
-/// run in the folder and neither is named, or nothing names one.
-pub(crate) fn resolve_session(
-    named: Option<&str>,
-    cwd: Option<&str>,
-    loaded: &HashSet<String>,
-    sessions: &[Known],
-) -> Option<String> {
-    let named = named.filter(|id| agent_hud_runtime::claude_plugin::valid_name(id));
-    if let Some(id) = named.filter(|id| loaded.contains(*id)) {
-        return Some(id.to_owned());
-    }
-    let running_here = sessions
-        .iter()
-        .filter(|session| {
-            loaded.contains(&session.id)
-                && cwd
-                    .zip(session.cwd.as_deref())
-                    .is_some_and(|(cwd, theirs)| same_folder(cwd, theirs))
-        })
-        .collect::<Vec<_>>();
-    match running_here.as_slice() {
-        [only] => Some(only.id.clone()),
-        [] => named.map(str::to_owned),
-        _ => None,
-    }
+/// The Claude Code session that called: the one Claude Code named
+/// (`CLAUDE_CODE_SESSION_ID`), never guessed from what else runs. A stale id
+/// (after /clear or a resume) is kept as it is: at worst 转回 Claude then
+/// says the session has no plugin, rather than sending to another session.
+pub(crate) fn caller_session(caller: &Value) -> Option<String> {
+    caller["sessionId"]
+        .as_str()
+        .filter(|id| agent_hud_runtime::claude_plugin::valid_name(id))
+        .map(str::to_owned)
 }
 
 /// The app's own lines: the ChatGPT channel and Agent HUD's Claude Code plugin.
@@ -659,13 +665,8 @@ pub(crate) fn listen(app: &tauri::AppHandle) {
 }
 
 /// `relay_to_chatgpt`: Claude Code hands its work to ChatGPT for review.
-/// Only a Claude Code session may; which one is checked against the
-/// sessions the plugin says run now (`resolve_session`).
-pub(crate) fn relay(
-    app: &tauri::AppHandle,
-    params: &Value,
-    sessions: &[Known],
-) -> Result<Value, String> {
+/// Only a Claude Code session may, and only for itself (`caller_session`).
+pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, String> {
     let caller = &params["caller"];
     if !caller.is_null() && caller["client"] != CLAUDE {
         return Err(l10n::text(
@@ -677,17 +678,12 @@ pub(crate) fn relay(
     let summary = params["summary"].as_str();
     let brief = params["brief"].as_str().unwrap_or("");
     let cwd = params["cwd"].as_str().filter(|cwd| !cwd.is_empty());
-    let loaded = app
-        .try_state::<super::claude_plugin::ClaudePlugin>()
-        .map(|plugin| plugin.loaded())
-        .unwrap_or_default();
-    let session = resolve_session(caller["sessionId"].as_str(), cwd, &loaded, sessions)
-        .ok_or_else(|| {
-            l10n::text(
-                "认不准是哪个 Claude Code 会话在调用（同一目录有几个会话在跑，或没有会话 id），没有发出。请在 Claude Code 会话里调用这个工具，或先关掉同目录多余的会话。",
-                "Could not tell for sure which Claude Code session is calling (several run in this folder, or none is named); nothing was sent. Call this tool from a Claude Code session, or close the other sessions in this folder.",
-            )
-        })?;
+    let session = caller_session(caller).ok_or_else(|| {
+        l10n::text(
+            "认不出是哪个 Claude Code 会话在调用（调用里没有会话 id），没有发出。请在 Claude Code 会话里调用这个工具。",
+            "Could not tell which Claude Code session is calling (the call names none); nothing was sent. Call this tool from a Claude Code session.",
+        )
+    })?;
     let mut answer = start(app, &session, cwd, title, summary, brief, false)?;
     answer["claudeSession"] = json!(session);
     answer["message"] = json!(if answer["status"] == "repeated" {
@@ -759,6 +755,8 @@ mod tests {
         open_fails: bool,
         unreachable: bool,
         sent: RefCell<Vec<(String, String, String)>>,
+        /// What happens while words are being sent.
+        on_send: Option<Box<dyn Fn()>>,
     }
     impl Lines for Fake {
         fn connected(&self) -> bool {
@@ -786,6 +784,9 @@ mod tests {
             self.sent
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
+            if let Some(during) = &self.on_send {
+                during();
+            }
             Ok(())
         }
         fn reaches(&self, _session: &str) -> Result<(), String> {
@@ -1119,88 +1120,122 @@ mod tests {
     }
 
     #[test]
-    fn the_caller_is_the_session_running_now_never_a_guess() {
-        let known = |id: &str, cwd: &str, at: i64| Known {
-            id: id.into(),
-            cwd: Some(cwd.into()),
-            at,
-        };
-        let sessions = [
-            known("old", "/w", 1),
-            known("new", "/w/", 5),
-            known("other", "/x", 9),
-        ];
-        let loaded = |ids: &[&str]| ids.iter().map(|id| id.to_string()).collect();
-        // The named session runs the plugin now.
+    fn the_caller_is_only_ever_the_session_that_named_itself() {
         assert_eq!(
-            resolve_session(Some("old"), Some("/w"), &loaded(&["old", "new"]), &sessions),
-            Some("old".into())
+            caller_session(&json!({"client":"claude","sessionId":"s1"})),
+            Some("s1".into())
         );
-        // The named one went stale (/clear): the only one running here now.
-        assert_eq!(
-            resolve_session(Some("old"), Some("/w"), &loaded(&["new"]), &sessions),
-            Some("new".into())
-        );
-        assert_eq!(
-            resolve_session(None, Some("/w"), &loaded(&["new"]), &sessions),
-            Some("new".into())
-        );
-        // Two run here and neither is named: no guess.
-        assert_eq!(
-            resolve_session(
-                Some("stale"),
-                Some("/w"),
-                &loaded(&["old", "new"]),
-                &sessions
-            ),
-            None
-        );
-        // Without the plugin, the named one as it is; never the folder's latest.
-        assert_eq!(
-            resolve_session(Some("old"), Some("/w"), &loaded(&[]), &sessions),
-            Some("old".into())
-        );
-        assert_eq!(
-            resolve_session(None, Some("/w"), &loaded(&[]), &sessions),
-            None
-        );
-        assert_eq!(
-            resolve_session(Some("fresh"), Some("/y"), &loaded(&[]), &sessions),
-            Some("fresh".into())
-        );
-        assert_eq!(
-            resolve_session(None, None, &loaded(&["new"]), &sessions),
-            None
-        );
-        assert_eq!(
-            resolve_session(Some("../x"), None, &loaded(&[]), &sessions),
-            None
-        );
+        // No id, or a malformed one: refused, never guessed from the folder.
+        assert_eq!(caller_session(&json!({"client":"claude"})), None);
+        assert_eq!(caller_session(&json!({"sessionId":"../x"})), None);
+        assert_eq!(caller_session(&Value::Null), None);
     }
 
     #[test]
-    fn the_snapshot_lists_claude_sessions_by_their_latest_time() {
-        let snapshot = json!({"sessions":[
-            {"id":"a","source":"claude","cwd":"/w","updatedAt":"2026-11-05T10:00:00Z","lastMessageAt":"2026-11-05T09:00:00Z"},
-            {"id":"b","source":"codex","cwd":"/w","updatedAt":"2026-11-05T10:00:00Z"},
-            {"id":"c","source":"claude","cwd":null,"updatedAt":"bad"},
-        ]});
-        let found = claude_sessions(&snapshot);
-        assert_eq!(found.len(), 2);
-        assert_eq!(found[0].id, "a");
+    fn two_starts_side_by_side_begin_one_handoff() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let first = desk.claim("session:s1").unwrap();
+        assert!(desk
+            .start(&lines, "s1", None, "t", None, "brief", false, 1)
+            .is_err());
+        // Another session is not held up.
+        assert!(desk
+            .start(&lines, "s2", None, "t", None, "brief", false, 1)
+            .is_ok());
+        drop(first);
+        assert!(matches!(
+            desk.start(&lines, "s1", None, "t", None, "brief", false, 2),
+            Ok(Started::Opening { .. })
+        ));
+        assert_eq!(desk.projection(3).as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn ending_waits_for_words_on_their_way() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let sending = desk.claim(&handoff.id).unwrap();
+        assert!(desk.act(&lines, &handoff.id, "end", 3).is_err());
+        assert_ne!(desk.projection(3)[0]["phase"], "ended");
+        drop(sending);
+        desk.act(&lines, &handoff.id, "end", 4).unwrap();
+        assert_eq!(desk.projection(4)[0]["phase"], "ended");
+    }
+
+    #[test]
+    fn turns_before_the_conversation_is_bound_are_taken_in_order() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "t", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!()
+        };
+        // ChatGPT answers in full before `opened` does.
+        assert!(!desk.observe(&turn("start", ""), 2));
+        assert!(!desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        desk.open(&lines, &handoff.id, "brief", None, || 4).unwrap();
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "replied");
+        let kinds = shown[0]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| step["kind"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(kinds.last().map(String::as_str), Some("reply"));
         assert_eq!(
-            found[0].at,
-            chrono::DateTime::parse_from_rfc3339("2026-11-05T10:00:00Z")
-                .unwrap()
-                .timestamp_millis()
+            shown[0]["steps"].as_array().unwrap().last().unwrap()["at"],
+            3
         );
+        // Taken once: nothing is left to take again.
+        assert!(!desk.caught_up("c-new"));
+    }
+
+    #[test]
+    fn turns_while_the_next_round_is_on_its_way_count_for_that_round() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let handoff = opened(desk, &lines);
+        assert!(desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        // Round 2: ChatGPT starts, and answers, before `send` returns.
+        lines.on_send = Some(Box::new(|| {
+            assert!(!desk.observe(&turn("start", ""), 5));
+            assert!(!desk.observe(
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：通过","messageId":"m2"}),
+                6
+            ));
+        }));
+        let Started::Sent { repeated, .. } = desk
+            .start(&lines, "s1", None, "t", None, "第 2 轮改动", false, 4)
+            .unwrap()
+        else {
+            panic!("round 2 goes into the same conversation")
+        };
+        assert!(!repeated);
+        let shown = desk.projection(7);
+        assert_eq!(shown[0]["id"], handoff.id.as_str());
+        assert_eq!(shown[0]["phase"], "replied");
+        let last = shown[0]["steps"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
         assert_eq!(
-            found[1],
-            Known {
-                id: "c".into(),
-                cwd: None,
-                at: 0
-            }
+            (last["kind"].as_str(), last["verdict"].as_str()),
+            (Some("reply"), Some("pass"))
+        );
+        // Talk after the answer is not taken as another answer.
+        lines.on_send = None;
+        assert!(!desk.observe(&turn("complete", "顺便说一句"), 8));
+        assert_eq!(
+            desk.projection(8)[0]["steps"].as_array().unwrap().len(),
+            shown[0]["steps"].as_array().unwrap().len()
         );
     }
 }

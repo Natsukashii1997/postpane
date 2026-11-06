@@ -63,8 +63,8 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - `status`：`opening`（新会话正在打开）→ `open`（已绑定会话）或 `failed`（打开失败，`error` 写原因）；同一个 Claude 会话发起新审核、或常浩点「结束接力」时改成 `closed`。一个 Claude 会话、一个 ChatGPT 会话同时只属于一条未结束（opening / open）的接力。
 - `phase`（批 A，#120）：`sending`（正在送，新会话在开）→ `delivered`（插件确认已送到，对方没开始）→ `working`（插件报这一轮开始）→ `replied`（回信到了，等常浩决定）→ `returned`（已转回 Claude）；另有 `ended`、`failed`。`phaseAt` 是进入这一阶段的时间。「送到了」只认插件的 `opened` / `sent` 回应，「审完了」只认 `turn complete`。
 - `steps`：每一步 `{at, kind, text?, points?, verdict?}`。`work` Claude 做完一轮（`text` 是 `summary`，没给就用标题）、`ask` 驿窗送给 ChatGPT 且已送到（`text` 是原话摘录）、`reply` ChatGPT 回信（`points` 是回信里编号列出的意见，最多 12 条；`verdict` 从最后的「结论：通过 / 需修改」读出 `pass` / `revise`；最新一条回信全文保留，最多 64 KB，供「转回 Claude」用）、`back` 转回 Claude、`again` 请 Claude 交回复审、`fail` 没送出去、`end` 结束。快照里的步骤只带 600 字以内的摘录，不带原话指纹。
-- 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。同一条接力同一时间只有一段话在路上，并排的第二次直接拒绝（「上一段还在送」）。
-- 回信只认审核中的那一轮：接力在 `sending` / `delivered` / `working` 时的 `turn complete` 才记成回信，同一 `messageId` 只记一次；回信之后常浩在 ChatGPT 里接着聊不算审核。新会话往往在插件回 `opened` 之前就开始回答，宿主先记下这次 `turn start`，绑上会话时补成 `working`。
+- 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。同一条接力同一时间只有一段话在路上，并排的第二次直接拒绝（「上一段还在送」）；同一个 Claude 会话同一时间只能发起一次，「结束接力」也要等路上那段送完。
+- 回信只认审核中的那一轮：接力在 `sending` / `delivered` / `working` 时的 `turn complete` 才记成回信，同一 `messageId` 只记一次；回信之后常浩在 ChatGPT 里接着聊不算审核。ChatGPT 常在宿主拿到 `opened` / `sent` 回应之前就开始、甚至答完：会话还没绑上，或这条接力的那段话还在路上时，`turn start` / `turn complete` 先整条记下（最多 16 条），绑上或送完后按顺序补录；已绑定、没在送的会话直接记，所以回信之后的闲聊不会补成回信。
 - 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开。打开请求的 `requestId` 是「接力 id~第几次」（`attempt`，每次重试加 1）：超时后插件迟到的 `opened` 只有属于当前这一次、且这个 Claude 会话还没开新接力时才绑上。
 - `rounds`：第一次交代之后，两边每转一次加 1。卡上的「第 n / 2 轮」按 `ask` 步数算，最多 2 轮（可以超）。
 - 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / 迟到的 `opened` 告诉宿主（`Channel::listen`），接力当场前进。
@@ -74,7 +74,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 ### 从 Claude 发起：`relay_to_chatgpt`
 
 - 驿窗 MCP 的内置工具，参数 `{title, summary?, brief}`（`summary` 一句话写这一轮做了什么，显示在接力卡时间线上）；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。
-- 宿主认调用的会话，不猜：`caller.sessionId` 在 Agent HUD 插件报的在线会话里就用它；否则（`/clear`、续会话后 id 会过时）同目录下只有一个在线的 Claude 会话就用它；同目录没有在线会话时用 `caller.sessionId` 原样；同目录有几个在线会话、又认不出是哪个时拒绝，不按「同目录最近活动」兜底。别的客户端调用一律拒绝。
+- 宿主只认调用方自己报的会话：`caller.sessionId` 格式合法就用它，不看哪些会话在线，也不按同目录去猜；没有就拒绝。id 过时（`/clear`、续会话后）时照样记在它名下，最坏是「转回 Claude」报这个会话没加载插件，不会送错会话。别的客户端调用一律拒绝。
 - 不受「让智能体整理 HUD」开关管，但 ChatGPT 插件必须连着，否则返回中文原因。登记了 ChatGPT 插件（host manifest 在）时，本机工具通道也会监听，好让这个工具够得着。
 - 这个会话已有 `open` 的接力：直接把 brief 送进那个 ChatGPT 会话（等插件回话，最多 30 秒），返回 `{handoffId, status: "sent", conversation}`；还在 `opening`：拒绝，等它打开。否则新建一条 `opening`，在后台线程 `open`（带项目），立即返回 `{handoffId, status: "opening"}`；打开后改 `open` 或 `failed`。返回里另有 `message`，一句给 Claude 看的中文。
 - 单条文字超过 768 KB 拒绝（Chrome 发往插件一帧不能超过 1 MB，超了会断开插件）。

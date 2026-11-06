@@ -131,19 +131,11 @@ fn handle(
     }
     if method == super::handoff::RELAY_METHOD {
         // Claude handing its work to ChatGPT: not a HUD tool, so not behind
-        // their switch; the ChatGPT extension must be connected instead. The
-        // snapshot's Claude sessions name the caller when its id is stale.
-        let sessions = backend
-            .lock()
-            .map_err(|_| "Application state unavailable")?
-            .snapshot
-            .as_ref()
-            .map(|snapshot| super::handoff::claude_sessions(snapshot))
-            .unwrap_or_default();
+        // their switch; the ChatGPT extension must be connected instead.
         if !active.load(Ordering::Acquire) {
             return Err("Local tools are disabled".into());
         }
-        return super::handoff::relay(app, &params, &sessions);
+        return super::handoff::relay(app, &params);
     }
     let mut owner = backend
         .lock()
