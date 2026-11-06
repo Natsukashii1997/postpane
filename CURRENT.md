@@ -4,6 +4,33 @@
 
 
 
+## 自动转回失败改排队；L5 批 3 真实任务跑到一半（2026-11-07，Claude，常浩选「排队等唤醒」；PR #173 全量通过，按授权 squash 合并 `1852338`；已打包、未装机）
+
+- 时间：开工 `2026-11-07 01:55`（按本会话记录，常浩回「排队等唤醒」）；本节写于 `2026-11-07 02:20`。来由：L5 批 3 里，C、D 两单的「自动转回 Claude」都失败停下。原因是做事的 Claude 会话一轮做完后很快被桌面版结束，插件不再签到（L-14）。
+- 改了哪些文件（PR #173）：
+  - `host/src/handoff.rs` `auto_back`：直接送话两次失败后，用 `Lines::leave` 排进会话队列，记 `fail` 加自动 `back`，自动往返不停；排队也失败才交还常浩。
+  - `platform/.../chatgpt/handoffs.rs`：`queued_at`、`Book::queued`、`QUEUE_WAIT_MS` 1 小时、`overdue` 加「排队没人领」。
+  - 协议 `queuedAt`；`handoff-card.ts` 显示「意见已排队 · 打开 Claude 会话继续」。
+  - `docs/chatgpt-channel.md`；`docs/LESSONS.md` 新增 L-14。
+- 测试：
+  - 改写宿主测试 `words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person`（先红后绿），新增前端用例 1 条。
+  - `pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 737 passed / 0 failed；`ℹ pass 300` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`）；`node --test tests/*.test.mjs` 退出 0。
+  - 之后只给 LESSONS 跑了 prettier。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-auto-back-queue/`。
+- 验证：只有单测，实机还没走过排队这条路。
+- 截图：无。
+- 发布与回读：未装机。产物 `.claude/worktrees/120-relay-card/target/release/bundle/macos/PostPane.app`，主程序 `4638968249ee`，与 main `1852338` 同树，已包含批 C #172。现装 `0719f477cba0`，是另一会话 01:52 装的批 C。暂缓原因：装机会重启驿窗，开着自动往返的接力一律先暂停，会打断 B 的真实任务和批 C 的实机测试。等这两条接力结束，再用 `install.sh auto-back-queue` 装。
+- L5 批 3 现状（接力记录在 `~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json`）：
+  - A 管培生 PR #27：会话 `local_a668aac6` 在等常浩亲口回「送」，还没送出。
+  - B 数码世界 #60（PR digiworld#64，接力 `h1a1b20460cf01`）：02:01 新会话打开超时（fail），02:03 重送成功，02:07 回信「需修改」并自动转回成功，Claude 在改第 1 轮。B 会话最后一条报告说「送审 timeout、已交还常浩」，和记录对不上，要核实。
+  - C github-center #3（PR github-center#65，接力 `h1a1b1e9404a00`）：常浩已决定换成 D；01:34 转回两次失败后停下，留作补充记录。
+  - D my-skills PR #16（接力 `h1a1b1f62cc701`）：01:49 转回两次失败后停下。装新版后，在卡上点「继续自动」做前后对比。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 「还没加载插件」这条提示，对已结束的会话不准（`claude_plugin::unreachable`），没改。
+  - 左滑第 3 轮复审（`h1a1b076a94400`）还没回信。
+  - L4 材料仍缺。
+- skill 进化：无
+- 本轮新坑：L-14
+
 ## 驿窗一轮采纳 E-07、E-08：测试前先格式化、实机出问题怎么查（2026-11-06，Claude，常浩回复「两条都批」；已提交，无需发布）
 
 - 时间：开工 `2026-11-06 23:00`（`date '+%F %H:%M'` 记录）。来由：#167，skill 第一次走完「提案 → 批准 → 采纳」。
