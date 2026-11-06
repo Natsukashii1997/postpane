@@ -14,6 +14,7 @@ import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
 import {
   HUD_METRICS,
+  statusColor,
   type HUDConfig,
   type HUDEdge,
   type HUDVendor,
@@ -61,6 +62,8 @@ export function HUDExpandedSurface({
   focusedVendor,
   scale,
   peekTuck,
+  expandMeter,
+  spotlight,
   pin,
   request,
   event,
@@ -106,6 +109,11 @@ export function HUDExpandedSurface({
   focusedVendor?: HUDVendor;
   scale: number;
   peekTuck: number;
+  /** The wait before the peek grows into the whole board, drawn as a line
+   * running out along its foot. */
+  expandMeter?: { key: string; ms: number } | null;
+  /** The agent the whole board scrolls to (see SourceHoverPanel). */
+  spotlight?: string;
   pin: (key?: string) => void;
   request?: Approval;
   event?: IslandEvent;
@@ -415,6 +423,25 @@ export function HUDExpandedSurface({
                             edge={edge}
                           />
                         </PaperContext.Provider>
+                        {expandMeter && !reduceMotion && (
+                          <span
+                            key={expandMeter.key}
+                            className="hud-peek-expand-meter"
+                            aria-hidden
+                            style={{
+                              position: "absolute",
+                              left: edge === "left" ? 8 + peekTuck : 8,
+                              right: edge === "right" ? 8 + peekTuck : 8,
+                              bottom: 3,
+                              height: 2,
+                              borderRadius: 1,
+                              background: statusColor("warning"),
+                              transformOrigin:
+                                edge === "right" ? "right" : "left",
+                              animationDuration: `${expandMeter.ms}ms`,
+                            }}
+                          />
+                        )}
                       </button>
                     ) : !open && (request || event) ? (
                       <CompactAlertView
@@ -489,6 +516,7 @@ export function HUDExpandedSurface({
                                   config={config}
                                   snapshot={snapshot}
                                   focusVendor={focusedVendor?.name}
+                                  spotlight={spotlight}
                                   light={light}
                                   Logo={HUDLogo}
                                   onConfigure={configurePanel}

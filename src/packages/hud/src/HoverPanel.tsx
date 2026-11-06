@@ -43,6 +43,9 @@ export interface SourceHoverPanelProps {
   config?: HUDConfig;
   snapshot: Snapshot;
   focusVendor?: string;
+  /** The agent (mark key) the board scrolls to and briefly frames: the one a
+   * peek grew from, or the mark the pointer moved to since. */
+  spotlight?: string;
   light: boolean;
   Logo: Logo;
   onConfigure?: () => void;
@@ -61,6 +64,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   config = defaultHUDConfig,
   snapshot,
   focusVendor,
+  spotlight,
   light,
   Logo,
   onConfigure,
@@ -77,6 +81,43 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   const [draftError, setDraftError] = useState<string | null>(null);
   const panelElement = useRef<HTMLDivElement>(null),
     [contentWidth, setContentWidth] = useState<number>();
+  const scroller = useRef<HTMLDivElement>(null);
+  const [lit, setLit] = useState<string | null>(null);
+  useEffect(() => {
+    setLit(null);
+    const box = scroller.current;
+    if (!spotlight || !box) return;
+    const block = [
+      ...box.querySelectorAll<HTMLElement>("[data-hud-block]"),
+    ].find(
+      (element) =>
+        vendorKey((element.dataset.hudBlock ?? "").replace(/^api:/, "")) ===
+        spotlight,
+    );
+    if (!block) return;
+    const reach = () => {
+      const top =
+        block.getBoundingClientRect().top -
+        box.getBoundingClientRect().top +
+        box.scrollTop -
+        8;
+      box.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    };
+    reach();
+    // A board just grown from a peek gets its height capped a frame later;
+    // only then can it scroll, so it reaches again as its size settles.
+    const sized = new ResizeObserver(reach);
+    sized.observe(box);
+    setLit(block.dataset.hudBlock ?? null);
+    const timer = setTimeout(() => {
+      sized.disconnect();
+      setLit(null);
+    }, 1200);
+    return () => {
+      sized.disconnect();
+      clearTimeout(timer);
+    };
+  }, [spotlight]);
   useEffect(() => {
     const element = panelElement.current;
     if (!element) return;
@@ -250,7 +291,15 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
                     key={block.key}
                     data-hud-block={block.key}
                     data-hud-half={line.length === 2 ? "true" : undefined}
-                    style={{ minWidth: 0 }}
+                    style={{
+                      minWidth: 0,
+                      borderRadius: 4,
+                      // The amber of a warning reading; deeper on light paper.
+                      boxShadow: `inset 0 0 0 1.5px ${
+                        light ? "rgba(184,128,0," : "rgba(255,210,63,"
+                      }${lit === block.key ? 0.7 : 0})`,
+                      transition: "box-shadow 0.45s ease-out",
+                    }}
                   >
                     {block.content}
                   </div>
@@ -316,6 +365,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       }
     >
       <div
+        ref={scroller}
         data-hud-natural-scroll
         style={{
           overflowY: "auto",

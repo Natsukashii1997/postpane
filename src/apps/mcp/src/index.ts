@@ -191,7 +191,6 @@ const hud = z
     ringWidth: z.number().min(1).max(4).optional(),
     simpleStyle: z.enum(["rings", "segments", "bars", "numbers"]).optional(),
     showNumbers: z.boolean().optional(),
-    separateAgents: z.boolean().optional(),
     appearance: z.enum(["dark", "light", "system"]).optional(),
     transparency: z.number().min(0).max(1).optional(),
     glow: z
