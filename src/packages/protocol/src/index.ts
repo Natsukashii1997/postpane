@@ -884,9 +884,11 @@ export interface RelayLaunch {
   session: string;
   kind: "review" | "discuss";
   at: number;
-  /** Queued until the session takes them up (then the row gives way to its
-   * handoff); refused or expired when they never reached it. */
-  state: "queued" | "refused" | "expired";
+  /** Queued while waiting for the session (or taken until it is idle);
+   * started once in the session, which has yet to call `relay_to_chatgpt`
+   * (its handoff then takes the row over); refused or expired when they
+   * never reached it; stalled when taken but no handoff came in the hour. */
+  state: "queued" | "started" | "refused" | "expired" | "stalled";
   reason: string | null;
 }
 /** A price per million tokens; an empty cache rate takes the input's. */
