@@ -54,6 +54,7 @@ impl Backend {
         if let Some(desk) = app.try_state::<handoff::Desk>() {
             value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
         }
+        value["relayLaunches"] = handoff::launch_projection(app);
         if let Some(tools) = &self.tools {
             value["connection"]["localTools"] = tools.configure(tools::channel_wanted(
                 value["settings"]["hudTools"].as_bool().unwrap_or(false),
@@ -135,9 +136,12 @@ impl Backend {
             return;
         };
         let handoffs = desk.projection(chrono::Utc::now().timestamp_millis());
+        let launches = handoff::launch_projection(app);
         if let Some(snapshot) = &mut self.snapshot {
-            if snapshot["handoffs"] != handoffs {
-                Arc::make_mut(snapshot)["handoffs"] = handoffs;
+            if snapshot["handoffs"] != handoffs || snapshot["relayLaunches"] != launches {
+                let snapshot = Arc::make_mut(snapshot);
+                snapshot["handoffs"] = handoffs;
+                snapshot["relayLaunches"] = launches;
                 self.publish_snapshot(app);
             }
         }

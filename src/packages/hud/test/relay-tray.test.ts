@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Session } from "@agent-hud/protocol";
 import {
+  alreadyQueuedText,
   launchKind,
+  launchLine,
   stepBlock,
   trayKinds,
   trayReady,
@@ -65,4 +67,24 @@ test("every block names itself and says what it does", () => {
     }
   }
   assert.equal(trayText("rm", true).to, null);
+});
+
+test("a row says how its swipe's words stand until the session takes them", () => {
+  assert.deepEqual(
+    launchLine({ kind: "review", state: "queued", reason: null }, true),
+    { ok: true, text: "审核请求排队中，会话空下来就处理" },
+  );
+  assert.deepEqual(
+    launchLine({ kind: "discuss", state: "expired", reason: null }, true),
+    { ok: false, text: "讨论请求过期了，没送进会话" },
+  );
+  assert.deepEqual(
+    launchLine({ kind: "review", state: "refused", reason: "busy" }, true),
+    { ok: false, text: "审核请求被拒绝：busy" },
+  );
+  assert.equal(
+    launchLine({ kind: "review", state: "refused", reason: null }, false).text,
+    "Review request refused by the session",
+  );
+  assert.equal(alreadyQueuedText(true), "已在排队，不再重复发");
 });

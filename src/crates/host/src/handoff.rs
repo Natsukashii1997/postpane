@@ -9,7 +9,7 @@ use agent_hud_runtime::chatgpt::handoffs::{self, Book, Handoff, Phase, Status, S
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Mutex, MutexGuard},
 };
@@ -42,6 +42,40 @@ pub(crate) trait Lines {
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, session: &str) -> Result<(), String>;
     fn reply(&self, session: &str, text: &str) -> Result<(), String>;
+    /// Leaves words for a Claude Code session and says which, to follow
+    /// them (`left`).
+    fn leave(&self, session: &str, text: &str) -> Result<String, String>;
+    /// How words left for a session stand (`waiting`, `taken`, `started`,
+    /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
+    /// the plugin's files are gone.
+    fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)>;
+}
+
+/// How long a launch that refused or expired stays on its row.
+const LAUNCH_SHOWN_MS: i64 = 30 * 60 * 1000;
+/// How long words wait for a session before the plugin drops them
+/// (claude_plugin PROMPT_LIFETIME).
+const LAUNCH_LIFETIME_MS: i64 = 60 * 60 * 1000;
+
+/// 左滑发起 (#124): words left for a session to hand its work over, followed
+/// until it takes them up, refuses them or they expire.
+#[derive(Clone, Debug, PartialEq)]
+struct Launch {
+    kind: String,
+    id: String,
+    at: i64,
+    /// `queued`, `started`, `refused` or `expired`.
+    state: &'static str,
+    reason: Option<String>,
+    /// When it refused or expired.
+    settled_at: Option<i64>,
+}
+
+/// What a swipe did: left words now, or found words still waiting.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Launched {
+    Queued,
+    AlreadyQueued,
 }
 
 /// What a start did, or leaves to do away from the caller.
@@ -69,6 +103,8 @@ pub(crate) struct Desk {
     /// Handoffs with words on their way now: a second sending waits, so the
     /// same words are not sent twice side by side.
     sending: Mutex<HashSet<String>>,
+    /// Each session's last 左滑发起, by session.
+    launches: Mutex<HashMap<String, Launch>>,
 }
 
 /// How many early turns are kept: those of conversations never bound (the
@@ -104,6 +140,7 @@ impl Desk {
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
             sending: Mutex::new(HashSet::new()),
+            launches: Mutex::new(HashMap::new()),
         };
         if book.interrupted(now_ms(), &interrupted()) {
             let desk = desk(book);
@@ -163,6 +200,40 @@ impl Desk {
             })
             .map(Handoff::shown)
             .collect::<Vec<_>>();
+        json!(shown)
+    }
+
+    fn launches(&self) -> MutexGuard<'_, HashMap<String, Launch>> {
+        self.launches.lock().unwrap_or_else(|p| p.into_inner())
+    }
+    /// The snapshot's `relayLaunches`: swipes whose words still wait for
+    /// their session, or that refused or expired lately. Started ones give
+    /// way to the handoff the session starts.
+    pub(crate) fn launch_projection(&self, lines: &dyn Lines, now: i64) -> Value {
+        let mut launches = self.launches();
+        for (session, launch) in launches.iter_mut() {
+            follow(launch, lines, session, now);
+        }
+        launches.retain(|_, launch| match launch.state {
+            "queued" => true,
+            "started" => false,
+            _ => launch
+                .settled_at
+                .is_some_and(|at| now - at < LAUNCH_SHOWN_MS),
+        });
+        let mut shown: Vec<Value> = launches
+            .iter()
+            .map(|(session, launch)| {
+                json!({
+                    "session": session,
+                    "kind": launch.kind,
+                    "at": launch.at,
+                    "state": launch.state,
+                    "reason": launch.reason,
+                })
+            })
+            .collect();
+        shown.sort_by(|a, b| a["session"].as_str().cmp(&b["session"].as_str()));
         json!(shown)
     }
 
@@ -493,7 +564,14 @@ fn launch_text(kind: &str) -> Option<&'static str> {
 /// 左滑发起: asks the Claude Code `session` to hand its work to ChatGPT
 /// (`kind`: review or discuss). Its words wait in line while it runs; it
 /// then calls `relay_to_chatgpt` itself, so the handoff is its own.
-pub(crate) fn launch(lines: &dyn Lines, session: &str, kind: &str) -> Result<(), String> {
+/// Words still waiting for the session are not left again.
+pub(crate) fn launch(
+    desk: &Desk,
+    lines: &dyn Lines,
+    session: &str,
+    kind: &str,
+    now: i64,
+) -> Result<Launched, String> {
     if !agent_hud_runtime::claude_plugin::valid_name(session) {
         return Err(l10n::text(
             "Claude 会话 id 不对",
@@ -510,8 +588,52 @@ pub(crate) fn launch(lines: &dyn Lines, session: &str, kind: &str) -> Result<(),
     if !lines.connected() {
         return Err(not_connected());
     }
+    let mut launches = desk.launches();
+    if let Some(waiting) = launches.get_mut(session) {
+        follow(waiting, lines, session, now);
+        if waiting.state == "queued" {
+            return Ok(Launched::AlreadyQueued);
+        }
+    }
     lines.reaches(session)?;
-    lines.reply(session, text)
+    let id = lines.leave(session, text)?;
+    launches.insert(
+        session.to_owned(),
+        Launch {
+            kind: kind.to_owned(),
+            id,
+            at: now,
+            state: "queued",
+            reason: None,
+            settled_at: None,
+        },
+    );
+    Ok(Launched::Queued)
+}
+
+/// Reads how a launch's words stand now. Taken words are only queued: the
+/// plugin submits them once the session is idle. Words whose file is gone
+/// were taken (the plugin's sweep drops taken words after a minute), unless
+/// they outlived their hour.
+fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
+    if launch.state != "queued" {
+        return;
+    }
+    let (state, reason) = match lines.left(session, &launch.id) {
+        Some((state, reason)) => match state.as_str() {
+            "started" => ("started", None),
+            "refused" => ("refused", reason),
+            "expired" | "cancelled" => ("expired", None),
+            _ => return,
+        },
+        None if now - launch.at >= LAUNCH_LIFETIME_MS => ("expired", None),
+        None => ("started", None),
+    };
+    launch.state = state;
+    launch.reason = reason;
+    if state != "started" {
+        launch.settled_at = Some(now);
+    }
 }
 
 fn timed_out() -> String {
@@ -605,6 +727,46 @@ impl Lines for AppLines<'_> {
             .ok_or_else(no_plugin)?;
         plugin.replies().reply(CLAUDE, session, text)
     }
+    fn leave(&self, session: &str, text: &str) -> Result<String, String> {
+        let plugin = self
+            .0
+            .try_state::<super::claude_plugin::ClaudePlugin>()
+            .ok_or_else(no_plugin)?;
+        plugin
+            .channel()
+            .hand(session, text, std::time::SystemTime::now())
+            .map_err(|refusal| {
+                eprintln!("左滑发起 could not leave words: {refusal}");
+                l10n::text(
+                    "没能交给这个会话的 Agent HUD 插件。",
+                    "The words could not be left for this session's Agent HUD plugin.",
+                )
+            })
+    }
+    fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
+        use agent_hud_runtime::claude_plugin::PromptState;
+        let plugin = self.0.try_state::<super::claude_plugin::ClaudePlugin>()?;
+        let (state, reason) = plugin
+            .channel()
+            .state(session, id, std::time::SystemTime::now())
+            .ok()??;
+        let state = match state {
+            PromptState::Waiting | PromptState::CancelRequested => "waiting",
+            PromptState::Taken => "taken",
+            PromptState::Started => "started",
+            PromptState::Refused => "refused",
+            PromptState::Cancelled => "cancelled",
+            PromptState::Expired => "expired",
+        };
+        Some((state.to_owned(), reason))
+    }
+}
+
+/// The snapshot's `relayLaunches` as the app's ways out have them.
+pub(crate) fn launch_projection(app: &tauri::AppHandle) -> Value {
+    app.try_state::<Desk>()
+        .map(|desk| desk.launch_projection(&AppLines(app), now_ms()))
+        .unwrap_or_else(|| json!([]))
 }
 fn no_plugin() -> String {
     l10n::text(
@@ -771,8 +933,11 @@ pub async fn relay_launch(
     kind: String,
 ) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        launch(&AppLines(&app), &session_id, &kind)?;
-        Ok(json!({"done": true}))
+        let desk = app.try_state::<Desk>().ok_or_else(demo)?;
+        let launched = launch(&desk, &AppLines(&app), &session_id, &kind, now_ms())?;
+        // The row says how the words stand from now on.
+        republish(&app);
+        Ok(json!({"queued": true, "already": launched == Launched::AlreadyQueued}))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -810,6 +975,8 @@ mod tests {
         sent: RefCell<Vec<(String, String, String)>>,
         /// What happens while words are being sent.
         on_send: Option<Box<dyn Fn()>>,
+        /// How left words stand, as the plugin would say; None once gone.
+        left_as: RefCell<Option<(String, Option<String>)>>,
     }
     impl Lines for Fake {
         fn connected(&self) -> bool {
@@ -855,6 +1022,18 @@ mod tests {
                 .push(("reply".into(), session.into(), text.into()));
             Ok(())
         }
+        fn leave(&self, session: &str, text: &str) -> Result<String, String> {
+            let mut sent = self.sent.borrow_mut();
+            sent.push(("leave".into(), session.into(), text.into()));
+            Ok(format!("p{}", sent.len()))
+        }
+        fn left(&self, _session: &str, _id: &str) -> Option<(String, Option<String>)> {
+            self.left_as.borrow().clone()
+        }
+    }
+    fn left_as(lines: &Fake, state: Option<&str>, reason: Option<&str>) {
+        *lines.left_as.borrow_mut() =
+            state.map(|state| (state.to_owned(), reason.map(str::to_owned)));
     }
     fn desk() -> (tempfile::TempDir, Desk) {
         let temp = tempfile::tempdir().unwrap();
@@ -1174,29 +1353,114 @@ mod tests {
 
     #[test]
     fn a_swipe_asks_the_claude_session_to_hand_its_own_work_over() {
+        let (_temp, desk) = desk();
         let lines = Fake::default();
-        launch(&lines, "s1", "review").unwrap();
-        launch(&lines, "s1", "discuss").unwrap();
+        left_as(&lines, Some("waiting"), None);
+        assert_eq!(
+            launch(&desk, &lines, "s1", "review", 1).unwrap(),
+            Launched::Queued
+        );
+        assert_eq!(
+            launch(&desk, &lines, "s2", "discuss", 1).unwrap(),
+            Launched::Queued
+        );
         let sent = lines.sent.borrow().clone();
         assert_eq!(sent.len(), 2);
-        assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("reply", "s1"));
+        assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("leave", "s1"));
         assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("结论：通过"));
         assert!(sent[1].2.contains("relay_to_chatgpt") && sent[1].2.contains("不改代码"));
         // Kinds not open yet, a bad id, no way out: nothing is sent.
-        assert!(launch(&lines, "s1", "test").is_err());
-        assert!(launch(&lines, "../x", "review").is_err());
+        assert!(launch(&desk, &lines, "s3", "test", 1).is_err());
+        assert!(launch(&desk, &lines, "../x", "review", 1).is_err());
         let offline = Fake {
             offline: true,
             ..Fake::default()
         };
-        assert!(launch(&offline, "s1", "review").is_err());
+        assert!(launch(&desk, &offline, "s3", "review", 1).is_err());
         let unreachable = Fake {
             unreachable: true,
             ..Fake::default()
         };
-        assert!(launch(&unreachable, "s1", "review").is_err());
+        assert!(launch(&desk, &unreachable, "s3", "review", 1).is_err());
         assert!(offline.sent.borrow().is_empty() && unreachable.sent.borrow().is_empty());
         assert_eq!(lines.sent.borrow().len(), 2);
+    }
+
+    #[test]
+    fn a_second_swipe_while_the_words_wait_leaves_nothing_more() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        left_as(&lines, Some("waiting"), None);
+        launch(&desk, &lines, "s1", "review", 1).unwrap();
+        assert_eq!(
+            launch(&desk, &lines, "s1", "review", 2).unwrap(),
+            Launched::AlreadyQueued
+        );
+        // Taken words wait for the session to be idle: still queued.
+        left_as(&lines, Some("taken"), None);
+        assert_eq!(
+            launch(&desk, &lines, "s1", "discuss", 3).unwrap(),
+            Launched::AlreadyQueued
+        );
+        assert_eq!(lines.sent.borrow().len(), 1);
+        let shown = desk.launch_projection(&lines, 4);
+        assert_eq!(shown[0]["session"], "s1");
+        assert_eq!(shown[0]["kind"], "review");
+        assert_eq!(shown[0]["state"], "queued");
+        // Once the session took them up, the row gives way to its handoff and
+        // a new swipe leaves words again.
+        left_as(&lines, Some("started"), None);
+        assert_eq!(desk.launch_projection(&lines, 5), json!([]));
+        assert_eq!(
+            launch(&desk, &lines, "s1", "review", 6).unwrap(),
+            Launched::Queued
+        );
+        assert_eq!(lines.sent.borrow().len(), 2);
+    }
+
+    #[test]
+    fn words_refused_or_expired_say_so_on_the_row_a_while() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        left_as(&lines, Some("waiting"), None);
+        launch(&desk, &lines, "s1", "review", 0).unwrap();
+        left_as(&lines, Some("refused"), Some("session ended"));
+        let shown = desk.launch_projection(&lines, 10);
+        assert_eq!(shown[0]["state"], "refused");
+        assert_eq!(shown[0]["reason"], "session ended");
+        // A refusal can be swiped again at once.
+        assert_eq!(
+            launch(&desk, &lines, "s1", "review", 11).unwrap(),
+            Launched::Queued
+        );
+        left_as(&lines, Some("expired"), None);
+        assert_eq!(desk.launch_projection(&lines, 20)[0]["state"], "expired");
+        // Shown half an hour, then gone.
+        assert_eq!(
+            desk.launch_projection(&lines, 20 + LAUNCH_SHOWN_MS),
+            json!([])
+        );
+        // Words whose file went before their hour were taken; after it, expired.
+        left_as(&lines, Some("waiting"), None);
+        launch(&desk, &lines, "s2", "review", 0).unwrap();
+        launch(&desk, &lines, "s3", "review", 0).unwrap();
+        left_as(&lines, None, None);
+        let shown = desk.launch_projection(&lines, LAUNCH_LIFETIME_MS);
+        assert_eq!(shown.as_array().unwrap().len(), 2);
+        assert!(shown
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|l| l["state"] == "expired"));
+        left_as(&lines, Some("waiting"), None);
+        launch(&desk, &lines, "s4", "review", 0).unwrap();
+        left_as(&lines, None, None);
+        let shown = desk.launch_projection(&lines, 60_000);
+        assert!(!shown
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l["session"] == "s4"));
     }
 
     #[test]

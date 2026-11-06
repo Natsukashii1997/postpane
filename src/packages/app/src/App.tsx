@@ -658,7 +658,10 @@ function AppContent({
     // 左滑发起: the sessions panel asks a Claude session to relay its work.
     relayLaunch: async (sessionId, kind) => {
       if (!isTauri()) throw new Error("只能在驿窗里发起接力");
-      return invoke("relay_launch", { sessionId, kind });
+      return invoke<{ queued: boolean; already: boolean }>("relay_launch", {
+        sessionId,
+        kind,
+      });
     },
     selectSession: (session) => {
       setSelectedSession(session);

@@ -42,6 +42,12 @@ impl ClaudePlugin {
         })
     }
 
+    /// The channel words to Claude Code sessions are left in (左滑发起 follows
+    /// its own words there).
+    pub(crate) fn channel(&self) -> &ClaudeChannel {
+        &self.channel
+    }
+
     /// The HUD's way to answer Claude's questions in a session running the plugin.
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
         let claude_config = super::mcp_clients::home()

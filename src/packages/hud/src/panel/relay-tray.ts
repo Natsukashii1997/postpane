@@ -1,4 +1,4 @@
-import type { Session } from "@agent-hud/protocol";
+import type { RelayLaunch, Session } from "@agent-hud/protocol";
 
 /** What a row's swipe tray offers (relay batch B, #124): hand the session's
  * work to another agent, or remove the row. */
@@ -102,4 +102,51 @@ export function trayText(
             line: "Remove from the sidebar until something new.",
           };
   }
+}
+
+/** What a row says of its swipe's words until the session takes them up:
+ * waiting (`ok`), or why they never reached it. */
+export function launchLine(
+  launch: Pick<RelayLaunch, "kind" | "state" | "reason">,
+  zh: boolean,
+): { ok: boolean; text: string } {
+  const what = zh
+    ? launch.kind === "review"
+      ? "审核请求"
+      : "讨论请求"
+    : launch.kind === "review"
+      ? "Review request"
+      : "Discussion request";
+  switch (launch.state) {
+    case "queued":
+      return {
+        ok: true,
+        text: zh
+          ? `${what}排队中，会话空下来就处理`
+          : `${what} queued; the session takes it up once idle`,
+      };
+    case "refused":
+      return {
+        ok: false,
+        text: launch.reason
+          ? zh
+            ? `${what}被拒绝：${launch.reason}`
+            : `${what} refused: ${launch.reason}`
+          : zh
+            ? `${what}被会话拒绝`
+            : `${what} refused by the session`,
+      };
+    case "expired":
+      return {
+        ok: false,
+        text: zh
+          ? `${what}过期了，没送进会话`
+          : `${what} expired before the session took it`,
+      };
+  }
+}
+
+/** What a swipe says when words for the session were already waiting. */
+export function alreadyQueuedText(zh: boolean): string {
+  return zh ? "已在排队，不再重复发" : "Already queued; nothing sent again";
 }

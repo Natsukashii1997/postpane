@@ -40,7 +40,12 @@ export interface PanelServices {
   ): Promise<unknown>;
   /** 左滑发起 (relay batch B): ask a Claude Code session to hand its work
    * to ChatGPT for review or discussion. Rejects with the reason. */
-  relayLaunch?(sessionId: string, kind: "review" | "discuss"): Promise<unknown>;
+  /** Leaves 左滑发起 words for a Claude Code session; `already` when words
+   * still wait for it and none were left. */
+  relayLaunch?(
+    sessionId: string,
+    kind: "review" | "discuss",
+  ): Promise<{ queued: boolean; already: boolean }>;
   sources?: Record<string, SourcePreferences>;
   draft?: {
     unsaved: boolean;
