@@ -125,6 +125,20 @@ export function launchLine(
           ? `${what}排队中，会话空下来就处理`
           : `${what} queued; the session takes it up once idle`,
       };
+    case "started":
+      return {
+        ok: true,
+        text: zh
+          ? `${what}已送进会话，正在整理`
+          : `${what} is in the session, being written up`,
+      };
+    case "stalled":
+      return {
+        ok: false,
+        text: zh
+          ? `会话领了${what}，但一小时没发起接力`
+          : `The session took the ${what.toLowerCase()} but started no handoff in an hour`,
+      };
     case "refused":
       return {
         ok: false,

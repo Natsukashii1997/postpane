@@ -460,8 +460,17 @@ function LiveRow({
     setHot(index);
     blocks.current[index]?.focus();
   };
+  // ← opened the tray: its first block takes the keyboard once it is open,
+  // never after it closed again.
+  const focusOnOpen = useRef(false);
   useEffect(() => {
-    if (!open) setHot(null);
+    if (!open) {
+      setHot(null);
+      focusOnOpen.current = false;
+    } else if (focusOnOpen.current) {
+      focusOnOpen.current = false;
+      focusBlock(0);
+    }
   }, [open]);
   // What a handoff just asked: said in place of the second line a while.
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
@@ -472,10 +481,16 @@ function LiveRow({
     const timer = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
+  // A handoff asked and not answered yet: another pick waits for it, and
+  // only the latest one's answer is said.
+  const launching = useRef(false);
+  const asked = useRef(0);
   const pick = async (kind: TrayKind) => {
     if (kind === "rm") return onRemove();
     const launch = launchKind(kind);
-    if (!launch) return;
+    if (!launch || launching.current) return;
+    launching.current = true;
+    const ask = ++asked.current;
     onOpen(false);
     try {
       if (!services?.relayLaunch)
@@ -483,16 +498,20 @@ function LiveRow({
           zh ? "只能在驿窗里发起接力" : "Only PostPane can start a handoff",
         );
       const left = await services.relayLaunch(session.id, launch);
-      // Words left now show as queued on the second line (`waits`), until the
-      // session takes them up; nothing to say before that is known.
-      setNotice(
-        left?.already ? { ok: true, text: alreadyQueuedText(zh) } : null,
-      );
+      // Words left now show on the second line (`waits`, kept by the host
+      // in the snapshot) until the session's handoff takes over.
+      if (ask === asked.current)
+        setNotice(
+          left?.already ? { ok: true, text: alreadyQueuedText(zh) } : null,
+        );
     } catch (reason) {
-      setNotice({
-        ok: false,
-        text: reason instanceof Error ? reason.message : String(reason ?? ""),
-      });
+      if (ask === asked.current)
+        setNotice({
+          ok: false,
+          text: reason instanceof Error ? reason.message : String(reason ?? ""),
+        });
+    } finally {
+      launching.current = false;
     }
   };
   useEffect(() => {
@@ -624,9 +643,12 @@ function LiveRow({
               return onOpen(false);
             if (event.key === "ArrowLeft") {
               event.preventDefault();
-              onOpen(true);
-              // The tray slides in; its first block takes the keyboard.
-              if (!solo) setTimeout(() => focusBlock(0), 0);
+              if (solo) onOpen(true);
+              else if (open) focusBlock(0);
+              else {
+                focusOnOpen.current = true;
+                onOpen(true);
+              }
               return;
             }
             if (event.key !== "Enter" && event.key !== " ") return;

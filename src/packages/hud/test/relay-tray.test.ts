@@ -88,3 +88,18 @@ test("a row says how its swipe's words stand until the session takes them", () =
   );
   assert.equal(alreadyQueuedText(true), "已在排队，不再重复发");
 });
+
+test("words in the session are not yet a handoff; an hour with none says so", () => {
+  assert.deepEqual(
+    launchLine({ kind: "review", state: "started", reason: null }, true),
+    { ok: true, text: "审核请求已送进会话，正在整理" },
+  );
+  assert.deepEqual(
+    launchLine({ kind: "discuss", state: "stalled", reason: null }, true),
+    { ok: false, text: "会话领了讨论请求，但一小时没发起接力" },
+  );
+  assert.equal(
+    launchLine({ kind: "review", state: "stalled", reason: null }, false).text,
+    "The session took the review request but started no handoff in an hour",
+  );
+});

@@ -36,6 +36,8 @@ pub(super) struct Tracker {
     /// The failed Hermes scheduled tasks already told (`bot:job`), kept on
     /// disk so a restart does not tell them again; loaded on first look.
     cron_told: Option<HashSet<String>>,
+    /// What was told could not be written last time: written at the next look.
+    cron_unsaved: bool,
     revision: u64,
     events: VecDeque<Value>,
 }
@@ -57,6 +59,7 @@ impl Tracker {
             sign_ins: HashMap::new(),
             gateways: HashMap::new(),
             cron_told: None,
+            cron_unsaved: false,
             revision: 0,
             events: VecDeque::new(),
         }
@@ -341,11 +344,18 @@ impl Tracker {
                 self.push(&format!("hermes:{id}:cron:{}:{now}", job.id),json!({"kind":"cron-failed","islandAlert":true,"at":iso(now),"source":"hermes","accountId":id,"title":job.name,"message":crate::l10n::text("没跑成", "Did not run"),"failedAt":job.last_run_at.map(iso),"nextRunAt":job.next_run_at.map(iso),"bot":{"id":id,"name":bot.name}}));
             }
         }
-        if told != before {
+        if told != before || self.cron_unsaved {
             if let Some(path) = told_path {
                 let mut keys = told.iter().collect::<Vec<_>>();
                 keys.sort();
-                let _ = std::fs::write(path, json!(keys).to_string());
+                // Whole or not at all: a torn file would tell everything again.
+                let temporary = path.with_extension("json.tmp");
+                let saved = std::fs::write(&temporary, json!(keys).to_string())
+                    .and_then(|_| std::fs::rename(&temporary, path));
+                if let Err(error) = &saved {
+                    eprintln!("Hermes cron told {}: {error}", path.display());
+                }
+                self.cron_unsaved = saved.is_err();
             }
         }
         self.cron_told = Some(told);
@@ -563,5 +573,78 @@ mod tests {
             now + 7,
         );
         assert_eq!(told(&restarted), 1);
+    }
+
+    fn cron_fixture() -> (
+        agent_hud_agents::hermes::Bot,
+        impl Fn(&str) -> agent_hud_agents::hermes::CronJob,
+        impl Fn(&Tracker) -> usize,
+    ) {
+        use agent_hud_agents::hermes::{Bot, CronJob};
+        let bot = Bot {
+            id: "default".into(),
+            name: "猛鬼兽".into(),
+        };
+        let failed = |id: &str| CronJob {
+            id: id.into(),
+            name: format!("任务{id}"),
+            enabled: true,
+            failed: true,
+            last_run_at: Some(1_793_582_041_841),
+            next_run_at: Some(1_794_181_500_000),
+            schedule: None,
+        };
+        let told = |tracker: &Tracker| {
+            tracker
+                .events
+                .iter()
+                .filter(|e| e["kind"] == "cron-failed")
+                .count()
+        };
+        (bot, failed, told)
+    }
+
+    #[test]
+    fn a_torn_told_file_tells_once_more_then_is_whole_again() {
+        let (bot, failed, told) = cron_fixture();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hermes-cron-told.json");
+        std::fs::write(&path, "[\"default:a\"").unwrap();
+        let mut tracker = Tracker::new();
+        let now = tracker.started + 1_000;
+        tracker.cron(&[(bot.clone(), Some(vec![failed("a")]))], Some(&path), now);
+        // Unreadable means not known to be told: once more, never lost.
+        assert_eq!(told(&tracker), 1);
+        let kept: Vec<String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(kept, vec!["default:a".to_string()]);
+        assert!(!dir.path().join("hermes-cron-told.json.tmp").exists());
+        let mut restarted = Tracker::new();
+        restarted.cron(&[(bot, Some(vec![failed("a")]))], Some(&path), now + 1);
+        assert_eq!(told(&restarted), 0);
+    }
+
+    #[test]
+    fn a_told_file_that_cannot_be_written_is_tried_again_next_look() {
+        let (bot, failed, told) = cron_fixture();
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("later");
+        let path = folder.join("hermes-cron-told.json");
+        let mut tracker = Tracker::new();
+        let now = tracker.started + 1_000;
+        tracker.cron(&[(bot.clone(), Some(vec![failed("a")]))], Some(&path), now);
+        assert_eq!(told(&tracker), 1);
+        assert!(!path.exists());
+        // Nothing new, but what was told is still unsaved: saved now.
+        std::fs::create_dir(&folder).unwrap();
+        tracker.cron(
+            &[(bot.clone(), Some(vec![failed("a")]))],
+            Some(&path),
+            now + 1,
+        );
+        assert_eq!(told(&tracker), 1, "not told again in the meantime");
+        let mut restarted = Tracker::new();
+        restarted.cron(&[(bot, Some(vec![failed("a")]))], Some(&path), now + 2);
+        assert_eq!(told(&restarted), 0);
     }
 }

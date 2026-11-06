@@ -117,6 +117,27 @@ export const perforatedSide = (edge: HUDEdge) =>
         ? "bottom"
         : "top";
 
+/** Where a handoff's airmail stripes go (owner, 2026-11-06): the open card
+ * along its top, or its bottom when the holes take the top (docked to the
+ * screen's bottom edge); the closed tag along the side facing away from the
+ * holes. Never the hole side. */
+export function airmailSides(
+  edge: HUDEdge,
+  open: boolean,
+): ("left" | "right" | "top" | "bottom")[] {
+  const holes = perforatedSide(edge);
+  if (open) return [holes === "top" ? "bottom" : "top"];
+  return [
+    holes === "left"
+      ? "right"
+      : holes === "right"
+        ? "left"
+        : holes === "top"
+          ? "bottom"
+          : "top",
+  ];
+}
+
 /** A mask punching a row of holes `hole` across, every `pitch`, down a
  * side of the paper: its perforation. */
 export function perforation(
