@@ -134,6 +134,53 @@ fn a_finished_turn_becomes_a_completion_event() {
 }
 
 #[test]
+fn any_conversation_reports_its_turns_and_whether_postpane_opened_it() {
+    let now = 1_792_470_000_000;
+    let watched = Watched {
+        id: "68a1".into(),
+        title: "审核".into(),
+        opened_at: 1,
+        named: true,
+    };
+    // A finished turn says whether it is one of PostPane's (a review).
+    let done = json!({"conversation":"68a1","reply":"答","messageId":"m1","at":now});
+    assert_eq!(
+        completion(&done, Some(&watched), now).unwrap().data["review"],
+        true
+    );
+    let own = json!({"conversation":"77b2","title":"杭州两日行程","reply":"答","messageId":"m2","at":now});
+    assert_eq!(completion(&own, None, now).unwrap().data["review"], false);
+    // A turn that starts is a running observation of its conversation.
+    let start = json!({"type":"turn","phase":"start","conversation":"77b2","title":"杭州两日行程","prompt":"帮我排两天","at":now - 20});
+    let event = started(&start, None, now).unwrap();
+    assert_eq!(event.source, "chatgpt");
+    assert_eq!(event.session_id, "chatgpt:77b2");
+    assert_eq!(event.kind, "session-observation");
+    assert_eq!(event.at_ms, now - 20);
+    assert_eq!(event.data["state"], "running");
+    assert_eq!(event.data["startedAtMs"], now - 20);
+    assert_eq!(event.data["title"], "杭州两日行程");
+    assert_eq!(event.data["prompt"], "帮我排两天");
+    assert_eq!(event.data["review"], false);
+    assert_eq!(
+        event.data["navigationTarget"],
+        json!({"kind":"chatgpt-conversation","id":"77b2"})
+    );
+    assert_eq!(
+        started(
+            &json!({"conversation":"68a1","at":now}),
+            Some(&watched),
+            now
+        )
+        .unwrap()
+        .data["title"],
+        "审核"
+    );
+    // A new chat's first start, before it has an address, is not one.
+    assert!(started(&json!({"phase":"start","at":now}), None, now).is_none());
+}
+
+#[test]
 fn the_manifest_names_the_relay_and_only_the_extension() {
     let temp = tempfile::tempdir().unwrap();
     let directory = temp.path().join("NativeMessagingHosts");

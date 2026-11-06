@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Approval, Quota, Session } from "@agent-hud/protocol";
 import { quotaWindowLabel } from "../src/panel/window-labels.ts";
+import { agentVendorName } from "../src/agent-artwork.ts";
 import {
   blockListed,
   panelHidesTokens,
@@ -425,4 +426,9 @@ test("cloud credits show their dollars and expiry, outside the pace count", () =
     verdict.words!.map((word) => word.text).join(""),
     "照现在的速度，这个额度在重置前用不完。",
   );
+});
+
+test("a panel on ChatGPT, with no quota and no block, names it and leaves tokens out (#145)", () => {
+  assert.equal(agentVendorName("openai"), "ChatGPT");
+  assert.equal(panelHidesTokens([], "openai"), true);
 });

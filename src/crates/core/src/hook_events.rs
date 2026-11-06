@@ -11,6 +11,18 @@ const DAY: i64 = 86_400_000;
 const COMPACTION: i64 = 300_000;
 const FUTURE: i64 = 60_000;
 const PI_HEARTBEAT: i64 = 120_000;
+/// ChatGPT reports a turn's start once, not a heartbeat: a reply still
+/// streaming after this long (a tab closed mid-answer) is no longer shown
+/// answering.
+const CHATGPT_TURN: i64 = 15 * 60_000;
+/// How long a running observation lasts with no renewal.
+fn heartbeat(source: &str) -> i64 {
+    if source == "chatgpt" {
+        CHATGPT_TURN
+    } else {
+        PI_HEARTBEAT
+    }
+}
 
 type Key = (String, String);
 #[derive(Default)]
@@ -47,7 +59,9 @@ fn observation_state(event: &HookEvent, now: i64) -> Option<&'static str> {
     // Only Pi reports in-flight observer snapshots; its extension renews them
     // every 15 seconds. OpenCode observations already carry terminal states.
     match event.data["state"].as_str()? {
-        "running" | "waiting" if now.saturating_sub(event.at_ms) >= PI_HEARTBEAT => Some("idle"),
+        "running" | "waiting" if now.saturating_sub(event.at_ms) >= heartbeat(&event.source) => {
+            Some("idle")
+        }
         "running" => Some("running"),
         "waiting" => Some("waiting"),
         "completed" | "ended" => Some("idle"),
@@ -63,10 +77,18 @@ fn reports_turns(source: &str) -> bool {
 }
 /// What a completion the client reported itself says beyond the turn: the
 /// prompt and its way back. A channel's reply is kept in full.
+/// Whether a ChatGPT conversation is a review PostPane opened, or the owner's
+/// own chat, as its latest turn said.
+fn review(session: &mut Value, event: &HookEvent) {
+    if let Some(review) = event.data["review"].as_bool() {
+        session["review"] = json!(review);
+    }
+}
 fn completion_details(session: &mut Value, completion: &HookEvent) {
     if !completion.data["navigationTarget"].is_null() {
         session["navigationTarget"] = completion.data["navigationTarget"].clone();
     }
+    review(session, completion);
     let facts = facts(session);
     for key in ["message", "prompt"] {
         if facts[key].is_null() && !completion.data[key].is_null() {
@@ -208,6 +230,7 @@ impl HookEvidence {
                         || hooks.is_some_and(|hooks| {
                             hooks.completion.as_ref().is_some_and(|c| c.begin.is_some())
                         })
+                        || reports_turns(&event.source)
                 }
                 "attention" => hooks.is_some_and(|hooks| hooks.attention),
                 "compaction" => hooks.is_some_and(|hooks| hooks.compaction.is_some()),
@@ -305,7 +328,7 @@ impl HookEvidence {
         for evidence in self.sessions.values().flat_map(HashMap::values) {
             if let Some(event) = &evidence.observation {
                 if matches!(event.data["state"].as_str(), Some("running" | "waiting")) {
-                    times.push(event.at_ms.saturating_add(PI_HEARTBEAT));
+                    times.push(event.at_ms.saturating_add(heartbeat(&event.source)));
                 }
             }
             for (event, retention) in [
@@ -479,6 +502,7 @@ impl HookEvidence {
                 if !observed.data["navigationTarget"].is_null() {
                     session["navigationTarget"] = observed.data["navigationTarget"].clone();
                 }
+                review(session, observed);
             }
         }
 

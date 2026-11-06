@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowUpRight,
   CornerDownRight,
@@ -29,7 +35,8 @@ import {
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
-import { usePaper } from "../paper";
+import { airmailStripes, relayPaperOf, usePaper } from "../paper";
+import { isReview } from "../chatgpt-desk";
 import { handoffFor, progressLine, round } from "../alerts/handoff-card";
 import type { Handoff, RelayLaunch } from "@agent-hud/protocol";
 import {
@@ -99,6 +106,13 @@ export function SourceSessions({
   );
   const { removed, remove, prune } = useRemovedSessions();
   const live = shownSessions(listedLive, removed);
+  // The owner's own sessions above; ChatGPT reviews on a lower slip of the
+  // reviews' paper, always in full (#145).
+  const handoffs = snapshot.handoffs ?? [];
+  const isReviewRow = (entry: (typeof live)[number]) =>
+    entry.session.source === "chatgpt" && isReview(entry.session, handoffs);
+  const upper = live.filter((entry) => !isReviewRow(entry));
+  const lower = live.filter(isReviewRow);
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Removals end once their session has something new, or has stopped.
   useEffect(() => {
@@ -142,11 +156,49 @@ export function SourceSessions({
   useLayoutEffect(() => {
     const last = rows.current?.children[limit - 1] as HTMLElement | undefined;
     setRowsHeight(
-      live.length > limit && last
+      upper.length > limit && last
         ? last.offsetTop + last.offsetHeight
         : undefined,
     );
-  }, [live.length, limit]);
+  }, [upper.length, limit]);
+  const row = (
+    entry: (typeof live)[number],
+    index: number,
+    list: readonly (typeof live)[number][],
+    onPaper = light,
+  ) => (
+    <LiveRow
+      key={removedKey(entry)}
+      entry={entry}
+      handoff={handoffFor(
+        snapshot.handoffs,
+        entry.session.source,
+        entry.session.id,
+      )}
+      waits={
+        entry.session.source === "claude"
+          ? snapshot.relayLaunches?.find(
+              (launch) => launch.session === entry.session.id,
+            )
+          : undefined
+      }
+      now={now}
+      light={onPaper}
+      first={index === 0}
+      last={index === list.length - 1}
+      onStats={onStats}
+      open={openKey === removedKey(entry)}
+      onOpen={(open) =>
+        setOpenKey((key) =>
+          open ? removedKey(entry) : key === removedKey(entry) ? null : key,
+        )
+      }
+      onRemove={() => {
+        setOpenKey(null);
+        remove(entry);
+      }}
+    />
+  );
   return (
     <section
       className="hud-source-sessions"
@@ -179,44 +231,13 @@ export function SourceSessions({
           overflowY: rowsHeight ? "auto" : undefined,
         }}
       >
-        {live.map((entry, index) => (
-          <LiveRow
-            key={removedKey(entry)}
-            entry={entry}
-            handoff={handoffFor(
-              snapshot.handoffs,
-              entry.session.source,
-              entry.session.id,
-            )}
-            waits={
-              entry.session.source === "claude"
-                ? snapshot.relayLaunches?.find(
-                    (launch) => launch.session === entry.session.id,
-                  )
-                : undefined
-            }
-            now={now}
-            light={light}
-            first={index === 0}
-            last={index === live.length - 1}
-            onStats={onStats}
-            open={openKey === removedKey(entry)}
-            onOpen={(open) =>
-              setOpenKey((key) =>
-                open
-                  ? removedKey(entry)
-                  : key === removedKey(entry)
-                    ? null
-                    : key,
-              )
-            }
-            onRemove={() => {
-              setOpenKey(null);
-              remove(entry);
-            }}
-          />
-        ))}
+        {upper.map((entry, index) => row(entry, index, upper))}
       </div>
+      {lower.length > 0 && (
+        <ReviewRows zh={zh}>
+          {lower.map((entry, index) => row(entry, index, lower, true))}
+        </ReviewRows>
+      )}
       {!live.length && (
         <span
           style={{
@@ -300,6 +321,50 @@ const TRAY: Record<
  * button (owner, 2026-11-05); a Claude Code session on this machine shows
  * a tray of handoffs before it (#124). A click elsewhere, a drag right, →
  * or Esc puts it back. */
+/** ChatGPT's reviews in the list (#145): a slip of the reviews' paper under
+ * an airmail band, below the owner's own sessions. */
+function ReviewRows({ zh, children }: { zh: boolean; children: ReactNode }) {
+  const sheet = relayPaperOf(true);
+  return (
+    <div
+      style={{
+        position: "relative",
+        margin: "10px 0 2px",
+        padding: "10px 0 2px",
+        background: sheet.paper,
+        color: sheet.ink,
+        borderRadius: 6,
+        overflow: "hidden",
+        boxShadow: "inset 0 6px 6px -6px rgba(0,0,0,.35)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 5,
+          background: airmailStripes(5),
+        }}
+      />
+      <div
+        style={{
+          padding: "2px 6px 0",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.3em",
+          color: sheet.blue,
+        }}
+      >
+        {zh ? "审核" : "REVIEWS"}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function LiveRow({
   entry,
   handoff,

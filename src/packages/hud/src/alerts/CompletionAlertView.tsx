@@ -1,11 +1,11 @@
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight } from "lucide-react";
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { cardColumn } from "../card-column";
-import { usePaper } from "../paper";
+import { airmailStripes, relayPaperOf, usePaper, type Paper } from "../paper";
 import {
   SHOWN_ENTRIES,
   entryTitle,
@@ -32,6 +32,7 @@ import {
   replyFacts,
   replyGroups,
   replyMessage,
+  isReviewReply,
 } from "./reply-list";
 
 /**
@@ -69,6 +70,7 @@ export function CompletionAlertView({
   const { groups, hidden, sectioned } = replyGroups(
     entries,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
+    zh,
   );
 
   // Going back puts the reply away; where there is no way back, the line
@@ -87,6 +89,143 @@ export function CompletionAlertView({
     Boolean(sessionToOpen(entry) && services?.openSession) &&
     !unreachable.has(entry.id);
 
+  // The owner's own replies on the receipt; a review's on the lower slip of
+  // the reviews' paper (#145).
+  const handoffs = snapshot.handoffs ?? [];
+  const review = (entry: ApprovalEntry) => isReviewReply(entry, handoffs);
+  const reviews = groups.flatMap((group) => group.entries.filter(review));
+  const reviewPaper = relayPaperOf(light, paper?.bleed);
+  const reviewInks = cardInks(reviewPaper, light);
+  const line = (
+    entry: ApprovalEntry,
+    index: number,
+    inks: Inks,
+    paper: Paper | null,
+  ) => {
+    if (entry.kind !== "reply") return null;
+    const open = entry.id === openId;
+    const failed = unreachable.has(entry.id);
+    const bot = entry.session?.bot;
+    // A reply in a handoff opens its card (查看接力).
+    const handoff = handoffFor(
+      snapshot.handoffs,
+      entry.event.source,
+      entry.event.sessionId,
+    );
+    // A handoff's reply is titled by the handoff: its question is the
+    // whole brief.
+    const title =
+      handoff?.title ?? entryTitle(entry, newsTitle(entry.event, zh));
+
+    // The body lines up under the title, past the seal or the mark.
+    const indent = (bot ? SEAL_COLUMN : 18) + 12;
+    return (
+      <div
+        key={entry.id}
+        style={{
+          borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
+        }}
+      >
+        <EntryRow
+          entry={entry}
+          open={open}
+          title={title}
+          summary={
+            replyMessage(entry.event, entry.session) ??
+            newsTitle(entry.event, zh)
+          }
+          canOpen={canOpen(entry)}
+          onSelect={() => void goBack(entry)}
+          onOpen={() => void goBack(entry)}
+          inks={inks}
+          light={light}
+          zh={zh}
+          openTag={false}
+          seal={
+            bot ? (
+              <BotSeal bot={bot} light={light} color={inks.dim} />
+            ) : undefined
+          }
+        />
+        {open ? (
+          <div
+            style={{
+              ...cardColumn(12),
+              padding: `14px 0 18px ${indent}px`,
+            }}
+          >
+            <ReplyBody entry={entry} inks={inks} zh={zh} failed={failed} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => drop(entries.map((each) => each.id))}
+                style={{
+                  ...buttonFace,
+                  border: `1.5px solid ${inks.faint}`,
+                  background: "transparent",
+                  color: inks.ink,
+                }}
+              >
+                {entries.length > 1
+                  ? zh
+                    ? "全部知道了"
+                    : "Dismiss all"
+                  : zh
+                    ? "知道了"
+                    : "Got it"}
+              </button>
+              <span style={{ flex: 1 }} />
+              {handoff && card && (
+                <button
+                  type="button"
+                  onClick={() => card.open(handoff.id)}
+                  style={{
+                    ...buttonFace,
+                    border: `1.5px solid ${inks.faint}`,
+                    background: "transparent",
+                    color: inks.ink,
+                  }}
+                >
+                  {zh ? "查看接力" : "Handoff"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void goBack(entry)}
+                style={{
+                  ...buttonFace,
+                  border: `1.5px solid ${inks.ink}`,
+                  background: inks.ink,
+                  color: paper
+                    ? paper.paper
+                    : light
+                      ? "#ffffff"
+                      : "rgba(0,0,0,0.88)",
+                  fontWeight: 600,
+                  opacity: canOpen(entry) ? 1 : 0.5,
+                }}
+              >
+                <ArrowUpRight size={12} strokeWidth={2.4} />
+                {zh ? "回到会话" : "Return to session"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          failed && (
+            <Unreachable
+              inks={inks}
+              zh={zh}
+              style={{
+                padding: `0 0 12px ${indent}px`,
+                marginTop: -4,
+              }}
+            />
+          )
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       className="hud-reply-content"
@@ -103,146 +242,27 @@ export function CompletionAlertView({
         zh={zh}
       />
       <ListTear paper={paper} inks={inks} />
-      {groups.map((group) => (
-        <div key={group.section ?? ""} style={cardColumn(0)}>
-          {sectioned && (
-            <SectionTitle inks={inks}>
-              {group.section ?? (zh ? "未分区" : "No section")}
-            </SectionTitle>
+      {groups
+        .filter((group) => group.entries.some((entry) => !review(entry)))
+        .map((group) => (
+          <div key={group.section ?? ""} style={cardColumn(0)}>
+            {sectioned && (
+              <SectionTitle inks={inks}>
+                {group.section ?? (zh ? "未分区" : "No section")}
+              </SectionTitle>
+            )}
+            {group.entries
+              .filter((entry) => !review(entry))
+              .map((entry, index) => line(entry, index, inks, paper))}
+          </div>
+        ))}
+      {reviews.length > 0 && (
+        <ReviewSlip paper={paper} zh={zh}>
+          {reviews.map((entry, index) =>
+            line(entry, index, reviewInks, reviewPaper),
           )}
-          {group.entries.map((entry, index) => {
-            if (entry.kind !== "reply") return null;
-            const open = entry.id === openId;
-            const failed = unreachable.has(entry.id);
-            const bot = entry.session?.bot;
-            // A reply in a handoff opens its card (查看接力).
-            const handoff = handoffFor(
-              snapshot.handoffs,
-              entry.event.source,
-              entry.event.sessionId,
-            );
-            // A handoff's reply is titled by the handoff: its question is the
-            // whole brief.
-            const title =
-              handoff?.title ?? entryTitle(entry, newsTitle(entry.event, zh));
-
-            // The body lines up under the title, past the seal or the mark.
-            const indent = (bot ? SEAL_COLUMN : 18) + 12;
-            return (
-              <div
-                key={entry.id}
-                style={{
-                  borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
-                }}
-              >
-                <EntryRow
-                  entry={entry}
-                  open={open}
-                  title={title}
-                  summary={
-                    replyMessage(entry.event, entry.session) ??
-                    newsTitle(entry.event, zh)
-                  }
-                  canOpen={canOpen(entry)}
-                  onSelect={() => void goBack(entry)}
-                  onOpen={() => void goBack(entry)}
-                  inks={inks}
-                  light={light}
-                  zh={zh}
-                  openTag={false}
-                  seal={
-                    bot ? (
-                      <BotSeal bot={bot} light={light} color={inks.dim} />
-                    ) : undefined
-                  }
-                />
-                {open ? (
-                  <div
-                    style={{
-                      ...cardColumn(12),
-                      padding: `14px 0 18px ${indent}px`,
-                    }}
-                  >
-                    <ReplyBody
-                      entry={entry}
-                      inks={inks}
-                      zh={zh}
-                      failed={failed}
-                    />
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => drop(entries.map((each) => each.id))}
-                        style={{
-                          ...buttonFace,
-                          border: `1.5px solid ${inks.faint}`,
-                          background: "transparent",
-                          color: inks.ink,
-                        }}
-                      >
-                        {entries.length > 1
-                          ? zh
-                            ? "全部知道了"
-                            : "Dismiss all"
-                          : zh
-                            ? "知道了"
-                            : "Got it"}
-                      </button>
-                      <span style={{ flex: 1 }} />
-                      {handoff && card && (
-                        <button
-                          type="button"
-                          onClick={() => card.open(handoff.id)}
-                          style={{
-                            ...buttonFace,
-                            border: `1.5px solid ${inks.faint}`,
-                            background: "transparent",
-                            color: inks.ink,
-                          }}
-                        >
-                          {zh ? "查看接力" : "Handoff"}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void goBack(entry)}
-                        style={{
-                          ...buttonFace,
-                          border: `1.5px solid ${inks.ink}`,
-                          background: inks.ink,
-                          color: paper
-                            ? paper.paper
-                            : light
-                              ? "#ffffff"
-                              : "rgba(0,0,0,0.88)",
-                          fontWeight: 600,
-                          opacity: canOpen(entry) ? 1 : 0.5,
-                        }}
-                      >
-                        <ArrowUpRight size={12} strokeWidth={2.4} />
-                        {zh ? "回到会话" : "Return to session"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  failed && (
-                    <Unreachable
-                      inks={inks}
-                      zh={zh}
-                      style={{
-                        padding: `0 0 12px ${indent}px`,
-                        marginTop: -4,
-                      }}
-                    />
-                  )
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+        </ReviewSlip>
+      )}
       {hidden > 0 && (
         <FoldButton
           hidden={hidden}
@@ -251,7 +271,61 @@ export function CompletionAlertView({
           zh={zh}
         />
       )}
-      <div style={{ height: 6 }} />
+      {/* A review slip runs to the foot. */}
+      {!reviews.length && <div style={{ height: 6 }} />}
+    </div>
+  );
+}
+
+/** The reviews' replies (#145): a lower slip of the reviews' paper across the
+ * card, under an airmail band, joined to the receipt with no perforation. */
+function ReviewSlip({
+  paper,
+  zh,
+  children,
+}: {
+  paper: Paper | null;
+  zh: boolean;
+  children: ReactNode;
+}) {
+  const sheet = relayPaperOf(true);
+  const bleed = paper?.bleed ?? { left: 0, right: 0 };
+  return (
+    <div
+      style={{
+        ...cardColumn(0),
+        position: "relative",
+        margin: `10px ${-bleed.right}px 0 ${-bleed.left}px`,
+        padding: `12px ${bleed.right}px 4px ${bleed.left}px`,
+        background: sheet.paper,
+        color: sheet.ink,
+        borderRadius: paper ? 0 : 8,
+        boxShadow: "inset 0 6px 6px -6px rgba(0,0,0,.35)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 5,
+          background: airmailStripes(5),
+        }}
+      />
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.3em",
+          color: sheet.blue,
+        }}
+      >
+        {zh ? "审核" : "REVIEWS"}
+      </div>
+      {children}
     </div>
   );
 }

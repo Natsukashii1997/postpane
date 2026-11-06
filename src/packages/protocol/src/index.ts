@@ -168,6 +168,9 @@ export interface Session {
   /** From Core, for Hermes: the Feishu bot whose home the session was read
    * from (`default`, or a profile's folder) and what its SOUL.md calls it. */
   bot?: { id: string; name: string } | null;
+  /** From Core, for ChatGPT: true for a conversation PostPane opened (a
+   * relay's review), false for the owner's own chat (docs/chatgpt-channel.md). */
+  review?: boolean;
   /** From Core: where the session's first (`init`) and latest prompts were typed, as `category:source` tags ("cli:iterm", "desktop:claude", "mobile:iphone"). Categories: desktop, cli, ide, mobile, mcp, sdk, others; a source nobody can tell is `others`. Null when unknown. */
   origins?: { init: string | null; latest: string | null };
   /** From Core: the project id, the repository its worktrees share written with ~ ("unassigned" filters match none). */

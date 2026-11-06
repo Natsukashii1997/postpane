@@ -1,6 +1,6 @@
 // Bridges chatgpt.com tabs and PostPane over Chrome Native Messaging.
-// Protocol: docs/chatgpt-channel.md. Only conversations on PostPane's watch
-// list (plus a chat this extension is opening) are ever reported.
+// Protocol: docs/chatgpt-channel.md. Every conversation's turns are reported
+// (#145); only conversations on PostPane's watch list are sent to.
 const HOST = "com.postpane.chatgpt";
 const HOME = "https://chatgpt.com/";
 const GROUP = "驿窗接力";
@@ -26,7 +26,11 @@ function connect() {
     port = null;
     reconnect();
   });
-  post({ type: "hello", version: chrome.runtime.getManifest().version, extensionId: chrome.runtime.id });
+  post({
+    type: "hello",
+    version: chrome.runtime.getManifest().version,
+    extensionId: chrome.runtime.id,
+  });
   retry = 5000;
   statusSoon();
 }
@@ -52,10 +56,18 @@ async function onHost(message) {
       statusSoon();
       break;
     case "open":
-      post({ type: "opened", requestId: message.requestId, ...(await open(message.text, message.project)) });
+      post({
+        type: "opened",
+        requestId: message.requestId,
+        ...(await open(message.text, message.project)),
+      });
       break;
     case "send":
-      post({ type: "sent", requestId: message.requestId, ...(await send(message.conversation, message.text)) });
+      post({
+        type: "sent",
+        requestId: message.requestId,
+        ...(await send(message.conversation, message.text)),
+      });
       break;
     case "focus":
       await focus(message.conversation);
@@ -66,7 +78,8 @@ async function onHost(message) {
 // --- Tabs --------------------------------------------------------------------
 
 function tabFor(conversation) {
-  for (const [tabId, page] of pages) if (page.conversation === conversation) return tabId;
+  for (const [tabId, page] of pages)
+    if (page.conversation === conversation) return tabId;
   return null;
 }
 
@@ -90,11 +103,19 @@ function ready(tabId, ms, test = () => true) {
 async function group(tabId) {
   try {
     const tab = await chrome.tabs.get(tabId);
-    const [existing] = await chrome.tabGroups.query({ title: GROUP, windowId: tab.windowId });
-    if (existing) await chrome.tabs.group({ tabIds: [tabId], groupId: existing.id });
+    const [existing] = await chrome.tabGroups.query({
+      title: GROUP,
+      windowId: tab.windowId,
+    });
+    if (existing)
+      await chrome.tabs.group({ tabIds: [tabId], groupId: existing.id });
     else {
       const groupId = await chrome.tabs.group({ tabIds: [tabId] });
-      await chrome.tabGroups.update(groupId, { title: GROUP, color: "yellow", collapsed: false });
+      await chrome.tabGroups.update(groupId, {
+        title: GROUP,
+        color: "yellow",
+        collapsed: false,
+      });
     }
   } catch {
     /* grouping is cosmetic */
@@ -128,7 +149,9 @@ async function open(text, project) {
     watched.add(page.conversation);
     await chrome.storage.local.set({ watched: [...watched] });
     statusSoon();
-    const { title } = await chrome.tabs.sendMessage(tab.id, { op: "state" }).catch(() => ({}));
+    const { title } = await chrome.tabs
+      .sendMessage(tab.id, { op: "state" })
+      .catch(() => ({}));
     return { ok: true, conversation: page.conversation, title: title || "" };
   } finally {
     opening.delete(tab.id);
@@ -139,10 +162,14 @@ async function send(conversation, text) {
   if (!watched.has(conversation)) return { ok: false, reason: "not-watched" };
   let tabId = tabFor(conversation);
   if (tabId === null) {
-    const tab = await chrome.tabs.create({ url: `${HOME}c/${conversation}`, active: false });
+    const tab = await chrome.tabs.create({
+      url: `${HOME}c/${conversation}`,
+      active: false,
+    });
     tabId = tab.id;
     await group(tabId);
-    if (!(await ready(tabId, 30000, (p) => p.conversation === conversation))) return { ok: false, reason: "timeout" };
+    if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
+      return { ok: false, reason: "timeout" };
   }
   return submit(tabId, text);
 }
@@ -165,7 +192,11 @@ function statusSoon() {
   statusTimer = setTimeout(() => {
     const conversations = [...watched].map((id) => {
       const tabId = tabFor(id);
-      return { id, open: tabId !== null, hidden: tabId !== null && !!pages.get(tabId).hidden };
+      return {
+        id,
+        open: tabId !== null,
+        hidden: tabId !== null && !!pages.get(tabId).hidden,
+      };
     });
     post({ type: "tabs", conversations });
   }, 1000);
@@ -177,13 +208,17 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   const tabId = sender.tab?.id;
   if (tabId === undefined) return;
   if (message.type === "page") {
-    const page = { conversation: message.conversation, hidden: message.hidden, streaming: message.streaming };
+    const page = {
+      conversation: message.conversation,
+      hidden: message.hidden,
+      streaming: message.streaming,
+    };
     pages.set(tabId, page);
     for (const check of waiters.get(tabId) || []) check(page);
     statusSoon();
   } else if (message.type === "turn") {
-    const known = message.conversation && watched.has(message.conversation);
-    if (known || (opening.has(tabId) && message.conversation)) post(message);
+    // A new chat's first start, before it has an address, says nothing yet.
+    if (message.conversation) post(message);
   }
 });
 
@@ -203,8 +238,15 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
 // A restarted worker has lost its tab map; ask the tabs already open.
 async function resync() {
   for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
-    const state = await chrome.tabs.sendMessage(tab.id, { op: "state" }).catch(() => null);
-    if (state) pages.set(tab.id, { conversation: state.conversation, hidden: state.hidden, streaming: state.streaming });
+    const state = await chrome.tabs
+      .sendMessage(tab.id, { op: "state" })
+      .catch(() => null);
+    if (state)
+      pages.set(tab.id, {
+        conversation: state.conversation,
+        hidden: state.hidden,
+        streaming: state.streaming,
+      });
   }
   statusSoon();
 }

@@ -1,4 +1,5 @@
 import hudDefaults from "@agent-hud/protocol/hud-defaults.json";
+import { chatgptDesk, type ChatGPTDesk } from "./chatgpt-desk.ts";
 import type {
   PanelLayout,
   RequestDecision,
@@ -129,6 +130,8 @@ export interface HUDVendor {
   sessions: Snapshot["sessions"];
   /** Hermes's Feishu bots, which its peek shows instead of a quota. */
   bots?: NonNullable<Snapshot["hermesBots"]>;
+  /** ChatGPT's chats and reviews, which its stub and peek show (#145). */
+  desk?: ChatGPTDesk;
 }
 
 /** Artwork identity is authoritative: ChatGPT is the OpenAI mark, Codex its own. */
@@ -163,6 +166,10 @@ export function vendorsFromSnapshot(
     const balance = quotas.length
       ? undefined
       : snapshot.billing.find((b) => vendorKey(b.vendor) === key);
+    const desk =
+      key === vendorKey("chatgpt") && !quotas.length
+        ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
+        : undefined;
     const deepseekBalances =
       key === "deepseek" && !quotas.length
         ? snapshot.billing.filter((b) => vendorKey(b.vendor) === key)
@@ -179,11 +186,13 @@ export function vendorsFromSnapshot(
         balance?.level ??
         "stale",
       // In flight, as Open counts working: running or waiting on a request;
-      // ChatGPT's mark also counts the relays it is answering.
-      working:
+      // ChatGPT's mark also counts the relays it is answering, whose
+      // conversations may be running sessions themselves.
+      working: Math.max(
         sessions.filter((s) => s.state === "running" || s.state === "waiting")
-          .length +
-        (key === vendorKey("chatgpt") ? relaysAnswering(snapshot) : 0),
+          .length,
+        key === vendorKey("chatgpt") ? relaysAnswering(snapshot) : 0,
+      ),
       waiting: snapshot.approvals.filter((a) => vendorKey(a.source) === key)
         .length,
       questions: snapshot.approvals.filter(
@@ -204,10 +213,15 @@ export function vendorsFromSnapshot(
               snapshotLanguage(snapshot),
             )
           : null,
-      usage: quotas.length ? null : recentLabel(recentUsage(snapshot, key)),
+      usage: desk
+        ? desk.stub.text
+        : quotas.length
+          ? null
+          : recentLabel(recentUsage(snapshot, key)),
       quotas,
       sessions,
       bots: key === "hermes" ? (snapshot.hermesBots ?? []) : [],
+      ...(desk ? { desk } : {}),
     };
   });
   if (!byMode) vendorProjections.set(snapshot, (byMode = new Map()));

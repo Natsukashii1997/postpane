@@ -26,7 +26,12 @@ import {
   stubMarks,
   stubSize,
 } from "../ticket-stub";
-import { PAPER_GRAIN, perforatedSide } from "../paper";
+import {
+  PAPER_GRAIN,
+  airmailStripes,
+  perforatedSide,
+  relayPaperOf,
+} from "../paper";
 
 const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
@@ -36,6 +41,15 @@ const STUB_INK = "#2a2925",
   // Tokens on a stub with no window: what was used, not what is left.
   STUB_DIM = "rgba(42,41,37,.5)",
   STUB_RED = "rgba(196,38,30,.92)";
+/** ChatGPT's stub (#145): a review waiting for you, answering, today's chats. */
+const DESK_TONE = {
+  amber: "#97600f",
+  blue: "#2f5fb3",
+  ink: STUB_INK,
+  dim: STUB_DIM,
+} as const;
+const REVIEW_PAPER = relayPaperOf(false).paper;
+const PAPER_UI = `"PingFang SC", "Hiragino Sans GB", sans-serif`;
 
 export function HUDMarkStrip({
   id,
@@ -509,6 +523,14 @@ export function StubFace({
           borderTop: `${unit}px dashed rgba(42,41,37,.34)`,
           display: "grid",
           placeItems: "center",
+          // A review on ChatGPT's desk: its foot is on the reviews' paper,
+          // under an airmail band (#145).
+          ...(vendor.desk?.stub.review && !marks.sealed
+            ? {
+                borderTop: "none",
+                background: `${airmailStripes(2 * unit)} 0 0 / 100% ${2.5 * unit}px no-repeat, ${REVIEW_PAPER}`,
+              }
+            : null),
         }}
       >
         {marks.sealed ? (
@@ -537,12 +559,16 @@ export function StubFace({
               font: `600 ${9.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
               letterSpacing: 0.15 * unit,
               fontVariantNumeric: "tabular-nums",
-              color:
-                markUsed(vendor) == null
+              color: vendor.desk
+                ? DESK_TONE[vendor.desk.stub.tone]
+                : markUsed(vendor) == null
                   ? STUB_DIM
                   : marks.warn
                     ? STUB_RED
                     : STUB_INK,
+              ...(vendor.desk && /\p{Script=Han}/u.test(label)
+                ? { font: `600 ${8.5 * unit}px/1 ${PAPER_UI}` }
+                : null),
             }}
           >
             {label}
