@@ -42,6 +42,13 @@ struct Backend {
     tools: Option<Arc<tools::ToolsChannel>>,
     extension: Option<Arc<dyn extension::ProductExtension>>,
 }
+/// Every HUD flies the letters handoffs moved since the last look (#171).
+fn fly_tosses(app: &tauri::AppHandle, desk: &handoff::Desk) {
+    for flight in desk.tosses() {
+        activity::publish(app, "hud:flight", &flight);
+    }
+}
+
 impl Backend {
     fn install_snapshot(&mut self, app: &tauri::AppHandle, mut value: Value) {
         chatgpt::mark_detected(app, &mut value);
@@ -54,6 +61,7 @@ impl Backend {
         }
         if let Some(desk) = app.try_state::<handoff::Desk>() {
             value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
+            fly_tosses(app, &desk);
         }
         value["relayLaunches"] = handoff::launch_projection(app);
         if let Some(tools) = &self.tools {
@@ -137,6 +145,7 @@ impl Backend {
             return;
         };
         let handoffs = desk.projection(chrono::Utc::now().timestamp_millis());
+        fly_tosses(app, &desk);
         let launches = handoff::launch_projection(app);
         if let Some(snapshot) = &mut self.snapshot {
             if snapshot["handoffs"] != handoffs || snapshot["relayLaunches"] != launches {

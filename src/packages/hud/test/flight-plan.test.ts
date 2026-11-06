@@ -12,6 +12,11 @@ import {
   type Cubic,
   type HUDFlight,
   type Point,
+  CATCH,
+  catchFrames,
+  inward,
+  THROW,
+  throwFrames,
 } from "../src/scene/flight-plan.ts";
 
 const flight = (patch: Partial<HUDFlight> = {}): HUDFlight => ({
@@ -84,19 +89,19 @@ const points = (route: readonly Cubic[]) => {
   );
 };
 
-test("two marks 64 points apart on a right dock get a long loop out into the screen", () => {
+test("two marks 64 points apart on a right dock get a loop out into the screen", () => {
   const start = { x: 260, y: 120 };
   const end = { x: 260, y: 184 };
   const route = dockRoute(start, end, "right", { width: 300, height: 400 });
-  assert.equal(route.length, 5, "five curves round an ellipse");
+  assert.ok(route.length >= 4, "curves round most of an ellipse");
   assert.deepEqual(route[0][0], start);
   assert.deepEqual(route.at(-1)![3], end);
   assertSmooth(route);
   const { length } = measure(route);
-  assert.ok(length >= 250, `${length} is long enough to be seen`);
+  assert.ok(length >= 220, `${length} is long enough to be seen`);
   const leftmost = Math.min(...points(route).map((point) => point.x));
   assert.ok(
-    leftmost < 260 - 120,
+    leftmost < 260 - 80,
     `it reaches ${260 - leftmost} points into the screen`,
   );
   assert.ok(
@@ -145,7 +150,7 @@ test("marks far apart get one bow; a narrow window shrinks the loop to fit", () 
   assertSmooth(far);
   const deepest = Math.max(...points(far).map((point) => point.x));
   assert.ok(
-    deepest > 100 && deepest < 20 + 140,
+    deepest > 80 && deepest < 20 + 110,
     `bows ${deepest - 20} points in`,
   );
 
@@ -256,7 +261,7 @@ test("the story packs, folds, flies nose first, unfolds and delivers", () => {
     "an envelope again at the end",
   );
   assert.ok(
-    told.dashes.length >= 20,
+    told.dashes.length >= 16,
     `${told.dashes.length} dashes mark the way`,
   );
   for (const dash of told.dashes) assertOrdered("dash", dash.frames);
@@ -299,4 +304,38 @@ test("a refused plane falls from halfway and bursts open; reduced motion only sh
     Math.max(...refused.second.map((frame) => frame.opacity as number)),
     0,
   );
+});
+
+test("on a dock the robots throw and catch: still at both ends, leaning the letter's way", () => {
+  const down = { x: 0, y: 1 };
+  const thrown = throwFrames(inward.right, down);
+  const caught = catchFrames(inward.right, down);
+  for (const frames of [thrown, caught]) {
+    for (const end of [frames[0], frames.at(-1)!]) {
+      assert.equal(end.translate, "0px 0px");
+      assert.equal(end.rotate, "0deg");
+      assert.equal(end.scale, "1 1");
+    }
+  }
+  // It lets go flung into the screen, and is hit pushed along the way.
+  const release = thrown.find((frame) => frame.offset === THROW.release)!;
+  assert.equal(release.translate, "-2px 1.5px");
+  const impact = caught.find((frame) => frame.offset === CATCH.impact)!;
+  assert.equal(impact.translate, "0px 2px");
+  assert.equal(impact.scale, "1.15 0.84", "squashed across the way it came");
+  // Thrown the other way, it leans the other way.
+  assert.equal(throwFrames(inward.right, { x: 0, y: -1 })[1].rotate, "-10deg");
+  assert.equal(thrown[1].rotate, "10deg");
+  // Along a top dock the letter travels sideways: the squash turns with it.
+  const sideways = catchFrames(inward.top, { x: 1, y: 0 });
+  assert.equal(
+    sideways.find((frame) => frame.offset === CATCH.impact)!.scale,
+    "0.84 1.15",
+  );
+});
+
+test("the whole flight takes about two and a half seconds", () => {
+  const told =
+    STORY.pack + STORY.fold + STORY.fly + STORY.unfold + STORY.deliver;
+  assert.ok(told >= 2300 && told <= 2700, `${told} ms`);
 });

@@ -115,3 +115,11 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-launch-attribution/test.log`（第一次，失败）、`test2.log`（第二次，Rust 734 passed / 0 failed）；PR #170 描述。
 - 升级：未升级。
 
+
+## L-13 不提交的自查页放在 `src/` 下，`pnpm run check` 卡在格式检查（2026-11-07）
+
+- 现象：#171 收尾跑 `pnpm run check` 退出 1，只报 `src/apps/desktop/relay-real/main.tsx`、`vite.config.ts` 两个文件格式不对；这两个是不提交的真实组件自查页，本 PR 的改动全都格式化过。
+- 根因：`format:check` 跑的是 `prettier --check "src/**/*.{ts,tsx,mjs,css}"`，按路径扫，不管文件是否被 git 跟踪；自查时临时改了自查页又没格式化，就把整条 check 拦下。E-07 的「先格式化」只格式化了改动文件，覆盖不到未跟踪的。
+- 正确做法：跑全量前先 `git status --short` 看 `src/` 下有没有未跟踪的文件；自查页用完先备份到证据目录再删，或在跑测试前对它也 `prettier --write`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-relay-toss/check-2.log`（删页后重跑的那次覆盖了失败那次，失败输出见本条现象）；自查页备份在同目录 `relay-real-page/`。
+- 升级：未升级。

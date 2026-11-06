@@ -11,6 +11,7 @@ import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
 import { relaysAnswering } from "./relays-answering.ts";
+import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
 import { quotaRowShown, tightestWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
@@ -132,6 +133,8 @@ export interface HUDVendor {
   bots?: NonNullable<Snapshot["hermesBots"]>;
   /** ChatGPT's chats and reviews, which its stub and peek show (#145). */
   desk?: ChatGPTDesk;
+  /** The 「审」 stamp or 「回」 seal relays print on this stub (#171). */
+  relay?: RelayStamps;
 }
 
 /** Artwork identity is authoritative: ChatGPT is the OpenAI mark, Codex its own. */
@@ -166,6 +169,14 @@ export function vendorsFromSnapshot(
     const balance = quotas.length
       ? undefined
       : snapshot.billing.find((b) => vendorKey(b.vendor) === key);
+    const relay = relayStamps(
+      snapshot,
+      key === vendorKey("chatgpt")
+        ? "chatgpt"
+        : key === vendorKey("claude")
+          ? "claude"
+          : null,
+    );
     const desk =
       key === vendorKey("chatgpt") && !quotas.length
         ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
@@ -222,6 +233,7 @@ export function vendorsFromSnapshot(
       sessions,
       bots: key === "hermes" ? (snapshot.hermesBots ?? []) : [],
       ...(desk ? { desk } : {}),
+      ...(relay ? { relay } : {}),
     };
   });
   if (!byMode) vendorProjections.set(snapshot, (byMode = new Map()));

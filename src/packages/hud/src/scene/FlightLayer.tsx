@@ -20,6 +20,8 @@ import { botState, type BotCue } from "../bots/bot-state";
 import { islandPath, type HUDRect } from "../geometry";
 import type { HUDEdge, HUDMode } from "../model";
 import {
+  CATCH,
+  catchFrames,
   dockRoute,
   ENVELOPE,
   FLIGHT_FRESHNESS_MS,
@@ -32,6 +34,8 @@ import {
   STORY,
   stillStory,
   story,
+  THROW,
+  throwFrames,
   type HUDFlightCommand,
   type Point,
   type Ride,
@@ -201,15 +205,19 @@ function FlightRun({
       const root = scene.current;
       if (!root) return null;
       const bounds = root.getBoundingClientRect();
-      // The whole mark (its ring included), not the logo inside it.
-      const mark = (source: string) => {
-        const logo = [
+      const logo = (source: string) =>
+        [
           ...root.querySelectorAll<HTMLElement>(
             `.hud-resting-strip [data-bot-source="${botKey(source)}"]`,
           ),
-        ].find((element) => !element.closest("[data-hud-measurement]"));
-        return logo?.closest<HTMLElement>(".hud-agent-mark") ?? logo ?? null;
+        ].find((element) => !element.closest("[data-hud-measurement]")) ?? null;
+      // The route runs beside the whole mark (its stub included), not the logo inside it.
+      const mark = (source: string) => {
+        const found = logo(source);
+        return found?.closest<HTMLElement>(".hud-agent-mark") ?? found;
       };
+      // The robot alone throws and catches; the stub stays put (#171).
+      const robot = (source: string) => logo(source)?.parentElement ?? null;
       const sender = mark(flight.from);
       const receiver = mark(flight.to);
       const shelf = (sender ?? receiver)
@@ -271,8 +279,8 @@ function FlightRun({
             { width: bounds.width, height: bounds.height },
             size.width,
           ),
-          sender,
-          receiver,
+          sender: robot(flight.from),
+          receiver: robot(flight.to),
         },
       };
     }
@@ -388,17 +396,40 @@ function FlightRun({
           );
         }
       }
-      // The sender hands the letter over with a little push.
-      run(
-        sender,
-        [
-          { scale: "1", rotate: "0deg" },
-          { scale: "0.9", rotate: "0deg", offset: 0.4 },
-          { scale: "1.06", rotate: "0deg", offset: 0.75 },
-          { scale: "1", rotate: "0deg" },
-        ],
-        { duration: 380, delay: delay + 40, easing: "ease-out", fill: "none" },
-      );
+      // Along the dock, from the sender towards the receiver.
+      const along = (() => {
+        const dx = ends.to.x - ends.from.x;
+        const dy = ends.to.y - ends.from.y;
+        const d = Math.hypot(dx, dy);
+        return d > 1e-6
+          ? { x: dx / d, y: dy / d }
+          : { x: -inward[edge].y, y: inward[edge].x };
+      })();
+      if (notch)
+        // The sender hands the letter over with a little push.
+        run(
+          sender,
+          [
+            { scale: "1", rotate: "0deg" },
+            { scale: "0.9", rotate: "0deg", offset: 0.4 },
+            { scale: "1.06", rotate: "0deg", offset: 0.75 },
+            { scale: "1", rotate: "0deg" },
+          ],
+          {
+            duration: 380,
+            delay: delay + 40,
+            easing: "ease-out",
+            fill: "none",
+          },
+        );
+      // On a dock the sender throws it: it leaves the robot's hand as it takes off.
+      else
+        run(sender, throwFrames(inward[edge], along), {
+          duration: THROW.duration,
+          delay: Math.max(0, s.takeoff - THROW.duration * THROW.release),
+          easing: "ease-in-out",
+          fill: "none",
+        });
       if (flight.arrives && !notch)
         run(
           receiver,
@@ -439,7 +470,7 @@ function FlightRun({
             () => setPuzzled({ event: "failed", at: performance.now() / 1000 }),
             s.landing,
           );
-      } else {
+      } else if (notch) {
         // The receiver takes the letter in with a bounce.
         run(
           receiver,
@@ -455,6 +486,15 @@ function FlightRun({
             fill: "none",
           },
         );
+      } else {
+        // On a dock the receiver catches it as the letter slides in.
+        const delivered = s.landing + STORY.unfold + STORY.deliver * 0.7;
+        run(receiver, catchFrames(inward[edge], along), {
+          duration: CATCH.duration,
+          delay: Math.max(0, delivered - CATCH.duration * CATCH.impact),
+          easing: "ease-out",
+          fill: "none",
+        });
       }
     }
     // Landed when every part finished or was cancelled from outside, or at

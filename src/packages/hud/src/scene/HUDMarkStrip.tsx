@@ -20,6 +20,7 @@ import { quotaDisplayLabel } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
+import { ReplySeal, ReviewStamp } from "./RelayStamps";
 import {
   stubBotTop,
   stubFootHeight,
@@ -365,6 +366,17 @@ export function HUDMarkStrip({
                   foot={stubFootHeight(metrics.logo)}
                   side={side}
                   zh={zh}
+                  reduceMotion={reduceMotion}
+                />
+              )}
+              {stubbed && vendor.relay?.replied && (
+                // An answer is back with Claude: the 「回」 seal in its corner (#171).
+                <ReplySeal
+                  unit={unit}
+                  side={side}
+                  zh={zh}
+                  since={vendor.relay.since}
+                  reduceMotion={reduceMotion}
                 />
               )}
               {config.mode === "simple" && metrics.bar > 0 && (
@@ -496,6 +508,7 @@ export function StubFace({
   foot,
   side,
   zh,
+  reduceMotion = false,
 }: {
   vendor: HUDVendor;
   label: string;
@@ -503,6 +516,7 @@ export function StubFace({
   foot: number;
   side: "left" | "right" | "top" | "bottom";
   zh: boolean;
+  reduceMotion?: boolean;
 }) {
   const marks = stubMarks({
     waiting: vendor.waiting,
@@ -550,6 +564,38 @@ export function StubFace({
           >
             {zh ? (marks.answer ? "答" : "批") : marks.answer ? "?" : "!"}
           </span>
+        ) : vendor.relay?.review ? (
+          // ChatGPT has a relay's words: the 「审」 stamp lands over the reading (#171).
+          <ReviewStamp
+            unit={unit}
+            zh={zh}
+            answering={vendor.relay.answering}
+            since={vendor.relay.since}
+            reduceMotion={reduceMotion}
+          >
+            <span
+              style={{
+                maxWidth: "100%",
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+                font: `600 ${9.5 * unit}px/1 "Avenir Next Condensed", "DIN Condensed", "Arial Narrow", sans-serif`,
+                letterSpacing: 0.15 * unit,
+                fontVariantNumeric: "tabular-nums",
+                color: vendor.desk
+                  ? DESK_TONE[vendor.desk.stub.tone]
+                  : markUsed(vendor) == null
+                    ? STUB_DIM
+                    : marks.warn
+                      ? STUB_RED
+                      : STUB_INK,
+                ...(vendor.desk && /\p{Script=Han}/u.test(label)
+                  ? { font: `600 ${8.5 * unit}px/1 ${PAPER_UI}` }
+                  : null),
+              }}
+            >
+              {label}
+            </span>
+          </ReviewStamp>
         ) : (
           <span
             style={{
