@@ -1,6 +1,7 @@
 /** How long a peek stays before it grows into the whole board, once shown
- * (owner, 2026-11-06: 「停久看全」). */
-export const PEEK_EXPAND_AFTER_MS = 800;
+ * (owner, 2026-11-06: 「停久看全」; 0.8 s left too little time to read the
+ * peek, so 2 s). */
+export const PEEK_EXPAND_AFTER_MS = 2000;
 
 /** What is left of the wait before the peek on a mark grows into the board.
  * `since` is when the pointer came to this mark: a peek shows after the
