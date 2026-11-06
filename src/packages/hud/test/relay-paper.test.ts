@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { airmailStripes, paperOf, relayPaperOf } from "../src/paper.ts";
+import {
+  airmailSides,
+  airmailStripes,
+  paperOf,
+  perforatedSide,
+  relayPaperOf,
+} from "../src/paper.ts";
 
 test("a handoff is printed on the same old letter paper in either appearance", () => {
   for (const light of [true, false]) {
@@ -23,4 +29,23 @@ test("airmail stripes are toned down to sit with the receipt ink", () => {
   const stripes = airmailStripes(6);
   assert.match(stripes, /#b0574b/);
   assert.match(stripes, /#46679f/);
+});
+
+test("the airmail stripes never fall on the hole side, docked to any edge", () => {
+  for (const edge of ["left", "right", "top", "bottom"] as const) {
+    for (const open of [true, false]) {
+      const sides = airmailSides(edge, open);
+      assert.equal(sides.length, 1, `${edge} ${open}`);
+      assert.notEqual(sides[0], perforatedSide(edge), `${edge} ${open}`);
+    }
+  }
+  // The open card keeps its top band, unless docked to the bottom edge,
+  // where the holes take the top.
+  assert.deepEqual(airmailSides("right", true), ["top"]);
+  assert.deepEqual(airmailSides("left", true), ["top"]);
+  assert.deepEqual(airmailSides("top", true), ["top"]);
+  assert.deepEqual(airmailSides("bottom", true), ["bottom"]);
+  // The closed tag along the side facing away from the holes.
+  assert.deepEqual(airmailSides("right", false), ["right"]);
+  assert.deepEqual(airmailSides("bottom", false), ["bottom"]);
 });

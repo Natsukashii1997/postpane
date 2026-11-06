@@ -28,6 +28,7 @@ import {
   PaperContext,
   paperFace,
   perforatedSide,
+  airmailSides,
   perforation,
   type Paper,
 } from "../paper";
@@ -312,8 +313,7 @@ export function HUDExpandedSurface({
             {paper?.airmail && (
               <AirmailEdges
                 holes={perforatedSide(edge)}
-                // The card along its top; its tag along the side away from the holes.
-                sides={open ? ["top"] : [opposite(perforatedSide(edge))]}
+                sides={airmailSides(edge, open)}
                 width={open ? 6 : 4}
                 inset={paperInset}
               />
@@ -552,14 +552,6 @@ export function HUDExpandedSurface({
 }
 
 type Side = "left" | "right" | "top" | "bottom";
-const opposite = (side: Side): Side =>
-  side === "left"
-    ? "right"
-    : side === "right"
-      ? "left"
-      : side === "top"
-        ? "bottom"
-        : "top";
 
 /** A handoff's airmail edge (owner, 2026-11-06): red and blue stripes along
  * `sides` of the paper, never its hole side. */
