@@ -17,6 +17,15 @@ import {
   type BotSign,
 } from "./bot-state.ts";
 import { BotMoves, easeInOut, easeOut, easeOutBack } from "./bot-moves.ts";
+import {
+  CLOUD_ACTS,
+  cloudSky,
+  type CloudActKind,
+  type CloudDrop,
+  type CloudPuff,
+  type CloudShape,
+  type CloudSky,
+} from "./bot-cloud.ts";
 export interface BotFace {
   open: number;
   look: number;
@@ -131,7 +140,8 @@ type ActKind =
   | "turn"
   | "wave"
   | "scuttle"
-  | "hop";
+  | "hop"
+  | CloudActKind;
 interface Act {
   kind: ActKind;
   start: number;
@@ -146,6 +156,7 @@ export interface MotionSpec {
   limbs?: { pixel: number } | null;
   crossesEyes?: boolean;
   petals?: boolean;
+  cloud?: boolean;
   avatar?: unknown;
   keeps?: unknown;
   decor?: readonly { kind: string; fins?: readonly { hand: number }[] }[];
@@ -188,6 +199,13 @@ export class BotMotion {
   petals = false;
   /** Petal spread for the outline: 1 as drawn, 0 closed round, above 1 flared. */
   petal = 1;
+  /** Cloud bots: their edge rolls, they go grey, puff and rain. */
+  cloud = false;
+  shape: CloudShape | null = null;
+  gray = 0;
+  puffs: CloudPuff[] = [];
+  drops: CloudDrop[] = [];
+  bolt = 0;
   dim = 0;
   ring: number | null = null;
   avatar = false;
@@ -240,6 +258,10 @@ export class BotMotion {
   private petalGoal = 1;
   private petalLive = false;
   private dimGoal = 0;
+  private grayGoal = 0;
+  private fade = 1;
+  private sky: CloudSky | null = null;
+  private weather: { kind: BotEvent; start: number } | null = null;
   private hoverAt: number | null = null;
   private faded = 1;
   private settled = false;
@@ -254,6 +276,7 @@ export class BotMotion {
     this.avatar = Boolean(spec.avatar);
     this.crossesEyes = Boolean(spec.crossesEyes) && !this.avatar;
     this.petals = Boolean(spec.petals);
+    this.cloud = Boolean(spec.cloud);
     this.pulses = Boolean(spec.keeps);
     this.finned = Boolean(
       spec.decor?.some(
@@ -385,6 +408,7 @@ export class BotMotion {
       (this.morph > 0.9 || !hasFace)
     ) {
       this.event = { kind: this.pending.kind, start: now };
+      if (this.cloud) this.weather = { ...this.event };
       this.joltFrom = this.turn;
       this.pending = null;
       this.act = null;
@@ -406,7 +430,7 @@ export class BotMotion {
     if (
       this.greeting !== null &&
       now - this.greeting >=
-        (this.finned
+        (this.finned || this.cloud
           ? Math.max(BotMoves.hopSeconds, BotMoves.finWaveSeconds)
           : BotMoves.hopSeconds)
     )
@@ -466,6 +490,7 @@ export class BotMotion {
         this.pose.x = 0.012 * Math.sin(now * 90) * this.morph;
     } else if (this.morph > 0.5) this.pose.x += 0.025 * this.face.look;
     if (!this.limbed) this.played(now);
+    if (this.cloud) this.drift(age, now, dozing, progress);
     this.limbs =
       this.limbed && arrived ? this.stance(age, now, dozing) : botLimbs();
     this.flap =
@@ -477,6 +502,7 @@ export class BotMotion {
     else this.following = this.blinking = false;
     if (arrived) this.keep(age, now, dt);
     if (this.petals) this.shapePetals(age, now, dt, dozing);
+    if (this.cloud) this.settleSky(dt);
     if (this.avatar) this.actAvatar(age, now, dt, dozing);
     const stills =
       (this.state.holds && isWorking(this.look)) ||
@@ -490,7 +516,8 @@ export class BotMotion {
       !this.act &&
       !this.event &&
       !this.pending &&
-      this.greeting === null;
+      this.greeting === null &&
+      !this.skyMoving;
     const wait = this.nextFrame(now, age, wanted, dozing);
     this.wait = wait === null ? null : wait + now - time;
   }
@@ -561,6 +588,15 @@ export class BotMotion {
           this.look === "thinking" ? BotPace.following : BotPace.lively,
         );
       if (dozing) return every(BotPace.following);
+    }
+    if (this.cloud) {
+      if (this.skyMoving || (this.look === "done" && age < 2.8))
+        return every(BotPace.lively);
+      if (
+        staysInPlace(this.look) &&
+        !(this.state.holds && isWorking(this.look))
+      )
+        return every(dozing ? BotPace.calm : BotPace.following);
     }
     let pace: number | null = this.following
         ? BotPace.following
@@ -773,6 +809,82 @@ export class BotMotion {
         ? (Math.max(0, age) % 6) / 6
         : null;
   }
+  private get skyMoving() {
+    return (
+      this.cloud &&
+      (Boolean(this.sky?.live) ||
+        Math.abs(this.gray - this.grayGoal) > 0.01 ||
+        (this.shape !== null &&
+          this.sky !== null &&
+          (["tower", "tail", "morph"] as const).some(
+            (key) => this.shape![key] !== this.sky!.shape[key],
+          )) ||
+        Math.abs(this.fade - (this.sky?.opacity ?? 1)) > 0.01)
+    );
+  }
+  /** Cloud bots float, roll their edge, puff, rain and go grey with the work. */
+  private drift(age: number, now: number, dozing: boolean, progress: number) {
+    if (this.weather && now - this.weather.start > 2.5) this.weather = null;
+    const moving = isAttention(this.look) && this.moving(age),
+      sky = cloudSky({
+        look: this.look,
+        age,
+        now,
+        beats: now - this.beatsFrom,
+        holds: this.state.holds,
+        hovered: this.state.hovered,
+        badge: this.state.badge,
+        card: this.state.card,
+        dozing,
+        waiting: !this.turnsToCard && age < BotMoves.fullWait,
+        move: moving ? age - (BotMoves.move(age).start ?? age) : null,
+        weather: this.weather
+          ? { kind: this.weather.kind, time: now - this.weather.start }
+          : null,
+        greeting: this.greeting === null ? null : now - this.greeting,
+        act: this.act
+          ? { kind: this.act.kind, progress, side: this.act.side }
+          : null,
+      }),
+      m = this.morph;
+    this.sky = sky;
+    this.pose.x += sky.x * m;
+    this.pose.y += sky.y * m;
+    this.pose.rotation += sky.rotation * m;
+    this.pose.scaleX *= 1 + (sky.scaleX - 1) * m;
+    this.pose.scaleY *= 1 + (sky.scaleY - 1) * m;
+    this.ring =
+      this.look === "tool-long-command" && !this.state.holds
+        ? (Math.max(0, age) % 6) / 6
+        : null;
+  }
+  private settleSky(dt: number) {
+    const sky = this.sky;
+    if (!sky) return;
+    const goal = sky.shape,
+      ease = 1 - Math.exp(-dt * 12),
+      shape = this.shape ?? { ...goal };
+    for (const key of ["tower", "tail", "morph"] as const) {
+      shape[key] += (goal[key] - shape[key]) * ease;
+      if (Math.abs(goal[key] - shape[key]) < 0.004) shape[key] = goal[key];
+    }
+    shape.billow = goal.billow;
+    shape.phase = goal.phase;
+    shape.morphPhase = goal.morphPhase;
+    shape.tailAngle = goal.tailAngle;
+    this.shape = shape;
+    this.puffs = sky.puffs;
+    this.drops = sky.drops;
+    this.bolt = sky.bolt;
+    this.grayGoal = sky.gray;
+    this.gray +=
+      (sky.gray - this.gray) *
+      (1 - Math.exp(-dt * (sky.gray > this.gray ? 14 : 4)));
+    if (Math.abs(sky.gray - this.gray) < 0.005) this.gray = sky.gray;
+    this.fade += (sky.opacity - this.fade) * (1 - Math.exp(-dt * 3));
+    if (Math.abs(sky.opacity - this.fade) < 0.005) this.fade = sky.opacity;
+    this.opacity *= 1 + (this.fade - 1) * this.morph;
+  }
   private get fadeGoal() {
     return this.state.badge === "limited" || this.event?.kind === "limit-hit"
       ? 0.45
@@ -951,11 +1063,11 @@ export class BotMotion {
       if (!this.turnsToCard) {
         const start = BotMoves.move(age).start;
         if (!this.limbed) {
-          if (this.look === "permission")
+          if (this.look === "permission" && !this.cloud)
             pose.rotation = start === null ? 0 : BotMoves.knock(age - start);
-          if (this.look === "question")
+          if (this.look === "question" && !this.cloud)
             pose.rotation = BotMoves.questionTilt(age);
-          if (this.look === "plan")
+          if (this.look === "plan" && !this.cloud)
             pose.y += start === null ? 0 : BotMoves.nod(age - start);
         }
       }
@@ -987,7 +1099,7 @@ export class BotMotion {
         pose.scaleX = 1 + 0.03 * Math.sin(2 * breath);
         pose.scaleY = 1 - 0.03 * Math.sin(2 * breath);
       }
-      if (this.look === "thinking" && !this.limbed)
+      if (this.look === "thinking" && !this.limbed && !this.cloud)
         pose.rotation =
           BotMoves.ponderTilt *
           Math.max(-1, Math.min(1, this.face.look / BotMoves.ponderGaze[0]));
@@ -1084,7 +1196,7 @@ export class BotMotion {
       target.lookY = BotMoves.ponderGaze[1];
       every = [2.2, 4.5];
     } else if (
-      this.petals &&
+      (this.petals || this.cloud) &&
       (this.look.startsWith("tool-") || this.look === "compacting") &&
       !this.state.hovered &&
       !this.state.holds
@@ -1135,6 +1247,12 @@ export class BotMotion {
       target.open = 0.72;
     if (this.avatar && this.state.badge === "limited" && !this.event)
       target.open = 0.45;
+    if (this.cloud && this.sky && !this.event) {
+      if (this.sky.look !== null) target.look = this.sky.look;
+      if (this.sky.lookY !== null) target.lookY = this.sky.lookY;
+      if (this.sky.open !== null)
+        target.open = Math.min(target.open, this.sky.open);
+    }
     if (this.state.holds) every = null;
     if (this.pending?.kind === "start" && !this.avatar) target.open = 0;
     if (this.event) {
@@ -1363,6 +1481,17 @@ export class BotMotion {
       ["wiggle", 2],
     ];
     if (this.spin !== 0) pool.push(["turn", 3]);
+    if (this.cloud)
+      pool = [
+        ...pool.filter(
+          ([kind]) =>
+            kind !== "tilt" && kind !== "stretch" && kind !== "wiggle",
+        ),
+        ["gust", 3],
+        ["swell", 2],
+        ["bud", 3],
+        ["drift", 2],
+      ];
     if (this.limbed) {
       pool = pool.filter(([kind]) => kind !== "tilt" && kind !== "wiggle");
       if (this.state.hovered)
@@ -1404,6 +1533,7 @@ export class BotMotion {
         wave: 1.4,
         scuttle: 1.1,
         hop: 0.8,
+        ...CLOUD_ACTS,
       },
       length =
         kind === "glance" ? 1.1 + this.random.unit() * 0.7 : lengths[kind],

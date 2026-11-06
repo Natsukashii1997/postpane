@@ -75,6 +75,8 @@ export interface BotSpec {
   stays?: boolean;
   /** Petals open, close and turn with the work. */
   petals?: boolean;
+  /** Floats, rolls its edge, puffs, rains and greys with the work, never turning. */
+  cloud?: boolean;
   /**
    * Acts as its own artwork instead of a drawn bot: the portrait tilts, nods
    * and closes its eyes. Eyes are ellipses [x, y, rx, ry] in artwork shares.
@@ -148,6 +150,7 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
       shape: { kind: "outline", keep: 1, smooth: 3 },
       crossesEyes: true,
       stays: true,
+      cloud: true,
       unpainted: [
         [0.22, 0.31, 0.42, 0.7],
         [0.47, 0.58, 0.79, 0.7],

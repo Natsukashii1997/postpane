@@ -11,6 +11,8 @@ interface Slot {
   flap: string;
   petal: number;
   dim: number;
+  gray: number;
+  cloud: string;
   bytes: ImageData | null;
 }
 /** Same 36-slot, second-identical-frame bitmap cache as BotStill.swift. */
@@ -26,6 +28,8 @@ export class BotStill {
     private context: CanvasRenderingContext2D,
     petal = 1,
     dim = 0,
+    gray = 0,
+    cloud = "",
   ) {
     const t = context.getTransform();
     this.key = {
@@ -39,6 +43,8 @@ export class BotStill {
       flap: `${flap.left},${flap.right}`,
       petal,
       dim,
+      gray,
+      cloud,
     };
   }
   private slot() {
@@ -63,7 +69,9 @@ export class BotStill {
       slot.helper === k.helper &&
       slot.flap === k.flap &&
       slot.petal === k.petal &&
-      slot.dim === k.dim
+      slot.dim === k.dim &&
+      slot.gray === k.gray &&
+      slot.cloud === k.cloud
     );
   }
   restore() {

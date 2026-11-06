@@ -15,6 +15,7 @@ import { finPath, finSilhouette } from "./bot-fins";
 import { paintSign, signBox } from "./bot-signs";
 import { layHairline } from "./bot-hairline";
 import { BotStill } from "./bot-still";
+import { cloudShapeKey, type CloudShape } from "./bot-cloud";
 import { borrowCanvas, giveBack, reuseCanvas } from "./scratch";
 const margin = 0.3,
   ink = "#0d0d0f",
@@ -87,6 +88,11 @@ export function botRenderLook(motion: BotMotion) {
     s(motion.kept.scale, 60),
     s(motion.petal, 60),
     s(motion.dim, 20),
+    s(motion.gray, 40),
+    cloudShapeKey(motion.shape),
+    motion.puffs,
+    motion.drops.map((d) => [s(d.x, 200), s(d.y, 200), s(d.alpha, 20)]),
+    motion.bolt,
     motion.ring === null ? -1 : s(motion.ring, 120),
     motion.prop,
     motion.prop ? s(motion.propAge, 24) : 0,
@@ -466,6 +472,8 @@ function stillPart(
   flap: BotFlap = { left: 0, right: 0 },
   petal = 1,
   dim = 0,
+  gray = 0,
+  cloud: CloudShape | null = null,
 ) {
   const s = form.spec,
     [cx, cy] = s.center,
@@ -476,7 +484,7 @@ function stillPart(
     context.drawImage(form.artwork, 0, 0, 1, 1);
   }
   context.translate(0, (s.settle ?? 0) * m.eased);
-  const path = formOutline(form, m.eased, turn, petal),
+  const path = formOutline(form, m.eased, turn, petal, cloud),
     ringShare = s.ring ? Math.max(0, Math.min(1, (m.share - 0.5) / 0.5)) : 0;
   if (s.ring && ringShare > 0) {
     context.globalAlpha = ringShare;
@@ -549,6 +557,7 @@ function stillPart(
     context.fillStyle = `rgba(0, 0, 0, ${0.38 * dim})`;
     context.fillRect(-0.3, -0.3, 1.6, 1.6);
   }
+  if (gray > 0) overcast(context, gray);
   context.restore();
   if (s.ring && ringShare > 0) {
     context.save();
@@ -611,6 +620,84 @@ function drawHelper(
   }
   context.restore();
 }
+/** A storm cloud: the paint loses its colour and darkens a little. */
+function overcast(context: CanvasRenderingContext2D, gray: number) {
+  context.save();
+  context.globalCompositeOperation = "saturation";
+  context.fillStyle = `rgba(128, 128, 128, ${Math.min(1, gray)})`;
+  context.fillRect(-0.3, -0.3, 1.6, 1.6);
+  context.globalCompositeOperation = "source-over";
+  context.fillStyle = `rgba(30, 32, 44, ${0.3 * gray})`;
+  context.fillRect(-0.3, -0.3, 1.6, 1.6);
+  context.restore();
+}
+/** Rain, lightning and small puffs around a cloud bot, puffs in its own paint. */
+function weather(
+  context: CanvasRenderingContext2D,
+  form: BotForm,
+  motion: BotMotion,
+  strength: number,
+) {
+  if (motion.drops.length) {
+    context.save();
+    context.strokeStyle = form.light ? "#4f5fe8" : "#9aa8ff";
+    context.lineWidth = 0.03;
+    context.lineCap = "round";
+    for (const drop of motion.drops) {
+      context.globalAlpha = drop.alpha * strength;
+      context.beginPath();
+      context.moveTo(drop.x, drop.y);
+      context.lineTo(drop.x - 0.012, drop.y + drop.length);
+      context.stroke();
+    }
+    context.restore();
+  }
+  if (motion.bolt > 0) {
+    context.save();
+    context.globalAlpha = motion.bolt * strength;
+    context.fillStyle = "#ffcc33";
+    context.beginPath();
+    for (const [x, y] of [
+      [0.53, 0.74],
+      [0.44, 0.9],
+      [0.5, 0.9],
+      [0.45, 1.06],
+      [0.6, 0.86],
+      [0.53, 0.86],
+      [0.58, 0.74],
+    ])
+      context.lineTo(x, y);
+    context.closePath();
+    context.fill();
+    context.restore();
+  }
+  for (const puff of motion.puffs) {
+    const p = new Path2D();
+    if (puff.mini)
+      for (const [dx, dy, k] of [
+        [-0.75, 0.25, 0.62],
+        [0, -0.1, 0.85],
+        [0.75, 0.25, 0.62],
+        [0, 0.35, 0.6],
+      ]) {
+        p.moveTo(puff.x + dx * puff.r + k * puff.r, puff.y + dy * puff.r);
+        p.arc(
+          puff.x + dx * puff.r,
+          puff.y + dy * puff.r,
+          k * puff.r,
+          0,
+          2 * Math.PI,
+        );
+      }
+    else p.arc(puff.x, puff.y, puff.r, 0, 2 * Math.PI);
+    context.save();
+    context.globalAlpha = puff.alpha * strength;
+    context.clip(p);
+    fillPaint(context, form, form.spec.paint);
+    if (motion.gray > 0) overcast(context, motion.gray);
+    context.restore();
+  }
+}
 /** A ring around the body that fills clockwise from the top, in the body's own paint. */
 function progressRing(
   context: CanvasRenderingContext2D,
@@ -663,6 +750,8 @@ function drawBody(
           context,
           motion.petal,
           motion.dim,
+          motion.gray,
+          cloudShapeKey(motion.shape),
         )
       : null;
   if (!still?.restore()) {
@@ -677,11 +766,15 @@ function drawBody(
       motion.flap,
       motion.petal,
       motion.dim,
+      motion.gray,
+      motion.shape,
     );
     context.restore();
     still?.keep();
   }
-  if (motion.ring !== null && m.dressed > 0)
+  if (s.cloud) {
+    if (m.dressed > 0) weather(context, form, motion, m.dressed);
+  } else if (motion.ring !== null && m.dressed > 0)
     progressRing(context, form, motion.ring, m.dressed);
   context.translate(0, (s.settle ?? 0) * m.eased);
   if (s.keeps) {
@@ -713,7 +806,7 @@ function drawBody(
     wear(
       context,
       s,
-      formOutline(form, m.eased, motion.turn, motion.petal),
+      formOutline(form, m.eased, motion.turn, motion.petal, motion.shape),
       m.dressed,
     );
   for (const item of decor.slice(settled))

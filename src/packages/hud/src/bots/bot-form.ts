@@ -1,4 +1,5 @@
 import { botSpecs, type BotSpec, type Point, type Box } from "./bot-spec";
+import { cloudRadius, cloudShapeKey, type CloudShape } from "./bot-cloud";
 /** BotForm.swift: 360 radial samples and original 60px paint-field spread. */
 function rounded(points: Point[], radius: number): Path2D {
   const path = new Path2D(),
@@ -314,17 +315,33 @@ export function makeForm(
 }
 const outlines = new WeakMap<
   BotForm,
-  { eased: number; turn: number; petal: number; path: Path2D }
+  {
+    eased: number;
+    turn: number;
+    petal: number;
+    cloud: string;
+    path: Path2D;
+  }
 >();
-/** `petal` scales how far the outline strays from a circle: 0 closes it, above 1 flares it. */
+/**
+ * `petal` scales how far the outline strays from a circle: 0 closes it, above
+ * 1 flares it. A cloud shape bends the outline without turning the body.
+ */
 export function formOutline(
   form: BotForm,
   eased: number,
   turn: number,
   petal = 1,
+  cloud: CloudShape | null = null,
 ) {
-  const cached = outlines.get(form);
-  if (cached?.eased === eased && cached.turn === turn && cached.petal === petal)
+  const key = cloudShapeKey(cloud),
+    cached = outlines.get(form);
+  if (
+    cached?.eased === eased &&
+    cached.turn === turn &&
+    cached.petal === petal &&
+    cached.cloud === key
+  )
     return cached.path;
   const path = new Path2D(),
     blend = eased,
@@ -336,13 +353,15 @@ export function formOutline(
       part = sample - low;
     const shaped =
         form.body[low] + (form.body[(low + 1) % 360] - form.body[low]) * part,
-      body = round + (shaped - round) * petal,
-      r = form.logo[i] + (body - form.logo[i]) * blend,
-      a = (i * Math.PI) / 180;
+      a = (i * Math.PI) / 180,
+      body =
+        (round + (shaped - round) * petal) *
+        (cloud ? cloudRadius(cloud, a) : 1),
+      r = form.logo[i] + (body - form.logo[i]) * blend;
     if (!i) path.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
     else path.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
   }
   path.closePath();
-  outlines.set(form, { eased, turn, petal, path });
+  outlines.set(form, { eased, turn, petal, cloud: key, path });
   return path;
 }
