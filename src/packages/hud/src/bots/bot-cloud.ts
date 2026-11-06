@@ -19,6 +19,16 @@ export interface CloudDrop {
   length: number;
   alpha: number;
 }
+/**
+ * A snot bubble on a sleeping cloud, in mark shares. `pop` is 0 while it is
+ * whole and then runs 0–1 as it bursts into a ring of spray.
+ */
+export interface CloudSnot {
+  x: number;
+  y: number;
+  r: number;
+  pop: number;
+}
 /** How the cloud's own outline bends; the body never turns. */
 export interface CloudShape {
   /** Five swells rolling round the edge, `phase` degrees on. */
@@ -117,6 +127,9 @@ export interface CloudSky {
   opacity: number;
   puffs: CloudPuff[];
   drops: CloudDrop[];
+  snot: CloudSnot | null;
+  /** Closed eyes drawn as soft curves, for sleep. */
+  lids: boolean;
   /** A lightning flash under the body, 0–1. */
   bolt: number;
   /** Something moves faster than a slow float, so frames come quickly. */
@@ -190,6 +203,8 @@ export function cloudSky(cue: CloudCue): CloudSky {
     opacity: 1,
     puffs: [],
     drops: [],
+    snot: null,
+    lids: false,
     bolt: 0,
     live: false,
     look: null,
@@ -202,29 +217,33 @@ export function cloudSky(cue: CloudCue): CloudSky {
   };
   const working = look.startsWith("tool-") || look === "thinking";
   if (cue.dozing) {
-    // Asleep: the cloud comes apart into three small clouds drifting low and pale.
+    // Asleep: full size, breathing deep in place; a snot bubble swells with
+    // each breath in, shrinks with each breath out and pops every third.
     shape.billow = 0;
-    sky.scaleX = sky.scaleY = 0.8 + 0.02 * Math.sin((TAU * now) / 4);
-    sky.y = 0.07;
-    sky.opacity = 0.6;
-    const drift = Math.sin((TAU * now) / 10);
-    sky.x = 0.02 * drift;
-    sky.puffs.push(
-      {
-        x: -0.06 - 0.03 * drift,
-        y: 0.74 + 0.015 * Math.sin((TAU * now) / 4.6),
-        r: 0.12,
-        alpha: 1,
-        mini: true,
-      },
-      {
-        x: 1.06 + 0.03 * drift,
-        y: 0.68 + 0.015 * Math.sin((TAU * now) / 5.2 + 1),
-        r: 0.1,
-        alpha: 1,
-        mini: true,
-      },
-    );
+    const breath = 3.2,
+      phase = wrap(now, breath) / breath,
+      inhale = (1 - Math.cos(TAU * phase)) / 2,
+      third = Math.floor(now / breath) % 3 === 2 && phase > 0.5,
+      after = (phase - 0.5) * breath,
+      // Just right of and below the right eye.
+      x = CX + Math.sin(0.34) * R * 0.76 + 0.03,
+      y = 0.6;
+    sky.scaleX = 1 + 0.012 * inhale;
+    sky.scaleY = 1 + 0.035 * inhale;
+    sky.y = -0.012 * inhale;
+    sky.lids = true;
+    if (!third) {
+      const r = 0.025 + 0.14 * inhale;
+      sky.snot = { x: x + r * 0.8, y: y + r * 0.45, r, pop: 0 };
+    } else if (after < 0.35) {
+      sky.snot = {
+        x: x + 0.13,
+        y: y + 0.07,
+        r: 0.06,
+        pop: Math.max(0.01, after / 0.35),
+      };
+      sky.live = true;
+    }
   } else if (cue.holds && (working || look === "plain")) {
     // Stuck or retrying: overcast and still, sat a little low.
     sky.gray = 0.6;
@@ -512,6 +531,13 @@ export function cloudSky(cue: CloudCue): CloudSky {
       alpha: round(puff.alpha),
     }));
   sky.drops = sky.drops.filter((drop) => drop.alpha > 0.02);
+  if (sky.snot)
+    sky.snot = {
+      x: round(sky.snot.x),
+      y: round(sky.snot.y),
+      r: round(sky.snot.r),
+      pop: round(sky.snot.pop),
+    };
   if (sky.puffs.length || sky.drops.length || sky.bolt) sky.live = true;
   return sky;
 }

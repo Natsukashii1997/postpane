@@ -83,13 +83,30 @@ test("an idle cloud wanders across and reshapes as it goes", () => {
   assert.notEqual(idle.wait, null);
 });
 
-test("a dozing cloud splits into three pale little clouds", () => {
-  const motion = run(cloud, { look: "asleep" }, 4);
-  assert.equal(motion.puffs.filter((puff) => puff.mini).length, 2);
-  assert.ok(motion.pose.scaleX < 0.85, `scale ${motion.pose.scaleX}`);
-  assert.ok(motion.opacity < 0.7, `opacity ${motion.opacity}`);
-  assert.equal(motion.sign, "z");
-  assert.equal(motion.face.open < 0.05, true);
+test("a dozing cloud breathes full size with a snot bubble and no Z", () => {
+  const sizes: number[] = [],
+    radii: number[] = [];
+  let popped = 0;
+  const motion = run(cloud, { look: "asleep" }, 10, 10, (m) => {
+    sizes.push(m.pose.scaleX, m.pose.scaleY);
+    if (m.snot && m.snot.pop === 0) radii.push(m.snot.r);
+    if (m.snot && m.snot.pop > 0) popped++;
+  });
+  assert.ok(Math.min(...sizes.slice(48)) >= 1, `scale ${Math.min(...sizes)}`);
+  assert.ok(motion.opacity > 0.99, `opacity ${motion.opacity}`);
+  assert.equal(motion.puffs.length, 0);
+  assert.equal(motion.sign, null);
+  assert.ok(motion.face.open < 0.05);
+  assert.equal(motion.lids, true);
+  assert.ok(Math.max(...radii) > 0.12, `largest ${Math.max(...radii)}`);
+  assert.ok(Math.min(...radii) < 0.04, `smallest ${Math.min(...radii)}`);
+  assert.ok(popped > 0, "the bubble pops every third breath");
+});
+
+test("a hovered sleeper wakes: no bubble, open eyes", () => {
+  const motion = run(cloud, { look: "asleep", hovered: true }, 3);
+  assert.equal(motion.snot, null);
+  assert.equal(motion.lids, false);
 });
 
 test("thinking heaps the top up instead of tilting", () => {
@@ -163,5 +180,7 @@ test("ChatGPT's flower keeps its petals and none of the weather", () => {
     assert.equal(motion.puffs.length, 0);
     assert.equal(motion.drops.length, 0);
     assert.equal(motion.gray, 0);
+    assert.equal(motion.snot, null);
+    assert.equal(motion.lids, false);
   }
 });

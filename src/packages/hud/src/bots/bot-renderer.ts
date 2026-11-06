@@ -15,7 +15,7 @@ import { finPath, finSilhouette } from "./bot-fins";
 import { paintSign, signBox } from "./bot-signs";
 import { layHairline } from "./bot-hairline";
 import { BotStill } from "./bot-still";
-import { cloudShapeKey, type CloudShape } from "./bot-cloud";
+import { cloudShapeKey, type CloudShape, type CloudSnot } from "./bot-cloud";
 import { borrowCanvas, giveBack, reuseCanvas } from "./scratch";
 const margin = 0.3,
   ink = "#0d0d0f",
@@ -93,6 +93,8 @@ export function botRenderLook(motion: BotMotion) {
     motion.puffs,
     motion.drops.map((d) => [s(d.x, 200), s(d.y, 200), s(d.alpha, 20)]),
     motion.bolt,
+    motion.snot,
+    motion.lids,
     motion.ring === null ? -1 : s(motion.ring, 120),
     motion.prop,
     motion.prop ? s(motion.propAge, 24) : 0,
@@ -331,7 +333,10 @@ function eyes(
   yaw: number,
   pitch: number,
   awake: number,
+  lids = false,
 ) {
+  const unit = context.getTransform(),
+    hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b));
   const r = s.radius,
     size = 0.78,
     spread = s.eye.spread,
@@ -368,6 +373,23 @@ function eyes(
         s.eye.height * r * big * tall * Math.max(0.08, face.open) * awake;
     context.save();
     context.translate(x, y);
+    if (lids && face.open < 0.3) {
+      // Asleep: a soft downward curve a little wider than the open eye, so
+      // the face stays as full as when awake.
+      const eye = s.eye.width * r * size,
+        w = 0.92 * eye,
+        d = 0.7 * eye;
+      context.globalAlpha = awake;
+      context.strokeStyle = paint;
+      context.lineWidth = Math.max(0.5 * eye, 1.25 * hair);
+      context.lineCap = "round";
+      context.beginPath();
+      context.moveTo(-w, -d * 0.35);
+      context.quadraticCurveTo(0, d * 1.25, w, -d * 0.35);
+      context.stroke();
+      context.restore();
+      continue;
+    }
     if (face.happy < 0.98 && face.crossed < 0.98) {
       context.globalAlpha = (1 - face.happy) * (1 - face.crossed);
       context.fillStyle = paint;
@@ -817,8 +839,51 @@ function drawBody(
       item.kind === "blocks" && item.follows ? glance : [0, 0],
       m.dressed,
     );
-  eyes(context, s, face, yaw, pitch, m.dressed);
+  eyes(context, s, face, yaw, pitch, m.dressed, motion.lids);
+  if (motion.snot) snotBubble(context, motion.snot, m.dressed);
 }
+/** A sleeping cloud's snot bubble, pale with a deep outline so it reads on the body and on paper. */
+function snotBubble(
+  context: CanvasRenderingContext2D,
+  snot: CloudSnot,
+  strength: number,
+) {
+  const unit = context.getTransform(),
+    hair = 1 / Math.max(1, Math.hypot(unit.a, unit.b)),
+    stroke = Math.max(0.022, 1.25 * hair);
+  context.save();
+  context.globalAlpha = strength;
+  context.strokeStyle = SNOT_INK;
+  context.lineWidth = stroke;
+  context.lineCap = "round";
+  if (snot.pop === 0) {
+    context.fillStyle = "rgba(236, 242, 255, 0.78)";
+    context.beginPath();
+    context.arc(snot.x, snot.y, snot.r, 0, 2 * Math.PI);
+    context.fill();
+    context.stroke();
+    if (snot.r > 0.06) {
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = Math.max(0.018, hair);
+      context.beginPath();
+      context.arc(snot.x, snot.y, snot.r * 0.6, -2.7, -1.75);
+      context.stroke();
+    }
+  } else {
+    context.globalAlpha = strength * (1 - snot.pop);
+    for (let i = 0; i < 6; i++) {
+      const a = (2 * Math.PI * i) / 6 + 0.3,
+        from = snot.r + 0.08 * snot.pop,
+        to = from + 0.05;
+      context.beginPath();
+      context.moveTo(snot.x + Math.cos(a) * from, snot.y + Math.sin(a) * from);
+      context.lineTo(snot.x + Math.cos(a) * to, snot.y + Math.sin(a) * to);
+      context.stroke();
+    }
+  }
+  context.restore();
+}
+const SNOT_INK = "#2e31b8";
 const STICKER_INK = "#ffffff",
   AVATAR_BLUE = "#3370ff",
   AVATAR_GREEN = "#19a974",

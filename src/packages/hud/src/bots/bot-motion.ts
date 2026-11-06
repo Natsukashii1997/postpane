@@ -25,6 +25,7 @@ import {
   type CloudPuff,
   type CloudShape,
   type CloudSky,
+  type CloudSnot,
 } from "./bot-cloud.ts";
 export interface BotFace {
   open: number;
@@ -205,6 +206,9 @@ export class BotMotion {
   gray = 0;
   puffs: CloudPuff[] = [];
   drops: CloudDrop[] = [];
+  snot: CloudSnot | null = null;
+  /** Closed eyes drawn as soft curves, while a cloud sleeps. */
+  lids = false;
   bolt = 0;
   dim = 0;
   ring: number | null = null;
@@ -596,7 +600,7 @@ export class BotMotion {
         staysInPlace(this.look) &&
         !(this.state.holds && isWorking(this.look))
       )
-        return every(dozing ? BotPace.calm : BotPace.following);
+        return every(BotPace.following);
     }
     let pace: number | null = this.following
         ? BotPace.following
@@ -875,6 +879,8 @@ export class BotMotion {
     this.shape = shape;
     this.puffs = sky.puffs;
     this.drops = sky.drops;
+    this.snot = sky.snot;
+    this.lids = sky.lids;
     this.bolt = sky.bolt;
     this.grayGoal = sky.gray;
     this.gray +=
@@ -1341,7 +1347,7 @@ export class BotMotion {
       !this.avatar
     )
       sign = shownSign(sign, "ellipsis");
-    if (this.morph > 0 && dozing) sign = shownSign(sign, "z");
+    if (this.morph > 0 && dozing && !this.cloud) sign = shownSign(sign, "z");
     this.sign = sign;
     this.lit =
       sign === "ellipsis" && !this.state.holds
