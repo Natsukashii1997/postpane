@@ -72,15 +72,16 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：12 个会话的 `pnpm run check` 因 `Code style issues found` 失败；16 个会话事后补跑 `prettier --write`，17 个跑 `cargo fmt --all`。统计里这两条是「不属于任何一步」的头两名。
 - 建议：SKILL.md 第 2 步第一条前加「先 `cargo fmt --all` 与 `pnpm exec prettier --write <改过的前端文件>`，再跑三条」；`steps.json` 的 test 痕迹加 `cargo fmt`、`prettier --write`。
 - 证据：`round-stats.mjs`（2026-11-06 18:48）不属于任何一步：`cargo fmt` 17、`npx` 15；会话记录里 `Code style issues found` 12 个会话。
-- 状态：待批
+- 状态：已采纳（本 PR，#167）
 
 ## E-08 加一步「排障」，把实机诊断手段收拢（2026-11-06）
 
 - 步骤：install
 - 发生了什么：装机后出问题时，各会话各自摸索诊断：`log show --predicate 'process == "PostPane"'` 8 个会话、`sample <pid>` 7、`lsof -iTCP` 10、`curl` 本机端口 8；L-06、L-10 都是靠 `sample` 和标题通道查实的。
-- 建议：第 3 步后加「3a. 实机出问题怎么查」：先 `log show`、再 `sample` 卡住的线程、注入脚本用标题通道；调用全局 `diagnosing-bugs` 的诊断循环，不另写一套。
+- 建议：第 3 步后加「实机出问题怎么查」一小节：先 `log show`、再 `sample` 卡住的线程、注入脚本用标题通道；调用全局 `diagnosing-bugs` 的诊断循环，不另写一套。
 - 证据：`round-stats.mjs`（2026-11-06 18:48）不属于任何一步：`lsof` 10、`log` 8、`curl` 8、`sample` 7；L-06、L-10。
-- 状态：待批
+- 状态：已采纳（本 PR，#167）
+- 批准：常浩 2026-11-06 回复「两条都批」（E-07、E-08 同批）。落地时 E-08 没另开一步，放进第 3 步末尾的小节，相应命令计入 install 痕迹，步骤数不变。
 
 ## E-09 接着做的下一张 issue，可在刚合并的 worktree 上从 main 切新分支，保留构建缓存（2026-11-07）
 
@@ -89,4 +90,3 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：第 1 步加一句：同一会话接着做下一张、上一张已合并且 worktree 干净时，可以在原 worktree 里从最新 main 切新分支，代替新开；合并后照第 5 步清理。并行会话仍然各开各的（G-04）。
 - 证据：PR #164（`f6cd22b`）合并后在同一 worktree 起 PR #168（`b15f3c3`）；CURRENT.md「接力自动往返上线」一节；日志 `evidence/2026-11-06-auto-relay/build.log`。
 - 状态：待批
-

@@ -102,7 +102,9 @@
         "node scripts/check-rules\\.mjs",
         "node --test ",
         "pnpm (run )?typecheck",
-        "tsc --noEmit"
+        "tsc --noEmit",
+        "cargo fmt",
+        "prettier --write"
       ]
     },
     {
@@ -117,7 +119,11 @@
         "osascript[^|;]*PostPane",
         "open (-a )?/Applications/PostPane",
         "codesign -d",
-        "screencapture"
+        "screencapture",
+        "log show[^|;]*PostPane",
+        "\\bsample \\d+ ",
+        "curl [^|;]*127\\.0\\.0\\.1",
+        "lsof [^|;]*(iTCP|-p )"
       ]
     },
     {

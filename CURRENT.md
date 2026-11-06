@@ -4,6 +4,18 @@
 
 
 
+## 驿窗一轮采纳 E-07、E-08：测试前先格式化、实机出问题怎么查（2026-11-06，Claude，常浩回复「两条都批」；已提交，无需发布）
+
+- 时间：开工 `2026-11-06 23:00`（`date '+%F %H:%M'` 记录）。来由：#167，skill 第一次走完「提案 → 批准 → 采纳」。
+- 改了哪些文件：`.agents/skills/postpane-round/SKILL.md`（第 2 步先 `cargo fmt` 与 prettier；第 3 步末尾加「实机出问题怎么查」：`log show`、`sample`、`lsof`、`curl` 本机端口、标题通道，诊断循环调用 `diagnosing-bugs`）；`steps.json`（test 加格式化痕迹，install 加排障痕迹）；`EVOLUTION.md`（E-07、E-08 改为已采纳，记批准原话与落地差异：E-08 放进第 3 步的小节，没另开一步）；`tests/postpane-round.test.mjs` 与夹具（格式化现在算测试，夹具改用 `xcrun` 保留「不属于任何一步」的覆盖）。
+- 测试：`node --test tests/*.test.mjs` 原样结果 `ℹ pass 14` / `ℹ fail 0`。未跑 `pnpm run check` / `pnpm test`：本轮只改 skill 文档、`steps.json` 与 tests 夹具，没碰 `src/` 与任何脚本。
+- 验证：`round-stats.mjs` 在本机真实记录上重跑：`cargo fmt`、prettier、`log`、`sample`、`curl`、`lsof` 都不再出现在「不属于任何一步」里；装机回读 47 个会话、519 次调用。`lsof` 第一版痕迹只认 `-iTCP`，漏了 `-tiTCP`、`-nP -iTCP`、`-p`，改成 `lsof [^|;]*(iTCP|-p )` 后归位。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：E-08 原提案写「加一步」，落地为第 3 步里的小节，理由是排障只在装机后出问题时发生，单列一步会让每轮都多一个空步骤；已写进 E-08。统计里仍有 `pgrep`（12，多是查别的应用）、`npx tsc`（11）、`sqlite3` 查 TCC（6）等，暂不提案。
+- 本轮新坑：无。
+- skill 进化：E-07、E-08 已采纳；本轮无新提案。变基时与 #168 会话新提的 E-09（同一会话接着做下一张，可在刚合并的 worktree 里从 main 切新分支）合并了冲突，E-09 仍待批。
+
 ## 项目内 skill「驿窗一轮」：开工到收尾六步串起来、能自进化（2026-11-06，Claude，常浩问「project-starter、会话复盘、worktree 清理在驿窗是否高频，是就打包成一个 skill，放项目库里，结合驿窗经验、能自进化」，看方案后说「按推荐开工」；已提交，无需发布）
 
 - 时间：开工 `2026-11-06 18:42`（`date '+%F %H:%M'` 记录）。来由：#165。统计 56 个 Claude、2 个 Codex 驿窗会话，三个全局 skill 点名调用 1 / 0 / 0 次，但开工、测试、装机回读、交接、合并清理每轮都在做（46–49 个会话），装机那串命令在 19 个会话里手敲。
