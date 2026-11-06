@@ -34,7 +34,7 @@ const outsidePointer: HUDNativePointer = {
 /** Only outer HUD geometry wakes native reports; animated bot descendants never do. */
 function observeHUDContours(report: () => void) {
   const selector =
-    ".hud-scene, .hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant";
+    ".hud-scene, .hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant, .hud-side-tag";
   let timer: ReturnType<typeof setTimeout> | null = null,
     last = 0;
   const queue = () => {
@@ -577,7 +577,7 @@ export default function NativeHUDSurface({
         if (disposed) return;
         const regions = [
           ...document.querySelectorAll(
-            ".hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant",
+            ".hud-resting-strip, .hud-expanded-surface, .hud-grab-surface, .hud-hover-floor, .hud-app-pendant, .hud-side-tag",
           ),
         ]
           .map((element) => {

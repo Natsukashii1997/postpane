@@ -11,6 +11,14 @@ import { CompletionAlertView } from "./alerts/CompletionAlertView";
 import { QuotaAlertView } from "./alerts/QuotaAlertViews";
 import { queuedQuotas, shownNews } from "./alerts/quota-list";
 import { seenFirst, staysUntilSeen } from "./alerts/reply-stays";
+import {
+  blocksNotice,
+  laneEvents,
+  newsLanes,
+  sideLanes,
+  type LaneCard,
+  type NewsLane,
+} from "./alerts/news-lanes";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
 export { ReminderMark } from "./alerts/ReminderMark";
@@ -28,15 +36,7 @@ export {
 } from "./alerts/PendingEventRows";
 
 /** Presentation only: Core is the sole producer/deduplicator of event facts. */
-export type IslandCard =
-  | { type: "request"; id: string; at: string }
-  | {
-      type: "news";
-      id: string;
-      at: string;
-      event: IslandEvent;
-      inUsagePanel?: boolean;
-    };
+export type IslandCard = LaneCard;
 
 function promoteOldestWaiting(pending: IslandCard[]): IslandCard[] {
   if (pending.length < 2) return pending;
@@ -81,7 +81,7 @@ export function reconcileIslandCards(
     }
   }
   for (const event of visible) {
-    if (next[0]?.type === "request" && event.kind !== "completion") continue;
+    if (blocksNotice(next, requests, event)) continue;
     next.push({
       type: "news",
       id: event.id,
@@ -110,14 +110,17 @@ export function dropIslandCards(
   return next[0]?.id === previous[0]?.id ? next : promoteOldestWaiting(next);
 }
 
-/** The replies in the queue, as they came. */
-export function queuedReplies(queue: IslandCard[]): IslandEvent[] {
-  return queue.flatMap((card) =>
-    card.type === "news" && card.event.kind === "completion"
-      ? [card.event]
-      : [],
-  );
+/** The waiting requests of one agent's lane, oldest first. */
+function laneRequests(
+  lane: NewsLane | undefined,
+  requests: Approval[],
+): Approval[] {
+  return lane
+    ? requests.filter((request) => vendorKey(request.source) === lane.vendor)
+    : [];
 }
+
+export type SideNews = ReturnType<typeof useIslandNews>["sides"][number];
 
 export function useIslandNews(
   snapshot: Snapshot,
@@ -197,6 +200,43 @@ export function useIslandNews(
     const timer = setTimeout(dismiss, 4000);
     return () => clearTimeout(timer);
   }, [current?.id, held]);
+  // Each other agent's tag hangs by its own mark (#162): a notice there folds
+  // away on its own clock, as the first one does; one waiting to be looked at
+  // stays until the pointer brings it to the front.
+  const lanes = newsLanes(queue, requests);
+  const sides = sideLanes(lanes, shown);
+  const sideNews = sides.flatMap(({ lane }) =>
+    lane.front.type === "news" &&
+    (!staysUntilSeen(lane.front.event) || looked.current.has(lane.front.id))
+      ? [lane.front.id]
+      : [],
+  );
+  const sideTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = sideTimers.current;
+    for (const [id, timer] of timers) {
+      if (sideNews.includes(id)) continue;
+      clearTimeout(timer);
+      timers.delete(id);
+    }
+    for (const id of sideNews) {
+      if (timers.has(id)) continue;
+      timers.set(
+        id,
+        setTimeout(() => {
+          timers.delete(id);
+          drop([id]);
+        }, 4000),
+      );
+    }
+  }, [sideNews.join("\0")]);
+  useEffect(() => {
+    const timers = sideTimers.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
   const select = (id: string) =>
     setQueue((previous) => {
       const at = previous.findIndex((card) => card.id === id);
@@ -214,8 +254,24 @@ export function useIslandNews(
         ? requests.find((request) => request.id === current.id)
         : undefined,
     queue,
-    replies: queuedReplies(queue),
-    quotas: queuedQuotas(queue),
+    // The card shows the first agent's things only (#162).
+    laneQueue: lanes[0]?.cards ?? [],
+    requests: laneRequests(lanes[0], requests),
+    replies: laneEvents(lanes[0], "completion"),
+    quotas: queuedQuotas(lanes[0]?.cards ?? []),
+    // The other agents' tags, each by its own mark.
+    sides: sides.map(({ lane, mark }) => ({
+      vendor: lane.vendor,
+      mark,
+      id: lane.front.id,
+      event: lane.front.type === "news" ? lane.front.event : undefined,
+      request:
+        lane.front.type === "request"
+          ? requests.find((request) => request.id === lane.front.id)
+          : undefined,
+      requests: laneRequests(lane, requests),
+      replies: laneEvents(lane, "completion"),
+    })),
     select,
     dismiss,
     drop,
