@@ -18,6 +18,17 @@
 - 本轮新坑：无。
 
 
+## 设置页「侧栏长什么样」预览去掉 DeepSeek（2026-11-06，Claude，常浩说「展示页面把deepseek去掉吧」；PR #147 测试通过，按授权 squash 合并 `c4c6148`；已从该 main 打包安装、回读一致）
+
+- 时间：开工 `2026-11-06 12:27`（本会话建立时间）；本节写于 `2026-11-06 12:46`。来由：2026-11-05 在预览里加过「总把 DeepSeek 当已开启画出来」，常浩现在不要了。issue #146。
+- 改了哪些文件（PR #147）：`src/packages/app/src/settings/SettingsSamples.tsx`（`SmallHUDPreview` 删掉强行开启 DeepSeek 的 `useMemo`，直接用快照算客户端；侧栏本身与 DeepSeek 接入不动）。
+- 测试：`pnpm run test:ts` `ℹ pass 263` / `ℹ fail 0`；app 包 `tsc --noEmit` 退出 0；`prettier --check` 通过。未跑 Rust 与全量 `pnpm test`（只改一个前端文件里的预览）。日志 `~/Library/Application Support/postpane/evidence/2026-11-06-preview-no-deepseek/`（test-ts.log、build.log）。
+- 验证：先用旧启动配置 `settings-browser` 看，那份审查数据 `providers` 为空、DeepSeek 默认开着，不能作证；另建数据目录 `evidence/2026-11-06-preview-no-deepseek/data`（复制本机 `settings.json`，DeepSeek 为关），加启动配置 `settings-real`（`.claude/launch.json`，不进仓库）起设置页：预览只剩 Claude、Codex、Hermes。装机后用电脑操作截已装驿窗的设置窗口：「侧栏长什么样」预览为 Claude、Codex、ChatGPT、Hermes 四格，没有 DeepSeek。
+- 截图：在本会话工具结果里，未落盘。
+- 发布与回读：从 main `c4c6148` 打包，装前 `/Applications` 是 `621500c59f09`（#144 那版），备份 `evidence/2026-11-06-preview-no-deepseek/PostPane-621500c59f09.app`；12:42:54 退出旧应用后 `ditto` 安装并启动，`shasum` 回读 `fe4e72e0ac5e` 与产物一致，签名仍是固定证书（`certificate leaf = H"b773068e…"`）。回滚：退出后 `ditto ~/Library/Application\ Support/postpane/evidence/2026-11-06-preview-no-deepseek/PostPane-621500c59f09.app /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：以后本机开启 DeepSeek，预览会照常显示它（与侧栏一致）。worktree 已删，`cargo clean` 不需要（打包在主目录）。
+- 本轮新坑：无
+
 ## 侧栏 Codex 打盹改成「鼻涕泡」（2026-11-06，Claude，常浩说 Codex 睡眠「整体变小了」「Z 的形式和 gpt 又太接近了，再想三个动作」，看三版后说「用乙 鼻涕泡」；PR #144 本地全量通过，按授权 squash 合并 `061f1e0`；已从该 main 打包安装、回读一致）
 
 - 时间：开工 `2026-11-06 12:02`（本会话建立时间）；本节写于 `2026-11-06 12:30`。来由：#143 的打盹把云朵缩到 0.8、透明度 0.6、下沉 0.07，侧栏里看着整只变小；像素 Z 与 ChatGPT 同款。三版预览 https://claude.ai/artifact/QDFL9AN6cyWjFPLNgMxWQx （甲浮云冒泡 / 乙鼻涕泡 / 丙点头打盹 + 终端光标，真实渲染代码画云朵和 ChatGPT）。
