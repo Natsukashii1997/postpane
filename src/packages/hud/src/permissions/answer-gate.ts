@@ -14,6 +14,10 @@ export async function sendThenForget(
  * clicks: the second click of a double click would answer it unseen (#222). */
 export const SETTLE_MS = 400;
 
+/** How soon after an answer a card counts as the one that took its place;
+ * a card shown later came on its own and takes clicks at once. */
+export const FOLLOWS_MS = 2000;
+
 /** Whether a click on a card shown at `shownAt` is refused at `now`, the last
  * answer having been sent at `answeredAt`. */
 export function refusesClick({
@@ -26,6 +30,9 @@ export function refusesClick({
   now: number;
 }): boolean {
   return (
-    answeredAt !== null && answeredAt <= shownAt && now - shownAt < SETTLE_MS
+    answeredAt !== null &&
+    answeredAt <= shownAt &&
+    shownAt - answeredAt < FOLLOWS_MS &&
+    now - shownAt < SETTLE_MS
   );
 }

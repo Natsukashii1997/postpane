@@ -31,6 +31,11 @@ test("a card no answer came before takes clicks at once", () => {
     refusesClick({ answeredAt: null, shownAt: 1_000, now: 1_010 }),
     false,
   );
+  // A card that came long after the last answer did not take its place.
+  assert.equal(
+    refusesClick({ answeredAt: 1_000, shownAt: 60_000, now: 60_010 }),
+    false,
+  );
   // The answer was given on this very card, after it showed.
   assert.equal(
     refusesClick({ answeredAt: 1_500, shownAt: 1_000, now: 1_510 }),
