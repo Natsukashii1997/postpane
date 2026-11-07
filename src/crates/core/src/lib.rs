@@ -112,6 +112,8 @@ pub struct AgentHudCore {
     projection_sources: u64,
     database: Option<Connection>,
     storage_issue: Option<String>,
+    /// Why settings.json could not be read again, until it reads or is rewritten.
+    settings_issue: Option<String>,
     /// The data version the ledger records (`data_version`).
     data_version: Option<String>,
     /// Why the ledger is being read through, until it has been.
@@ -233,6 +235,7 @@ impl AgentHudCore {
             projection_sources: 0,
             database,
             storage_issue,
+            settings_issue: None,
             data_version: recorded,
             indexing_run,
             listed_once: false,
@@ -448,7 +451,7 @@ impl AgentHudCore {
     }
 
     pub fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
-        self.reload_preferences()?;
+        self.reload_preferences();
         match method {
             "snapshot" => {
                 self.collect();

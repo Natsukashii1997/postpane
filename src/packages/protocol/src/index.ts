@@ -862,6 +862,9 @@ export interface Snapshot {
     status: "connected" | "disconnected" | "loading";
     platform: string;
     message: string | null;
+    /** Why settings.json could not be read again; the settings in use stay
+     * as last read until the next change rewrites the file (#224). */
+    settingsIssue?: string | null;
     platformCapabilities?: PlatformCapabilities;
     clientHooks?: ClientHooksStatus;
     system?: {

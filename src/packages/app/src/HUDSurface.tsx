@@ -16,6 +16,7 @@ import type {
 } from "@agent-hud/hud/model";
 import type { Direction } from "@agent-hud/hud/bots/mark-director";
 import type { Snapshot, NativeMethod } from "./lib/types";
+import { watchFloatNotes } from "./lib/float-notes";
 import type {
   NativeHUDGeometry,
   NativeHUDMonitor,
@@ -374,6 +375,20 @@ export default function NativeHUDSurface({
       invoke<boolean>("toggle_float_notes", { anchor }),
     [],
   );
+  // 随手记's halo follows its window (#224): the host's word on each show and
+  // hide, the 收起 inside the page included, and its answer after a reload.
+  const [floatNotesShown, setFloatNotesShown] = useState(false);
+  useEffect(() => {
+    if (!isTauri()) return;
+    return watchFloatNotes(
+      {
+        ask: () => invoke<boolean>("float_notes_shown"),
+        follow: (heard) =>
+          listen<boolean>("float-notes:shown", ({ payload }) => heard(payload)),
+      },
+      setFloatNotesShown,
+    );
+  }, []);
   // 磁盘瘦身's status file (#155): read every 30 s, and every second for a
   // while after its pendant is clicked or while its panel shows, so the halo
   // follows the panel when it is closed with Esc or a click elsewhere.
@@ -683,6 +698,7 @@ export default function NativeHUDSurface({
       height={geometry?.canvas.height ?? window.innerHeight}
       onConfigure={configure}
       onFloatNotes={floatNotes}
+      floatNotesShown={floatNotesShown}
       diskSlim={diskSlim}
       onDiskSlim={toggleDiskSlim}
       onStats={stats}

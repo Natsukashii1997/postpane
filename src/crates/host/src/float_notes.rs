@@ -5,7 +5,7 @@
 //! capability, and it may only show that page (or the note shown while the
 //! Digital World app is not running).
 use std::{net::TcpStream, time::Duration};
-use tauri::{Manager, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow};
 
 const LABEL: &str = "float-notes";
 const HOST: &str = "127.0.0.1";
@@ -28,6 +28,9 @@ const COLLAPSE: &str = "postpane-notes://collapse";
 const COLLAPSE_SCRIPT: &str = r#"(()=>{const sheet=new CSSStyleSheet();sheet.replaceSync(".fn-standalone-collapsed{visibility:hidden}");document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];let folded=false;new MutationObserver(()=>{const now=!!document.querySelector(".fn-standalone-collapsed");if(now&&!folded)location.href="postpane-notes://collapse";folded=now;}).observe(document,{childList:true,subtree:true});})();"#;
 /// The page's own call for its host showing it again: the panel comes back.
 const RESTORE_SCRIPT: &str = "window.floatingNotesHost?.focus?.()";
+/// Told to the HUD windows each time the notes show or hide, so the
+/// pendant's halo follows the window, a 收起 inside the page included (#224).
+const SHOWN_EVENT: &str = "float-notes:shown";
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub(crate) struct Rect {
@@ -131,6 +134,18 @@ fn start_url() -> Result<tauri::Url, String> {
     url.parse().map_err(|error| format!("{error}"))
 }
 
+fn tell(app: &AppHandle, shown: bool) {
+    let _ = app.emit(SHOWN_EVENT, shown);
+}
+
+/// Whether the notes show now: a reloaded HUD starts its halo from this.
+#[tauri::command]
+pub(crate) fn float_notes_shown(app: AppHandle) -> bool {
+    app.get_webview_window(LABEL)
+        .and_then(|notes| notes.is_visible().ok())
+        .unwrap_or(false)
+}
+
 /// Opens the notes beside the ball at `anchor` (points, in the calling HUD
 /// window's page), or hides them when they are showing.
 #[tauri::command]
@@ -142,6 +157,7 @@ pub(crate) async fn toggle_float_notes(
     if let Some(notes) = app.get_webview_window(LABEL) {
         if notes.is_visible().map_err(|error| error.to_string())? {
             notes.hide().map_err(|error| error.to_string())?;
+            tell(&app, false);
             return Ok(false);
         }
     }
@@ -205,6 +221,7 @@ pub(crate) async fn toggle_float_notes(
                             if let Some(notes) = handle.get_webview_window(LABEL) {
                                 let _ = notes.hide();
                                 let _ = notes.eval(RESTORE_SCRIPT);
+                                tell(&handle, false);
                             }
                         });
                         return false;
@@ -228,6 +245,7 @@ pub(crate) async fn toggle_float_notes(
         .set_position(tauri::LogicalPosition::new(frame.x, frame.y))
         .map_err(|error| error.to_string())?;
     notes.show().map_err(|error| error.to_string())?;
+    tell(&app, true);
     notes.set_focus().map_err(|error| error.to_string())?;
     Ok(true)
 }
