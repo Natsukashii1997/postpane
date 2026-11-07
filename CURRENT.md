@@ -4,6 +4,31 @@
 
 
 
+## 工程接力按风险级设审查预算、续审按 PR 跨会话累计、支持暂停/升级与专项续审（2026-11-08，Claude，常浩在 #217 方案评论上回复「按方案开工」；PR 全量通过，按授权 squash 合并；实机往返在合并前的包上做，合并后从 main 重打重装见下）
+
+- 时间：开工 `2026-11-07 23:07`（`date '+%F %H:%M'` 记录）。来由：multi-agent MA-02 工程审查契约 v0.1（`317945b`），常浩 11-07 批准审查预算原则；方案见 #217 评论。
+- 改了哪些文件：
+  - `src/crates/platform/src/clients/chatgpt/handoffs.rs`：Handoff 加 `risk`、`pr`、`carried`、`extra`；`budget`、`counted`（按 ChatGPT 实际回信数计，暂停取证那次不算）、`spent`；`review_exit` 读倒数第二行「审查出口」；`pull_request` 取 brief 第一个 PR；`Book::carried_for`、`pr_counted`、`rule`、`allow_extra`；`next()` 新增 `Settle`（L1 收口）、`BadTail`（出口与结论对不上）；工程审查的「证据不足暂停」也走 #209 的取证续上。
+  - `src/crates/host/src/handoff.rs`：`start_ruled` 拒收 L0 和写错的风险级；新单按同一 PR 已审次数判预算；续发按 PR 累计（`pr_counted`）判预算，用完后不带 `extra` 就拒发；带 `extra` 时加一轮预算并记一步「专项续审：…」；转回话术按「可复审 / L1 收口 / 预算用完 / 证据不足 / 决策升级 / 出口无效」区分；工具返回提示不再写死 2 轮；`Desk::start` 只留给测试。
+  - `src/apps/mcp/src/index.ts`：`relay_to_chatgpt` 加 `risk`、`extra`；工具说明写进预算规则、PR 链接放最前、回信末两行格式。
+  - `src/packages/hud/src/alerts/handoff-card.ts`、`src/packages/protocol/src/index.ts`：卡上「第 n / m 轮」和「再审一轮」按预算与 `carried` 算，只改数字和文字。
+  - 测试：handoffs.rs 5 例、handoff.rs 5 例、`handoff-card.test.ts` 1 例。
+  - 文档：`docs/chatgpt-channel.md`「审查预算」一条与参数说明、`docs/安装与使用.md` 第 89–91 行。
+- 测试：变基到 `f5234ad` 后，`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 784 passed / 0 failed，hud 套件 `ℹ pass 338` / `ℹ fail 0`，其余套件 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-217-review-budget/`。再变基到 `bfa8d60`（只改交接文档）后只重跑了 `node --test tests/*.test.mjs`，见 PR。
+- 验证：在 `d2d9c9cbe121` 包上（基于 `f441f73`，不含 #228–#231）用 `claude -p` 新开会话实机往返，测试 PR 编号 90001、90002，请 ChatGPT 按固定格式回：
+  - L1（`h1a1b708fc4400`）：回「返修 / 需修改」，转回话术含「L1 的审查预算已用完……补改未复审」，随后自动结束，结束原因「L1 审查预算用完」；
+  - 跨会话 L2：会话一 `h1a1b70a066c01` 第 1 轮；会话二 `h1a1b70aa6ed02` 自动关联，卡上「续审 · 原单 h1a1b70a066c01 · 已审 1 次」，`carried` 1，回「需修改」后停下，原因「已审 2 轮仍需修改」；
+  - 会话三不带 `extra` 再送，被拒，返回「这个 PR 已审 2 轮，审查预算用完了，没有发出……」。
+  - 实机中发现工具返回提示还写「没满 2 轮」，已改。
+- 截图：无（没有界面样式改动；卡上数字由单元测试覆盖）。
+- 发布与回读：合并前装 `d2d9c9cbe121`（装前 `f67df8d754e0` 备份在 `evidence/2026-11-08-2026-11-08-217-review-budget/`），用于实机。合并后从 main 重打重装的结果补在下面。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 两张测试卡 `h1a1b70a066c01`（`claude -p` 会话退出，转回失败两次后停下）、`h1a1b70aa6ed02` 停在「等你决定」，请常浩点「结束接力」。
+  - 风险级只在新单第一次送审时记，续发时再填不会改。
+  - multi-agent MA-02 契约第 4 节「正文第一行写暂停/升级」要改成「倒数第二行审查出口」，在 multi-agent 另开 PR。
+- 本轮新坑：无
+- skill 进化：E-10 待批（并行合并频繁时不追变基，先装本分支做实机，合并后从 main 重打重装）。
+
 ## ChatGPT 单家面板列出今天的对话，与侧栏「N 对话」一致（2026-11-07，Claude，常浩截图说侧栏显示 5 对话、展开却说没有会话，选甲「沿用一格两联补上已回」；PR 全量通过，按授权 squash 合并；已从 main 装机回读一致）
 
 - 时间：开工 `2026-11-07 23:30`（`date '+%F %H:%M'` 记录）。来由：#219。脚注「5 对话」与悬停小收据由 `chatgpt-desk.ts` 按今天（北京时间）自己的对话计、回完也算；单家面板走通用 `liveSessions`，只列 running / waiting，ChatGPT 回完即 idle，于是「正在进行 0」，底行「近 24 小时 18 个会话」又把 13 个审核算进去。#145 定了「正在进行里列出（在答 / 已回）」，单家面板漏做「已回」。

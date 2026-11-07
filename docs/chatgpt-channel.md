@@ -74,6 +74,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开。打开请求的 `requestId` 是「接力 id~第几次」（`attempt`，每次重试加 1）：超时后插件迟到的 `opened` 只有属于当前这一次、且这个 Claude 会话还没开新接力时才绑上。新会话还在打开时点「结束接力」，要等这次打开完（提示「上一段还在送」）；已结束的接力不再打开。
 - 送话迟到（#223）：送进已有会话的 `requestId` 是「接力 id~send时间」。等满 30 秒算失败后，插件迟到的 `sent`（`ok`）仍补记这一轮的 `ask`，只记一次，之后的回信照常认；Claude 再送同一段话按「刚送过」处理，不重复送。
 - `rounds`：第一次交代之后，两边每转一次加 1。卡上的「第 n / 2 轮」按 `ask` 步数算，最多 2 轮（可以超）。
+- 审查预算（#217，对齐 multi-agent MA-02 契约）：工程接力（标题不以「思维评审｜」开头）按 `risk` 给预算，L1 审 1 轮、L2/L3 最多 2 轮、不填按 2 轮，L0 拒收。`pr` 是 brief 里第一个 PR 链接（`owner/repo#n`）；同一 PR 的新单从最近一张未通过的旧单继承已审次数（`carried`），所以换 Claude 会话、另开一单都不清零。卡上的「第 n / m 轮」按 `carried` + `ask` 步数和预算算。预算用完后再调用一律拒收，带 `extra`（谁授权、为什么）才放行一次，记为一步「专项续审：…」并把预算加 1（`extra` 字段）。L1 回「需修改」时转回 Claude 改完、在 PR 写「补改未复审」后自动结束接力，不交常浩。回信倒数第二行可选写「审查出口：通过 / 返修 / 证据不足暂停 / 决策升级」，最后一行的结论要对得上（通过配通过，其余配需修改）：证据不足暂停照思维评审的做法转回并停下，补了证据再送就自动续上，那一次不计轮数；决策升级转回并交常浩；对不上就不转回、交常浩。没有这一行时只看结论，跟原来一样。
 - 回合日志：宿主每收到一条 `turn` 就在 `<数据目录>/chatgpt/turns.jsonl` 记一行 `{at, conversation, phase, messageId, replyChars, outcome}`，不记回复原文。`outcome`：`taken` 直接记入、`early` 先存着、`caught-up` 绑上后补录、`unused` 没用上（不是审核中的那一轮，或回复是空的）、`evicted` 存满 16 条被挤掉。文件超过 1 MB 改名为 `turns.old.jsonl` 后重新记。回信丢了先查这里：没有那一行，是插件那一侧没报；有那一行，看 `outcome` 就知道宿主为什么没用。
 - 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / `opened` / `sent`（成功的，含迟到的）告诉宿主（`Channel::listen`），接力当场前进。
 - 新会话放进的 ChatGPT 项目存 `<数据目录>/chatgpt/config.json`：`{"project": "https://chatgpt.com/g/<id>/project"}`，只认这种项目页网址（去掉 `?`、`#` 和末尾 `/`）。在设置 · 智能体插件 ·「ChatGPT（Chrome 插件）」登记后出现「新会话放进项目」一行，粘贴保存；不填就开在 ChatGPT 首页。
@@ -81,7 +82,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 ### 从 Claude 发起：`relay_to_chatgpt`
 
-- 驿窗 MCP 的内置工具，参数 `{title, summary?, brief}`（`summary` 一句话写这一轮做了什么，显示在接力卡时间线上）；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。
+- 驿窗 MCP 的内置工具，参数 `{title, summary?, brief, risk?, extra?, launch?}`（`risk`、`extra` 见上面「审查预算」）（`summary` 一句话写这一轮做了什么，显示在接力卡时间线上）；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。
 - 宿主只认调用方自己报的会话：`caller.sessionId` 格式合法就用它，不看哪些会话在线，也不按同目录去猜；没有就拒绝。id 过时（`/clear`、续会话后）时照样记在它名下，最坏是「转回 Claude」报这个会话没加载插件，不会送错会话。别的客户端调用一律拒绝。
 - 不受「让智能体整理 HUD」开关管，但 ChatGPT 插件必须连着，否则返回中文原因。登记了 ChatGPT 插件（host manifest 在）时，本机工具通道也会监听，好让这个工具够得着。
 - 这个会话已有 `open` 的接力：直接把 brief 送进那个 ChatGPT 会话（等插件回话，最多 30 秒），返回 `{handoffId, status: "sent", conversation}`；还在 `opening`：拒绝，等它打开。否则新建一条 `opening`，在后台线程 `open`（带项目），立即返回 `{handoffId, status: "opening"}`；打开后改 `open` 或 `failed`。返回里另有 `message`，一句给 Claude 看的中文。
