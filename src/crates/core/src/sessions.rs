@@ -37,12 +37,9 @@ impl AgentHudCore {
                     if !ask.is_worded() {
                         return None;
                     }
-                    if now - ask.at >= 1_800_000
-                        || !matches!(
-                            log.live.session_state(now, &log.source, None),
-                            "running" | "waiting"
-                        )
-                    {
+                    // A box stands until it is answered or its session is put
+                    // away; it waits as long as approvals do (#184).
+                    if !self.requests.still_held(ask.at, now) {
                         return None;
                     }
                     let key = crate::grok_cache::hash(&[&log.id, &ask.id]);

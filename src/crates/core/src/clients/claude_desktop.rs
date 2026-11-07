@@ -17,13 +17,15 @@ impl crate::AgentHudCore {
             .filter(|log| log.source == CLAUDE.id && !log.gone)
             .filter_map(|log| {
                 let ask = log.live.activity.as_ref()?.desktop_ask.as_ref()?;
-                (!ask.is_worded() && ask.offset.is_some() && now - ask.at < 1_800_000).then(|| {
-                    (
-                        log.path.clone(),
-                        log.origin_path.clone().unwrap_or_else(|| log.path.clone()),
-                        ask.clone(),
-                    )
-                })
+                // Read again for as long as the box can be shown (#184).
+                (!ask.is_worded() && ask.offset.is_some() && self.requests.still_held(ask.at, now))
+                    .then(|| {
+                        (
+                            log.path.clone(),
+                            log.origin_path.clone().unwrap_or_else(|| log.path.clone()),
+                            ask.clone(),
+                        )
+                    })
             })
             .collect::<Vec<_>>();
         fn asked<'a>(head: &'a mut crate::LogHead, id: &str) -> Option<&'a mut DesktopAsk> {

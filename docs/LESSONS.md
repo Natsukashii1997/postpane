@@ -163,3 +163,11 @@
 - 正确做法：插件只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`（`content.js` 的 `settle`）。查「回信丢了」先看 `<数据目录>/chatgpt/turns.jsonl`，再看 `hooks/inbox` 里该会话的 completion 记录（`message` 为空就是这一类）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`inbox-completion-empty.json`：01:54:19.827 收到的空回复，turnId `e6c1acb9…`；`dom-probe.md`：页面上真回复的 messageId 也是 `e6c1acb9…`）；复现测试 `src/apps/chrome-extension/test/content.test.mjs`「an empty placeholder is not the reply that fills it later」修复前报 `[['m5', '']]`。
 - 升级：已写成测试（上面那条，以及「a reply still being written without a stop button waits until it stops changing」）。
+
+## L-19 「一直等」没生效：同一个允许值列表抄了三份，漏改了每次请求都跑的那份（2026-11-07）
+
+- 现象：#181 加了「等待回答：一直等」（值 0），常浩本机设成它、设置文件回读是 0，可忘了处理的审批照样 10 分钟就从侧栏消失；常浩问「一直等真的打开了吗」。另有 Claude 每轮末尾的「下一步」提问框，超过 30 分钟就不在侧栏显示。
+- 根因：允许的分钟数在 `lib.rs`（启动）、`settings.rs` 校验、`settings.rs` 的 `reload_preferences` 各写了一份；#181 只改了前两份。`reload_preferences` 在每次请求开头都跑，不认 0 就退回 10 分钟，所以启动那一刻是一直等，第一次请求后就变回 10 分钟。#181 的测试直接操作 `Requests`，没经过重读设置这条路，所以全过。下一步框另有两处写死的 30 分钟（`sessions.rs` 选卡、`clients/claude_desktop.rs` 重读措辞），沿用上游，不看设置。
+- 正确做法：同一组取值只定义一次（`settings::APPROVAL_WAIT_MINUTES`），各处引用它；改设置相关功能时，测试要走「写设置文件 → 新建 core → 发一次请求 → 再看效果」这条真实路径。查「设置改了没生效」先 `grep -rn` 旧取值列表，看有没有漏网的副本。
+- 证据：`git show 2fe2329 -- src/crates/core/src/settings.rs`（只改了校验）；回滚修复时 `settings::tests::waiting_until_answered_survives_every_reload_of_the_settings_file` 在「after a request reloads the file」处失败；日志 `~/Library/Application Support/postpane/evidence/2026-11-07-keep-waiting/`。
+- 升级：已写成测试 `waiting_until_answered_survives_every_reload_of_the_settings_file`、`a_next_step_box_left_for_hours_stays_in_the_sidebar_while_approvals_wait_until_answered`、`a_request_waits_for_postpane_past_two_minutes_only_when_set_to_wait_until_answered`。可提议提升为全局坑：「同一组取值抄多份，加新值漏改一份」换个项目也成立。

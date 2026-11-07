@@ -359,8 +359,18 @@ pub(crate) fn send(
 }
 
 /// How long a request waits for PostPane to come back after it quit; an
-/// update restarts it within seconds. Past this the client asks on its own.
+/// update restarts it within seconds. Past this the client asks on its own,
+/// unless the user chose to wait until answered (「一直等」, #184).
 const RETURN_WAIT: Duration = Duration::from_secs(120);
+
+/// Whether the saved settings say approvals wait until answered: PostPane's
+/// `approvalWaitMinutes` of 0. Read when PostPane is gone, so it is the file.
+fn waits_until_answered(data: &Path) -> bool {
+    std::fs::read(data.join("settings.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .is_some_and(|saved| saved["settings"]["approvalWaitMinutes"] == 0)
+}
 
 fn connect(data: &Path, bytes: &[u8], read: Duration) -> Result<UnixStream, String> {
     let mut stream = UnixStream::connect(socket_path(data))
@@ -434,7 +444,11 @@ fn reconnect(
     transcript: &mut Option<super::transcript::Transcript>,
     deadline: std::time::Instant,
 ) -> Option<UnixStream> {
-    let give_up = (std::time::Instant::now() + RETURN_WAIT).min(deadline);
+    let give_up = if waits_until_answered(data) {
+        deadline
+    } else {
+        (std::time::Instant::now() + RETURN_WAIT).min(deadline)
+    };
     loop {
         std::thread::sleep(Duration::from_millis(500));
         if transcript.as_mut().is_some_and(|watch| watch.settled())
@@ -562,5 +576,22 @@ mod tests {
             .answer(&ids[0], &json!({"kind": "deny"}), now_ms())
             .unwrap();
         assert!(callback.join().unwrap().unwrap().is_some());
+    }
+
+    #[test]
+    fn a_request_waits_for_postpane_past_two_minutes_only_when_set_to_wait_until_answered() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            !waits_until_answered(dir.path()),
+            "no settings: two minutes"
+        );
+        for (minutes, waits) in [(0, true), (10, false)] {
+            std::fs::write(
+                dir.path().join("settings.json"),
+                json!({"settings": {"approvalWaitMinutes": minutes}, "providers": {}}).to_string(),
+            )
+            .unwrap();
+            assert_eq!(waits_until_answered(dir.path()), waits, "{minutes} minutes");
+        }
     }
 }
