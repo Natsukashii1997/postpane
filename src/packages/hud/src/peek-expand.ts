@@ -1,11 +1,17 @@
-/** How long a peek stays before it grows into the whole board, once shown
+/** How long a peek stays before it grows into its agent's panel, once shown
  * (owner, 2026-11-06: 「停久看全」; 0.8 s left too little time to read the
  * peek, the owner settled on 1.5 s). */
 export const PEEK_EXPAND_AFTER_MS = 1500;
 
-/** What is left of the wait before the peek on a mark grows into the board.
+/** What a peek left on its mark grows into: that agent's own panel, as a
+ * click on the mark opens it (owner, 2026-11-07, #202: the whole board, every
+ * agent at once, was more than wanted). The board stays for the notch, the
+ * menu's 「打开面板」 and an edit hold, which have no one agent to show. */
+export const PEEK_GROWS_INTO = { pinned: true, expanded: false } as const;
+
+/** What is left of the wait before the peek on a mark grows into its panel.
  * `since` is when the pointer came to this mark: a peek shows after the
- * hover delay, and the board follows {@link PEEK_EXPAND_AFTER_MS} later. */
+ * hover delay, and the panel follows {@link PEEK_EXPAND_AFTER_MS} later. */
 export function peekExpandWait(
   hoverDelayMs: number,
   since: number,
@@ -15,8 +21,8 @@ export function peekExpandWait(
 }
 
 /** The agent the open sidebar is about; none means the whole board. An
- * alert's sender comes first; then the hovered mark's peek or panel, until
- * the peek has grown into the board. The notch only ever shows the board. */
+ * alert's sender comes first; then the hovered mark's peek or panel, unless
+ * the board is out (menu, edit hold). The notch only ever shows the board. */
 export function cardAgent({
   notch,
   sender,

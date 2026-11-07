@@ -66,7 +66,11 @@ import {
 } from "./model";
 import { glowAlert } from "./HUDGlow";
 import { InlineEventRow } from "./alerts/InlineEventRow";
-import { inlineAlertAllowed, peekExpandWait } from "./peek-expand";
+import {
+  inlineAlertAllowed,
+  peekExpandWait,
+  PEEK_GROWS_INTO,
+} from "./peek-expand";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import {
   ListedSessionsContext,
@@ -231,7 +235,8 @@ export function HUDScene({
   const [systemLight, setSystemLight] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState(false);
-  // The hovered mark's peek has grown into the whole board (「停久看全」).
+  // The whole board is out: opened from the menu or held for an edit. A peek
+  // left on its mark grows into its own panel instead (pinned, #202).
   const [expanded, setExpanded] = useState(false);
   const [pointerInside, setPointerInside] = useState(false);
   const [domTyping, setDomTyping] = useState(false);
@@ -527,14 +532,21 @@ export function HUDScene({
       markSince.current = performance.now();
     lastMark.current = hovered;
   }, [hovered, pointerInside]);
-  // A peek left on its mark grows into the whole board; the line along its
-  // foot runs out over the same wait.
+  // A peek left on its mark grows into its agent's own panel, as a click on
+  // the mark opens it (#202); the line along its foot runs out over the same
+  // wait.
   const [expandMeter, setExpandMeter] = useState<{
     key: string;
     ms: number;
   } | null>(null);
   useEffect(() => {
-    if (!peek || expanded || !hovered || focusedVendor?.key !== hovered) {
+    if (
+      !peek ||
+      pinned ||
+      expanded ||
+      !hovered ||
+      focusedVendor?.key !== hovered
+    ) {
       setExpandMeter(null);
       return;
     }
@@ -544,9 +556,19 @@ export function HUDScene({
       performance.now(),
     );
     setExpandMeter({ key: `${hovered}:${markSince.current}`, ms });
-    const timer = setTimeout(() => setExpanded(true), ms);
+    const timer = setTimeout(() => {
+      setExpanded(PEEK_GROWS_INTO.expanded);
+      setPinned(PEEK_GROWS_INTO.pinned);
+    }, ms);
     return () => clearTimeout(timer);
-  }, [peek, expanded, hovered, focusedVendor?.key, config.hoverDelayMs]);
+  }, [
+    peek,
+    pinned,
+    expanded,
+    hovered,
+    focusedVendor?.key,
+    config.hoverDelayMs,
+  ]);
 
   // A request beside the dock is printed on paper, its tag and its card, and
   // so are a notice's and the usage panel, as receipts; in the notch they
