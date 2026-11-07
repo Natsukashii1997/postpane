@@ -223,7 +223,7 @@ export function jobRows(
 /** Where an ask came from: a private chat, or a group (topics included). */
 export function chatLabel(chat: string | null | undefined, language: Language) {
   return chat === "dm"
-    ? say(language, "私聊", "DM")
+    ? say(language, "私", "DM")
     : say(language, "群", "Group");
 }
 

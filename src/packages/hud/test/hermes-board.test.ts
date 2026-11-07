@@ -165,8 +165,8 @@ test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
   assert.equal(rows[0].title, "日报（新结构·并跑）");
 });
 
-test("asks read 私聊 or 群; a desk with tasks shows one ask, without three", () => {
-  assert.equal(chatLabel("dm", "zh"), "私聊");
+test("asks read 私 or 群; a desk with tasks shows one ask, without three", () => {
+  assert.equal(chatLabel("dm", "zh"), "私");
   assert.equal(chatLabel("group", "zh"), "群");
   assert.equal(chatLabel("thread", "zh"), "群");
   assert.equal(askLimit([{}]), 1);

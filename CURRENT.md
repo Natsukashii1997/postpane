@@ -4,6 +4,18 @@
 
 
 
+## 亚古兽「最近被问」来源标签「私聊」改成「私」（2026-11-07，Claude，常浩截图要求「私聊改成私，跟下面的群对齐」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 21:12`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Hermes 区亚古兽「最近被问」里，私聊来源标两个字「私聊」，比下面一个字的「群」宽，标题起点对不齐。
+- 改了哪些文件：`src/packages/hud/src/panel/hermes-board.ts`（`chatLabel` 中文私聊改为「私」，英文仍是 DM）；`src/packages/hud/test/hermes-board.test.ts`（断言同步改为「私」）。标签宽度随文字（`HermesBoard.tsx` 里没有固定宽度），单字后与「群」同宽。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，前端各套件 `ℹ fail 0`（hud 套件 `ℹ pass 313` / `ℹ fail 0`，含 `asks read 私 or 群` 一条）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/dm-label-*.log`。
+- 验证：单测覆盖文案；实机悬停面板未看（电脑控制点不动悬停面板，见 L-09），请常浩悬停亚古兽一格看一眼。
+- 截图：`evidence/2026-11-07-dm-label/after-install.png`（装机后全屏，无「想访问文稿」弹窗）。
+- 发布与回读：从分支 `claude/dm-label`（基于 main `3207202`）打包，`install.sh dm-label`：装前 `6329ee7a901a`（已备份），21:20:09 退出、21:20:09 启动，产物 `d18118eff032` / 已装 `d18118eff032`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-dm-label/PostPane-6329ee7a901a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：无。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 思维评审接力：严格末两行、终态转回 Claude、按评审出口换话术（2026-11-07，Claude，常浩在 thinking-review skill 审核意见上选「驿窗加窄改动」；PR 全量通过，按授权 squash 合并；装机回读见下）
 
 - 时间：开工 `2026-11-07 19:37`（`date '+%F %H:%M'` 记录）。来由：#209。my-skills#66（thinking-review 1.0.0）经 ChatGPT 审核指出三处驿窗行为（已核对属实）：`Next::Pass` 只关闭接力、不把回信转回 Claude；`review()` 从下往上找「结论：」，认不出的值会继续往上找，可能把正文引用的旧「结论：通过」当结论；`back_text()` 固定是工程返修话术。
