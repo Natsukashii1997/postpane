@@ -5,7 +5,7 @@ import { STORY } from "./scene/flight-plan.ts";
 /** What relays print on the stubs (#171), by the phase they are in rather
  * than by the letter flying: ChatGPT's reading gives way to a blue 「审」
  * stamp while it has the words, rippling while it answers; Claude's stub
- * takes a red 「回」 wax seal in its corner while an answer waits for the
+ * takes the same stamp as 「回」 over its reading while an answer waits for the
  * person. `since` is when the words moved (the step), so a stamp that comes
  * while its letter is still in the air waits for it to land. */
 export interface RelayStamps {

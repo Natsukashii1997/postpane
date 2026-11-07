@@ -4,6 +4,18 @@
 
 
 
+## Claude 那格的「回」改成和「审」同一枚方章（2026-11-07，Claude，常浩说「回」不好看、要和「审」放一起看成接力的两面、一套风格，看三版后选甲「脚上一枚，答优先」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 23:09`（`date '+%F %H:%M'` 记录）。来由：Claude 票根角上的红色立体火漆「回」和其他扁平印章不统一、被打孔切掉、又和「答」同红。设计稿 https://claude.ai/artifact/Rs6zDWu49aKP68SaxuaU2a 第 5 版（ChatGPT 与 Claude 两格并排、接力四个时刻）。issue #218。
+- 改了哪些文件：`src/packages/hud/src/ticket-stub.ts`（新增 `stubFoot`：脚上印什么——自己的「答/批」优先，其次接力章「审 / 回」，再次读数；接力纸给在审的 ChatGPT 脚、和有回信等看的 Claude 脚，Claude 盖着「答」时接力纸也保留）；`src/packages/hud/src/scene/HUDMarkStrip.tsx`（`StubFace` 改用 `stubFoot`，「回」走 `ReviewStamp`，去掉角上的 `ReplySeal`）；`src/packages/hud/src/scene/RelayStamps.tsx`（`ReviewStamp` 加 `reply`：字换成「回」，同色同尺寸、同落下动画、不发散；删掉 `ReplySeal`）；`relay-stamps.ts`、`model.ts` 只改注释；`docs/chatgpt-channel.md`、`docs/ROADMAP.md` 同步规则；`src/packages/hud/test/ticket-stub.test.ts` 加两条 `stubFoot` 测试。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，hud 前端 `ℹ pass 315` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek `ℹ pass 14` / `ℹ fail 0`，插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-reply-stamp/{check,test,rules}.log`。
+- 验证：真实组件自查页（`HUDScene` 原样，#171 那份脱敏快照，`?s=review|replied|ask`）放大看：在审时 ChatGPT 脚上蓝「审」照旧；有回信时 Claude 脚换接力纸加航空斜纹、蓝「回」方章落下（截到落下中途的一帧，读数 82% 随后让开），`data-relay-stamp="reply"`，颜色 `rgb(58, 92, 150)` 与「审」相同；同时有待答时 Claude 脚上是红「答」、接力纸保留。实机：装机后实机有 4 单「已回复」，`get_hud_screenshot` 看到 Claude 格是接力纸加蓝「回」方章。自查页已备份到 `evidence/2026-11-07-reply-stamp/preview-218/` 后删掉。
+- 截图：`evidence/2026-11-07-reply-stamp/hud-after.png`（装机后实机侧栏渲染）；自查页放大截图只在会话里看过，没落盘。
+- 发布与回读：从分支 `claude/218-reply-stamp`（基于 main `785cd28`）打包，`install.sh 2026-11-07-reply-stamp`：装前 `5540cc76bc8e`（已备份），00:09:03 退出、00:09:03 启动，产物 `f67df8d754e0` / 已装 `f67df8d754e0`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-2026-11-07-reply-stamp/PostPane-5540cc76bc8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`（脚本给备份目录加了当天日期前缀）。
+- 与授权不一致之处、遗留问题、范围外发现：Claude 有「答」时「回」字不显示，只靠接力纸提示还有回信，这是甲的取舍，常浩已知。设计稿里的小人是示意图，实机用真实素材。可提议提升为全局坑：Artifact 页面脚本顶层 `const claude` 会和运行环境自带的全局 `claude` 撞名，整段脚本不执行、控制台也看不到报错（发布后页面空白才发现），只出提案。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 额度看板「吃紧」红色斜纹调浅（2026-11-07，Claude，常浩截图说红色斜纹太显眼、影响观看，要「稍微再浅一点点」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 21:33`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Claude「每周」照速度会提前用完时，「照速度到重置」那段斜纹用满色红，压过了已用条和文字。
