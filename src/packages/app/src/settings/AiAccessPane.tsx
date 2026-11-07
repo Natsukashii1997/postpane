@@ -8,7 +8,6 @@ import { TooltipProvider } from "@agent-hud/ui/components/tooltip";
 import { monthDayTime, snapshotLanguage } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import {
-  Footnote,
   Page,
   Pill,
   Row,
@@ -296,6 +295,10 @@ export function AiAccessPane({
             "Read only · they write nothing for PostPane",
             "只读取 · 不替驿窗产出",
           )}
+          footer={t(
+            "API keys PostPane keeps (DeepSeek, Kimi, GLM, OpenCode) show only as saved, never in full.",
+            "驿窗保存的 API Key（DeepSeek、Kimi、GLM、OpenCode）只显示「已保存」，不显示明文。",
+          )}
         >
           <table className="ai-access-table">
             <thead>
@@ -346,12 +349,6 @@ export function AiAccessPane({
             </div>
           )}
         </Section>
-        <Footnote>
-          {t(
-            "API keys PostPane keeps (DeepSeek, Kimi, GLM, OpenCode) show only as saved, never in full.",
-            "驿窗保存的 API Key（DeepSeek、Kimi、GLM、OpenCode）只显示「已保存」，不显示明文。",
-          )}
-        </Footnote>
       </Page>
     </TooltipProvider>
   );
