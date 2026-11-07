@@ -53,3 +53,43 @@ test("windows that reset since, or never had a number, hold nothing", () => {
   );
   assert.equal(heldUsed([], now), null);
 });
+
+test("a failed read holds the weekly window over a fuller 5 hours (#174)", () => {
+  assert.equal(
+    heldUsed(
+      [
+        {
+          ...window(95, "stale", "2026-11-01T13:00:00Z"),
+          windowDurationSeconds: 18_000,
+          allModels: true,
+        },
+        {
+          ...window(30, "stale", "2026-11-03T12:00:00Z"),
+          windowDurationSeconds: 604_800,
+          allModels: true,
+        },
+      ],
+      now,
+    ),
+    30,
+  );
+  // A weekly window that has reset since holds nothing: the 5 hours stand.
+  assert.equal(
+    heldUsed(
+      [
+        {
+          ...window(95, "stale", "2026-11-01T13:00:00Z"),
+          windowDurationSeconds: 18_000,
+          allModels: true,
+        },
+        {
+          ...window(30, "stale", "2026-11-01T11:00:00Z"),
+          windowDurationSeconds: 604_800,
+          allModels: true,
+        },
+      ],
+      now,
+    ),
+    95,
+  );
+});

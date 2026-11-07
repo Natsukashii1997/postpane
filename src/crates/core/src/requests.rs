@@ -14,6 +14,16 @@ type Wake = Arc<dyn Fn() + Send + Sync>;
 #[derive(Clone)]
 pub struct Requests(Arc<Shared>);
 
+/// When a request stops waiting for the HUD; a hold of 0 waits until it is
+/// answered here or in the client's own window (#174).
+fn held_until(at_ms: i64, hold_ms: u64) -> i64 {
+    if hold_ms == 0 {
+        i64::MAX
+    } else {
+        at_ms.saturating_add(hold_ms as i64)
+    }
+}
+
 struct Shared {
     state: Mutex<State>,
     wake: Mutex<Option<Wake>>,
@@ -95,7 +105,7 @@ impl Requests {
             let mut state = self.0.state.lock().unwrap_or_else(|p| p.into_inner());
             state.sequence = state.sequence.wrapping_add(1);
             let id = format!("hook:{}:{}:{}", request.source, state.epoch, state.sequence);
-            let deadline_ms = now_ms.saturating_add(state.hold_ms as i64);
+            let deadline_ms = held_until(now_ms, state.hold_ms);
             state.pending.push_back(Pending {
                 id: id.clone(),
                 content: Content::Hook(request),
@@ -122,7 +132,7 @@ impl Requests {
             if state.dismissed.contains(&id) || state.pending.iter().any(|p| p.id == id) {
                 return None;
             }
-            let deadline_ms = now_ms.saturating_add(state.hold_ms as i64);
+            let deadline_ms = held_until(now_ms, state.hold_ms);
             view["id"] = Value::String(id.clone());
             state.pending.push_back(Pending {
                 id: id.clone(),
@@ -306,7 +316,7 @@ impl Requests {
             } else {
                 state.hold_ms = hold_ms;
                 for item in &mut state.pending {
-                    item.deadline_ms = item.created_ms.saturating_add(hold_ms as i64);
+                    item.deadline_ms = held_until(item.created_ms, hold_ms);
                 }
                 true
             }

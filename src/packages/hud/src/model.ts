@@ -12,7 +12,7 @@ import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
 import { relaysAnswering } from "./relays-answering.ts";
 import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
-import { quotaRowShown, tightestWindow } from "./quota-rows.ts";
+import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
 import {
@@ -162,7 +162,7 @@ export function vendorsFromSnapshot(
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
-    const tightest = tightestWindow(quotas);
+    const tightest = leadingWindow(quotas);
     const sessions = snapshot.sessions.filter(
       (s) => vendorKey(s.source) === key,
     );
@@ -307,7 +307,7 @@ export function configuredVendors(
 function withShownRows(vendor: HUDVendor, layout: PanelLayout): HUDVendor {
   const quotas = vendor.quotas.filter((row) => quotaRowShown(row, layout));
   if (quotas.length === vendor.quotas.length) return vendor;
-  const tightest = tightestWindow(quotas);
+  const tightest = leadingWindow(quotas);
   return {
     ...vendor,
     quotas,

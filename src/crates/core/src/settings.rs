@@ -146,7 +146,7 @@ impl crate::AgentHudCore {
             "approvalWaitMinutes"
                 if value
                     .as_u64()
-                    .is_some_and(|v| [1, 3, 5, 10, 30, 60].contains(&v)) => {}
+                    .is_some_and(|v| [0, 1, 3, 5, 10, 30, 60].contains(&v)) => {}
             // The price page: the owner's prices per million tokens by model,
             // multipliers by relay host, and what a local host is.
             "customPrices"
