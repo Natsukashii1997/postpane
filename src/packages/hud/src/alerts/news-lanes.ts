@@ -1,5 +1,6 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
+import { staysUntilSeen } from "./reply-stays.ts";
 
 /** One card of the sidebar's news queue (IslandNews keeps the queue). */
 export type LaneCard =
@@ -121,4 +122,24 @@ export function sideLanes(
     const mark = marks.indexOf(lane.vendor);
     return mark < 0 ? [] : [{ lane, mark }];
   });
+}
+
+/** The queue with at most `limit` notices: past that, the oldest notice that
+ * folds away by itself makes room, else the oldest one, never the card in
+ * front nor the one just come; requests are never put away (#221). */
+export function roomForNews(queue: LaneCard[], limit = 32): LaneCard[] {
+  const next = [...queue];
+  let news = next.filter((card) => card.type === "news").length;
+  while (news > limit) {
+    const notices = next.flatMap((card, index) =>
+      index > 0 && index < next.length - 1 && card.type === "news"
+        ? [{ card, index }]
+        : [],
+    );
+    const out =
+      notices.find(({ card }) => !staysUntilSeen(card.event)) ?? notices[0];
+    next.splice(out.index, 1);
+    news -= 1;
+  }
+  return next;
 }

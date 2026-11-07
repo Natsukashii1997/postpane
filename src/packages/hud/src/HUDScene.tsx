@@ -17,11 +17,13 @@ export { HUDArtwork as HUDLogo } from "./HUDArtwork";
 import { DockMemory, type Direction } from "./bots/mark-director";
 import {
   useIslandNews,
+  useSideClocks,
   NewsContent,
   PendingEventRows,
   clientDisplayName,
 } from "./IslandNews";
 import { replyChip } from "./alerts/reply-list";
+import { sideClocks } from "./alerts/reply-stays";
 import { useCardHeld } from "./alerts/card-hold";
 import {
   HandoffCard,
@@ -414,6 +416,7 @@ export function HUDScene({
     underPointer,
     open && allowsInlineUsageAlert,
     config.panelLayout,
+    open,
   );
   const event = news.event;
   const request = news.request;
@@ -622,6 +625,17 @@ export function HUDScene({
           sideHung.push(placed);
           return [{ side, rect: placed }];
         });
+  // Only a tag drawn folds away on its clock, and none under the pointer or
+  // while a reply is typed (#221).
+  useSideClocks(
+    sideClocks(
+      news.sides,
+      sideTags.map(({ side }) => side.id),
+      news.looked,
+      pointerInside || typing,
+    ),
+    news.drop,
+  );
   const sidePaper = useMemo(() => paperOf(light), [light]);
   // Resting on another agent's tag or mark brings it to the front before the
   // card opens, so the card that opens there is that agent's own.
