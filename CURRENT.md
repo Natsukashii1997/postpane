@@ -16,6 +16,26 @@
 - 本轮新坑：无
 - skill 进化：无。
 
+## 侧栏 11-07 改动实机点验第一批；刘海形态下接力框的签不再被虚线划穿（2026-11-07，Claude，常浩看分批计划后点「按计划开始」，看点验结论后点「现在修」；PR #192 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 14:26`（`date '+%F %H:%M'` 记录，修 #190 那段；点验从 14:17 起）。来由：[【交接】驿窗侧栏｜回复卡与接力章实机点验] 会话，把 #180、#182、#183、#186 在实机上逐项点验。
+- 点验结果（第一批，只读）：
+  - 现装核对：开工时现装 `e0596c0c2a2d`（#187 那版，与 main `68ea84b` 同内容，含今天四个 PR），`install.sh check` 一致。
+  - 接力虚线框（#186）：真实组件自查页三种底色截图。深色、浅色纸面对；刘海形态（无纸面，`usePaper()` 为空）下签底色 `transparent`，虚线从字中间穿过，「接力」「需修改」退成白色 → 开 #190 修掉（见下）。纸面上签的纯色底在纸纹上显出一块略深的矩形，一并修掉。常浩现在用动态形态，回复卡印在纸面上，原本看不到刘海这个问题。
+  - 实机侧栏 14:18 截图：Claude 格挂「回」，ChatGPT 格挂红色「未审」（批 C 那单 `h1a1b1fed89e00`）。
+  - **未验证，等常浩亲手点（L-09）**：点「未审」是否打开那个 ChatGPT 对话；↗ 悬停变亮、按下下沉；两条以上待审批时停在展开卡上回答一条是否直接接下一条；dt-sandbox 两单回复在实机上的虚线框样子。
+- 改了哪些文件（#190 / PR #192）：`hud/src/alerts/CompletionAlertView.tsx`（`RelayFrame` 用 SVG mask 在签的位置给框线留缺口，宽度按签实测、`ResizeObserver` 跟随；签不再铺底色；颜色走 `relayLegendInks`）；`hud/src/alerts/handoff-card.ts` 新增 `relayLegendInks`（无纸面时用同外观纸面的蓝 / 红）；`hud/test/handoff-card.test.ts` 新增 1 条（先红：没有该导出；后绿）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 747 passed / 0 failed，前端 `ℹ pass 307` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/`（`check.log`、`test.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽，深色纸 / 浅色纸 / 刘海黑底各一张，两单接力 + 一单普通回复），内置浏览器等字体加载完截图，放大到签对照两轮：缺口两端距字约 6px，三种底色下框线都不压字，刘海下「接力」蓝、「需修改」红。自查页备份在 `evidence/2026-11-07-sidebar-spot-check/reply-check-page/`，用后已删。**未验证**：实机刘海形态（常浩没在用，没有切形态去看）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/`：`before-notch.jpg`、`after-notch.jpg`、`after-notch-x5.jpg`、`after-dark.jpg`、`after-light.jpg`；点验截图在 `evidence/2026-11-07-sidebar-spot-check/`（`three-modes.jpg`、`hud-real-1418.png` 等）。
+- 发布与回读：`install.sh notch-legend`：装前 `64e4138de2f3`（#189 那版，已备份），14:40:19 退出并启动，产物 `eb4bbc557f00` / 已装 `eb4bbc557f00`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；装时没有开着的自动往返。包从与 main `2969c84` 同代码的分支打（之后 main 只多了交接文档）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/PostPane-64e4138de2f3.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 顺序：这次先合并 PR 再写本节交接，和 postpane-round「写好交接再合并」不一致；交接内容没有缺项。
+  - 范围外：dt-sandbox 两单（`h1a1b486b8d801`、`h1a1b48f66f200`）「转回 Claude 失败两次」：发起会话是一次性代发会话（只调用一次 `relay_to_chatgpt` 就结束，各约 20 秒），回信时没人接；当时提示「还没加载插件，/reload-plugins」与实情不符。#189 之后已停会话改提示「已经停了」，代发会话正常结束时是否也写 `ended`，未核实。relay 工具回给代发会话的话仍承诺「自动转回这个会话」。排查记录 `evidence/2026-11-07-sidebar-spot-check/dt-sandbox-auto-back-fail.md`。未改。
+  - 挂「回」的各单（左滑复审第 2 轮、GitHub 快速中心 #3、数字分身 DT-ORC、管培生 #1、dt-sandbox 两单）没动，等常浩定。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 审批卡：Claude 重启后停掉的会话不再误报「没加载插件」（2026-11-07，Claude，常浩看排查结论后点「改，在这里做」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
 
 - 时间：开工 `2026-11-07 14:17`（`date '+%F %H:%M'` 记录）。来由：#188，常浩截图问数字分身会话的提问卡为什么说「没加载插件」。查到 14:12 Claude 桌面应用重启，约 50 个会话同一秒被插件写成 `ended`，这个会话其实加载过插件（L-20）。
