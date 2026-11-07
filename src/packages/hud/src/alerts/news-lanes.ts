@@ -22,6 +22,38 @@ export interface NewsLane {
   cards: LaneCard[];
 }
 
+/** The queue with the request waiting longest in front (IslandAlertQueue.
+ * dismiss(): requests wait since they were asked and come before notices,
+ * which keep their order). */
+export function promoteOldestWaiting(pending: LaneCard[]): LaneCard[] {
+  if (pending.length < 2) return pending;
+  const best = pending.reduce((at, card, index) => {
+    const waiting = card.type === "request";
+    const prior = pending[at],
+      priorWaiting = prior.type === "request";
+    return waiting &&
+      (!priorWaiting || Date.parse(card.at) < Date.parse(prior.at))
+      ? index
+      : at;
+  }, 0);
+  return [pending[best], ...pending.filter((_, index) => index !== best)];
+}
+
+/** The queue without the requests no longer waiting, settled as the queue
+ * itself will be a render later. The snapshot drops an answered request
+ * first; read from the queue alone, that render had no card in front, and
+ * the open card folded away into the small tag (owner, 2026-11-07). */
+export function liveQueue(
+  queue: LaneCard[],
+  requests: readonly Approval[],
+): LaneCard[] {
+  const waiting = (card: LaneCard) =>
+    card.type !== "request" || requests.some((each) => each.id === card.id);
+  if (queue.every(waiting)) return queue;
+  const kept = queue.filter(waiting);
+  return waiting(queue[0]) ? kept : promoteOldestWaiting(kept);
+}
+
 /** The agent a card is about; a request no longer waiting has none. */
 export function cardVendor(
   card: LaneCard,

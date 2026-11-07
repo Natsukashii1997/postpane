@@ -4,6 +4,7 @@ import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import {
   blocksNotice,
   laneEvents,
+  liveQueue,
   newsLanes,
   sideLanes,
   type LaneCard,
@@ -117,4 +118,21 @@ test("the lanes beside the first hang by their own marks; one off the strip has 
     ]),
     [["codex", 1]],
   );
+});
+
+test("an answered request leaves the front at once, the next waiting one taking its place", () => {
+  // The snapshot drops an answered request a render before the queue does;
+  // read from the queue alone, that render had no card in front, and the
+  // open card folded away into the small tag (owner, 2026-11-07).
+  const queue = [asked(claudeAsk), told(claudeReply), asked(claudeAsk2)];
+  const left = [claudeAsk2, codexAsk];
+  assert.deepEqual(
+    liveQueue(queue, left).map((card) => card.id),
+    ["ask-2", "reply-2"],
+  );
+});
+
+test("a queue whose requests all still wait is passed on as it is", () => {
+  const queue = [asked(claudeAsk), told(claudeReply)];
+  assert.equal(liveQueue(queue, requests), queue);
 });

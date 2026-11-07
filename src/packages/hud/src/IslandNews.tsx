@@ -14,7 +14,9 @@ import { seenFirst, staysUntilSeen } from "./alerts/reply-stays";
 import {
   blocksNotice,
   laneEvents,
+  liveQueue,
   newsLanes,
+  promoteOldestWaiting,
   sideLanes,
   type LaneCard,
   type NewsLane,
@@ -37,22 +39,6 @@ export {
 
 /** Presentation only: Core is the sole producer/deduplicator of event facts. */
 export type IslandCard = LaneCard;
-
-function promoteOldestWaiting(pending: IslandCard[]): IslandCard[] {
-  if (pending.length < 2) return pending;
-  // Matches IslandAlertQueue.dismiss(): permission requests have waitingSince = request.at
-  // and come before non-persistent events (.distantFuture), which keep arrival order.
-  const best = pending.reduce((at, card, index) => {
-    const waiting = card.type === "request";
-    const prior = pending[at],
-      priorWaiting = prior.type === "request";
-    return waiting &&
-      (!priorWaiting || Date.parse(card.at) < Date.parse(prior.at))
-      ? index
-      : at;
-  }, 0);
-  return [pending[best], ...pending.filter((_, index) => index !== best)];
-}
 
 export function reconcileIslandCards(
   previous: IslandCard[],
@@ -186,7 +172,9 @@ export function useIslandNews(
       ),
     );
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
-  const current = queue[0];
+  // Requests answered since the queue last caught up are already gone.
+  const live = liveQueue(queue, requests);
+  const current = live[0];
   const dismiss = () => setQueue(dismissIslandCard);
   const drop = (ids: readonly string[]) =>
     setQueue((previous) => dropIslandCards(previous, ids));
@@ -203,7 +191,7 @@ export function useIslandNews(
   // Each other agent's tag hangs by its own mark (#162): a notice there folds
   // away on its own clock, as the first one does; one waiting to be looked at
   // stays until the pointer brings it to the front.
-  const lanes = newsLanes(queue, requests);
+  const lanes = newsLanes(live, requests);
   const sides = sideLanes(lanes, shown);
   const sideNews = sides.flatMap(({ lane }) =>
     lane.front.type === "news" &&
@@ -253,7 +241,7 @@ export function useIslandNews(
       current?.type === "request"
         ? requests.find((request) => request.id === current.id)
         : undefined,
-    queue,
+    queue: live,
     // The card shows the first agent's things only (#162).
     laneQueue: lanes[0]?.cards ?? [],
     requests: laneRequests(lanes[0], requests),
