@@ -16,6 +16,8 @@
 | 开需求、拆任务、实现、审查 | 下面「Agent skills」一节 |
 | 写交接、验收别人的交接 | [docs/templates/handoff.md](docs/templates/handoff.md) 骨架；[OPERATIONS](docs/OPERATIONS.md)「交接写法」「报告与验收」 |
 | 一轮从开工到收尾：worktree、测试、装机回读、交接、合并清理、复盘进化 | [.agents/skills/postpane-round/SKILL.md](.agents/skills/postpane-round/SKILL.md)（Claude `/postpane-round`，Codex `$postpane-round`） |
+| 给别人装驿窗、第二人复现 | [docs/安装与使用.md](docs/安装与使用.md) |
+| 查 AI 使用六级 L4–L6 的证据 | `docs/evidence/`（L4 Skill 与使用记录、L5 运行记录、L6 前后对比） |
 
 项目长出接口、样式、发布等文档后，在这张表里加一行。
 
