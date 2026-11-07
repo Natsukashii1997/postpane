@@ -1,11 +1,5 @@
-import {
-  useEffect,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
-import { ArrowUpRight } from "lucide-react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { GoButton } from "../GoButton";
 import { HUDArtwork } from "../HUDArtwork";
 import { PAPER_SEAL, type Paper } from "../paper";
 import { dateFormat } from "@agent-hud/ui/format";
@@ -174,37 +168,20 @@ export function EntryRow({
           )
         )}
       </span>
-      {/* Lights up under the pointer and sinks when pressed (owner,
-          2026-11-07: it gave no sign it was pressed); global.css. */}
-      <button
-        type="button"
-        className="hud-go-button"
-        aria-label={goTitle}
-        title={goTitle}
-        aria-disabled={!canOpen}
+      <GoButton
+        label={goTitle}
+        enabled={canOpen}
+        inks={{
+          line: inks.line,
+          ink: inks.mid,
+          faint: inks.faint,
+          strong: inks.ink,
+        }}
         onClick={(event) => {
           event.stopPropagation();
           if (canOpen) onOpen();
         }}
-        style={
-          {
-            "--go-line": inks.line,
-            "--go-ink": canOpen ? inks.mid : inks.faint,
-            "--go-strong": inks.ink,
-            display: "inline-grid",
-            placeItems: "center",
-            width: 26,
-            height: 26,
-            boxSizing: "border-box",
-            padding: 0,
-            borderRadius: 3,
-            opacity: canOpen ? 1 : 0.6,
-            cursor: canOpen ? "pointer" : "default",
-          } as CSSProperties
-        }
-      >
-        <ArrowUpRight size={13} strokeWidth={2} />
-      </button>
+      />
       {model && (
         // The model and its reasoning effort, the same size and faint ink, on
         // one line; the model is cut first.
