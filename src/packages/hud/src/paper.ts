@@ -84,9 +84,13 @@ export function relayPaperOf(
 }
 
 /** Airmail stripes, red and blue, for a band `width` wide. */
+/** The airmail red and blue, toned down for the receipts. */
+export const AIRMAIL_RED = "#b0574b";
+export const AIRMAIL_BLUE = "#46679f";
+
 export function airmailStripes(width: number): string {
-  const red = "#b0574b",
-    blue = "#46679f";
+  const red = AIRMAIL_RED,
+    blue = AIRMAIL_BLUE;
   // Each stripe as long as the band is wide again, as on an envelope.
   const a = width * 1.33,
     b = a * 1.5;

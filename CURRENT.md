@@ -16,6 +16,18 @@
 - 本轮新坑：无。
 - skill 进化：E-09 已采纳；当前没有待批条目。
 
+## 回复卡：接力单套航空虚线框，去掉重复的「回到会话」（2026-11-07，Claude，常浩看三轮预览后定「甲 · 航空虚线框」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 13:35`（`date '+%F %H:%M'` 记录）。来由：常浩说展开那条里的白色「回到会话」和标题行 ↗ 重复，要删；接力单和普通回复混在一起分不出来，要围绕「会话框」本身做区分。预览 https://claude.ai/artifact/GP6JQSmbiUxtFhmoUMm2hQ 第 4 版甲；前两轮（整张换纸、只加斜纹线）被否，理由见记忆 postpane-relay-card-distinct。
+- 改了哪些文件：`hud/src/alerts/CompletionAlertView.tsx`（属于接力的回复整单套红蓝交替虚线框、极淡蓝底，框上左上角嵌签「接力 · Claude ⇄ ChatGPT · 第 n / 2 轮 · 结论」；送审纸条上的不套；展开后只剩「查看接力」，白色「回到会话」删掉，普通回复展开后没有按钮）；`hud/src/alerts/handoff-card.ts` 新增 `relayLegend`；`hud/src/paper.ts` 导出 `AIRMAIL_RED` / `AIRMAIL_BLUE`；测试 `handoff-card.test.ts` 新增 1 条（先红后绿）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 744 passed / 0 failed，前端 `ℹ pass 306` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-relay-entry-frame/`。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽深色纸，两单接力数据）截图：框、签、「需修改」、只剩「查看接力」都对；自查页备份在证据目录 `reply-check-page/` 后删掉。**未验证**：实机里有接力回复时的样子，等下一单接力回信时看。
+- 截图：无。
+- 发布与回读：`install.sh relay-entry-frame`：装前 `d70c15d14181`（已备份），13:48:43 退出并启动，产物 `93e2849ddb33` / 已装 `93e2849ddb33`，签名 leaf `H"b773068e"`；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-relay-entry-frame/PostPane-d70c15d14181.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：刘海形态（无纸面）下签没有底色衬，压在框线上，未专门看。
+- skill 进化：无。
+- 本轮新坑：无
+
 ## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致；常浩重新加载插件 0.2.1 后实测一单真实接力，回信收到并自动结束）
 
 - 时间：开工 `2026-11-07 12:31`（`date '+%F %H:%M'` 记录）。来由：批 C 那单接力 `h1a1b1fed89e00` ChatGPT 实际回了「结论：通过」，驿窗停在 `delivered`，30 分钟后交还常浩（#182 只让它被看见）。

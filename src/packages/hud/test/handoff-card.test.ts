@@ -6,6 +6,7 @@ import {
   autoLabel,
   handoffFor,
   progressLine,
+  relayLegend,
   round,
   stamp,
   timeline,
@@ -284,4 +285,31 @@ test("an answer queued for a paused Claude session says to open the session", ()
     progressLine(queued, T + 14 * minute, true),
     "意见已排队 · 打开 Claude 会话继续",
   );
+});
+
+test("a relay's reply is framed with its round and ChatGPT's verdict", () => {
+  // Owner, 2026-11-07 (甲 · 航空虚线框): the frame's label says which
+  // round it is and what ChatGPT said, and nothing more.
+  assert.deepEqual(relayLegend(handoff(), true), {
+    trip: "Claude ⇄ ChatGPT · 第 1 / 2 轮",
+    verdict: undefined,
+  });
+  const answered = handoff({
+    phase: "replied",
+    steps: [
+      step("ask", T + minute),
+      step("reply", T + 2 * minute, { verdict: "revise" }),
+      step("back", T + 3 * minute),
+      step("ask", T + 4 * minute),
+      step("reply", T + 5 * minute, { verdict: "pass" }),
+    ],
+  });
+  assert.deepEqual(relayLegend(answered, true), {
+    trip: "Claude ⇄ ChatGPT · 第 2 / 2 轮",
+    verdict: "通过",
+  });
+  assert.deepEqual(relayLegend(answered, false), {
+    trip: "Claude ⇄ ChatGPT · round 2 / 2",
+    verdict: "Pass",
+  });
 });
