@@ -205,6 +205,55 @@ pub enum Next {
     Limit,
     /// No verdict written: the person decides.
     NoVerdict,
+    /// 思维评审 (#209) 成熟退出 / 转其他路径: back to Claude, then the handoff ends.
+    Close,
+    /// 思维评审 证据不足暂停: back to Claude, then the auto round trip stops.
+    Pause,
+    /// 思维评审 决策升级: back to Claude, then the person decides.
+    Escalate,
+    /// 思维评审 whose last two lines do not hold: the person decides.
+    Invalid(Flaw),
+}
+
+/// A 思维评审 answer's way out, its 「评审出口」 (#209).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Exit {
+    /// 成熟退出 ↔ 通过
+    Mature,
+    /// 转其他路径 ↔ 通过
+    OtherPath,
+    /// 继续深化 ↔ 需修改
+    Deepen,
+    /// 证据不足暂停 ↔ 需修改
+    NeedEvidence,
+    /// 决策升级 ↔ 交常浩裁决
+    Escalate,
+}
+
+impl Exit {
+    /// The verdict it goes with; none for 交常浩裁决.
+    pub fn verdict(self) -> Option<Verdict> {
+        match self {
+            Self::Mature | Self::OtherPath => Some(Verdict::Pass),
+            Self::Deepen | Self::NeedEvidence => Some(Verdict::Revise),
+            Self::Escalate => None,
+        }
+    }
+}
+
+/// Why a 思维评审 answer's last two lines do not hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Flaw {
+    /// The last line is not 「结论：…」.
+    NoVerdict,
+    /// 「结论：」 with none of 通过 / 需修改 / 交常浩裁决.
+    UnknownVerdict,
+    /// The line before is not 「评审出口：…」.
+    NoExit,
+    /// 「评审出口：」 with none of the five.
+    UnknownExit,
+    /// The way out and the verdict do not go together.
+    Mismatch,
 }
 
 impl Handoff {
@@ -257,6 +306,26 @@ impl Handoff {
         if !self.live() || self.phase != Phase::Replied {
             return None;
         }
+        // 思维评审 (#209): only its last two lines count, and nothing
+        // happens by itself while the auto round trip is off — not even a
+        // pass, which must reach Claude before the handoff ends.
+        if self.thinking() {
+            if !self.auto {
+                return None;
+            }
+            let reply = self
+                .last_reply()
+                .and_then(|step| step.text.as_deref())
+                .unwrap_or_default();
+            return Some(match exit(reply) {
+                Ok(Exit::Mature | Exit::OtherPath) => Next::Close,
+                Ok(Exit::Deepen) if self.reviews() < ROUNDS => Next::Back,
+                Ok(Exit::Deepen) => Next::Limit,
+                Ok(Exit::NeedEvidence) => Next::Pause,
+                Ok(Exit::Escalate) => Next::Escalate,
+                Err(flaw) => Next::Invalid(flaw),
+            });
+        }
         let verdict = self.last_reply().and_then(|step| step.verdict);
         if verdict == Some(Verdict::Pass) {
             return Some(Next::Pass);
@@ -270,6 +339,11 @@ impl Handoff {
             Some(Verdict::Revise) => Next::Limit,
             None => Next::NoVerdict,
         })
+    }
+    /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
+    pub fn thinking(&self) -> bool {
+        let title = self.title.trim_start();
+        title.starts_with("思维评审｜") || title.starts_with("思维评审|")
     }
     /// Whether the newest step of `kinds` sent these same words.
     fn just_sent(&self, kinds: &[StepKind], key: &str) -> bool {
@@ -553,7 +627,11 @@ impl Book {
                 }
             }
         }
-        let (points, verdict) = review(reply);
+        let (points, mut verdict) = review(reply);
+        // A 思维评审 answer's verdict is its last line or none (#209).
+        if handoff.thinking() {
+            verdict = exit(reply).ok().and_then(Exit::verdict);
+        }
         handoff.steps.push(Step {
             at: now,
             kind: StepKind::Reply,
@@ -805,6 +883,53 @@ pub fn review(reply: &str) -> (Vec<String>, Option<Verdict>) {
             .collect();
     }
     (points, verdict)
+}
+
+/// A 思维评审 answer's way out (#209), from its last two lines only: the
+/// last 「结论：通过 / 需修改 / 交常浩裁决」, the one before 「评审出口：…」,
+/// the two going together. Nothing higher up counts, not even an earlier
+/// 「结论：」.
+pub fn exit(reply: &str) -> Result<Exit, Flaw> {
+    let mut lines = reply
+        .lines()
+        .rev()
+        .map(|line| line.replace("**", "").replace("__", ""))
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty());
+    let value = |line: Option<String>, label: &str| -> Option<String> {
+        let line = line?;
+        let rest = [format!("{label}："), format!("{label}:")]
+            .iter()
+            .find_map(|label| line.strip_prefix(label.as_str()).map(str::to_owned))?;
+        Some(
+            rest.trim()
+                .trim_end_matches(['；', ';', '。', '.'])
+                .trim()
+                .to_owned(),
+        )
+    };
+    let verdict = value(lines.next(), "结论").ok_or(Flaw::NoVerdict)?;
+    let verdict = match verdict.as_str() {
+        "通过" => Some(Verdict::Pass),
+        "需修改" => Some(Verdict::Revise),
+        "交常浩裁决" => None,
+        _ => return Err(Flaw::UnknownVerdict),
+    };
+    let way = match value(lines.next(), "评审出口")
+        .ok_or(Flaw::NoExit)?
+        .as_str()
+    {
+        "成熟退出" => Exit::Mature,
+        "转其他路径" => Exit::OtherPath,
+        "继续深化" => Exit::Deepen,
+        "证据不足暂停" => Exit::NeedEvidence,
+        "决策升级" => Exit::Escalate,
+        _ => return Err(Flaw::UnknownExit),
+    };
+    if way.verdict() != verdict {
+        return Err(Flaw::Mismatch);
+    }
+    Ok(way)
 }
 
 fn new_id(now: i64) -> String {
@@ -1236,6 +1361,66 @@ mod tests {
         let (points, _) = review("- 第一条\n- 第二条\n结论：通过");
         assert_eq!(points, ["第一条", "第二条"]);
         assert!(review("1. 结论：通过").0.is_empty());
+    }
+
+    #[test]
+    fn a_thinking_review_is_read_from_its_last_two_lines_only() {
+        assert_eq!(
+            exit("意见\n评审出口：成熟退出\n结论：通过"),
+            Ok(Exit::Mature)
+        );
+        assert_eq!(
+            exit("意见\n\n**评审出口:** 转其他路径  \n  **结论:** 通过；\n\n"),
+            Ok(Exit::OtherPath)
+        );
+        assert_eq!(exit("评审出口：继续深化\n结论：需修改"), Ok(Exit::Deepen));
+        assert_eq!(
+            exit("评审出口：证据不足暂停\n结论：需修改"),
+            Ok(Exit::NeedEvidence)
+        );
+        assert_eq!(
+            exit("评审出口：决策升级\n结论：交常浩裁决"),
+            Ok(Exit::Escalate)
+        );
+        // T2: an earlier 「结论：通过」 in the body never counts.
+        assert_eq!(
+            exit("上一轮写过：\n结论：通过\n评审出口：决策升级\n结论：交常浩裁决"),
+            Ok(Exit::Escalate)
+        );
+        // T8: missing, unknown or at odds — none holds.
+        assert_eq!(
+            exit("评审出口：成熟退出\n结论：通过\n补充一句"),
+            Err(Flaw::NoVerdict)
+        );
+        assert_eq!(
+            exit("评审出口：成熟退出\n结论：挺好"),
+            Err(Flaw::UnknownVerdict)
+        );
+        assert_eq!(exit("结论：通过"), Err(Flaw::NoExit));
+        assert_eq!(exit("意见\n结论：通过"), Err(Flaw::NoExit));
+        assert_eq!(exit("评审出口：收工\n结论：通过"), Err(Flaw::UnknownExit));
+        assert_eq!(
+            exit("评审出口：成熟退出\n结论：需修改"),
+            Err(Flaw::Mismatch)
+        );
+        assert_eq!(exit("评审出口：决策升级\n结论：通过"), Err(Flaw::Mismatch));
+
+        // The verdict kept for the card is the strict one.
+        let mut book = Book::default();
+        let handoff = book.begin("s1", None, "思维评审|方案", None, "请评审", 1);
+        assert!(book.get(&handoff.id).unwrap().thinking());
+        book.opened(&handoff.id, "c1", 2);
+        book.replied(
+            "c1",
+            "结论：通过\n评审出口：决策升级\n结论：交常浩裁决",
+            Some("m1"),
+            3,
+        );
+        let handoff = book.get(&handoff.id).unwrap();
+        assert_eq!(handoff.last_reply().unwrap().verdict, None);
+        assert_eq!(handoff.next(), Some(Next::Escalate));
+        let other = Book::default().begin("s2", None, "修登录", None, "请审核", 1);
+        assert!(!other.thinking());
     }
 
     #[test]
