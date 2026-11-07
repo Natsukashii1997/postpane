@@ -4,6 +4,17 @@
 
 
 
+## 驿窗一轮采纳 E-09：同一会话接着做下一张可复用刚合并的 worktree（2026-11-07，Claude，常浩经驿窗侧栏回复「批 E-09」；已提交，无需发布）
+
+- 时间：开工 `2026-11-07 09:27`（`date '+%F %H:%M'` 记录）。来由：#178；E-09 由 #168 的会话提出。动手前核实 main 上 E-09 仍是待批、skill 目录自 `7733bc4` 起没被别处改过、没有别的 PR 在改它。
+- 改了哪些文件：`.agents/skills/postpane-round/SKILL.md`（第 1 步加一条：上一张已合并、原 worktree 干净时可在原地 `git switch -c claude/<号>-<短名> origin/main`，别的会话在用的不碰，并行仍各开各的）；`steps.json`（start 痕迹加 `git switch -c claude/`）；`EVOLUTION.md`（E-09 改为已采纳，记批准来源与落地差异：`main` 写成 `origin/main`、加「干净」判据）。
+- 测试：`node --test tests/*.test.mjs` 原样结果 `ℹ pass 14` / `ℹ fail 0`。未跑 `pnpm run check` / `pnpm test`：只改 skill 文档与 `steps.json`，没碰 `src/` 与脚本。
+- 验证：读回第 1 步全文确认新条目位置与命令；无界面改动。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：批准经 agent-hud 插件转进本会话，按 AGENTS.md 先核实了 E-09 的现状再改。开 issue 时号是 #178，worktree 先按预估的 177 建，已改名为 `178-round-e09`、分支 `claude/178-round-e09`。
+- 本轮新坑：无。
+- skill 进化：E-09 已采纳；当前没有待批条目。
 
 ## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致；常浩重新加载插件 0.2.1 后实测一单真实接力，回信收到并自动结束）
 
