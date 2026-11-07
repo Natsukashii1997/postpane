@@ -171,3 +171,11 @@
 - 正确做法：同一组取值只定义一次（`settings::APPROVAL_WAIT_MINUTES`），各处引用它；改设置相关功能时，测试要走「写设置文件 → 新建 core → 发一次请求 → 再看效果」这条真实路径。查「设置改了没生效」先 `grep -rn` 旧取值列表，看有没有漏网的副本。
 - 证据：`git show 2fe2329 -- src/crates/core/src/settings.rs`（只改了校验）；回滚修复时 `settings::tests::waiting_until_answered_survives_every_reload_of_the_settings_file` 在「after a request reloads the file」处失败；日志 `~/Library/Application Support/postpane/evidence/2026-11-07-keep-waiting/`。
 - 升级：已写成测试 `waiting_until_answered_survives_every_reload_of_the_settings_file`、`a_next_step_box_left_for_hours_stays_in_the_sidebar_while_approvals_wait_until_answered`、`a_request_waits_for_postpane_past_two_minutes_only_when_set_to_wait_until_answered`。可提议提升为全局坑：「同一组取值抄多份，加新值漏改一份」换个项目也成立。
+
+## L-20 审批卡说「没加载插件，执行 /reload-plugins」，其实是 Claude 重启后会话停了（2026-11-07）
+
+- 现象：数字分身会话的提问卡提示「这个会话还没加载 Agent HUD 插件。在会话里执行 /reload-plugins…」，可这个会话此前收过 40 多条驿窗转进去的消息，插件明明在跑。
+- 根因：14:12:27 Claude 桌面应用重启（`ps -o lstart` 看主进程），退出时每个会话的插件都跑 `session.end`，约 50 个签到文件在 14:12:23 同一秒被写成 `{"ended":…}`。重启后桌面应用只给打开的会话起进程，没打开的会话没有进程，也不会再签到。`unreachable()` 只分「没装 / 被暂停 / 没加载」三种，`last_check_in` 遇到 `ended` 返回空，于是落到「没加载」，给了一个无处可执行的命令。
+- 正确做法：签到文件标了 `ended` 就说「会话已停，在 Claude 里打开它」，不给 `/reload-plugins`。排查「会话为什么连不上」先看 `~/Library/Application Support/app.postpane.mac/claude-channel/sessions/<会话 id>.json` 的内容与修改时间，再用 `ps -axo lstart,command | grep "MacOS/claude "` 看这个会话有没有进程。
+- 证据：`stat -f "%m %Sm %N" claude-channel/sessions/*.json | sort -rn`（大批文件同一秒写成 ended）；会话记录 `be0e22ad-….jsonl` 里有 43 处 `agent-hud`；日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
+- 升级：已写成测试 `an_unreached_session_names_the_step_that_lets_the_hud_answer` 的 ended 一段（#188）。
