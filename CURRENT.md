@@ -5,6 +5,27 @@
 
 
 
+## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致，插件待常浩重新加载后实测）
+
+- 时间：开工 `2026-11-07 12:31`（`date '+%F %H:%M'` 记录）。来由：批 C 那单接力 `h1a1b1fed89e00` ChatGPT 实际回了「结论：通过」，驿窗停在 `delivered`，30 分钟后交还常浩（#182 只让它被看见）。
+- 根因（有证据）：`hooks/inbox` 里这个对话在 01:54:19.827（送达后 1.5 秒）收到一条 `turn complete`，回复为空，messageId `e6c1acb9…`；在 Chrome 打开该对话，真回复的 messageId 也是 `e6c1acb9…`。ChatGPT 先出空占位块，答案随后写进同一个块。插件发完话后采样时没看到停止按钮，就把空块报成答完并记为已报；宿主不收空回复；真回复写进来后，插件因为同一 messageId（且 `expecting` 已清）不再报。整轮没采到停止按钮，所以也没有 `turn start`。详见 L-18。
+- 改了哪些文件：
+  - `src/apps/chrome-extension/content.js`：只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`；空的或还在变的，等下一次变化再采样（5 行）。
+  - `src/apps/chrome-extension/manifest.json`：版本 0.2.0 → 0.2.1，重新加载后宿主 `hello` 能看出是新版。
+  - `src/crates/host/src/handoff.rs`：每条 `turn` 记一行 `<数据目录>/chatgpt/turns.jsonl`（`at`、`conversation`、`phase`、`messageId`、`replyChars`、`outcome`：taken / early / caught-up / unused / evicted），不记原文，超过 1 MB 改名 `turns.old.jsonl`。
+  - 测试：`content.test.mjs` 新增「an empty placeholder is not the reply that fills it later」（修复前报 `[['m5', '']]`，与这次故障一致）和「a reply still being written without a stop button waits until it stops changing」（修复前报出半截「一二三」）；`handoff.rs` 新增 `every_turn_is_logged_with_what_became_of_it_but_not_its_words`。
+  - `docs/chatgpt-channel.md`：页面结构补占位块规则，接力一节补回合日志；`docs/LESSONS.md` 新增 L-18。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 744 passed / 0 failed，前端 `ℹ pass 305` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。还原 `content.js` 的 prettier 重排后重跑 `pnpm run test:extension` `ℹ pass 10` / `ℹ fail 0`，`format:check`、`check-rules` 通过。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`check.log`、`test.log`、`node-tests.log`、`test-extension-2.log`、`build.log`）。
+- 验证：根因证据同目录 `inbox-completion-empty.json`、`handoff-h1a1b1fed89e00.json`、`dom-probe.md`。**实机未验证**：Chrome 从主目录加载插件，要合并、拉取后常浩在扩展程序页重新加载驿窗插件（0.2.1），再发一单真实接力看回信能到、`turns.jsonl` 有记录。
+- 截图：无界面改动。
+- 发布与回读：`install.sh chatgpt-reply-lost`：装前 `3888d0dec483`（已备份），12:48:30 退出并启动，产物 `d70c15d14181` / 已装 `d70c15d14181`，签名 leaf `H"b773068e"`；`extension.sock` 12:48 重建，tccd 无文稿权限请求；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/PostPane-3888d0dec483.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划里的「对账」兜底（宿主定时请插件读对话最新回复）没做：根因已有证据并修掉，另两处可疑点（`background.js` 丢弃无会话 id 的 `complete`、原生连接断开时 `post` 静默丢消息）这次没有证据，留给 `turns.jsonl` 观察；再丢一次、日志里没有那一行时再做。
+  - 取舍：只有图片、没有文字的回复不再报 `turn complete`（以前报一条空回执）。
+  - 范围外：`early` 只留 16 条，常浩自己聊天的回合也会存进去、一直不清（现在日志里记成 `early` / `evicted`），短时间内不会挤掉接力的回合，未改。
+- skill 进化：无。
+- 本轮新坑：L-18
+
 ## 回复卡「全部知道了」移到头部；按钮有按下反馈；接力章改成「审 / 未审 / 回」按实际状态（2026-11-07，Claude，常浩看预览后说「把蓝色标识删掉，上面放一个全部知道了就可以」，章的规则在提问里选定：「审」停掉或交还就撤、30 分钟没回信改「未审」可点去 ChatGPT，「回」通过即结束、需修改留章；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 11:15`（`date '+%F %H:%M'` 记录）。来由：常浩三条反馈：回复卡里「全部知道了」作用于整张却放在单条里；条目右上 ↗ 悬停、按下都没反应；「回」「审」一直挂着，分不清接力结束没有。预览 https://claude.ai/artifact/URiwPVoodUWGH1rPgKtVR2 第 2 版。
