@@ -251,6 +251,22 @@ async function resync() {
   statusSoon();
 }
 
+// Installing, updating or reloading the extension gives the chatgpt.com tabs
+// already open no content script, and cuts the old one off: replies in them
+// went unreported until the tab was reloaded (#206). Put one in each; a tab
+// that cannot take it (discarded, still loading) gets one when it loads.
+chrome.runtime.onInstalled.addListener(async () => {
+  for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
+    await chrome.scripting
+      .executeScript({
+        target: { tabId: tab.id },
+        files: ["page.js", "content.js"],
+      })
+      .catch(() => {});
+  }
+  resync();
+});
+
 chrome.storage.local.get("watched").then(({ watched: saved }) => {
   if (saved && !watched.size) watched = new Set(saved);
 });

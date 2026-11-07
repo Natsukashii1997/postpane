@@ -196,3 +196,11 @@
 - 证据：本会话 17:2x 三次实测：`open https://…` 与 `open lark://…` 后前台仍为 `com.anthropic.claudefordesktop`；`open feishu://…` 后飞书 `frontmost` 为 `true`，常浩确认是亚古兽所在的群。
 - 升级：已写成测试 `a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser`（#198）。
 - 提升：已提升为全局 G-21（2026-11-07，agent-kit#34）。
+
+## L-23 自己开的 ChatGPT 对话侧栏一条都收不到：插件重载后，已开标签页里的脚本断了（2026-11-07）
+
+- 现象：常浩在 Chrome 里和 ChatGPT 聊了好几个对话，侧栏 ChatGPT 格一直「正在进行 0」，也没有新回复回执；接力会话却一直正常。
+- 根因：Chrome 装上、更新或重新加载插件时，不给已经开着的标签页装新的内容脚本，旧脚本跟插件断开，`chrome.runtime.sendMessage` 同步抛错，被吞掉。ChatGPT 是单页应用，在同一个标签页里新建对话也不会重装脚本，于是这个标签页永远不报。接力会话每次由插件新开标签页，脚本是新的，所以只有接力能收到，看起来像「只读得到名单里的会话」。
+- 正确做法：插件后台在 `runtime.onInstalled` 里用 `chrome.scripting.executeScript` 给已开的目标标签页补装脚本；内容脚本要能被重复装（旧的一份让位）、断开后自己停下。查「插件那边没报」先比两组：插件自己开的标签页能报、用户自己的标签页不能报，就是这一类；让用户刷新标签页再试一句，能报就坐实。
+- 证据：`<数据目录>/hooks/inbox` 里 ChatGPT 的 17 条回复全在 `chatgpt/watched.json` 名单内，`chatgpt/turns.jsonl` 最后一行 14:29；常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来。修复见 #206。
+- 升级：已写成测试 `injected again into an open tab, the page reports each turn once`、`a copy cut off by an extension reload stops instead of throwing on every change`、`installing or reloading the extension puts the scripts into chatgpt.com tabs already open`。
