@@ -3,7 +3,10 @@
 // each part live here so the page and its tests read one list; AGENTS.md
 // 「AI 接入」 says the same and changes with it.
 import type { Provider } from "@agent-hud/protocol";
-import type { ChatGptStatus, MCPClientsStatus } from "../settings/agent-plugins/services";
+import type {
+  ChatGptStatus,
+  MCPClientsStatus,
+} from "../settings/agent-plugins/services";
 import type { Words } from "./agent-plugins";
 
 export type AccessTone = "green" | "orange" | "gray";
@@ -79,10 +82,7 @@ const sources: Record<string, { sessions: Words; quota: Words }> = {
   },
   deepseek: {
     sessions: ["~/.dsh/sessions", "~/.dsh/sessions"],
-    quota: [
-      "api.deepseek.com with an API key",
-      "api.deepseek.com，用 API Key",
-    ],
+    quota: ["api.deepseek.com with an API key", "api.deepseek.com，用 API Key"],
   },
   cursor: {
     sessions: ["Cursor state.vscdb", "Cursor 的 state.vscdb"],

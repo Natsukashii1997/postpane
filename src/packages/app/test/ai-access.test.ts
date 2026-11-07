@@ -1,11 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Provider } from "@agent-hud/protocol";
-import {
-  dataObjects,
-  executorState,
-  mcpReach,
-} from "../src/lib/ai-access.ts";
+import { dataObjects, executorState, mcpReach } from "../src/lib/ai-access.ts";
 
 const chatgpt = {
   supported: true,

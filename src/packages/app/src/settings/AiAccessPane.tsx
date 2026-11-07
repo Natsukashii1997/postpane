@@ -75,9 +75,7 @@ export function AiAccessPane({
   const logo = (source: string) => (
     <HUDArtwork source={source} size={18} light={light} />
   );
-  const path = (text: string) => (
-    <span className="ai-access-path">{text}</span>
-  );
+  const path = (text: string) => <span className="ai-access-path">{text}</span>;
 
   return (
     <TooltipProvider>
@@ -161,7 +159,10 @@ export function AiAccessPane({
               ],
               [
                 t("Executor", "执行方"),
-                t("ChatGPT on the web (the default)", "ChatGPT 网页（跟随默认）"),
+                t(
+                  "ChatGPT on the web (the default)",
+                  "ChatGPT 网页（跟随默认）",
+                ),
               ],
               [
                 t("How", "接入"),
@@ -215,18 +216,24 @@ export function AiAccessPane({
           )}
         >
           <ToolSwitchRow
-            title={t("HUD tools (MCP “agent-hud”)", "侧栏工具（MCP「agent-hud」）")}
+            title={t(
+              "HUD tools (MCP “agent-hud”)",
+              "侧栏工具（MCP「agent-hud」）",
+            )}
             description={
               reach === "reading"
-                ? t("Reading which clients have it…", "正在读取装到了哪些客户端…")
+                ? t(
+                    "Reading which clients have it…",
+                    "正在读取装到了哪些客户端…",
+                  )
                 : reach === "unknown"
                   ? t(
                       "Can't tell here which clients have it.",
                       "这里读不到装到了哪些客户端。",
                     )
                   : t(
-                    `In ${list(reach.installed) || "no client"}${reach.missing.length ? `; not in ${list(reach.missing)}` : ""}.`,
-                    `已装到 ${list(reach.installed) || "（无）"}${reach.missing.length ? `；${list(reach.missing)} 未装` : ""}。`,
+                      `In ${list(reach.installed) || "no client"}${reach.missing.length ? `; not in ${list(reach.missing)}` : ""}.`,
+                      `已装到 ${list(reach.installed) || "（无）"}${reach.missing.length ? `；${list(reach.missing)} 未装` : ""}。`,
                     )
             }
             checked={tools.on}
