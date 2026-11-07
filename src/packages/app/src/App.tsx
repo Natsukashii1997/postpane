@@ -646,6 +646,14 @@ function AppContent({
         return false;
       }
     },
+    openFeishuChat: async (chatId) => {
+      try {
+        await action("open_feishu_chat", { chatId });
+        return true;
+      } catch {
+        return false;
+      }
+    },
     query: (method, params) => act(method, params),
     openSettingsPage: (page) => {
       if (isTauri()) void invoke("hud_show_main", { page });

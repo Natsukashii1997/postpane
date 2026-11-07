@@ -139,3 +139,18 @@ fn a_chatgpt_conversation_opens_on_chatgpt_com_only_by_its_id() {
         assert_eq!(open(odd), None);
     }
 }
+
+#[test]
+fn a_feishu_chat_opens_through_its_applink() {
+    assert_eq!(
+        session_url(&json!({"kind":"feishu-chat","id":"oc_08a1_B2"})),
+        Some("https://applink.feishu.cn/client/chat/open?openChatId=oc_08a1_B2".into())
+    );
+    for id in ["oc_a&x=1", "ou_08a1", "oc_", "https://example.com"] {
+        assert_eq!(
+            session_url(&json!({"kind":"feishu-chat","id":id})),
+            None,
+            "{id}"
+        );
+    }
+}

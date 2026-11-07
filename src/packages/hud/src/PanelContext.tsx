@@ -29,6 +29,9 @@ export interface PanelServices {
   selectProvider?(provider: string): void;
   /** Resolves false when the session could not be reached (the reply card then offers a retry). */
   openSession?(session: Session): void | Promise<boolean | void>;
+  /** Opens the Feishu chat of a Hermes ask; resolves false when it could
+   * not. */
+  openFeishuChat?(chatId: string): Promise<boolean>;
   /** Settings, on the page with this id, such as "agent-plugins". */
   openSettingsPage?(page: string): void;
   /** The handoff card's buttons (relay design 甲): send ChatGPT's answer

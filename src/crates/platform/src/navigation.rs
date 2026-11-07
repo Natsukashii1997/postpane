@@ -161,6 +161,13 @@ fn session_url_on(target: &Value, os: Os, registered: impl Fn(&str) -> bool) -> 
         "chatgpt-conversation" if agent_hud_agents::chatgpt::conversation_id(id) => {
             Some(format!("https://chatgpt.com/c/{id}"))
         }
+        // A Hermes bot's Feishu chat opens in the Feishu app through its
+        // applink, which also launches Feishu when it is closed.
+        "feishu-chat" if agent_hud_agents::hermes::feishu_chat_id(id) => {
+            let mut url = reqwest::Url::parse("https://applink.feishu.cn/client/chat/open").ok()?;
+            url.query_pairs_mut().append_pair("openChatId", id);
+            Some(url.into())
+        }
         "iterm-session" | "iTermSession" if !id.trim().is_empty() && id.len() <= 4096 => {
             let mut url = reqwest::Url::parse("iterm2:reveal").ok()?;
             url.query_pairs_mut().append_pair("sessionid", id);

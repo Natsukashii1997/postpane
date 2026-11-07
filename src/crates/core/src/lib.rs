@@ -508,6 +508,7 @@ impl AgentHudCore {
             }
             "sessions" => self.sessions(params),
             "session_detail" => self.session_detail(params),
+            "hermes_chat_target" => self.hermes_chat(&params),
             _ => Err(format!("{method} is not supported by the local runtime")),
         }
     }

@@ -141,6 +141,9 @@ export interface HermesCronJob {
 export interface HermesAsk {
   /** Feishu's chat type: `dm`, `group` or `thread`. */
   chat: string | null;
+  /** From Core: the Feishu chat it opens in (`oc_…`); absent or null when
+   * it does not open, such as a colleague's private chat with the bot. */
+  chatId?: string | null;
   title: string;
   at: string | null;
   answer: "answered" | "replying" | "waiting";
@@ -1257,6 +1260,7 @@ export type NativeMethod =
   | "answer_request"
   | "session_detail"
   | "open_session"
+  | "open_feishu_chat"
   | "open_native"
   | "toggle_hud"
   | "extension"

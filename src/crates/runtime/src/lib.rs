@@ -345,6 +345,21 @@ impl Runtime {
             self.platform.reveal_transcript(&path)?;
             return Ok(json!({"opened":true,"action":"reveal_transcript"}));
         }
+        // A Hermes ask opens its Feishu chat; Core says which chats the panel
+        // lists, so no other chat opens from here.
+        if method == "open_feishu_chat" {
+            let target = self.core.request("hermes_chat_target", params)?;
+            if self.is_demo() {
+                return Ok(json!({"opened":true,"action":"demo"}));
+            }
+            if self.platform.navigate_session(&target)? {
+                return Ok(json!({"opened":true,"action":"native_session"}));
+            }
+            return Err(l10n::text(
+                "飞书没能打开这个聊天",
+                "Feishu could not open this chat",
+            ));
+        }
         if method == "answer_request" {
             return self.core.request(method, params);
         }
