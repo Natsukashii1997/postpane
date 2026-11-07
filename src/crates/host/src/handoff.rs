@@ -107,6 +107,11 @@ fn launch_code(now: i64) -> String {
 fn launches_path(data: &std::path::Path) -> PathBuf {
     agent_hud_runtime::chatgpt::folder(data).join("launches.json")
 }
+fn turns_path(data: &std::path::Path) -> PathBuf {
+    agent_hud_runtime::chatgpt::folder(data).join("turns.jsonl")
+}
+/// How big the turn log grows before it is moved to `turns.old.jsonl`.
+const TURNS_KEPT: u64 = 1 << 20;
 
 /// What a swipe did: left words now, or found words still waiting.
 #[derive(Debug, PartialEq)]
@@ -297,6 +302,39 @@ impl Desk {
         self.launches.lock().unwrap_or_else(|p| p.into_inner())
     }
     /// Keeps the swipes (held, so a newer state is never overwritten).
+    /// One line in `chatgpt/turns.jsonl` for a turn the extension reported:
+    /// its conversation, phase, message id, how long the reply was and what
+    /// the desk made of it (`taken`, `unused`, `early`, `caught-up`,
+    /// `evicted`). Never the words themselves. A lost reply is then traced to
+    /// the extension (no line) or to the desk (a line that says why).
+    fn note_turn(&self, message: &Value, at: i64, outcome: &str) {
+        use std::io::Write;
+        let Some(data) = &self.data else { return };
+        let path = turns_path(data);
+        if std::fs::metadata(&path).is_ok_and(|m| m.len() > TURNS_KEPT) {
+            let _ = std::fs::rename(&path, path.with_extension("old.jsonl"));
+        }
+        let line = json!({
+            "at": at,
+            "conversation": message["conversation"],
+            "phase": message["phase"],
+            "messageId": message["messageId"],
+            "replyChars": message["reply"].as_str().map(|r| r.chars().count()),
+            "outcome": outcome,
+        });
+        let written = std::fs::create_dir_all(agent_hud_runtime::chatgpt::folder(data))
+            .and_then(|()| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+            })
+            .and_then(|mut file| writeln!(file, "{line}"));
+        if let Err(error) = written {
+            eprintln!("ChatGPT turn log {}: {error}", path.display());
+        }
+    }
+
     fn keep_launches(&self, launches: &HashMap<String, Launch>) {
         let Some(data) = &self.data else { return };
         let path = launches_path(data);
@@ -506,7 +544,13 @@ impl Desk {
         // Still holding `early`, so a turn reported now waits behind these.
         let mut changed = false;
         for turn in mine {
-            changed |= self.take(&turn.message, conversation, turn.at);
+            let took = self.take(&turn.message, conversation, turn.at);
+            self.note_turn(
+                &turn.message,
+                turn.at,
+                if took { "caught-up" } else { "unused" },
+            );
+            changed |= took;
         }
         changed
     }
@@ -554,11 +598,16 @@ impl Desk {
                         message: message.clone(),
                         at: now,
                     });
+                    self.note_turn(message, now, "early");
                     let extra = early.len().saturating_sub(EARLY_KEPT);
-                    early.drain(..extra);
+                    for turn in early.drain(..extra) {
+                        self.note_turn(&turn.message, now, "evicted");
+                    }
                     return false;
                 }
-                self.take(message, conversation, now)
+                let took = self.take(message, conversation, now);
+                self.note_turn(message, now, if took { "taken" } else { "unused" });
+                took
             }
             (Some("opened"), _) if message["ok"] == true => {
                 // Only a try that already gave up waiting: a waited-for
@@ -2374,6 +2423,62 @@ mod tests {
         );
         // Taken once: nothing is left to take again.
         assert!(!desk.caught_up("c-new"));
+    }
+
+    #[test]
+    fn every_turn_is_logged_with_what_became_of_it_but_not_its_words() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "t", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("start", ""), 2);
+        desk.open(&lines, &handoff.id, "brief", None, || 3).unwrap();
+        // The empty placeholder of 2026-11-07, then the answer.
+        desk.observe(&turn("complete", ""), 4);
+        desk.observe(&turn("complete", "结论：通过"), 5);
+        for i in 0..=EARLY_KEPT {
+            desk.observe(
+                &json!({"type":"turn","phase":"start","conversation":format!("own-{i}")}),
+                6,
+            );
+        }
+        let log = std::fs::read_to_string(turns_path(&temp.path().join("data"))).unwrap();
+        assert!(!log.contains("结论"), "no words are logged");
+        let lines: Vec<Value> = log
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let seen = |line: &Value| {
+            (
+                line["conversation"].as_str().unwrap().to_owned(),
+                line["phase"].as_str().unwrap().to_owned(),
+                line["outcome"].as_str().unwrap().to_owned(),
+            )
+        };
+        let mine: Vec<_> = lines
+            .iter()
+            .filter(|l| l["conversation"] == "c-new")
+            .map(seen)
+            .collect();
+        let row =
+            |phase: &str, outcome: &str| ("c-new".to_owned(), phase.to_owned(), outcome.to_owned());
+        assert_eq!(
+            mine,
+            [
+                row("start", "early"),
+                row("start", "caught-up"),
+                row("complete", "unused"),
+                row("complete", "taken"),
+            ]
+        );
+        assert_eq!(lines[3]["replyChars"], 5);
+        assert!(lines
+            .iter()
+            .any(|l| l["conversation"] == "own-0" && l["outcome"] == "evicted"));
     }
 
     #[test]
