@@ -171,6 +171,10 @@ export function vendorsFromSnapshot(
     const balance = quotas.length
       ? undefined
       : snapshot.billing.find((b) => vendorKey(b.vendor) === key);
+    const desk =
+      key === vendorKey("chatgpt") && !quotas.length
+        ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
+        : undefined;
     const relay = relayStamps(
       snapshot,
       key === vendorKey("chatgpt")
@@ -179,13 +183,10 @@ export function vendorsFromSnapshot(
           ? "claude"
           : null,
       now,
+      desk?.pressing,
     );
     // A review falling overdue changes the stamp with no new snapshot.
     if (relay?.until != null) expiresAt = Math.min(expiresAt, relay.until);
-    const desk =
-      key === vendorKey("chatgpt") && !quotas.length
-        ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
-        : undefined;
     const deepseekBalances =
       key === "deepseek" && !quotas.length
         ? snapshot.billing.filter((b) => vendorKey(b.vendor) === key)

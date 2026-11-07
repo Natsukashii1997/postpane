@@ -126,3 +126,16 @@ test("an old open relay nobody is on any more is left out", () => {
     [],
   );
 });
+
+test("answering or a reply to read is more pressing than an overdue review", () => {
+  // Owner, #213: the stub's 「未审」 waits while either is up.
+  const pressing = (sessions: Session[], handoffs: Handoff[]) =>
+    chatgptDesk({ sessions, handoffs }, now, true).pressing;
+  assert.equal(pressing([chat("a", now, "running")], []), true);
+  assert.equal(
+    pressing([], [relay({ phase: "replied", phaseAt: now - 5 * min })]),
+    true,
+  );
+  assert.equal(pressing([chat("a", now - min)], []), false);
+  assert.equal(pressing([], []), false);
+});

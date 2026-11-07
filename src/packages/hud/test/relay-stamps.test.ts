@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Handoff } from "@agent-hud/protocol";
 import {
   LETTER_LANDS_MS,
+  LINGERS_MS,
   REPLY_WAIT_MS,
   relayStamps,
   stampWait,
@@ -60,6 +61,7 @@ test("ChatGPT's stub is stamped 「审」 while it has the words, rippling while
     replied: false,
     since: 20,
     overdue: false,
+    lingering: false,
     conversation: undefined,
     until: 50 + REPLY_WAIT_MS + 1,
   });
@@ -98,6 +100,7 @@ test("Claude's stub takes the 「回」 seal while an answer waits for the perso
     replied: true,
     since: 30,
     overdue: false,
+    lingering: false,
     until: null,
   });
   // Sent back to Claude, or ended: the seal comes off.
@@ -164,4 +167,52 @@ test("a relay stopped or handed back takes no 「审」; one unanswered past the
   );
   assert.equal(both?.overdue, true);
   assert.equal(both?.answering, false);
+});
+
+test("「未审」 gives way while the stub has more to say, and ripples once it lingers", () => {
+  // Owner, #213: answering or a reply to read comes first; 「未审」 waits.
+  const late = {
+    ...relay("delivered", [{ at: 50, kind: "ask" }]),
+    chatgptConversation: "c-late",
+    halt: "ChatGPT 30 分钟没回信",
+  };
+  const after = 50 + REPLY_WAIT_MS + 1;
+  assert.equal(
+    relayStamps({ handoffs: [late] }, "chatgpt", after, true),
+    undefined,
+  );
+  // A review ChatGPT still has keeps its own 「审」 meanwhile.
+  const working = { ...relay("working"), id: "h-new", phaseAt: after - 10 };
+  const yielded = relayStamps(
+    { handoffs: [late, working] },
+    "chatgpt",
+    after,
+    true,
+  );
+  assert.equal(yielded?.overdue, false);
+  assert.equal(yielded?.answering, true);
+  // Overdue but young: plain 「未审」, which says when it starts to ripple.
+  const young = relayStamps({ handoffs: [late] }, "chatgpt", after);
+  assert.equal(young?.overdue, true);
+  assert.equal(young?.lingering, false);
+  assert.equal(young?.until, 50 + LINGERS_MS + 1);
+  // Past two hours (as the panel stops listing it), it ripples until it ends.
+  assert.equal(LINGERS_MS, 2 * 60 * 60 * 1000);
+  const old = relayStamps(
+    { handoffs: [late] },
+    "chatgpt",
+    50 + 18 * 60 * 60 * 1000,
+  );
+  assert.equal(old?.overdue, true);
+  assert.equal(old?.lingering, true);
+  assert.equal(old?.answering, false);
+  assert.equal(old?.until, null);
+  assert.equal(
+    relayStamps(
+      { handoffs: [{ ...late, status: "closed" }] },
+      "chatgpt",
+      50 + 18 * 60 * 60 * 1000,
+    ),
+    undefined,
+  );
 });

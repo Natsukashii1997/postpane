@@ -593,6 +593,7 @@ export function StubFace({
             zh={zh}
             answering={vendor.relay.answering}
             overdue={vendor.relay.overdue}
+            lingering={vendor.relay.lingering}
             since={vendor.relay.since}
             reduceMotion={reduceMotion}
           >
