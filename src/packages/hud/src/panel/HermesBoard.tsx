@@ -4,7 +4,7 @@
 // thing it was asked; a bot without lists the latest three asks and whether
 // each was answered.
 import { useState, type CSSProperties } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { GoButton } from "../GoButton";
 import type { HermesAsk, HermesBotStatus, Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePaper } from "../paper";
@@ -166,32 +166,21 @@ function AskRow({
         {when}
       </span>
       {jumps && (
-        <button
-          type="button"
-          aria-label={goTitle}
-          title={goTitle}
-          aria-disabled={!canOpen}
+        <GoButton
+          label={goTitle}
+          enabled={canOpen}
+          size={20}
+          inks={{
+            line: inks.divider,
+            ink: inks.secondary,
+            faint: inks.tertiary,
+            strong: inks.text,
+          }}
           onClick={(event) => {
             event.stopPropagation();
             void go();
           }}
-          style={{
-            display: "inline-grid",
-            placeItems: "center",
-            width: 20,
-            height: 20,
-            boxSizing: "border-box",
-            padding: 0,
-            border: `1.5px solid ${inks.divider}`,
-            borderRadius: 3,
-            background: "transparent",
-            color: canOpen ? inks.secondary : inks.tertiary,
-            opacity: canOpen ? 1 : 0.6,
-            cursor: canOpen ? "pointer" : "default",
-          }}
-        >
-          <ArrowUpRight size={12} strokeWidth={2} />
-        </button>
+        />
       )}
       {!jumps && slot && <span aria-hidden />}
     </div>

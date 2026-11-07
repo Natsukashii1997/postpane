@@ -4,6 +4,18 @@
 
 
 
+## 侧栏所有跳转箭头统一按钮质感（2026-11-07，Claude，常浩实点 #198 后说「两个都对」，并要求把侧栏所有跳转箭头的效果统一、有点击按钮的质感；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 17:59`（`date '+%F %H:%M'` 记录）。来由：#200。#182 只给清单卡（审批 / 回复）的 ↗ 加了 `.hud-go-button`（悬停变亮、按下下沉），正在进行会话行、Hermes 提问行（#196 新加）、接力卡头部「回到 Claude 会话」各自手写样式，没有反馈。
+- 改了哪些文件：新增 `src/packages/hud/src/GoButton.tsx`（共用 ↗ 按钮，套 `.hud-go-button`，`enabled` 控制变淡与 `aria-disabled`，尺寸 26 或紧凑行 20）；`permissions/ListCard.tsx`、`panel/SessionsSection.tsx`、`panel/HermesBoard.tsx`、`alerts/HandoffCard.tsx` 头部改用它；`HandoffCard.tsx` 的「查看 ChatGPT 对话 ↗」加 `.hud-press` 和 `aria-disabled`。`global.css` 未改。
+- 测试：`pnpm run check` 第一次 exit 1（`ListCard.tsx` 删导入后没重新格式化，E-07），格式化后 exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/`（`check-2.log`、`test-2.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`HermesBoard`、`HandoffCard` 原样，接力用 #194 的 DT-ORC 真实记录），内置浏览器真实悬停：Hermes 提问 ↗ 悬停时边框与箭头变 `rgb(245,245,247)`、底色 14% 填充，旁边的不变；「查看 ChatGPT 对话」悬停 `filter: brightness(1.18)`；这单「回到 Claude 会话」不可用，`aria-disabled="true"`，不亮。按下下沉沿用 `.hud-go-button:active` 规则（已确认在页面样式里），浏览器工具按不住鼠标，**未实测按下那一下**。正在进行会话行、清单卡改用同一组件，靠类型检查与全量测试，未单独截图。**未验证**：实机侧栏（L-09），留给常浩摸一下。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/`：`page.jpg`、`hermes-hover.png`；自查页备份在 `check-page/`。
+- 发布与回读：`install.sh 200-go-button`：装前 `3e1e0471ecf8`（#198 那版，已备份），18:08:02 退出并启动，产物 `5076014be5bd` / 已装 `5076014be5bd`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/PostPane-3e1e0471ecf8.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：接力卡其余文字按钮（结束接力、转回 Claude 等）仍没有按下反馈，不是跳转箭头，本轮未动；面板底部「统计 ↗」是另一套按钮，未动。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## Hermes 提问跳转改用 feishu:// 协议，飞书直接到前台（2026-11-07，Claude，常浩实点 #196 后说「有问题，点不动跳转键」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 17:29`（`date '+%F %H:%M'` 记录；排查从 17:0x 起）。来由：#198。#196 用 `open https://applink.feishu.cn/…` 跳飞书，本机 https 默认交给 Chrome，Chrome 在后台接走，飞书不出来（L-22）。
