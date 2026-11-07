@@ -212,3 +212,19 @@
 - 正确做法：新加一种事件经收件箱传递时，测试要从入口一路走到收件箱读取，不能只测造事件的函数和消费方；查「事件没生效」先看收件箱目录里有没有那个文件。
 - 证据：`chatgpt/turns.jsonl` 20:01:28–20:02:06 有三条 `start`，`hooks/inbox` 里没有任何 chatgpt 的 `session-observation`；`hud_sessions` 里 `chatgpt:6aeed449…` 为 `idle`。
 - 升级：已写成测试 `a_chatgpt_turn_start_is_kept_so_the_sidebar_shows_it_answering`（收件箱写入与读取）与 `the_extension_opens_a_conversation_and_reports_its_reply` 里的收件箱断言（通道一路到收件箱）。
+
+## L-25 点了跳转没跳过去，回复却被收起：「成功」只看请求发出去了，没看用户到了那里（2026-11-07）
+
+- 现象：常浩在侧栏「新回复」上多次点 ↗，Claude 没切到那个会话，回复却一条条消失。
+- 根因：后台把 Claude 会话的 CLI id 换成桌面标签时，找不到标签（`claude -p` 子进程误带 `claude-desktop` 目标；标签换过 CLI 会话后旧 id 只在 `priorCliSessionIds` 里，解析器不读）就只叫起 Claude、返回成功；前端只要没收到失败就收起回复。本机最近 100 个 Claude 会话里 57 个会走这条路。同一类问题审核里还查出好几处：后台任务跳转先报成功再在后台线程里打开；审批钩子对驿窗不处理的请求无声断开，客户端当成「驿窗退出」反复重连到 24 小时；送话超时后插件迟到的「已送达」被丢掉。侧栏窗口没挂 `<Toaster>`，失败提示一律看不见，更难发现。
+- 正确做法：任何「做完就改界面状态」的动作，成功判定要对准用户可见的结果（目标到了前台、回答到了客户端、话进了对话），只确认了请求发出的一律按未成功处理，前端保留状态、在原地写明原因、几秒后可重试。对外连接要么给回应、要么只在自己真退出时才无声断开。验收跳转照 L-22 看目标应用和打开到哪里。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-ops-audit/`（`汇总.md`、`nav/` 本机会话统计脚本）；Claude 日志 `~/Library/Logs/Claude/main.log` 23:16:42 实测 `claude://claude.ai/epitaxy/local_…` 能切会话。
+- 升级：已写成测试 `a_claude_desktop_session_without_its_tab_is_not_reported_open`、`a_tab_that_moved_to_a_new_claude_code_session_is_found_by_the_old_id`、`a_print_run_under_the_desktop_app_has_no_tab_to_go_back_to`、`starting_the_move_is_not_reported_as_the_session_open`、`a_request_postpane_leaves_alone_goes_straight_back_to_the_client`、`words_sent_after_the_wait_gave_up_still_count`，前端 `open-result.test.ts`（#227、#228、#230）。可提议提升为全局坑：「把请求发出当成功」换个项目也成立，与 G-21 同源但更宽。
+
+## L-26 几个 worktree 共用 CARGO_TARGET_DIR，测试跑的是别的 worktree 编出的代码（2026-11-08）
+
+- 现象：5 个子 agent 并行修 #220–#224，为省磁盘共用 `~/Library/Caches/postpane-shared-target`。#227 报「Rust 761 passed」，可它新增了 4 条 Rust 测试，应是 765；#222 一次红测试报「running 0 tests」；#223 改 l10n 时报「找不到函数」。
+- 根因：同名 crate 在不同目录编出的产物文件名哈希相同（main 与共享目录里 `agent_hud_core-16f50467…` 一模一样），cargo 判断要不要重编只看 dep-info 里记的源文件路径与修改时间，记的是上一次编译它的那个 worktree 的路径。于是一个 worktree 的改动被当成「已编」，测试跑的是别人的代码，结果照样是绿的。
+- 正确做法：并行 worktree 各用各的构建目录；磁盘不够非共用不可时，每次跑测试前把本 worktree 的 `.rs` 和 `Cargo.toml` 修改时间改到未来（`find src/crates src/apps/desktop/src-tauri \( -name '*.rs' -o -name Cargo.toml \) -exec touch -t <未来时间> {} +`），并核对三件事：输出里有本 worktree 路径的 `Compiling` 行、新测试名出现且通过、Rust 通过总数等于基线加新增条数。合并前在主目录用 main 自己的构建目录再跑一次全量。
+- 证据：`evidence/2026-11-07-fix-220/main-f441f73-cargo-test.log`（主目录补验 765 passed，含 #227 的 4 条新测试）；`evidence/2026-11-07-fix-224/core-host-after-rebase.log`（core 176 = 174 + 2）；`evidence/2026-11-08-ops-fixes/test.log`（合完 5 批后 774 = 761 + 13）。
+- 升级：未写成测试（构建环境问题）。可提议提升为全局坑：换个 Rust 项目也成立。
