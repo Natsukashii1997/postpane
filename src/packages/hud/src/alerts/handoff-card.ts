@@ -1,5 +1,6 @@
 import type { Handoff, HandoffStep, Session } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
+import { paperOf, type Paper } from "../paper.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */
@@ -123,6 +124,16 @@ export function relayLegend(
       : `Claude ⇄ ChatGPT · round ${at} / ${of}`,
     verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
   };
+}
+
+/** The legend's airmail inks: the paper's own, and where there is none (the
+ * notch, #190) the paper's of that appearance, not plain ink. */
+export function relayLegendInks(
+  paper: Paper | null,
+  light: boolean,
+): { relay: string; verdict: string } {
+  const inks = paper ?? paperOf(light);
+  return { relay: inks.blue, verdict: inks.red };
 }
 
 /** The stamp in the card's corner, by where it stands. */

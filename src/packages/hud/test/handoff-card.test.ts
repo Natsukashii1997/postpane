@@ -7,10 +7,12 @@ import {
   handoffFor,
   progressLine,
   relayLegend,
+  relayLegendInks,
   round,
   stamp,
   timeline,
 } from "../src/alerts/handoff-card.ts";
+import { paperOf } from "../src/paper.ts";
 
 const T = Date.UTC(2026, 10, 6, 8, 15);
 const minute = 60_000;
@@ -311,5 +313,20 @@ test("a relay's reply is framed with its round and ChatGPT's verdict", () => {
   assert.deepEqual(relayLegend(answered, false), {
     trip: "Claude ⇄ ChatGPT · round 2 / 2",
     verdict: "Pass",
+  });
+});
+
+test("the relay legend keeps airmail blue and red where there is no paper", () => {
+  // In the notch (#190) the card has no paper: the legend still says 接力 in
+  // blue and the verdict in red, in the dark paper's inks, not plain white.
+  const dark = paperOf(false);
+  assert.deepEqual(relayLegendInks(null, false), {
+    relay: dark.blue,
+    verdict: dark.red,
+  });
+  const light = paperOf(true);
+  assert.deepEqual(relayLegendInks(light, true), {
+    relay: light.blue,
+    verdict: light.red,
   });
 });
