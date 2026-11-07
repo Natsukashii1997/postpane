@@ -41,7 +41,9 @@ pub(crate) trait Lines {
         title: &str,
         request: &str,
     ) -> Result<String, String>;
-    fn send(&self, conversation: &str, text: &str) -> Result<(), String>;
+    /// Sends `text` into `conversation`, asked as `request`: the extension
+    /// may still say it went in after the wait gave up (`Desk::observe`).
+    fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, session: &str) -> Result<(), String>;
     fn reply(&self, session: &str, text: &str) -> Result<(), String>;
@@ -145,6 +147,9 @@ pub(crate) struct Desk {
     /// Handoffs with words on their way now: a second sending waits, so the
     /// same words are not sent twice side by side.
     sending: Mutex<HashSet<String>>,
+    /// Words being sent to ChatGPT, by handoff, until they are known to have
+    /// gone in: in time, or told by the extension after the wait (#223).
+    asking: Mutex<HashMap<String, Asking>>,
     /// Each session's last 左滑发起, by session.
     launches: Mutex<HashMap<String, Launch>>,
     /// How many of each handoff's steps the sidebar has flown a letter for
@@ -155,6 +160,15 @@ pub(crate) struct Desk {
 /// How many early turns are kept: those of conversations never bound (the
 /// person's own chats) are dropped oldest first.
 const EARLY_KEPT: usize = 16;
+
+/// Words on their way into a handoff's conversation, kept until they go in.
+struct Asking {
+    request: String,
+    summary: Option<String>,
+    brief: String,
+    /// They bring the evidence a 思维评审 paused for (#209).
+    evidence: bool,
+}
 
 /// A turn the ChatGPT channel reported before the desk could take it.
 struct Early {
@@ -180,6 +194,9 @@ impl Desk {
     /// that were opening when the app stopped count as failed, to retry.
     pub(crate) fn new(data: Option<PathBuf>) -> Self {
         let mut book = data.as_deref().map(handoffs::load).unwrap_or_default();
+        // What a restart writes below comes before Core follows the
+        // Language setting (#223).
+        let chinese = data.as_deref().map_or_else(l10n::chinese, stored_chinese);
         // Swipes still waiting when the app stopped wait on.
         let launches: HashMap<String, Launch> = data
             .as_deref()
@@ -197,12 +214,13 @@ impl Desk {
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
             sending: Mutex::new(HashSet::new()),
+            asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
         };
         let now = now_ms();
         // Not `||`: both are to happen.
-        let interrupted = book.interrupted(now, &interrupted());
-        let paused = book.restarted(now, &restart_paused());
+        let interrupted = book.interrupted(now, &interrupted(chinese));
+        let paused = book.restarted(now, &restart_paused(chinese));
         // Reviews that passed while nothing drove them (the auto round trip
         // off) end now, as a pass coming in would (owner, 2026-11-07). Not a
         // 思维评审 one (#209): its answer has to reach Claude first, so it
@@ -215,7 +233,7 @@ impl Desk {
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
-            ended |= book.passed(id, &passed(), now);
+            ended |= book.passed(id, &passed(chinese), now);
         }
         if interrupted | paused | ended {
             let desk = desk(book);
@@ -503,15 +521,47 @@ impl Desk {
             .lock()
             .get(&handoff.id)
             .is_some_and(Handoff::waits_for_evidence);
-        lines.send(conversation, brief)?;
-        self.change(|book| {
-            book.asked(&handoff.id, summary, brief, now)
-                && (!evidence || book.evidence_in(&handoff.id, now))
-        });
+        // Kept until they go in: the extension may only say so after the
+        // wait gave up (`observe`, #223).
+        let request = format!("{}~send{now}", handoff.id);
+        self.asking().insert(
+            handoff.id.clone(),
+            Asking {
+                request: request.clone(),
+                summary: summary.map(str::to_owned),
+                brief: brief.to_owned(),
+                evidence,
+            },
+        );
+        lines.send(conversation, brief, &request)?;
+        self.went_in(&request, now);
         let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
         Ok(Started::Sent {
             handoff: sent,
             repeated: false,
+        })
+    }
+
+    fn asking(&self) -> MutexGuard<'_, HashMap<String, Asking>> {
+        self.asking.lock().unwrap_or_else(|p| p.into_inner())
+    }
+    /// Words asked as `request` went into ChatGPT: into the book once,
+    /// whichever of `ask` and the extension's late word comes first.
+    fn went_in(&self, request: &str, now: i64) -> bool {
+        let id = request.rsplit_once('~').map_or("", |(id, _)| id);
+        let asking = {
+            let mut asking = self.asking();
+            if !asking.get(id).is_some_and(|a| a.request == request) {
+                return false;
+            }
+            asking.remove(id)
+        };
+        let Some(asking) = asking else {
+            return false;
+        };
+        self.change(|book| {
+            book.asked(id, asking.summary.as_deref(), &asking.brief, now)
+                && (!asking.evidence || book.evidence_in(id, now))
         })
     }
 
@@ -527,16 +577,22 @@ impl Desk {
         project: Option<&str>,
         now: impl Fn() -> i64,
     ) -> Result<String, String> {
-        let (title, request) = self
-            .lock()
-            .get(id)
-            .map(|h| (h.title.clone(), h.request()))
-            .unwrap_or_default();
-        let opened = lines.open(brief, project, &title, &request);
-        self.change(|book| match &opened {
-            Ok(conversation) => book.opened(id, conversation, now()),
-            Err(error) => book.failed(id, error, now()),
-        });
+        let opened = {
+            // Held while it opens, so 结束接力 waits for it (#223).
+            let _opening = self.claim(id)?;
+            let (title, request) = self
+                .lock()
+                .get(id)
+                .filter(|h| h.status == Status::Opening)
+                .map(|h| (h.title.clone(), h.request()))
+                .ok_or_else(|| l10n::text("这次接力已经结束", "This handoff has ended"))?;
+            let opened = lines.open(brief, project, &title, &request);
+            self.change(|book| match &opened {
+                Ok(conversation) => book.opened(id, conversation, now()),
+                Err(error) => book.failed(id, error, now()),
+            });
+            opened
+        };
         if let Ok(conversation) = &opened {
             self.caught_up(conversation);
         }
@@ -619,6 +675,10 @@ impl Desk {
                 self.note_turn(message, now, if took { "taken" } else { "unused" });
                 took
             }
+            // Words in: those whose wait gave up count now (#223).
+            (Some("sent"), _) if message["ok"] == true => {
+                self.went_in(message["requestId"].as_str().unwrap_or(""), now)
+            }
             (Some("opened"), _) if message["ok"] == true => {
                 // Only a try that already gave up waiting: a waited-for
                 // answer binds through `open`.
@@ -680,8 +740,20 @@ impl Desk {
                 if self.lock().returned_already(id, &text) {
                     return Ok(Acted::Done);
                 }
-                lines.reaches(&handoff.claude_session)?;
-                lines.reply(&handoff.claude_session, &text)?;
+                let sent = lines
+                    .reaches(&handoff.claude_session)
+                    .and_then(|()| lines.reply(&handoff.claude_session, &text));
+                if let Err(error) = sent {
+                    // As the auto round trip's (#223): they wait in the
+                    // session's queue and go in once it is opened.
+                    lines
+                        .leave(&handoff.claude_session, &text)
+                        .map_err(|_| error)?;
+                    self.change(|book| {
+                        book.returned(id, kind, &text, false, now) && book.queued(id, now)
+                    });
+                    return Ok(Acted::Done);
+                }
                 self.change(|book| book.returned(id, kind, &text, false, now));
                 Ok(Acted::Done)
             }
@@ -751,7 +823,7 @@ impl Desk {
         let mut changed = false;
         for (id, next) in due {
             changed |= match next {
-                Next::Pass => self.change(|book| book.passed(&id, &passed(), now)),
+                Next::Pass => self.change(|book| book.passed(&id, &passed(l10n::chinese()), now)),
                 Next::Limit => self.change(|book| book.stop(&id, &at_limit(), true, now)),
                 Next::NoVerdict => self.change(|book| book.stop(&id, &no_verdict(), true, now)),
                 Next::Invalid(flaw) => {
@@ -1010,8 +1082,12 @@ fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     }
 }
 
-fn passed() -> String {
-    l10n::text("结论：通过，自动结束接力", "Passed; the handoff ended")
+fn passed(chinese: bool) -> String {
+    in_language(
+        chinese,
+        "结论：通过，自动结束接力",
+        "Passed; the handoff ended",
+    )
 }
 fn thinking_closed() -> String {
     l10n::text(
@@ -1111,8 +1187,9 @@ fn no_handover() -> String {
         "Claude has not handed it over again in 2 hours; left to you",
     )
 }
-fn restart_paused() -> String {
-    l10n::text(
+fn restart_paused(chinese: bool) -> String {
+    in_language(
+        chinese,
         "驿窗重启，自动往返先暂停",
         "PostPane restarted; the auto round trip is paused",
     )
@@ -1162,11 +1239,30 @@ fn timed_out() -> String {
         "The ChatGPT conversation did not open within two minutes",
     )
 }
-fn interrupted() -> String {
-    l10n::text(
+fn interrupted(chinese: bool) -> String {
+    in_language(
+        chinese,
         "驿窗重启时 ChatGPT 新会话还在打开",
         "PostPane restarted while the ChatGPT conversation was opening",
     )
+}
+
+/// Whether the Language setting kept in `data` (`settings.json`, as Core
+/// keeps it) means Chinese.
+fn stored_chinese(data: &std::path::Path) -> bool {
+    let stored = std::fs::read(data.join("settings.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or(Value::Null);
+    // As `l10n::follow` reads it.
+    match stored["settings"]["language"].as_str().unwrap_or("system") {
+        "system" => l10n::system_chinese(),
+        language => language.starts_with("zh"),
+    }
+}
+/// The text in Chinese or not, whatever the app's language now.
+fn in_language(chinese: bool, zh: &str, en: &str) -> String {
+    if chinese { zh } else { en }.to_owned()
 }
 
 fn too_long() -> String {
@@ -1223,12 +1319,15 @@ impl Lines for AppLines<'_> {
             .map(str::to_owned)
             .ok_or_else(|| "The ChatGPT extension named no conversation".into())
     }
-    fn send(&self, conversation: &str, text: &str) -> Result<(), String> {
+    fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String> {
         let state = self
             .0
             .try_state::<super::chatgpt::ChatGpt>()
             .ok_or("The ChatGPT channel is unavailable")?;
-        state.channel()?.send(conversation, text).map(drop)
+        state
+            .channel()?
+            .send_as(conversation, text, Some(request))
+            .map(drop)
     }
     fn reaches(&self, session: &str) -> Result<(), String> {
         let plugin = self
@@ -1567,6 +1666,12 @@ mod tests {
         sent: RefCell<Vec<(String, String, String)>>,
         /// What happens while words are being sent.
         on_send: Option<Box<dyn Fn()>>,
+        /// What happens while a conversation is being opened.
+        on_open: Option<Box<dyn Fn()>>,
+        /// Sending gives up waiting for the extension.
+        send_fails: std::cell::Cell<bool>,
+        /// The request each sending was asked as.
+        requests: RefCell<Vec<String>>,
         /// How left words stand, as the plugin would say; None once gone.
         left_as: RefCell<Option<(String, Option<String>)>>,
         /// Leaving words fails.
@@ -1590,18 +1695,25 @@ mod tests {
                 format!("{}|{title}|{request}", project.unwrap_or("")),
                 text.into(),
             ));
+            if let Some(during) = &self.on_open {
+                during();
+            }
             if self.open_fails {
                 Err("timeout".into())
             } else {
                 Ok("c-new".into())
             }
         }
-        fn send(&self, conversation: &str, text: &str) -> Result<(), String> {
+        fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String> {
             self.sent
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
+            self.requests.borrow_mut().push(request.into());
             if let Some(during) = &self.on_send {
                 during();
+            }
+            if self.send_fails.get() {
+                return Err("ChatGPT 插件没能完成：timeout".into());
             }
             Ok(())
         }
@@ -2474,7 +2586,7 @@ mod tests {
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "open");
         assert_eq!(shown[0]["phase"], "replied");
-        assert_eq!(shown[0]["halt"], restart_paused());
+        assert_eq!(shown[0]["halt"], restart_paused(false));
         // Turned back on, it reaches Claude and then ends.
         let lines = Fake::default();
         desk.act(&lines, &handoff.id, "resume", 6).unwrap();
@@ -2529,7 +2641,7 @@ mod tests {
         let desk = Desk::new(Some(data));
         let shown = desk.projection(3);
         assert_eq!(shown[0]["auto"], false);
-        assert_eq!(shown[0]["halt"], restart_paused());
+        assert_eq!(shown[0]["halt"], restart_paused(false));
 
         let (_temp, desk) = self::desk();
         opened(&desk, &lines);
@@ -2570,6 +2682,8 @@ mod tests {
             unreachable: true,
             ..Fake::default()
         };
+        // Nor a queue to wait in (#223).
+        unreachable.leave_fails.set(true);
         assert_eq!(
             desk.act(&unreachable, &handoff.id, "back", 5).unwrap_err(),
             "这个会话还没加载 Agent HUD 插件"
@@ -3094,5 +3208,169 @@ mod tests {
         // The steps kept from before a restart flew already.
         let again = Desk::new(Some(temp.path().join("data")));
         assert!(again.tosses().is_empty());
+    }
+
+    // #223: words that reached ChatGPT after the wait for them gave up
+    // still count once the extension says so, and its answer is taken.
+    #[test]
+    fn words_sent_after_the_wait_gave_up_still_count() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3);
+        desk.act(&lines, &handoff.id, "back", 3).unwrap();
+        lines.send_fails.set(true);
+        assert!(desk
+            .start(&lines, "s1", None, "t", None, "第 2 轮改动", false, 4)
+            .is_err());
+        assert_eq!(desk.projection(4)[0]["phase"], "returned");
+        let request = lines.requests.borrow().last().unwrap().clone();
+        assert!(desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 5));
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "delivered");
+        assert_eq!(
+            shown[0]["steps"].as_array().unwrap().last().unwrap()["kind"],
+            "ask"
+        );
+        // Told twice, it counts once; Claude asking again sends nothing more.
+        assert!(!desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 5));
+        lines.send_fails.set(false);
+        let Started::Sent { repeated, .. } = desk
+            .start(&lines, "s1", None, "t", None, "第 2 轮改动", false, 6)
+            .unwrap()
+        else {
+            panic!("round 2 goes into the same conversation")
+        };
+        assert!(repeated);
+        // The answer that follows is the review's.
+        assert!(desk.observe(
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：通过","messageId":"m2"}),
+            7
+        ));
+        assert_eq!(desk.projection(7)[0]["phase"], "replied");
+    }
+
+    // #223: 转回 Claude by hand that cannot go into the session waits in its
+    // queue, as the auto round trip's does.
+    #[test]
+    fn words_back_by_hand_that_cannot_go_in_wait_in_the_queue() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.act(&lines, &handoff.id, "pause", 3).unwrap();
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        let unreachable = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        desk.act(&unreachable, &handoff.id, "back", 5).unwrap();
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["queuedAt"], 5);
+        {
+            let sent = unreachable.sent.borrow();
+            assert_eq!(sent.len(), 1);
+            assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("leave", "s1"));
+            assert!(sent[0].2.contains("少一项"));
+        }
+        // Clicked again, nothing more is queued.
+        desk.act(&unreachable, &handoff.id, "back", 6).unwrap();
+        assert_eq!(unreachable.sent.borrow().len(), 1);
+        // A reply that fails is queued too.
+        let (_temp, desk) = self::desk();
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        let failing = Fake::default();
+        failing.reply_fails.set(1);
+        desk.act(&failing, &handoff.id, "back", 5).unwrap();
+        assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
+        assert_eq!(failing.sent.borrow()[0].0, "leave");
+    }
+
+    // #223: what a restart writes is in the language Settings name, though
+    // Core has yet to follow it then.
+    #[test]
+    fn what_a_restart_writes_follows_the_language_setting() {
+        let cases = [
+            (
+                "zh-CN",
+                "驿窗重启，自动往返先暂停",
+                "驿窗重启时 ChatGPT 新会话还在打开",
+                "结论：通过，自动结束接力",
+            ),
+            (
+                "en",
+                "PostPane restarted; the auto round trip is paused",
+                "PostPane restarted while the ChatGPT conversation was opening",
+                "Passed; the handoff ended",
+            ),
+        ];
+        for (language, paused, cut_off, ended) in cases {
+            let temp = tempfile::tempdir().unwrap();
+            let data = temp.path().join("data");
+            std::fs::create_dir_all(&data).unwrap();
+            std::fs::write(
+                data.join("settings.json"),
+                json!({"settings":{"language":language},"providers":{}}).to_string(),
+            )
+            .unwrap();
+            let mut book = handoffs::Book::default();
+            let on = book.begin("s1", None, "修登录", None, "请审核", 1).id;
+            book.opened(&on, "c1", 2);
+            let opening = book.begin("s2", None, "别的", None, "请审核", 1).id;
+            let passed = book.begin("s3", None, "第三个", None, "请审核", 1).id;
+            book.opened(&passed, "c3", 2);
+            book.stop(&passed, "停", true, 3);
+            book.replied("c3", "结论：通过", Some("m1"), 4);
+            handoffs::save(&data, &book).unwrap();
+            let desk = Desk::new(Some(data));
+            let book = desk.lock();
+            assert_eq!(book.get(&on).unwrap().halt.as_deref(), Some(paused));
+            assert_eq!(book.get(&opening).unwrap().error.as_deref(), Some(cut_off));
+            assert_eq!(
+                book.get(&passed)
+                    .unwrap()
+                    .steps
+                    .last()
+                    .unwrap()
+                    .text
+                    .as_deref(),
+                Some(ended)
+            );
+        }
+    }
+
+    // #223: 结束接力 while the review conversation is still opening waits
+    // for it; ended before it opens, none is opened.
+    #[test]
+    fn ending_waits_for_the_conversation_to_open() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "t", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!()
+        };
+        let id = handoff.id.clone();
+        lines.on_open = Some(Box::new(move || {
+            assert!(desk.act(&Fake::default(), &id, "end", 2).is_err());
+        }));
+        desk.open(&lines, &handoff.id, "brief", None, || 3).unwrap();
+        assert_eq!(desk.projection(3)[0]["phase"], "delivered");
+        desk.act(&lines, &handoff.id, "end", 4).unwrap();
+        assert_eq!(desk.projection(4)[0]["phase"], "ended");
+        // Ended before its opening began: nothing is opened.
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s9", None, "t", None, "brief", false, 5)
+            .unwrap()
+        else {
+            panic!()
+        };
+        desk.act(&lines, &handoff.id, "end", 6).unwrap();
+        assert!(desk.open(&lines, &handoff.id, "brief", None, || 7).is_err());
+        assert!(lines.sent.borrow().is_empty());
     }
 }
