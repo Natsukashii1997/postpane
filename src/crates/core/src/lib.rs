@@ -200,7 +200,7 @@ impl AgentHudCore {
         requests.set_hold_ms(
             settings["approvalWaitMinutes"]
                 .as_u64()
-                .filter(|v| [0, 1, 3, 5, 10, 30, 60].contains(v))
+                .filter(|v| settings::APPROVAL_WAIT_MINUTES.contains(v))
                 .unwrap_or(10)
                 * 60_000,
         );

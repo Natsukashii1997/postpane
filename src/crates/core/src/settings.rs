@@ -2,6 +2,10 @@
 //! settings file, which another copy of the app may have written since.
 use super::*;
 
+/// The waits 「等待回答」 offers, in minutes; 0 waits until answered. Starting,
+/// changing and reloading the settings all check against this one list (#184).
+pub(crate) const APPROVAL_WAIT_MINUTES: [u64; 7] = [0, 1, 3, 5, 10, 30, 60];
+
 impl crate::AgentHudCore {
     pub fn client_hooks_enabled(&self) -> bool {
         self.settings["clientHooks"] == true
@@ -146,7 +150,7 @@ impl crate::AgentHudCore {
             "approvalWaitMinutes"
                 if value
                     .as_u64()
-                    .is_some_and(|v| [0, 1, 3, 5, 10, 30, 60].contains(&v)) => {}
+                    .is_some_and(|v| APPROVAL_WAIT_MINUTES.contains(&v)) => {}
             // The price page: the owner's prices per million tokens by model,
             // multipliers by relay host, and what a local host is.
             "customPrices"
@@ -222,7 +226,7 @@ impl crate::AgentHudCore {
         self.requests.set_hold_ms(
             self.settings["approvalWaitMinutes"]
                 .as_u64()
-                .filter(|v| [1, 3, 5, 10, 30, 60].contains(v))
+                .filter(|v| APPROVAL_WAIT_MINUTES.contains(v))
                 .unwrap_or(10)
                 * 60_000,
         );
@@ -256,6 +260,32 @@ impl crate::AgentHudCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn waiting_until_answered_survives_every_reload_of_the_settings_file() {
+        // 「一直等」写在设置文件里：启动、每次请求重读设置之后都还是一直等。
+        let home = tempfile::tempdir().unwrap();
+        fs::write(
+            home.path().join("settings.json"),
+            json!({"settings": {"approvalWaitMinutes": 0}, "providers": {}}).to_string(),
+        )
+        .unwrap();
+        let mut core = AgentHudCore::new(vec![], home.path().to_owned());
+        let now = Utc::now().timestamp_millis();
+        assert!(core.requests.still_held(now - 86_400_000, now), "at launch");
+        core.request("snapshot", json!({})).unwrap();
+        assert!(
+            core.requests.still_held(now - 86_400_000, now),
+            "after a request reloads the file"
+        );
+        core.apply_setting("approvalWaitMinutes", &json!(10))
+            .unwrap();
+        core.request("snapshot", json!({})).unwrap();
+        assert!(
+            !core.requests.still_held(now - 11 * 60_000, now),
+            "10 minutes"
+        );
+    }
 
     #[test]
     fn quota_display_defaults_to_consumed_and_persists_only_supported_choices() {

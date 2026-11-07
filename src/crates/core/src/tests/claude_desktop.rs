@@ -266,7 +266,19 @@ impl replies::SessionReplies for FakeReplies {
 
 /// A Claude desktop session whose last line asks `name` with `input`.
 fn desktop_asking(root: &Path, session: &str, call: &str, name: &str, input: Value) {
-    let now = Utc::now().to_rfc3339();
+    desktop_asking_at(root, session, call, name, input, Utc::now());
+}
+
+/// The same, asked at `at`.
+fn desktop_asking_at(
+    root: &Path,
+    session: &str,
+    call: &str,
+    name: &str,
+    input: Value,
+    at: chrono::DateTime<Utc>,
+) {
+    let now = at.to_rfc3339();
     fs::write(
         root.join(format!("{session}.jsonl")),
         format!(
@@ -442,6 +454,35 @@ fn a_claude_desktop_box_is_answered_into_its_session_where_the_host_reaches_it()
     assert!(desktop_cards(&mut backend)
         .iter()
         .all(|shown| shown["sessionId"] != boxed));
+}
+
+#[test]
+fn a_next_step_box_left_for_hours_stays_in_the_sidebar_while_approvals_wait_until_answered() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    desktop_asking_at(
+        &root,
+        "11111111-2222-3333-4444-555555555555",
+        "toolu_box",
+        "mcp__ccd_turn__wrap_up",
+        json!({"recap": "Merged.", "ask": "Delete the worktree?",
+               "actions": [{"label": "Delete it", "message": "Delete the worktree"}]}),
+        Utc::now() - chrono::Duration::hours(3),
+    );
+    let mut backend = fixture(home);
+    backend
+        .apply_setting("approvalWaitMinutes", &json!(0))
+        .unwrap();
+    assert_eq!(desktop_cards(&mut backend).len(), 1, "一直等: still shown");
+    backend
+        .apply_setting("approvalWaitMinutes", &json!(10))
+        .unwrap();
+    assert!(
+        desktop_cards(&mut backend).is_empty(),
+        "10 minutes: put away long ago"
+    );
 }
 
 #[test]
