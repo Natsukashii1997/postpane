@@ -249,13 +249,22 @@ impl Handoff {
         self.phase_at = now;
         self.updated_at = now;
     }
-    /// What the auto round trip is to do now, if anything: only while it is
-    /// on and an answer waits.
+    /// What is to happen now to an answer that waits, if anything: a pass
+    /// ends the handoff whether or not the auto round trip is on (owner,
+    /// 2026-11-07: a passed review left open kept Claude's 「回」 seal up);
+    /// the rest only while it is on.
     pub fn next(&self) -> Option<Next> {
-        if !self.auto || !self.live() || self.phase != Phase::Replied {
+        if !self.live() || self.phase != Phase::Replied {
             return None;
         }
-        Some(match self.last_reply().and_then(|step| step.verdict) {
+        let verdict = self.last_reply().and_then(|step| step.verdict);
+        if verdict == Some(Verdict::Pass) {
+            return Some(Next::Pass);
+        }
+        if !self.auto {
+            return None;
+        }
+        Some(match verdict {
             Some(Verdict::Pass) => Next::Pass,
             Some(Verdict::Revise) if self.reviews() < ROUNDS => Next::Back,
             Some(Verdict::Revise) => Next::Limit,
@@ -1074,6 +1083,22 @@ mod tests {
         let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
         book.opened(&handoff.id, "c1", 2);
         handoff.id
+    }
+
+    #[test]
+    fn a_pass_ends_the_handoff_even_with_the_auto_round_trip_off() {
+        // Owner, 2026-11-07: a passed review left open kept the 「回」 seal up.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        assert!(book.stop(&id, "驿窗重启，自动往返先暂停", true, 3));
+        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pass));
+        // A revise with it off still waits for the person.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        assert!(book.stop(&id, "停", true, 3));
+        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), None);
     }
 
     #[test]

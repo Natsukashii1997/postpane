@@ -16,7 +16,18 @@ export interface RelayStamps {
   replied: boolean;
   /** When the latest of those words moved, in milliseconds. */
   since: number | null;
+  /** A relay's words have sat with ChatGPT past {@link REPLY_WAIT_MS} with no
+   * answer: 「未审」 in red, and the mark goes to that conversation. */
+  overdue: boolean;
+  /** The ChatGPT conversation the mark goes to while one is overdue. */
+  conversation?: string;
+  /** When the stamps next change on their own (a review falls overdue). */
+  until: number | null;
 }
+
+/** How long ChatGPT has to answer before the review counts as overdue; the
+ * host hands the relay back at the same mark (REPLY_WAIT_MS in handoffs.rs). */
+export const REPLY_WAIT_MS = 30 * 60 * 1000;
 
 /** How long after the words move the letter lands in the receiver: the
  * flight's story up to the letter sliding in. */
@@ -44,20 +55,45 @@ const latest = (times: (number | null)[]) =>
 export function relayStamps(
   snapshot: Pick<Snapshot, "handoffs">,
   end: "chatgpt" | "claude" | null,
+  now = Date.now(),
 ): RelayStamps | undefined {
   const open = (snapshot.handoffs ?? []).filter(
     (handoff) => handoff.status === "open",
   );
   if (end === "chatgpt") {
-    const reviewing = open.filter(
+    const waiting = open.filter(
       (handoff) => handoff.phase === "delivered" || handoff.phase === "working",
     );
-    if (!reviewing.length) return undefined;
+    const since = (handoff: Handoff) =>
+      handoff.phaseAt ?? moved(handoff, "ask") ?? now;
+    // Owner, 2026-11-07: 「审」 only while ChatGPT really has it; a relay
+    // stopped or handed back prints nothing, and one left unanswered past
+    // the wait prints 「未审」 so it is seen and taken to ChatGPT.
+    const overdue = waiting
+      .filter((handoff) => now - since(handoff) > REPLY_WAIT_MS)
+      .sort((a, b) => since(b) - since(a));
+    const reviewing = waiting.filter(
+      (handoff) => !handoff.halt && now - since(handoff) <= REPLY_WAIT_MS,
+    );
+    if (!overdue.length && !reviewing.length) return undefined;
     return {
       review: true,
-      answering: reviewing.some((handoff) => handoff.phase === "working"),
+      answering:
+        !overdue.length &&
+        reviewing.some((handoff) => handoff.phase === "working"),
       replied: false,
-      since: latest(reviewing.map((handoff) => moved(handoff, "ask"))),
+      since: latest(
+        (overdue.length ? overdue : reviewing).map((handoff) =>
+          moved(handoff, "ask"),
+        ),
+      ),
+      overdue: overdue.length > 0,
+      conversation: overdue[0]?.chatgptConversation ?? undefined,
+      until: reviewing.length
+        ? Math.min(...reviewing.map((handoff) => since(handoff))) +
+          REPLY_WAIT_MS +
+          1
+        : null,
     };
   }
   if (end === "claude") {
@@ -68,6 +104,8 @@ export function relayStamps(
       answering: false,
       replied: true,
       since: latest(replied.map((handoff) => moved(handoff, "reply"))),
+      overdue: false,
+      until: null,
     };
   }
   return undefined;

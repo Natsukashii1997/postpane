@@ -92,11 +92,13 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 底部按阶段：送出与处理中「结束接力」「查看 ChatGPT 对话」；回信到了加「转回 Claude」（把回信全文连同处理要求经插件送回 Claude 会话，会话在跑就排队）；已转回加「再审一轮」（请 Claude 改完调 `relay_to_chatgpt` 复审，第 2 轮后不再出现）；失败「重试」；结束「知道了」。
 - 命令：`handoff_act {id, action: "back" | "again" | "end" | "retry" | "pause" | "resume"}`。旧的转交单（`handoff_start`、`handoff_forward`、`handoff_route`）已撤掉。
 
+- 侧栏票根上的章（2026-11-07 常浩定，`packages/hud/src/relay-stamps.ts`）：ChatGPT 票根的蓝色「审」只在 ChatGPT 真的在看时盖——接力开着、处于 `delivered` / `working`、没被停（`halt` 为空）、送达不到 `REPLY_WAIT_MS`（30 分钟）；被停掉或交还常浩的不盖。送达超过 30 分钟还没回信的（不论停没停）改盖红色「未审」，点 ChatGPT 那一格直接打开那个 ChatGPT 对话（悬停照旧出面板）。Claude 票根的红蜡「回」：有接力处于「已回复」等常浩处理时显示；判了通过的会自动结束，所以只剩「需修改」交还常浩、还没处理的，卡上点「结束接力」或转回 Claude 后撤掉。
+
 ### 自动往返（批 2，#72）
 
 - 开关：新接力默认开（`auto: true`）；#72 之前的记录读进来是关的。卡头「接力」旁标「自动往返」，停了标琥珀色「自动已停」（悬停看原因），底部多一个「暂停自动」/「继续自动」。
 - 回信到了（`replied`）且开着时，驿窗按结论自己走（`Desk::drive`，插件报 `turn complete` 后立即跑）：
-  - 「结论：通过」：自动结束接力，`end` 步带 `auto`；
+  - 「结论：通过」：自动结束接力，`end` 步带 `auto`；自动往返关着或已停时也照样结束（2026-11-07 常浩定：判了通过的接力一直开着，Claude 票根上的「回」撤不掉）；
   - 「结论：需修改」且审过不到 `ROUNDS`（2）轮：把回信全文转回 Claude（与「转回 Claude」同一段话），`back` 步带 `auto`；Claude 改完自己调 `relay_to_chatgpt`，进入下一轮；
   - 第 2 轮仍「需修改」，或回信没写结论：停下交还常浩（`stop` 步，`halt` 写原因），卡上照常可「转回 Claude」「结束接力」。
 - 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）。两次都失败（最常见的是 Claude 桌面版在会话一轮做完、空闲几分钟后把它暂停了，插件不再签到；2026-11-07 L5 第一单实测碰到），改为把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt`，阶段照常是 `returned`、自动往返不停。常浩在 Claude 里打开那个会话，插件就会提交，卡上和「正在进行」写「意见已排队 · 打开 Claude 会话继续」。排队失败才停下交还常浩；排队 `QUEUE_WAIT_MS`（1 小时，与插件的留话寿命一致）没被领走也停下交还常浩。Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。

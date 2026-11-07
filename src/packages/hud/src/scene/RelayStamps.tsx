@@ -43,6 +43,7 @@ export function ReviewStamp({
   unit,
   zh,
   answering,
+  overdue = false,
   since,
   reduceMotion,
   children,
@@ -50,6 +51,9 @@ export function ReviewStamp({
   unit: number;
   zh: boolean;
   answering: boolean;
+  /** Left unanswered past the wait: 「未审」 in the wax red (owner,
+   * 2026-11-07). */
+  overdue?: boolean;
   since: number | null;
   reduceMotion: boolean;
   /** The reading it covers. */
@@ -112,17 +116,19 @@ export function ReviewStamp({
       )}
       <span
         ref={stamp}
-        data-relay-stamp="review"
+        data-relay-stamp={overdue ? "overdue" : "review"}
         style={{
           ...square,
+          ...(overdue ? { width: 17 * unit } : null),
           display: "grid",
           placeItems: "center",
-          border: `${1.2 * unit}px solid ${REVIEW_BLUE}`,
-          color: REVIEW_BLUE,
-          font: `900 ${8 * unit}px/1 "Songti SC", "STSong", serif`,
+          border: `${1.2 * unit}px solid ${overdue ? WAX : REVIEW_BLUE}`,
+          color: overdue ? WAX : REVIEW_BLUE,
+          font: `900 ${overdue ? 6.4 * unit : 8 * unit}px/1 "Songti SC", "STSong", serif`,
+          whiteSpace: "nowrap",
         }}
       >
-        {zh ? "审" : "R"}
+        {overdue ? (zh ? "未审" : "LATE") : zh ? "审" : "R"}
       </span>
     </span>
   );

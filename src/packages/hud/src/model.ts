@@ -158,7 +158,9 @@ export function vendorsFromSnapshot(
   const cached = byMode?.get(mode);
   if (cached && now >= cached.observedAt && now <= cached.expiresAt)
     return cached.value;
-  const { order: sources, expiresAt } = restingAgents(snapshot, mode, now);
+  const resting = restingAgents(snapshot, mode, now);
+  const sources = resting.order;
+  let expiresAt = resting.expiresAt;
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
@@ -176,7 +178,10 @@ export function vendorsFromSnapshot(
         : key === vendorKey("claude")
           ? "claude"
           : null,
+      now,
     );
+    // A review falling overdue changes the stamp with no new snapshot.
+    if (relay?.until != null) expiresAt = Math.min(expiresAt, relay.until);
     const desk =
       key === vendorKey("chatgpt") && !quotas.length
         ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
