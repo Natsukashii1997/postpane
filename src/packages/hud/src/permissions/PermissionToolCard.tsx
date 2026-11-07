@@ -18,7 +18,7 @@ export function PermissionToolCard({
   pending: boolean;
   light?: boolean;
   zh?: boolean;
-  answer: (decision: RequestDecision) => void | Promise<void>;
+  answer: (decision: RequestDecision) => Promise<boolean>;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
   // On paper the buttons are printed boxes: Allow filled with the ink,

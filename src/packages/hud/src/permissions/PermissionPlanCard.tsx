@@ -7,6 +7,7 @@ import { alertFill, onAlertFill, permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
+import { sendThenForget } from "./answer-gate";
 
 /** Whether the user is writing what a plan should change, and what they wrote
  * so far, by request: the island redraws its cards as the pointer comes and
@@ -24,7 +25,7 @@ export function PermissionPlanCard({
   disabled: boolean;
   light?: boolean;
   zh?: boolean;
-  answer: (decision: RequestDecision) => void | Promise<void>;
+  answer: (decision: RequestDecision) => Promise<boolean>;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
   const saved = planDrafts.get(request.id);
@@ -41,8 +42,11 @@ export function PermissionPlanCard({
     keep({ noting, feedback: value });
   };
   const sendBack = () => {
-    planDrafts.delete(request.id);
-    void answer({ kind: "keep_planning", message: feedback });
+    void sendThenForget(
+      answer,
+      { kind: "keep_planning", message: feedback },
+      () => planDrafts.delete(request.id),
+    );
   };
   const canAnswerPlan = request.answersPlan === true;
   const vendor = request.vendor ?? clientDisplayName(request.source);
