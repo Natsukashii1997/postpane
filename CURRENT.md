@@ -11,7 +11,7 @@
 - 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 748 passed / 0 failed，前端 `ℹ pass 307` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`（以上为变基到含 #192 的 main 后重跑结果）。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-191-ended-week/*-rebased.log`。
 - 验证：单测覆盖 2 天（已停的留、普通的删）与 8 天（已停的也删）。
 - 截图：无。
-- 发布与回读：见合并后补记。
+- 发布与回读：合并为 `47623e1`，从同树分支（含 #192）打包，`install.sh 191-ended-week`：装前 `eb4bbc557f00`（#192 会话装的，已备份），14:44:11 退出、14:44:12 启动，产物 `0612183039f6` / 已装 `0612183039f6`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-191-ended-week/PostPane-eb4bbc557f00.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：装前已被删掉的记录找不回来，11-04 那 2 张提问卡（会话 `35984513…`、`3182ae78…`）仍显示旧提示，要在侧栏手动拿掉。
 - 本轮新坑：无
 - skill 进化：无。
