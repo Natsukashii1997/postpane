@@ -6,6 +6,7 @@ import {
   AgentPluginsPane,
   type AgentPluginItem,
 } from "./settings/AgentPluginsPane";
+import { AiAccessPane } from "./settings/AiAccessPane";
 import { DisplayPane } from "./settings/DisplayPane";
 import { GeneralPane } from "./settings/GeneralPane";
 import { PricesPane } from "./settings/PricesPane";
@@ -72,6 +73,14 @@ export default function SettingsPane({
         onLayout={onLayout}
         preferences={preferences}
         onPreferences={onPreferences}
+      />
+    );
+  if (page === "ai-access")
+    return (
+      <AiAccessPane
+        snapshot={settingsProps.snapshot}
+        action={settingsProps.action}
+        active={settingsProps.active}
       />
     );
   if (page === "agent-plugins")

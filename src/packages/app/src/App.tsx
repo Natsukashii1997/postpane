@@ -24,6 +24,7 @@ import {
   Puzzle,
   Settings2,
   Waypoints,
+  Workflow,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { Button } from "@agent-hud/ui/components/button";
@@ -157,6 +158,16 @@ const pages: {
     group: "agents",
   },
   {
+    // Which AI makes what PostPane shows, who connects in, whose data it reads.
+    id: "ai-access",
+    label: "AI access",
+    icon: Workflow,
+    color: "#30b0c7",
+    description:
+      "Which AI writes for PostPane, who connects to it, whose data it reads.",
+    group: "agents",
+  },
+  {
     // Relays, one per address, whichever agents use them.
     id: "relays",
     label: "Relays",
@@ -188,6 +199,10 @@ const chinesePages: Record<string, [string, string]> = {
   display: ["显示", ""],
   agents: ["智能体", "驿窗关注哪些智能体，以及它们的账户。"],
   "agent-plugins": ["智能体插件", "驿窗为这台电脑上的智能体添加的功能。"],
+  "ai-access": [
+    "AI 接入",
+    "谁替驿窗产出内容、谁能连进驿窗、驿窗读了谁的数据。",
+  ],
   relays: ["中转站", "智能体经过的中转站。"],
   prices: ["价格", "每个模型的价格，不对时可以自己改。"],
   updates: ["更新", "驿窗的更新与 Beta 版本。"],
@@ -982,6 +997,7 @@ function AppContent({
                           page === "display" ||
                           page === "agents" ||
                           page === "agent-plugins" ||
+                          page === "ai-access" ||
                           page === "updates") && (
                           <SettingsPane
                             page={page}
