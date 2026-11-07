@@ -939,6 +939,7 @@ pub fn run_with_options(
             hud::hud_text_focus,
             hud_show_main,
             float_notes::toggle_float_notes,
+            float_notes::float_notes_shown,
             disk_slim::disk_slim_status,
             disk_slim::toggle_disk_slim,
             quit_app,

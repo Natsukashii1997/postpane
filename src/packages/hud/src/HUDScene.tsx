@@ -102,6 +102,8 @@ export interface HUDSceneProps {
   onConfigure?: () => unknown;
   /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
   onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
+  /** Whether 随手记's window shows, as the host last said (#224). */
+  floatNotesShown?: boolean;
   /** 磁盘瘦身's last status; it hangs under 随手记 while it is installed (#155). */
   diskSlim?: DiskSlimState | null;
   /** Asks 磁盘瘦身 to open or hide its panel beside its ball. */
@@ -194,6 +196,7 @@ export function HUDScene({
   config: supplied,
   onConfigure,
   onFloatNotes,
+  floatNotesShown = false,
   diskSlim,
   onDiskSlim,
   onStats,
@@ -1281,6 +1284,7 @@ export function HUDScene({
                 zh={snapshotLanguage(snapshot) === "zh"}
                 still={reduceMotion || dragVisual}
                 carried={dragVisual}
+                shown={floatNotesShown}
                 onToggle={onFloatNotes!}
               />
             ) : (
