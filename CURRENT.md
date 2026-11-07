@@ -4,6 +4,18 @@
 
 
 
+## Hermes 提问跳转改用 feishu:// 协议，飞书直接到前台（2026-11-07，Claude，常浩实点 #196 后说「有问题，点不动跳转键」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 17:29`（`date '+%F %H:%M'` 记录；排查从 17:0x 起）。来由：#198。#196 用 `open https://applink.feishu.cn/…` 跳飞书，本机 https 默认交给 Chrome，Chrome 在后台接走，飞书不出来（L-22）。
+- 改了哪些文件：`src/crates/platform/src/navigation.rs`（`feishu-chat` 先拼 `feishu://applink.feishu.cn/client/chat/open?openChatId=…`，飞书没认领这个协议才退回 https）；`navigation/tests.rs` 改为 `a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser`（改前旧测试在本机返回 `feishu://` 而失败）；`docs/LESSONS.md` 新增 L-22。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-198-feishu-scheme/`。
+- 验证：终端里三种链接各开一次亚古兽所在的群：`https://` 与 `lark://` 后前台仍是 Claude；`feishu://` 后飞书 `frontmost` 为 `true`，常浩看过确认打开的就是那个群。**未验证**：实机侧栏点箭头（由驿窗而不是终端调用 `open`，macOS 可能不把飞书提到前台）；私聊那行。已请常浩实点，未答复。排查时 `open https://…` 给 Chrome 留了 applink 标签页，可直接关。
+- 截图：无（飞书窗口截图授权被拒，由常浩目视确认）。
+- 发布与回读：`install.sh 198-feishu-scheme`：装前 `de58129a128f`（#196 那版，已备份），17:37:20 退出并启动，产物 `3e1e0471ecf8` / 已装 `3e1e0471ecf8`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-198-feishu-scheme/PostPane-de58129a128f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：L-22 可提议提升为全局坑（deeplink 跳本机应用别走 https），待常浩批。
+- 本轮新坑：L-22
+- skill 进化：无。
+
 ## 侧栏 Hermes「最近被问」点一下跳到飞书对应私聊 / 群（2026-11-07，Claude，常浩截图问「为什么不能像 Claude、GPT 一样一箭头跳转」，看方案后点「开工」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 15:43`（`date '+%F %H:%M'` 记录）。来由：#196。Hermes 的 `state.db` 每条飞书会话都记着 `chat_id`，但 `recent_asks` 没读，快照里没有，外壳的跳转白名单也不认飞书，所以提问行只能看不能跳。
