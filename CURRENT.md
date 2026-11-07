@@ -4,6 +4,19 @@
 
 
 
+## 侧栏停满后直接进各家自己的面板，不再展开整张看板（2026-11-07，Claude，常浩说「删除这个图1完整页面，我不需要同时看。单ai小卡黄色线走过之后，直接进入到各自的图3」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 18:17`（`date '+%F %H:%M'` 记录）。来由：#202。#141「停久看全」：悬停一格出小收据，黄线走完（再停 1.5 秒）展开成整张看板（各家叠在一起）。常浩改为黄线走完直接进这一家自己的面板（与点一格相同）。
+- 改了哪些文件：`src/packages/hud/src/peek-expand.ts`（新增 `PEEK_GROWS_INTO = { pinned: true, expanded: false }`，注释改为长成自己的面板）；`src/packages/hud/src/HUDScene.tsx`（黄线计时到点改为钉住这一家，不再置 `expanded`；已钉住时不再计时）；`src/packages/hud/test/peek-expand.test.ts` 新增一条（改前 `PEEK_GROWS_INTO` 不存在而失败）。等待时长 1.5 秒、黄线不变。
+- 范围：只改悬停停满这条路。刘海形态、菜单「打开面板」、助手编辑 HUD 时的保持，没有单独一家可看，仍是整张看板（`expanded`），未删。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/`。
+- 验证：自查页渲染真实 `HUDScene`（logos、右边，与本机设置相同），喂 16:37 读到的实机快照（去掉审批），内置浏览器真实悬停：Codex 格 1 秒时小卡与黄线在（`.hud-peek-expand-meter` 存在），3 秒后只有 Codex 一家面板；Hermes 格同样只出 Hermes 面板；面板出来后移到 Claude 格，换成 Claude 一家，整张看板没出现。浏览器里小卡阶段的截图没拍到画面（DOM 里在），未补。自查页备份在证据目录 `check-page/`，实机快照副本已删、不留。**未验证**：实机侧栏（L-09），留给常浩。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/`：`codex-after-wait.jpg`、`hermes-after-wait.jpg`、`move-to-claude.jpg`。
+- 发布与回读：`install.sh 202-peek-to-panel`：装前 `5076014be5bd`（#200 那版，已备份），18:27:16 退出、18:27:17 启动，产物 `bfd637730be4` / 已装 `bfd637730be4`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/PostPane-5076014be5bd.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：整张看板在刘海形态、菜单打开、编辑保持里仍在；常浩要连这些也去掉，需另定这几处改显示什么。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 侧栏所有跳转箭头统一按钮质感（2026-11-07，Claude，常浩实点 #198 后说「两个都对」，并要求把侧栏所有跳转箭头的效果统一、有点击按钮的质感；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 17:59`（`date '+%F %H:%M'` 记录）。来由：#200。#182 只给清单卡（审批 / 回复）的 ↗ 加了 `.hud-go-button`（悬停变亮、按下下沉），正在进行会话行、Hermes 提问行（#196 新加）、接力卡头部「回到 Claude 会话」各自手写样式，没有反馈。
