@@ -5,6 +5,22 @@
 
 
 
+## 待审批展开卡回答一条后不再收成小签，鼠标在面板上可连续处理（2026-11-07，Claude，常浩反映「处理完一个就弹回小卡、剩下的得再点」请修复，看过方案后说「现在装」；PR #180 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 09:31`（`date '+%F %H:%M'` 记录）。来由：常浩截图，在待审批展开卡里回答 / 选一项后，面板收成小签，下一条要再点小签展开。
+- 改了哪些文件：`src/packages/hud/src/alerts/news-lanes.ts`（新增 `liveQueue`：读队首前去掉已不在等的请求，队首被去掉时把等得最久的请求提前；`promoteOldestWaiting` 从 `IslandNews.tsx` 挪来共用）；`src/packages/hud/src/IslandNews.tsx`（`current`、各家小签、返回的 `queue` 都用 `liveQueue` 的结果）；`src/packages/hud/test/news-lanes.test.ts`（两条用例）；`docs/LESSONS.md` 新增 L-16。
+- 根因：回答后快照先去掉那条审批，`useIslandNews` 的队列要到下一次 effect 才跟上；中间那一帧队首还是已回答的请求，`request` 读成空，`useHUDInteraction` 当成「最后一条提醒处理完」（closeAfterLastAlert）：收起面板并压住悬停；下一帧新请求到队首时面板已关，只出小签，鼠标还在也不会再自动展开。
+- 测试：新用例先红（`does not provide an export named 'liveQueue'`）后绿。变基到含 #181 的 main（`2fe2329`）后重跑：`pnpm run check` exit 0；`pnpm test` Rust 合计 741 passed / 0 failed，前端 `ℹ pass 304` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展第一次 `ℹ pass 0` / `ℹ fail 8`（L-16，Playwright 浏览器缓存被本机清掉），补装后 `pnpm run test:extension` `ℹ pass 8` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/`（`check-2.log`、`test-2.log`、`test-extension-3.log`、`node-test-2.log`）。
+- 验证：只有单测和代码推演，**实机未验证**：侧栏面板里的「提交」电脑控制点不动（L-09），要常浩下次有两条以上待审批时亲手点一次——鼠标停在展开卡上回答一条，应直接显示下一条；移开后照收起延时缩回小签；全部答完照旧收起。
+- 截图：无。
+- 发布与回读：从 `2fe2329`（含 #181）+ 本修复打包，`install.sh expanded-card-stays`：装前 `bd108f283650`（已备份），10:55:53 退出、10:55:54 启动，产物 `480e26fab1d2` / 已装 `480e26fab1d2`，签名 leaf `H"b773068e"`，`install.sh check` 复核一致；`log show` 里 tccd 没有对驿窗的文稿权限请求。之后 main 只多了 CURRENT.md 两次提交，代码与已装一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/PostPane-bd108f283650.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 装机时管培生 #1 后端审核那单接力（`h1a1b3a224a200`）开着自动往返、09:37 「需修改」转回 Claude 后在改；常浩说「现在装」后装机，10:55:55 记 `stop`、`auto` 已关，要常浩在卡上点「继续自动」。
+  - 已装这版含 #181 代码，不含 #177（尚未合并）。上一节「#177、#180 合并后由最后合并的会话统一装、再把等待回答改成一直等」仍有效：#177 合并的会话照做；本会话没改 `approvalWaitMinutes`。
+  - 范围外：`~/Library/Caches/ms-playwright/` 被本机别的清理删掉，没查是哪个程序（L-16）。
+- skill 进化：无。
+- 本轮新坑：L-16
+
 ## 侧栏读数固定每周、审批重启后重挂与「一直等」（2026-11-07，Claude，常浩反映「数字成了 5 小时」「真实任务的审批侧栏没弹」，请深度自检修复；四项方案常浩逐项选定；PR #181 全量通过，按授权 squash 合并 `2fe2329`；已打包、未装机）
 
 - 时间：开工 `2026-11-07 08:44`（`date '+%F %H:%M'` 记录）。来由：#174。

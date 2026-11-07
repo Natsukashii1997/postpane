@@ -139,3 +139,11 @@
 - 正确做法：「等待回答」加「一直等」（值 0，不设截止，客户端窗口里批了侧栏自动收起），常浩本机用它。驿窗主动结束请求时给钩子回 `{}`；连接无声断开说明驿窗退出了，钩子等最多 2 分钟，新进程起来后重新挂上同一条请求。查「侧栏没弹审批」先看两件事：当时设置的等待时长，以及那段时间驿窗有没有被重启（`ps -o lstart= -p $(pgrep -x PostPane)`、各会话的 `install.sh` 记录）。
 - 证据：会话记录 `~/.claude/projects/-Users-nat-Documents-ChatGPT----work-postpane/5f107a09-….jsonl` 18:28:12Z 的 tool_use 与 00:35:13Z 的 tool_result；`93636e9f-….jsonl` 23:29:06Z 的 `install.sh auto-back-queue`；`settings.json` 的 `approvalWaitMinutes: 10`。
 - 升级：已写成测试 `hooks::transport::tests::a_request_open_when_postpane_restarts_is_put_to_the_new_one`、`a_request_postpane_ends_itself_goes_back_to_the_client_once`、`waiting_until_answered_never_runs_out`。
+
+## L-16 Chrome 扩展测试 8 条全挂：Playwright 浏览器缓存被本机清理删掉了（2026-11-07）
+
+- 现象：同一 worktree 一小时内跑两次 `pnpm test`，第一次 `test:extension` 是 `ℹ pass 8`，第二次变成 `ℹ pass 0` / `ℹ fail 8`，每条都报 `browserType.launch: Executable doesn't exist at ~/Library/Caches/ms-playwright/chromium_headless_shell-1248/...`。
+- 根因：`~/Library/Caches/ms-playwright/` 整个目录被本机某个清理删掉了（不是驿窗的代码，仓库里搜不到这个路径），项目依赖的 Playwright 版本（1.64.1）没变。和代码改动无关。
+- 正确做法：看到这条报错先 `ls ~/Library/Caches/ms-playwright/`；目录没了就在 `src/apps/chrome-extension` 下跑 `pnpm exec playwright install chromium-headless-shell` 补回，再重跑 `pnpm run test:extension`。不要为这个去改测试或代码。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/test.log`（通过）、`test-2.log`（全挂）、`playwright-install.log`、`test-extension-3.log`（补装后 `ℹ pass 8`）。
+- 升级：无（环境问题，测试本身的报错已经说清楚了）。可提议提升为全局坑：别的项目用 Playwright 也会被同样清掉。
