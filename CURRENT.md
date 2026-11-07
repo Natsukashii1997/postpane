@@ -21,7 +21,7 @@
   - 会话三不带 `extra` 再送，被拒，返回「这个 PR 已审 2 轮，审查预算用完了，没有发出……」。
   - 实机中发现工具返回提示还写「没满 2 轮」，已改。
 - 截图：无（没有界面样式改动；卡上数字由单元测试覆盖）。
-- 发布与回读：合并前装 `d2d9c9cbe121`（装前 `f67df8d754e0` 备份在 `evidence/2026-11-08-2026-11-08-217-review-budget/`），用于实机。合并后从 main 重打重装的结果补在下面。
+- 发布与回读：合并前装 `d2d9c9cbe121`（装前 `f67df8d754e0` 备份在 `evidence/2026-11-08-2026-11-08-217-review-budget/`），用于实机。合并后从 main `fb62a6a` 重打（`build=0`，无警告，打完 main 没有新提交），`install.sh 217-main`：装前 `4ea6f3b36caa`（并行会话装的，已备份到 `evidence/2026-11-08-217-main/`），01:40:14 退出、01:40:14 启动，产物 `b4c7a75cb585` / 已装 `b4c7a75cb585`，签名 leaf `H"b773068e"`；应用在运行，启动后两分钟日志无 error/panic。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-217-main/PostPane-4ea6f3b36caa.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 两张测试卡 `h1a1b70a066c01`（`claude -p` 会话退出，转回失败两次后停下）、`h1a1b70aa6ed02` 停在「等你决定」，请常浩点「结束接力」。
   - 风险级只在新单第一次送审时记，续发时再填不会改。
