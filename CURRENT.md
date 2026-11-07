@@ -5,7 +5,7 @@
 
 
 
-## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致，插件待常浩重新加载后实测）
+## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致；常浩重新加载插件 0.2.1 后实测一单真实接力，回信收到并自动结束）
 
 - 时间：开工 `2026-11-07 12:31`（`date '+%F %H:%M'` 记录）。来由：批 C 那单接力 `h1a1b1fed89e00` ChatGPT 实际回了「结论：通过」，驿窗停在 `delivered`，30 分钟后交还常浩（#182 只让它被看见）。
 - 根因（有证据）：`hooks/inbox` 里这个对话在 01:54:19.827（送达后 1.5 秒）收到一条 `turn complete`，回复为空，messageId `e6c1acb9…`；在 Chrome 打开该对话，真回复的 messageId 也是 `e6c1acb9…`。ChatGPT 先出空占位块，答案随后写进同一个块。插件发完话后采样时没看到停止按钮，就把空块报成答完并记为已报；宿主不收空回复；真回复写进来后，插件因为同一 messageId（且 `expecting` 已清）不再报。整轮没采到停止按钮，所以也没有 `turn start`。详见 L-18。
@@ -16,7 +16,7 @@
   - 测试：`content.test.mjs` 新增「an empty placeholder is not the reply that fills it later」（修复前报 `[['m5', '']]`，与这次故障一致）和「a reply still being written without a stop button waits until it stops changing」（修复前报出半截「一二三」）；`handoff.rs` 新增 `every_turn_is_logged_with_what_became_of_it_but_not_its_words`。
   - `docs/chatgpt-channel.md`：页面结构补占位块规则，接力一节补回合日志；`docs/LESSONS.md` 新增 L-18。
 - 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 744 passed / 0 failed，前端 `ℹ pass 305` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。还原 `content.js` 的 prettier 重排后重跑 `pnpm run test:extension` `ℹ pass 10` / `ℹ fail 0`，`format:check`、`check-rules` 通过。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`check.log`、`test.log`、`node-tests.log`、`test-extension-2.log`、`build.log`）。
-- 验证：根因证据同目录 `inbox-completion-empty.json`、`handoff-h1a1b1fed89e00.json`、`dom-probe.md`。**实机未验证**：Chrome 从主目录加载插件，要合并、拉取后常浩在扩展程序页重新加载驿窗插件（0.2.1），再发一单真实接力看回信能到、`turns.jsonl` 有记录。
+- 验证：根因证据同目录 `inbox-completion-empty.json`、`handoff-h1a1b1fed89e00.json`、`dom-probe.md`。实机（补记）：#183 合并、主目录拉取后，常浩在扩展程序页重新加载插件，转接进程 12:51:24 重启；本会话用 `relay_to_chatgpt` 在「驿窗审核」项目新开一单（`h1a1b4592f6f00`，请 ChatGPT 只回「结论：通过」，即这次出事的情形）。`turns.jsonl`：12:51:54 `start` 先 `early` 后 `caught-up`，12:51:58 `complete` messageId `4cee2eaa…`、`replyChars` 5、`taken`，没有空回复那一行；接力 12:51:58 记 `reply`（`pass`），同一秒自动 `end`。证据 `turns-after-fix.jsonl`、`handoff-h1a1b4592f6f00.json`。一单只能说明这条路通了，后台标签页久挂、长回复的情形仍靠 `turns.jsonl` 观察。
 - 截图：无界面改动。
 - 发布与回读：`install.sh chatgpt-reply-lost`：装前 `3888d0dec483`（已备份），12:48:30 退出并启动，产物 `d70c15d14181` / 已装 `d70c15d14181`，签名 leaf `H"b773068e"`；`extension.sock` 12:48 重建，tccd 无文稿权限请求；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/PostPane-3888d0dec483.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：
