@@ -604,7 +604,8 @@ export interface Approval {
  * asks (`/reload-plugins`), or turn answering back on in Settings → Agent
  * plugins. */
 export type AnswerFix = "installPlugin" | "reloadPlugins" | "turnOnAnswers";
-export type ApprovalWaitMinutes = 1 | 3 | 5 | 10 | 30 | 60;
+/** 0 waits until the request is answered (#174). */
+export type ApprovalWaitMinutes = 0 | 1 | 3 | 5 | 10 | 30 | 60;
 export interface ClientHooksStatus {
   supported: boolean;
   /** The callback receiver is listening; this alone does not prove client installation. */

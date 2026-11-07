@@ -227,6 +227,10 @@ fn serve(
     }
     reminders.record(source, flag, payload);
     let ticket = requests.register(request, now_ms());
+    // PostPane ended the request itself (its wait ran out, or it was settled
+    // elsewhere): the callback is told so with `{}`. Closing without a word
+    // means PostPane went away, and the callback asks the next one (#174).
+    let mut ended = false;
     loop {
         if !running.load(Ordering::Acquire) || disconnected(&stream) {
             break;
@@ -237,18 +241,26 @@ fn serve(
                 let _ = stream.write_all(b"\n");
                 break;
             }
-            Ok(None) | Err(RecvTimeoutError::Disconnected) => break,
+            Ok(None) => {
+                ended = true;
+                break;
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {
                 if requests
                     .deadline(&ticket.id)
                     .is_none_or(|deadline| now_ms() >= deadline)
                 {
+                    ended = true;
                     break;
                 }
             }
         }
     }
     requests.cancel(&ticket.id);
+    if ended && running.load(Ordering::Acquire) {
+        let _ = stream.write_all(b"{}\n");
+    }
 }
 fn read_frame(stream: &mut UnixStream, running: &AtomicBool) -> Option<Vec<u8>> {
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
@@ -316,69 +328,127 @@ pub(crate) fn send(
     if bytes.len() > PAYLOAD_LIMIT {
         return Err("Hook callback is too large".into());
     }
+    if flag != "--permission-hook" {
+        let stream = connect(data, &bytes, Duration::from_secs(3))?;
+        let mut response = Vec::new();
+        stream
+            .take((PAYLOAD_LIMIT + 1) as u64)
+            .read_to_end(&mut response)
+            .map_err(|_| "Hook response did not complete")?;
+        return finish(response);
+    }
+    let mut transcript = if super::settles_in_transcript(source) {
+        super::transcript::Transcript::new(payload)
+    } else {
+        None
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(86_405);
+    let mut stream = connect(data, &bytes, Duration::from_millis(100))?;
+    loop {
+        match wait(&mut stream, &mut transcript, deadline)? {
+            Waited::Answer(response) => return finish(response),
+            Waited::Over => return Ok(None),
+            // PostPane quit with the request open, as installing a new version
+            // does: put it to the PostPane that comes back (#174).
+            Waited::Gone => match reconnect(data, &bytes, &mut transcript, deadline) {
+                Some(next) => stream = next,
+                None => return Ok(None),
+            },
+        }
+    }
+}
+
+/// How long a request waits for PostPane to come back after it quit; an
+/// update restarts it within seconds. Past this the client asks on its own.
+const RETURN_WAIT: Duration = Duration::from_secs(120);
+
+fn connect(data: &Path, bytes: &[u8], read: Duration) -> Result<UnixStream, String> {
     let mut stream = UnixStream::connect(socket_path(data))
         .map_err(|_| "Agent HUD hooks are disabled or not running")?;
     stream
         .set_write_timeout(Some(Duration::from_secs(2)))
         .map_err(|_| "Hook timeout unavailable")?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(if flag == "--permission-hook" {
-            86_405
-        } else {
-            3
-        })))
+        .set_read_timeout(Some(read))
         .map_err(|_| "Hook timeout unavailable")?;
-    stream
-        .write_all(&bytes)
-        .map_err(|_| "Hook callback failed")?;
     // Keep the write side open: EOF means the waiting CLI was cancelled. The
     // JSONL request already frames its payload without requiring a half-close.
+    stream
+        .write_all(bytes)
+        .map_err(|_| "Hook callback failed")?;
+    Ok(stream)
+}
+
+enum Waited {
+    /// PostPane's answer, or `{}` when it ended the request itself.
+    Answer(Vec<u8>),
+    /// Answered in the client's own window, or waited the longest a client does.
+    Over,
+    /// PostPane closed without a word: it quit.
+    Gone,
+}
+
+fn wait(
+    stream: &mut UnixStream,
+    transcript: &mut Option<super::transcript::Transcript>,
+    deadline: std::time::Instant,
+) -> Result<Waited, String> {
     let mut response = Vec::new();
-    if flag == "--permission-hook" {
-        let mut transcript = if super::settles_in_transcript(source) {
-            super::transcript::Transcript::new(payload)
-        } else {
-            None
-        };
-        stream
-            .set_read_timeout(Some(Duration::from_millis(100)))
-            .map_err(|_| "Hook timeout unavailable")?;
-        let deadline = std::time::Instant::now() + Duration::from_secs(86_405);
-        loop {
-            if transcript.as_mut().is_some_and(|watch| watch.settled()) {
-                return Ok(None);
-            }
-            if std::time::Instant::now() >= deadline {
-                return Ok(None);
-            }
-            let mut chunk = [0u8; 8192];
-            match stream.read(&mut chunk) {
-                Ok(0) => break,
-                Ok(n) => {
-                    response.extend_from_slice(&chunk[..n]);
-                    if response.len() > PAYLOAD_LIMIT {
-                        return Err("Hook response is too large".into());
-                    }
-                }
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        std::io::ErrorKind::WouldBlock
-                            | std::io::ErrorKind::TimedOut
-                            | std::io::ErrorKind::Interrupted
-                    ) =>
-                {
-                    continue
-                }
-                Err(_) => return Err("Hook response did not complete".into()),
-            }
+    loop {
+        if transcript.as_mut().is_some_and(|watch| watch.settled())
+            || std::time::Instant::now() >= deadline
+        {
+            return Ok(Waited::Over);
         }
-    } else {
-        stream
-            .take((PAYLOAD_LIMIT + 1) as u64)
-            .read_to_end(&mut response)
-            .map_err(|_| "Hook response did not complete")?;
+        let mut chunk = [0u8; 8192];
+        match stream.read(&mut chunk) {
+            Ok(0) if response.is_empty() => return Ok(Waited::Gone),
+            Ok(0) => return Ok(Waited::Answer(response)),
+            Ok(n) => {
+                response.extend_from_slice(&chunk[..n]);
+                if response.len() > PAYLOAD_LIMIT {
+                    return Err("Hook response is too large".into());
+                }
+            }
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::Interrupted
+                ) =>
+            {
+                continue
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset && response.is_empty() => {
+                return Ok(Waited::Gone)
+            }
+            Err(_) => return Err("Hook response did not complete".into()),
+        }
     }
+}
+
+fn reconnect(
+    data: &Path,
+    bytes: &[u8],
+    transcript: &mut Option<super::transcript::Transcript>,
+    deadline: std::time::Instant,
+) -> Option<UnixStream> {
+    let give_up = (std::time::Instant::now() + RETURN_WAIT).min(deadline);
+    loop {
+        std::thread::sleep(Duration::from_millis(500));
+        if transcript.as_mut().is_some_and(|watch| watch.settled())
+            || std::time::Instant::now() >= give_up
+        {
+            return None;
+        }
+        if let Ok(stream) = connect(data, bytes, Duration::from_millis(100)) {
+            return Some(stream);
+        }
+    }
+}
+
+fn finish(response: Vec<u8>) -> Result<Option<Value>, String> {
     if response.len() > PAYLOAD_LIMIT {
         return Err("Hook response is too large".into());
     }
@@ -388,5 +458,109 @@ pub(crate) fn send(
         serde_json::from_slice(&response)
             .map(Some)
             .map_err(|_| "Invalid hook response".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    fn permission() -> Value {
+        json!({
+            "session_id": "session-174",
+            "hook_event_name": "PermissionRequest",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git branch -D claude/174"},
+            "cwd": "/"
+        })
+    }
+
+    fn open(data: &Path, requests: &Requests) -> Server {
+        Server::start(
+            data,
+            requests.clone(),
+            Arc::new(|| {}),
+            super::super::reminders::Reminders::default(),
+        )
+        .unwrap()
+    }
+
+    fn waiting(requests: &Requests) -> Vec<String> {
+        let until = Instant::now() + Duration::from_secs(10);
+        loop {
+            let ids: Vec<String> = requests
+                .views(now_ms())
+                .iter()
+                .filter_map(|view| view["id"].as_str().map(str::to_owned))
+                .collect();
+            if !ids.is_empty() || Instant::now() >= until {
+                return ids;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn ask(data: &Path) -> std::thread::JoinHandle<Result<Option<Value>, String>> {
+        let data = data.to_owned();
+        std::thread::spawn(move || send(&data, "claude", "--permission-hook", &permission(), None))
+    }
+
+    #[test]
+    fn a_request_open_when_postpane_restarts_is_put_to_the_new_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = Requests::default();
+        let server = open(dir.path(), &first);
+        let callback = ask(dir.path());
+        assert_eq!(waiting(&first).len(), 1, "the sidebar shows it");
+
+        // Installing a new version quits PostPane with the request open…
+        drop(server);
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(!callback.is_finished(), "the callback waits for PostPane");
+
+        // …and the PostPane that comes back shows it again.
+        let second = Requests::default();
+        let _server = open(dir.path(), &second);
+        let ids = waiting(&second);
+        assert_eq!(ids.len(), 1, "put to the new PostPane");
+        second
+            .answer(&ids[0], &json!({"kind": "allow"}), now_ms())
+            .unwrap();
+        let response = callback.join().unwrap().unwrap().expect("its answer");
+        assert_eq!(
+            response["hookSpecificOutput"]["decision"]["behavior"],
+            "allow"
+        );
+    }
+
+    #[test]
+    fn a_request_postpane_ends_itself_goes_back_to_the_client_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let requests = Requests::default();
+        let _server = open(dir.path(), &requests);
+        requests.set_hold_ms(1);
+        let callback = ask(dir.path());
+        let response = callback.join().unwrap().unwrap();
+        assert_eq!(response, Some(json!({})), "no decision: the client asks");
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(requests.views(now_ms()).is_empty(), "not put again");
+    }
+
+    #[test]
+    fn waiting_until_answered_never_runs_out() {
+        let requests = Requests::default();
+        requests.set_hold_ms(0);
+        let dir = tempfile::tempdir().unwrap();
+        let _server = open(dir.path(), &requests);
+        let callback = ask(dir.path());
+        let ids = waiting(&requests);
+        assert_eq!(ids.len(), 1);
+        requests.expire(now_ms() + 30 * 86_400_000);
+        assert_eq!(waiting(&requests), ids, "still waiting a month on");
+        requests
+            .answer(&ids[0], &json!({"kind": "deny"}), now_ms())
+            .unwrap();
+        assert!(callback.join().unwrap().unwrap().is_some());
     }
 }

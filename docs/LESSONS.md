@@ -131,3 +131,11 @@
 - 正确做法：自动转回两次失败后，不直接停，改为把同一段话排进该会话的待发送队列（`Lines::leave`，与左滑发起同一机制），记 `queuedAt`，卡上提示「打开 Claude 会话继续」；排队也失败、或排了 1 小时没人领，才交还常浩。插件在会话再次运行时会领走排队的话。
 - 证据：`~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里上面两条接力的 `fail` / `stop` 步；`~/Library/Application Support/app.postpane.mac/claude-channel/sessions/7c4b4704-….json` 的 `ended`；修复 PR 见本条之后的交接。
 - 升级：已写成测试 `handoff::tests::words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person`（改为排队，排队失败或 1 小时没人领才交还）。
+
+## L-15 侧栏审批「看不到」：10 分钟就撤回，驿窗一重装也丢（2026-11-07）
+
+- 现象：常浩反映真实任务里要批的命令，侧栏没弹出带「允许 / 拒绝」的卡，只在 Claude 窗口里看到。会话 `5f107a09` 凌晨 02:28 发出一条命中 `ask` 规则的命令（`git branch -D`、`git push --delete`），Claude 窗口一直挂到 08:35 才批；同一会话 08:37 的另一条审批驿窗收到了。
+- 根因：两处。① 设置「等待回答」默认 10 分钟（`approvalWaitMinutes`），到点驿窗撤掉卡片、交还客户端自己问，02:28 那条 02:38 就从侧栏消失了，人不在电脑前必然错过。② 审批钩子连接挂在驿窗进程上；装新版会重启驿窗（07:29 另一会话装 #173），旧连接一断，钩子就当「没结论」退出，新进程不知道这条请求。钩子这条链路本身没坏，排查时别先怀疑插件和钩子配置。
+- 正确做法：「等待回答」加「一直等」（值 0，不设截止，客户端窗口里批了侧栏自动收起），常浩本机用它。驿窗主动结束请求时给钩子回 `{}`；连接无声断开说明驿窗退出了，钩子等最多 2 分钟，新进程起来后重新挂上同一条请求。查「侧栏没弹审批」先看两件事：当时设置的等待时长，以及那段时间驿窗有没有被重启（`ps -o lstart= -p $(pgrep -x PostPane)`、各会话的 `install.sh` 记录）。
+- 证据：会话记录 `~/.claude/projects/-Users-nat-Documents-ChatGPT----work-postpane/5f107a09-….jsonl` 18:28:12Z 的 tool_use 与 00:35:13Z 的 tool_result；`93636e9f-….jsonl` 23:29:06Z 的 `install.sh auto-back-queue`；`settings.json` 的 `approvalWaitMinutes: 10`。
+- 升级：已写成测试 `hooks::transport::tests::a_request_open_when_postpane_restarts_is_put_to_the_new_one`、`a_request_postpane_ends_itself_goes_back_to_the_client_once`、`waiting_until_answered_never_runs_out`。

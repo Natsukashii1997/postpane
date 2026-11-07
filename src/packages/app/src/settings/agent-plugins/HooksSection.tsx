@@ -115,12 +115,14 @@ export function HooksSection({
         <Menu
           label={t("Wait for an answer", "等待回答")}
           value={String(wait)}
-          options={[1, 3, 5, 10, 30, 60].map((minutes) => [
+          options={[0, 1, 3, 5, 10, 30, 60].map((minutes) => [
             String(minutes),
-            t(
-              minutes === 1 ? "1 minute" : `${minutes} minutes`,
-              `${minutes} 分钟`,
-            ),
+            minutes === 0
+              ? t("Until answered", "一直等")
+              : t(
+                  minutes === 1 ? "1 minute" : `${minutes} minutes`,
+                  `${minutes} 分钟`,
+                ),
           ])}
           disabled={pending || !on}
           reason={
