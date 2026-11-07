@@ -94,7 +94,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 底部按阶段：送出与处理中「结束接力」「查看 ChatGPT 对话」；回信到了加「转回 Claude」（把回信全文连同处理要求经插件送回 Claude 会话，会话在跑就排队）；已转回加「再审一轮」（请 Claude 改完调 `relay_to_chatgpt` 复审，第 2 轮后不再出现）；失败「重试」；结束「知道了」。
 - 命令：`handoff_act {id, action: "back" | "again" | "end" | "retry" | "pause" | "resume"}`。旧的转交单（`handoff_start`、`handoff_forward`、`handoff_route`）已撤掉。
 
-- 侧栏票根上的章（2026-11-07 常浩定，`packages/hud/src/relay-stamps.ts`）：ChatGPT 票根的蓝色「审」只在 ChatGPT 真的在看时盖——接力开着、处于 `delivered` / `working`、没被停（`halt` 为空）、送达不到 `REPLY_WAIT_MS`（30 分钟）；被停掉或交还常浩的不盖。送达超过 30 分钟还没回信的（不论停没停）改盖红色「未审」，点 ChatGPT 那一格直接打开那个 ChatGPT 对话（悬停照旧出面板）。Claude 票根的红蜡「回」：有接力处于「已回复」等常浩处理时显示；判了通过的会自动结束，所以只剩「需修改」交还常浩、还没处理的，卡上点「结束接力」或转回 Claude 后撤掉。
+- 侧栏票根上的章（2026-11-07 常浩定，`packages/hud/src/relay-stamps.ts`）：ChatGPT 票根的蓝色「审」只在 ChatGPT 真的在看时盖——接力开着、处于 `delivered` / `working`、没被停（`halt` 为空）、送达不到 `REPLY_WAIT_MS`（30 分钟）；被停掉或交还常浩的不盖。送达超过 30 分钟还没回信的（不论停没停）改盖红色「未审」，点 ChatGPT 那一格直接打开那个 ChatGPT 对话（悬停照旧出面板）。「未审」让位（#213）：ChatGPT 格有更要紧的事要说——在答（常浩自己的对话或接力在答）、有回信待你看——时不盖「未审」，脚注照常显示；空下来再盖回去。「未审」挂满 `LINGERS_MS`（2 小时，同悬停面板不再列出该审核的 `STALE_REVIEW`）不退场，边框像「审」在答时那样向外发散（蜡红、长方框），直到接力结束。Claude 票根的红蜡「回」：有接力处于「已回复」等常浩处理时显示；判了通过的会自动结束，所以只剩「需修改」交还常浩、还没处理的，卡上点「结束接力」或转回 Claude 后撤掉。
 
 ### 自动往返（批 2，#72）
 

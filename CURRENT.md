@@ -19,6 +19,23 @@
 - 本轮新坑：无
 - skill 进化：无。
 
+## ChatGPT 格：在答时「未审」章让位，挂满 2 小时的「未审」边框发散（2026-11-07，Claude，常浩看三版预览 https://claude.ai/artifact/3t7EizoP38kBF8yWqLPYyM 后选乙，并改「长期未审不退场，要像审接力一样闪起来、边框发散」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 20:56`（`date '+%F %H:%M'` 记录）。来由：#213。#212 遗留：18 小时前的接力 `h1a1b1fed89e00` 挂着「未审」，章落下时把脚注淡成 0，常浩聊天时 ChatGPT 格看不出「在答」。同日先在常浩同意下结束了这条接力（退出驿窗改 `handoffs.json`，改前备份在 `evidence/2026-11-07-end-stale-relay/`，重启后读回 closed / ended）。
+- 改了哪些文件：
+  - `src/packages/hud/src/chatgpt-desk.ts`：脚注数据加 `pressing`（在答，或有回信待你看）。
+  - `src/packages/hud/src/relay-stamps.ts`：`relayStamps` 加参数 `yields`，为真时不算「未审」；加 `lingering`（未审挂满 `LINGERS_MS` = `STALE_REVIEW` 2 小时）；`until` 也算「开始发散」的时刻。
+  - `src/packages/hud/src/model.ts`：先算脚注，再把 `desk.pressing` 交给章。
+  - `src/packages/hud/src/scene/RelayStamps.tsx`、`HUDMarkStrip.tsx`：「未审」挂久了照「审」的波纹发散（2.4 秒一圈、放大 1.9 倍淡出），蜡红、17 单位宽的长方框。
+  - 测试：`test/relay-stamps.test.ts` 新增一条并补字段，`test/chatgpt-desk.test.ts` 新增一条；`docs/chatgpt-channel.md` 章的规则补一段。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 761 passed / 0 failed，前端 `ℹ pass 313` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。第一次全量 exit 101：新 worktree 没先跑 `package-resources.mjs`（L-01），补上后重跑即上面的结果。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-stub-yields/`（`check2.log`、`test2.log`）。
+- 验证：真实组件自查页（`HUDScene` 原样，常浩 20:34 的真实快照，右侧停靠、30 pt 票根），内置浏览器等字体加载完后逐种核对：你的对话在答 + 18 小时未审 → 脚注「在答」、无章；未审 40 分钟 → 静止「未审」、无发散圈；未审 18 小时 → 有发散圈，边框 `rgb(179, 38, 30)`、2400 ms、无限循环，暂停在 1.3 秒放大截图可见红框外扩；ChatGPT 在审接力 → 蓝色「审」照常发散（`rgb(58, 92, 150)`）。自查页备份在证据目录 `preview-213/`，工作区里已删除（L-13）。实机：装机后常浩 21:03:44 在 ChatGPT 发问，`get_hud_screenshot` 显示 ChatGPT 格脚注蓝色「在答」（#206 一整条在真实使用中走通）。
+- 截图：自查页截图在本会话工具结果里，未另存；实机未审发散没有现成的未审接力可看，未实看。
+- 发布与回读：`install.sh stub-yields`：装前 `06a7d6cd0a2b`（已备份），21:07:35 退出并启动，产物 `6329ee7a901a` / 已装 `6329ee7a901a`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-07-stub-yields/PostPane-06a7d6cd0a2b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「挂久」的门槛常浩只举了 18 小时的例子，取 2 小时（与悬停面板不再列出该审核一致），如要改只动 `LINGERS_MS`。范围外：接力过了 2 小时悬停面板就不再列出，界面上点不到「结束接力」，常浩这轮没选做。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## ChatGPT「在答」能进驿窗了：收件箱不再拒收开始回合（2026-11-07，Claude，常浩装上 #207 后反馈「还是失败抓不到」，看实测后回「发了，还是没显示」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 20:06`（`date '+%F %H:%M'` 记录）。来由：#206 第二个断点。#207 之后回复已经能进驿窗（19:30「审核需求梳理」4634 字），但 ChatGPT 格仍是「正在进行 0」。

@@ -38,12 +38,14 @@ function useLanding(
 }
 
 /** ChatGPT's reading, with the 「审」 stamp pressed over it as the letter
- * lands; the reading gives way at that moment. Ripples while ChatGPT answers. */
+ * lands; the reading gives way at that moment. Ripples while ChatGPT answers,
+ * and 「未审」 ripples in wax red once it has lingered (#213). */
 export function ReviewStamp({
   unit,
   zh,
   answering,
   overdue = false,
+  lingering = false,
   since,
   reduceMotion,
   children,
@@ -54,6 +56,8 @@ export function ReviewStamp({
   /** Left unanswered past the wait: 「未审」 in the wax red (owner,
    * 2026-11-07). */
   overdue?: boolean;
+  /** 「未审」 left long enough that its border spreads, as 「审」 does. */
+  lingering?: boolean;
   since: number | null;
   reduceMotion: boolean;
   /** The reading it covers. */
@@ -73,8 +77,9 @@ export function ReviewStamp({
     return () => animation?.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const ripples = overdue ? lingering : answering;
   useLayoutEffect(() => {
-    if (!answering || reduceMotion) return;
+    if (!ripples || reduceMotion) return;
     const animation = ring.current?.animate(
       [
         { scale: "1", opacity: 0.55 },
@@ -83,7 +88,7 @@ export function ReviewStamp({
       { duration: 2400, easing: "ease-out", iterations: Infinity },
     );
     return () => animation?.cancel();
-  }, [answering, reduceMotion]);
+  }, [ripples, reduceMotion]);
   const square = {
     gridArea: "1 / 1",
     width: 12 * unit,
@@ -103,13 +108,14 @@ export function ReviewStamp({
       <span ref={reading} style={{ gridArea: "1 / 1", maxWidth: "100%" }}>
         {children}
       </span>
-      {answering && !reduceMotion && (
+      {ripples && !reduceMotion && (
         <span
           ref={ring}
           aria-hidden="true"
           style={{
             ...square,
-            border: `${unit}px solid ${REVIEW_BLUE}`,
+            ...(overdue ? { width: 17 * unit } : null),
+            border: `${unit}px solid ${overdue ? WAX : REVIEW_BLUE}`,
             opacity: 0,
           }}
         />

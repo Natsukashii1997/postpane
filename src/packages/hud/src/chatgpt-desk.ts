@@ -36,6 +36,9 @@ export interface ChatGPTDesk {
   /** How many chats had a turn today. */
   today: number;
   reviews: DeskReview[];
+  /** The stub says something more pressing than an overdue review: ChatGPT
+   * answering, or a reply to read. 「未审」 waits meanwhile (owner, #213). */
+  pressing: boolean;
   stub: {
     text: string;
     tone: "amber" | "blue" | "ink" | "dim";
@@ -140,6 +143,7 @@ export function chatgptDesk(
     more: Math.max(0, todays.length - chats.length),
     today: todays.length,
     reviews,
+    pressing: stub.tone === "amber" || stub.tone === "blue",
     stub,
   };
 }
