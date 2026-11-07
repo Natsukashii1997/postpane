@@ -71,10 +71,11 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - `steps`：每一步 `{at, kind, text?, points?, verdict?}`。`work` Claude 做完一轮（`text` 是 `summary`，没给就用标题）、`ask` 驿窗送给 ChatGPT 且已送到（`text` 是原话摘录）、`reply` ChatGPT 回信（`points` 是回信里编号列出的意见，最多 12 条；`verdict` 从最后的「结论：通过 / 需修改」读出 `pass` / `revise`；最新一条回信全文保留，最多 64 KB，供「转回 Claude」用）、`back` 转回 Claude、`again` 请 Claude 交回复审、`fail` 没送出去、`end` 结束。快照里的步骤只带 600 字以内的摘录，不带原话指纹。
 - 去重：同一段文字刚送到 ChatGPT、还没回信时，再送一次（Claude 等超时重试）不重复发，返回 `status: "repeated"`；转回 Claude 同理。同一条接力同一时间只有一段话在路上，并排的第二次直接拒绝（「上一段还在送」）；同一个 Claude 会话同一时间只能发起一次，「结束接力」也要等路上那段送完。
 - 回信只认审核中的那一轮：接力在 `sending` / `delivered` / `working` 时的 `turn complete` 才记成回信，同一 `messageId` 只记一次；回信之后常浩在 ChatGPT 里接着聊不算审核。ChatGPT 常在宿主拿到 `opened` / `sent` 回应之前就开始、甚至答完：会话还没绑上，或这条接力的那段话还在路上时，`turn start` / `turn complete` 先整条记下（最多 16 条），绑上或送完后按顺序补录；已绑定、没在送的会话直接记，所以回信之后的闲聊不会补成回信。
-- 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开。打开请求的 `requestId` 是「接力 id~第几次」（`attempt`，每次重试加 1）：超时后插件迟到的 `opened` 只有属于当前这一次、且这个 Claude 会话还没开新接力时才绑上。
+- 打开超时与恢复：`opening` 超过 2 分钟算失败（「ChatGPT 新会话两分钟没打开」）；驿窗重启时还在 `opening` 的改成失败（「驿窗重启时 ChatGPT 新会话还在打开」）。失败的接力保留 `brief`（只留最新 3 条），卡上「重试」原样再开。打开请求的 `requestId` 是「接力 id~第几次」（`attempt`，每次重试加 1）：超时后插件迟到的 `opened` 只有属于当前这一次、且这个 Claude 会话还没开新接力时才绑上。新会话还在打开时点「结束接力」，要等这次打开完（提示「上一段还在送」）；已结束的接力不再打开。
+- 送话迟到（#223）：送进已有会话的 `requestId` 是「接力 id~send时间」。等满 30 秒算失败后，插件迟到的 `sent`（`ok`）仍补记这一轮的 `ask`，只记一次，之后的回信照常认；Claude 再送同一段话按「刚送过」处理，不重复送。
 - `rounds`：第一次交代之后，两边每转一次加 1。卡上的「第 n / 2 轮」按 `ask` 步数算，最多 2 轮（可以超）。
 - 回合日志：宿主每收到一条 `turn` 就在 `<数据目录>/chatgpt/turns.jsonl` 记一行 `{at, conversation, phase, messageId, replyChars, outcome}`，不记回复原文。`outcome`：`taken` 直接记入、`early` 先存着、`caught-up` 绑上后补录、`unused` 没用上（不是审核中的那一轮，或回复是空的）、`evicted` 存满 16 条被挤掉。文件超过 1 MB 改名为 `turns.old.jsonl` 后重新记。回信丢了先查这里：没有那一行，是插件那一侧没报；有那一行，看 `outcome` 就知道宿主为什么没用。
-- 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / 迟到的 `opened` 告诉宿主（`Channel::listen`），接力当场前进。
+- 快照 `handoffs` 带未结束的和最近一天失败或结束的，不带 `brief`；记录一变，宿主当场重发快照，不等下一轮采集。ChatGPT 通道把 `turn start` / `turn complete` / `opened` / `sent`（成功的，含迟到的）告诉宿主（`Channel::listen`），接力当场前进。
 - 新会话放进的 ChatGPT 项目存 `<数据目录>/chatgpt/config.json`：`{"project": "https://chatgpt.com/g/<id>/project"}`，只认这种项目页网址（去掉 `?`、`#` 和末尾 `/`）。在设置 · 智能体插件 ·「ChatGPT（Chrome 插件）」登记后出现「新会话放进项目」一行，粘贴保存；不填就开在 ChatGPT 首页。
 - 名单（`watched.json`）：接力的会话都是驿窗经 `open` 新开的，开好就在名单里，记的是接力标题（`named: true`），不是插件报的标签页标题；它的回信回执也先用接力标题。
 
@@ -103,7 +104,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
   - 「结论：通过」：自动结束接力，`end` 步带 `auto`；自动往返关着或已停时也照样结束（2026-11-07 常浩定：判了通过的接力一直开着，Claude 票根上的「回」撤不掉）；
   - 「结论：需修改」且审过不到 `ROUNDS`（2）轮：把回信全文转回 Claude（与「转回 Claude」同一段话），`back` 步带 `auto`；Claude 改完自己调 `relay_to_chatgpt`，进入下一轮；
   - 第 2 轮仍「需修改」，或回信没写结论：停下交还常浩（`stop` 步，`halt` 写原因），卡上照常可「转回 Claude」「结束接力」。
-- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）。两次都失败（最常见的是 Claude 桌面版在会话一轮做完、空闲几分钟后把它暂停了，插件不再签到；2026-11-07 L5 第一单实测碰到），改为把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt`，阶段照常是 `returned`、自动往返不停。常浩在 Claude 里打开那个会话，插件就会提交，卡上和「正在进行」写「意见已排队 · 打开 Claude 会话继续」。排队失败才停下交还常浩；排队 `QUEUE_WAIT_MS`（1 小时，与插件的留话寿命一致）没被领走也停下交还常浩。Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。
+- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）。两次都失败（最常见的是 Claude 桌面版在会话一轮做完、空闲几分钟后把它暂停了，插件不再签到；2026-11-07 L5 第一单实测碰到），改为把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt`，阶段照常是 `returned`、自动往返不停。常浩在 Claude 里打开那个会话，插件就会提交，卡上和「正在进行」写「意见已排队 · 打开 Claude 会话继续」。排队失败才停下交还常浩；排队 `QUEUE_WAIT_MS`（1 小时，与插件的留话寿命一致）没被领走也停下交还常浩。Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理，各项等待从点下时重新计时（`phaseAt`，排队中的 `queuedAt` 也是），不会下一次快照又停（#223）。常浩手动「转回 Claude」/「再审一轮」送不进去时，同样排进待发送队列、记 `queuedAt`，排队也失败才报错。驿窗重启时写下的停止原因和结束说明，按设置里的界面语言写（那时 Core 还没跟随语言设置）。
 - 记录：每一步的 `at`、谁做的（`auto` 表示驿窗自动做的，没有就是常浩点的）、出错原文与处理方式（`fail` / `stop` 的 `text`）都在 `handoffs.json`，每轮耗时由相邻步骤的时间相减得出。
 
 ### 本机工具通道

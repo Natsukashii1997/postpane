@@ -184,8 +184,8 @@ struct State {
     names: HashMap<String, String>,
     watched: Vec<Watched>,
 }
-/// Told of what the extension reports: turns starting and finishing, and
-/// conversations opened (late ones too).
+/// Told of what the extension reports: turns starting and finishing,
+/// conversations opened and words sent (late ones too).
 pub type Listener = Arc<dyn Fn(&Value) + Send + Sync>;
 pub(crate) struct Shared {
     data: PathBuf,
@@ -314,7 +314,16 @@ impl Shared {
                     self.tell(&message);
                 }
             }
-            Some("sent") => answer(&mut state, message),
+            Some("sent") => {
+                // Heard as well, so words that arrive after the wait for
+                // them gave up still count (#223).
+                let ok = message["ok"] == true;
+                answer(&mut state, message.clone());
+                drop(state);
+                if ok {
+                    self.tell(&message);
+                }
+            }
             _ => {}
         }
     }
@@ -329,11 +338,8 @@ impl Shared {
             Err(not_connected())
         }
     }
-    /// Sends `message` with a new request id and waits for its answer.
-    fn ask(&self, message: Value, timeout: Duration) -> Result<Value, String> {
-        self.ask_as(request_id(), message, timeout)
-    }
-    /// `ask` under the caller's request id, which a late answer still carries.
+    /// Sends `message` under the caller's request id, which a late answer
+    /// still carries, and waits for its answer.
     fn ask_as(&self, id: String, mut message: Value, timeout: Duration) -> Result<Value, String> {
         message["requestId"] = json!(id);
         let (sender, receiver) = mpsc::channel();
@@ -579,13 +585,25 @@ impl Channel {
     }
     /// Sends `text` to a watched conversation.
     pub fn send(&self, conversation: &str, text: &str) -> Result<Value, String> {
+        self.send_as(conversation, text, None)
+    }
+    /// `send`, asked as `request`: an answer that comes after the wait still
+    /// reaches the listener under that id.
+    pub fn send_as(
+        &self,
+        conversation: &str,
+        text: &str,
+        request: Option<&str>,
+    ) -> Result<Value, String> {
         if !agent::conversation_id(conversation) {
             return Err(l10n::text("会话 id 不对", "Invalid conversation id"));
         }
         if text.trim().is_empty() {
             return Err(l10n::text("缺少要发出的文字", "Text is required"));
         }
-        self.shared.ask(
+        let id = request.map(str::to_owned).unwrap_or_else(request_id);
+        self.shared.ask_as(
+            id,
             json!({"type":"send","conversation":conversation,"text":text}),
             SEND_TIME,
         )?;

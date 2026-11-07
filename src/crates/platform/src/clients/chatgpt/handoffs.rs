@@ -759,13 +759,18 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// The person turns the auto round trip back on.
+    /// The person turns the auto round trip back on. Its waits start afresh
+    /// (#223): counted from before, `overdue` would stop it again at once.
     pub fn resume(&mut self, id: &str, now: i64) -> bool {
         let Some(handoff) = self.live_mut(id).filter(|h| !h.auto) else {
             return false;
         };
         handoff.auto = true;
         handoff.halt = None;
+        handoff.phase_at = now;
+        if handoff.queued_at.is_some() {
+            handoff.queued_at = Some(now);
+        }
         handoff.steps.push(Step::new(now, StepKind::Resume, None));
         handoff.updated_at = now;
         true
@@ -1312,6 +1317,33 @@ mod tests {
         let id = asked_once(&mut book);
         book.replied("c1", "我看了一下，挺好的", Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::NoVerdict));
+    }
+
+    // #223: 「继续自动」 after a long wait starts the wait afresh, rather
+    // than the next snapshot stopping it again at once.
+    #[test]
+    fn resuming_after_a_long_wait_counts_the_wait_from_then() {
+        let reasons = ("30 分钟没回信", "2 小时没交回", "排队没人领");
+        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1, reasons.2);
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        let late = 3 + REPLY_WAIT_MS;
+        assert!(overdue(&mut book, late));
+        assert!(book.resume(&id, late + 1));
+        assert!(!overdue(&mut book, late + 2));
+        assert!(book.get(&id).unwrap().auto);
+        assert!(overdue(&mut book, late + 2 + REPLY_WAIT_MS));
+        // Its answer queued for Claude: the hour to be taken up starts again too.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "结论：需修改", Some("m1"), 4);
+        book.returned(&id, StepKind::Back, "意见", true, 5);
+        book.queued(&id, 5);
+        let late = 6 + QUEUE_WAIT_MS;
+        assert!(overdue(&mut book, late));
+        assert!(book.resume(&id, late + 1));
+        assert!(!overdue(&mut book, late + 2));
+        assert_eq!(book.get(&id).unwrap().queued_at, Some(late + 1));
     }
 
     #[test]
