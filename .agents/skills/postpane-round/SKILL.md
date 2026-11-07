@@ -17,6 +17,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 - 一张 issue 一个分支，从 `origin/main` 拉，开在独立 worktree：
   `git fetch -q origin && git worktree add .claude/worktrees/<号>-<短名> -b claude/<号>-<短名> origin/main`。
   并行会话不共用目录（G-04）。
+- 同一会话接着做下一张、上一张已合并且原 worktree 干净（`git status --short` 为空）时，可以留在原 worktree 里从最新 main 切新分支，保留构建缓存，省掉一次从头编译：`git fetch -q origin && git switch -c claude/<号>-<短名> origin/main`。目录名对不上新号没关系，合并后照第 5 步清理。别的会话还在用的 worktree 不碰，并行会话仍各开各的（E-09）。
 - 新 worktree 先备环境：`source ~/.cargo/env; export PATH=~/.bun/bin:$PATH; pnpm install; node src/tooling/package-resources.mjs`。不生成资源目录，`cargo test` 一项都跑不起来（L-01）。
 - 排障、改脚本、装 launchd 之前，先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑。
 - 驿窗的协作骨架 2026-11-04 已由 `project-starter` 铺好，不再重铺；发现骨架（交接模板、格式测试、`scripts/check-rules.mjs`）本身该改，按 `project-starter` 的「骨架怎么进化」出提案。

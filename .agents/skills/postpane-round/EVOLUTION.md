@@ -89,4 +89,5 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：#164 刚合并，`120-relay-card` 里有 10 GB 构建缓存，紧接着做 #72。按第 1 步新开 worktree 要从头编一遍，于是在原 worktree 里 `git switch -c claude/72-auto-relay main`。打包约 4 分钟，全量测试一次就过。
 - 建议：第 1 步加一句：同一会话接着做下一张、上一张已合并且 worktree 干净时，可以在原 worktree 里从最新 main 切新分支，代替新开；合并后照第 5 步清理。并行会话仍然各开各的（G-04）。
 - 证据：PR #164（`f6cd22b`）合并后在同一 worktree 起 PR #168（`b15f3c3`）；CURRENT.md「接力自动往返上线」一节；日志 `evidence/2026-11-06-auto-relay/build.log`。
-- 状态：待批
+- 状态：已采纳（本 PR，#178）
+- 批准：常浩 2026-11-07 经驿窗侧栏回复「批 E-09」。落地时把原提案的 `main` 写成 `origin/main`（工程流程第 1 节：不从本地 main 拉），并加上「原 worktree 干净」的判据 `git status --short` 为空；`steps.json` 的 start 痕迹加 `git switch -c claude/`。
