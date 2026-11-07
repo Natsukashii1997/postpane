@@ -53,9 +53,18 @@ pub(super) fn valid(event: &HookEvent, now: i64) -> bool {
         "compaction" => 300_000,
         "completion" | "account" => 30 * 86_400_000,
         "origin" | "delivery" => i64::MAX,
+        // A turn starting, from a client whose own channel reports its turns
+        // (ChatGPT): it has no hook transport to the app, so this record is
+        // the only way the sidebar hears it is answering (#206).
+        "session-observation" if reports_turns(&event.source) => 30 * 86_400_000,
         _ => return false,
     };
     now.saturating_sub(event.at_ms) < retention
+}
+fn reports_turns(source: &str) -> bool {
+    agent_hud_agents::by_id(source)
+        .and_then(|agent| agent.channel)
+        .is_some_and(|channel| channel.carries.contains(&agent_hud_agents::Carries::Turns))
 }
 
 /// Serialize account callbacks across processes so the timestamp comparison
@@ -319,6 +328,32 @@ mod tests {
     use serde_json::json;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    #[test]
+    fn a_chatgpt_turn_start_is_kept_so_the_sidebar_shows_it_answering() {
+        // ChatGPT's turns reach the app only through this inbox (#206); a
+        // client with hooks sends its starts to the app directly.
+        let root = tempfile::tempdir().unwrap();
+        let data = &root.path().join("data");
+        let start = |source: &str| HookEvent {
+            source: source.into(),
+            session_id: format!("{source}:c1"),
+            kind: "session-observation".into(),
+            at_ms: now_ms() - 1_000,
+            data: json!({"state":"running","turnId":"start-1"}),
+        };
+        record_event(data, &start("chatgpt")).unwrap();
+        assert!(record_event(data, &start("cursor")).is_err());
+        let inbox = Inbox::new(data, std::sync::Arc::new(|| {})).unwrap();
+        let events = inbox.drain();
+        assert_eq!(
+            events
+                .iter()
+                .map(|e| (e.session_id.as_str(), e.data["state"].as_str()))
+                .collect::<Vec<_>>(),
+            [("chatgpt:c1", Some("running"))]
+        );
+    }
 
     #[test]
     fn a_session_record_keeps_its_first_surface() {
