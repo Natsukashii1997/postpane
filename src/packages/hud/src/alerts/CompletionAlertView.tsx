@@ -1,11 +1,18 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpRight, CheckCheck } from "lucide-react";
-import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
+import { CheckCheck } from "lucide-react";
+import type { Handoff, IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { cardColumn } from "../card-column";
-import { airmailStripes, relayPaperOf, usePaper, type Paper } from "../paper";
+import {
+  AIRMAIL_BLUE,
+  AIRMAIL_RED,
+  airmailStripes,
+  relayPaperOf,
+  usePaper,
+  type Paper,
+} from "../paper";
 import {
   SHOWN_ENTRIES,
   entryTitle,
@@ -25,7 +32,7 @@ import {
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { useHandoffCard } from "./HandoffCard";
-import { handoffFor } from "./handoff-card";
+import { handoffFor, relayLegend } from "./handoff-card";
 import {
   newestReply,
   replyEntries,
@@ -96,22 +103,28 @@ export function CompletionAlertView({
   const reviews = groups.flatMap((group) => group.entries.filter(review));
   const reviewPaper = relayPaperOf(light, paper?.bleed);
   const reviewInks = cardInks(reviewPaper, light);
+  // A reply in a handoff opens its card (查看接力).
+  const relayOf = (entry: ApprovalEntry | undefined) =>
+    entry?.kind === "reply"
+      ? handoffFor(snapshot.handoffs, entry.event.source, entry.event.sessionId)
+      : undefined;
+  // A relay's reply on the receipt sits in the airmail frame; a review's is
+  // on the reviews' paper already.
+  const framed = (entry: ApprovalEntry | undefined) =>
+    Boolean(entry && relayOf(entry) && !review(entry));
   const line = (
     entry: ApprovalEntry,
     index: number,
     inks: Inks,
     paper: Paper | null,
+    previous?: ApprovalEntry,
   ) => {
     if (entry.kind !== "reply") return null;
     const open = entry.id === openId;
     const failed = unreachable.has(entry.id);
     const bot = entry.session?.bot;
-    // A reply in a handoff opens its card (查看接力).
-    const handoff = handoffFor(
-      snapshot.handoffs,
-      entry.event.source,
-      entry.event.sessionId,
-    );
+    const handoff = relayOf(entry);
+    const inFrame = framed(entry);
     // A handoff's reply is titled by the handoff: its question is the
     // whole brief.
     const title =
@@ -122,10 +135,26 @@ export function CompletionAlertView({
     return (
       <div
         key={entry.id}
-        style={{
-          borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
-        }}
+        style={
+          inFrame
+            ? {
+                position: "relative",
+                margin: "12px -8px 10px",
+                padding: "4px 8px 0",
+                borderRadius: 6,
+                background: `color-mix(in srgb, ${paper?.blue ?? inks.dim} 5%, transparent)`,
+              }
+            : {
+                borderTop:
+                  index > 0 && !framed(previous)
+                    ? `1px dotted ${inks.line}`
+                    : undefined,
+              }
+        }
       >
+        {inFrame && handoff && (
+          <RelayFrame handoff={handoff} paper={paper} inks={inks} zh={zh} />
+        )}
         <EntryRow
           entry={entry}
           open={open}
@@ -155,17 +184,18 @@ export function CompletionAlertView({
             }}
           >
             <ReplyBody entry={entry} inks={inks} zh={zh} failed={failed} />
-            {/* Only what acts on this reply; putting them all away is the
-                head's (owner, 2026-11-07). */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: 8,
-              }}
-            >
-              {handoff && card && (
+            {/* Only what acts on this reply: going back is the ↗ in its
+                title row, putting them all away the head's (owner,
+                2026-11-07). */}
+            {handoff && card && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                }}
+              >
                 <button
                   type="button"
                   className="hud-press"
@@ -179,29 +209,8 @@ export function CompletionAlertView({
                 >
                   {zh ? "查看接力" : "Handoff"}
                 </button>
-              )}
-              <button
-                type="button"
-                className="hud-press"
-                aria-disabled={!canOpen(entry)}
-                onClick={() => void goBack(entry)}
-                style={{
-                  ...buttonFace,
-                  border: `1.5px solid ${inks.ink}`,
-                  background: inks.ink,
-                  color: paper
-                    ? paper.paper
-                    : light
-                      ? "#ffffff"
-                      : "rgba(0,0,0,0.88)",
-                  fontWeight: 600,
-                  opacity: canOpen(entry) ? 1 : 0.5,
-                }}
-              >
-                <ArrowUpRight size={12} strokeWidth={2.4} />
-                {zh ? "回到会话" : "Return to session"}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           failed && (
@@ -272,7 +281,9 @@ export function CompletionAlertView({
             )}
             {group.entries
               .filter((entry) => !review(entry))
-              .map((entry, index) => line(entry, index, inks, paper))}
+              .map((entry, index, list) =>
+                line(entry, index, inks, paper, list[index - 1]),
+              )}
           </div>
         ))}
       {reviews.length > 0 && (
@@ -293,6 +304,94 @@ export function CompletionAlertView({
       {/* A review slip runs to the foot. */}
       {!reviews.length && <div style={{ height: 6 }} />}
     </div>
+  );
+}
+
+/** The airmail frame round a relay's reply on the receipt (owner,
+ * 2026-11-07, 甲 · 航空虚线框): red and blue dashes in turn, as an airmail
+ * envelope's edge, with 「接力」, the round and ChatGPT's verdict set into its
+ * top edge. */
+function RelayFrame({
+  handoff,
+  paper,
+  inks,
+  zh,
+}: {
+  handoff: Handoff;
+  paper: Paper | null;
+  inks: Inks;
+  zh: boolean;
+}) {
+  const { trip, verdict } = relayLegend(handoff, zh);
+  const dash = {
+    x: 0.75,
+    y: 0.75,
+    width: "calc(100% - 1.5px)",
+    height: "calc(100% - 1.5px)",
+    rx: 6,
+    fill: "none",
+    strokeWidth: 1.5,
+    strokeDasharray: "7 7",
+  } as const;
+  return (
+    <>
+      <svg
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          overflow: "visible",
+          pointerEvents: "none",
+          opacity: 0.9,
+        }}
+      >
+        <rect style={{ ...dash, stroke: AIRMAIL_RED }} />
+        <rect style={{ ...dash, stroke: AIRMAIL_BLUE, strokeDashoffset: 7 }} />
+      </svg>
+      <span
+        style={{
+          position: "absolute",
+          top: -8,
+          left: 14,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 6px",
+          maxWidth: "calc(100% - 28px)",
+          // Set into the frame's top edge: the paper shows through it.
+          background: paper?.paper ?? "transparent",
+          fontSize: 11,
+          lineHeight: "16px",
+          fontWeight: 500,
+          color: inks.dim,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 700,
+            letterSpacing: "0.2em",
+            color: paper?.blue ?? inks.ink,
+          }}
+        >
+          {zh ? "接力" : "RELAY"}
+        </span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {trip}
+          {verdict && (
+            <>
+              {" · "}
+              <span style={{ color: paper?.red ?? inks.ink, fontWeight: 600 }}>
+                {verdict}
+              </span>
+            </>
+          )}
+        </span>
+      </span>
+    </>
   );
 }
 

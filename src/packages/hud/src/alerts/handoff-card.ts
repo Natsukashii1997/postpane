@@ -109,6 +109,22 @@ const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
 export const lastReply = (handoff: Handoff) =>
   [...(handoff.steps ?? [])].reverse().find((step) => step.kind === "reply");
 
+/** What the frame round a relay's reply says (owner, 2026-11-07, 甲 ·
+ * 航空虚线框): the round it is in and ChatGPT's verdict, once there is one. */
+export function relayLegend(
+  handoff: Handoff,
+  zh: boolean,
+): { trip: string; verdict?: string } {
+  const { at, of } = round(handoff);
+  const reply = lastReply(handoff);
+  return {
+    trip: zh
+      ? `Claude ⇄ ChatGPT · 第 ${at} / ${of} 轮`
+      : `Claude ⇄ ChatGPT · round ${at} / ${of}`,
+    verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
+  };
+}
+
 /** The stamp in the card's corner, by where it stands. */
 export function stamp(
   handoff: Handoff,
