@@ -4,6 +4,18 @@
 
 
 
+## 审批卡：Claude 重启后停掉的会话不再误报「没加载插件」（2026-11-07，Claude，常浩看排查结论后点「改，在这里做」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
+
+- 时间：开工 `2026-11-07 14:17`（`date '+%F %H:%M'` 记录）。来由：#188，常浩截图问数字分身会话的提问卡为什么说「没加载插件」。查到 14:12 Claude 桌面应用重启，约 50 个会话同一秒被插件写成 `ended`，这个会话其实加载过插件（L-20）。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（`ClaudeChannel::ended` 新增；`unreachable()` 先判断会话已停，提示「这个会话已经停了（Claude 重启或关掉过它）。在 Claude 里打开这个会话，就能在 Agent HUD 里回答。」，不给 `/reload-plugins` 修复动作）；`claude_plugin/tests.rs`（`an_unreached_session_names_the_step_that_lets_the_hud_answer` 加 ended 一段，修复前在 `fix` 处失败：`Some(ReloadPlugins)` ≠ `None`）；`docs/LESSONS.md` 新增 L-20。前端没改：`fix` 为空时卡片原样显示提示文字（与「被暂停」一样）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 747 passed / 0 failed，前端 `ℹ pass 306` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
+- 验证：单测覆盖 ended 刚写与一小时前两种；实机卡片文案未单独截图。
+- 截图：无。
+- 发布与回读：见合并后补记。
+- 与授权不一致之处、遗留问题、范围外发现：#175（会话被桌面版停掉时后台续接）与本题相邻，本轮只改提示，不续接。
+- 本轮新坑：L-20
+- skill 进化：无。
+
 ## 驿窗一轮采纳 E-09：同一会话接着做下一张可复用刚合并的 worktree（2026-11-07，Claude，常浩经驿窗侧栏回复「批 E-09」；已提交，无需发布）
 
 - 时间：开工 `2026-11-07 09:27`（`date '+%F %H:%M'` 记录）。来由：#178；E-09 由 #168 的会话提出。动手前核实 main 上 E-09 仍是待批、skill 目录自 `7733bc4` 起没被别处改过、没有别的 PR 在改它。

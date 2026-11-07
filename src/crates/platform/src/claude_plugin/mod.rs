@@ -238,6 +238,22 @@ impl ClaudeChannel {
         metadata.modified().ok()
     }
 
+    /// Whether `session` ran the plugin and then ended, as when Claude quits
+    /// or restarts and stops every session it ran.
+    pub fn ended(&self, session: &str) -> bool {
+        if !valid_name(session) {
+            return false;
+        }
+        let path = self
+            .directory
+            .join("sessions")
+            .join(format!("{session}.json"));
+        fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .is_some_and(|value| value.get("ended").is_some())
+    }
+
     /// Writes the plugin's files into `folder` (an absolute path), pointing
     /// it at this channel, and makes the channel's folders. Returns whether a
     /// file changed. Only what differs is written.
@@ -477,8 +493,9 @@ impl ClaudeReplies {
 
     /// Why words would not reach `session`, which has not checked in lately,
     /// and what would change it: the plugin is not installed; the session
-    /// ran it since it was installed, so the app has paused the session; or
-    /// the session started before the install and has not loaded it.
+    /// ran it and ended, as when Claude restarts; the session ran it since it
+    /// was installed, so the app has paused the session; or the session
+    /// started before the install and has not loaded it.
     fn unreachable(&self, session: &str) -> Unreachable {
         if !installed(&self.claude_config) {
             return Unreachable::new(
@@ -487,6 +504,15 @@ impl ClaudeReplies {
                     "Claude Code doesn't have Agent HUD's plugin yet. Install it to answer Claude's questions in Agent HUD (Settings → Agent plugins).",
                 ),
                 Some(AnswerFix::InstallPlugin),
+            );
+        }
+        if self.channel.ended(session) {
+            return Unreachable::new(
+                l10n::text(
+                    "这个会话已经停了（Claude 重启或关掉过它）。在 Claude 里打开这个会话，就能在 Agent HUD 里回答。",
+                    "This session has stopped (Claude restarted or closed it). Open it in Claude to answer in Agent HUD.",
+                ),
+                None,
             );
         }
         let paused = installed_at(&self.claude_config)

@@ -304,6 +304,17 @@ fn an_unreached_session_names_the_step_that_lets_the_hud_answer() {
     assert_eq!(paused.fix, None);
     assert!(paused.note.contains("paused"), "{}", paused.note);
 
+    // It ended (Claude quit or restarted and stopped it): reloading plugins has
+    // nowhere to run, so the card says to open it in Claude, however long ago.
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    for seconds_ago in [0, 3_600] {
+        checked_in(seconds_ago);
+        let ended = replies.reaches("claude", SESSION).unwrap_err();
+        assert_eq!(ended.fix, None);
+        assert!(ended.note.contains("stopped"), "{}", ended.note);
+    }
+
+    check_in(&channel, SESSION, br#"{"at":1}"#);
     checked_in(0);
     assert!(replies.reaches("claude", SESSION).is_ok());
 }
