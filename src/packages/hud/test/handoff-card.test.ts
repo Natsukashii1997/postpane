@@ -406,3 +406,20 @@ test("the relay legend keeps airmail blue and red where there is no paper", () =
     verdict: light.red,
   });
 });
+
+test("an engineering review counts by its risk level and its pull request (#217)", () => {
+  // L1 gets one review: once asked, nothing is left for 「再审一轮」.
+  const l1 = handoff({ risk: "L1", phase: "returned" });
+  assert.deepEqual(round(l1), { at: 1, of: 1 });
+  assert.ok(!actions(l1).includes("again"));
+  // A follow-up from another session carries the first one's review.
+  const carried = handoff({ risk: "L2", carried: 1, phase: "returned" });
+  assert.deepEqual(round(carried), { at: 2, of: 2 });
+  assert.ok(!actions(carried).includes("again"));
+  // The person's leave adds one.
+  const allowed = handoff({ risk: "L1", extra: 1, phase: "returned" });
+  assert.deepEqual(round(allowed), { at: 1, of: 2 });
+  assert.ok(actions(allowed).includes("again"));
+  // None named: two, as before.
+  assert.deepEqual(round(handoff()), { at: 1, of: 2 });
+});

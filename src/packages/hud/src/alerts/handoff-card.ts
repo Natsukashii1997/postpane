@@ -60,10 +60,19 @@ export function handoffFor(
 export const reviews = (handoff: Handoff) =>
   (handoff.steps ?? []).filter((step) => step.kind === "ask").length;
 
+/** The reviews it gets (#217): one at L1, `ROUNDS` otherwise, and those
+ * the person allowed past it. */
+export const budget = (handoff: Handoff) =>
+  (handoff.risk === "L1" ? 1 : ROUNDS) + (handoff.extra ?? 0);
+
+/** Reviews counted against its budget: its pull request's earlier ones too. */
+export const counted = (handoff: Handoff) =>
+  (handoff.carried ?? 0) + reviews(handoff);
+
 /** The round it is in, and of how many: 「第 1 / 2 轮」. */
 export function round(handoff: Handoff): { at: number; of: number } {
-  const at = Math.max(1, reviews(handoff));
-  return { at, of: Math.max(ROUNDS, at) };
+  const at = Math.max(1, counted(handoff));
+  return { at, of: Math.max(budget(handoff), at) };
 }
 
 const phaseOf = (handoff: Handoff) =>
@@ -383,7 +392,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       ? `${clock(at)} 起 · ${since(at, now, zh)}`
       : `since ${clock(at)} · ${since(at, now, zh)}`
     : since(at, now, zh);
-  const next = reviews(handoff) + 1;
+  const next = counted(handoff) + 1;
   const again: Row = {
     who: "chatgpt",
     time: "",
@@ -391,12 +400,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       ? `第 ${next} 轮：ChatGPT 再审核`
       : `Round ${next}: ChatGPT again`,
     sub: zh
-      ? `最多 ${ROUNDS} 轮；写「结论：通过」就停`
-      : `At most ${ROUNDS} rounds; stops at a pass`,
+      ? `最多 ${budget(handoff)} 轮；写「结论：通过」就停`
+      : `At most ${budget(handoff)} rounds; stops at a pass`,
     state: "todo",
   };
   const passed = lastReply(handoff)?.verdict === "pass";
-  const more = next <= ROUNDS && !passed;
+  const more = next <= budget(handoff) && !passed;
   const todoBack: Row = {
     who: "post",
     time: "",
@@ -488,7 +497,7 @@ export function actions(handoff: Handoff): Action[] {
     ? []
     : handoff.auto
       ? ["pause"]
-      : handoff.halt && reviews(handoff) < ROUNDS
+      : handoff.halt && counted(handoff) < budget(handoff)
         ? ["resume"]
         : [];
   const open: Action[] = [
@@ -506,7 +515,7 @@ export function actions(handoff: Handoff): Action[] {
       return [
         "end",
         ...open,
-        ...(reviews(handoff) < ROUNDS ? (["again"] as const) : []),
+        ...(counted(handoff) < budget(handoff) ? (["again"] as const) : []),
       ];
     default:
       return ["end", ...open];

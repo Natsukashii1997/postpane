@@ -75,6 +75,47 @@ pub enum Verdict {
     Revise,
 }
 
+/// An engineering review's risk level (#217, multi-agent MA-02): it sets
+/// how many reviews the handoff gets. L0 is not sent for review at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Risk {
+    L1,
+    L2,
+    L3,
+}
+
+impl Risk {
+    /// 「L1」「l2」…; None for anything else, L0 included.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_uppercase().as_str() {
+            "L1" => Some(Self::L1),
+            "L2" => Some(Self::L2),
+            "L3" => Some(Self::L3),
+            _ => None,
+        }
+    }
+    /// The reviews it gets: L1 one, L2 and L3 `ROUNDS`.
+    pub fn reviews(self) -> u32 {
+        match self {
+            Self::L1 => 1,
+            Self::L2 | Self::L3 => ROUNDS,
+        }
+    }
+}
+
+/// An engineering answer's way out (#217), its optional 「审查出口」.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Review {
+    /// 通过 ↔ 通过
+    Pass,
+    /// 返修 ↔ 需修改
+    Fix,
+    /// 证据不足暂停 ↔ 需修改
+    NeedEvidence,
+    /// 决策升级 ↔ 需修改
+    Escalate,
+}
+
 /// What happened, and who did it: `work` Claude, `reply` ChatGPT, the rest PostPane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -192,6 +233,23 @@ pub struct Handoff {
     /// session is opened. Cleared when Claude hands over again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued_at: Option<i64>,
+    /// An engineering review's risk level, when Claude named one (#217).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<Risk>,
+    /// The pull request under review, 「owner/repo#n」 (#217): reviews of it
+    /// count on across handoffs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<String>,
+    /// Reviews of the same pull request in earlier handoffs (#217).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub carried: u32,
+    /// Reviews past the budget the person allowed, one each time (#217).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub extra: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// What the auto round trip does with an answer that came in.
@@ -213,6 +271,12 @@ pub enum Next {
     Escalate,
     /// 思维评审 whose last two lines do not hold: the person decides.
     Invalid(Flaw),
+    /// L1 「需修改」 with its one review used (#217): back to Claude to fix
+    /// it and close without another review, then the handoff ends.
+    Settle,
+    /// An engineering answer whose 「审查出口」 does not go with its
+    /// verdict (#217): the person decides.
+    BadTail(Flaw),
 }
 
 /// A 思维评审 answer's way out, its 「评审出口」 (#209).
@@ -326,19 +390,67 @@ impl Handoff {
                 Err(flaw) => Next::Invalid(flaw),
             });
         }
-        let verdict = self.last_reply().and_then(|step| step.verdict);
+        let reply = self
+            .last_reply()
+            .and_then(|step| step.text.as_deref())
+            .unwrap_or_default();
+        // 「审查出口」 (#217), when the answer wrote one; else the verdict alone.
+        let way = match review_exit(reply) {
+            Ok(way) => way,
+            Err(flaw) => return self.auto.then_some(Next::BadTail(flaw)),
+        };
+        let verdict = match way {
+            Some(Review::Pass) => Some(Verdict::Pass),
+            Some(_) => Some(Verdict::Revise),
+            None => self.last_reply().and_then(|step| step.verdict),
+        };
         if verdict == Some(Verdict::Pass) {
             return Some(Next::Pass);
         }
         if !self.auto {
             return None;
         }
-        Some(match verdict {
-            Some(Verdict::Pass) => Next::Pass,
-            Some(Verdict::Revise) if self.reviews() < ROUNDS => Next::Back,
-            Some(Verdict::Revise) => Next::Limit,
-            None => Next::NoVerdict,
+        Some(match (way, verdict) {
+            (Some(Review::NeedEvidence), _) => Next::Pause,
+            (Some(Review::Escalate), _) => Next::Escalate,
+            (_, Some(Verdict::Revise)) if self.counted() < self.budget() => Next::Back,
+            (_, Some(Verdict::Revise)) if self.risk == Some(Risk::L1) => Next::Settle,
+            (_, Some(Verdict::Revise)) => Next::Limit,
+            _ => Next::NoVerdict,
         })
+    }
+    /// The reviews an engineering handoff gets (#217): by its risk level,
+    /// `ROUNDS` when it named none, plus those the person allowed past it.
+    /// A 思维评审 gets `ROUNDS`.
+    pub fn budget(&self) -> u32 {
+        if self.thinking() {
+            return ROUNDS;
+        }
+        self.risk.map_or(ROUNDS, Risk::reviews) + self.extra
+    }
+    /// Reviews that count against `budget`: those of the same pull request
+    /// in earlier handoffs, and this one's that were answered (#217) — more
+    /// words sent before an answer are the same review. Not those that
+    /// paused for evidence. A 思维评审 counts as `rounds_used`.
+    pub fn counted(&self) -> u32 {
+        if self.thinking() {
+            return self.rounds_used();
+        }
+        let answered = self
+            .steps
+            .iter()
+            .filter(|step| step.kind == StepKind::Reply)
+            .count() as u32;
+        let paused = self
+            .steps
+            .iter()
+            .filter(|step| step.kind == StepKind::Resume && step.auto)
+            .count() as u32;
+        self.carried + answered.saturating_sub(paused)
+    }
+    /// No review is left for it (#217): another needs the person's leave.
+    pub fn spent(&self) -> bool {
+        self.counted() >= self.budget()
     }
     /// Reviews that count toward `ROUNDS`: for a 思维评审, not the ones
     /// that paused for evidence (#209) — each left an auto 「resume」 when
@@ -356,11 +468,17 @@ impl Handoff {
     /// paused since by the person.
     pub fn waits_for_evidence(&self) -> bool {
         let reply = self.last_reply().and_then(|step| step.text.as_deref());
-        self.thinking()
-            && self.live()
+        let paused = |reply: &str| {
+            if self.thinking() {
+                exit(reply) == Ok(Exit::NeedEvidence)
+            } else {
+                review_exit(reply) == Ok(Some(Review::NeedEvidence))
+            }
+        };
+        self.live()
             && !self.auto
             && self.phase == Phase::Returned
-            && reply.is_some_and(|reply| exit(reply) == Ok(Exit::NeedEvidence))
+            && reply.is_some_and(paused)
             && self
                 .steps
                 .iter()
@@ -370,8 +488,7 @@ impl Handoff {
     }
     /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
     pub fn thinking(&self) -> bool {
-        let title = self.title.trim_start();
-        title.starts_with("思维评审｜") || title.starts_with("思维评审|")
+        thinking(&self.title)
     }
     /// Whether the newest step of `kinds` sent these same words.
     fn just_sent(&self, kinds: &[StepKind], key: &str) -> bool {
@@ -459,6 +576,10 @@ impl Book {
             auto: true,
             halt: None,
             queued_at: None,
+            risk: None,
+            pr: None,
+            carried: 0,
+            extra: 0,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -744,11 +865,11 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// Claude came back with evidence to a 思维评审 paused for it (#209):
-    /// the auto round trip is on again, and that paused review does not
-    /// count toward `ROUNDS`.
+    /// Claude came back with evidence to a review paused for it (a 思维评审,
+    /// #209; an engineering 「证据不足暂停」, #217): the auto round trip is on
+    /// again, and that paused review does not count toward its rounds.
     pub fn evidence_in(&mut self, id: &str, now: i64) -> bool {
-        let Some(handoff) = self.live_mut(id).filter(|h| h.thinking() && !h.auto) else {
+        let Some(handoff) = self.live_mut(id).filter(|h| !h.auto) else {
             return false;
         };
         handoff.auto = true;
@@ -822,6 +943,79 @@ impl Book {
             return false;
         };
         handoff.rounds += 1;
+        handoff.updated_at = now;
+        true
+    }
+    /// Reviews of pull request `pr` that a new handoff carries on (#217):
+    /// the newest earlier handoff of it, unless that one passed.
+    pub fn carried_for(&self, pr: &str) -> Option<(String, u32)> {
+        let last = self
+            .list
+            .iter()
+            .rev()
+            .find(|handoff| handoff.pr.as_deref() == Some(pr) && !handoff.thinking())?;
+        let passed = last.last_reply().and_then(|step| step.verdict) == Some(Verdict::Pass);
+        (!passed).then(|| (last.id.clone(), last.counted()))
+    }
+    /// Reviews counted against handoff `id`'s budget, its pull request's
+    /// newer handoffs included (#217): a session going on with its own
+    /// handoff after another session reviewed the same pull request sees
+    /// those reviews too.
+    pub fn pr_counted(&self, id: &str) -> u32 {
+        let Some(handoff) = self.get(id) else {
+            return 0;
+        };
+        let newest = handoff
+            .pr
+            .as_deref()
+            .and_then(|pr| self.carried_for(pr))
+            .map_or(0, |(_, count)| count);
+        handoff.counted().max(newest)
+    }
+    /// Sets a new engineering handoff's risk level and pull request (#217);
+    /// reviews of the pull request in an earlier handoff count on, and its
+    /// first step says so.
+    pub fn rule(&mut self, id: &str, risk: Option<Risk>, pr: Option<&str>) -> bool {
+        let carried = pr.and_then(|pr| self.carried_for(pr).filter(|(earlier, _)| earlier != id));
+        let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
+            return false;
+        };
+        handoff.risk = risk;
+        handoff.pr = pr.map(str::to_owned);
+        let mut notes = vec![];
+        if let Some(risk) = risk {
+            notes.push(format!("{risk:?}"));
+        }
+        if let Some((earlier, count)) = carried.filter(|(_, count)| *count > 0) {
+            handoff.carried = count;
+            notes.push(l10n::text(
+                &format!("续审 · 原单 {earlier} · 已审 {count} 次"),
+                &format!("Follow-up · first handoff {earlier} · {count} reviewed"),
+            ));
+        }
+        if let Some(first) = handoff.steps.first_mut().filter(|_| !notes.is_empty()) {
+            let text = first.text.take().unwrap_or_default();
+            notes.push(text);
+            first.text = Some(notes.join(" · "));
+        }
+        true
+    }
+    /// The person allowed one review past the budget (#217): `reason` says
+    /// who allowed it and why; the auto round trip is on again for it.
+    pub fn allow_extra(&mut self, id: &str, reason: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
+            return false;
+        };
+        handoff.extra += 1;
+        handoff.auto = true;
+        handoff.halt = None;
+        let text = l10n::text(
+            &format!("专项续审：{}", reason.trim()),
+            &format!("Extra review: {}", reason.trim()),
+        );
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Work, Some(&text)));
         handoff.updated_at = now;
         true
     }
@@ -978,6 +1172,92 @@ pub fn exit(reply: &str) -> Result<Exit, Flaw> {
         return Err(Flaw::Mismatch);
     }
     Ok(way)
+}
+
+/// A 思维评审 handoff's title (#209): it begins 「思维评审｜」.
+pub fn thinking(title: &str) -> bool {
+    let title = title.trim_start();
+    title.starts_with("思维评审｜") || title.starts_with("思维评审|")
+}
+
+/// An engineering answer's way out (#217), from its last two lines: when
+/// the one before the verdict is 「审查出口：通过 / 返修 / 证据不足暂停 /
+/// 决策升级」, the last must be the verdict that goes with it (通过 with
+/// 通过, the rest with 需修改). None when there is no such line: the
+/// verdict alone counts, as before.
+pub fn review_exit(reply: &str) -> Result<Option<Review>, Flaw> {
+    let mut lines = reply
+        .lines()
+        .rev()
+        .map(|line| line.replace("**", "").replace("__", ""))
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty());
+    let value = |line: &str, label: &str| -> Option<String> {
+        let rest = [format!("{label}："), format!("{label}:")]
+            .iter()
+            .find_map(|label| line.strip_prefix(label.as_str()).map(str::to_owned))?;
+        Some(
+            rest.trim()
+                .trim_end_matches(['；', ';', '。', '.'])
+                .trim()
+                .to_owned(),
+        )
+    };
+    let last = lines.next().unwrap_or_default();
+    let Some(way) = lines.next().and_then(|line| value(&line, "审查出口")) else {
+        return Ok(None);
+    };
+    let way = match way.as_str() {
+        "通过" => Review::Pass,
+        "返修" => Review::Fix,
+        "证据不足暂停" => Review::NeedEvidence,
+        "决策升级" => Review::Escalate,
+        _ => return Err(Flaw::UnknownExit),
+    };
+    let verdict = match value(&last, "结论").ok_or(Flaw::NoVerdict)?.as_str() {
+        "通过" => Verdict::Pass,
+        "需修改" => Verdict::Revise,
+        _ => return Err(Flaw::UnknownVerdict),
+    };
+    let goes = if way == Review::Pass {
+        Verdict::Pass
+    } else {
+        Verdict::Revise
+    };
+    if verdict != goes {
+        return Err(Flaw::Mismatch);
+    }
+    Ok(Some(way))
+}
+
+/// The first pull request `text` links to, as 「owner/repo#n」 (#217).
+pub fn pull_request(text: &str) -> Option<String> {
+    text.match_indices("github.com/").find_map(|(at, found)| {
+        let mut parts = text[at + found.len()..].split('/');
+        let owner = parts.next()?;
+        let repo = parts.next()?;
+        if parts.next()? != "pull" {
+            return None;
+        }
+        let number = parts
+            .next()?
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>();
+        let fine = |part: &str| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        };
+        (fine(owner) && fine(repo) && !number.is_empty()).then(|| {
+            format!(
+                "{}/{}#{number}",
+                owner.to_ascii_lowercase(),
+                repo.to_ascii_lowercase()
+            )
+        })
+    })
 }
 
 fn new_id(now: i64) -> String {
@@ -1555,5 +1835,175 @@ mod tests {
         assert!(book.superseded(&old.id));
         assert!(!book.opened_late(&old.request(), "c-old", 4));
         assert!(book.opened_late(&newer.request(), "c-new", 4));
+    }
+
+    /// An engineering handoff of `risk` and pull request `pr` (#217), its
+    /// review conversation open.
+    fn ruled(book: &mut Book, session: &str, risk: Option<Risk>, pr: Option<&str>) -> String {
+        let conversation = format!("c-{session}");
+        let handoff = book.begin(session, None, "修登录", None, "请审核", 1);
+        assert!(book.rule(&handoff.id, risk, pr));
+        book.opened(&handoff.id, &conversation, 2);
+        handoff.id
+    }
+
+    #[test]
+    fn the_risk_level_sets_the_budget_and_l1_settles_after_one_review() {
+        assert_eq!(Risk::parse(" l1 "), Some(Risk::L1));
+        assert_eq!(Risk::parse("L3"), Some(Risk::L3));
+        assert_eq!(Risk::parse("L0"), None, "L0 is not sent for review");
+        let mut book = Book::default();
+        let id = ruled(&mut book, "s1", Some(Risk::L1), None);
+        let kept = book.get(&id).unwrap();
+        assert_eq!(kept.budget(), 1);
+        assert!(kept.steps[0].text.as_deref().unwrap().starts_with("L1"));
+        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Settle));
+        // L2 and none named get `ROUNDS`; a 思维评审 is not ruled at all.
+        let id = ruled(&mut book, "s2", Some(Risk::L2), None);
+        assert_eq!(book.get(&id).unwrap().budget(), ROUNDS);
+        book.replied("c-s2", "1. 要超时\n结论：需修改", Some("m2"), 3);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Back));
+        let id = ruled(&mut book, "s3", None, None);
+        assert_eq!(book.get(&id).unwrap().budget(), ROUNDS);
+        let thinking = book.begin("s4", None, "思维评审｜驿窗｜预算", None, "b", 1);
+        assert!(!book.rule(&thinking.id, Some(Risk::L1), Some("a/b#1")));
+        assert_eq!(book.get(&thinking.id).unwrap().budget(), ROUNDS);
+    }
+
+    #[test]
+    fn an_engineering_answer_may_end_with_its_way_out() {
+        assert_eq!(
+            review_exit("1. 好\n结论：需修改"),
+            Ok(None),
+            "the old form holds"
+        );
+        assert_eq!(
+            review_exit("正文\n审查出口：返修\n结论：需修改"),
+            Ok(Some(Review::Fix))
+        );
+        assert_eq!(
+            review_exit("**审查出口：证据不足暂停**\n\n**结论：需修改。**\n"),
+            Ok(Some(Review::NeedEvidence))
+        );
+        assert_eq!(
+            review_exit("审查出口：决策升级\n结论：需修改"),
+            Ok(Some(Review::Escalate))
+        );
+        assert_eq!(
+            review_exit("审查出口：通过\n结论：通过"),
+            Ok(Some(Review::Pass))
+        );
+        assert_eq!(
+            review_exit("审查出口：通过\n结论：需修改"),
+            Err(Flaw::Mismatch)
+        );
+        assert_eq!(
+            review_exit("审查出口：返修\n结论：通过"),
+            Err(Flaw::Mismatch)
+        );
+        assert_eq!(
+            review_exit("审查出口：再看看\n结论：需修改"),
+            Err(Flaw::UnknownExit)
+        );
+        assert_eq!(
+            review_exit("审查出口：返修\n结论：待定"),
+            Err(Flaw::UnknownVerdict)
+        );
+        assert_eq!(
+            review_exit("审查出口：返修\n还有一句"),
+            Err(Flaw::NoVerdict)
+        );
+    }
+
+    #[test]
+    fn a_paused_or_escalated_review_does_not_go_round_as_a_revise() {
+        let mut book = Book::default();
+        let id = ruled(&mut book, "s1", Some(Risk::L2), None);
+        book.replied(
+            "c-s1",
+            "缺日志\n审查出口：证据不足暂停\n结论：需修改",
+            Some("m1"),
+            3,
+        );
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pause));
+        // Back to Claude and stopped by itself: it waits for evidence, and
+        // the evidence turns it on again without counting the paused review.
+        assert!(book.returned(&id, StepKind::Back, "意见", true, 4));
+        assert!(book.stop(&id, "证据不足暂停", true, 5));
+        assert!(book.get(&id).unwrap().waits_for_evidence());
+        assert!(book.evidence_in(&id, 6));
+        assert_eq!(book.get(&id).unwrap().counted(), 0);
+        let id = ruled(&mut book, "s2", Some(Risk::L2), None);
+        book.replied(
+            "c-s2",
+            "要改方案\n审查出口：决策升级\n结论：需修改",
+            Some("m2"),
+            3,
+        );
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Escalate));
+        let id = ruled(&mut book, "s3", Some(Risk::L2), None);
+        book.replied("c-s3", "审查出口：通过\n结论：需修改", Some("m3"), 3);
+        assert_eq!(
+            book.get(&id).unwrap().next(),
+            Some(Next::BadTail(Flaw::Mismatch))
+        );
+        assert!(book.stop(&id, "停", false, 4));
+        assert_eq!(book.get(&id).unwrap().next(), None, "the person decides");
+        // A way out of 通过 ends it, as a pass does.
+        let id = ruled(&mut book, "s4", Some(Risk::L2), None);
+        book.replied("c-s4", "审查出口：通过\n结论：通过", Some("m4"), 3);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pass));
+    }
+
+    #[test]
+    fn a_pull_requests_reviews_count_on_in_a_new_handoff() {
+        assert_eq!(
+            pull_request(
+                "见 https://github.com/Natsukashii1997/dt-sandbox/pull/4/files 和 /pull/5"
+            ),
+            Some("natsukashii1997/dt-sandbox#4".to_owned())
+        );
+        assert_eq!(pull_request("github.com/a/b/issues/3"), None);
+        assert_eq!(pull_request("没有链接"), None);
+        let mut book = Book::default();
+        let first = ruled(&mut book, "s1", Some(Risk::L2), Some("a/b#4"));
+        book.replied("c-s1", "1. 原子写入\n结论：需修改", Some("m1"), 3);
+        // Round 2 from another Claude session (SBX-8): it carries round 1.
+        let second = ruled(&mut book, "s2", Some(Risk::L2), Some("a/b#4"));
+        let kept = book.get(&second).unwrap();
+        assert_eq!((kept.carried, kept.counted()), (1, 1));
+        assert!(kept.steps[0].text.as_deref().unwrap().contains(&first));
+        book.replied("c-s2", "1. 还差\n结论：需修改", Some("m2"), 3);
+        assert_eq!(book.get(&second).unwrap().next(), Some(Next::Limit));
+        assert!(book.get(&second).unwrap().spent());
+        // A third handoff starts spent; a passed one carries nothing on.
+        assert_eq!(book.carried_for("a/b#4"), Some((second.clone(), 2)));
+        let other = ruled(&mut book, "s3", None, Some("a/b#9"));
+        book.replied("c-s3", "结论：通过", Some("m3"), 3);
+        assert_eq!(book.get(&other).unwrap().next(), Some(Next::Pass));
+        assert_eq!(book.carried_for("a/b#9"), None);
+        assert_eq!(book.carried_for("a/b#1"), None);
+        // The first session going on with its own handoff sees round 2.
+        assert_eq!(book.get(&first).unwrap().counted(), 1);
+        assert_eq!(book.pr_counted(&first), 2);
+    }
+
+    #[test]
+    fn the_person_may_allow_one_review_past_the_budget() {
+        let mut book = Book::default();
+        let id = ruled(&mut book, "s1", Some(Risk::L1), None);
+        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
+        assert!(book.stop(&id, "停", true, 4));
+        assert!(book.get(&id).unwrap().spent());
+        assert!(book.allow_extra(&id, "常浩要求再审一次：P1 未确认", 5));
+        let kept = book.get(&id).unwrap();
+        assert_eq!((kept.budget(), kept.extra), (2, 1));
+        assert!(kept.auto && kept.halt.is_none());
+        assert!(!kept.spent());
+        let said = kept.steps.last().unwrap().text.clone().unwrap();
+        assert!(said.ends_with("常浩要求再审一次：P1 未确认"), "{said}");
+        let thinking = book.begin("s2", None, "思维评审｜x｜y", None, "b", 1);
+        assert!(!book.allow_extra(&thinking.id, "r", 2));
     }
 }

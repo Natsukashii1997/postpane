@@ -836,6 +836,15 @@ export interface Handoff {
   auto?: boolean;
   /** Why the auto round trip stopped, while it is off. */
   halt?: string | null;
+  /** An engineering review's risk level (#217): L1 gets one review, L2 and
+   * L3 two. */
+  risk?: "L1" | "L2" | "L3";
+  /** The pull request under review, 「owner/repo#n」 (#217). */
+  pr?: string;
+  /** Reviews of the same pull request in earlier handoffs (#217). */
+  carried?: number;
+  /** Reviews past the budget the person allowed (#217). */
+  extra?: number;
   /** When ChatGPT's answer was queued for a Claude session paused once its
    * turn was over: it goes in once the session is opened. */
   queuedAt?: number | null;
