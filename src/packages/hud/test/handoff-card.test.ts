@@ -230,7 +230,8 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
     [last.at(-1)?.title, last.at(-1)?.sub],
     ["自动往返停下", "已审 2 轮仍需修改，自动往返停下，交还常浩"],
   );
-  assert.deepEqual(actions(stopped), ["end", "resume", "open", "back"]);
+  // Every round used: nothing left for it to do, so no 「继续自动」 (#194).
+  assert.deepEqual(actions(stopped), ["end", "open", "back"]);
   assert.equal(autoLabel(stopped, true), "自动已停");
   assert.equal(
     progressLine(stopped, T, true),
@@ -264,6 +265,81 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
   // Handoffs from before the auto round trip offer no switch.
   assert.deepEqual(actions(handoff()), ["end", "open"]);
   assert.equal(autoLabel(handoff(), true), null);
+});
+
+test("「继续自动」 only while a round is left, and the card says what it waits for (#194)", () => {
+  // Round 1 sent back, then stopped: turning it back on still has work.
+  const back = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("stop", T + 13 * minute, { text: "常浩暂停" }),
+  ];
+  const stopped = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: false,
+    halt: "常浩暂停",
+    steps: back,
+  });
+  assert.deepEqual(actions(stopped), ["end", "resume", "open", "again"]);
+  // Turned back on: the row says what it waits for now.
+  const resumed = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: true,
+    steps: [...back, step("resume", T + 14 * minute)],
+  });
+  const rows = timeline(resumed, T + 15 * minute, true);
+  const on = rows.find((row) => row.title === "你打开了自动往返");
+  assert.equal(on?.sub, "等 Claude 改完送审，回信需修改就自动转回");
+  // Round 2 of 2 back with Claude (DT-ORC, 2026-11-07): no 「继续自动」.
+  const last = handoff({
+    phase: "returned",
+    phaseAt: T + 30 * minute,
+    auto: false,
+    halt: "已审 2 轮仍需修改，自动往返停下，交还常浩",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("ask", T + 20 * minute),
+      { ...reply, at: T + 25 * minute },
+      step("stop", T + 25 * minute, { text: "已审 2 轮仍需修改", auto: true }),
+      step("back", T + 30 * minute),
+    ],
+  });
+  assert.deepEqual(actions(last), ["end", "open"]);
+});
+
+test("where it stands keeps the timeline in order: no earlier clock after later steps (#194)", () => {
+  const steps = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("resume", T + 70 * minute),
+    step("stop", T + 72 * minute, { text: "常浩暂停" }),
+  ];
+  const rows = timeline(
+    handoff({ phase: "returned", phaseAt: T + 12 * minute, steps }),
+    T + 80 * minute,
+    true,
+  );
+  const cur = rows.find((row) => row.state === "cur")!;
+  assert.equal(cur.title, "Claude 按意见修改");
+  assert.equal(cur.time, "");
+  assert.match(cur.sub ?? "", /^\d\d:\d\d 起 · 已 1 小时$/);
+  // With nothing after it, it keeps its own clock.
+  const plain = timeline(
+    handoff({
+      phase: "returned",
+      phaseAt: T + 12 * minute,
+      steps: steps.slice(0, 4),
+    }),
+    T + 20 * minute,
+    true,
+  ).find((row) => row.state === "cur")!;
+  assert.match(plain.time, /^\d\d:\d\d$/);
+  assert.equal(plain.sub, "已 8 分钟");
 });
 
 test("an answer queued for a paused Claude session says to open the session", () => {

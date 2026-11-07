@@ -680,6 +680,10 @@ impl Desk {
                 Ok(Acted::Done)
             }
             "resume" => {
+                // Every round used: an answer can only stop it again (#194).
+                if handoff.reviews() >= handoffs::ROUNDS {
+                    return Err(no_rounds_left());
+                }
                 if !self.change(|book| book.resume(id, now)) {
                     return Err(l10n::text(
                         "自动往返已经开着，或接力已结束",
@@ -1004,6 +1008,18 @@ fn at_limit() -> String {
         ),
         &format!(
             "Still to fix after {} rounds; left to you",
+            handoffs::ROUNDS
+        ),
+    )
+}
+fn no_rounds_left() -> String {
+    l10n::text(
+        &format!(
+            "已审满 {} 轮，自动往返没有可做的了：要再审请让 Claude 重新送审，或结束接力",
+            handoffs::ROUNDS
+        ),
+        &format!(
+            "All {} rounds are used; nothing is left for the auto round trip. Have Claude send it for review afresh, or end the handoff",
             handoffs::ROUNDS
         ),
     )
@@ -1890,6 +1906,11 @@ mod tests {
         // The person can still send it back.
         desk.act(&lines, &handoff.id, "back", 9).unwrap();
         assert_eq!(replies(&lines), 2);
+        // Every round used: turning it back on would do nothing, so it says
+        // so instead of taking the click (#194).
+        let refused = desk.act(&lines, &handoff.id, "resume", 10);
+        assert_eq!(refused.err(), Some(no_rounds_left()));
+        assert_eq!(desk.projection(10)[0]["auto"], false);
 
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
