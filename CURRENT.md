@@ -13,7 +13,8 @@
 - 测试：子 agent 跑 `pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 760 passed / 0 failed，前端各套件 fail 0；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。我独立复跑 `cargo test -p agent-hud-platform handoffs` 13 passed / 0 failed，`cargo test -p agent-hud-host handoff` 36 passed / 0 failed。新增测试：T1 `a_thinking_review_that_settles_goes_back_to_claude_once_then_ends`，T2 `a_thinking_review_quoting_an_old_pass_is_escalated_not_passed`，T3 `a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again`、`a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence`，T8 `a_thinking_review_whose_last_two_lines_do_not_hold_sends_nothing`，另有继续深化、启动场景、再审一轮、解析单测各一。
 - 验证：单测覆盖 T1、T2、T3、T8；实机往返见「发布与回读」。
 - 截图：无。
-- 发布与回读：合并后从 main 打包装机，结果补记在本节。
+- 发布与回读（补记）：从 main `3ff8684` 打包，`install.sh 209-thinking-relay`：装前 `bfd637730be4`（已备份），19:52:24 退出、19:52:24 启动，产物 `f1b8bdb870a8` / 已装 `f1b8bdb870a8`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-209-thinking-relay/PostPane-bfd637730be4.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机往返（T1，补记）：本会话调 `relay_to_chatgpt` 发测试单「思维评审｜驿窗｜接力实机往返测试」（接力 `h1a1b5da92af00`），ChatGPT 回信末两行「评审出口：成熟退出 / 结论：通过」；本会话收到回信全文加收口话术「这次思维评审已收口……不要再调用 relay_to_chatgpt」。`handoffs.json` 该接力 steps：work、ask、reply、back（自动）、end（自动，「思维评审收口，回信已转回 Claude，自动结束接力」），状态 closed / ended。
 - 与授权不一致之处、遗留问题、范围外发现：转给 Claude 的思维评审话术只写中文（与现有 `back_text` 一致）；回信超过 64KB 被截断时末行损坏，按无效交常浩；MCP 工具说明仍偏工程审查，未改（skill 里写明以 skill 为准）。
 - 本轮新坑：无
 - skill 进化：无。
