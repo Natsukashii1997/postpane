@@ -198,7 +198,19 @@ impl Desk {
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted());
         let paused = book.restarted(now, &restart_paused());
-        if interrupted | paused {
+        // Reviews that passed while nothing drove them (the auto round trip
+        // off) end now, as a pass coming in would (owner, 2026-11-07).
+        let passed_ids = book
+            .list
+            .iter()
+            .filter(|h| h.next() == Some(Next::Pass))
+            .map(|h| h.id.clone())
+            .collect::<Vec<_>>();
+        let mut ended = false;
+        for id in &passed_ids {
+            ended |= book.passed(id, &passed(), now);
+        }
+        if interrupted | paused | ended {
             let desk = desk(book);
             desk.change(|_| ());
             return desk;
@@ -1956,6 +1968,22 @@ mod tests {
             desk.act(&lines, &handoff.id, "resume", 7).is_err(),
             "already on"
         );
+    }
+
+    #[test]
+    fn a_review_that_passed_with_nothing_driving_it_ends_when_the_app_starts() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let mut book = handoffs::Book::default();
+        let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
+        book.opened(&handoff.id, "c1", 2);
+        assert!(book.stop(&handoff.id, "停", true, 3));
+        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        handoffs::save(&data, &book).unwrap();
+        let desk = Desk::new(Some(data));
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["status"], "closed");
+        assert_eq!(shown[0]["phase"], "ended");
     }
 
     #[test]

@@ -1,4 +1,10 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { ArrowUpRight } from "lucide-react";
 import { HUDArtwork } from "../HUDArtwork";
 import { PAPER_SEAL, type Paper } from "../paper";
@@ -168,8 +174,11 @@ export function EntryRow({
           )
         )}
       </span>
+      {/* Lights up under the pointer and sinks when pressed (owner,
+          2026-11-07: it gave no sign it was pressed); global.css. */}
       <button
         type="button"
+        className="hud-go-button"
         aria-label={goTitle}
         title={goTitle}
         aria-disabled={!canOpen}
@@ -177,20 +186,22 @@ export function EntryRow({
           event.stopPropagation();
           if (canOpen) onOpen();
         }}
-        style={{
-          display: "inline-grid",
-          placeItems: "center",
-          width: 26,
-          height: 26,
-          boxSizing: "border-box",
-          padding: 0,
-          border: `1.5px solid ${inks.line}`,
-          borderRadius: 3,
-          background: "transparent",
-          color: canOpen ? inks.mid : inks.faint,
-          opacity: canOpen ? 1 : 0.6,
-          cursor: canOpen ? "pointer" : "default",
-        }}
+        style={
+          {
+            "--go-line": inks.line,
+            "--go-ink": canOpen ? inks.mid : inks.faint,
+            "--go-strong": inks.ink,
+            display: "inline-grid",
+            placeItems: "center",
+            width: 26,
+            height: 26,
+            boxSizing: "border-box",
+            padding: 0,
+            borderRadius: 3,
+            opacity: canOpen ? 1 : 0.6,
+            cursor: canOpen ? "pointer" : "default",
+          } as CSSProperties
+        }
       >
         <ArrowUpRight size={13} strokeWidth={2} />
       </button>
@@ -270,6 +281,7 @@ export function ListHead({
   inks,
   light,
   zh,
+  action,
 }: {
   label: string;
   entries: readonly ApprovalEntry[];
@@ -279,6 +291,9 @@ export function ListHead({
   inks: Inks;
   light: boolean;
   zh: boolean;
+  /** What acts on the whole card, before the count tags (the reply card's
+   * 全部知道了). */
+  action?: ReactNode;
 }) {
   return (
     <div
@@ -310,6 +325,7 @@ export function ListHead({
           overflow: "hidden",
         }}
       >
+        {action}
         {tagCounts(entries).map(({ badge, count }) => (
           <ApprovalTag
             key={badge}

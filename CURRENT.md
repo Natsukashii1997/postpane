@@ -5,6 +5,27 @@
 
 
 
+## 回复卡「全部知道了」移到头部；按钮有按下反馈；接力章改成「审 / 未审 / 回」按实际状态（2026-11-07，Claude，常浩看预览后说「把蓝色标识删掉，上面放一个全部知道了就可以」，章的规则在提问里选定：「审」停掉或交还就撤、30 分钟没回信改「未审」可点去 ChatGPT，「回」通过即结束、需修改留章；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 11:15`（`date '+%F %H:%M'` 记录）。来由：常浩三条反馈：回复卡里「全部知道了」作用于整张却放在单条里；条目右上 ↗ 悬停、按下都没反应；「回」「审」一直挂着，分不清接力结束没有。预览 https://claude.ai/artifact/URiwPVoodUWGH1rPgKtVR2 第 2 版。
+- 改了哪些文件：
+  - `hud/src/alerts/CompletionAlertView.tsx`、`permissions/ListCard.tsx`：`ListHead` 加 `action`，回复卡把「全部知道了」（只有 1 条时写「知道了」）放到头部数量签左边；单条只留「查看接力」「回到会话」，靠右。
+  - `ui/src/global.css` 新增 `.hud-go-button`（↗：悬停描边与图标变亮、浅底；按下下沉缩小）、`.hud-press`（回复卡文字按钮：悬停提亮、按下下沉）；减少动效时不动。
+  - `hud/src/relay-stamps.ts`、`model.ts`、`scene/HUDMarkStrip.tsx`、`scene/RelayStamps.tsx`：「审」只在接力开着、`delivered` / `working`、没有 `halt`、送达不到 30 分钟时盖；送达超过 30 分钟没回信（停没停都算）盖红色「未审」，点 ChatGPT 那一格直接打开那个 ChatGPT 对话；票根缓存到 30 分钟点自动刷新。
+  - `platform/.../chatgpt/handoffs.rs` `next()`：判「通过」不论自动往返开没开都结束；`host/src/handoff.rs` 驿窗启动时结束已判通过、没人驱动的接力。
+  - 测试：`relay-stamps.test.ts` 新增 1 条并给旧用例固定时钟；Rust 新增 `a_pass_ends_the_handoff_even_with_the_auto_round_trip_off`、`a_review_that_passed_with_nothing_driving_it_ends_when_the_app_starts`。
+  - `docs/chatgpt-channel.md` 写明章的规则与通过即结束；`docs/LESSONS.md` 新增 L-17。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 743 passed / 0 failed，前端 `ℹ pass 305` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 8` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。中途一轮 Grok 计时测试失败（L-17，负载 64–71），负载降下后全量通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all/`（`check-3.log`、`test-3.log`、`node-test-3.log`）。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽深色纸）：3 条时头部「全部知道了」、点后全部收掉，1 条时写「知道了」，单条只剩右侧按钮；↗ 悬停实测变亮（计算样式与放大截图），按下的 `:active` 规则已生效但截不到那一瞬。侧栏自查页（`HUDScene` 原样）放大看「未审」章。实机：装机后 `get_hud_screenshot` 侧栏 ChatGPT 票根是红色「未审」（批 C 那单），Claude 票根仍有「回」（3 单需修改待处理）；my-skills #16、数码世界 #60 两单已自动结束（`closed` / `ended`）。**未验证**：实机点「未审」跳转、↗ 按下手感，要常浩亲手点（L-09）。自查页已备份到证据目录 `reply-check-page/`、`stub-check-page/` 后删掉。
+- 截图：无（实机截图在本会话里看过，未落盘）。
+- 发布与回读：`install.sh reply-dismiss-all-2`：装前 `324a033ce9cc`（本轮第一次装的，已备份），12:15:46 退出并启动，产物 `3888d0dec483` / 已装 `3888d0dec483`，签名 leaf `H"b773068e"`；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all-2/PostPane-324a033ce9cc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - **ChatGPT 回信没收到（bug，未修）**：批 C 那单（`h1a1b1fed89e00`，对话 `6aee1442-…`，在「驿窗审核」项目里）ChatGPT 实际回了「结论：通过」，驿窗却连「开始回答」都没收到，停在「已送达」。插件代码里项目路径 `/g/…/c/<id>` 是认的；可疑点：新对话地址出现前就答完时完成事件带不上会话 id 被丢、原生连接断开时 `post` 静默丢消息。当时没有插件到宿主的日志，定位不了，建议另开会话先加回合日志再等复现。
+  - 「需修改」交还常浩的 3 单（左滑复审第 2 轮、GitHub 快速中心 #3、数字分身 DT-ORC）仍挂「回」，按常浩选定的规则要在卡上点「结束接力」或转回 Claude 才撤。
+  - 已装这版不含 #177（尚未合并），#181 那节「#177 合并后统一装机」仍有效。
+- skill 进化：无。
+- 本轮新坑：L-17
+
 ## 待审批展开卡回答一条后不再收成小签，鼠标在面板上可连续处理（2026-11-07，Claude，常浩反映「处理完一个就弹回小卡、剩下的得再点」请修复，看过方案后说「现在装」；PR #180 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 09:31`（`date '+%F %H:%M'` 记录）。来由：常浩截图，在待审批展开卡里回答 / 选一项后，面板收成小签，下一条要再点小签展开。

@@ -1,4 +1,6 @@
 import type { CSSProperties, MutableRefObject } from "react";
+import type { Session } from "@agent-hud/protocol";
+import { usePanelServices } from "../PanelContext";
 import { BotMark } from "../BotMark";
 import { botKey } from "../bots/artwork";
 import { botState, facingFromEdge, isAttention } from "../bots/bot-state";
@@ -114,6 +116,7 @@ export function HUDMarkStrip({
   pin: (key?: string) => void;
 }) {
   const format = useFormat();
+  const services = usePanelServices();
   const { quotaDisplay } = format;
   const zh = format.language === "zh";
   // A ring's figure is text: on a see-through ground, its level's see-through shade.
@@ -213,7 +216,17 @@ export function HUDMarkStrip({
                 setHovered(vendor.key);
                 if (!hasAlert && !suppressHover.current) forceOpen();
               }}
-              onClick={() => pin(vendor.key)}
+              onClick={() => {
+                // 「未审」: the mark goes to that ChatGPT conversation, so the
+                // review can be picked up there (owner, 2026-11-07).
+                const conversation =
+                  vendor.relay?.overdue && vendor.relay.conversation;
+                if (conversation && services?.openSession) {
+                  void services.openSession(chatgptConversation(conversation));
+                  return;
+                }
+                pin(vendor.key);
+              }}
               style={{
                 position: "relative",
                 zIndex: 1,
@@ -428,6 +441,15 @@ type StubSide = "left" | "right" | "top" | "bottom";
 /** A stub's own box: its size, with the bot's room at its top. The bot sits
  * on the stub like a sticker; the paper is its own layer behind it, so the
  * bot's moves and props are never clipped by the paper. */
+/** A ChatGPT conversation to open, as the handoff card names one. */
+function chatgptConversation(id: string): Session {
+  return {
+    id: `chatgpt:${id}`,
+    source: "chatgpt",
+    navigationTarget: { kind: "chatgpt-conversation", id },
+  } as unknown as Session;
+}
+
 export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
   const stub = stubSize(logo),
     unit = logo / 20;
@@ -570,6 +592,7 @@ export function StubFace({
             unit={unit}
             zh={zh}
             answering={vendor.relay.answering}
+            overdue={vendor.relay.overdue}
             since={vendor.relay.since}
             reduceMotion={reduceMotion}
           >

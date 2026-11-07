@@ -147,3 +147,11 @@
 - 正确做法：看到这条报错先 `ls ~/Library/Caches/ms-playwright/`；目录没了就在 `src/apps/chrome-extension` 下跑 `pnpm exec playwright install chromium-headless-shell` 补回，再重跑 `pnpm run test:extension`。不要为这个去改测试或代码。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/test.log`（通过）、`test-2.log`（全挂）、`playwright-install.log`、`test-extension-3.log`（补装后 `ℹ pass 8`）。
 - 升级：无（环境问题，测试本身的报错已经说清楚了）。可提议提升为全局坑：别的项目用 Playwright 也会被同样清掉。
+
+## L-17 机器负载很高时，`core` 的 Grok 计时测试稳定失败（2026-11-07）
+
+- 现象：`pnpm test` 里 `source_db::tests::grok_bot_session_works_while_a_message_has_no_reply_and_idles_once_answered` 在 `tests.rs:608` 的 `assert!(!backend.look())` 失败，单独重跑三次都失败，每次 12–19 秒；同一份代码一小时前、以及负载降下来后的全量都通过。
+- 根因：这条测试要求刷新完之后 10 秒内再看一次「不该到点」；当时 `uptime` 负载均值 64–71（多个会话同时编译），一次刷新本身就超过 10 秒，轮询已经到点。与改动无关。
+- 正确做法：这条失败先看 `uptime`；负载均值远高于核数时等别的编译跑完再重跑全量，不要为它改代码或改测试。交接里写明当时的负载和重跑结果。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all/test.log`（失败）、`test-2.log`、`test-3.log`（负载 14–17 时通过，Rust 合计 742、743 passed / 0 failed）。
+- 升级：未升级。

@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CheckCheck } from "lucide-react";
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
@@ -155,29 +155,20 @@ export function CompletionAlertView({
             }}
           >
             <ReplyBody entry={entry} inks={inks} zh={zh} failed={failed} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => drop(entries.map((each) => each.id))}
-                style={{
-                  ...buttonFace,
-                  border: `1.5px solid ${inks.faint}`,
-                  background: "transparent",
-                  color: inks.ink,
-                }}
-              >
-                {entries.length > 1
-                  ? zh
-                    ? "全部知道了"
-                    : "Dismiss all"
-                  : zh
-                    ? "知道了"
-                    : "Got it"}
-              </button>
-              <span style={{ flex: 1 }} />
+            {/* Only what acts on this reply; putting them all away is the
+                head's (owner, 2026-11-07). */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
               {handoff && card && (
                 <button
                   type="button"
+                  className="hud-press"
                   onClick={() => card.open(handoff.id)}
                   style={{
                     ...buttonFace,
@@ -191,6 +182,8 @@ export function CompletionAlertView({
               )}
               <button
                 type="button"
+                className="hud-press"
+                aria-disabled={!canOpen(entry)}
                 onClick={() => void goBack(entry)}
                 style={{
                   ...buttonFace,
@@ -240,6 +233,32 @@ export function CompletionAlertView({
         inks={inks}
         light={light}
         zh={zh}
+        action={
+          <button
+            type="button"
+            className="hud-press"
+            onClick={() => drop(entries.map((each) => each.id))}
+            style={{
+              ...buttonFace,
+              height: 24,
+              padding: "0 10px",
+              fontSize: 12,
+              flex: "none",
+              border: `1.5px solid ${inks.faint}`,
+              background: "transparent",
+              color: inks.mid,
+            }}
+          >
+            <CheckCheck size={13} strokeWidth={2.2} />
+            {entries.length > 1
+              ? zh
+                ? "全部知道了"
+                : "Dismiss all"
+              : zh
+                ? "知道了"
+                : "Got it"}
+          </button>
+        }
       />
       <ListTear paper={paper} inks={inks} />
       {groups

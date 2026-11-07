@@ -522,6 +522,53 @@ a:focus-visible {
   transform: scale(0.92);
   transition-duration: 0.08s;
 }
+/* The ↗ that goes back to a session (a list card's row): it lights up
+ * under the pointer and sinks when pressed (owner, 2026-11-07). The row
+ * passes its inks in as --go-line, --go-ink and --go-strong. */
+.hud-go-button {
+  border: 1.5px solid var(--go-line);
+  background: transparent;
+  color: var(--go-ink);
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+}
+.hud-go-button:not([aria-disabled="true"]):hover {
+  border-color: var(--go-strong);
+  color: var(--go-strong);
+  background: color-mix(in srgb, var(--go-strong) 14%, transparent);
+}
+.hud-go-button:not([aria-disabled="true"]):active {
+  transform: translateY(1px) scale(0.92);
+  background: color-mix(in srgb, var(--go-strong) 26%, transparent);
+  transition-duration: 0.06s;
+}
+/* A card's text buttons (知道了, 查看接力, 回到会话): the same give. */
+.hud-press {
+  transition:
+    filter 0.12s ease,
+    transform 0.12s ease;
+}
+.hud-press:not([aria-disabled="true"]):hover {
+  filter: brightness(1.18);
+}
+.hud-press:not([aria-disabled="true"]):active {
+  transform: translateY(1px) scale(0.97);
+  filter: brightness(0.9);
+  transition-duration: 0.06s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-go-button,
+  .hud-press {
+    transition: none;
+  }
+  .hud-go-button:not([aria-disabled="true"]):active,
+  .hud-press:not([aria-disabled="true"]):active {
+    transform: none;
+  }
+}
 /* The sway, blink and twinkle play only under the pointer (#103): at rest
  * the ball stays still and costs nothing to draw. Each starts just before
  * its move, so a hover shows it within half a second. */
