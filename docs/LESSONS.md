@@ -178,4 +178,4 @@
 - 根因：14:12:27 Claude 桌面应用重启（`ps -o lstart` 看主进程），退出时每个会话的插件都跑 `session.end`，约 50 个签到文件在 14:12:23 同一秒被写成 `{"ended":…}`。重启后桌面应用只给打开的会话起进程，没打开的会话没有进程，也不会再签到。`unreachable()` 只分「没装 / 被暂停 / 没加载」三种，`last_check_in` 遇到 `ended` 返回空，于是落到「没加载」，给了一个无处可执行的命令。
 - 正确做法：签到文件标了 `ended` 就说「会话已停，在 Claude 里打开它」，不给 `/reload-plugins`。排查「会话为什么连不上」先看 `~/Library/Application Support/app.postpane.mac/claude-channel/sessions/<会话 id>.json` 的内容与修改时间，再用 `ps -axo lstart,command | grep "MacOS/claude "` 看这个会话有没有进程。
 - 证据：`stat -f "%m %Sm %N" claude-channel/sessions/*.json | sort -rn`（大批文件同一秒写成 ended）；会话记录 `be0e22ad-….jsonl` 里有 43 处 `agent-hud`；日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
-- 升级：已写成测试 `an_unreached_session_names_the_step_that_lets_the_hud_answer` 的 ended 一段（#188）。
+- 升级：已写成测试 `an_unreached_session_names_the_step_that_lets_the_hud_answer` 的 ended 一段（#188）；签到文件一天后被 `sweep` 清掉、停久了又退回旧提示，#191 让标了 ended 的记录留 7 天，测试 `an_ended_session_is_remembered_for_a_week`。

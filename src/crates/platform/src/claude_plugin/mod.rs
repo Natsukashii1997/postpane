@@ -417,13 +417,22 @@ impl ClaudeChannel {
         }
     }
 
-    /// Removes check-ins older than a day, and words taken a minute ago or
-    /// older than an hour.
+    /// Removes check-ins older than a day (a week for a session that ended,
+    /// so its questions still say to open it in Claude), and words taken a
+    /// minute ago or older than an hour.
     pub fn sweep(&self, now: SystemTime) {
         if let Ok(files) = fs::read_dir(self.directory.join("sessions")) {
             for entry in files.flatten() {
                 let path = entry.path();
-                if file_age(&path, now) > Duration::from_secs(86_400) {
+                let age = file_age(&path, now);
+                if age <= Duration::from_secs(86_400) {
+                    continue;
+                }
+                let ended = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(|session| self.ended(session));
+                if !ended || age > Duration::from_secs(7 * 86_400) {
                     let _ = fs::remove_file(path);
                 }
             }
