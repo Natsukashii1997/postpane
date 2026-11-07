@@ -4,6 +4,22 @@
 
 
 
+## 设置加「AI 接入」页，AGENTS.md 加「AI 接入」一节（2026-11-08，Claude，常浩按全局规则 P-13 让母会话分派，看三版预览 https://claude.ai/artifact/Eusos7b3DHkDT4uQ4VrCtY 后选甲「四块收据」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 23:25`（会话创建时间，未单独 `date` 记录）。来由：P-13 要求应用里 AI 产出的东西在设置里看得清谁做、怎么接、读什么、写到哪、能不能用。盘点结论：驿窗有一个执行方（ChatGPT 接力审核，网页桥，仅支持 ChatGPT 网页），一个对外开放（MCP「agent-hud」+ `relay_to_chatgpt`），其余各家都是数据对象；母会话原判断「没有执行方」不准。
+- 改了哪些文件：
+  - `src/packages/app/src/settings/AiAccessPane.tsx`、`ai-access.css`（新）：四块——默认执行方（ChatGPT 网页可用状态 + 检查时间，Claude / Codex 标不支持）、功能清单（接力审核：谁发起、执行方、接入、读、写到、留痕、为什么仅支持）、对外开放（侧栏工具开关即 `hudTools`，能读 / 能写 / 在哪关；发起接力按 ChatGPT 插件登记显示开关）、数据对象（按快照列在读的、已关的、没检测到的）。
+  - `src/packages/app/src/lib/ai-access.ts`（新）：可用状态、MCP 装到哪些客户端、各家读取来源的文字与拆分；`test/ai-access.test.ts` 3 条。
+  - `src/packages/app/src/App.tsx`、`SettingsPanes.tsx`：登记第 5 页「AI 接入」。
+  - `AGENTS.md`：新增「AI 接入」一节，导航表加一行。
+- 测试：变基到 main `bcf71b2` 后 `pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 784 passed / 0 failed，前端 `ℹ pass 341` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-ai-access/`（`check3.log`、`test3.log`、`rules3.log`）。
+- 验证：浏览器预览（隔离数据目录，拷入本机真实 `settings.json`）用真实组件看了两轮：第 1 轮浅色，数据对象与本机一致（在读 Claude Code、Codex、Hermes；7 个已关），发现页尾 API Key 说明单独成行，挪进「数据对象」脚注；第 2 轮深色复看。ChatGPT 插件状态、MCP 装到哪些客户端只在 Tauri 里读得到，浏览器里显示「这个系统不支持」「这里读不到」，逻辑由单测覆盖，实机未看——请求电脑控制截图被拒。
+- 截图：在本会话工具结果里，未另存。
+- 发布与回读：从分支 `claude/ai-access-declare-62dcfa`（基于 main `bcf71b2`）打包，`install.sh ai-access-final`：装前 `f9039973266c`（已备份），01:46:24 退出并启动，产物 `f009fe1bbfe1` / 已装 `f009fe1bbfe1`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-ai-access-final/PostPane-f9039973266c.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：各家读取来源的文字写在前端 `lib/ai-access.ts`（不在 agents crate 描述符里），新增客户端时要同步补一行，否则显示「它的本机日志」。范围外：「允许智能体调整侧栏」开关名字只说调整，实际也管读取快照、会话、截图；Codex 发起或审核接力要另开一单。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 工程接力按风险级设审查预算、续审按 PR 跨会话累计、支持暂停/升级与专项续审（2026-11-08，Claude，常浩在 #217 方案评论上回复「按方案开工」；PR 全量通过，按授权 squash 合并；实机往返在合并前的包上做，合并后从 main 重打重装见下）
 
 - 时间：开工 `2026-11-07 23:07`（`date '+%F %H:%M'` 记录）。来由：multi-agent MA-02 工程审查契约 v0.1（`317945b`），常浩 11-07 批准审查预算原则；方案见 #217 评论。
