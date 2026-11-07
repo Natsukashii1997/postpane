@@ -319,7 +319,7 @@ impl Handoff {
                 .unwrap_or_default();
             return Some(match exit(reply) {
                 Ok(Exit::Mature | Exit::OtherPath) => Next::Close,
-                Ok(Exit::Deepen) if self.reviews() < ROUNDS => Next::Back,
+                Ok(Exit::Deepen) if self.rounds_used() < ROUNDS => Next::Back,
                 Ok(Exit::Deepen) => Next::Limit,
                 Ok(Exit::NeedEvidence) => Next::Pause,
                 Ok(Exit::Escalate) => Next::Escalate,
@@ -339,6 +339,34 @@ impl Handoff {
             Some(Verdict::Revise) => Next::Limit,
             None => Next::NoVerdict,
         })
+    }
+    /// Reviews that count toward `ROUNDS`: for a 思维评审, not the ones
+    /// that paused for evidence (#209) — each left an auto 「resume」 when
+    /// Claude came back with it (`Book::evidence_in`).
+    pub fn rounds_used(&self) -> u32 {
+        let paused = self
+            .steps
+            .iter()
+            .filter(|step| step.kind == StepKind::Resume && step.auto)
+            .count() as u32;
+        self.reviews().saturating_sub(paused)
+    }
+    /// A 思维评审 paused for evidence (#209): its answer, 证据不足暂停, went
+    /// back to Claude and the auto round trip stopped itself after it — not
+    /// paused since by the person.
+    pub fn waits_for_evidence(&self) -> bool {
+        let reply = self.last_reply().and_then(|step| step.text.as_deref());
+        self.thinking()
+            && self.live()
+            && !self.auto
+            && self.phase == Phase::Returned
+            && reply.is_some_and(|reply| exit(reply) == Ok(Exit::NeedEvidence))
+            && self
+                .steps
+                .iter()
+                .rev()
+                .find(|step| matches!(step.kind, StepKind::Stop | StepKind::Resume))
+                .is_some_and(|step| step.kind == StepKind::Stop && step.auto)
     }
     /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
     pub fn thinking(&self) -> bool {
@@ -713,6 +741,21 @@ impl Book {
         handoff.halt = Some(reason.to_owned());
         let step = Step::new(now, StepKind::Stop, Some(reason));
         handoff.steps.push(if auto { step.by_auto() } else { step });
+        handoff.updated_at = now;
+        true
+    }
+    /// Claude came back with evidence to a 思维评审 paused for it (#209):
+    /// the auto round trip is on again, and that paused review does not
+    /// count toward `ROUNDS`.
+    pub fn evidence_in(&mut self, id: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id).filter(|h| h.thinking() && !h.auto) else {
+            return false;
+        };
+        handoff.auto = true;
+        handoff.halt = None;
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Resume, None).by_auto());
         handoff.updated_at = now;
         true
     }

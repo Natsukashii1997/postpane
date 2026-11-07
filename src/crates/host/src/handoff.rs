@@ -498,8 +498,16 @@ impl Desk {
                 repeated: true,
             });
         }
+        // Evidence a 思维评审 paused for (#209): it goes on by itself again.
+        let evidence = self
+            .lock()
+            .get(&handoff.id)
+            .is_some_and(Handoff::waits_for_evidence);
         lines.send(conversation, brief)?;
-        self.change(|book| book.asked(&handoff.id, summary, brief, now));
+        self.change(|book| {
+            book.asked(&handoff.id, summary, brief, now)
+                && (!evidence || book.evidence_in(&handoff.id, now))
+        });
         let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
         Ok(Started::Sent {
             handoff: sent,
@@ -660,7 +668,13 @@ impl Desk {
                         })?;
                     (StepKind::Back, back_text(&handoff, &reply))
                 } else {
-                    (StepKind::Again, again_text(handoff.reviews() + 1))
+                    let round = handoff.rounds_used() + 1;
+                    let text = if handoff.thinking() {
+                        thinking_again_text(round)
+                    } else {
+                        again_text(round)
+                    };
+                    (StepKind::Again, text)
                 };
                 let _sending = self.claim(id)?;
                 if self.lock().returned_already(id, &text) {
@@ -683,7 +697,7 @@ impl Desk {
             }
             "resume" => {
                 // Every round used: an answer can only stop it again (#194).
-                if handoff.reviews() >= handoffs::ROUNDS {
+                if handoff.rounds_used() >= handoffs::ROUNDS {
                     return Err(no_rounds_left());
                 }
                 if !self.change(|book| book.resume(id, now)) {
@@ -842,8 +856,8 @@ fn thinking_back_text(handoff: &Handoff, reply: &str) -> String {
     let (tail, ask) = match handoffs::exit(reply) {
         Ok(exit) => {
             let (way, verdict, ask) = match exit {
-                Exit::Mature => ("成熟退出", "通过", "评审已收口，驿窗随即结束这次接力。请按回信收尾：把采纳的意见和最终结论写进决策记录，余下的意见记为执行建议；不要再调用 relay_to_chatgpt。".to_owned()),
-                Exit::OtherPath => ("转其他路径", "通过", "评审建议转其他路径，驿窗随即结束这次接力。请把为什么转、转去哪条路径写进决策记录，再按新路径继续；不要再调用 relay_to_chatgpt 送审本方案。".to_owned()),
+                Exit::Mature => ("成熟退出", "通过", "这次思维评审已收口。请按回信收尾：把采纳的意见和最终结论写进决策记录，余下的意见记为执行建议；不要再调用 relay_to_chatgpt。".to_owned()),
+                Exit::OtherPath => ("转其他路径", "通过", "这次思维评审已收口，建议转其他路径。请把为什么转、转去哪条路径写进决策记录，再按新路径继续；不要再调用 relay_to_chatgpt 送审本方案。".to_owned()),
                 Exit::Deepen => ("继续深化", "需修改", format!("请逐条处理意见：采纳；不采纳并给出反证；补证据；交常浩；或记为执行建议。然后更新决策记录，只针对「需深化」的项准备下一阶段送审包，再调用 relay_to_chatgpt 交回 ChatGPT 评审（最多 {max} 轮）；内容没有实质变化就不要重送。summary 写一句这轮深化了什么。", max = handoffs::ROUNDS)),
                 Exit::NeedEvidence => ("证据不足暂停", "需修改", "评审认为证据不足，先暂停：请先取证——跑测试、做实验、查数据，或直接问常浩。拿到新证据前不要再调用 relay_to_chatgpt，也不要实施被评审的部分。取得新证据后再调用 relay_to_chatgpt 送审，summary 写一句补了什么证据。".to_owned()),
                 Exit::Escalate => ("决策升级", "交常浩裁决", "评审要求决策升级：请整理可选方案、各自的依据和你的推荐，交给常浩，等常浩决定；不要再调用 relay_to_chatgpt，也不要先动手实施。".to_owned()),
@@ -864,6 +878,13 @@ fn thinking_back_text(handoff: &Handoff, reply: &str) -> String {
 fn again_text(round: u32) -> String {
     format!(
         "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，最后请 ChatGPT 写「结论：通过」或「结论：需修改」；summary 写一句这轮改了什么。"
+    )
+}
+/// 再审一轮 for a 思维评审 (#209): only what is to deepen goes, and the
+/// answer ends with its way out and verdict.
+fn thinking_again_text(round: u32) -> String {
+    format!(
+        "请把按评审意见深化后的内容交回 ChatGPT 评审（第 {round} 轮）：先逐条处理意见、更新决策记录，只针对「需深化」的项准备下一阶段送审包，再调用 relay_to_chatgpt 送出；内容没有实质变化就不要重送。请 ChatGPT 在回信最后两行依次写「评审出口：成熟退出 / 继续深化 / 证据不足暂停 / 决策升级 / 转其他路径」和「结论：通过 / 需修改 / 交常浩裁决」。summary 写一句这轮深化了什么。"
     )
 }
 /// 左滑发起 (批 B, #124): what a Claude Code session is asked to do so it
@@ -2287,6 +2308,96 @@ mod tests {
             ("send".into(), "c-new".into(), "新证据如下".into())
         );
         assert_eq!(desk.projection(later + 1)[0]["phase"], "delivered");
+    }
+
+    // Evidence brought back turns the auto round trip on again, and the
+    // paused review does not count toward the rounds.
+    #[test]
+    fn a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        let evidence = |desk: &Desk, lines: &Fake, now: i64| {
+            desk.start(
+                lines,
+                "s1",
+                Some("/w"),
+                "思维评审｜方案 A",
+                Some("补了实验数据"),
+                &format!("新证据 {now}"),
+                false,
+                now,
+            )
+            .unwrap();
+        };
+        evidence(&desk, &lines, 6);
+        let shown = desk.projection(6);
+        assert_eq!(shown[0]["auto"], true, "on again");
+        assert!(shown[0]["halt"].is_null());
+        assert_eq!(
+            kinds(&desk, 6).last().unwrap(),
+            &("resume".to_owned(), true)
+        );
+        let reply = "证据够了\n评审出口：成熟退出\n结论：通过";
+        desk.observe(
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":reply,"messageId":"m2"}),
+            7,
+        );
+        assert!(desk.drive(&lines, 8));
+        assert_eq!(replies(&lines), 2);
+        let text = last_sent(&lines).2;
+        assert!(text.contains(reply) && text.contains("这次思维评审已收口"));
+        assert!(!text.contains("驿窗随即结束"));
+        assert_eq!(desk.projection(8)[0]["status"], "closed");
+        let _ = handoff;
+
+        // Two asks, one paused for evidence: 继续深化 still goes back by
+        // itself, and the card can still turn it back on.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        evidence(&desk, &lines, 6);
+        desk.observe(
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"评审出口：继续深化\n结论：需修改","messageId":"m2"}),
+            7,
+        );
+        assert!(desk.drive(&lines, 8));
+        assert_eq!(desk.projection(8)[0]["phase"], "returned");
+        assert_eq!(desk.projection(8)[0]["auto"], true);
+        let used = desk.lock().get(&handoff.id).unwrap().rounds_used();
+        assert_eq!(used, 1);
+
+        // Paused by the person after the evidence pause: a new relay does
+        // not override that.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        desk.act(&lines, &handoff.id, "resume", 6).unwrap();
+        desk.act(&lines, &handoff.id, "pause", 7).unwrap();
+        evidence(&desk, &lines, 8);
+        assert_eq!(desk.projection(8)[0]["auto"], false);
+    }
+
+    // 再审一轮 asks for a 思维评审 handover, not an engineering one.
+    #[test]
+    fn a_thinking_review_asked_again_asks_for_its_way_out() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "评审出口：继续深化\n结论：需修改"), 4);
+        desk.act(&lines, &handoff.id, "pause", 5).unwrap();
+        desk.act(&lines, &handoff.id, "again", 6).unwrap();
+        let text = last_sent(&lines).2;
+        assert!(text.contains("第 2 轮") && text.contains("「需深化」"));
+        assert!(text.contains("评审出口：成熟退出 / 继续深化"));
+        assert!(text.contains("结论：通过 / 需修改 / 交常浩裁决"));
+        assert!(!text.contains("「结论：通过」或「结论：需修改」"));
     }
 
     // 继续深化: back with the deepening words, the clock on; at the limit, stops.
