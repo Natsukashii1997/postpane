@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   stubBotTop,
+  stubFoot,
   stubFootHeight,
   stubMarks,
   stubSize,
@@ -43,4 +44,36 @@ test("the seal reads 答 only while every waiting request is a question", () => 
   assert.equal(stubMarks({ ...idle, waiting: 2, questions: 1 }).answer, false);
   assert.equal(stubMarks({ ...idle, waiting: 1 }).answer, false);
   assert.equal(stubMarks({ ...idle, waiting: 0, questions: 0 }).answer, false);
+});
+
+test("the relay's two ends print one stamp on one paper (#218)", () => {
+  const none = {
+    sealed: false,
+    deskReview: false,
+    review: false,
+    replied: false,
+  };
+  assert.deepEqual(stubFoot(none), { relayPaper: false, shows: "reading" });
+  // ChatGPT holding the words: 「审」 on the relay's paper.
+  assert.deepEqual(stubFoot({ ...none, deskReview: true, review: true }), {
+    relayPaper: true,
+    shows: "stamp",
+  });
+  // An answer back with Claude: 「回」, the same stamp, on the same paper.
+  assert.deepEqual(stubFoot({ ...none, replied: true }), {
+    relayPaper: true,
+    shows: "stamp",
+  });
+});
+
+test("Claude asking first: its 「答」 takes the foot, the reply's paper stays (#218)", () => {
+  assert.deepEqual(
+    stubFoot({ sealed: true, deskReview: false, review: false, replied: true }),
+    { relayPaper: true, shows: "seal" },
+  );
+  // ChatGPT's own seal still drops the review paper, as before (#145).
+  assert.deepEqual(
+    stubFoot({ sealed: true, deskReview: true, review: true, replied: false }),
+    { relayPaper: false, shows: "seal" },
+  );
 });

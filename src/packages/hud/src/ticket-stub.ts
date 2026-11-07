@@ -43,3 +43,27 @@ export function stubMarks(vendor: {
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,
   };
 }
+
+/** What the tear-off foot prints, and on which paper. The agent's own seal
+ * (「答」/「批」) comes first; then a relay's stamp, 「审」 on ChatGPT or 「回」
+ * on Claude, over the reading. The relay's paper and airmail band go under
+ * ChatGPT's foot while it holds a review, and under Claude's while an answer
+ * waits — still under its seal, so the reply is not lost (owner, #218). */
+export function stubFoot(stub: {
+  sealed: boolean;
+  /** ChatGPT's desk holds a review. */
+  deskReview: boolean;
+  /** ChatGPT has a relay's words (「审」). */
+  review: boolean;
+  /** An answer is back with Claude (「回」). */
+  replied: boolean;
+}): { relayPaper: boolean; shows: "seal" | "stamp" | "reading" } {
+  return {
+    relayPaper: (stub.deskReview && !stub.sealed) || stub.replied,
+    shows: stub.sealed
+      ? "seal"
+      : stub.review || stub.replied
+        ? "stamp"
+        : "reading",
+  };
+}

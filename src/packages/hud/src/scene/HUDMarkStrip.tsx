@@ -22,10 +22,11 @@ import { quotaDisplayLabel } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
-import { ReplySeal, ReviewStamp } from "./RelayStamps";
+import { ReviewStamp } from "./RelayStamps";
 import {
   stubBotTop,
   stubFootHeight,
+  stubFoot,
   stubMarks,
   stubSize,
 } from "../ticket-stub";
@@ -382,16 +383,6 @@ export function HUDMarkStrip({
                   reduceMotion={reduceMotion}
                 />
               )}
-              {stubbed && vendor.relay?.replied && (
-                // An answer is back with Claude: the 「回」 seal in its corner (#171).
-                <ReplySeal
-                  unit={unit}
-                  side={side}
-                  zh={zh}
-                  since={vendor.relay.since}
-                  reduceMotion={reduceMotion}
-                />
-              )}
               {config.mode === "simple" && metrics.bar > 0 && (
                 <MarkBars
                   items={markItems(vendor, quotaDisplay, config.panelLayout)}
@@ -545,6 +536,12 @@ export function StubFace({
     questions: vendor.questions,
     used: markUsed(vendor),
   });
+  const print = stubFoot({
+    sealed: marks.sealed,
+    deskReview: vendor.desk?.stub.review ?? false,
+    review: vendor.relay?.review ?? false,
+    replied: vendor.relay?.replied ?? false,
+  });
   return (
     <>
       <span
@@ -559,9 +556,8 @@ export function StubFace({
           borderTop: `${unit}px dashed rgba(42,41,37,.34)`,
           display: "grid",
           placeItems: "center",
-          // A review on ChatGPT's desk: its foot is on the reviews' paper,
-          // under an airmail band (#145).
-          ...(vendor.desk?.stub.review && !marks.sealed
+          // The relay's paper under an airmail band (#145, #218).
+          ...(print.relayPaper
             ? {
                 borderTop: "none",
                 background: `${airmailStripes(2 * unit)} 0 0 / 100% ${2.5 * unit}px no-repeat, ${REVIEW_PAPER}`,
@@ -569,7 +565,7 @@ export function StubFace({
             : null),
         }}
       >
-        {marks.sealed ? (
+        {print.shows === "seal" ? (
           <span
             style={{
               display: "grid",
@@ -586,11 +582,14 @@ export function StubFace({
           >
             {zh ? (marks.answer ? "答" : "批") : marks.answer ? "?" : "!"}
           </span>
-        ) : vendor.relay?.review ? (
-          // ChatGPT has a relay's words: the 「审」 stamp lands over the reading (#171).
+        ) : print.shows === "stamp" && vendor.relay ? (
+          // ChatGPT has a relay's words: the 「审」 stamp lands over the
+          // reading (#171); an answer back with Claude lands the same stamp
+          // as 「回」 (#218).
           <ReviewStamp
             unit={unit}
             zh={zh}
+            reply={vendor.relay.replied}
             answering={vendor.relay.answering}
             overdue={vendor.relay.overdue}
             lingering={vendor.relay.lingering}

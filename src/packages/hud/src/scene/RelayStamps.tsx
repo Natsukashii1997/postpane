@@ -1,7 +1,8 @@
 // What relays print on the stubs (#171, the owner's 定稿 · 纸飞机 + 票根印章):
-// a blue 「审」 stamp over ChatGPT's reading while it has the words, and a
-// red 「回」 wax seal in Claude's stub corner while an answer waits. Each
-// lands with its letter (`stampWait`) and simply shows when motion is reduced.
+// a blue 「审」 stamp over ChatGPT's reading while it has the words, and the
+// same stamp as 「回」 over Claude's while an answer waits (#218: the relay's
+// two ends in one style). Each lands with its letter (`stampWait`) and
+// simply shows when motion is reduced.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { stampWait } from "../relay-stamps";
 
@@ -39,10 +40,12 @@ function useLanding(
 
 /** ChatGPT's reading, with the 「审」 stamp pressed over it as the letter
  * lands; the reading gives way at that moment. Ripples while ChatGPT answers,
- * and 「未审」 ripples in wax red once it has lingered (#213). */
+ * and 「未审」 ripples in wax red once it has lingered (#213). As `reply` it
+ * is Claude's 「回」: the same stamp, still, while an answer waits (#218). */
 export function ReviewStamp({
   unit,
   zh,
+  reply = false,
   answering,
   overdue = false,
   lingering = false,
@@ -52,6 +55,8 @@ export function ReviewStamp({
 }: {
   unit: number;
   zh: boolean;
+  /** Claude's 「回」 rather than ChatGPT's 「审」. */
+  reply?: boolean;
   answering: boolean;
   /** Left unanswered past the wait: 「未审」 in the wax red (owner,
    * 2026-11-07). */
@@ -122,7 +127,7 @@ export function ReviewStamp({
       )}
       <span
         ref={stamp}
-        data-relay-stamp={overdue ? "overdue" : "review"}
+        data-relay-stamp={overdue ? "overdue" : reply ? "reply" : "review"}
         style={{
           ...square,
           ...(overdue ? { width: 17 * unit } : null),
@@ -134,57 +139,18 @@ export function ReviewStamp({
           whiteSpace: "nowrap",
         }}
       >
-        {overdue ? (zh ? "未审" : "LATE") : zh ? "审" : "R"}
+        {overdue
+          ? zh
+            ? "未审"
+            : "LATE"
+          : reply
+            ? zh
+              ? "回"
+              : "↩"
+            : zh
+              ? "审"
+              : "R"}
       </span>
-    </span>
-  );
-}
-
-/** Claude's 「回」 wax seal, in the stub's top corner (on its perforated side
- * when docked left or right) so the reading on the foot stays in view. */
-export function ReplySeal({
-  unit,
-  side,
-  zh,
-  since,
-  reduceMotion,
-}: {
-  unit: number;
-  side: "left" | "right" | "top" | "bottom";
-  zh: boolean;
-  since: number | null;
-  reduceMotion: boolean;
-}) {
-  const [wait] = useState(() =>
-    reduceMotion ? 0 : stampWait(since, Date.now()),
-  );
-  const seal = useLanding(wait, reduceMotion);
-  const size = 10 * unit;
-  return (
-    <span
-      ref={seal}
-      aria-hidden="true"
-      data-relay-stamp="reply"
-      style={{
-        position: "absolute",
-        zIndex: 2,
-        pointerEvents: "none",
-        // The top corner, away from the reading on the stub's foot.
-        ...(side === "right" ? { right: 0 } : { left: 0 }),
-        top: 0,
-        width: size,
-        height: size,
-        display: "grid",
-        placeItems: "center",
-        borderRadius: "50%",
-        background: `radial-gradient(circle at 38% 34%, #d2453a, ${WAX} 55%, #7e1a14)`,
-        boxShadow: `0 0 0 ${0.6 * unit}px rgba(80,10,6,.55), 0 ${0.6 * unit}px 0 ${0.6 * unit}px rgba(0,0,0,.3)`,
-        color: "rgba(255,228,214,.92)",
-        font: `900 ${5.6 * unit}px/1 "Songti SC", "STSong", serif`,
-        rotate: "-12deg",
-      }}
-    >
-      {zh ? "回" : "↩"}
     </span>
   );
 }

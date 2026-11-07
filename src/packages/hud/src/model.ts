@@ -133,7 +133,7 @@ export interface HUDVendor {
   bots?: NonNullable<Snapshot["hermesBots"]>;
   /** ChatGPT's chats and reviews, which its stub and peek show (#145). */
   desk?: ChatGPTDesk;
-  /** The 「审」 stamp or 「回」 seal relays print on this stub (#171). */
+  /** The 「审」 or 「回」 stamp relays print on this stub (#171, #218). */
   relay?: RelayStamps;
 }
 
