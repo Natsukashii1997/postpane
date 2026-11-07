@@ -141,14 +141,19 @@ fn a_chatgpt_conversation_opens_on_chatgpt_com_only_by_its_id() {
 }
 
 #[test]
-fn a_feishu_chat_opens_through_its_applink() {
+fn a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser() {
+    let target = json!({"kind":"feishu-chat","id":"oc_08a1_B2"});
     assert_eq!(
-        session_url(&json!({"kind":"feishu-chat","id":"oc_08a1_B2"})),
+        session_url_on(&target, Os::MacOs, |url| url.starts_with("feishu://")),
+        Some("feishu://applink.feishu.cn/client/chat/open?openChatId=oc_08a1_B2".into())
+    );
+    assert_eq!(
+        session_url_on(&target, Os::MacOs, |_| false),
         Some("https://applink.feishu.cn/client/chat/open?openChatId=oc_08a1_B2".into())
     );
     for id in ["oc_a&x=1", "ou_08a1", "oc_", "https://example.com"] {
         assert_eq!(
-            session_url(&json!({"kind":"feishu-chat","id":id})),
+            session_url_on(&json!({"kind":"feishu-chat","id":id}), Os::MacOs, |_| true),
             None,
             "{id}"
         );

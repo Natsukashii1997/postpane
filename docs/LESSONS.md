@@ -187,3 +187,11 @@
 - 正确做法：开关类按钮按「打开后会不会有可见效果」决定显示，不只看状态字段；后台同样拒绝无效的打开，并说明原因。打开之后，在时间线上写明它接下来在等什么。查「点了没反应」先看 `~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里这单的 `steps`：有没有记下这一下、当时在什么阶段、审了几轮。
 - 证据：`handoffs.json` 中 `h1a1b344630400` 的 `resume` 14:53:08、`stop` 14:55:19，`phase` 为 `returned`，`ask` 两次；日志与截图在 `~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`。
 - 升级：已写成测试：前端「「继续自动」 only while a round is left」，后端 `the_auto_round_trip_stops_at_the_last_round_or_without_a_verdict` 末段（#194）。
+
+## L-22 跳去别的应用用 https applink，进了默认浏览器后台，目标应用不出来（2026-11-07）
+
+- 现象：#196 侧栏 Hermes 提问行加了箭头，常浩实点说「点不动跳转键」。自查页里点击都送出了对的 chat id，实机快照也带 `chatId`。
+- 根因：外壳用 `open https://applink.feishu.cn/client/chat/open?openChatId=…` 打开飞书。本机 https 默认交给 Chrome，Chrome 在后台接走这条链接，飞书根本没被叫起来；前台还是原来的应用，看起来就是「没反应」。`lark://` 同样没把飞书叫到前台；`feishu://applink.feishu.cn/…` 会，而且常浩确认打开的就是那个群。只在浏览器自查页里点、只看「送出了什么」，验不出这一层。
+- 正确做法：跳去本机应用，优先用它自己注册的协议（看 `Info.plist` 的 `CFBundleURLSchemes`），用 `registered_url` 确认有人认领，没装才退回 https。验收「跳转」要看目标应用有没有到前台、打开到哪里：`osascript -e 'tell application "System Events" to get frontmost of (first process whose bundle identifier is "…")'`，内容要么请常浩看，要么拿到该应用的截图授权。
+- 证据：本会话 17:2x 三次实测：`open https://…` 与 `open lark://…` 后前台仍为 `com.anthropic.claudefordesktop`；`open feishu://…` 后飞书 `frontmost` 为 `true`，常浩确认是亚古兽所在的群。
+- 升级：已写成测试 `a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser`（#198）。可提议提升为全局坑（换项目也成立：deeplink 跳本机应用别走 https）。
