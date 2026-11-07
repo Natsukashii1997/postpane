@@ -282,6 +282,10 @@ pub struct Ask {
     pub session: String,
     /// Feishu's chat type: `dm`, `group` or `thread`.
     pub chat: Option<String>,
+    /// Feishu's id of the chat (`oc_…`), where it opens.
+    pub chat_id: Option<String>,
+    /// Who asked: their open id for the bot's app (`ou_…`).
+    pub user: Option<String>,
     /// The session's title, or the question's first line when it has none.
     pub title: String,
     /// When it was asked (ms).
@@ -299,10 +303,12 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
         return Ok(Vec::new());
     }
     let mut statement = db.prepare(&format!(
-        "SELECT s.id,{},{} FROM sessions s JOIN messages m ON m.session_id=s.id \
+        "SELECT s.id,{},{},{},{} FROM sessions s JOIN messages m ON m.session_id=s.id \
          WHERE s.source='feishu' AND m.role='user' GROUP BY s.id ORDER BY max(m.timestamp) DESC LIMIT ?1",
         sql_column(&s, "s", "chat_type", "NULL"),
         sql_column(&s, "s", "title", "NULL"),
+        sql_column(&s, "s", "chat_id", "NULL"),
+        sql_column(&s, "s", "user_id", "NULL"),
     ))?;
     let chats = statement
         .query_map([(limit * 3) as i64], |row| {
@@ -310,6 +316,8 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
                 row.get::<_, String>(0)?,
                 row.get::<_, Option<String>>(1)?,
                 row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
             ))
         })?
         .flatten()
@@ -320,7 +328,7 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
         .collect::<Vec<_>>();
     let mut asks = chats
         .into_iter()
-        .filter_map(|(session, chat, title)| {
+        .filter_map(|(session, chat, title, chat_id, user)| {
             let (id, words, at) = last_question(db, &session)?;
             let answered = db
                 .query_row(
@@ -345,6 +353,8 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
             Some(Ask {
                 session,
                 chat,
+                chat_id,
+                user,
                 title,
                 at,
                 answer,
@@ -481,15 +491,15 @@ mod tests {
     fn the_latest_asks_say_where_from_and_whether_answered() {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch(
-            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL);
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL, chat_id TEXT, user_id TEXT);
              CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
              CREATE TABLE session_turn_leases (conversation_id TEXT PRIMARY KEY, holder TEXT, acquired_at REAL, expires_at REAL);
              INSERT INTO sessions VALUES
-               ('dm','feishu','dm','查找最近未回复的提问',0),
-               ('grp','feishu','group',NULL,0),
-               ('busy','feishu','thread','',0),
-               ('old','feishu','dm','很早的',0),
-               ('job','cron',NULL,'日报',0);
+               ('dm','feishu','dm','查找最近未回复的提问',0,'oc_dm','ou_me'),
+               ('grp','feishu','group',NULL,0,'oc_grp','ou_me'),
+               ('busy','feishu','thread','',0,NULL,NULL),
+               ('old','feishu','dm','很早的',0,'oc_old','ou_me'),
+               ('job','cron',NULL,'日报',0,NULL,NULL);
              INSERT INTO messages (session_id,role,content,timestamp) VALUES
                ('old','user','很早',10),
                ('dm','user','帮我查一下',100),
@@ -531,6 +541,28 @@ mod tests {
                 ),
             ]
         );
+        assert_eq!(
+            asks.iter()
+                .map(|a| (a.chat_id.as_deref(), a.user.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (None, None),
+                (Some("oc_grp"), Some("ou_me")),
+                (Some("oc_dm"), Some("ou_me"))
+            ]
+        );
+        // A database from before Hermes kept the chat still lists its asks.
+        let older = Connection::open_in_memory().unwrap();
+        older
+            .execute_batch(
+                "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT);
+                 CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+                 INSERT INTO sessions VALUES ('dm','feishu','dm','问');
+                 INSERT INTO messages (session_id,role,content,timestamp) VALUES ('dm','user','问',1);",
+            )
+            .unwrap();
+        let asks = recent_asks(&older, 0, 3).unwrap();
+        assert_eq!((asks.len(), asks[0].chat_id.clone()), (1, None));
         let bare = Connection::open_in_memory().unwrap();
         bare.execute_batch("CREATE TABLE sessions (id TEXT); CREATE TABLE messages (id INTEGER);")
             .unwrap();

@@ -4,6 +4,21 @@
 
 
 
+## 侧栏 Hermes「最近被问」点一下跳到飞书对应私聊 / 群（2026-11-07，Claude，常浩截图问「为什么不能像 Claude、GPT 一样一箭头跳转」，看方案后点「开工」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 15:43`（`date '+%F %H:%M'` 记录）。来由：#196。Hermes 的 `state.db` 每条飞书会话都记着 `chat_id`，但 `recent_asks` 没读，快照里没有，外壳的跳转白名单也不认飞书，所以提问行只能看不能跳。
+- 改了哪些文件：`src/crates/agents/src/hermes/transcript.rs`（`recent_asks` 多读 `chat_id`、`user_id`，旧库没有这两列照常列出）；`src/crates/agents/src/hermes/mod.rs`（`feishu_chat_id` 校验 `oc_` 开头的 id，`chat_target`；`Gateway::owner()` 读 `config.yaml` 的 `platforms.feishu.home_channel.user_id` 认出本人；`asks_with_chats` 只给群 / 话题和本人的私聊配聊天，同事私聊不给）；`src/crates/core/src/snapshot.rs`、`lib.rs`（快照 asks 带 `chatId`；新请求 `hermes_chat_target` 只放行面板列出的聊天）；`src/crates/runtime/src/lib.rs`（`open_feishu_chat`）；`src/crates/platform/src/navigation.rs`（`feishu-chat` → `https://applink.feishu.cn/client/chat/open?openChatId=…`）；前端 `protocol`、`dev-bridge`、`PanelContext`（`openFeishuChat`）、`App.tsx`、`HermesBoard.tsx`（提问行整行可点、末尾 20px 箭头框，打开失败变灰；同卡有一行能跳时其余行留位对齐）、`hermes-board.ts`（`askChat`、`askGoTitle`）。测试：transcript、gateway（本人 / 同事私聊、怪 id）、快照与放行、外壳链接、前端各补一条。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`（对齐修改后重跑的结果）。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/`（`check-2.log`、`test-2.log`、`node-test-2.log`、`build.log`）。
+- 验证：真实组件自查页（`HermesBoard` 原样，深浅两种底，数据仿本机：本人私聊、群、同事私聊、猛鬼兽定时任务下的提问），内置浏览器等字体加载完后真实点击：点箭头送出 `oc_aa3_mine`、点群那行标题送出 `oc_08a_group`、点同事私聊那行无反应、模拟打开失败后箭头变灰并改提示「飞书没能打开这个聊天」。第一轮发现同事那行时间没对齐，改成留位后放大复查对齐。装机后用 MCP 读实机快照（16:37:32）：猛鬼兽 3 条私聊、亚古兽私聊与 2 条群都带 `chatId`。自查页备份在证据目录 `check-page/`，不进仓库。**未验证**：实机侧栏里点箭头、飞书是否打开到对的聊天（悬停面板电脑控制点不动，L-09；本轮请求看飞书窗口被常浩拒绝），留给常浩点一次群、一次私聊。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/`：`before-align.jpg`（第一轮，同事行时间偏右）、`after-clicks.jpg`、`after-align-zoom.png`。
+- 发布与回读：`install.sh 196-hermes-jump`：装前 `c9f2c7a3fb42`（#194 那版，已备份），16:37:21 退出并启动，产物 `de58129a128f` / 已装 `de58129a128f`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；`install.sh check` 一致。包从本分支打（基于 main `b8e2a81`，之后 main 无新提交）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/PostPane-c9f2c7a3fb42.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 话题群只能跳到群，跳不到具体话题（`thread_id` 目前都为空，飞书也没有稳定的话题链接）。
+  - 群里不判断常浩是否在群：机器人所在的同事群如果常浩不在，飞书会提示无权限。
+  - 「正在进行」和回执里的 Hermes 会话仍没有跳转（它们走 `open_session`，Hermes 没有 `session_target`），本轮未做。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 接力卡：审满轮数后不再显示「继续自动」；等待行时间顺序（2026-11-07，Claude，常浩截图问「点继续自动毫无反应」，看排查后说「先改之前的问题」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 15:00`（`date '+%F %H:%M'` 记录）。来由：#194。数字分身 DT-ORC 接力卡（`h1a1b344630400`）「第 2 / 2 轮」，点「继续自动」没反应：后台其实记下了（14:53:08 `resume`），但这单已审满 `ROUNDS` 轮、停在「转回 Claude」阶段，打开自动往返没有任何效果，卡上也不说明（L-21）。这单的 PR #63 早已合并，Claude 13:51 回过「不用再做事」。

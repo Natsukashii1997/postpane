@@ -227,6 +227,20 @@ export function chatLabel(chat: string | null | undefined, language: Language) {
     : say(language, "群", "Group");
 }
 
+/** The Feishu chat an ask opens in, when Core gave one that is a chat id
+ * (`oc_…`); a colleague's private chat with the bot has none. */
+export function askChat(ask: { chatId?: string | null }): string | null {
+  const id = ask.chatId ?? "";
+  return /^oc_[A-Za-z0-9_]{1,61}$/.test(id) ? id : null;
+}
+
+/** The tooltip of an ask's arrow: where it goes, or that it did not. */
+export function askGoTitle(failed: boolean, language: Language): string {
+  return failed
+    ? say(language, "飞书没能打开这个聊天", "Feishu could not open this chat")
+    : say(language, "在飞书打开这个聊天", "Open this chat in Feishu");
+}
+
 /** How many asks a desk shows: one under a task table, three without. */
 export function askLimit(jobs: readonly unknown[]): number {
   return jobs.length ? 1 : 3;

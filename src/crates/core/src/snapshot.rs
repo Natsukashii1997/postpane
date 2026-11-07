@@ -112,6 +112,19 @@ impl crate::AgentHudCore {
             .collect()
     }
 
+    /// `hermes_chat_target`: where the chat of one of the asks the panel
+    /// lists opens, by its `chatId`.
+    pub(crate) fn hermes_chat(&self, params: &Value) -> Result<Value, String> {
+        let chat = params["chatId"].as_str().unwrap_or_default();
+        let now = Utc::now().timestamp_millis();
+        hermes_chat_target(&self.hermes_gateways(now), chat, now).ok_or_else(|| {
+            l10n::text(
+                "这条提问的飞书聊天打不开",
+                "This ask's Feishu chat cannot be opened",
+            )
+        })
+    }
+
     fn render_key(&self) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -836,6 +849,24 @@ mod relay_balance_tests {
 /// is down and since when, how many turns the person asked it today (local
 /// day), when it last replied in Feishu, its scheduled tasks, and the latest
 /// three things it was asked. The default home's bot first, then by id.
+/// How many of each bot's latest asks the panel lists.
+const ASKS: usize = 3;
+
+/// Where a chat one of the bots' latest asks came from opens: only a chat
+/// the panel lists (`chatId`) is one the HUD may open.
+pub(crate) fn hermes_chat_target(
+    gateways: &[agent_hud_agents::hermes::Gateway],
+    chat_id: &str,
+    now: i64,
+) -> Option<Value> {
+    gateways
+        .iter()
+        .flat_map(|gateway| gateway.asks_with_chats(now, ASKS))
+        .any(|(_, chat)| chat.as_deref() == Some(chat_id))
+        .then(|| agent_hud_agents::hermes::chat_target(chat_id))
+        .flatten()
+}
+
 fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Value {
     use agent_hud_agents::hermes::{transcript::Answer, Down};
     use chrono::{Local, TimeZone};
@@ -871,8 +902,9 @@ fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Valu
                         "lastRunAt": job.last_run_at.and_then(iso),
                         "nextRunAt": job.next_run_at.and_then(iso),
                     })).collect::<Vec<_>>(),
-                    "asks": gateway.asks(now, 3).into_iter().map(|ask| json!({
+                    "asks": gateway.asks_with_chats(now, ASKS).into_iter().map(|(ask, chat_id)| json!({
                         "chat": ask.chat,
+                        "chatId": chat_id,
                         "title": ask.title,
                         "at": iso(ask.at),
                         "answer": match ask.answer {
@@ -919,16 +951,32 @@ mod hermes_bot_tests {
         .unwrap();
         let db = rusqlite::Connection::open(root.join("state.db")).unwrap();
         db.execute_batch(
-            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL);
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, started_at REAL, chat_id TEXT, user_id TEXT);
              CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
-             INSERT INTO sessions VALUES ('dm','feishu','dm','整理本周进展',0);
-             INSERT INTO messages (session_id,role,content,timestamp) VALUES ('dm','user','整理一下',1793869000);",
+             INSERT INTO sessions VALUES ('dm','feishu','dm','整理本周进展',0,'oc_dm','ou_colleague'),
+               ('grp','feishu','group','带教周会',0,'oc_grp','ou_colleague');
+             INSERT INTO messages (session_id,role,content,timestamp) VALUES ('dm','user','整理一下',1793869000),
+               ('grp','user','周会改哪天',1793868000);",
         )
         .unwrap();
         drop(db);
         let gateways = agent_hud_agents::hermes::gateways(&root, now);
         let bots = hermes_bots(&gateways, now);
+        // Only a chat the panel lists opens.
+        let targets = [
+            hermes_chat_target(&gateways, "oc_grp", now),
+            hermes_chat_target(&gateways, "oc_dm", now),
+            hermes_chat_target(&gateways, "oc_other", now),
+        ];
         let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(
+            targets,
+            [
+                Some(json!({"kind": "feishu-chat", "id": "oc_grp"})),
+                None,
+                None
+            ]
+        );
         let bot = &bots[0];
         assert_eq!(bot["down"], "feishu");
         assert_eq!(bot["downSince"], at(now - 720_000));
@@ -939,7 +987,10 @@ mod hermes_bot_tests {
         );
         assert_eq!(
             bot["asks"],
-            json!([{"chat": "dm", "title": "整理本周进展", "at": at(1_793_869_000_000), "answer": "waiting"}])
+            json!([
+                {"chat": "dm", "chatId": null, "title": "整理本周进展", "at": at(1_793_869_000_000), "answer": "waiting"},
+                {"chat": "group", "chatId": "oc_grp", "title": "带教周会", "at": at(1_793_868_000_000), "answer": "waiting"}
+            ])
         );
     }
 }
