@@ -4,6 +4,21 @@
 
 
 
+## ChatGPT 单家面板列出今天的对话，与侧栏「N 对话」一致（2026-11-07，Claude，常浩截图说侧栏显示 5 对话、展开却说没有会话，选甲「沿用一格两联补上已回」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
+
+- 时间：开工 `2026-11-07 23:30`（`date '+%F %H:%M'` 记录）。来由：#219。脚注「5 对话」与悬停小收据由 `chatgpt-desk.ts` 按今天（北京时间）自己的对话计、回完也算；单家面板走通用 `liveSessions`，只列 running / waiting，ChatGPT 回完即 idle，于是「正在进行 0」，底行「近 24 小时 18 个会话」又把 13 个审核算进去。#145 定了「正在进行里列出（在答 / 已回）」，单家面板漏做「已回」。
+- 改了哪些文件：
+  - `src/packages/hud/src/chatgpt-desk.ts`：`ChatGPTDesk` 加 `day`（今天全部自己的对话，在答在前），`chats` 改为取它前 3 条；新增 `reviewsInDay()`（近 24 小时有动静的审核数）。
+  - `src/packages/hud/src/panel/SessionsSection.tsx`：只在 ChatGPT 单家面板生效——标题「正在进行」改「今天的对话」、数字取 `desk.today`（与脚注同一个数）；在答 / 等你的行照旧，其后加「已回」行（`RepliedRow`：灰色「已回」签、标题、「HH:MM 回复」、↗ 回到会话，回不去照 #227 在第二行说原因）；空时写「今天还没有对话」；底行改「今天 N 个对话 · 近 24 小时 M 个审核」「去统计看全部」。下联旧信纸的审核不变；其他智能体的面板不变。
+  - `src/packages/hud/test/chatgpt-desk.test.ts`：新增 2 条（面板列出今天全部对话且与脚注同数、小收据仍取前 3；审核按 24 小时单独计）。
+- 测试：以最后一次为准（底座 `72e9699`，main 在跑测试期间又合进 #229，未再重跑）：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 767 passed / 0 failed，前端 `ℹ pass 331` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。中途两次未过：变基到含 #227 后类型检查报 `Opened` 与 `false` 比较（#227 改了回到会话的返回值），已改成与 `LiveRow` 相同的 `failureOf` / `useOpenFailures`；同一次 Rust 有一条 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 失败（剩余 288.7 秒，断言要 290–300 秒），本 PR 不碰 Rust，单独重跑 1 passed，下一次全量 0 failed，与 L-12 同类。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-219-chatgpt-panel/`（`check5.log`、`test5.log`、`rules5.log`，失败那次是 `check3.log`、`test3.log`）。
+- 验证：见「发布与回读」；单测覆盖三处计数一致。
+- 截图：见「发布与回读」。
+- 发布与回读：合并后从 main 打包装机，结果补记在下一节（并行会话合并频繁，先合并再从 main 打，装进去的包一次带上全部改动，L-05）。
+- 与授权不一致之处、遗留问题、范围外发现：整张看板（不指定智能体）的「正在进行」仍按原口径，只列在跑 / 等你；范围外：`the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 在机器忙时会偶发失败（快照一次超过 10 秒），可另开一单把时间放宽或固定。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## Claude 那格的「回」改成和「审」同一枚方章（2026-11-07，Claude，常浩说「回」不好看、要和「审」放一起看成接力的两面、一套风格，看三版后选甲「脚上一枚，答优先」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 23:09`（`date '+%F %H:%M'` 记录）。来由：Claude 票根角上的红色立体火漆「回」和其他扁平印章不统一、被打孔切掉、又和「答」同红。设计稿 https://claude.ai/artifact/Rs6zDWu49aKP68SaxuaU2a 第 5 版（ChatGPT 与 Claude 两格并排、接力四个时刻）。issue #218。
