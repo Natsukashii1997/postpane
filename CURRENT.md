@@ -11,8 +11,8 @@
 - 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 747 passed / 0 failed，前端 `ℹ pass 306` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
 - 验证：单测覆盖 ended 刚写与一小时前两种；实机卡片文案未单独截图。
 - 截图：无。
-- 发布与回读：见合并后补记。
-- 与授权不一致之处、遗留问题、范围外发现：#175（会话被桌面版停掉时后台续接）与本题相邻，本轮只改提示，不续接。
+- 发布与回读：从与 main `2969c84` 同树的分支打包，`install.sh 188-ended-session`：装前 `e0596c0c2a2d`（已备份），14:28:06 退出并启动，产物 `64e4138de2f3` / 已装 `64e4138de2f3`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/PostPane-e0596c0c2a2d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装后数字分身会话 14:28:17 重新签到（常浩在 Claude 里打开了它），那张卡已不在待审批列表。
+- 与授权不一致之处、遗留问题、范围外发现：签到文件超过一天会被 `sweep` 删掉，所以停了一天以上的会话又会退回「没加载插件」的提示；装后待审批里还剩 2 张 11-04 的提问（会话 `35984513…`、`3182ae78…`），都没有签到文件，显示的仍是旧提示，要不要把 ended 记录留得更久未定。#175（会话被桌面版停掉时后台续接）与本题相邻，本轮只改提示，不续接。
 - 本轮新坑：L-20
 - skill 进化：无。
 
