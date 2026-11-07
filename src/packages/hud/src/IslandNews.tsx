@@ -10,13 +10,14 @@ import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
 import { QuotaAlertView } from "./alerts/QuotaAlertViews";
 import { queuedQuotas, shownNews } from "./alerts/quota-list";
-import { seenFirst, staysUntilSeen } from "./alerts/reply-stays";
+import { frontFolds, seenFirst, staysUntilSeen } from "./alerts/reply-stays";
 import {
   blocksNotice,
   laneEvents,
   liveQueue,
   newsLanes,
   promoteOldestWaiting,
+  roomForNews,
   sideLanes,
   type LaneCard,
   type NewsLane,
@@ -76,9 +77,9 @@ export function reconcileIslandCards(
       inUsagePanel: event.kind !== "completion" && inUsagePanel,
     });
   }
-  // Persistent requests are never evicted by a burst of informational events.
-  let news = 0;
-  return next.filter((card) => card.type === "request" || ++news <= 32);
+  // Persistent requests are never evicted by a burst of informational events;
+  // a new notice is kept, an older one makes room (#221).
+  return roomForNews(next);
 }
 
 export function dismissIslandCard(previous: IslandCard[]): IslandCard[] {
@@ -118,10 +119,13 @@ export function useIslandNews(
   inUsagePanel = false,
   /** The hover panel's layout: news about a row it hides is not told. */
   layout?: PanelLayout,
+  /** The card is open: what it shows has been seen (#221). */
+  opened = false,
 ) {
   const services = usePanelServices(),
     seen = useRef<Set<string> | null>(null),
-    seenRequests = useRef<Set<string> | null>(null);
+    seenRequests = useRef<Set<string> | null>(null),
+    heldArrivals = useRef<IslandEvent[]>([]);
   const [queue, setQueue] = useState<IslandCard[]>([]);
   const items = snapshot.islandEvents?.items ?? [];
   const requestIDs = requests.map((request) => request.id).join("\0");
@@ -157,6 +161,8 @@ export function useIslandNews(
                   services?.sources?.[sourceID(snapshot, event.source)]
                     ?.reminders !== false)),
           );
+    // Held, a reply that waits to be seen comes in front once let go (#221).
+    if (held) heldArrivals.current.push(...visible.filter(staysUntilSeen));
     setQueue((previous) =>
       seenFirst(
         reconcileIslandCards(
@@ -169,62 +175,31 @@ export function useIslandNews(
           inUsagePanel,
         ),
         visible,
+        held,
       ),
     );
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
+  useEffect(() => {
+    if (held || heldArrivals.current.length === 0) return;
+    const arrived = heldArrivals.current;
+    heldArrivals.current = [];
+    setQueue((previous) => seenFirst(previous, arrived));
+  }, [held]);
   // Requests answered since the queue last caught up are already gone.
   const live = liveQueue(queue, requests);
   const current = live[0];
   const dismiss = () => setQueue(dismissIslandCard);
   const drop = (ids: readonly string[]) =>
     setQueue((previous) => dropIslandCards(previous, ids));
-  // Cards the pointer has rested on: a Hermes reply folds away only then.
+  // Cards opened so far: a Hermes reply folds away only then (#221).
   const looked = useRef(new Set<string>());
   useEffect(() => {
-    if (current && held) looked.current.add(current.id);
-    if (!current || held || current.type === "request") return;
-    if (staysUntilSeen(current.event) && !looked.current.has(current.id))
-      return;
+    if (!frontFolds(current, { held, opened, looked: looked.current })) return;
     const timer = setTimeout(dismiss, 4000);
     return () => clearTimeout(timer);
-  }, [current?.id, held]);
-  // Each other agent's tag hangs by its own mark (#162): a notice there folds
-  // away on its own clock, as the first one does; one waiting to be looked at
-  // stays until the pointer brings it to the front.
+  }, [current?.id, held, opened]);
   const lanes = newsLanes(live, requests);
   const sides = sideLanes(lanes, shown);
-  const sideNews = sides.flatMap(({ lane }) =>
-    lane.front.type === "news" &&
-    (!staysUntilSeen(lane.front.event) || looked.current.has(lane.front.id))
-      ? [lane.front.id]
-      : [],
-  );
-  const sideTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
-    const timers = sideTimers.current;
-    for (const [id, timer] of timers) {
-      if (sideNews.includes(id)) continue;
-      clearTimeout(timer);
-      timers.delete(id);
-    }
-    for (const id of sideNews) {
-      if (timers.has(id)) continue;
-      timers.set(
-        id,
-        setTimeout(() => {
-          timers.delete(id);
-          drop([id]);
-        }, 4000),
-      );
-    }
-  }, [sideNews.join("\0")]);
-  useEffect(() => {
-    const timers = sideTimers.current;
-    return () => {
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
-    };
-  }, []);
   const select = (id: string) =>
     setQueue((previous) => {
       const at = previous.findIndex((card) => card.id === id);
@@ -260,10 +235,47 @@ export function useIslandNews(
       requests: laneRequests(lane, requests),
       replies: laneEvents(lane, "completion"),
     })),
+    /** The cards opened so far (sideClocks). */
+    looked: looked.current,
     select,
     dismiss,
     drop,
   };
+}
+
+/** Each other agent's tag hangs by its own mark (#162): a notice there folds
+ * away on its own clock, as the first one does. `ids` are the tags whose
+ * clock runs (sideClocks); one leaving them stops its clock. */
+export function useSideClocks(
+  ids: readonly string[],
+  drop: (ids: readonly string[]) => void,
+) {
+  const sideTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = sideTimers.current;
+    for (const [id, timer] of timers) {
+      if (ids.includes(id)) continue;
+      clearTimeout(timer);
+      timers.delete(id);
+    }
+    for (const id of ids) {
+      if (timers.has(id)) continue;
+      timers.set(
+        id,
+        setTimeout(() => {
+          timers.delete(id);
+          drop([id]);
+        }, 4000),
+      );
+    }
+  }, [ids.join("\0")]);
+  useEffect(() => {
+    const timers = sideTimers.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
 }
 
 export const newsTitle = (event: IslandEvent, zh = false) =>
