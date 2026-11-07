@@ -155,3 +155,11 @@
 - 正确做法：这条失败先看 `uptime`；负载均值远高于核数时等别的编译跑完再重跑全量，不要为它改代码或改测试。交接里写明当时的负载和重跑结果。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all/test.log`（失败）、`test-2.log`、`test-3.log`（负载 14–17 时通过，Rust 合计 742、743 passed / 0 failed）。
 - 升级：未升级。
+
+## L-18 ChatGPT 实际回了，驿窗没收到：插件把空占位块报成了「答完」（2026-11-07）
+
+- 现象：接力 `h1a1b1fed89e00` 01:54:18 送达，ChatGPT 很快答完（「……结论：通过」），驿窗一直停在 `delivered`，连 `turn start` 也没有，30 分钟后按「没回信」停下。
+- 根因：ChatGPT 先出一个空的回复占位块，答案随后写进同一个块、同一个 `messageId`。插件发完话后 `expecting` 为真，采样时没看到停止按钮（回复短、后台标签页采样慢，整段生成落在两次采样之间），就把空占位块当成新回复，600 毫秒后报了空的 `turn complete`，同时把这个 `messageId` 记为已报、`expecting` 清掉。宿主拿到空回复不算回信；真回复写进来后，插件因为 `messageId` 相同（或 `expecting` 已清）不再报。
+- 正确做法：插件只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`（`content.js` 的 `settle`）。查「回信丢了」先看 `<数据目录>/chatgpt/turns.jsonl`，再看 `hooks/inbox` 里该会话的 completion 记录（`message` 为空就是这一类）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`inbox-completion-empty.json`：01:54:19.827 收到的空回复，turnId `e6c1acb9…`；`dom-probe.md`：页面上真回复的 messageId 也是 `e6c1acb9…`）；复现测试 `src/apps/chrome-extension/test/content.test.mjs`「an empty placeholder is not the reply that fills it later」修复前报 `[['m5', '']]`。
+- 升级：已写成测试（上面那条，以及「a reply still being written without a stop button waits until it stops changing」）。

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "驿窗 · ChatGPT 接力",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "把驿窗接力里的 ChatGPT 会话接进驿窗：只读、只报驿窗名单里的会话。",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAy8og3YncDugHIAQ6fh89lN0fB+wmhpcQUarRtBLOq9GViEVlEYqQcQCBV91xbhZaJAyHV3a/c8g4IH2EZLBrrfakIcVsmzctI7Ze6mktf82oJ6XzGHlMnqHMeAWVEx6/xbZTb75gQvW78tSSD1ujqKzpsZhLovCjs7mp0tBTK2JITgD7yEq0RPDXdDmkzmOWi5kwOdVqJTk5B1e1nshYBS3BwIO1mNotngNKMMsH+91xAXLuLBeDGQEXfG+uGRyo8K/oqNvz9jxuE4f2uwMgjYLI+v/NM4mbytVc7eTR1sLeYWobJzUZsDzrX6ISbzDjI35QEwETICbqIx3FXLDM0QIDAQAB",
   "minimum_chrome_version": "116",

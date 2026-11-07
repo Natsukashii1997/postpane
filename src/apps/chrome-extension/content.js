@@ -40,11 +40,16 @@
     // not reported yet: a background tab may never be sampled mid-stream.
     const fresh = expecting && !streaming && (page.lastReply(document)?.messageId ?? null) !== reported;
     if (!streaming && (wasStreaming || fresh)) {
+      const seen = page.lastReply(document)?.markdown;
       // The last chunk may still be rendering when the stop button goes away.
       setTimeout(() => {
         if (page.streaming(document)) return;
         const reply = page.lastReply(document);
         if (!reply || (reply.messageId && reply.messageId === reported)) return;
+        // An empty reply is ChatGPT's placeholder, and one that changed since
+        // is still being written: the answer fills the same message id, so
+        // reporting either now would lose it. A later change samples again.
+        if (!reply.markdown.trim() || reply.markdown !== seen) return;
         reported = reply.messageId;
         expecting = false;
         tell({
