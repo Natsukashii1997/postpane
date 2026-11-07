@@ -4,6 +4,18 @@
 
 
 
+## 额度看板「吃紧」红色斜纹调浅（2026-11-07，Claude，常浩截图说红色斜纹太显眼、影响观看，要「稍微再浅一点点」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 21:33`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Claude「每周」照速度会提前用完时，「照速度到重置」那段斜纹用满色红，压过了已用条和文字。
+- 改了哪些文件：`src/packages/hud/src/panel/AgentBoard.tsx`（额度条预测斜纹在 `runsOut` 时加 `opacity: 0.55`；颜色、纹路、灰色斜纹、下方红字和「吃紧」圆章都不变）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，前端各套件 `ℹ fail 0`（hud 套件 `ℹ pass 313` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-hatch-lighter/hatch-*.log`。
+- 验证：装机后用驿窗 MCP `get_hud_screenshot` 渲染悬停面板，「每周」斜纹亮条像素约 `(163,61,55)`，下方红字约 `(191,56,48)`，斜纹已比文字暗一档；电脑控制截图请求被拒，未做全屏截图。
+- 截图：`evidence/2026-11-07-hatch-lighter/panel-after.png`。
+- 发布与回读：从分支 `claude/hatch-lighter`（基于 main `70763a3`）打包，`install.sh hatch-lighter`：装前 `d18118eff032`（已备份），21:40:41 退出、21:40:41 启动，产物 `5540cc76bc8e` / 已装 `5540cc76bc8e`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-hatch-lighter/PostPane-d18118eff032.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：只出一版（0.55），属单一参数微调，没出三版；常浩觉得还要更浅或偏深，改这个数即可。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 亚古兽「最近被问」来源标签「私聊」改成「私」（2026-11-07，Claude，常浩截图要求「私聊改成私，跟下面的群对齐」；PR 全量通过，按授权 squash 合并；已装机回读一致）
 
 - 时间：开工 `2026-11-07 21:12`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Hermes 区亚古兽「最近被问」里，私聊来源标两个字「私聊」，比下面一个字的「群」宽，标题起点对不齐。

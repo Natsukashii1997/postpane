@@ -401,6 +401,8 @@ function QuotaLine({
               left: `${used}%`,
               width: `${outlook.projected - used}%`,
               display: "block",
+              // The red hatching is toned down so it warns without glaring.
+              opacity: outlook.runsOut ? 0.55 : 1,
               background: `repeating-linear-gradient(135deg, ${
                 outlook.runsOut ? inks.red : inks.hatch
               } 0 2px, transparent 2px 4px)`,
