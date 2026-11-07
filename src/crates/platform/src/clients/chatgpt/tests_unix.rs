@@ -136,6 +136,20 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert_eq!(heard[0]["type"], "opened");
     assert_eq!(heard[0]["requestId"], "h1");
     assert_eq!(heard[1]["phase"], "start");
+    // ...and the start is kept in the inbox, which is how the sidebar shows
+    // the conversation answering (#206: it used to be refused there).
+    let started = || {
+        fs::read_dir(&inbox)
+            .unwrap()
+            .flatten()
+            .filter_map(|entry| fs::read(entry.path()).ok())
+            .filter_map(|bytes| serde_json::from_slice::<HookEvent>(&bytes).ok())
+            .find(|event| event.session_id == "chatgpt:68b2")
+    };
+    wait_for(|| started().is_some());
+    let running = started().unwrap();
+    assert_eq!(running.kind, "session-observation");
+    assert_eq!(running.data["state"], "running");
 
     // Navigation brings the tab forward through the extension.
     assert!(focus("68a1"));

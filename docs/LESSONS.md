@@ -204,3 +204,11 @@
 - 正确做法：插件后台在 `runtime.onInstalled` 里用 `chrome.scripting.executeScript` 给已开的目标标签页补装脚本；内容脚本要能被重复装（旧的一份让位）、断开后自己停下。查「插件那边没报」先比两组：插件自己开的标签页能报、用户自己的标签页不能报，就是这一类；让用户刷新标签页再试一句，能报就坐实。
 - 证据：`<数据目录>/hooks/inbox` 里 ChatGPT 的 17 条回复全在 `chatgpt/watched.json` 名单内，`chatgpt/turns.jsonl` 最后一行 14:29；常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来。修复见 #206。
 - 升级：已写成测试 `injected again into an open tab, the page reports each turn once`、`a copy cut off by an extension reload stops instead of throwing on every change`、`installing or reloading the extension puts the scripts into chatgpt.com tabs already open`。
+
+## L-24 ChatGPT「在答」从没显示过：开始回合的记录被收件箱拒收（2026-11-07）
+
+- 现象：L-23 修好后，常浩的对话回复已经能进驿窗，但他正在和 ChatGPT 聊时，侧栏 ChatGPT 格仍是「正在进行 0」，快照里那个会话是 `idle`。
+- 根因：插件报的 `turn start` 被平台层写成 `session-observation` 存进 `hooks/inbox`，但 `hooks/inbox.rs` 的 `valid()` 只认 attention、compaction、completion、account、origin、delivery，写入时返回「Unsupported」，只打一行 stderr。核心层（`core/src/hook_events.rs`）其实为 ChatGPT 准备好了 15 分钟的「在答」规则。别的客户端的开始回合还有钩子通道直连应用，只有 ChatGPT 全靠收件箱，所以只有它坏。#145 的测试只测了 `started()` 造出的事件对不对、核心收到后怎么算，没测「经通道进来 → 落到收件箱」这一段。
+- 正确做法：新加一种事件经收件箱传递时，测试要从入口一路走到收件箱读取，不能只测造事件的函数和消费方；查「事件没生效」先看收件箱目录里有没有那个文件。
+- 证据：`chatgpt/turns.jsonl` 20:01:28–20:02:06 有三条 `start`，`hooks/inbox` 里没有任何 chatgpt 的 `session-observation`；`hud_sessions` 里 `chatgpt:6aeed449…` 为 `idle`。
+- 升级：已写成测试 `a_chatgpt_turn_start_is_kept_so_the_sidebar_shows_it_answering`（收件箱写入与读取）与 `the_extension_opens_a_conversation_and_reports_its_reply` 里的收件箱断言（通道一路到收件箱）。

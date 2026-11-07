@@ -19,6 +19,22 @@
 - 本轮新坑：无
 - skill 进化：无。
 
+## ChatGPT「在答」能进驿窗了：收件箱不再拒收开始回合（2026-11-07，Claude，常浩装上 #207 后反馈「还是失败抓不到」，看实测后回「发了，还是没显示」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 20:06`（`date '+%F %H:%M'` 记录）。来由：#206 第二个断点。#207 之后回复已经能进驿窗（19:30「审核需求梳理」4634 字），但 ChatGPT 格仍是「正在进行 0」。
+- 根因（有证据）：`chatgpt/turns.jsonl` 20:01–20:09 有多条 `start`，`hooks/inbox` 里没有任何 chatgpt 的 `session-observation`，`hud_sessions` 里 `chatgpt:6aeed449…` 是 `idle`。`platform/src/hooks/inbox.rs` 的 `valid()` 只认 attention、compaction、completion、account、origin、delivery，写入时直接拒收。别的客户端的开始回合还有钩子通道直连应用，只有 ChatGPT 全靠收件箱，所以只有它坏。
+- 改了哪些文件：
+  - `src/crates/platform/src/hooks/inbox.rs`：只给「自己的通道报回合」的客户端（目前只有 ChatGPT）收 `session-observation`，保留 30 天（与核心一致，核心 15 分钟后不再算在答）；别的客户端仍拒收。新增测试 `a_chatgpt_turn_start_is_kept_so_the_sidebar_shows_it_answering`。
+  - `src/crates/platform/src/clients/chatgpt/tests_unix.rs`：通道测试加断言，开始回合一路落到收件箱。
+  - `docs/chatgpt-channel.md` 补一句；`docs/LESSONS.md` 新增 L-24。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 761 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通用规则检查通过。第一次全量有两处失败：`check-test-paths`（新测试直接用了 tempdir 根，已改成 `join("data")`）、`demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes`（时间戳抖动，单独重跑与全量重跑都通过，与本改动无关）。撤掉修复时收件箱单测 `FAILED`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-running/`（`check2.log`、`test2.log` 为最终结果）。
+- 验证：装机后常浩在 ChatGPT 发问，20:29:44 `start` 落进收件箱（「项目体系重构报告」，`running`）；`hud_snapshot` 里该会话 `state: running`；`get_hud_screenshot` 渲染的 ChatGPT 面板为「正在进行 1 · 在跑 · 正在干活 · 已 5 分钟」。
+- 截图：应用自渲染面板与静止侧栏各一张，在本会话工具结果里，未另存。
+- 发布与回读：`install.sh chatgpt-running`：装前 `f1b8bdb870a8`（已备份），20:14:44 退出并启动，产物 `06a7d6cd0a2b` / 已装 `06a7d6cd0a2b`，签名 leaf `H"b773068e"`；插件 20:14:49 重连。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-running/PostPane-f1b8bdb870a8.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：**遗留，等常浩定**：静止侧栏 ChatGPT 格脚注本应显示蓝色「在答」，但被接力 `h1a1b1fed89e00`「驿窗｜批 C 传信动效实机测试」的红色「未审」章盖住（章落下时把脚注淡成 0）。这条接力 01:54 送达，ChatGPT 早已回「通过」（L-18 当时丢了回信），至今仍是 open / delivered / halt，章已挂了 18 小时。可选：结束这条接力（章立即消失），和 / 或改设计让「在答」压过陈旧的「未审」。另：截图工具渲染的是静态帧，小人「工作中」的动作未实看（`vendors.rs` 已把 ChatGPT running 会话计入 `working`）。
+- 本轮新坑：L-24。
+- skill 进化：无。
+
 ## 侧栏收得到自己开的 ChatGPT 对话：插件重载后给已开标签页补装脚本（2026-11-07，Claude，常浩反馈「侧边栏 GPT 还是抓不到他的回话……明显的 bug」，并按提示刷新标签页发了一句测试；PR 全量通过，按授权 squash 合并；常浩重新加载插件 0.2.2 后实机验证通过，驿窗应用无需发布）
 
 - 时间：开工 `2026-11-07 19:05`（`date '+%F %H:%M'` 记录）。来由：#206。常浩在 Chrome 里聊了「审核需求梳理」「审核Skill方法论提炼」等对话，侧栏 ChatGPT 格「正在进行 0」，没有回执。
