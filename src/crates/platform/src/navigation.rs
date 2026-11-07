@@ -28,6 +28,17 @@ pub(super) fn open_claude_job(home: &std::path::Path, target: &Value) -> Result<
 }
 pub(super) use crate::os::{activate_app, app_running};
 fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
+    desktop_record(id, cowork)?["sessionId"]
+        .as_str()
+        .map(str::to_owned)
+}
+/// The Claude desktop app's record of the Code session that runs Claude
+/// Code session `id` (its folder, model, effort and permission mode), when
+/// exactly one unarchived record names it.
+pub fn claude_desktop_session(id: &str) -> Option<Value> {
+    desktop_record(id, false)
+}
+fn desktop_record(id: &str, cowork: bool) -> Option<Value> {
     let home = crate::os::home_dir().ok()?;
     let folder = if cowork {
         "local-agent-mode-sessions"
@@ -69,14 +80,17 @@ fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
                     && meta["sessionId"].as_str() == Some(stem)
                     && meta["isArchived"] != true
                 {
-                    matched.push(stem.to_owned());
+                    matched.push((stem.to_owned(), meta));
                 }
             }
         }
     }
-    matched.sort();
-    matched.dedup();
-    (matched.len() == 1).then(|| matched.pop()).flatten()
+    matched.sort_by(|a, b| a.0.cmp(&b.0));
+    matched.dedup_by(|a, b| a.0 == b.0);
+    (matched.len() == 1)
+        .then(|| matched.pop())
+        .flatten()
+        .map(|(_, meta)| meta)
 }
 fn uuid(value: &str) -> bool {
     value.len() == 36

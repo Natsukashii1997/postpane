@@ -99,7 +99,10 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
   - 「结论：通过」：自动结束接力，`end` 步带 `auto`；
   - 「结论：需修改」且审过不到 `ROUNDS`（2）轮：把回信全文转回 Claude（与「转回 Claude」同一段话），`back` 步带 `auto`；Claude 改完自己调 `relay_to_chatgpt`，进入下一轮；
   - 第 2 轮仍「需修改」，或回信没写结论：停下交还常浩（`stop` 步，`halt` 写原因），卡上照常可「转回 Claude」「结束接力」。
-- 出错与处理：转回 Claude 失败马上重试一次，两次的错误各记一条 `fail` 步（`auto`）。两次都失败（最常见的是 Claude 桌面版在会话一轮做完、空闲几分钟后把它暂停了，插件不再签到；2026-11-07 L5 第一单实测碰到），改为把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt`，阶段照常是 `returned`、自动往返不停。常浩在 Claude 里打开那个会话，插件就会提交，卡上和「正在进行」写「意见已排队 · 打开 Claude 会话继续」。排队失败才停下交还常浩；排队 `QUEUE_WAIT_MS`（1 小时，与插件的留话寿命一致）没被领走也停下交还常浩。Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送；常浩点「继续自动」后，等着的回信立即处理。
+- 出错与处理（送回 Claude，L-14，#175）：先经插件直接送话。送不到时看会话的插件签到：
+  - 签到写着已结束（桌面版在内存紧张时会回收空闲会话的 Claude 进程，日志 `CliGovernor pressure evicting`；打开或点开会话只会「预热」，不会重启进程），或超过 `WAKE_AFTER_MS`（3 分钟）没签到：驿窗立即**后台续接**——按桌面版的会话记录（`claude-code-sessions/**/local_*.json`，用 `cliSessionId` 对上）取工作目录、模型、思考强度和权限模式，跑 `claude -p --resume <会话> --permission-mode <模式>`，把回信全文连同处理要求交给它；时间线记 `back` 和 `wake` 两步（`auto`），快照字段 `wakingSince` 表示正在跑。只有 `auto`、`acceptEdits`、`bypassPermissions` 三种权限模式会续接，其余后台没人点允许，直接交还常浩。续接跑完后 Claude 已调 `relay_to_chatgpt` 交回复审，就照常往下走；跑完还在等 Claude（没交回复审或出错退出），停下交还常浩。实测：会话被停后续接 12 秒完成，之后在桌面版里给它发消息，应用续接同一个会话号，看得到并接上那一轮（证据 `evidence/2026-11-07-headless-resume/`）。续接进行中桌面版界面是否实时显示、和常浩同时在应用里发消息的并发情况未验证。
+  - 签到只是过期（多半是电脑一时卡顿）：马上重试一次，两次的错误各记一条 `fail` 步；仍失败就把同一段话排进该会话的待发送队列（与左滑发起同一机制），记 `queuedAt` 与 `queuedId`，阶段照常是 `returned`。排队 3 分钟后，会话领走了就清掉排队；仍没领、且会话已停或 3 分钟没签到，撤回排队（插件的 `.cancel`）再后台续接；撤回不了（已被领走）不续接，防止送两遍。从没签到过的会话可能根本没装插件、正在运行，不续接，排队 `QUEUE_WAIT_MS`（1 小时）没被领走就停下交还常浩。排队失败也停下交还常浩。
+  - Claude 再调 `relay_to_chatgpt` 交回复审时清掉 `queuedAt`、`queuedId`、`wakingSince`。ChatGPT 30 分钟没回信（`delivered` / `working` 超过 `REPLY_WAIT_MS`）、Claude 2 小时没交回复审（`returned` 超过 `FIX_WAIT_MS`）都停下交还常浩，在生成快照时检查。驿窗重启时开着的一律先暂停（「驿窗重启，自动往返先暂停」），防止重启前后重复送，重启前的后台续接不再跟踪；常浩点「继续自动」后，等着的回信立即处理。
 - 记录：每一步的 `at`、谁做的（`auto` 表示驿窗自动做的，没有就是常浩点的）、出错原文与处理方式（`fail` / `stop` 的 `text`）都在 `handoffs.json`，每轮耗时由相邻步骤的时间相减得出。
 
 ### 本机工具通道

@@ -20,6 +20,8 @@ use tauri::Manager;
 
 /// Claude Code's source id, the only client words go back into.
 const CLAUDE: &str = "claude";
+/// Claude Code's command line, as the MCP clients name it.
+const CLAUDE_CODE: &str = "claudeCode";
 /// The local tool Claude calls to hand its work to ChatGPT.
 pub(crate) const RELAY_METHOD: &str = "relay_to_chatgpt";
 /// The longest text sent either way: Chrome refuses a message to an
@@ -52,6 +54,17 @@ pub(crate) trait Lines {
     /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
     /// the plugin's files are gone.
     fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)>;
+    /// Whether the session ran the plugin and its Claude Code process has
+    /// stopped since: Claude's desktop app reclaims idle sessions, and
+    /// opening one does not run it again (L-14).
+    fn stopped(&self, session: &str) -> bool;
+    /// Takes back words left for a session (`leave`) that it has not taken;
+    /// false once it took them, or when that cannot be told.
+    fn withdraw(&self, session: &str, id: &str) -> bool;
+    /// Runs Claude Code for the session in the background with `text`, as
+    /// the desktop app would (its folder, model and permission mode). The
+    /// run's end comes back through `Desk::woke_up` for `handoff`.
+    fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String>;
 }
 
 /// How long a launch that came to nothing stays on its row.
@@ -695,30 +708,109 @@ impl Desk {
         if self.lock().returned_already(id, &text) {
             return false;
         }
+        let session = &handoff.claude_session;
         let send = || {
             lines
-                .reaches(&handoff.claude_session)
-                .and_then(|()| lines.reply(&handoff.claude_session, &text))
+                .reaches(session)
+                .and_then(|()| lines.reply(session, &text))
         };
-        if let Err(first) = send() {
-            self.change(|book| book.trouble(id, &back_retry(&first), now));
-            if let Err(again) = send() {
-                // A session Claude paused once its turn was over cannot take
-                // words now: they wait in its queue and go in once it is
-                // opened (L5 run 1, 2026-11-07).
-                if lines.leave(&handoff.claude_session, &text).is_err() {
-                    return self.change(|book| {
-                        book.trouble(id, &retry_failed(&again), now);
-                        book.stop(id, &back_failed(), true, now)
-                    });
-                }
-                return self.change(|book| {
-                    book.trouble(id, &queued_instead(&again), now);
-                    book.returned(id, StepKind::Back, &text, true, now) && book.queued(id, now)
-                });
-            }
+        let Err(first) = send() else {
+            return self.change(|book| book.returned(id, StepKind::Back, &text, true, now));
+        };
+        // Its process stopped: nothing runs in it to take the words, so
+        // Claude Code runs for it in the background (L-14).
+        if lines.stopped(session) {
+            return match lines.wake(id, session, &text) {
+                Ok(()) => self.change(|book| {
+                    book.returned(id, StepKind::Back, &text, true, now)
+                        && book.woke(id, &woke_stopped(&first), now)
+                }),
+                Err(error) => self.change(|book| {
+                    book.trouble(id, &wake_failed(&first, &error), now);
+                    book.stop(id, &back_failed(), true, now)
+                }),
+            };
         }
-        self.change(|book| book.returned(id, StepKind::Back, &text, true, now))
+        self.change(|book| book.trouble(id, &back_retry(&first), now));
+        let Err(again) = send() else {
+            return self.change(|book| book.returned(id, StepKind::Back, &text, true, now));
+        };
+        // Quiet for now (a stall, or a session going away): the words wait in
+        // its queue; still waiting once it has been quiet for long, Claude
+        // Code runs for it (`wake_queued`).
+        match lines.leave(session, &text) {
+            Ok(prompt) => self.change(|book| {
+                book.trouble(id, &queued_instead(&again), now);
+                book.returned(id, StepKind::Back, &text, true, now) && book.queued(id, &prompt, now)
+            }),
+            Err(_) => self.change(|book| {
+                book.trouble(id, &retry_failed(&again), now);
+                book.stop(id, &back_failed(), true, now)
+            }),
+        }
+    }
+    /// Words back that waited in the queue of a session that has gone quiet
+    /// for `WAKE_AFTER_MS`: taken back, and Claude Code runs for the session
+    /// in the background with them (L-14). Words it took meanwhile leave the
+    /// queue; a session never seen running the plugin keeps waiting, since
+    /// it may be running without it. Whether anything changed.
+    pub(crate) fn wake_queued(&self, lines: &dyn Lines, now: i64) -> bool {
+        let due = self.lock().waiting_to_wake(now);
+        let mut changed = false;
+        for (id, session, prompt) in due {
+            let Ok(_sending) = self.claim(&id) else {
+                continue;
+            };
+            let taken = prompt.as_deref().is_some_and(|prompt| {
+                lines
+                    .left(&session, prompt)
+                    .is_some_and(|(state, _)| state == "taken" || state == "started")
+            });
+            if taken {
+                changed |= self.change(|book| book.unqueued(&id));
+                continue;
+            }
+            if !lines.stopped(&session) {
+                continue;
+            }
+            if prompt.is_some_and(|prompt| !lines.withdraw(&session, &prompt)) {
+                changed |= self.change(|book| book.unqueued(&id));
+                continue;
+            }
+            let Some(text) = self.lock().get(&id).and_then(|handoff| {
+                let reply = handoff.last_reply()?.text.clone()?;
+                Some(back_text(handoff, &reply))
+            }) else {
+                continue;
+            };
+            changed |= match lines.wake(&id, &session, &text) {
+                Ok(()) => self.change(|book| book.woke(&id, &woke_queued(), now)),
+                Err(error) => self.change(|book| {
+                    book.unqueued(&id);
+                    book.trouble(&id, &wake_failed(&queued_quiet(), &error), now);
+                    book.stop(&id, &back_failed(), true, now)
+                }),
+            };
+        }
+        changed
+    }
+    /// The background run for handoff `id` ended (`result`). Claude handing
+    /// the next round over moved it on; still waiting on Claude, it ended
+    /// without doing so, and is left to the person.
+    pub(crate) fn woke_up(&self, id: &str, result: Result<(), String>, now: i64) -> bool {
+        self.change(|book| {
+            if !book.awake(id, now) {
+                return false;
+            }
+            let waiting = book
+                .get(id)
+                .is_some_and(|h| h.live() && h.phase == handoffs::Phase::Returned);
+            if waiting {
+                book.trouble(id, &woke_without_handover(result.err().as_deref()), now);
+                book.stop(id, &back_failed(), true, now);
+            }
+            true
+        })
     }
 }
 
@@ -893,11 +985,50 @@ fn retry_failed(error: &str) -> String {
 }
 fn queued_instead(error: &str) -> String {
     l10n::text(
-        &format!("重试仍失败：{error}；改为排进这个会话的待发送队列，打开会话就会继续"),
+        &format!("重试仍失败：{error}；改为排进这个会话的待发送队列，会话一直不在线就在后台续接"),
         &format!(
-            "Failed again: {error}; queued for the session instead, to go in once it is opened"
+            "Failed again: {error}; queued for the session instead, to run in the background if it stays quiet"
         ),
     )
+}
+fn woke_stopped(error: &str) -> String {
+    l10n::text(
+        &format!("直接送话没送到：{error}。这个会话的 Claude 进程已被桌面版停掉，驿窗改在后台续接它，按意见修改"),
+        &format!("Could not send it straight: {error}. The desktop app stopped this session's Claude process, so PostPane runs it in the background to work on the answer"),
+    )
+}
+fn woke_queued() -> String {
+    l10n::text(
+        &format!(
+            "意见排队 {} 分钟没被领走，会话一直没运行；驿窗撤回排队，改在后台续接 Claude，按意见修改",
+            handoffs::WAKE_AFTER_MS / 60_000
+        ),
+        "The queued answer was not taken up and the session stayed quiet; PostPane took it back and runs the session in the background to work on it",
+    )
+}
+fn queued_quiet() -> String {
+    l10n::text(
+        "意见排队后会话一直没运行",
+        "The session stayed quiet after the answer was queued",
+    )
+}
+fn wake_failed(why: &str, error: &str) -> String {
+    l10n::text(
+        &format!("{why}；后台续接 Claude 也没成：{error}"),
+        &format!("{why}; running Claude in the background failed too: {error}"),
+    )
+}
+fn woke_without_handover(error: Option<&str>) -> String {
+    match error {
+        Some(error) => l10n::text(
+            &format!("后台续接 Claude 出错结束：{error}"),
+            &format!("The background Claude run ended with an error: {error}"),
+        ),
+        None => l10n::text(
+            "后台续接 Claude 这一轮结束了，但它没有交回复审",
+            "The background Claude run ended without handing the work over again",
+        ),
+    }
 }
 fn no_wake() -> String {
     l10n::text(
@@ -1083,6 +1214,103 @@ impl Lines for AppLines<'_> {
         };
         Some((state.to_owned(), reason))
     }
+    fn stopped(&self, session: &str) -> bool {
+        self.0
+            .try_state::<super::claude_plugin::ClaudePlugin>()
+            .is_some_and(|plugin| {
+                plugin.channel().stopped(
+                    session,
+                    std::time::SystemTime::now(),
+                    std::time::Duration::from_millis(handoffs::WAKE_AFTER_MS as u64),
+                )
+            })
+    }
+    fn withdraw(&self, session: &str, id: &str) -> bool {
+        use agent_hud_runtime::claude_plugin::PromptState;
+        self.0
+            .try_state::<super::claude_plugin::ClaudePlugin>()
+            .and_then(|plugin| plugin.channel().cancel(session, id).ok())
+            .is_some_and(|state| !matches!(state, PromptState::Taken | PromptState::Started))
+    }
+    fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
+        let (executable, home, folder, arguments) = wake_command(session, text)?;
+        let app = self.0.clone();
+        let handoff = handoff.to_owned();
+        std::thread::spawn(move || {
+            let run = std::time::Duration::from_millis(handoffs::FIX_WAIT_MS as u64);
+            let result =
+                super::mcp_clients::run_client_in(&executable, &arguments, &home, &folder, run);
+            if let Err(error) = &result {
+                eprintln!("Background Claude run for {handoff}: {error}");
+            }
+            if app
+                .try_state::<Desk>()
+                .is_some_and(|desk| desk.woke_up(&handoff, result, now_ms()))
+            {
+                republish(&app);
+            }
+        });
+        Ok(())
+    }
+}
+
+/// How Claude Code runs a stopped desktop session in the background: the
+/// desktop app's own record of it gives its folder, model, effort and
+/// permission mode; nobody is there to allow a tool, so only modes that do
+/// not ask may run (L-14).
+fn wake_command(
+    session: &str,
+    text: &str,
+) -> Result<(PathBuf, PathBuf, PathBuf, Vec<String>), String> {
+    let record = agent_hud_runtime::claude_desktop_session(session).ok_or_else(|| {
+        l10n::text(
+            "Claude 桌面版里找不到这个会话的记录",
+            "Claude's desktop app has no record of this session",
+        )
+    })?;
+    let folder = record["cwd"]
+        .as_str()
+        .map(PathBuf::from)
+        .filter(|folder| folder.is_dir())
+        .ok_or_else(|| {
+            l10n::text(
+                "这个会话的工作目录已经不在了",
+                "This session's folder is gone",
+            )
+        })?;
+    let home = super::mcp_clients::home()?;
+    let executable = super::mcp_clients::executable(CLAUDE_CODE, &home).ok_or_else(|| {
+        l10n::text(
+            "这台 Mac 上找不到 Claude Code 命令行",
+            "Claude Code's command line is not on this Mac",
+        )
+    })?;
+    let arguments = wake_arguments(session, &record, text)?;
+    Ok((executable, home, folder, arguments))
+}
+/// `claude -p --resume`, in the session's permission mode, model and effort.
+fn wake_arguments(session: &str, record: &Value, text: &str) -> Result<Vec<String>, String> {
+    let mode = record["permissionMode"].as_str().unwrap_or("default");
+    if !matches!(mode, "auto" | "acceptEdits" | "bypassPermissions") {
+        return Err(l10n::text(
+            &format!("这个会话的权限模式是 {mode}，后台没人点允许，不能续接"),
+            &format!("This session's permission mode is {mode}; nobody is there to allow tools in the background"),
+        ));
+    }
+    let mut arguments = vec!["-p", "--resume", session, "--permission-mode", mode];
+    for (flag, field) in [("--model", "model"), ("--effort", "effort")] {
+        if let Some(value) = record[field].as_str().filter(|value| !value.is_empty()) {
+            arguments.extend([flag, value]);
+        }
+    }
+    arguments.push(text);
+    Ok(arguments.into_iter().map(str::to_owned).collect())
+}
+
+/// Each collection pass: queued words back for a session that went quiet
+/// go in through a background run (L-14).
+pub(crate) fn wake_queued(app: &tauri::AppHandle, desk: &Desk) {
+    desk.wake_queued(&AppLines(app), now_ms());
 }
 
 /// The snapshot's `relayLaunches` as the app's ways out have them.
@@ -1376,6 +1604,12 @@ mod tests {
         leave_fails: std::cell::Cell<bool>,
         /// How many replies to Claude fail before one goes through.
         reply_fails: std::cell::Cell<u32>,
+        /// The session's process stopped (L-14).
+        stopped: std::cell::Cell<bool>,
+        /// Queued words cannot be taken back (the session took them).
+        withdraw_fails: std::cell::Cell<bool>,
+        /// Running Claude Code in the background fails, and why.
+        wake_fails: RefCell<Option<String>>,
     }
     impl Lines for Fake {
         fn connected(&self) -> bool {
@@ -1435,6 +1669,26 @@ mod tests {
         }
         fn left(&self, _session: &str, _id: &str) -> Option<(String, Option<String>)> {
             self.left_as.borrow().clone()
+        }
+        fn stopped(&self, _session: &str) -> bool {
+            self.stopped.get()
+        }
+        fn withdraw(&self, session: &str, id: &str) -> bool {
+            self.sent
+                .borrow_mut()
+                .push(("withdraw".into(), session.into(), id.into()));
+            !self.withdraw_fails.get()
+        }
+        fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
+            if let Some(error) = self.wake_fails.borrow().clone() {
+                return Err(error);
+            }
+            self.sent.borrow_mut().push((
+                "wake".into(),
+                format!("{handoff}|{session}"),
+                text.into(),
+            ));
+            Ok(())
         }
     }
     fn left_as(lines: &Fake, state: Option<&str>, reason: Option<&str>) {
@@ -2478,5 +2732,205 @@ mod tests {
         // The steps kept from before a restart flew already.
         let again = Desk::new(Some(temp.path().join("data")));
         assert!(again.tosses().is_empty());
+    }
+
+    fn sent_as(lines: &Fake, kind: &str) -> Vec<(String, String)> {
+        lines
+            .sent
+            .borrow()
+            .iter()
+            .filter(|s| s.0 == kind)
+            .map(|s| (s.1.clone(), s.2.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_session_whose_process_stopped_is_run_in_the_background_with_the_answer() {
+        let (_temp, desk) = desk();
+        let lines = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        lines.stopped.set(true);
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 补测试\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert_eq!(replies(&lines), 0);
+        assert!(
+            sent_as(&lines, "leave").is_empty(),
+            "not queued: nothing runs to take it"
+        );
+        let woke = sent_as(&lines, "wake");
+        assert_eq!(woke.len(), 1);
+        assert_eq!(woke[0].0, format!("{}|s1", handoff.id));
+        assert!(woke[0].1.contains("补测试") && woke[0].1.contains("relay_to_chatgpt"));
+        let steps = kinds(&desk, 5);
+        assert_eq!(
+            steps[steps.len() - 2..],
+            [("back".to_owned(), true), ("wake".to_owned(), true)]
+        );
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["auto"], true);
+        assert_eq!(shown[0]["wakingSince"], 5);
+        assert!(!desk.drive(&lines, 6), "run once");
+
+        // The run ended and Claude handed the next round over: nothing to do.
+        desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            Some("按意见改完"),
+            "第二轮",
+            false,
+            7,
+        )
+        .unwrap();
+        assert!(!desk.woke_up(&handoff.id, Ok(()), 8));
+        assert!(desk.projection(8)[0].get("wakingSince").is_none());
+    }
+
+    #[test]
+    fn a_background_run_that_cannot_start_or_ends_without_a_handover_is_left_to_the_person() {
+        let (_temp, desk) = desk();
+        let lines = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        lines.stopped.set(true);
+        *lines.wake_fails.borrow_mut() = Some("权限模式是 default".into());
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["auto"], false);
+        assert_eq!(shown[0]["halt"], back_failed());
+        let steps = kinds(&desk, 5);
+        assert_eq!(
+            steps[steps.len() - 2..],
+            [("fail".to_owned(), true), ("stop".to_owned(), true)]
+        );
+        let fail = &shown[0]["steps"].as_array().unwrap()[steps.len() - 2];
+        assert!(fail["text"]
+            .as_str()
+            .unwrap()
+            .contains("权限模式是 default"));
+
+        // It ran, but ended with Claude still on it: no handover came.
+        let (_temp, desk) = self::desk();
+        let lines = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        lines.stopped.set(true);
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        assert!(desk.woke_up(&handoff.id, Err("exit 1".into()), 9));
+        let shown = desk.projection(9);
+        assert_eq!(shown[0]["auto"], false);
+        assert!(shown[0].get("wakingSince").is_none());
+        let steps = shown[0]["steps"].as_array().unwrap();
+        assert_eq!(
+            steps[steps.len() - 2]["text"],
+            woke_without_handover(Some("exit 1"))
+        );
+        assert!(!desk.woke_up(&handoff.id, Ok(()), 10), "once");
+    }
+
+    #[test]
+    fn queued_words_for_a_session_that_stays_quiet_are_taken_back_and_run_in_the_background() {
+        let wake_at = 5 + handoffs::WAKE_AFTER_MS;
+        let queued = || {
+            let (temp, desk) = self::desk();
+            let lines = Fake::default();
+            lines.reply_fails.set(2);
+            let handoff = opened(&desk, &lines);
+            desk.observe(&turn("complete", "结论：需修改"), 4);
+            assert!(desk.drive(&lines, 5));
+            assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
+            (temp, desk, lines, handoff)
+        };
+
+        // Quiet, but not for long yet: it waits.
+        let (_temp, desk, lines, handoff) = queued();
+        lines.stopped.set(true);
+        assert!(!desk.wake_queued(&lines, wake_at - 1));
+        assert!(sent_as(&lines, "wake").is_empty());
+        // Long enough: the queued words are taken back and Claude runs.
+        let prompt = desk.projection(5)[0]["queuedId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(desk.wake_queued(&lines, wake_at));
+        assert_eq!(sent_as(&lines, "withdraw"), [("s1".to_owned(), prompt)]);
+        let woke = sent_as(&lines, "wake");
+        assert_eq!(woke.len(), 1);
+        assert_eq!(woke[0].0, format!("{}|s1", handoff.id));
+        let shown = desk.projection(wake_at);
+        assert!(shown[0].get("queuedAt").is_none());
+        assert_eq!(shown[0]["wakingSince"], wake_at);
+        let steps = kinds(&desk, wake_at);
+        assert_eq!(steps.last().unwrap(), &("wake".to_owned(), true));
+        let backs = steps.iter().filter(|s| s.0 == "back").count();
+        assert_eq!(backs, 1, "the words went back once");
+        assert!(!desk.wake_queued(&lines, wake_at + 1), "run once");
+
+        // The session took the words meanwhile: they leave the queue, no run.
+        let (_temp, desk, lines, _) = queued();
+        lines.stopped.set(true);
+        left_as(&lines, Some("taken"), None);
+        assert!(desk.wake_queued(&lines, wake_at));
+        assert!(sent_as(&lines, "wake").is_empty());
+        assert!(desk.projection(wake_at)[0].get("queuedAt").is_none());
+
+        // Never seen stopped (it may run without the plugin): it keeps waiting.
+        let (_temp, desk, lines, _) = queued();
+        left_as(&lines, Some("waiting"), None);
+        assert!(!desk.wake_queued(&lines, wake_at));
+        assert_eq!(desk.projection(wake_at)[0]["queuedAt"], 5);
+
+        // The words could not be taken back: no second copy runs.
+        let (_temp, desk, lines, _) = queued();
+        lines.stopped.set(true);
+        lines.withdraw_fails.set(true);
+        assert!(desk.wake_queued(&lines, wake_at));
+        assert!(sent_as(&lines, "wake").is_empty());
+    }
+
+    #[test]
+    fn the_background_run_takes_the_sessions_own_mode_model_and_effort() {
+        let record = json!({"permissionMode":"auto","model":"claude-opus-5-5","effort":"high"});
+        assert_eq!(
+            wake_arguments("s1", &record, "意见").unwrap(),
+            [
+                "-p",
+                "--resume",
+                "s1",
+                "--permission-mode",
+                "auto",
+                "--model",
+                "claude-opus-5-5",
+                "--effort",
+                "high",
+                "意见"
+            ]
+        );
+        assert_eq!(
+            wake_arguments("s1", &json!({"permissionMode":"acceptEdits"}), "意见").unwrap(),
+            [
+                "-p",
+                "--resume",
+                "s1",
+                "--permission-mode",
+                "acceptEdits",
+                "意见"
+            ]
+        );
+        // Nobody is there to allow a tool.
+        for mode in [json!("default"), json!("plan"), Value::Null] {
+            assert!(wake_arguments("s1", &json!({"permissionMode": mode}), "意见").is_err());
+        }
     }
 }

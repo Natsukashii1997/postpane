@@ -27,6 +27,10 @@ pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
 /// How long words queued for a paused Claude session wait to be taken up
 /// (the plugin's own lifetime for words left).
 pub const QUEUE_WAIT_MS: i64 = 60 * 60 * 1000;
+/// How long words back wait in the queue of a session that has gone quiet
+/// before PostPane runs Claude Code for it in the background (L-14): long
+/// enough for a stall to pass, short against ChatGPT's minutes.
+pub const WAKE_AFTER_MS: i64 = 3 * 60 * 1000;
 /// The longest excerpt a step keeps of what was said.
 const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.
@@ -97,6 +101,9 @@ pub enum StepKind {
     Stop,
     /// The person turned the auto round trip back on.
     Resume,
+    /// The Claude session's process had stopped, so PostPane ran Claude Code
+    /// for it in the background with the words back (`text` says why, L-14).
+    Wake,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -192,6 +199,14 @@ pub struct Handoff {
     /// session is opened. Cleared when Claude hands over again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued_at: Option<i64>,
+    /// The plugin's id for the queued words, to take them back when the
+    /// session is woken in the background instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued_id: Option<String>,
+    /// Since when Claude Code runs in the background for the session with
+    /// the words back (`Wake`), until it ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waking_since: Option<i64>,
 }
 
 /// What the auto round trip does with an answer that came in.
@@ -348,6 +363,8 @@ impl Book {
             auto: true,
             halt: None,
             queued_at: None,
+            queued_id: None,
+            waking_since: None,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -491,6 +508,8 @@ impl Book {
             .steps
             .push(Step::new(now, StepKind::Ask, Some(text)).keyed(&key(text)));
         handoff.queued_at = None;
+        handoff.queued_id = None;
+        handoff.waking_since = None;
         handoff.rounds += 1;
         handoff.enter(Phase::Delivered, now);
         true
@@ -596,12 +615,60 @@ impl Book {
         handoff.enter(Phase::Ended, now);
         true
     }
-    /// The words back went into the Claude session's queue, not to it.
-    pub fn queued(&mut self, id: &str, now: i64) -> bool {
+    /// The words back went into the Claude session's queue (as `prompt`),
+    /// not to it.
+    pub fn queued(&mut self, id: &str, prompt: &str, now: i64) -> bool {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
         handoff.queued_at = Some(now);
+        handoff.queued_id = Some(prompt.to_owned());
+        true
+    }
+    /// The queued words are no longer waiting: the session took them, or
+    /// they were taken back.
+    pub fn unqueued(&mut self, id: &str) -> bool {
+        let Some(handoff) = self.live_mut(id).filter(|h| h.queued_at.is_some()) else {
+            return false;
+        };
+        handoff.queued_at = None;
+        handoff.queued_id = None;
+        true
+    }
+    /// Auto round trips whose words back waited in a session's queue for
+    /// longer than `WAKE_AFTER_MS` and that nothing runs for yet: (id,
+    /// session, queued words' id).
+    pub fn waiting_to_wake(&self, now: i64) -> Vec<(String, String, Option<String>)> {
+        self.list
+            .iter()
+            .filter(|h| h.auto && h.live() && h.phase == Phase::Returned)
+            .filter(|h| h.waking_since.is_none())
+            .filter(|h| h.queued_at.is_some_and(|at| now - at >= WAKE_AFTER_MS))
+            .map(|h| (h.id.clone(), h.claude_session.clone(), h.queued_id.clone()))
+            .collect()
+    }
+    /// PostPane runs Claude Code for the session in the background with the
+    /// words back (`how`: why).
+    pub fn woke(&mut self, id: &str, how: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff.queued_at = None;
+        handoff.queued_id = None;
+        handoff.waking_since = Some(now);
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Wake, Some(how)).by_auto());
+        handoff.updated_at = now;
+        true
+    }
+    /// The background run ended; whether it was still marked running.
+    pub fn awake(&mut self, id: &str, now: i64) -> bool {
+        let Some(handoff) = self.get_mut(id).filter(|h| h.waking_since.is_some()) else {
+            return false;
+        };
+        handoff.waking_since = None;
+        handoff.updated_at = now;
         true
     }
     /// The auto round trip met an error (`text`: what failed and what it did
@@ -679,7 +746,12 @@ impl Book {
         for id in &on {
             self.stop(id, reason, true, now);
         }
-        !on.is_empty()
+        // A background run from before is no longer followed.
+        let mut woke = false;
+        for handoff in &mut self.list {
+            woke |= handoff.waking_since.take().is_some();
+        }
+        !on.is_empty() || woke
     }
     /// Words went across once more.
     pub fn round(&mut self, id: &str, now: i64) -> bool {

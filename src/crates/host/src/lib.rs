@@ -60,6 +60,7 @@ impl Backend {
             system.project(&mut value);
         }
         if let Some(desk) = app.try_state::<handoff::Desk>() {
+            handoff::wake_queued(app, &desk);
             value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
             fly_tosses(app, &desk);
         }

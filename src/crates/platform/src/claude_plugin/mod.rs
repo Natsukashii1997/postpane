@@ -220,6 +220,22 @@ impl ClaudeChannel {
     /// When `session` last checked in, however long ago; None when it never
     /// did or has ended.
     pub fn last_check_in(&self, session: &str) -> Option<SystemTime> {
+        let (value, at) = self.check_in(session)?;
+        value.get("ended").is_none().then_some(at)
+    }
+
+    /// Whether `session` ran the plugin and its process has since stopped:
+    /// the plugin said it ended (Claude's desktop app stops idle sessions
+    /// when memory runs short, L-14), or it has not checked in for `quiet`.
+    /// A session that never checked in is not: it may run without the plugin.
+    pub fn stopped(&self, session: &str, now: SystemTime, quiet: Duration) -> bool {
+        self.check_in(session).is_some_and(|(value, at)| {
+            value.get("ended").is_some() || now.duration_since(at).unwrap_or_default() >= quiet
+        })
+    }
+
+    /// The session's check-in and when it was written.
+    fn check_in(&self, session: &str) -> Option<(Value, SystemTime)> {
         if !valid_name(session) {
             return None;
         }
@@ -232,10 +248,7 @@ impl ClaudeChannel {
             return None;
         }
         let value: Value = serde_json::from_slice(&fs::read(&path).ok()?).ok()?;
-        if value.get("ended").is_some() {
-            return None;
-        }
-        metadata.modified().ok()
+        Some((value, metadata.modified().ok()?))
     }
 
     /// Writes the plugin's files into `folder` (an absolute path), pointing
@@ -487,6 +500,21 @@ impl ClaudeReplies {
                     "Claude Code doesn't have Agent HUD's plugin yet. Install it to answer Claude's questions in Agent HUD (Settings → Agent plugins).",
                 ),
                 Some(AnswerFix::InstallPlugin),
+            );
+        }
+        // Once the plugin wrote that the session ended, it is not that the
+        // plugin is missing: the process stopped (L-14).
+        if self
+            .channel
+            .check_in(session)
+            .is_some_and(|(value, _)| value.get("ended").is_some())
+        {
+            return Unreachable::new(
+                l10n::text(
+                    "这个会话的 Claude 进程已经停了（桌面版会回收空闲会话），给它发一句话就会重新运行。",
+                    "This session's Claude process has stopped (the desktop app reclaims idle sessions); send it a message to run it again.",
+                ),
+                None,
             );
         }
         let paused = installed_at(&self.claude_config)

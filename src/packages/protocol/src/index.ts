@@ -785,7 +785,8 @@ export interface HandoffStep {
     | "fail"
     | "end"
     | "stop"
-    | "resume";
+    | "resume"
+    | "wake";
   /** What was said, cut to a few hundred characters. */
   text?: string | null;
   /** A reply's numbered points. */
@@ -832,9 +833,12 @@ export interface Handoff {
   auto?: boolean;
   /** Why the auto round trip stopped, while it is off. */
   halt?: string | null;
-  /** When ChatGPT's answer was queued for a Claude session paused once its
-   * turn was over: it goes in once the session is opened. */
+  /** When ChatGPT's answer was queued for a Claude session that could not
+   * take it then; a session that stays quiet is run in the background. */
   queuedAt?: number | null;
+  /** Since when PostPane runs Claude Code in the background for a session
+   * whose process stopped, with ChatGPT's answer (L-14). */
+  wakingSince?: number | null;
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the
