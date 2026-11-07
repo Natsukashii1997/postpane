@@ -26,18 +26,23 @@ pub(super) fn open_claude_job(home: &std::path::Path, target: &Value) -> Result<
         target["job"].as_str().unwrap_or(""),
     )
 }
-pub(super) use crate::os::{activate_app, app_running};
+pub(super) use crate::os::app_running;
 fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
     let home = crate::os::home_dir().ok()?;
+    let env = std::env::vars().collect::<crate::os::Environment>();
+    local_id_in(&crate::os::claude_desktop_bases(&home, &env), id, cowork)
+}
+/// The desktop app's tab (`local_<uuid>`) that holds the Claude Code session
+/// `id`, in the app's data folders `bases`.
+fn local_id_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<String> {
     let folder = if cowork {
         "local-agent-mode-sessions"
     } else {
         "claude-code-sessions"
     };
-    let env = std::env::vars().collect::<crate::os::Environment>();
-    let mut matched = Vec::new();
-    for org in crate::os::claude_desktop_bases(&home, &env)
-        .into_iter()
+    let (mut matched, mut before) = (Vec::new(), Vec::new());
+    for org in bases
+        .iter()
         .filter_map(|base| std::fs::read_dir(base.join(folder)).ok())
         .flat_map(|entries| entries.flatten())
     {
@@ -65,18 +70,49 @@ fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
                 let Ok(meta) = serde_json::from_slice::<Value>(&bytes) else {
                     continue;
                 };
-                if meta["cliSessionId"].as_str() == Some(id)
-                    && meta["sessionId"].as_str() == Some(stem)
-                    && meta["isArchived"] != true
-                {
+                if meta["sessionId"].as_str() != Some(stem) || meta["isArchived"] == true {
+                    continue;
+                }
+                // A tab that went on in a new Claude Code session keeps the
+                // ones it ran before (#220); a tab running `id` now wins.
+                if meta["cliSessionId"].as_str() == Some(id) {
                     matched.push(stem.to_owned());
+                } else if meta["priorCliSessionIds"]
+                    .as_array()
+                    .is_some_and(|ids| ids.iter().any(|prior| prior.as_str() == Some(id)))
+                {
+                    before.push(stem.to_owned());
                 }
             }
         }
     }
+    if matched.is_empty() {
+        matched = before;
+    }
     matched.sort();
     matched.dedup();
     (matched.len() == 1).then(|| matched.pop()).flatten()
+}
+/// What a target with no link comes to. A Claude desktop or Cowork session
+/// whose tab cannot be found is not reached by bringing the app forward.
+pub(super) fn without_link(target: &Value) -> Result<bool, String> {
+    if matches!(
+        target["kind"].as_str(),
+        Some(
+            "claude-desktop"
+                | "claude-desktop-session"
+                | "claudeDesktopSession"
+                | "claude-cowork"
+                | "claude-cowork-session"
+                | "claudeCoworkSession"
+        )
+    ) {
+        return Err(agent_hud_core::l10n::text(
+            "Claude 桌面里找不到这个会话的标签（可能已归档，或是 claude -p 跑出来的）",
+            "The Claude desktop app has no tab for this session (archived, or a claude -p run)",
+        ));
+    }
+    Ok(false)
 }
 fn uuid(value: &str) -> bool {
     value.len() == 36

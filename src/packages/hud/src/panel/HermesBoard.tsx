@@ -3,8 +3,10 @@
 // they run, how the last run went and when the next is, then the latest
 // thing it was asked; a bot without lists the latest three asks and whether
 // each was answered.
-import { useState, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import { GoButton } from "../GoButton";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import type { HermesAsk, HermesBotStatus, Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePaper } from "../paper";
@@ -89,16 +91,18 @@ function AskRow({
     : "";
   const waiting = ask.answer === "waiting";
   const services = usePanelServices();
-  const [failed, setFailed] = useState(false);
+  const { failure, fail } = useOpenFailures();
   const chatId = askChat(ask);
-  // Like a session's row: the ask goes back to its chat, here in Feishu.
+  const failed = chatId ? failure(chatId) : null;
+  // Like a session's row: the ask goes back to its chat, here in Feishu;
+  // where it could not, the row says why a few seconds (#220).
   const jumps = Boolean(chatId && services?.openFeishuChat);
   const canOpen = jumps && !failed;
-  const goTitle = askGoTitle(failed, language);
+  const goTitle = askGoTitle(Boolean(failed), language);
   const go = async () => {
     if (!canOpen || !chatId) return;
-    const opened = await services?.openFeishuChat?.(chatId);
-    if (opened === false) setFailed(true);
+    const reason = failureOf(await services?.openFeishuChat?.(chatId), zh);
+    if (reason) fail(chatId, reason);
   };
   return (
     <div
@@ -183,6 +187,13 @@ function AskRow({
         />
       )}
       {!jumps && slot && <span aria-hidden />}
+      {failed && (
+        <OpenNotice
+          text={failed}
+          light={light}
+          style={{ gridColumn: "2 / -1", marginTop: -2 }}
+        />
+      )}
     </div>
   );
 }

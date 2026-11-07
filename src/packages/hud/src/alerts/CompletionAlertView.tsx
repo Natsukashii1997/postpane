@@ -3,7 +3,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { CheckCheck } from "lucide-react";
@@ -40,13 +39,16 @@ import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { useHandoffCard } from "./HandoffCard";
 import { handoffFor, relayLegend, relayLegendInks } from "./handoff-card";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import {
-  newestReply,
+  openReplyId,
   replyEntries,
   replyFacts,
   replyGroups,
   replyMessage,
   isReviewReply,
+  sessionReplies,
 } from "./reply-list";
 
 /**
@@ -73,35 +75,39 @@ export function CompletionAlertView({
   const paper = usePaper();
   const inks = cardInks(paper, light);
   const services = usePanelServices();
-  const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const { failure, fail } = useOpenFailures();
   const [unfolded, setUnfolded] = useState(false);
+  // The reply whose row was clicked: it opens in place of the newest.
+  const [chosen, setChosen] = useState<string | null>(null);
   const card = useHandoffCard();
 
   const entries = replyEntries(replies, snapshot.sessions);
-  const openId = newestReply(entries)?.id;
+  const openId = openReplyId(entries, chosen);
   const { groups, hidden, sectioned } = replyGroups(
     entries,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
     zh,
   );
 
-  // Going back puts the reply away; where there is no way back, the line
-  // says so.
+  // Only ↗ goes back, and only once the session is in front are its
+  // replies put away; where it could not get there, the line says why a few
+  // seconds and may be tried again (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
-    const opened = target ? await services?.openSession?.(target) : false;
-    if (opened === false) {
-      setUnreachable((previous) => new Set(previous).add(entry.id));
+    const reason = failureOf(
+      target ? await services?.openSession?.(target) : false,
+      zh,
+    );
+    if (reason) {
+      fail(entry.id, reason);
       return;
     }
-    drop([entry.id]);
+    drop(sessionReplies(entries, entry));
     handoff?.();
   };
   const canOpen = (entry: ApprovalEntry) =>
     Boolean(sessionToOpen(entry) && services?.openSession) &&
-    !unreachable.has(entry.id);
+    !failure(entry.id);
 
   // The owner's own replies on the receipt; a review's on the lower slip of
   // the reviews' paper (#145).
@@ -128,7 +134,7 @@ export function CompletionAlertView({
   ) => {
     if (entry.kind !== "reply") return null;
     const open = entry.id === openId;
-    const failed = unreachable.has(entry.id);
+    const failed = failure(entry.id);
     const bot = entry.session?.bot;
     const handoff = relayOf(entry);
     const inFrame = framed(entry);
@@ -177,7 +183,7 @@ export function CompletionAlertView({
             newsTitle(entry.event, zh)
           }
           canOpen={canOpen(entry)}
-          onSelect={() => void goBack(entry)}
+          onSelect={() => setChosen(entry.id)}
           onOpen={() => void goBack(entry)}
           inks={inks}
           light={light}
@@ -196,7 +202,8 @@ export function CompletionAlertView({
               padding: `14px 0 18px ${indent}px`,
             }}
           >
-            <ReplyBody entry={entry} inks={inks} zh={zh} failed={failed} />
+            <ReplyBody entry={entry} inks={inks} zh={zh} />
+            {failed && <OpenNotice text={failed} light={light} />}
             {/* Only what acts on this reply: going back is the ↗ in its
                 title row, putting them all away the head's (owner,
                 2026-11-07). */}
@@ -227,9 +234,9 @@ export function CompletionAlertView({
           </div>
         ) : (
           failed && (
-            <Unreachable
-              inks={inks}
-              zh={zh}
+            <OpenNotice
+              text={failed}
+              light={light}
               style={{
                 padding: `0 0 12px ${indent}px`,
                 marginTop: -4,
@@ -502,12 +509,10 @@ function ReplyBody({
   entry,
   inks,
   zh,
-  failed,
 }: {
   entry: Extract<ApprovalEntry, { kind: "reply" }>;
   inks: Inks;
   zh: boolean;
-  failed: boolean;
 }) {
   const message = replyMessage(entry.event, entry.session);
   const { took, tokens } = replyFacts(entry.event, entry.session, zh);
@@ -561,31 +566,6 @@ function ReplyBody({
           )}
         </div>
       )}
-      {failed && <Unreachable inks={inks} zh={zh} />}
     </>
-  );
-}
-
-function Unreachable({
-  inks,
-  zh,
-  style,
-}: {
-  inks: Inks;
-  zh: boolean;
-  style?: CSSProperties;
-}) {
-  return (
-    <p
-      role="status"
-      style={{
-        margin: 0,
-        fontSize: 11.5,
-        color: inks.dim,
-        ...style,
-      }}
-    >
-      {zh ? "无法回到这个会话" : "Couldn't return to this session"}
-    </p>
   );
 }

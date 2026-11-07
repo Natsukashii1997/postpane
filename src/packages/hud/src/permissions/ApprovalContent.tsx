@@ -15,6 +15,8 @@ import {
   projectName,
 } from "../IslandNews";
 import { usePanelServices } from "../PanelContext";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import { alertText } from "../tokens";
 import { useGround } from "../ground";
 import { usePaper } from "../paper";
@@ -107,9 +109,7 @@ export function ApprovalContent({
   const paper = usePaper();
   const inks = cardInks(paper, light);
   const services = usePanelServices();
-  const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const { failure, fail } = useOpenFailures();
   const [unfolded, setUnfolded] = useState(false);
   const asking =
     selected.kind === "question" || Boolean(selected.questions?.length);
@@ -141,9 +141,9 @@ export function ApprovalContent({
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     if (!target) return;
-    const opened = await services?.openSession?.(target);
-    if (opened === false)
-      setUnreachable((previous) => new Set(previous).add(entry.id));
+    // Where it could not get there, the line says why a few seconds (#220).
+    const reason = failureOf(await services?.openSession?.(target), zh);
+    if (reason) fail(entry.id, reason);
   };
 
   const fallbackTitle = (entry: ApprovalEntry) =>
@@ -242,7 +242,7 @@ export function ApprovalContent({
                   summary={summaryOf(entry)}
                   canOpen={
                     Boolean(target && services?.openSession) &&
-                    !unreachable.has(entry.id)
+                    !failure(entry.id)
                   }
                   onSelect={() => select(entry.id)}
                   onOpen={() => void goBack(entry)}
@@ -250,6 +250,13 @@ export function ApprovalContent({
                   light={light}
                   zh={zh}
                 />
+                {failure(entry.id) && (
+                  <OpenNotice
+                    text={failure(entry.id)!}
+                    light={light}
+                    style={{ padding: "0 0 10px 30px", marginTop: -4 }}
+                  />
+                )}
                 {open && entry.kind === "request" && openDetail(entry.request)}
               </div>
             );

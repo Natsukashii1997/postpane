@@ -4,6 +4,7 @@ import { GoButton } from "../GoButton";
 import type { Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { usePanelServices } from "../PanelContext";
+import { failureOf } from "../open-result";
 import { usePaper, paperLevel, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
 import { agentArtwork } from "../agent-artwork";
@@ -128,9 +129,9 @@ export function HandoffCard({
 
   const go = async (session: Session | undefined) => {
     if (!session || !services?.openSession) return;
-    const opened = await services.openSession(session);
-    if (opened === false) {
-      setError(zh ? "无法打开这个会话" : "Couldn't open that session");
+    const reason = failureOf(await services.openSession(session), zh);
+    if (reason) {
+      setError(reason);
       return;
     }
     handover?.();

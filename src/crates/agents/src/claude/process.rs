@@ -94,6 +94,27 @@ fn interactive(arguments: &[String]) -> bool {
     true
 }
 
+/// Whether the arguments run one prompt and exit (`-p`, `--print`).
+fn prints(arguments: &[String]) -> bool {
+    let mut i = 1;
+    while i < arguments.len() {
+        let argument = &arguments[i];
+        if argument == "--" {
+            break;
+        }
+        let option = argument.split('=').next().unwrap_or("");
+        if matches!(option, "-p" | "--print") {
+            return true;
+        }
+        i += if !argument.contains('=') && takes_value(option) {
+            2
+        } else {
+            1
+        };
+    }
+    false
+}
+
 /// Where a Claude Code session started: the terminal, the Claude desktop
 /// app or Cowork, from the entrypoint Claude Code reports and the app it
 /// runs under.
@@ -103,16 +124,19 @@ pub fn origin(caller: &Caller, session: &str) -> Origin {
     };
     let entrypoint = caller.env("CLAUDE_CODE_ENTRYPOINT");
     let mut target = serde_json::Value::Null;
+    // `claude -p` started inside a desktop session inherits its entrypoint
+    // but has no tab in the app to go back to (#220).
+    let tab = !prints(&arguments);
     let host = match entrypoint {
         Some("cli" | "sdk-cli") => "cli",
         Some("claude-desktop" | "claude-desktop-3p") if caller.under_bundle(DESKTOP_BUNDLE) => {
-            if !session.is_empty() {
+            if tab && !session.is_empty() {
                 target = json!({"kind":"claude-desktop","id":session});
             }
             "desktop"
         }
         Some("local-agent") if caller.under_bundle(DESKTOP_BUNDLE) => {
-            if !session.is_empty() {
+            if tab && !session.is_empty() {
                 target = json!({"kind":"claude-cowork","id":session});
             }
             "cowork"
@@ -269,6 +293,47 @@ mod tests {
             &[DESKTOP_BUNDLE],
         );
         assert_eq!(cowork.target["kind"], "claude-cowork");
+    }
+
+    #[test]
+    fn a_print_run_under_the_desktop_app_has_no_tab_to_go_back_to() {
+        // #220: `claude -p` started inside a desktop session inherits its
+        // entrypoint but has no tab of its own in the app.
+        for (entrypoint, arguments) in [
+            ("claude-desktop", &["claude", "-p", "hi"][..]),
+            (
+                "claude-desktop",
+                &["claude", "--model", "x", "--print", "hi"][..],
+            ),
+            ("local-agent", &["claude", "-p", "hi"][..]),
+        ] {
+            let (origin, _) = run(
+                arguments,
+                &[("CLAUDE_CODE_ENTRYPOINT", entrypoint)],
+                &[DESKTOP_BUNDLE],
+            );
+            assert_eq!(origin.target, serde_json::Value::Null, "{arguments:?}");
+        }
+        // The app's own sessions talk stream-json and keep their tab.
+        let (session, _) = run(
+            &[
+                "claude",
+                "--output-format",
+                "stream-json",
+                "--input-format",
+                "stream-json",
+            ],
+            &[("CLAUDE_CODE_ENTRYPOINT", "claude-desktop")],
+            &[DESKTOP_BUNDLE],
+        );
+        assert_eq!(session.target, json!({"kind":"claude-desktop","id":"s-1"}));
+        // A prompt after `--` is not an option.
+        let (prompt, _) = run(
+            &["claude", "--", "-p"],
+            &[("CLAUDE_CODE_ENTRYPOINT", "claude-desktop")],
+            &[DESKTOP_BUNDLE],
+        );
+        assert_eq!(prompt.target["kind"], "claude-desktop");
     }
 
     #[test]

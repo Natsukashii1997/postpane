@@ -638,20 +638,22 @@ function AppContent({
   }, [statistics]);
   const panelServices: PanelServices = {
     sources: snapshot?.sourcePreferences ?? store.sources,
+    // The reason a session or chat could not be reached goes back to the
+    // line that asked, where the side panel says it (#220).
     openSession: async (session) => {
       try {
         await action("open_session", { id: session.id });
         return true;
-      } catch {
-        return false;
+      } catch (failure) {
+        return failure instanceof Error ? failure.message : String(failure);
       }
     },
     openFeishuChat: async (chatId) => {
       try {
         await action("open_feishu_chat", { chatId });
         return true;
-      } catch {
-        return false;
+      } catch (failure) {
+        return failure instanceof Error ? failure.message : String(failure);
       }
     },
     query: (method, params) => act(method, params),

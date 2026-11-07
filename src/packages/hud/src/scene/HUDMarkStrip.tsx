@@ -222,8 +222,15 @@ export function HUDMarkStrip({
                 // review can be picked up there (owner, 2026-11-07).
                 const conversation =
                   vendor.relay?.overdue && vendor.relay.conversation;
+                // Where it could not get there, the panel opens on ChatGPT's
+                // row instead, as a click on the mark does (#220).
                 if (conversation && services?.openSession) {
-                  void services.openSession(chatgptConversation(conversation));
+                  const key = vendor.key;
+                  void services
+                    .openSession(chatgptConversation(conversation))
+                    .then((opened) => {
+                      if (opened !== true) pin(key);
+                    });
                   return;
                 }
                 pin(vendor.key);

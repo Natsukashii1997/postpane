@@ -30,6 +30,7 @@ import {
   usePanelPalette,
   type Logo,
 } from "./panel/theme";
+import { OpenNotice } from "./OpenNotice";
 import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
@@ -51,6 +52,9 @@ export interface SourceHoverPanelProps {
   Logo: Logo;
   onConfigure?: () => void;
   onStats?: () => void;
+  /** Why Settings or Statistics did not open just now (#220); empty when
+   * it gave no reason. */
+  openFailure?: string | null;
   /** The product's newer version, as Open's HUD showed it: an arrow beside
    * Statistics that opens the update in Settings. */
   update?: HUDUpdateNotice | null;
@@ -70,6 +74,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   Logo,
   onConfigure,
   onStats,
+  openFailure = null,
   update,
   onUpdate,
   maxHeight,
@@ -482,6 +487,15 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
         <Button size="xs" variant="ghost" onClick={services.draft.release}>
           {snapshotLanguage(snapshot) === "zh" ? "完成编辑" : "Finish editing"}
         </Button>
+      )}
+      {openFailure !== null && (
+        <OpenNotice
+          text={
+            openFailure ||
+            (snapshotLanguage(snapshot) === "zh" ? "没能打开" : "Couldn't open")
+          }
+          light={light}
+        />
       )}
       <footer
         data-hud-footer
