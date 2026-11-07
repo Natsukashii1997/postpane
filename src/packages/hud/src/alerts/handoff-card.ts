@@ -211,9 +211,28 @@ const cut = (text: string, limit: number) =>
 const oneLine = (text: string | null | undefined) =>
   (text ?? "").replace(/\s+/g, " ").trim();
 
+/** What the auto round trip, just turned on, waits for. */
+function waitsFor(handoff: Handoff, zh: boolean): string | undefined {
+  switch (phaseOf(handoff)) {
+    case "returned":
+      return zh
+        ? "等 Claude 改完送审，回信需修改就自动转回"
+        : "Waits for Claude to hand it over; answers go back by themselves";
+    case "sending":
+    case "delivered":
+    case "working":
+      return zh
+        ? "等 ChatGPT 回信，需修改就自动转回 Claude"
+        : "Waits for ChatGPT; changes needed go back to Claude by themselves";
+    default:
+      return undefined;
+  }
+}
+
 /** The timeline: each step done, then where it stands, then what is to come. */
 export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
   const rows: Row[] = [];
+  const newest = handoff.steps?.at(-1);
   let asks = 0,
     works = 0;
   for (const step of handoff.steps ?? []) {
@@ -347,12 +366,23 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           who: "post",
           time,
           title: zh ? "你打开了自动往返" : "You turned the auto round trip on",
+          sub:
+            step === newest && handoff.auto ? waitsFor(handoff, zh) : undefined,
           state: "done",
         });
         break;
     }
   }
   const at = handoff.phaseAt ?? handoff.updatedAt;
+  // Steps after it began (paused, turned on) are listed above it: its clock
+  // goes into the line instead, so the times read in order (#194).
+  const later = (newest?.at ?? 0) > at;
+  const curTime = later ? "" : clock(at);
+  const lasted = later
+    ? zh
+      ? `${clock(at)} 起 · ${since(at, now, zh)}`
+      : `since ${clock(at)} · ${since(at, now, zh)}`
+    : since(at, now, zh);
   const next = reviews(handoff) + 1;
   const again: Row = {
     who: "chatgpt",
@@ -403,9 +433,9 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     case "working":
       rows.push({
         who: "chatgpt",
-        time: clock(at),
+        time: curTime,
         title: zh ? "ChatGPT 审核中" : "ChatGPT is reviewing",
-        sub: since(at, now, zh),
+        sub: lasted,
         state: "cur",
       });
       rows.push(todoBack, todoFix);
@@ -422,13 +452,13 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     case "returned":
       rows.push({
         who: "claude",
-        time: clock(at),
+        time: curTime,
         title: zh ? "Claude 按意见修改" : "Claude works on it",
         sub: handoff.queuedAt
           ? zh
             ? "意见已排队 · 在 Claude 里打开这个会话就会继续"
             : "Answer queued · open this session in Claude to go on"
-          : since(at, now, zh),
+          : lasted,
         state: "cur",
       });
       if (more) rows.push(again);
@@ -453,12 +483,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
 export function actions(handoff: Handoff): Action[] {
   const phase = phaseOf(handoff);
   // The auto round trip's switch, after 「结束接力」: pause it while on,
-  // turn it back on once it stopped.
+  // turn it back on once it stopped and a round is left for it (#194).
   const toggle: Action[] = !live(handoff)
     ? []
     : handoff.auto
       ? ["pause"]
-      : handoff.halt
+      : handoff.halt && reviews(handoff) < ROUNDS
         ? ["resume"]
         : [];
   const open: Action[] = [
