@@ -98,14 +98,16 @@ export type { DiskSlimState } from "./scene/DiskPendant";
 export interface HUDSceneProps {
   snapshot: Snapshot;
   config: HUDConfig;
-  onConfigure?: () => void;
+  /** Opens Settings; may reject with why it could not. */
+  onConfigure?: () => unknown;
   /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
   onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
   /** 磁盘瘦身's last status; it hangs under 随手记 while it is installed (#155). */
   diskSlim?: DiskSlimState | null;
   /** Asks 磁盘瘦身 to open or hide its panel beside its ball. */
   onDiskSlim?: (anchor: HUDRect) => Promise<void>;
-  onStats?: (target?: StatsTarget) => void;
+  /** Opens Statistics; may reject with why it could not. */
+  onStats?: (target?: StatsTarget) => unknown;
   /** The product's newer version, and the way to it (the panel footer's arrow). */
   update?: HUDUpdateNotice | null;
   onUpdate?: () => void;
@@ -751,6 +753,8 @@ export function HUDScene({
     handoff,
     configurePanel,
     showPanelStats,
+    openFromPanel,
+    panelFailure,
   } = useHUDInteraction({
     config,
     edge,
@@ -880,15 +884,15 @@ export function HUDScene({
     newsContent
   );
 
-  // The panel's session rows hand over as Open's ScreenHUD does: the HUD
-  // collapses first, then the Statistics window opens.
+  // The panel's session rows hand over to the Statistics window; the HUD
+  // collapses once it opened (#220).
   const openStatsAt = useCallback(
     (target: StatsTarget) => {
       if (!onStats) return;
       endHold();
-      handoff(() => onStats(target));
+      openFromPanel(() => onStats(target));
     },
-    [onStats, endHold, handoff],
+    [onStats, endHold, openFromPanel],
   );
   const listedSessions = useMemo<ListedSessions>(
     () => ({ openStats: openStatsAt }),
@@ -1038,6 +1042,7 @@ export function HUDScene({
                                 }
                               : undefined
                           }
+                          openFailure={panelFailure}
                           update={update}
                           onUpdate={
                             onUpdate
@@ -1157,6 +1162,7 @@ export function HUDScene({
             dismissNews={news.dismiss}
             showPanelStats={showPanelStats}
             configurePanel={configurePanel}
+            panelFailure={panelFailure}
             surfacePadding={surfacePadding}
             eventContent={eventContent}
             inlineAlert={inlineAlert(snapshot)}

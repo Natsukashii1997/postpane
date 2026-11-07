@@ -159,3 +159,48 @@ fn a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser() {
         );
     }
 }
+
+#[test]
+fn a_claude_desktop_session_without_its_tab_is_not_reported_open() {
+    // #220: the app alone is not the session, so the reply stays and says why.
+    for kind in ["claude-desktop", "claude-cowork", "claudeDesktopSession"] {
+        let target = json!({"kind":kind,"id":"11111111-2222-4333-8444-555555555555"});
+        let reason = without_link(&target).expect_err(kind);
+        assert!(!reason.is_empty(), "{kind}");
+    }
+    assert_eq!(without_link(&json!({"kind":"unknown","id":"x"})), Ok(false));
+}
+
+#[test]
+fn a_tab_that_moved_to_a_new_claude_code_session_is_found_by_the_old_id() {
+    // #220: the desktop tab keeps the ids it ran before in `priorCliSessionIds`.
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().to_path_buf();
+    let tab = |stem: &str, meta: Value| {
+        let folder = base.join("claude-code-sessions/org/acct");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join(format!("{stem}.json")), meta.to_string()).unwrap();
+    };
+    let stem = "local_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    let old = "11111111-2222-4333-8444-555555555555";
+    let now = "66666666-7777-4888-9999-aaaaaaaaaaaa";
+    tab(
+        stem,
+        json!({"sessionId":stem,"cliSessionId":now,"priorCliSessionIds":[old]}),
+    );
+    let bases = [base.clone()];
+    assert_eq!(local_id_in(&bases, now, false), Some(stem.into()));
+    assert_eq!(local_id_in(&bases, old, false), Some(stem.into()));
+    // An id that is another tab's current one goes to that tab.
+    let other = "local_ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    tab(other, json!({"sessionId":other,"cliSessionId":old}));
+    assert_eq!(local_id_in(&bases, old, false), Some(other.into()));
+    // An archived tab is not opened by its old id either.
+    let archived = "22222222-2222-4333-8444-555555555555";
+    let gone = "local_00000000-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    tab(
+        gone,
+        json!({"sessionId":gone,"cliSessionId":now,"priorCliSessionIds":[archived],"isArchived":true}),
+    );
+    assert_eq!(local_id_in(&bases, archived, false), None);
+}

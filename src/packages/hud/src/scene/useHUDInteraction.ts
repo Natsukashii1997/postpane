@@ -3,11 +3,13 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type MutableRefObject,
   type RefObject,
 } from "react";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import type { HUDRect, StripMetrics } from "../geometry";
+import { RETRY_AFTER_MS, openThenPutAway } from "../open-result";
 import {
   vendorKey,
   type HUDConfig,
@@ -63,8 +65,10 @@ export interface UseHUDInteractionArgs {
   inUsagePanel?: boolean;
   typing?: boolean;
   nativePointer?: HUDNativePointer;
-  onConfigure?: () => void;
-  onStats?: () => void;
+  /** Open Settings and Statistics; each may resolve, or reject with why it
+   * could not open. */
+  onConfigure?: () => unknown;
+  onStats?: () => unknown;
   /** Escape only ends an agent's edit hold; the panel is left to the hover. */
   onEscape?: () => void;
 }
@@ -339,13 +343,32 @@ export function useHUDInteraction({
     },
     [collapse, suppressHover],
   );
+  // Settings and Statistics open before the panel goes; one that does not
+  // leaves the panel up, saying why a few seconds (#220).
+  const [panelFailure, setPanelFailure] = useState<string | null>(null);
+  const failureTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(failureTimer.current), []);
+  const openFromPanel = useCallback(
+    (open: () => unknown) => {
+      void openThenPutAway(open, () => handoff()).then((reason) => {
+        clearTimeout(failureTimer.current);
+        setPanelFailure(reason);
+        if (reason !== null)
+          failureTimer.current = setTimeout(
+            () => setPanelFailure(null),
+            RETRY_AFTER_MS,
+          );
+      });
+    },
+    [handoff],
+  );
   const configurePanel = useMemo(
-    () => (onConfigure ? () => handoff(onConfigure) : undefined),
-    [onConfigure, handoff],
+    () => (onConfigure ? () => openFromPanel(onConfigure) : undefined),
+    [onConfigure, openFromPanel],
   );
   const showPanelStats = useMemo(
-    () => (onStats ? () => handoff(onStats) : undefined),
-    [onStats, handoff],
+    () => (onStats ? () => openFromPanel(onStats) : undefined),
+    [onStats, openFromPanel],
   );
 
   return {
@@ -357,5 +380,7 @@ export function useHUDInteraction({
     handoff,
     configurePanel,
     showPanelStats,
+    openFromPanel,
+    panelFailure,
   };
 }

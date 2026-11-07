@@ -75,6 +75,7 @@ export function HUDExpandedSurface({
   dismissNews,
   showPanelStats,
   configurePanel,
+  panelFailure,
   surfacePadding,
   eventContent,
   inlineAlert,
@@ -126,6 +127,8 @@ export function HUDExpandedSurface({
   dismissNews: () => void;
   showPanelStats?: () => void;
   configurePanel?: () => void;
+  /** Why Settings or Statistics did not open just now (#220). */
+  panelFailure?: string | null;
   surfacePadding: { top: number; right: number; bottom: number; left: number };
   eventContent: ReactNode;
   /** Quota news atop the open usage panel. */
@@ -521,6 +524,7 @@ export function HUDExpandedSurface({
                                   Logo={HUDLogo}
                                   onConfigure={configurePanel}
                                   onStats={showPanelStats}
+                                  openFailure={panelFailure}
                                   inlineAlert={inlineAlert}
                                   maxHeight={Math.max(
                                     40,

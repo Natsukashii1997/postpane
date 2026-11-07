@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { GoButton } from "../GoButton";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import type {
   PanelLayout,
   SessionsResponse,
@@ -400,15 +402,18 @@ function LiveRow({
   const inks = useBoardInks(light);
   const card = useHandoffCard();
   const paper = usePaper();
-  const [failed, setFailed] = useState(false);
+  const { failure, fail } = useOpenFailures();
   const [hover, setHover] = useState(false);
   const { session } = entry;
+  const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
+  // Where it could not get there, the second line says why a few seconds,
+  // then ↗ may be tried again (#220).
   const goBack = async () => {
     if (!canOpen) return;
-    const opened = await services?.openSession?.(session);
-    if (opened === false) setFailed(true);
+    const reason = failureOf(await services?.openSession?.(session), zh);
+    if (reason) fail(session.id, reason);
   };
   const details = () =>
     listed
@@ -766,7 +771,13 @@ function LiveRow({
               void goBack();
             }}
           />
-          {notice ? (
+          {failed ? (
+            <OpenNotice
+              text={failed}
+              light={light}
+              style={{ gridColumn: "2 / 3" }}
+            />
+          ) : notice ? (
             <span
               role="status"
               style={{

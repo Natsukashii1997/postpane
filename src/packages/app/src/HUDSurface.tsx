@@ -366,9 +366,9 @@ export default function NativeHUDSurface({
     return () => clearTimeout(timer);
   }, [held, config.mode, config.edge, config.offset]);
   const shownConfig = held ? { ...config, ...held } : config;
-  const configure = useCallback(() => {
-    void invoke("hud_show_main");
-  }, []);
+  // Settings and Statistics resolve once open, or reject with why not: the
+  // panel goes away only once they opened (#220).
+  const configure = useCallback(() => invoke("hud_show_main"), []);
   const floatNotes = useCallback(
     (anchor: { x: number; y: number; width: number; height: number }) =>
       invoke<boolean>("toggle_float_notes", { anchor }),
@@ -421,12 +421,14 @@ export default function NativeHUDSurface({
     [],
   );
   // Statistics opens on Tokens (Open's footer button), or where a session row points.
-  const stats = useCallback((target?: { tab?: string; sessionId?: string }) => {
-    void invoke("open_statistics", {
-      tab: target?.tab ?? "tokens",
-      sessionId: target?.sessionId,
-    });
-  }, []);
+  const stats = useCallback(
+    (target?: { tab?: string; sessionId?: string }) =>
+      invoke("open_statistics", {
+        tab: target?.tab ?? "tokens",
+        sessionId: target?.sessionId,
+      }),
+    [],
+  );
   const looked = useCallback((keys: string[] | null) => {
     void invoke("hud_bot_looked", { keys });
   }, []);
