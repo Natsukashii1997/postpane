@@ -4,7 +4,7 @@
 
 
 
-## 侧栏收得到自己开的 ChatGPT 对话：插件重载后给已开标签页补装脚本（2026-11-07，Claude，常浩反馈「侧边栏 GPT 还是抓不到他的回话……明显的 bug」，并按提示刷新标签页发了一句测试；PR 全量通过，按授权 squash 合并；插件需常浩在扩展程序页重新加载，驿窗应用无需发布）
+## 侧栏收得到自己开的 ChatGPT 对话：插件重载后给已开标签页补装脚本（2026-11-07，Claude，常浩反馈「侧边栏 GPT 还是抓不到他的回话……明显的 bug」，并按提示刷新标签页发了一句测试；PR 全量通过，按授权 squash 合并；常浩重新加载插件 0.2.2 后实机验证通过，驿窗应用无需发布）
 
 - 时间：开工 `2026-11-07 19:05`（`date '+%F %H:%M'` 记录）。来由：#206。常浩在 Chrome 里聊了「审核需求梳理」「审核Skill方法论提炼」等对话，侧栏 ChatGPT 格「正在进行 0」，没有回执。
 - 根因（有证据）：`hooks/inbox` 里 ChatGPT 的 17 条回复全是接力会话（都在 `watched.json`），#145 上线以来没有一条常浩自己开的对话；`chatgpt/turns.jsonl` 也只有接力会话，最后一行 14:29，宿主对任何 turn 都记，所以是插件没报。页面选择器在当前 ChatGPT 页面上仍取得到。常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来，收件箱生成 completion。结论：插件重载（#183 时 12:51）后，Chrome 不给已开标签页装新脚本，旧脚本断开、发消息同步抛错被吞；接力会话由插件新开标签页，所以不受影响。
@@ -14,7 +14,7 @@
   - `src/apps/chrome-extension/manifest.json`：加 `scripting` 权限，版本 0.2.1 → 0.2.2。
   - `src/apps/chrome-extension/test/content.test.mjs` 两条、新增 `test/background.test.mjs` 一条；`docs/chatgpt-channel.md` 补一条；`docs/LESSONS.md` 新增 L-23。
 - 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通用规则检查通过。新加的两条内容脚本测试换回旧 `content.js` 跑是 `ℹ pass 0` / `ℹ fail 2`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-stale-tabs/`。
-- 验证：根因实测见上（常浩刷新后发一句）。修复后的实机验证**未做，等常浩操作**：主目录拉到合并后的 main，在 `chrome://extensions` 点驿窗插件的重新加载（版本应显示 0.2.2），然后**不刷新**原来的 ChatGPT 标签页直接发一句，`turns.jsonl` 应出现新行、侧栏弹回执。
+- 验证：根因实测见上（常浩刷新后发一句）。修复后实机（补记）：常浩在 `chrome://extensions` 重新加载插件 0.2.2，转接进程 19:16:52 重启；**没刷新**的那个 ChatGPT 标签页里发「测试2」，`turns.jsonl` 19:17:00 start、19:17:05 complete，收件箱生成 completion（回复「测试2：接收成功，回复正常。」），说明重载后补装的脚本在工作。
 - 截图：无。
 - 发布与回读：驿窗应用没改，无需发布；插件靠常浩重新加载生效。
 - 与授权不一致之处、遗留问题、范围外发现：范围外：`manifest.json` 的 description「只报驿窗名单里的会话」、`content.js` 开头注释「只转发名单里的会话」自 #145 起已不符，未改。
