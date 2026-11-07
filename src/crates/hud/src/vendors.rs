@@ -80,10 +80,17 @@ fn deepseek_balances<'a>(snapshot: &'a Value, layout: &Value) -> (Option<String>
     (balance, level)
 }
 
-/// The tightest window of an agent's last reading while every window waits
-/// on a failed read ("stale"), so a Simple mark keeps showing it in the stale
-/// grey. A window whose reset has passed holds nothing, since its share has
-/// started over. None while any window reads live (held-reading.ts `heldUsed`).
+/// A window over a whole week that covers every model: the one a mark leads
+/// with (#174, quota-rows.ts `weeklyWindow`).
+fn weekly(quota: &Value) -> bool {
+    quota["windowDurationSeconds"].as_f64() == Some(604_800.0) && quota["allModels"] != false
+}
+
+/// The window of an agent's last reading its mark leads with (its weekly
+/// window, else its tightest) while every window waits on a failed read
+/// ("stale"), so a Simple mark keeps showing it in the stale grey. A window
+/// whose reset has passed holds nothing, since its share has started over.
+/// None while any window reads live (held-reading.ts `heldUsed`).
 fn held(quotas: &[&Value], now_ms: i64) -> Option<f64> {
     if quotas
         .iter()
@@ -91,7 +98,7 @@ fn held(quotas: &[&Value], now_ms: i64) -> Option<f64> {
     {
         return None;
     }
-    quotas
+    let standing: Vec<(f64, bool)> = quotas
         .iter()
         .filter(|q| {
             q["resetAt"]
@@ -99,8 +106,16 @@ fn held(quotas: &[&Value], now_ms: i64) -> Option<f64> {
                 .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
                 .is_none_or(|at| at.timestamp_millis() > now_ms)
         })
-        .filter_map(|q| q["usedPercent"].as_f64().filter(|used| used.is_finite()))
-        .fold(None, |most: Option<f64>, used| {
+        .filter_map(|q| {
+            let used = q["usedPercent"].as_f64().filter(|used| used.is_finite())?;
+            Some((used, weekly(q)))
+        })
+        .collect();
+    let leads = standing.iter().any(|(_, weekly)| *weekly);
+    standing
+        .into_iter()
+        .filter(|(_, weekly)| *weekly || !leads)
+        .fold(None, |most: Option<f64>, (used, _)| {
             Some(most.map_or(used, |most| most.max(used)))
         })
 }
@@ -126,15 +141,18 @@ pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'
             let quotas: Vec<&Value> = list(snapshot, "quotas")
                 .filter(|q| mark(q["vendor"].as_str().unwrap_or("")) == key)
                 .collect();
-            // The first of equal readings stays the tightest.
-            let tightest = quotas
+            // The weekly window leads (#174); without one, the first of
+            // equal readings stays the tightest.
+            let live = quotas
                 .iter()
                 .filter(|q| q["status"] != "stale")
-                .filter_map(|q| Some((q["usedPercent"].as_f64()?, *q)))
-                .fold(None::<(f64, &Value)>, |best, (used, q)| match best {
+                .filter_map(|q| Some((q["usedPercent"].as_f64()?, *q)));
+            let tightest = live.clone().find(|(_, q)| weekly(q)).or_else(|| {
+                live.fold(None::<(f64, &Value)>, |best, (used, q)| match best {
                     Some((most, _)) if used <= most => best,
                     _ => Some((used, q)),
-                });
+                })
+            });
             let sessions: Vec<&Value> = list(snapshot, "sessions")
                 .filter(|s| mark(s["source"].as_str().unwrap_or("")) == key)
                 .collect();
@@ -468,6 +486,55 @@ mod tests {
         assert_eq!(label("kimi"), "30%", "a window comes first");
         assert_eq!(label("pi"), "--", "nothing used: nothing to show");
         assert_eq!(label("opencode"), "700", "a local model: its tokens too");
+    }
+
+    #[test]
+    fn a_mark_leads_with_its_weekly_window_however_full_the_5_hours_are() {
+        let window = |vendor: &str, used: f64, seconds: Value, all: bool, status: &str| {
+            json!({"vendor": vendor, "usedPercent": used, "status": status,
+                   "windowDurationSeconds": seconds, "allModels": all,
+                   "resetAt": "2099-01-01T00:00:00Z"})
+        };
+        let providers: Vec<Value> = ["claude", "codex", "kimi", "cursor"]
+            .map(|id| json!({"id": id, "detected": true, "enabled": true, "recent": null}))
+            .into();
+        let snapshot = json!({
+            "quotas": [
+                window("claude", 11.0, json!(18_000), true, "normal"),
+                window("claude", 4.0, json!(604_800), true, "normal"),
+                window("codex", 95.0, json!(18_000), true, "normal"),
+                window("codex", 30.0, json!(604_800), true, "normal"),
+                window("kimi", 20.0, json!(18_000), true, "normal"),
+                window("kimi", 60.0, json!(604_800), false, "normal"),
+                window("cursor", 95.0, json!(18_000), true, "stale"),
+                window("cursor", 30.0, json!(604_800), true, "stale")
+            ],
+            "billing": [], "sessions": [], "approvals": [],
+            "providers": providers
+        });
+        let rows = vendors(&snapshot, "simple", 0);
+        let row = |key: &str| rows.iter().find(|row| row.key == key).unwrap();
+        assert_eq!(
+            row("claude").used,
+            Some(4.0),
+            "weekly, not the fuller 5 hours"
+        );
+        assert_eq!(
+            row("codex").used,
+            Some(30.0),
+            "weekly, not the nearly spent 5 hours"
+        );
+        assert_eq!(
+            row("kimi").used,
+            Some(60.0),
+            "one model's week does not lead"
+        );
+        assert_eq!(row("cursor").used, None);
+        assert_eq!(
+            row("cursor").held,
+            Some(30.0),
+            "a held reading keeps the week too"
+        );
     }
 
     #[test]

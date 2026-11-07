@@ -136,3 +136,11 @@
   - 「打开会话就继续」不成立：打开会话链接或在侧栏点开，桌面版只记 `Warming session`，不重启 Claude 进程，插件不签到，排队的话领不走；要有一条消息发进去，桌面版才重启进程（`evidence/2026-11-07-link-wake/`）。会话跑后台任务时桌面版照样按空闲计时，后台等待防不住回收（`evidence/2026-11-07-bg-wait/`）。
   - 正确做法：会话进程已停（签到写着 `ended`，或 3 分钟没签到）就用 `claude -p --resume <CLI 会话号> --permission-mode <会话自己的模式>` 在后台续接，桌面版之后续接同一个会话号、接得上这一轮（`evidence/2026-11-07-headless-resume/`）；只是暂时卡顿的先排队，3 分钟还没领、会话也没恢复，撤回排队再续接。CLI 会话号对应的工作目录、模型、权限模式在桌面版会话记录 `~/Library/Application Support/Claude/claude-code-sessions/**/local_*.json`（`cliSessionId`）里。
   - 升级：已写成测试 `handoff::tests::a_session_whose_process_stopped_is_run_in_the_background_with_the_answer`、`queued_words_for_a_session_that_stays_quiet_are_taken_back_and_run_in_the_background`、`a_background_run_that_cannot_start_or_ends_without_a_handover_is_left_to_the_person`。
+
+## L-15 侧栏审批「看不到」：10 分钟就撤回，驿窗一重装也丢（2026-11-07）
+
+- 现象：常浩反映真实任务里要批的命令，侧栏没弹出带「允许 / 拒绝」的卡，只在 Claude 窗口里看到。会话 `5f107a09` 凌晨 02:28 发出一条命中 `ask` 规则的命令（`git branch -D`、`git push --delete`），Claude 窗口一直挂到 08:35 才批；同一会话 08:37 的另一条审批驿窗收到了。
+- 根因：两处。① 设置「等待回答」默认 10 分钟（`approvalWaitMinutes`），到点驿窗撤掉卡片、交还客户端自己问，02:28 那条 02:38 就从侧栏消失了，人不在电脑前必然错过。② 审批钩子连接挂在驿窗进程上；装新版会重启驿窗（07:29 另一会话装 #173），旧连接一断，钩子就当「没结论」退出，新进程不知道这条请求。钩子这条链路本身没坏，排查时别先怀疑插件和钩子配置。
+- 正确做法：「等待回答」加「一直等」（值 0，不设截止，客户端窗口里批了侧栏自动收起），常浩本机用它。驿窗主动结束请求时给钩子回 `{}`；连接无声断开说明驿窗退出了，钩子等最多 2 分钟，新进程起来后重新挂上同一条请求。查「侧栏没弹审批」先看两件事：当时设置的等待时长，以及那段时间驿窗有没有被重启（`ps -o lstart= -p $(pgrep -x PostPane)`、各会话的 `install.sh` 记录）。
+- 证据：会话记录 `~/.claude/projects/-Users-nat-Documents-ChatGPT----work-postpane/5f107a09-….jsonl` 18:28:12Z 的 tool_use 与 00:35:13Z 的 tool_result；`93636e9f-….jsonl` 23:29:06Z 的 `install.sh auto-back-queue`；`settings.json` 的 `approvalWaitMinutes: 10`。
+- 升级：已写成测试 `hooks::transport::tests::a_request_open_when_postpane_restarts_is_put_to_the_new_one`、`a_request_postpane_ends_itself_goes_back_to_the_client_once`、`waiting_until_answered_never_runs_out`。

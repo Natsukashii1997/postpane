@@ -113,17 +113,29 @@ export function quotaRowShown(
   return blockRows([row], layout?.blocks?.[row.vendor]).length > 0;
 }
 
-/** The window an agent's mark leads with: its live plan window most used. A
- * credit grant is spending money, not a plan limit, so it never leads. */
-export function tightestWindow<T extends Quota>(
+/** A window over a whole week that covers every model (#174). */
+export function weeklyWindow(row: {
+  windowDurationSeconds?: number | null;
+  allModels?: boolean;
+}): boolean {
+  return row.windowDurationSeconds === 604_800 && row.allModels !== false;
+}
+
+/** The window an agent's mark leads with: its live weekly window, as 常浩
+ * asked (#174), however full its 5 hours are; without one, its live plan
+ * window most used. A credit grant is spending money, not a plan limit, so it
+ * never leads. */
+export function leadingWindow<T extends Quota>(
   rows: readonly T[],
 ): T | undefined {
-  return rows
-    .filter(
-      (q) => q.usedPercent != null && q.status !== "stale" && !quotaCredits(q),
-    )
-    .reduce<T | undefined>(
+  const live = rows.filter(
+    (q) => q.usedPercent != null && q.status !== "stale" && !quotaCredits(q),
+  );
+  return (
+    live.find(weeklyWindow) ??
+    live.reduce<T | undefined>(
       (a, b) => (!a || b.usedPercent! > a.usedPercent! ? b : a),
       undefined,
-    );
+    )
+  );
 }

@@ -6,7 +6,7 @@ import {
   quotaRowHidden,
   quotaRowKey,
   quotaRowShown,
-  tightestWindow,
+  leadingWindow,
   withRowShown,
 } from "../src/quota-rows.ts";
 import { peekWindowName } from "../src/panel/window-labels.ts";
@@ -92,17 +92,53 @@ test("the peek lists only the windows the hover panel shows", () => {
   assert.equal(claude.filter((q) => quotaRowShown(q, hidingAccount)).length, 0);
 });
 
-test("the resting strip's figure leads with the tightest shown window, never credits", () => {
-  assert.equal(tightestWindow(claude)?.usedPercent, 92);
+test("without a weekly window the figure leads with the tightest shown window, never credits", () => {
+  assert.equal(leadingWindow(claude)?.usedPercent, 92);
   assert.equal(
-    tightestWindow(claude.filter((q) => quotaRowShown(q, hidingFable)))
+    leadingWindow(claude.filter((q) => quotaRowShown(q, hidingFable)))
       ?.usedPercent,
     47,
   );
   assert.equal(
-    tightestWindow([reading("claude-weekly", 30, { status: "stale" })]),
+    leadingWindow([reading("claude-weekly", 30, { status: "stale" })]),
     undefined,
   );
+});
+
+// Claude and Codex as they read: a 5-hour and an every-model weekly window.
+const timed = (window: string, usedPercent: number, seconds: number) =>
+  reading(window, usedPercent, {
+    windowDurationSeconds: seconds,
+    allModels: true,
+  });
+
+test("the resting strip's figure leads with the weekly window, however full the 5 hours are (#174)", () => {
+  const justReset = [
+    timed("claude-session", 11, 18_000),
+    timed("claude-weekly", 4, 604_800),
+  ];
+  assert.equal(leadingWindow(justReset)?.usedPercent, 4);
+  const nearlySpent = [
+    timed("claude-session", 95, 18_000),
+    { ...timed("claude-weekly", 30, 604_800), status: "normal" as const },
+  ];
+  assert.equal(leadingWindow(nearlySpent)?.usedPercent, 30);
+  // A weekly window for one model only does not lead.
+  const fableOnly = [
+    timed("claude-session", 11, 18_000),
+    reading("claude-weekly-fable", 60, {
+      windowDurationSeconds: 604_800,
+      allModels: false,
+    }),
+  ];
+  assert.equal(leadingWindow(fableOnly)?.usedPercent, 60);
+  assert.equal(leadingWindow(fableOnly)?.name, "claude-weekly-fable");
+  // A weekly window that failed to read gives way to a live one.
+  const weeklyStale = [
+    timed("claude-session", 11, 18_000),
+    { ...timed("claude-weekly", 4, 604_800), status: "stale" as const },
+  ];
+  assert.equal(leadingWindow(weeklyStale)?.usedPercent, 11);
 });
 
 test("the peek writes Claude's cloud credits as 云端 in Chinese only", () => {
