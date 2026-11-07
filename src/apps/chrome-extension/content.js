@@ -3,7 +3,21 @@
 // PostPane's watch list. Page structure lives in page.js.
 (() => {
   const page = globalThis.PostPanePage;
-  const tell = (message) => chrome.runtime.sendMessage(message).catch(() => {});
+  // background.js injects this again into tabs already open when the
+  // extension is installed, updated or reloaded: a copy still running here
+  // steps aside, so the page is reported once.
+  globalThis.PostPaneContentStop?.();
+  let stopped = false;
+  // A copy left behind by a reload is cut off from the extension and every
+  // send throws: it stops instead of failing silently on every change.
+  const tell = (message) => {
+    if (stopped) return;
+    try {
+      chrome.runtime.sendMessage(message).catch(() => {});
+    } catch {
+      stop();
+    }
+  };
 
   let conversation = page.conversationId(location.href);
   let wasStreaming = page.streaming(document);
@@ -23,6 +37,7 @@
   }
 
   function settle() {
+    if (stopped) return;
     const now = page.conversationId(location.href);
     const streaming = page.streaming(document);
     if (now !== conversation) {
@@ -69,16 +84,17 @@
 
   // Sample at most every 400 ms while the page changes, never postponing: a
   // streaming page changes without pause, and a background tab's timers are slow.
-  new MutationObserver(() => {
+  const observer = new MutationObserver(() => {
     timer ??= setTimeout(() => {
       timer = null;
       settle();
     }, 400);
-  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label"] });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label"] });
 
   document.addEventListener("visibilitychange", report);
 
-  chrome.runtime.onMessage.addListener((command, _sender, reply) => {
+  function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
       page.submit(document, command.text).then((result) => {
         if (result.ok) expecting = true;
@@ -95,7 +111,21 @@
       });
     }
     return false;
-  });
+  }
+  chrome.runtime.onMessage.addListener(onCommand);
+
+  function stop() {
+    stopped = true;
+    observer.disconnect();
+    clearTimeout(timer);
+    document.removeEventListener("visibilitychange", report);
+    try {
+      chrome.runtime.onMessage.removeListener(onCommand);
+    } catch {
+      // Cut off from the extension: nothing left to remove.
+    }
+  }
+  globalThis.PostPaneContentStop = stop;
 
   report();
 })();
