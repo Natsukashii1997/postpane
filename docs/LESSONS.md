@@ -179,3 +179,11 @@
 - 正确做法：签到文件标了 `ended` 就说「会话已停，在 Claude 里打开它」，不给 `/reload-plugins`。排查「会话为什么连不上」先看 `~/Library/Application Support/app.postpane.mac/claude-channel/sessions/<会话 id>.json` 的内容与修改时间，再用 `ps -axo lstart,command | grep "MacOS/claude "` 看这个会话有没有进程。
 - 证据：`stat -f "%m %Sm %N" claude-channel/sessions/*.json | sort -rn`（大批文件同一秒写成 ended）；会话记录 `be0e22ad-….jsonl` 里有 43 处 `agent-hud`；日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
 - 升级：已写成测试 `an_unreached_session_names_the_step_that_lets_the_hud_answer` 的 ended 一段（#188）；签到文件一天后被 `sweep` 清掉、停久了又退回旧提示，#191 让标了 ended 的记录留 7 天，测试 `an_ended_session_is_remembered_for_a_week`。
+
+## L-21 「继续自动」点了没反应：开关按钮只看「停了」就显示，没看打开后还有没有事可做（2026-11-07）
+
+- 现象：数字分身 DT-ORC 那单接力卡显示「自动已停 · 第 2 / 2 轮」，常浩点「继续自动」，卡上没有任何变化，也没有真的继续。
+- 根因：`actions()` 只要 `halt` 有值就给「继续自动」，后台 `resume` 也照收。可这单已审满 `ROUNDS` 轮，到上限后自动往返对任何回信都只会再停下，打开它没有任何效果；卡片又停在「转回 Claude」阶段（等 Claude 送审），时间线上只多一行「你打开了自动往返」。这单的 PR 其实早已合并，Claude 13:51 就回了「不用再做事」。
+- 正确做法：开关类按钮按「打开后会不会有可见效果」决定显示，不只看状态字段；后台同样拒绝无效的打开，并说明原因。打开之后，在时间线上写明它接下来在等什么。查「点了没反应」先看 `~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里这单的 `steps`：有没有记下这一下、当时在什么阶段、审了几轮。
+- 证据：`handoffs.json` 中 `h1a1b344630400` 的 `resume` 14:53:08、`stop` 14:55:19，`phase` 为 `returned`，`ask` 两次；日志与截图在 `~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`。
+- 升级：已写成测试：前端「「继续自动」 only while a round is left」，后端 `the_auto_round_trip_stops_at_the_last_round_or_without_a_verdict` 末段（#194）。

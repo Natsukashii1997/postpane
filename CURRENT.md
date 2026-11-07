@@ -4,6 +4,21 @@
 
 
 
+## 接力卡：审满轮数后不再显示「继续自动」；等待行时间顺序（2026-11-07，Claude，常浩截图问「点继续自动毫无反应」，看排查后说「先改之前的问题」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 15:00`（`date '+%F %H:%M'` 记录）。来由：#194。数字分身 DT-ORC 接力卡（`h1a1b344630400`）「第 2 / 2 轮」，点「继续自动」没反应：后台其实记下了（14:53:08 `resume`），但这单已审满 `ROUNDS` 轮、停在「转回 Claude」阶段，打开自动往返没有任何效果，卡上也不说明（L-21）。这单的 PR #63 早已合并，Claude 13:51 回过「不用再做事」。
+- 改了哪些文件：`src/packages/hud/src/alerts/handoff-card.ts`（`actions()` 只在 `reviews < ROUNDS` 时给「继续自动」；刚打开自动往返的那一行写明在等什么；阶段开始后有更晚步骤时，等待行不显示较早时刻，改写「HH:MM 起 · 已 X」）；`src/crates/host/src/handoff.rs`（`act("resume")` 已审满时拒绝并说明，新增 `no_rounds_left()`）；`src/packages/hud/test/handoff-card.test.ts`（新增 2 条，改 1 处期望；修复前 3 处失败）；`handoff.rs` 测试 `the_auto_round_trip_stops_at_the_last_round_or_without_a_verdict` 末段（修复前 `left: None`）；`docs/LESSONS.md` 新增 L-21。轮数仍按 `ROUNDS` 判断，不写死 2。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 748 passed / 0 failed，前端 `ℹ pass 309` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`（`check.log`、`test.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`HandoffCard` 原样，470 宽，接力信纸），喂本机 DT-ORC 真实记录和两个第 1 轮变体，内置浏览器等字体加载完截图、放大核对两轮：真实记录底部只剩「结束接力」「查看 ChatGPT 对话」，时间读作 08:06 → 13:48 → 14:53 → 14:55，等待行写「13:48 起 · 已 1 小时」；第 1 轮暂停仍有「继续自动」；第 1 轮打开后写「等 Claude 改完送审，回信需修改就自动转回」、按钮变「暂停自动」。自查页备份在 `evidence/2026-11-07-194-resume-limit/check-page/`，不进仓库。**未验证**：实机侧栏里这张卡（悬停面板按钮电脑控制点不动，L-09，留给常浩看）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`：`after-three-cards.jpg`、`after-real-bottom.png`、`after-r1-paused.png`、`after-r1-resumed.png`。
+- 发布与回读：`install.sh 194-resume-limit`：装前 `0612183039f6`（#191 那版，已备份），15:08:57 退出并启动，产物 `c9f2c7a3fb42` / 已装 `c9f2c7a3fb42`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；装时没有开着的自动往返；`install.sh check` 一致。包从本分支打（基于 main `5aaf8dd`，之后 main 无新提交）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/PostPane-0612183039f6.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - DT-ORC 这张卡是旧单，要常浩点「结束接力」收掉。
+  - PR #177（#175）也改 `handoffs.rs` / `handoff-card.ts`，已有冲突，与本轮改的不是同一处，未动。
+  - 常浩下一步要讨论：把审核过程重新梳理成审核 skill，由它决定跑几轮，替代固定 2 轮。本轮未做。
+- 本轮新坑：L-21
+- skill 进化：无。
+
 ## 已停会话的签到记录留 7 天（2026-11-07，Claude，常浩在 #189 收尾时点「改成 7 天」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
 
 - 时间：开工 `2026-11-07 14:30`（`date '+%F %H:%M'` 记录）。来由：#191。#189 之后，`sweep` 仍把超过一天的签到文件全删，停了一天以上的会话又显示「没加载插件，执行 /reload-plugins」。
