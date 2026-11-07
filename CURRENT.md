@@ -4,6 +4,20 @@
 
 
 
+## 思维评审接力：严格末两行、终态转回 Claude、按评审出口换话术（2026-11-07，Claude，常浩在 thinking-review skill 审核意见上选「驿窗加窄改动」；PR 全量通过，按授权 squash 合并；装机回读见下）
+
+- 时间：开工 `2026-11-07 19:37`（`date '+%F %H:%M'` 记录）。来由：#209。my-skills#66（thinking-review 1.0.0）经 ChatGPT 审核指出三处驿窗行为（已核对属实）：`Next::Pass` 只关闭接力、不把回信转回 Claude；`review()` 从下往上找「结论：」，认不出的值会继续往上找，可能把正文引用的旧「结论：通过」当结论；`back_text()` 固定是工程返修话术。
+- 改了哪些文件：只对标题以「思维评审｜」开头的接力生效，工程审查接力行为与旧断言不变。
+  - `src/crates/platform/src/clients/chatgpt/handoffs.rs`：新增 `Exit`、`Flaw`、`exit()`（只认最后两个非空行「评审出口：…」「结论：…」且必须对得上，缺失、未知、矛盾都算无效）、`Handoff::thinking()`、`rounds_used()`（证据不足暂停后的自动恢复不计轮）、`waits_for_evidence()`、`Book::evidence_in()`；`Next` 加 `Close`、`Pause`、`Escalate`、`Invalid`；思维评审接力的卡片结论改用严格解析。
+  - `src/crates/host/src/handoff.rs`：`drive()` 按评审出口处理——成熟退出 / 转其他路径先转回 Claude（复用送达、重试、排队）再结束，送不到不关；继续深化转回；证据不足暂停转回后停下、不计等复审超时，Claude 带证据续接时自动往返恢复；决策升级转回并交常浩；无效末两行不放行、不转回、交常浩。新增思维评审版转回、再审一轮、收口话术与卡片文案；启动时直接结束已通过接力的那段跳过思维评审接力。
+- 测试：子 agent 跑 `pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 760 passed / 0 failed，前端各套件 fail 0；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。我独立复跑 `cargo test -p agent-hud-platform handoffs` 13 passed / 0 failed，`cargo test -p agent-hud-host handoff` 36 passed / 0 failed。新增测试：T1 `a_thinking_review_that_settles_goes_back_to_claude_once_then_ends`，T2 `a_thinking_review_quoting_an_old_pass_is_escalated_not_passed`，T3 `a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again`、`a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence`，T8 `a_thinking_review_whose_last_two_lines_do_not_hold_sends_nothing`，另有继续深化、启动场景、再审一轮、解析单测各一。
+- 验证：单测覆盖 T1、T2、T3、T8；实机往返见「发布与回读」。
+- 截图：无。
+- 发布与回读：合并后从 main 打包装机，结果补记在本节。
+- 与授权不一致之处、遗留问题、范围外发现：转给 Claude 的思维评审话术只写中文（与现有 `back_text` 一致）；回信超过 64KB 被截断时末行损坏，按无效交常浩；MCP 工具说明仍偏工程审查，未改（skill 里写明以 skill 为准）。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 侧栏收得到自己开的 ChatGPT 对话：插件重载后给已开标签页补装脚本（2026-11-07，Claude，常浩反馈「侧边栏 GPT 还是抓不到他的回话……明显的 bug」，并按提示刷新标签页发了一句测试；PR 全量通过，按授权 squash 合并；常浩重新加载插件 0.2.2 后实机验证通过，驿窗应用无需发布）
 
 - 时间：开工 `2026-11-07 19:05`（`date '+%F %H:%M'` 记录）。来由：#206。常浩在 Chrome 里聊了「审核需求梳理」「审核Skill方法论提炼」等对话，侧栏 ChatGPT 格「正在进行 0」，没有回执。
