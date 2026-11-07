@@ -364,7 +364,11 @@ impl Shared {
                                     "failed",
                                     Some(reason),
                                     crate::hooks::now_ms(),
-                                )
+                                );
+                                // The next state Codex sends offers the card
+                                // again; this clears only our dismissal and
+                                // never resends the answer (#222).
+                                shared.requests.settle_native(&item.id);
                             }
                             Err(ReplyFailure::Uncertain(reason)) => {
                                 shared.requests.note_native_delivery(

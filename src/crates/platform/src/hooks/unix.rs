@@ -217,12 +217,18 @@ fn serve(
         let _ = stream.write_all(b"{}\n");
         return;
     }
+    // A request PostPane leaves to the client (one it cannot answer, or a
+    // turn with no user reviewer) is handed back with `{}` at once: closing
+    // without a word would read as PostPane quitting, and the callback would
+    // put it again and again (#222).
     let Ok(Some(request)) = agent_hud_agents::parse_request(source, payload) else {
+        hand_back(&mut stream, running);
         return;
     };
     if request.requires_user_reviewer
         && !super::reviewer::is_user(&requests, &request.source, payload)
     {
+        hand_back(&mut stream, running);
         return;
     }
     reminders.record(source, flag, payload);
@@ -258,7 +264,14 @@ fn serve(
         }
     }
     requests.cancel(&ticket.id);
-    if ended && running.load(Ordering::Acquire) {
+    if ended {
+        hand_back(&mut stream, running);
+    }
+}
+/// Tells the callback PostPane gives no decision, so the client asks itself;
+/// only a PostPane on its way out closes without a word (#174).
+fn hand_back(stream: &mut UnixStream, running: &AtomicBool) {
+    if running.load(Ordering::Acquire) {
         let _ = stream.write_all(b"{}\n");
     }
 }
@@ -559,6 +572,34 @@ mod tests {
         assert_eq!(response, Some(json!({})), "no decision: the client asks");
         std::thread::sleep(Duration::from_millis(300));
         assert!(requests.views(now_ms()).is_empty(), "not put again");
+    }
+
+    #[test]
+    fn a_request_postpane_leaves_alone_goes_straight_back_to_the_client() {
+        let dir = tempfile::tempdir().unwrap();
+        let requests = Requests::default();
+        let _server = open(dir.path(), &requests);
+        // A plan Qoder keeps for itself, and a Codex turn with no user
+        // reviewer: PostPane is up but does not take either (#222).
+        let plan = json!({"session_id": "s", "tool_name": "ExitPlanMode", "tool_input": {}});
+        let automatic = permission();
+        for (source, payload) in [("qoder", plan), ("codex", automatic)] {
+            let data = dir.path().to_owned();
+            let callback = std::thread::spawn(move || {
+                send(&data, source, "--permission-hook", &payload, None)
+            });
+            let until = Instant::now() + Duration::from_secs(2);
+            while !callback.is_finished() && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            assert!(
+                callback.is_finished(),
+                "{source}: handed back at once, not reconnecting"
+            );
+            let response = callback.join().unwrap().unwrap();
+            assert_eq!(response, Some(json!({})), "{source}: the client asks");
+            assert!(requests.views(now_ms()).is_empty(), "{source}: no card");
+        }
     }
 
     #[test]

@@ -6,6 +6,11 @@ import { PermissionToolCard } from "./permissions/PermissionToolCard";
 import { useGround } from "./ground";
 import { alertText } from "./tokens";
 import { cardColumn } from "./card-column";
+import { refusesClick } from "./permissions/answer-gate";
+
+/** When the sidebar last sent an answer: the card that comes up in its place
+ * refuses clicks for a moment (each card mounts afresh, so it is kept here). */
+let answeredAt: number | null = null;
 
 export interface RequestActionsProps {
   request: Approval;
@@ -33,6 +38,7 @@ export function RequestActions({
   const current = useRef(identity);
   current.current = identity;
   const pendingRef = useRef<string | null>(null);
+  const shownAt = useRef(Date.now());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ground = useGround(light);
@@ -41,22 +47,33 @@ export function RequestActions({
     : "#e9a16d";
 
   useEffect(() => {
+    shownAt.current = Date.now();
     pendingRef.current = null;
     setPending(false);
     setError(null);
   }, [identity]);
 
-  const answer = async (decision: RequestDecision) => {
-    if (!onDecision || pendingRef.current === identity) return;
+  /** Whether the decision was sent; a card keeps its draft until it was. */
+  const answer = async (decision: RequestDecision): Promise<boolean> => {
+    const now = Date.now();
+    if (
+      !onDecision ||
+      pendingRef.current === identity ||
+      refusesClick({ answeredAt, shownAt: shownAt.current, now })
+    )
+      return false;
+    answeredAt = now;
     const captured = identity;
     pendingRef.current = captured;
     setPending(true);
     setError(null);
     try {
       await onDecision(decision);
+      return true;
     } catch (failure) {
       if (current.current === captured)
         setError(failure instanceof Error ? failure.message : String(failure));
+      return false;
     } finally {
       if (current.current === captured) {
         pendingRef.current = null;

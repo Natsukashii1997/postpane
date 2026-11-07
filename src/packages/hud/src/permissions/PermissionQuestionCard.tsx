@@ -18,6 +18,7 @@ import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
 import { ApprovalTag } from "./ApprovalTag";
+import { sendThenForget } from "./answer-gate";
 
 /** A question's draft: the offered answers picked, the words typed, and
  * whether those words are the answer (`own`). Skipping or picking a single
@@ -61,7 +62,7 @@ export function PermissionQuestionCard({
   pending: boolean;
   light?: boolean;
   zh?: boolean;
-  answer: (decision: RequestDecision) => void | Promise<void>;
+  answer: (decision: RequestDecision) => Promise<boolean>;
   /** Settings, on a page such as "agent-plugins"; without it the card only says where to go. */
   openSettings?: (page: string) => void;
 }) {
@@ -224,8 +225,9 @@ export function PermissionQuestionCard({
             key !== omitKey && (value.selected.length > 0 || "custom" in value),
         ),
     );
-    drafts.delete(request.id);
-    void answer({ kind: "answer", answers: written });
+    void sendThenForget(answer, { kind: "answer", answers: written }, () =>
+      drafts.delete(request.id),
+    );
   };
 
   if (!canAnswerQuestion) {
@@ -306,8 +308,9 @@ export function PermissionQuestionCard({
             type="button"
             disabled={disabled}
             onClick={() => {
-              drafts.delete(request.id);
-              void answer({ kind: "leave" });
+              void sendThenForget(answer, { kind: "leave" }, () =>
+                drafts.delete(request.id),
+              );
             }}
             style={{
               display: "inline-flex",
