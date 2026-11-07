@@ -4,6 +4,32 @@
 
 
 
+
+## 侧栏读数固定每周、审批重启后重挂与「一直等」（2026-11-07，Claude，常浩反映「数字成了 5 小时」「真实任务的审批侧栏没弹」，请深度自检修复；四项方案常浩逐项选定；PR #181 全量通过，按授权 squash 合并 `2fe2329`；已打包、未装机）
+
+- 时间：开工 `2026-11-07 08:44`（`date '+%F %H:%M'` 记录）。来由：#174。
+- 根因（排查证据见 L-15 与 #174）：
+  - 读数：规则一直是「面板里用得最多的一窗」，从没有「固定每周」。Claude 每周额度今早重置到 4%，5 小时 11%，读数自动换成 5 小时；不是被哪个 PR 改回去。
+  - 审批：钩子链路是通的（08:37 的审批驿窗收到了）。看不到有两个原因：「等待回答」10 分钟到点就撤卡交还 Claude 窗口，02:28 那条 02:38 就撤了；07:29 另一会话装 #173 重启驿窗，挂着的审批连接一断就丢，新进程不知道。
+- 改了哪些文件：
+  - `hud/src/quota-rows.ts` `leadingWindow` / `weeklyWindow`、`held-reading.ts`、`model.ts`；Rust `crates/hud/src/vendors.rs`：有每周（全模型）窗口时读数与颜色固定用每周，读失败的灰色兜底也优先每周；Claude、Codex 都适用。
+  - `platform/src/hooks/unix.rs`：驿窗主动结束请求回 `{}`；连接无声断开视为驿窗退出，钩子最多等 2 分钟，新进程起来后重挂同一条请求，Claude 窗口里批了就不再挂。
+  - `core/src/requests.rs`、`settings.rs`、`lib.rs`、协议 `ApprovalWaitMinutes`、设置页 `HooksSection.tsx`：「等待回答」加「一直等」（值 0，不设截止）。
+  - `docs/LESSONS.md` 新增 L-15。
+- 测试：
+  - 新增 `hooks::transport::tests` 3 条（重启后重挂并能批准、主动结束只回一次 `{}`、一直等不过期），把重挂关掉时第 1 条失败、已还原；前端 `quota-rows`、`held-reading` 各 1 条；Rust `a_mark_leads_with_its_weekly_window_however_full_the_5_hours_are`。
+  - `pnpm run check` 退出 0。`pnpm test` 第一次退出 101（我新写的 Rust 测试 `json!` 写法编译不过），改后重跑退出 0：Rust 合计 741 passed / 0 failed；`ℹ pass 302` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`。
+  - `node --test tests/*.test.mjs`（变基到含 #176、#179 的 main 后）`ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-07-weekly-approvals/check-2.log`、`test-2.log`、`node-test.log`。
+- 验证：只有单测与端到端测试（真起钩子服务、模拟重装）；实机未验证。
+- 截图：无。
+- 发布与回读：未装机。产物 `.claude/worktrees/174-weekly-approvals/target/release/bundle/macos/PostPane.app`（与 main `2fe2329` 同码，打包早于变基进来的两个纯文档提交）。暂缓原因：已装的是 `bd108f283650`，即另一会话 09:19 装的未合并 PR #177（接力自动转回续接）实测版；PR #180（展开卡连续处理）10:37 也已打包。直接装会冲掉 #177 的实测。装机时要同时把本机「等待回答」设为「一直等」（`settings.json` 的 `approvalWaitMinutes: 0`，在驿窗退出时改，或装后在设置页选）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - Windows 钩子传输（`hooks/windows.rs`）未改。
+  - 装机前已在等的审批由旧版钩子进程托着，不会重挂；装上本版之后发起的才有效。
+  - #177、#180 合并前要变基到含 #181 的 main，否则它们装机会把本修复冲掉（L-05）。
+- skill 进化：无。
+- 本轮新坑：L-15
+
 ## L4–L6 证据整理；#173 装机；L5 批 3 跑完（2026-11-07，Claude，常浩说「按计划开工」，后补「我不是为了交作业，而是深度分析补全实际的项目的真实情况」；已提交、#173 已装机回读通过）
 
 - 时间：开工 `2026-11-07 02:27`（本会话第一条命令 `date` 记录）。来由：上一会话 L5 批 3 跑到一半时上下文到 50%，交接到本会话，补齐 L4–L6 证据并装 #173。
