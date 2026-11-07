@@ -318,3 +318,27 @@ fn an_unreached_session_names_the_step_that_lets_the_hud_answer() {
     checked_in(0);
     assert!(replies.reaches("claude", SESSION).is_ok());
 }
+
+/// A session that ended stays known as ended for a week, so its question
+/// still says to open it in Claude; other check-ins go after a day.
+#[test]
+fn an_ended_session_is_remembered_for_a_week() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("channel"));
+    let ended = "55555555-5555-4555-8555-555555555555";
+    check_in(&channel, SESSION, br#"{"at":1}"#);
+    check_in(&channel, ended, br#"{"ended":1}"#);
+    let now = SystemTime::now();
+    let day = Duration::from_secs(86_400);
+
+    channel.sweep(now + 2 * day);
+    assert!(channel.ended(ended), "kept past a day");
+    assert_eq!(
+        channel.last_check_in(SESSION),
+        None,
+        "a plain check-in goes after a day"
+    );
+
+    channel.sweep(now + 8 * day);
+    assert!(!channel.ended(ended), "gone after a week");
+}

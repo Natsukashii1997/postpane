@@ -4,6 +4,18 @@
 
 
 
+## 已停会话的签到记录留 7 天（2026-11-07，Claude，常浩在 #189 收尾时点「改成 7 天」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
+
+- 时间：开工 `2026-11-07 14:30`（`date '+%F %H:%M'` 记录）。来由：#191。#189 之后，`sweep` 仍把超过一天的签到文件全删，停了一天以上的会话又显示「没加载插件，执行 /reload-plugins」。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（`sweep`：标了 `ended` 的签到文件留 7 天，其余仍一天）；`claude_plugin/tests.rs` 新增 `an_ended_session_is_remembered_for_a_week`（修复前在「kept past a day」处失败）；`docs/LESSONS.md` L-20 升级一行补上。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 748 passed / 0 failed，前端 `ℹ pass 307` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`（以上为变基到含 #192 的 main 后重跑结果）。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-191-ended-week/*-rebased.log`。
+- 验证：单测覆盖 2 天（已停的留、普通的删）与 8 天（已停的也删）。
+- 截图：无。
+- 发布与回读：见合并后补记。
+- 与授权不一致之处、遗留问题、范围外发现：装前已被删掉的记录找不回来，11-04 那 2 张提问卡（会话 `35984513…`、`3182ae78…`）仍显示旧提示，要在侧栏手动拿掉。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## 审批卡：Claude 重启后停掉的会话不再误报「没加载插件」（2026-11-07，Claude，常浩看排查结论后点「改，在这里做」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
 
 - 时间：开工 `2026-11-07 14:17`（`date '+%F %H:%M'` 记录）。来由：#188，常浩截图问数字分身会话的提问卡为什么说「没加载插件」。查到 14:12 Claude 桌面应用重启，约 50 个会话同一秒被插件写成 `ended`，这个会话其实加载过插件（L-20）。
