@@ -17,6 +17,8 @@ export interface RequestActionsProps {
   onDecision?: (decision: RequestDecision) => void | Promise<void>;
   /** Settings, on a page such as "agent-plugins". */
   onOpenSettings?: (page: string) => void;
+  /** A handoff card's 去开始: back to its session, the card put away (#247). */
+  onGoStart?: () => void;
   light?: boolean;
   language?: string;
 }
@@ -29,6 +31,7 @@ export function RequestActions({
   request,
   onDecision,
   onOpenSettings,
+  onGoStart,
   light = false,
   language,
 }: RequestActionsProps) {
@@ -103,6 +106,7 @@ export function RequestActions({
           zh={zh}
           answer={answer}
           openSettings={onOpenSettings}
+          goStart={onGoStart}
         />
       ) : isPlan ? (
         <PermissionPlanCard

@@ -93,6 +93,19 @@ export function requestTitle(
   );
 }
 
+/** Whether a handoff card's button reads 去开始: it goes back to its session,
+ * where the person starts the new one from Claude's own card, and puts the
+ * START tag away (owner, #247). `canOpen`: the sidebar can go back and the
+ * last try did not fail; without it the button only puts the card away. */
+export function goesToStart(entry: ApprovalEntry, canOpen: boolean): boolean {
+  return (
+    entry.kind === "request" &&
+    entry.request.badge === START_BADGE &&
+    canOpen &&
+    sessionToOpen(entry) !== undefined
+  );
+}
+
 /** The session to go back to: the one found, else for a reply the way back
  * it carries; undefined when there is no way back. */
 export function sessionToOpen(entry: ApprovalEntry): Session | undefined {

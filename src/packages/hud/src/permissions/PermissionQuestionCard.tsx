@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronLeft,
   LoaderCircle,
@@ -57,6 +58,7 @@ export function PermissionQuestionCard({
   zh = false,
   answer,
   openSettings,
+  goStart,
 }: {
   request: Approval;
   disabled: boolean;
@@ -66,6 +68,9 @@ export function PermissionQuestionCard({
   answer: (decision: RequestDecision) => Promise<boolean>;
   /** Settings, on a page such as "agent-plugins"; without it the card only says where to go. */
   openSettings?: (page: string) => void;
+  /** A handoff card's 去开始 in place of 知道了: back to its session, where
+   * the person starts the new one, the card put away (#247). */
+  goStart?: () => void;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
   const [answers, setAnswers] = useState<Record<string, Draft>>(
@@ -311,6 +316,7 @@ export function PermissionQuestionCard({
             type="button"
             disabled={disabled}
             onClick={() => {
+              if (goStart) return goStart();
               void sendThenForget(answer, { kind: "leave" }, () =>
                 drafts.delete(request.id),
               );
@@ -330,8 +336,12 @@ export function PermissionQuestionCard({
               cursor: disabled ? "default" : "pointer",
             }}
           >
-            <X size={9} strokeWidth={2.6} />
-            {t("Dismiss", "知道了")}
+            {goStart ? (
+              <ArrowUpRight size={9} strokeWidth={2.6} />
+            ) : (
+              <X size={9} strokeWidth={2.6} />
+            )}
+            {goStart ? t("Go start", "去开始") : t("Dismiss", "知道了")}
           </button>
         </div>
       </div>
