@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { agedTags, TAG_NARROW_MS } from "./tag-fold";
 
 /** Which waiting tags have hung whole for TAG_NARROW_MS (`aged`), and which
- * of them are drawn as their narrow slip now (`narrow`): none while the
- * pointer is on the sidebar or a reply is being typed (`awake`), so every
- * tag opens out whole under the pointer and folds back once it leaves
- * (#243). `keys` are tagFoldKey's, one per waiting tag drawn. */
+ * of them are drawn as their narrow slip now (`narrow`): all of them but
+ * the agents in `awake` (the one under the pointer, the one a reply is being
+ * typed to), whose tag opens out whole and folds back once the pointer
+ * leaves it (#243). `tags` carry tagFoldKey's keys, one per waiting tag. */
 export function useTagFold(
-  keys: readonly string[],
-  awake: boolean,
+  tags: readonly { key: string; vendor: string }[],
+  awake: ReadonlySet<string>,
 ): { aged: ReadonlySet<string>; narrow: ReadonlySet<string> } {
+  const keys = tags.map((tag) => tag.key);
   const since = useRef(new Map<string, number>());
   const [, setTick] = useState(0);
   // Each key's age counts from the first frame it was drawn in.
@@ -34,5 +35,10 @@ export function useTagFold(
     );
     return () => clearTimeout(timer);
   }, [due]);
-  return { aged, narrow: awake ? new Set() : aged };
+  const narrow = new Set(
+    tags
+      .filter((tag) => aged.has(tag.key) && !awake.has(tag.vendor))
+      .map((tag) => tag.key),
+  );
+  return { aged, narrow };
 }

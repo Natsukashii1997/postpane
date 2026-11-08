@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   agedTags,
+  agentUnder,
   narrowTagSize,
   tagFoldKey,
   tagGap,
@@ -54,4 +55,51 @@ test("the slip stands on a side edge and lies along the top or bottom", () => {
 test("the slip stands against the stub; a whole tag keeps its gap", () => {
   assert.equal(tagGap(true), 0);
   assert.equal(tagGap(false), 6);
+});
+
+const strip = { x: 900, y: 100, width: 50, height: 300 };
+const marks = [
+  { vendor: "claude", center: 40 },
+  { vendor: "codex", center: 120 },
+  { vendor: "hermes", center: 260 },
+];
+const tags = [
+  {
+    vendor: "claude",
+    rects: [
+      { x: 600, y: 125, width: 294, height: 30 },
+      { x: 872, y: 113, width: 28, height: 53 },
+    ],
+  },
+  {
+    vendor: "hermes",
+    rects: [{ x: 872, y: 333, width: 28, height: 53 }, null],
+  },
+];
+
+test("only the agent under the pointer opens out: its mark on the strip", () => {
+  assert.equal(
+    agentUnder({ x: 920, y: 365 }, { strip, edge: "right", marks, tags }),
+    "hermes",
+  );
+  assert.equal(
+    agentUnder({ x: 920, y: 215 }, { strip, edge: "right", marks, tags }),
+    "codex",
+  );
+});
+
+test("or its own tag, whole or folded, and nothing else", () => {
+  assert.equal(
+    agentUnder({ x: 700, y: 140 }, { strip, edge: "right", marks, tags }),
+    "claude",
+  );
+  assert.equal(
+    agentUnder({ x: 880, y: 160 }, { strip, edge: "right", marks, tags }),
+    "claude",
+  );
+  assert.equal(
+    agentUnder({ x: 400, y: 140 }, { strip, edge: "right", marks, tags }),
+    null,
+  );
+  assert.equal(agentUnder(null, { strip, edge: "right", marks, tags }), null);
 });

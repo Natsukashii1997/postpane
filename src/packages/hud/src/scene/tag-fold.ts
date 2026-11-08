@@ -50,3 +50,53 @@ export function narrowTagSize(
 /** The gap between a tag and the stubs: a whole tag keeps 6pt, the narrow
  * slip stands against the stub. */
 export const tagGap = (narrow: boolean) => (narrow ? 0 : 6);
+
+type Point = { x: number; y: number };
+type Rect = { x: number; y: number; width: number; height: number };
+const inside = (rect: Rect, point: Point) =>
+  point.x >= rect.x &&
+  point.x <= rect.x + rect.width &&
+  point.y >= rect.y &&
+  point.y <= rect.y + rect.height;
+
+/** Whose tag the pointer is on: the agent whose mark on the strip it is
+ * over, or whose tag or narrow slip it is over. Only that agent's tag opens
+ * out whole; every other one stays folded (owner, 2026-11-08, #243). */
+export function agentUnder(
+  point: Point | null | undefined,
+  {
+    strip,
+    edge,
+    marks,
+    tags,
+  }: {
+    strip: Rect;
+    edge: Edge;
+    /** Each mark's agent and its centre along the strip. */
+    marks: readonly { vendor: string; center: number }[];
+    /** Each tag's agent and the places it covers: whole, and its slip. */
+    tags: readonly { vendor: string; rects: readonly (Rect | null)[] }[];
+  },
+): string | null {
+  if (!point) return null;
+  if (inside(strip, point)) {
+    const along =
+      edge === "top" || edge === "bottom"
+        ? point.x - strip.x
+        : point.y - strip.y;
+    let best: string | null = null,
+      distance = Infinity;
+    for (const mark of marks) {
+      const off = Math.abs(mark.center - along);
+      if (off < distance) {
+        best = mark.vendor;
+        distance = off;
+      }
+    }
+    return best;
+  }
+  for (const tag of tags)
+    if (tag.rects.some((rect) => rect && inside(rect, point)))
+      return tag.vendor;
+  return null;
+}

@@ -37,7 +37,7 @@ import {
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
 import { clearOf } from "./scene/side-tag-stack";
-import { tagFoldKey, tagWaits } from "./scene/tag-fold";
+import { agentUnder, tagFoldKey, tagWaits } from "./scene/tag-fold";
 import { useTagFold } from "./scene/useTagFold";
 import { AppPendant } from "./scene/AppPendant";
 import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
@@ -248,6 +248,9 @@ export function HUDScene({
   // left on its mark grows into its own panel instead (pinned, #202).
   const [expanded, setExpanded] = useState(false);
   const [pointerInside, setPointerInside] = useState(false);
+  // The agent whose mark, tag or slip the pointer is on (#243).
+  const [tagUnder, setTagUnder] = useState<string | null>(null);
+  const otherMarkRef = useRef(false);
   const [domTyping, setDomTyping] = useState(false);
   const checkDomTyping = useCallback(() => {
     const active = document.activeElement;
@@ -424,9 +427,29 @@ export function HUDScene({
     open && allowsInlineUsageAlert,
     config.panelLayout,
     open,
+    // Only the front news's own card being out counts as a look at it.
+    otherMarkRef,
   );
-  const event = news.event;
-  const request = news.request;
+  // Another agent's mark under the pointer shows that agent's own peek, not
+  // the news in front (owner, 2026-11-08, #243): every mark answers for its
+  // own agent. An agent with news of its own comes to the front instead.
+  // The agent the open sidebar answers for stays until it folds away, so
+  // the pointer leaving while it closes does not hand the card to the news.
+  const frontOf = news.request ?? news.event;
+  const openFor = useRef<string | null>(null);
+  if (!open) openFor.current = null;
+  else if (pointerInside && tagUnder) openFor.current = tagUnder;
+  const peekOf = openFor.current;
+  const otherMark = Boolean(
+    peekOf &&
+    frontOf &&
+    vendorKey(frontOf.source) !== peekOf &&
+    vendors.some((vendor) => vendor.key === peekOf) &&
+    !news.sides.some((side) => side.vendor === peekOf),
+  );
+  otherMarkRef.current = otherMark;
+  const event = otherMark ? undefined : news.event;
+  const request = otherMark ? undefined : news.request;
   // The handoff card opened from a reply or 「正在进行」, in place of what the
   // sidebar showed until it closes or the sidebar folds away.
   const cardId = useOpenedHandoffCard();
@@ -444,19 +467,23 @@ export function HUDScene({
     clientDisplayName(each.source),
   );
   // Tags that wait (a request, an unseen Hermes or ChatGPT reply) fold into
-  // their narrow slip once they have hung whole for five seconds, and open
-  // out whole while the pointer is on the sidebar (#243). Ages count from the
+  // their narrow slip once they have hung whole for five seconds; only the
+  // agent under the pointer opens out whole (#243). Ages count from the
   // news itself, so a tag hidden under an open card keeps its age.
   const docked = config.mode !== "notch";
-  const frontNews = request ?? event;
+  const frontNews = news.request ?? news.event;
+  const frontVendor = frontNews ? vendorKey(frontNews.source) : null;
   const frontKey =
     docked &&
     frontNews &&
-    tagWaits({ id: frontNews.id, request, event }, news.looked)
+    tagWaits(
+      { id: frontNews.id, request: news.request, event: news.event },
+      news.looked,
+    )
       ? tagFoldKey(
           vendorKey(frontNews.source),
           frontNews.id,
-          request ? news.requests.length : news.replies.length,
+          news.request ? news.requests.length : news.replies.length,
         )
       : null;
   const sideKey = (side: (typeof news.sides)[number]) =>
@@ -468,10 +495,19 @@ export function HUDScene({
         )
       : null;
   const fold = useTagFold(
-    [frontKey, ...news.sides.map(sideKey)].filter(
-      (key): key is string => key !== null,
-    ),
-    pointerInside || typing,
+    [
+      ...(frontKey && frontVendor
+        ? [{ key: frontKey, vendor: frontVendor }]
+        : []),
+      ...news.sides.flatMap((side) => {
+        const key = sideKey(side);
+        return key ? [{ key, vendor: side.vendor }] : [];
+      }),
+    ],
+    new Set([
+      ...(pointerInside && tagUnder ? [tagUnder] : []),
+      ...(typing && frontVendor ? [frontVendor] : []),
+    ]),
   );
   // The rim flashes once for each island alert, over its sender's colours.
   const glowFlash = useMemo(
@@ -670,6 +706,53 @@ export function HUDScene({
           sideHung.push(placed);
           return [{ side, rect: placed, narrow, slip }];
         });
+  // Whose mark, tag or slip the pointer is on: only that agent's tag opens
+  // out whole (#243). A tag open whole still claims its slip's place, so the
+  // pointer in the gap by the stub does not fold it back under itself.
+  const agentAt = (point: { x: number; y: number } | null | undefined) =>
+    agentUnder(point, {
+      strip,
+      edge,
+      marks: vendors.map((vendor, index) => ({
+        vendor: vendor.key,
+        center: metrics.centers[index] ?? -Infinity,
+      })),
+      tags: [
+        ...(mainTag && frontVendor
+          ? [
+              {
+                vendor: frontVendor,
+                rects: [
+                  frame,
+                  frontKey && fold.aged.has(frontKey) ? narrowFrame : null,
+                ],
+              },
+            ]
+          : []),
+        ...sideTags.map(({ side, rect, slip }) => ({
+          vendor: side.vendor,
+          rects: [rect, slip],
+        })),
+      ],
+    });
+  const tagPlaces = JSON.stringify([
+    frame,
+    sideTags.map(({ rect }) => rect),
+    fold.aged.size,
+  ]);
+  useLayoutEffect(() => {
+    if (!nativePointer) return;
+    setTagUnder(
+      nativePointer.inside && nativePointer.point
+        ? agentAt(nativePointer.point)
+        : null,
+    );
+  }, [
+    nativePointer?.inside,
+    nativePointer?.point?.x,
+    nativePointer?.point?.y,
+    tagPlaces,
+  ]);
   // Where the slips of the tags open whole under the pointer stand: still the
   // sidebar's, so the pointer resting there keeps them open (#243).
   const slipKeepers = [
@@ -834,8 +917,10 @@ export function HUDScene({
     setPinned,
     setExpanded,
     setPointerInside,
-    request,
-    event,
+    // The news itself, not what the open card shows: a peek of another
+    // agent is not the last alert handled (#243).
+    request: news.request,
+    event: news.event,
     inUsagePanel,
     typing,
     nativePointer,
@@ -1034,6 +1119,7 @@ export function HUDScene({
               y: event.clientY - bounds.top,
             };
             lastPointerPointRef.current = pt;
+            setTagUnder(agentAt(pt));
             if (
               heldFrame &&
               (rectContains(frame, pt) || rectContains(strip, pt))
