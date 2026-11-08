@@ -121,6 +121,9 @@ export function useIslandNews(
   layout?: PanelLayout,
   /** The card is open: what it shows has been seen (#221). */
   opened = false,
+  /** Read once the frame is drawn: the open card shows another agent's own
+   * peek, so the news in front was not looked at (#243). */
+  elsewhere?: { readonly current: boolean },
 ) {
   const services = usePanelServices(),
     seen = useRef<Set<string> | null>(null),
@@ -194,10 +197,12 @@ export function useIslandNews(
   // Cards opened so far: a Hermes reply folds away only then (#221).
   const looked = useRef(new Set<string>());
   useEffect(() => {
-    if (!frontFolds(current, { held, opened, looked: looked.current })) return;
+    const looking = opened && !elsewhere?.current;
+    if (!frontFolds(current, { held, opened: looking, looked: looked.current }))
+      return;
     const timer = setTimeout(dismiss, 4000);
     return () => clearTimeout(timer);
-  }, [current?.id, held, opened]);
+  }, [current?.id, held, opened, elsewhere?.current]);
   const lanes = newsLanes(live, requests);
   const sides = sideLanes(lanes, shown);
   const select = (id: string) =>

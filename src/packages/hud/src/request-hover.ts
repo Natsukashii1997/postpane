@@ -1,6 +1,7 @@
 // While an agent waits on an answer, hovering the strip opens that agent's
-// card only from its own mark: pointing at another agent leaves the strip
-// resting. Where the waiting agent has no mark to point at (the notch, or a
+// card only from its own mark; another agent's mark opens that agent's own
+// peek (HUDScene shows the agent under the pointer, #243), and the gaps
+// between marks leave the strip resting. Where the waiting agent has no mark to point at (the notch, or a
 // hidden agent), any hover still opens it, so the request is never out of
 // reach. Kept free of the UI so the tests can run it.
 
@@ -26,5 +27,7 @@ export function hoverMayOpen({
   if (onPendant) return false;
   if (!requestKey || notch || pointerKey === undefined) return true;
   if (!markKeys.includes(requestKey)) return true;
-  return pointerKey === requestKey;
+  // Another agent's mark opens that agent's own peek, never the waiting
+  // card (owner, 2026-11-08, #243): every mark answers for its own agent.
+  return pointerKey !== null;
 }

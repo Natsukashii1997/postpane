@@ -6,6 +6,7 @@ import {
   entryTitle,
   findSession,
   modelLine,
+  requestBadge,
   requestTitle,
   sessionToOpen,
   tagColor,
@@ -259,4 +260,13 @@ test("a request's folded tag names its session's title, else the folder", () => 
     "postpane",
   );
   assert.equal(requestTitle(request("d", at), sessions, "Claude"), "Claude");
+});
+
+test("a request's folded tag is boxed as REPLY is: ANSWER, PLAN or APPROVE (#243)", () => {
+  assert.deepEqual(requestBadge("question"), { label: "ANSWER", tone: "ask" });
+  assert.deepEqual(requestBadge("plan"), { label: "PLAN", tone: "ask" });
+  assert.deepEqual(requestBadge("permission"), {
+    label: "APPROVE",
+    tone: "permission",
+  });
 });

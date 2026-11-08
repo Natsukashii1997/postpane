@@ -7,6 +7,18 @@ export type TagTone = "ask" | "permission" | "reply";
 
 export const REPLY_BADGE = "REPLY";
 
+/** A request's folded tag beside the dock, boxed as a reply's REPLY is
+ * (owner, 2026-11-08, #243): ANSWER for a question, PLAN for a plan,
+ * APPROVE for a permission. */
+export function requestBadge(kind: Approval["kind"]): {
+  label: string;
+  tone: TagTone;
+} {
+  if (kind === "question") return { label: "ANSWER", tone: "ask" };
+  if (kind === "plan") return { label: "PLAN", tone: "ask" };
+  return { label: "APPROVE", tone: "permission" };
+}
+
 export function tagTone(badge: string): TagTone {
   if (badge === "ASK" || badge === "PLAN") return "ask";
   if (badge === REPLY_BADGE) return "reply";

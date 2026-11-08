@@ -16,7 +16,7 @@ test("with nothing waiting, any hover opens", () => {
   );
 });
 
-test("while Claude waits, only Claude's mark opens", () => {
+test("while Claude waits, Claude's mark opens its card and another mark opens that agent's own peek (#243)", () => {
   const at = (pointerKey: string | null) =>
     hoverMayOpen({
       requestKey: "claude",
@@ -25,7 +25,8 @@ test("while Claude waits, only Claude's mark opens", () => {
       notch: false,
     });
   assert.equal(at("claude"), true);
-  assert.equal(at("codex"), false);
+  assert.equal(at("codex"), true);
+  // Between marks the strip stays resting.
   assert.equal(at(null), false);
 });
 
