@@ -8,7 +8,7 @@ use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, PoisonError},
 };
 use tauri::Manager;
 
@@ -155,7 +155,7 @@ pub async fn native_chatgpt_extension(
         let _owner = state
             .owner
             .lock()
-            .map_err(|_| "The ChatGPT channel's owner is unavailable")?;
+            .unwrap_or_else(PoisonError::into_inner);
         let directory = channel::manifest_directory();
         let helper = helper(&app);
         match action.as_str() {
@@ -176,9 +176,11 @@ pub async fn native_chatgpt_extension(
         if action != "status" {
             // Registering opens the local tools channel for relay_to_chatgpt.
             if let Some(service) = app.try_state::<super::Service>() {
-                if let Ok(mut backend) = service.backend.lock() {
-                    backend.refresh_tools(&app);
-                }
+                service
+                    .backend
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .refresh_tools(&app);
             }
         }
         Ok(settings_status(
