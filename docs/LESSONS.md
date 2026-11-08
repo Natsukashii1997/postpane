@@ -131,6 +131,7 @@
 - 正确做法：自动转回两次失败后，不直接停，改为把同一段话排进该会话的待发送队列（`Lines::leave`，与左滑发起同一机制），记 `queuedAt`，卡上提示「打开 Claude 会话继续」；排队也失败、或排了 1 小时没人领，才交还常浩。插件在会话再次运行时会领走排队的话。
 - 证据：`~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里上面两条接力的 `fail` / `stop` 步；`~/Library/Application Support/app.postpane.mac/claude-channel/sessions/7c4b4704-….json` 的 `ended`；修复 PR 见本条之后的交接。
 - 升级：已写成测试 `handoff::tests::words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person`（改为排队，排队失败或 1 小时没人领才交还）。
+- 补充（#255，2026-11-09）：上面的「正确做法」当时没做成。`Lines::leave` 底下是 `ClaudeChannel::hand`，它和直接送话一样先查 20 秒内的签到，会话结束后排队也被拒，三次尝试被同一道检查挡下；测试替身的 `leave` 不查签到，所以测试一直是绿的（见 L-30）。现在排队改走不查签到的 `Lines::queue`（`ClaudeChannel::queue`），左滑发起仍走 `leave`。
 
 ## L-15 侧栏审批「看不到」：10 分钟就撤回，驿窗一重装也丢（2026-11-07）
 
@@ -255,3 +256,11 @@
 - 补充（#247）：隐藏面板里按截图坐标点击也不可靠。截图的坐标框架在 800×600 和 800×622 之间来回变，和模拟视口 900×700 对不上，点「去开始」落在按钮外，看着像按钮没反应。用 JS 读元素位置确认按钮在、命中检测（`elementFromPoint`）也落在按钮上之后，改用 `find` 拿到 ref，再用 `computer` 按 ref 点击（同样是真实输入事件），一次就点中了。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。；#247 的记录在 `evidence/2026-11-08-go-start/preview-check.md`。
 - 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。
+
+## L-30 测试替身比真实实现宽松，兜底路径一直是绿的却从没生效过（2026-11-09）
+
+- 现象：#173 给「自动转回 Claude」加了排队兜底，测试全绿，交接写「已装机」；实机从没走通过（CURRENT 记「实机还没走过排队这条路」）。2026-11-09 对照上游 Agent HUD 的投递代码时读出来：排队那一步在 L-14 的场景里必被拒。
+- 根因：测试替身 `Fake` 的 `reaches` 能设「不在线」，但它的 `leave` 不管在不在线都成功；真实的 `AppLines::leave` 走 `ClaudeChannel::hand`，会话没签到就返回 `NotLoaded`。兜底测试又是用「写入失败」（`reply_fails`）而不是「会话不在线」去模拟「会话暂停」，于是替身放行了真实实现会拒的那条路。
+- 正确做法：给兜底、重试这类「第一条路失败后走的路」写测试时，先列出真实实现在这个场景下每一步会做的检查，替身逐条照做（同一个开关同时影响 `reaches`、`reply`、`leave`）；模拟场景用真实的失败原因（会话不在线），不用一个方便的替代原因（写入失败）。再加一条用真实组件（临时目录里的 `ClaudeChannel`）的测试，确认兜底那一步在该场景下真的能成。
+- 证据：`handoff::tests::words_back_to_a_claude_session_that_ended_wait_in_its_queue`、`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 在替身改成照真实规则拒收后先红（前者 `left: 0, right: 1`，即一句也没排进去；红色输出只在本轮会话记录里，没另存文件），改走 `queue` 后变绿（全量日志 `evidence/2026-11-09-queue-back/test.log`）；`claude_plugin::tests::words_queued_for_a_session_that_ended_wait_for_it_to_open` 用真实通道验证。
+- 可提议提升为全局坑：换个项目也成立（测试替身比真实实现宽松，掩盖兜底失效）。

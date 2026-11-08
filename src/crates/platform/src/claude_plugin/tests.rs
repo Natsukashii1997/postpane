@@ -201,6 +201,40 @@ fn the_huds_answer_goes_to_a_loaded_session_and_tidies_what_was_taken() {
     assert!(!file.exists());
 }
 
+/// #255 (L-14): a session that ended once its turn was over refuses words
+/// handed to it now, yet queued words wait for it as the plugin reads them,
+/// under the same refusals for empty words and slash commands.
+#[test]
+fn words_queued_for_a_session_that_ended_wait_for_it_to_open() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("data"));
+    let now = SystemTime::now();
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    assert_eq!(
+        channel.hand(SESSION, "Fix the three points", now),
+        Err(Refusal::NotLoaded)
+    );
+    for refused in ["/clear", "   "] {
+        assert!(channel.queue(SESSION, refused, now).is_err(), "{refused:?}");
+    }
+    assert!(channel.queue("../x", "Fix it", now).is_err());
+    let id = channel.queue(SESSION, "Fix the three points", now).unwrap();
+    let file = channel
+        .directory()
+        .join("prompts")
+        .join(SESSION)
+        .join(format!("{id}.json"));
+    let left: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+    assert_eq!(left["text"], "Fix the three points");
+    assert_eq!(left["asUser"], false);
+    let expires = left["expiresAt"].as_u64().unwrap() - left["at"].as_u64().unwrap();
+    assert_eq!(expires, PROMPT_LIFETIME.as_millis() as u64);
+    assert_eq!(
+        channel.state(SESSION, &id, now).unwrap(),
+        Some((PromptState::Waiting, None))
+    );
+}
+
 #[test]
 fn words_left_under_an_identity_report_how_they_went() {
     let temp = tempfile::tempdir().unwrap();

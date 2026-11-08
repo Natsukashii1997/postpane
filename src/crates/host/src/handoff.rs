@@ -59,6 +59,9 @@ pub(crate) trait Lines {
     /// Leaves words for a Claude Code session and says which, to follow
     /// them (`left`).
     fn leave(&self, session: &str, text: &str) -> Result<String, String>;
+    /// Leaves words as `leave` does, also for a session not running now: they
+    /// wait in its queue until it is opened (#255).
+    fn queue(&self, session: &str, text: &str) -> Result<String, String>;
     /// How words left for a session stand (`waiting`, `taken`, `started`,
     /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
     /// the plugin's files are gone.
@@ -833,7 +836,7 @@ impl Desk {
                     // As the auto round trip's (#223): they wait in the
                     // session's queue and go in once it is opened.
                     lines
-                        .leave(&handoff.claude_session, &text)
+                        .queue(&handoff.claude_session, &text)
                         .map_err(|_| error)?;
                     self.change(|book| {
                         book.returned(id, kind, &text, false, now) && book.queued(id, now)
@@ -965,7 +968,7 @@ impl Desk {
                 // A session Claude paused once its turn was over cannot take
                 // words now: they wait in its queue and go in once it is
                 // opened (L5 run 1, 2026-11-07).
-                if lines.leave(&handoff.claude_session, &text).is_err() {
+                if lines.queue(&handoff.claude_session, &text).is_err() {
                     return self.change(|book| {
                         book.trouble(id, &retry_failed(&again), now);
                         book.stop(id, &back_failed(), true, now)
@@ -1502,6 +1505,22 @@ impl Lines for AppLines<'_> {
                 )
             })
     }
+    fn queue(&self, session: &str, text: &str) -> Result<String, String> {
+        let plugin = self
+            .0
+            .try_state::<super::claude_plugin::ClaudePlugin>()
+            .ok_or_else(no_plugin)?;
+        plugin
+            .channel()
+            .queue(session, text, std::time::SystemTime::now())
+            .map_err(|refusal| {
+                eprintln!("转回 Claude could not queue words: {refusal}");
+                l10n::text(
+                    "没能排进这个会话的待发送队列。",
+                    "The words could not be queued for this session.",
+                )
+            })
+    }
     fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
         use agent_hud_runtime::claude_plugin::PromptState;
         let plugin = self.0.try_state::<super::claude_plugin::ClaudePlugin>()?;
@@ -1881,11 +1900,23 @@ mod tests {
             Ok(())
         }
         fn leave(&self, session: &str, text: &str) -> Result<String, String> {
+            // As `ClaudeChannel::hand`: only a session checked in now (#255).
+            if self.unreachable {
+                return Err("这个会话还没加载 Agent HUD 插件".into());
+            }
             if self.leave_fails.get() {
                 return Err("plugin folder not writable".into());
             }
             let mut sent = self.sent.borrow_mut();
             sent.push(("leave".into(), session.into(), text.into()));
+            Ok(format!("p{}", sent.len()))
+        }
+        fn queue(&self, session: &str, text: &str) -> Result<String, String> {
+            if self.leave_fails.get() {
+                return Err("plugin folder not writable".into());
+            }
+            let mut sent = self.sent.borrow_mut();
+            sent.push(("queue".into(), session.into(), text.into()));
             Ok(format!("p{}", sent.len()))
         }
         fn left(&self, _session: &str, _id: &str) -> Option<(String, Option<String>)> {
@@ -2299,6 +2330,37 @@ mod tests {
         assert_eq!(replies(&lines), 0);
     }
 
+    // #255 (L-14): the session ended once its turn was over, so its plugin
+    // no longer checks in. Sending is refused twice; the words still wait in
+    // its queue, which the plugin takes from when the session is opened.
+    #[test]
+    fn words_back_to_a_claude_session_that_ended_wait_in_its_queue() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        let ended = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        assert!(desk.drive(&ended, 5));
+        let sent = ended.sent.borrow();
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("queue", "s1"));
+        assert!(sent[0].2.contains("少一项"));
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["auto"], true, "still going by itself");
+        assert_eq!(shown[0]["queuedAt"], 5);
+        assert!(shown[0]["halt"].is_null());
+        let steps = kinds(&desk, 5);
+        let second = &shown[0]["steps"].as_array().unwrap()[steps.len() - 2];
+        assert_eq!(
+            second["text"],
+            queued_instead("这个会话还没加载 Agent HUD 插件")
+        );
+    }
+
     #[test]
     fn words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person() {
         let (_temp, desk) = desk();
@@ -2330,7 +2392,7 @@ mod tests {
             .sent
             .borrow()
             .iter()
-            .filter(|s| s.0 == "leave")
+            .filter(|s| s.0 == "queue")
             .count();
         assert_eq!(left, 1, "queued for the session");
         let shown = desk.projection(5);
@@ -2469,7 +2531,7 @@ mod tests {
         desk.observe(&turn("complete", reply), 4);
         assert!(desk.drive(&lines, 5));
         let (kind, _, text) = last_sent(&lines);
-        assert_eq!(kind, "leave");
+        assert_eq!(kind, "queue");
         assert!(text.contains("评审已收口"));
         assert_eq!(desk.projection(5)[0]["status"], "closed");
 
@@ -3416,7 +3478,7 @@ mod tests {
         {
             let sent = unreachable.sent.borrow();
             assert_eq!(sent.len(), 1);
-            assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("leave", "s1"));
+            assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("queue", "s1"));
             assert!(sent[0].2.contains("少一项"));
         }
         // Clicked again, nothing more is queued.
@@ -3430,7 +3492,7 @@ mod tests {
         failing.reply_fails.set(1);
         desk.act(&failing, &handoff.id, "back", 5).unwrap();
         assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
-        assert_eq!(failing.sent.borrow()[0].0, "leave");
+        assert_eq!(failing.sent.borrow()[0].0, "queue");
     }
 
     // #223: what a restart writes is in the language Settings name, though

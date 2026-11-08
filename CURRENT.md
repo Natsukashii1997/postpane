@@ -6,6 +6,18 @@
 
 
 
+## 自动转回 Claude 的排队兜底改成真能排进去（#255）（2026-11-09，Claude，常浩选「先修排队兜底」；已提交、已发布 `70ad4a4648bb` 回读通过）
+
+- 时间：开工 `2026-11-09 00:18`。来由：对照上游 Agent HUD 的投递代码（`docs/design/上游AgentHUD对比-2026-11-09.md` 二·1）时读出，#173 加的「直接送两次失败就排队」从没生效：`Lines::leave` 底下是 `ClaudeChannel::hand`，和直接送话一样先查 20 秒内签到，L-14 那种会话结束的场景三次都被同一道检查拒掉。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（新 `ClaudeChannel::queue`：与 `hand` 同样拒空话、斜杠开头、非法 id，但不要求会话在线；两者共用 `put`）；`src/crates/host/src/handoff.rs`（`Lines` 加 `queue`，`AppLines::queue` 调它；自动转回 `auto_back` 与手动「转回」的兜底从 `leave` 改用 `queue`；左滑发起仍 `reaches` + `leave`，行为不变；测试替身的 `leave` 改成会话不在线就拒，与真实一致，并加 `queue`；新测试 `words_back_to_a_claude_session_that_ended_wait_in_its_queue`；4 处兜底断言从 `"leave"` 改 `"queue"`）；`src/crates/platform/src/claude_plugin/tests.rs`（新 `words_queued_for_a_session_that_ended_wait_for_it_to_open`，用临时目录里的真实通道：签到文件写 `ended` 后 `hand` 返回 `NotLoaded`，`queue` 写进 `prompts/<会话>/`、1 小时过期、状态 Waiting）；`docs/LESSONS.md`（L-14 加补充，新 L-30）。
+- 测试：先红：替身照真实规则拒收后，`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 与新测试 `words_back_to_a_claude_session_that_ended_wait_in_its_queue` FAILED（后者 `left: 0 right: 1`，一句也没排进去）。改后 `pnpm run check` exit 0（第一次 exit 1：`check-test-paths` 不许把 tempdir 根目录交给私有目录代码，新测试改用 `temp.path().join("data")` 后通过）；`pnpm test` exit 0：Rust 合计 `788 passed / 0 failed`，各包 278、199、177、90、32 等，比上一轮的 278、198、177、89、32 正好多 platform、host 各 1 条，编译行是本 worktree 路径（共用主目录 `target`，按 L-26 把改动文件时间改到未来再测），前端 `ℹ pass 359` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` 见 PR。日志 `evidence/2026-11-09-queue-back/{check,test,build}.log`。
+- 验证：只到单元与真实通道测试。没有实机走一单「会话已结束 → 自动转回排队 → 打开会话后插件领走」：要一单真实接力恰好碰上会话结束，沿用 L-14 时常浩定的「等下一单自然触发」。插件领取逻辑没改：`register.ts` 每秒扫 `prompts/<会话>/`，会话重新打开就会领走。
+- 截图：`evidence/2026-11-09-queue-back/after-install.png`（装后侧栏与设置窗正常，没有「想访问文稿」弹窗）；无界面改动。
+- 发布与回读：从本分支打包装机，产物 `70ad4a4648bb` / 已装 `70ad4a4648bb`，签名证书 leaf `b773068e`，已装二进制里能搜到新提示「没能排进这个会话的待发送队列」。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-queue-back/PostPane-b18150e21b61.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留与范围外：上游对比报告里另有可学点（回执状态机、Codex 走队列不走 steer、插话自动重置轮次、照抄级小缺陷 A1–A6、Codex 钩子信任提醒等）还没开 issue；#253 正文有一处说错（上游传话一律走队列，不是先交桌面应用），未改。本轮在 `tests.rs` 第 241 行误改过别人的测试一行，已还原，diff 里没有。
+- 本轮新坑：L-30
+- skill 进化：无
+
 ## 交接卡「知道了」改「去开始」（#247）（2026-11-08，Claude，常浩评估后定：不做侧栏直接开启，只把「知道了」改成「去开始」三个字，点了跳回原会话并收起；已提交、squash 合并、已发布 `b18150e21b61` 回读通过）
 
 - 时间：开工 `2026-11-08 17:05`（`date '+%F %H:%M'` 估记）。来由：常浩装了 #245 后说交接卡只有「知道了」，点了还得自己找回原会话去点 START。先评估过「侧栏直接开启」（经驿窗插件把「开始」送进原会话）：新会话开起来照样要回 Claude 用，还多出十几到几十秒等待和插件、开关、会话忙等失败环节，常浩同意不做。

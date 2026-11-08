@@ -331,6 +331,23 @@ impl ClaudeChannel {
     /// user) or the session is not running the plugin. Returns its identity.
     /// Each answer clears what earlier ones left, so the folder does not grow.
     pub fn hand(&self, session: &str, text: &str, now: SystemTime) -> Result<String, Refusal> {
+        self.put(session, text, now, true)
+    }
+
+    /// Leaves `text` for `session` as `hand` does, also while the session is
+    /// not running: the plugin takes it once the session is opened again
+    /// within `PROMPT_LIFETIME` (#255).
+    pub fn queue(&self, session: &str, text: &str, now: SystemTime) -> Result<String, Refusal> {
+        self.put(session, text, now, false)
+    }
+
+    fn put(
+        &self,
+        session: &str,
+        text: &str,
+        now: SystemTime,
+        loaded_only: bool,
+    ) -> Result<String, Refusal> {
         if text.trim().is_empty() {
             return Err(Refusal::InvalidInput("Nothing to send".into()));
         }
@@ -342,7 +359,7 @@ impl ClaudeChannel {
         if !valid_name(session) {
             return Err(Refusal::InvalidInput("identity".into()));
         }
-        if !self.loaded(now).contains(session) {
+        if loaded_only && !self.loaded(now).contains(session) {
             return Err(Refusal::NotLoaded);
         }
         self.sweep(now);
