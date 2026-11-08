@@ -1758,9 +1758,9 @@ pub(crate) fn toss(steps: &[Step], seen: usize) -> Option<Toss> {
 /// Sends the snapshot again with the handoffs as they are now.
 fn republish(app: &tauri::AppHandle) {
     if let Some(service) = app.try_state::<super::Service>() {
-        if let Ok(mut backend) = service.backend.lock() {
-            backend.refresh_handoffs(app);
-        }
+        let lock = service.backend.lock();
+        let mut backend = lock.unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend.refresh_handoffs(app);
     }
 }
 
