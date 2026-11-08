@@ -28,6 +28,11 @@ pub struct Reading {
     /// as session rows: shown while the reading that found them is good,
     /// never kept in the usage ledger.
     pub live_sessions: Vec<Value>,
+    /// The events whose PostPane hook the agent skips until the user allows
+    /// it in the agent itself, as the agent names them (Codex marks a hook
+    /// whose command changed `modified`). Read fresh each time, never kept
+    /// for a restart.
+    pub unreviewed_hooks: Vec<String>,
 }
 impl Reading {
     pub fn empty(provider: &'static str) -> Self {
@@ -41,6 +46,7 @@ impl Reading {
             session_records: vec![],
             services: vec![],
             live_sessions: vec![],
+            unreviewed_hooks: vec![],
         }
     }
 }

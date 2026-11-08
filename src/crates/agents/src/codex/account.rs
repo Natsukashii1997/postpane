@@ -1,5 +1,8 @@
 //! Codex's quota: its CLI's own `app-server` (account/rateLimits/read and
-//! account/read), and Pi's ChatGPT sign-in, which spends the same plan.
+//! account/read), and Pi's ChatGPT sign-in, which spends the same plan. The
+//! same app-server also says which of PostPane's hooks wait for the user to
+//! allow them (`hook_review`).
+use super::hook_review;
 use crate::account::{
     account_id, client_home_key, legacy_account, legacy_unresolved, read_json, status, variable,
     EngineStart, Host, HttpFailure, HttpRequest, Provider, Reading, StatusPage, Unread,
@@ -97,6 +100,11 @@ fn merge(reading: &mut Reading, other: Reading) {
     if let Some(notice) = other.notice {
         append_notice(reading, notice);
     }
+    for event in other.unreviewed_hooks {
+        if !reading.unreviewed_hooks.contains(&event) {
+            reading.unreviewed_hooks.push(event);
+        }
+    }
 }
 
 fn read_native(host: &dyn Host, executable: &Path) -> Result<Reading, Unread> {
@@ -160,6 +168,8 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
     let mut account = Value::Null;
     let mut requires_openai_auth = None;
     let mut answered = false;
+    // An app-server too old for hooks/list answers with an error: none wait.
+    let mut hooks = None::<Vec<String>>;
     while let Some(message) = process.next(deadline.min(grace)) {
         let Some(id) = message["id"].as_u64() else {
             continue;
@@ -169,6 +179,8 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
             // without the signed-in email.
             if id == 3 {
                 answered = true;
+            } else if id == 4 {
+                hooks = Some(Vec::new());
             } else if id == 2 {
                 // Limits need a ChatGPT sign-in; account/read says why
                 // there is none.
@@ -194,6 +206,7 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
                     process.send(&json!({"method":"initialized"}))?;
                     process.send(&json!({"id":2,"method":"account/rateLimits/read"}))?;
                     process.send(&json!({"id":3,"method":"account/read","params":{}}))?;
+                    process.send(&hook_review::request(4, host.home()))?;
                 }
                 2 => {
                     limits = Some(result.clone());
@@ -204,13 +217,15 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
                     requires_openai_auth = result["requiresOpenaiAuth"].as_bool();
                     answered = true;
                 }
+                4 => hooks = Some(hook_review::unreviewed(result)),
                 _ => {}
             }
         }
-        if (limits.is_some() || refused.is_some()) && answered {
+        if (limits.is_some() || refused.is_some()) && answered && hooks.is_some() {
             break;
         }
     }
+    let unreviewed_hooks = hooks.unwrap_or_default();
     if let (None, Some(error)) = (&limits, refused) {
         // No sign-in at all is Codex's own state: the last windows stay.
         if requires_openai_auth == Some(true) && account.is_null() {
@@ -223,6 +238,7 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
             Some(notice) => {
                 let mut reading = Reading::empty("codex");
                 reading.notice = Some(notice);
+                reading.unreviewed_hooks = unreviewed_hooks;
                 Ok(reading)
             }
             None => Err(format!("Codex: {error}").into()),
@@ -249,6 +265,10 @@ fn read_home(host: &dyn Host, executable: &Path, home: &Path) -> Result<Reading,
         &client_home_key(host, home, &host.home().join(".codex")),
         true,
     )
+    .map(|mut reading| {
+        reading.unreviewed_hooks = unreviewed_hooks;
+        reading
+    })
     .map_err(Unread::from)
 }
 
@@ -810,6 +830,38 @@ mod tests {
     }
 
     #[test]
+    fn the_reading_says_which_postpane_hooks_codex_skips() {
+        let mut host = installed(limits(), Value::Null);
+        let app = "'/Applications/PostPane.app/Contents/MacOS/PostPane'";
+        host.engine_replies.insert(
+            4,
+            json!({"id": 4, "result": {"data": [{"cwd": "/u", "hooks": [
+                {"eventName": "permissionRequest", "command": format!("{app} --permission-hook codex"), "trustStatus": "modified", "enabled": true},
+                {"eventName": "sessionStart", "command": format!("{app} --session-origin-hook codex"), "trustStatus": "trusted", "enabled": true}
+            ]}]}}),
+        );
+        assert_eq!(read(&host).unwrap().unreviewed_hooks, ["permissionRequest"]);
+        let sent = host.engine_sent.borrow();
+        let list = sent.iter().find(|m| m["method"] == "hooks/list").unwrap();
+        assert_eq!(list["params"]["cwds"], json!(["/u"]));
+        drop(sent);
+        // Allowed in Codex: nothing waits.
+        host.engine_replies.insert(
+            4,
+            json!({"id": 4, "result": {"data": [{"cwd": "/u", "hooks": [
+                {"eventName": "permissionRequest", "command": format!("{app} --permission-hook codex"), "trustStatus": "trusted", "enabled": true}
+            ]}]}}),
+        );
+        assert!(read(&host).unwrap().unreviewed_hooks.is_empty());
+        // An app-server without hooks/list still reports limits, with none waiting.
+        host.engine_replies
+            .insert(4, json!({"id": 4, "error": {"message": "unknown method"}}));
+        let reading = read(&host).unwrap();
+        assert_eq!(reading.quotas.len(), 2);
+        assert!(reading.unreviewed_hooks.is_empty());
+    }
+
+    #[test]
     fn the_app_server_reports_limits_and_the_account() {
         let host = installed(
             limits(),
@@ -834,7 +886,8 @@ mod tests {
                 "initialize",
                 "initialized",
                 "account/rateLimits/read",
-                "account/read"
+                "account/read",
+                "hooks/list"
             ]
         );
         let identity = legacy_account("Codex", "a@example.com", "ws").unwrap();

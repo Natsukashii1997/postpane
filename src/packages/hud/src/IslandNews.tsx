@@ -304,9 +304,13 @@ export const newsTitle = (event: IslandEvent, zh = false) =>
               ? zh
                 ? "需要重新登录"
                 : "Sign in again"
-              : zh
-                ? "额度预警"
-                : "Running low";
+              : event.kind === "hooks-review-needed"
+                ? zh
+                  ? "钩子未允许"
+                  : "Hooks not allowed"
+                : zh
+                  ? "额度预警"
+                  : "Running low";
 
 export const compactDuration = (seconds: number) => {
   const total = Math.max(0, Math.round(seconds)),

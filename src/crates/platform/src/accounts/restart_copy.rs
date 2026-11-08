@@ -70,6 +70,7 @@ pub(super) fn load(data_dir: &Path, readers: Providers) -> Restored {
                 services: rows(&saved["services"]),
                 // What ran elsewhere before the restart is read again, not kept.
                 live_sessions: Vec::new(),
+                unreviewed_hooks: Vec::new(),
             };
             Some((reading, checked_at))
         })

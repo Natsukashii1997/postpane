@@ -208,6 +208,7 @@ fn platform_balance(
         session_records: Vec::new(),
         services: Vec::new(),
         live_sessions: Vec::new(),
+        unreviewed_hooks: Vec::new(),
     }))
 }
 
@@ -513,6 +514,7 @@ fn read_text(host: &dyn Host, routed: &mut Vec<Routed>) -> Result<Reading, Unrea
         session_records: Vec::new(),
         services: services(&shared, &account_identity, &balances),
         live_sessions: Vec::new(),
+        unreviewed_hooks: Vec::new(),
         account: Some(
             json!({"id":account_identity,"provider":"deepseek","label":"DeepSeek API","plan":null,"identity":"local-home","checkedAt":Utc::now().to_rfc3339()}),
         ),

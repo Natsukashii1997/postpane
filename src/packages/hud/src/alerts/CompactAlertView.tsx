@@ -8,6 +8,7 @@ import {
   cronShortName,
   quotaAlertCopy,
   resetCreditCopy,
+  hooksReviewCopy,
   signInCopy,
   type QuotaTone,
 } from "./quota-alert-copy";
@@ -71,6 +72,12 @@ export function quotaChipLabels(
     return {
       who: "",
       status: signInCopy(event, [], settings).chip,
+      tone: "critical",
+    };
+  if (event.kind === "hooks-review-needed")
+    return {
+      who: "",
+      status: hooksReviewCopy(event, settings.language).chip,
       tone: "critical",
     };
   const copy = quotaAlertCopy(event, settings);
@@ -148,6 +155,12 @@ export function compactAlertLabels(
     return {
       who: event.title ?? agentVendorName(event.source),
       status: zh ? "需要重新登录" : "Sign in again",
+    };
+  }
+  if (event.kind === "hooks-review-needed") {
+    return {
+      who: event.title ?? agentVendorName(event.source),
+      status: hooksReviewCopy(event, zh ? "zh" : "en").status,
     };
   }
   if (event.kind === "reset-credits") {
@@ -345,6 +358,7 @@ export function CompactAlertView({
     ? undefined
     : event?.kind === "completion" ||
         event?.kind === "sign-in-needed" ||
+        event?.kind === "hooks-review-needed" ||
         event?.kind === "bot-offline" ||
         event?.kind === "cron-failed"
       ? onOpen

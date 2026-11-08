@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  hooksReviewCopy,
   quotaAlertCopy,
   resetCreditCopy,
   signInCopy,
@@ -396,5 +397,44 @@ test("remaining display keeps alert thresholds and forecasts in consumed semanti
   assert.equal(
     quotaAlertCopy(event({}), { ...en, quotaDisplay: "remaining" }).display,
     "N/A",
+  );
+});
+
+test("a strip for Codex skipping PostPane's hooks says what it costs and where to allow them", () => {
+  const review = {
+    id: "h",
+    kind: "hooks-review-needed",
+    at: "2026-11-09T01:00:00Z",
+    source: "codex",
+    title: "Codex",
+    message: "审批不会出现在侧栏",
+    step: "到 Codex 里允许驿窗的钩子（命令行里输入 /hooks）",
+    hooks: ["permissionRequest"],
+  } as never;
+  const copy = hooksReviewCopy(review, "zh");
+  assert.deepEqual(
+    [copy.who, copy.status, copy.tag, copy.message, copy.step, copy.chip],
+    [
+      "Codex",
+      "没在运行驿窗的钩子",
+      "未允许",
+      "审批不会出现在侧栏",
+      "到 Codex 里允许驿窗的钩子（命令行里输入 /hooks）",
+      "钩子未允许",
+    ],
+  );
+  const en = hooksReviewCopy(
+    { ...(review as object), message: null, step: null } as never,
+    "en",
+  );
+  assert.deepEqual(
+    [en.status, en.tag, en.message, en.step, en.chip],
+    [
+      "Not running PostPane's hooks",
+      "Not allowed",
+      null,
+      null,
+      "Hooks not allowed",
+    ],
   );
 });

@@ -17,6 +17,7 @@ import { useFormat } from "@agent-hud/ui/format-context";
 import {
   quotaAlertCopy,
   cronFailedCopy,
+  hooksReviewCopy,
   resetCreditCopy,
   signInCopy,
   type QuotaTone,
@@ -100,6 +101,21 @@ export function stripCopy(
       when: copy.when,
       stillEmpty: null,
       note: null,
+      opens: false,
+    };
+  }
+  if (event.kind === "hooks-review-needed") {
+    const copy = hooksReviewCopy(event, settings.language);
+    return {
+      who: copy.who,
+      status: copy.status,
+      display: copy.tag,
+      tone: "critical",
+      framed: true,
+      bar: null,
+      when: copy.message,
+      stillEmpty: null,
+      note: copy.step,
       opens: false,
     };
   }
