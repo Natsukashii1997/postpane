@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { listCost, listPrice, monthDayTime } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
@@ -52,7 +53,10 @@ function usePlanValue(refresh: string, action: Action, active: boolean) {
         if (sequence.current === id && response?.kind === "plan_value")
           setData(response);
       })
-      .catch(() => {});
+      // The section has no place for a failure, so it shows as a toast.
+      .catch((failure) => {
+        if (sequence.current === id) toast.error(String(failure));
+      });
     return () => {
       sequence.current += 1;
     };
