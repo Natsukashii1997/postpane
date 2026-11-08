@@ -723,9 +723,8 @@ a:focus-visible {
   );
   transform: translateX(-140%) skewX(-12deg);
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-pendant-sway {
-  animation: hud-pendant-sway 7s ease-in-out -1.6s infinite;
-}
+/* It sways like the cat, from the shared rule: a hover swings the cord and
+ * ball at once while the broom sweeps (#240). */
 .hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-lid {
   animation: hud-disk-blink 5.2s ease-in-out -4.6s infinite;
 }
