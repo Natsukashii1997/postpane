@@ -22,6 +22,7 @@ import {
   type HUDVendor,
 } from "../model";
 import { peekLineWidth } from "./AgentPeek";
+import { narrowTagSize, tagGap } from "./tag-fold";
 import { peekBubbleHeight } from "./peek-size";
 import { SIMPLE_EDGE_MARGIN } from "./simple-panel";
 import { useNotchGeometry } from "./NotchSurface";
@@ -52,6 +53,8 @@ export interface UseHUDLayoutArgs {
   requestsCount: number;
   /** The replies waiting, for a reply's folded tag. */
   reply?: ReplyChip;
+  /** The folded tag is drawn as its narrow slip (#243). */
+  narrowTag?: boolean;
 }
 
 export function useHUDLayout({
@@ -74,6 +77,7 @@ export function useHUDLayout({
   inUsagePanel = false,
   requestsCount,
   reply,
+  narrowTag = false,
 }: UseHUDLayoutArgs) {
   const edge: HUDEdge = config.mode === "notch" ? "top" : config.edge;
   const strip =
@@ -194,8 +198,11 @@ export function useHUDLayout({
           snapshot.settings.quotaDisplay,
         )
       : 196 * scale;
-  const targetSize =
-    !open && (request || event)
+  const narrowSize = narrowTagSize(scale, edge);
+  const narrow = narrowTag && !open && Boolean(request || event);
+  const targetSize = narrow
+    ? narrowSize
+    : !open && (request || event)
       ? {
           width:
             config.mode === "notch"
@@ -254,7 +261,19 @@ export function useHUDLayout({
     canvasSize,
     detached,
     anchor,
-    simplePeek && !horizontal(edge) ? -strip.width / 2 : 6,
+    simplePeek && !horizontal(edge) ? -strip.width / 2 : tagGap(narrow),
+  );
+  // Where the folded tag's narrow slip stands, drawn or not: while the
+  // pointer has it open whole, that place still counts as the sidebar's, so
+  // the pointer resting there does not fold it back under itself (#243).
+  const narrowFrame = cardRect(
+    screen,
+    strip,
+    edge,
+    narrowSize,
+    true,
+    anchor,
+    tagGap(true),
   );
   const frame =
     config.mode === "notch"
@@ -360,5 +379,7 @@ export function useHUDLayout({
     measurementWidth,
     receipt,
     receiptInset,
+    narrow,
+    narrowFrame,
   };
 }

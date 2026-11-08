@@ -17,9 +17,15 @@ import { alertInk, alertText } from "../tokens";
 import { quotaAccent } from "./alert-tones";
 import { isQuotaEvent } from "./quota-list";
 import { useGround } from "../ground";
-import { PAPER_FIGURES, PAPER_SEAL, paperLevel, type Paper } from "../paper";
+import { paperLevel, type Paper } from "../paper";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { REPLY_BADGE, requestTitle } from "../permissions/approval-list";
+import {
+  REPLY_BADGE,
+  requestBadge,
+  requestTitle,
+  tagColor,
+  type TagTone,
+} from "../permissions/approval-list";
 import type { ReplyChip } from "./reply-list";
 
 /** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
@@ -154,6 +160,14 @@ export function compactAlertLabels(
   };
 }
 
+/** How wide a boxed tag is (ApprovalTag: 18px high, mono 10.5px), its label
+ * and its count. */
+const boxedTagWidth = (label: string, count: string) =>
+  15 +
+  Math.ceil(label.length * 10.5 * 0.7) +
+  5 +
+  Math.ceil(count.length * 10.5 * 0.62);
+
 /** How wide a reply's tag lets the newest reply's title run. */
 export const replyTitleWidth = (scale: number) => Math.round(150 * scale);
 
@@ -196,11 +210,7 @@ export function compactAlertDockWidth(
       Math.ceil(labelWidth(who, font) * 1.05),
       replyTitleWidth(scale),
     );
-    const tag =
-      15 +
-      Math.ceil(status.length * 10.5 * 0.7) +
-      5 +
-      Math.ceil((badge ?? "").length * 10.5 * 0.62);
+    const tag = boxedTagWidth(status, badge ?? "");
     return Math.ceil(
       icon +
         Math.round(5 * scale) +
@@ -214,27 +224,21 @@ export function compactAlertDockWidth(
   }
   if (request) {
     // Printed on paper: the name in bold (a session's title cut as a reply's
-    // is), a tear, then a seal and the status in spaced bold red
-    // (CompactAlertView's paper tag).
-    const bold = (text: string) => Math.ceil(labelWidth(text, font) * 1.05);
-    const leading =
-      icon +
-      Math.round(5 * scale) +
-      Math.min(bold(who), replyTitleWidth(scale));
-    const tear = Math.round(8 * scale) + 2;
-    const trailing =
-      Math.round(12 * scale) +
-      Math.round(4 * scale) +
-      bold(status) +
-      Math.ceil(status.length * font * 0.06) +
-      (badge
-        ? Math.round(4 * scale) + labelWidth(badge, Math.round(8 * scale))
-        : 0);
+    // is), a tear, then the boxed ANSWER / PLAN / APPROVE tag with its count,
+    // as a reply's REPLY tag (#243).
+    const { label } = requestBadge(request.kind);
+    const title = Math.min(
+      Math.ceil(labelWidth(who, font) * 1.05),
+      replyTitleWidth(scale),
+    );
     return Math.ceil(
-      leading +
-        tear +
+      icon +
+        Math.round(5 * scale) +
+        title +
         Math.round(8 * scale) +
-        trailing +
+        2 +
+        Math.round(8 * scale) +
+        boxedTagWidth(label, String(requestCount)) +
         Math.round(20 * scale),
     );
   }
@@ -272,6 +276,8 @@ export function CompactAlertView({
   sessions,
   onOpen,
   onDismissAndStats,
+  narrow = false,
+  across = false,
 }: {
   request?: Approval;
   event?: IslandEvent;
@@ -291,6 +297,10 @@ export function CompactAlertView({
   sessions?: readonly Session[];
   onOpen: () => void;
   onDismissAndStats: () => void;
+  /** Folded into its narrow slip: the seal and the count alone (#243). */
+  narrow?: boolean;
+  /** The slip lies along the top or bottom edge instead of standing. */
+  across?: boolean;
 }) {
   const { quotaDisplay } = useFormat();
   const quota =
@@ -335,53 +345,21 @@ export function CompactAlertView({
       ? onOpen
       : onDismissAndStats;
 
+  // A request printed on paper: its boxed ANSWER / PLAN / APPROVE tag with
+  // the count, as a reply's REPLY tag (#243).
+  const asked = request ? requestBadge(request.kind) : null;
+  const askedColor = (tone: TagTone, on: Paper) =>
+    tone === "ask" ? on.red : paperLevel("warning", on);
   const printedWhat =
-    request && paper ? (
-      <>
-        <span
-          aria-hidden="true"
-          style={{
-            display: "grid",
-            placeItems: "center",
-            width: Math.round(12 * scale),
-            height: Math.round(12 * scale),
-            boxSizing: "border-box",
-            border: `${1.2 * scale}px solid ${paper.red}`,
-            borderRadius: 2 * scale,
-            color: paper.red,
-            font: `900 ${7.5 * scale}px/1 ${PAPER_SEAL}`,
-            transform: "rotate(-9deg)",
-            flexShrink: 0,
-          }}
-        >
-          {request.kind === "question" ? (zh ? "答" : "?") : zh ? "批" : "!"}
-        </span>
-        <span
-          style={{
-            fontSize: font,
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            color: paper.red,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {status}
-        </span>
-        {badge && (
-          <span
-            style={{
-              font: `600 ${Math.round(8 * scale)}px/1 ${PAPER_FIGURES}`,
-              fontVariantNumeric: "tabular-nums",
-              color: paper.dim,
-              flexShrink: 0,
-            }}
-          >
-            {badge}
-          </span>
-        )}
-      </>
+    request && paper && asked ? (
+      <ApprovalTag
+        label={asked.label}
+        tone={asked.tone}
+        light={light}
+        count={requestCount}
+        ink={paper.ink}
+        color={askedColor(asked.tone, paper)}
+      />
     ) : null;
 
   const trailingWhat = request ? (
@@ -460,6 +438,71 @@ export function CompactAlertView({
       </span>
     </>
   );
+
+  if (narrow) {
+    // The narrow slip: the tag's own seal, a short tear, then the count in
+    // the colour of its box (red to answer, amber to approve, blue a reply).
+    const count = request ? requestCount : (reply?.count ?? 1);
+    const countColor = asked
+      ? paper
+        ? askedColor(asked.tone, paper)
+        : tagColor(asked.tone, light)
+      : (paper?.blue ?? tagColor("reply", light));
+    return (
+      <div
+        className="hud-compact-request hud-narrow-tag"
+        role={handleClick ? "button" : undefined}
+        onClick={handleClick}
+        style={{
+          cursor: handleClick ? "pointer" : "default",
+          position: "relative",
+          height: "100%",
+          display: "flex",
+          flexDirection: across ? "row" : "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: Math.round(4 * scale),
+          paddingLeft: across ? 0 : Math.round(2 * scale),
+          paddingTop: across ? Math.round(2 * scale) : 0,
+        }}
+      >
+        <ReminderMark
+          request={request}
+          event={replyTag ? reply.event : event}
+          bot={replyTag ? reply.bot : undefined}
+          size={Math.round(15 * scale)}
+          light={light}
+          botLogos={botLogos}
+        />
+        {paper && (
+          <span
+            aria-hidden="true"
+            style={
+              across
+                ? {
+                    alignSelf: "stretch",
+                    margin: `${Math.round(6 * scale)}px 0`,
+                    borderLeft: `1.2px dashed ${paper.line}`,
+                  }
+                : {
+                    width: Math.round(10 * scale),
+                    borderTop: `1.2px dashed ${paper.line}`,
+                  }
+            }
+          />
+        )}
+        <span
+          style={{
+            font: `700 ${Math.round(9.5 * scale)}px/1 ui-monospace, SFMono-Regular, Menlo, monospace`,
+            fontVariantNumeric: "tabular-nums",
+            color: countColor,
+          }}
+        >
+          {count}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

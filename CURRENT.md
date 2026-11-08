@@ -4,6 +4,18 @@
 
 
 
+## 常驻小签 5 秒后缩成竖签；待回答改 ANSWER 框（#243）（2026-11-08，Claude，常浩从三版预览选乙「竖签」，没说「只改 ANSWER」，APPROVE / PLAN 一起改；已提交、squash 合并、已发布 `2dfec0fd254f` 回读通过）
+
+- 时间：开工 `2026-11-08 14:20`（`date '+%F %H:%M'` 记录）。来由：常浩截图，Claude「待回答」和 Hermes 回复小签一直完整挂着挡内容；11-07 两轮设计（https://claude.ai/artifact/Es4WzEigfQwQ2kjUAiojJX 、https://claude.ai/artifact/AZgkYyfbV8toQmaLnVmK3F ）没定下来，这次重出三版 https://claude.ai/artifact/P1vt5nHeY4rV4Nf2uGiFQE ，常浩选乙。
+- 改了哪些文件：`src/packages/hud/src/scene/tag-fold.ts`（新：哪些小签算「等你处理」、5 秒计龄、竖签尺寸、贴票根不留缝）；`scene/useTagFold.ts`（新：按「智能体 + 前卡 id + 条数」计龄，新来一条就重新完整挂 5 秒；鼠标在侧栏或正在打字时全部展开）；`HUDScene.tsx`（前卡和别家小签共用计龄；展开时在竖签原位放一块透明「保护区」登记成可悬停区，防止展开后鼠标落在缝里又缩回来回跳，见 L-27）；`scene/useHUDLayout.ts`（前卡竖签尺寸与位置，另算竖签原位）；`scene/SideTags.tsx`（别家小签竖签与原位）；`scene/HUDExpandedSurface.tsx`（把竖签传给前卡）；`alerts/CompactAlertView.tsx`（竖签画法：印章、短撕线、彩色数字；请求小签改成和 REPLY 同款框）；`permissions/approval-list.ts`（`requestBadge`：提问 ANSWER、计划 PLAN、权限 APPROVE）；测试 `test/tag-fold.test.ts`（新 7 条）、`test/approval-list.test.ts`（加 1 条，先红后绿）；`docs/LESSONS.md`（L-29）。
+- 测试：`pnpm run check` 通过（exit 0）。`pnpm test` 第一遍 Rust 一条失败：`clients::chatgpt::tests::unix::the_extension_opens_a_conversation_and_reports_its_reply`（期望 `opened`，先收到 `turn`），本轮没改 Rust，单独重跑通过；第二遍全量 exit 0：Rust 各包 `test result: ok`（277、198、176、89、32 等，0 failed），`ℹ pass 354` / `ℹ fail 0`（前端），MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`。`node --test tests/*.test.mjs`：`ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-08-narrow-tag/`（`check.log`、`test.log`、`test2.log`、`rules.log`）。
+- 验证：真实 `HUDScene` + 今天的真实快照（Claude 一条提问）+ 注入 Hermes 回复，在内置浏览器里看（脚手架 `evidence/2026-11-08-narrow-tag/preview-243/`，没提交）：刚来两张都完整，ANSWER 1 红框、REPLY 1 蓝框；5 秒后都缩成竖签（Claude 小人 + 红 1，猛鬼兽印章 + 蓝 1）；悬停票根全部展开、移开缩回；点开看过的 Hermes 回复按原规则 4 秒收起；`?kind=permission&more`：APPROVE 1 琥珀框 → 竖签 → 第 2 条到达完整弹出 APPROVE 2 → 5 秒后竖签显示 2；顶边竖签横躺在票根下；左边用 JS 回读竖签 28×53 贴票根。面板隐藏时截到过半路帧，记为 L-29。
+- 截图：浏览器自查截图未存盘；三版预览源文件在 `evidence/2026-11-08-narrow-tag/`。
+- 发布与回读：`install.sh narrow-tag`：装前 `e0a8ff934edb` 已备份，产物 `2dfec0fd254f` / 已装 `2dfec0fd254f`，签名 `H"b773068e`；回滚 `osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/PostPane-e0a8ff934edb.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**实机竖签未截到**：`get_hud_screenshot` 不画小签，电脑控制点不动侧栏（L-09），要常浩看一次：有待回答或 Hermes 回复时 5 秒缩成竖签、鼠标移到侧栏展开、移开缩回，鼠标停在竖签和票根之间的缝里不来回跳。
+- 与授权不一致之处、遗留问题、范围外发现：刘海形态（notch）不缩，保持原样；APPROVE / PLAN 是我推断的写法，常浩没反对。范围外：常浩同轮提出「会话写交接卡时弹 START 小签」，另开一单，计划待常浩确认。
+- 本轮新坑：L-29（可提议提升为全局坑，和 G-11 同类）。
+- skill 进化：无。
+
 ## 磁盘瘦身挂件悬停马上摇晃（#240）（2026-11-08，Claude，常浩要求鼠标滑上去挂绳要像数码世界猫球一样晃、小扫帚同时动；已提交、squash 合并、已发布 `e0a8ff934edb` 回读通过；常浩实机验收通过）
 
 - 时间：开工 `2026-11-08 11:32`。来由：常浩截图说磁盘瘦身挂件悬停时没有猫球那种挂绳摇晃。代码里有摇晃，但磁盘瘦身单写了 `-1.6s` 负延迟，悬停约 2.74 秒才开始摆（L-28）。

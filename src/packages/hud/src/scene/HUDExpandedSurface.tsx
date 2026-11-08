@@ -76,6 +76,7 @@ export function HUDExpandedSurface({
   request,
   event,
   reply,
+  narrowTag = false,
   requests,
   snapshot,
   forceOpen,
@@ -128,6 +129,8 @@ export function HUDExpandedSurface({
   event?: IslandEvent;
   /** The replies waiting, for a reply's folded tag. */
   reply?: ReplyChip;
+  /** The folded tag stands as its narrow slip (#243). */
+  narrowTag?: boolean;
   requests: Approval[];
   snapshot: Snapshot;
   forceOpen: () => void;
@@ -476,6 +479,8 @@ export function HUDExpandedSurface({
                         paper={paper}
                         reply={reply}
                         sessions={snapshot.sessions}
+                        narrow={narrowTag}
+                        across={edge === "top" || edge === "bottom"}
                         onOpen={() => forceOpen()}
                         onDismissAndStats={() => {
                           dismissNews();

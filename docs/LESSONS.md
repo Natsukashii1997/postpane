@@ -246,3 +246,11 @@
 - 正确做法：「只在悬停时动、间歇触发」的动画，负延迟决定第一下何时出现，必须落在悬停后半秒内；同款挂件共用同一条规则，不单写时间。改关键帧百分比或时长时，一起核对各处延迟。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-240-disk-sway/`（浏览器实测：猫球 270ms、磁盘瘦身 283ms 开始摆，最大 4.5°）。
 - 升级：已写成测试 `src/packages/ui/test/pendant-sway.test.ts`：每条悬停摇晃规则的第一下必须在 0.5 秒内，磁盘瘦身不得再单写摇晃时间。
+
+## L-29 内置浏览器面板隐藏时截到「卡在半路」的侧栏，误以为布局错乱（2026-11-08）
+
+- 现象：#243 用真实 `HUDScene` 在内置浏览器里自查竖签，两次截到前卡停在 Codex 那一行、宽度是整条小签、里面却是竖签内容，像是位置和尺寸算错了。用 JS 读 `.hud-expanded-surface` 的实际位置，是正确的 28×53、贴在 Hermes 票根上。
+- 根因：`tabs_context` 显示浏览器面板是隐藏的（会话没在窗口里打开，常浩在手机上）。隐藏的页面按后台页处理，`requestAnimationFrame` 被节流，前卡的位移、尺寸动画停在中途，截图拍到的是半路帧。面板可见的那一轮截图完全正常。
+- 正确做法：截图前先看 `tabs_context` 是否「hidden」。隐藏时不用截图判断位置、尺寸和动画结果，改用 `javascript_tool` 读元素的 `getBoundingClientRect()` 确认最终几何；截图只用来看样式。能把面板显示出来就先显示（`show_pane` 只在会话开在窗口里时有效）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。
+- 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。

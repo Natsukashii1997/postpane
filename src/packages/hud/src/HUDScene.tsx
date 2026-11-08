@@ -37,6 +37,8 @@ import {
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
 import { clearOf } from "./scene/side-tag-stack";
+import { tagFoldKey, tagWaits } from "./scene/tag-fold";
+import { useTagFold } from "./scene/useTagFold";
 import { AppPendant } from "./scene/AppPendant";
 import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
 import { pendantChain } from "./app-pendant";
@@ -441,6 +443,36 @@ export function HUDScene({
   const reply = replyChip(news.replies, snapshot.sessions, (each) =>
     clientDisplayName(each.source),
   );
+  // Tags that wait (a request, an unseen Hermes or ChatGPT reply) fold into
+  // their narrow slip once they have hung whole for five seconds, and open
+  // out whole while the pointer is on the sidebar (#243). Ages count from the
+  // news itself, so a tag hidden under an open card keeps its age.
+  const docked = config.mode !== "notch";
+  const frontNews = request ?? event;
+  const frontKey =
+    docked &&
+    frontNews &&
+    tagWaits({ id: frontNews.id, request, event }, news.looked)
+      ? tagFoldKey(
+          vendorKey(frontNews.source),
+          frontNews.id,
+          request ? news.requests.length : news.replies.length,
+        )
+      : null;
+  const sideKey = (side: (typeof news.sides)[number]) =>
+    docked && tagWaits(side, news.looked)
+      ? tagFoldKey(
+          side.vendor,
+          side.id,
+          side.request ? side.requests.length : side.replies.length,
+        )
+      : null;
+  const fold = useTagFold(
+    [frontKey, ...news.sides.map(sideKey)].filter(
+      (key): key is string => key !== null,
+    ),
+    pointerInside || typing,
+  );
   // The rim flashes once for each island alert, over its sender's colours.
   const glowFlash = useMemo(
     () =>
@@ -508,6 +540,8 @@ export function HUDScene({
     measurementWidth,
     receipt,
     receiptInset,
+    narrow: narrowTag,
+    narrowFrame,
   } = useHUDLayout({
     config,
     snapshot,
@@ -528,6 +562,7 @@ export function HUDScene({
     inUsagePanel,
     requestsCount: news.requests.length,
     reply,
+    narrowTag: frontKey !== null && fold.narrow.has(frontKey),
   });
 
   // When the pointer came to the mark it is on: entering the strip, or moving
@@ -624,12 +659,25 @@ export function HUDScene({
           zh: snapshotLanguage(snapshot) === "zh",
           quotaDisplay: snapshot.settings.quotaDisplay,
           sessions: snapshot.sessions,
-        }).flatMap(({ side, rect }) => {
+          folded: (side) => {
+            const key = sideKey(side);
+            if (!key || !fold.aged.has(key)) return null;
+            return fold.narrow.has(key) ? "narrow" : "open";
+          },
+        }).flatMap(({ side, rect, narrow, slip }) => {
           const placed = clearOf(rect, sideHung, edge);
           if (cardVisible && !mainTag && rectsMeet(placed, frame)) return [];
           sideHung.push(placed);
-          return [{ side, rect: placed }];
+          return [{ side, rect: placed, narrow, slip }];
         });
+  // Where the slips of the tags open whole under the pointer stand: still the
+  // sidebar's, so the pointer resting there keeps them open (#243).
+  const slipKeepers = [
+    ...(mainTag && !narrowTag && frontKey && fold.aged.has(frontKey)
+      ? [narrowFrame]
+      : []),
+    ...sideTags.flatMap(({ narrow, slip }) => (!narrow && slip ? [slip] : [])),
+  ];
   // Only a tag drawn folds away on its clock, and none under the pointer or
   // while a reply is typed (#221).
   useSideClocks(
@@ -1112,6 +1160,22 @@ export function HUDScene({
               }}
             />
           )}
+          {slipKeepers.map((rect, index) => (
+            <div
+              key={index}
+              className="hud-side-tag hud-slip-keeper"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: rect.x,
+                top: rect.y,
+                width: rect.width,
+                height: rect.height,
+                zIndex: 0,
+                pointerEvents: "auto",
+              }}
+            />
+          ))}
           <SideTags
             tags={sideTags}
             edge={edge}
@@ -1159,6 +1223,7 @@ export function HUDScene({
             request={request}
             event={event}
             reply={reply}
+            narrowTag={narrowTag}
             requests={news.requests}
             snapshot={snapshot}
             forceOpen={forceOpen}
