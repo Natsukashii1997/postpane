@@ -1,6 +1,14 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import type { SessionCall, SessionTurnAgent } from "../lib/types";
+import { callRuns, panWindow } from "../lib/sessions";
 import {
   clipped,
   compact,
@@ -14,6 +22,8 @@ import {
 const LONG_STEP = 15_000;
 const ROW = 36;
 const BAR = 12;
+/** Calls closer than this on screen, px, draw as one run. */
+const RUN_GAP = 12;
 const PALETTE = {
   light: [
     "#398ad6",
@@ -63,7 +73,6 @@ interface Lane {
 
 interface Hover {
   lane: number;
-  at: number;
   x: number;
   y: number;
 }
@@ -264,23 +273,13 @@ function lanes(
   return result;
 }
 
-/** A lane's calls in view, one tick each, but none within 0.4% of the view of
- * the last one kept: hundreds of calls would otherwise merge into a block. */
-function ticks(lane: Lane, from: number, to: number, span: number) {
-  const kept: { at: number; call: SessionCall }[] = [];
-  for (const entry of lane.calls) {
-    if (entry.at < from || entry.at > to) continue;
-    const last = kept.at(-1);
-    if (!last || entry.at - last.at >= span * 0.004) kept.push(entry);
-  }
-  return kept;
-}
-
 /**
  * A picked turn's work over time: the session and each sub-agent it sent, one
  * row each, from when it started to its last call. A tick is a model call, a
  * darker stretch a step of 15 s or more; dots on the parent row mark sending
- * and handing back. Drag across the plot to zoom; double-click to return.
+ * and handing back. Calls too close to tell apart draw as one wider tick.
+ * Drag across the plot to zoom, swipe sideways (or shift-scroll) to pan the
+ * zoomed view, double-click to return.
  */
 export const SubagentTimeline = memo(function SubagentTimeline({
   calls,
@@ -322,6 +321,48 @@ export const SubagentTimeline = memo(function SubagentTimeline({
   const visible = (a: number, b: number) => b >= from && a <= to;
 
   const plot = useRef<HTMLDivElement>(null);
+  const [plotWidth, setPlotWidth] = useState(0);
+  useLayoutEffect(() => {
+    const node = plot.current;
+    if (!node) return;
+    setPlotWidth(node.clientWidth);
+    const observer = new ResizeObserver(([entry]) =>
+      setPlotWidth(entry.contentRect.width),
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const runGap = (RUN_GAP / Math.max(1, plotWidth)) * span;
+  // Swiping sideways on a trackpad, or shift with a mouse wheel, pans a zoomed
+  // view; up and down still scroll the page. React's wheel listener is
+  // passive, so this one is added by hand to keep the page from moving too.
+  const panning = useRef({ view, start, fullTo, plotWidth });
+  panning.current = { view, start, fullTo, plotWidth };
+  useEffect(() => {
+    const node = plot.current;
+    if (!node) return;
+    const onWheel = (event: WheelEvent) => {
+      const { view, start, fullTo, plotWidth } = panning.current;
+      const sideways =
+        event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      if (!sideways || !view) return;
+      event.preventDefault();
+      const delta = event.deltaX || event.deltaY;
+      const pixels =
+        delta *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? plotWidth : 1);
+      setView(
+        panWindow(
+          view,
+          (pixels / Math.max(1, plotWidth)) * (view[1] - view[0]),
+          start,
+          fullTo,
+        ),
+      );
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, []);
   const [hover, setHover] = useState<Hover | null>(null);
   const [focus, setFocus] = useState<number | null>(null);
   const [drag, setDrag] = useState<{ a: number; b: number } | null>(null);
@@ -358,13 +399,15 @@ export const SubagentTimeline = memo(function SubagentTimeline({
     axis.push(start + t);
 
   const hovered = hover ? rows[hover.lane] : null;
+  // From the pointer's x, so the card follows what slides under it while panning.
+  const hoverAt = hover ? from + (hover.x / Math.max(1, plotWidth)) * span : 0;
   const nearest =
     hover && hovered
       ? hovered.calls.reduce<{ at: number; call: SessionCall } | null>(
           (best, entry) =>
-            Math.abs(entry.at - hover.at) < span * 0.015 &&
+            Math.abs(entry.at - hoverAt) < span * 0.015 &&
             (!best ||
-              Math.abs(entry.at - hover.at) < Math.abs(best.at - hover.at))
+              Math.abs(entry.at - hoverAt) < Math.abs(best.at - hoverAt))
               ? entry
               : best,
           null,
@@ -372,9 +415,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
       : null;
   const hoveredStep =
     hover && hovered && !nearest
-      ? hovered.steps.find(
-          (step) => step.from <= hover.at && step.to >= hover.at,
-        )
+      ? hovered.steps.find((step) => step.from <= hoverAt && step.to >= hoverAt)
       : undefined;
 
   const stepColor = (lane: Lane, kind: Step["kind"]) =>
@@ -482,7 +523,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
                 rows.length - 1,
                 Math.max(0, Math.floor(point.y / ROW)),
               );
-              setHover({ lane, at: point.at, x: point.x, y: point.y });
+              setHover({ lane, x: point.x, y: point.y });
             }}
             onMouseDown={(event) => {
               const point = atX(event);
@@ -575,14 +616,14 @@ export const SubagentTimeline = memo(function SubagentTimeline({
                         />
                       ),
                     )}
-                  {ticks(lane, from, to, span).map((entry, n) => (
+                  {callRuns(lane.calls, from, to, runGap).map((run) => (
                     <div
-                      key={`t${n}`}
+                      key={`t${run.from}`}
                       style={{
                         position: "absolute",
-                        left: `calc(${pos(entry.at)}% - 1px)`,
+                        left: `calc(${pos(run.from)}% - 1px)`,
                         top: top - 2,
-                        width: 2,
+                        width: `calc(${pos(run.to) - pos(run.from)}% + 2px)`,
                         height: BAR + 4,
                         borderRadius: 1,
                         background: lane.color,
@@ -665,10 +706,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
               <div
                 style={{
                   position: "absolute",
-                  left: Math.min(
-                    hover.x + 12,
-                    (plot.current?.clientWidth ?? 400) - 224,
-                  ),
+                  left: Math.min(hover.x + 12, plotWidth - 224),
                   top: Math.min(hover.y + 12, Math.max(0, plotHeight - 64)),
                   width: 212,
                   boxSizing: "border-box",
@@ -687,7 +725,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
                   {hovered.name}
                 </div>
                 <div style={{ color: theme.secondary }}>
-                  {tipLine(hovered, hover.at, start, nearest, hoveredStep, zh)}
+                  {tipLine(hovered, hoverAt, start, nearest, hoveredStep, zh)}
                 </div>
               </div>
             )}
@@ -800,8 +838,8 @@ export const SubagentTimeline = memo(function SubagentTimeline({
             style={{ ...plain, color: theme.action, marginLeft: "auto" }}
           >
             {zh
-              ? `已放大 ${offset(to - from)} · 还原整轮`
-              : `Zoomed to ${offset(to - from)} · Show the whole turn`}
+              ? `已放大 ${offset(to - from)}（左右滑动平移）· 还原整轮`
+              : `Zoomed to ${offset(to - from)} (swipe sideways to pan) · Show the whole turn`}
           </button>
         ) : (
           <span style={{ marginLeft: "auto" }}>

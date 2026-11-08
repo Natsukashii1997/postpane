@@ -158,7 +158,37 @@ pub struct Step {
     /// Done by the auto round trip, not by the person (#72).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub auto: bool,
+    /// Words back to Claude (`back`, `again`, #257): the id they were left
+    /// under for the session's plugin, the same each time the step is tried.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    /// How those words stand with the plugin (#257).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<Delivery>,
 }
+
+/// How words back to Claude stand with its session's plugin (#257).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Delivery {
+    /// Left for the session; the plugin has not taken them.
+    Waiting,
+    /// Taken by the plugin, which submits them once the session is idle.
+    Taken,
+    /// Submitted: the session's turn on them began.
+    Started,
+    Refused,
+    /// Not taken within the plugin's hour.
+    Expired,
+    Cancelled,
+}
+impl Delivery {
+    /// The plugin gave the words up: they never reached the session.
+    pub fn gave_up(self) -> bool {
+        matches!(self, Self::Refused | Self::Expired | Self::Cancelled)
+    }
+}
+
 impl Step {
     fn new(at: i64, kind: StepKind, text: Option<&str>) -> Self {
         Self {
@@ -172,6 +202,8 @@ impl Step {
             verdict: None,
             key: None,
             auto: false,
+            prompt: None,
+            delivery: None,
         }
     }
     fn by_auto(mut self) -> Self {
@@ -246,9 +278,17 @@ pub struct Handoff {
     /// Reviews past the budget the person allowed, one each time (#217).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub extra: u32,
+    /// The step its rounds count from (#258): where the person spoke up and
+    /// Claude handed over again; earlier reviews, carried ones too, no
+    /// longer count.
+    #[serde(default, skip_serializing_if = "is_nought")]
+    pub rounds_from: usize,
 }
 
 fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+fn is_nought(n: &usize) -> bool {
     *n == 0
 }
 
@@ -329,12 +369,17 @@ impl Handoff {
     pub fn request(&self) -> String {
         format!("{}~{}", self.id, self.attempt)
     }
-    /// How many reviews were asked for.
+    /// How many reviews were asked for, since its rounds last began (#258).
     pub fn reviews(&self) -> u32 {
-        self.steps
+        self.chain()
             .iter()
             .filter(|step| step.kind == StepKind::Ask)
             .count() as u32
+    }
+    /// The steps its rounds count over: all, or those since the person
+    /// spoke up (#258).
+    fn chain(&self) -> &[Step] {
+        &self.steps[self.rounds_from.min(self.steps.len())..]
     }
     /// The newest reply, in full when it was kept so.
     pub fn last_reply(&self) -> Option<&Step> {
@@ -437,16 +482,22 @@ impl Handoff {
             return self.rounds_used();
         }
         let answered = self
-            .steps
+            .chain()
             .iter()
             .filter(|step| step.kind == StepKind::Reply)
             .count() as u32;
         let paused = self
-            .steps
+            .chain()
             .iter()
             .filter(|step| step.kind == StepKind::Resume && step.auto)
             .count() as u32;
-        self.carried + answered.saturating_sub(paused)
+        // Rounds that began again (#258) leave the carried ones behind.
+        let carried = if self.rounds_from == 0 {
+            self.carried
+        } else {
+            0
+        };
+        carried + answered.saturating_sub(paused)
     }
     /// No review is left for it (#217): another needs the person's leave.
     pub fn spent(&self) -> bool {
@@ -457,7 +508,7 @@ impl Handoff {
     /// Claude came back with it (`Book::evidence_in`).
     pub fn rounds_used(&self) -> u32 {
         let paused = self
-            .steps
+            .chain()
             .iter()
             .filter(|step| step.kind == StepKind::Resume && step.auto)
             .count() as u32;
@@ -489,6 +540,69 @@ impl Handoff {
     /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
     pub fn thinking(&self) -> bool {
         thinking(&self.title)
+    }
+    /// The id words back to Claude for the newest answer go under (#257),
+    /// `kind` `back` or `again`: one per answer and kind, the same however
+    /// often it is tried, and a new one only once the plugin gave the last
+    /// try up.
+    pub fn prompt_for(&self, kind: StepKind) -> String {
+        let answer = self
+            .steps
+            .iter()
+            .rposition(|step| step.kind == StepKind::Reply)
+            .unwrap_or(0);
+        let letter = if kind == StepKind::Again { 'a' } else { 'b' };
+        let base = format!("{}-{letter}{answer}", self.id);
+        let tries = self
+            .steps
+            .iter()
+            .filter(|step| {
+                step.prompt.as_deref().is_some_and(|prompt| {
+                    prompt == base
+                        || prompt
+                            .strip_prefix(&base)
+                            .is_some_and(|rest| rest.starts_with('-'))
+                })
+            })
+            .collect::<Vec<_>>();
+        match tries.last() {
+            None => base,
+            Some(step) if !step.delivery.is_some_and(Delivery::gave_up) => {
+                step.prompt.clone().unwrap_or(base)
+            }
+            Some(_) => format!("{base}-{}", tries.len()),
+        }
+    }
+    /// Whether `text` went back to Claude in this handoff (#258).
+    fn sent_back(&self, text: &str) -> bool {
+        let key = key(text);
+        self.steps.iter().any(|step| {
+            matches!(step.kind, StepKind::Back | StepKind::Again)
+                && step.key.as_deref() == Some(key.as_str())
+        })
+    }
+    /// Whether the person spoke up since words last went back to Claude
+    /// (#258): Claude's current turn (`turn`: who began it and when) began
+    /// after them, with the person's own words rather than PostPane's. Not
+    /// when it cannot be told, nor once Claude handed over again since.
+    pub fn spoke_up(&self, turn: Option<&(crate::claude_plugin::Opener, i64)>) -> bool {
+        use crate::claude_plugin::Opener;
+        let Some((opener, at)) = turn else {
+            return false;
+        };
+        let last = self
+            .steps
+            .iter()
+            .rev()
+            .find(|step| matches!(step.kind, StepKind::Ask | StepKind::Back | StepKind::Again));
+        let Some(last) = last.filter(|step| step.kind != StepKind::Ask) else {
+            return false;
+        };
+        *at > last.at
+            && match opener {
+                Opener::Person => true,
+                Opener::Plugin(text) => !self.sent_back(text),
+            }
     }
     /// Whether the newest step of `kinds` sent these same words.
     fn just_sent(&self, kinds: &[StepKind], key: &str) -> bool {
@@ -580,6 +694,7 @@ impl Book {
             pr: None,
             carried: 0,
             extra: 0,
+            rounds_from: 0,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -703,10 +818,19 @@ impl Book {
         self.get(id)
             .is_some_and(|h| h.just_sent(&[StepKind::Ask], &key(text)))
     }
-    /// Whether `text` was just sent back to Claude for this handoff.
+    /// Whether `text` was just sent back to Claude for this handoff, and
+    /// its plugin did not give it up (#257).
     pub fn returned_already(&self, id: &str, text: &str) -> bool {
-        self.get(id)
-            .is_some_and(|h| h.just_sent(&[StepKind::Back, StepKind::Again], &key(text)))
+        self.get(id).is_some_and(|h| {
+            h.just_sent(&[StepKind::Back, StepKind::Again], &key(text))
+                && !h
+                    .steps
+                    .iter()
+                    .rev()
+                    .find(|step| matches!(step.kind, StepKind::Back | StepKind::Again))
+                    .and_then(|step| step.delivery)
+                    .is_some_and(Delivery::gave_up)
+        })
     }
     /// Words reached the handoff's ChatGPT conversation: Claude's work
     /// (`summary`, when it handed some over) and the words themselves.
@@ -789,17 +913,29 @@ impl Book {
             verdict,
             key: message.map(str::to_owned),
             auto: false,
+            prompt: None,
+            delivery: None,
         });
         handoff.enter(Phase::Replied, now);
         true
     }
     /// Words went back to Claude: ChatGPT's answer (`back`) or the ask to
-    /// hand over again (`again`).
-    pub fn returned(&mut self, id: &str, kind: StepKind, text: &str, auto: bool, now: i64) -> bool {
+    /// hand over again (`again`), left under `prompt` for its plugin (#257).
+    pub fn returned(
+        &mut self,
+        id: &str,
+        kind: StepKind,
+        text: &str,
+        prompt: &str,
+        auto: bool,
+        now: i64,
+    ) -> bool {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
-        let step = Step::new(now, kind, Some(text)).keyed(&key(text));
+        let mut step = Step::new(now, kind, Some(text)).keyed(&key(text));
+        step.prompt = Some(prompt.to_owned());
+        step.delivery = Some(Delivery::Waiting);
         handoff.steps.push(if auto { step.by_auto() } else { step });
         handoff.rounds += 1;
         handoff.enter(Phase::Returned, now);
@@ -838,6 +974,85 @@ impl Book {
             return false;
         };
         handoff.queued_at = Some(now);
+        true
+    }
+    /// How the words back left under `prompt` stand with the plugin now
+    /// (#257), taken or started. Queued words taken: the wait for Claude's
+    /// changes begins then, not when they were queued. Whether it changed.
+    pub fn delivery(&mut self, id: &str, prompt: &str, delivery: Delivery, now: i64) -> bool {
+        let Some(handoff) = self.get_mut(id) else {
+            return false;
+        };
+        let Some(step) = handoff
+            .steps
+            .iter_mut()
+            .rev()
+            .find(|step| step.prompt.as_deref() == Some(prompt))
+            .filter(|step| step.delivery != Some(delivery))
+        else {
+            return false;
+        };
+        step.delivery = Some(delivery);
+        if handoff.queued_at.take().is_some() {
+            handoff.phase_at = now;
+        }
+        handoff.updated_at = now;
+        true
+    }
+    /// The plugin gave up the words back left under `prompt` (#257): they
+    /// never reached Claude. While they were the newest, the person has the
+    /// handoff at once (`reason` says why): an answer waits again to go
+    /// back, and the auto round trip stops.
+    pub fn undelivered(
+        &mut self,
+        id: &str,
+        prompt: &str,
+        delivery: Delivery,
+        reason: &str,
+        now: i64,
+    ) -> bool {
+        let Some(handoff) = self.get_mut(id) else {
+            return false;
+        };
+        let newest = handoff
+            .steps
+            .iter()
+            .rposition(|step| matches!(step.kind, StepKind::Back | StepKind::Again));
+        let Some(at) = handoff
+            .steps
+            .iter()
+            .rposition(|step| step.prompt.as_deref() == Some(prompt))
+            .filter(|at| handoff.steps[*at].delivery != Some(delivery))
+        else {
+            return false;
+        };
+        let step = &mut handoff.steps[at];
+        step.delivery = Some(delivery);
+        let back = step.kind == StepKind::Back;
+        handoff.updated_at = now;
+        if !handoff.live() || newest != Some(at) {
+            return true;
+        }
+        handoff.queued_at = None;
+        if back && handoff.phase == Phase::Returned {
+            handoff.enter(Phase::Replied, now);
+        }
+        if !self.stop(id, reason, true, now) {
+            if let Some(handoff) = self.live_mut(id) {
+                handoff
+                    .steps
+                    .push(Step::new(now, StepKind::Fail, Some(reason)));
+            }
+        }
+        true
+    }
+    /// The person spoke up since words last went back to Claude, which
+    /// hands over again (#258): its rounds count from one again.
+    pub fn restart_rounds(&mut self, id: &str) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff.rounds_from = handoff.steps.len();
         true
     }
     /// The auto round trip met an error (`text`: what failed and what it did
@@ -1501,7 +1716,7 @@ mod tests {
             !book.replied("c1", "随便聊聊", Some("m2"), 5),
             "answered: further chat is not the review"
         );
-        assert!(book.returned(&handoff.id, StepKind::Back, "意见", false, 5));
+        assert!(book.returned(&handoff.id, StepKind::Back, "意见", "p", false, 5));
         assert!(book.returned_already(&handoff.id, "意见"));
         assert_eq!(book.get(&handoff.id).unwrap().phase, Phase::Returned);
         assert!(book.asked(&handoff.id, Some("按意见改完"), "第二轮", 6));
@@ -1563,7 +1778,7 @@ mod tests {
         assert_eq!(kept.next(), None, "nothing to do before an answer");
         book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Back));
-        assert!(book.returned(&id, StepKind::Back, "意见", true, 5));
+        assert!(book.returned(&id, StepKind::Back, "意见", "p", true, 5));
         let back = book.get(&id).unwrap().steps.last().unwrap().clone();
         assert!(back.auto, "the step says the machine did it");
         assert_eq!(book.get(&id).unwrap().next(), None);
@@ -1617,7 +1832,7 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         book.replied("c1", "结论：需修改", Some("m1"), 4);
-        book.returned(&id, StepKind::Back, "意见", true, 5);
+        book.returned(&id, StepKind::Back, "意见", "p", true, 5);
         book.queued(&id, 5);
         let late = 6 + QUEUE_WAIT_MS;
         assert!(overdue(&mut book, late));
@@ -1651,7 +1866,7 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         book.replied("c1", "结论：需修改", Some("m1"), 4);
-        book.returned(&id, StepKind::Back, "意见", true, 5);
+        book.returned(&id, StepKind::Back, "意见", "p", true, 5);
         assert!(!book.overdue(
             5 + FIX_WAIT_MS,
             "30 分钟没回信",
@@ -1929,7 +2144,7 @@ mod tests {
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pause));
         // Back to Claude and stopped by itself: it waits for evidence, and
         // the evidence turns it on again without counting the paused review.
-        assert!(book.returned(&id, StepKind::Back, "意见", true, 4));
+        assert!(book.returned(&id, StepKind::Back, "意见", "p", true, 4));
         assert!(book.stop(&id, "证据不足暂停", true, 5));
         assert!(book.get(&id).unwrap().waits_for_evidence());
         assert!(book.evidence_in(&id, 6));
@@ -2005,5 +2220,121 @@ mod tests {
         assert!(said.ends_with("常浩要求再审一次：P1 未确认"), "{said}");
         let thinking = book.begin("s2", None, "思维评审｜x｜y", None, "b", 1);
         assert!(!book.allow_extra(&thinking.id, "r", 2));
+    }
+
+    /// #257: handoffs kept before words back had receipts, and before rounds
+    /// could start again, read as they were; the new fields are kept.
+    #[test]
+    fn handoffs_kept_before_receipts_still_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let old = r#"[{"id":"h1a2b3c400","title":"修登录","claudeSession":"s1","cwd":null,
+            "chatgptConversation":"c1","status":"open","createdAt":1,"updatedAt":5,"rounds":2,
+            "phase":"returned","phaseAt":5,"steps":[{"at":2,"kind":"ask","text":"请审核","key":"k1"},
+            {"at":4,"kind":"reply","text":"1. 要超时\n结论：需修改","verdict":"revise"},
+            {"at":5,"kind":"back","text":"意见","key":"k2","auto":true}],"auto":true,"queuedAt":5}]"#;
+        let book = Book {
+            list: serde_json::from_str(old).unwrap(),
+        };
+        save(&data, &book).unwrap();
+        let kept = load(&data);
+        let handoff = &kept.list[0];
+        assert_eq!(handoff.rounds_from, 0);
+        let back = handoff.steps.last().unwrap();
+        assert_eq!((back.prompt.as_deref(), back.delivery), (None, None));
+        assert_eq!(handoff.counted(), 1);
+        // The new fields are kept across a restart.
+        let mut book = kept.clone();
+        let id = book.list[0].id.clone();
+        assert!(book.returned(&id, StepKind::Again, "请复审", "h1a2b3c400-a3", false, 6));
+        assert!(book.delivery(&id, "h1a2b3c400-a3", Delivery::Taken, 7));
+        book.list[0].rounds_from = 3;
+        save(&data, &book).unwrap();
+        let text = std::fs::read_to_string(handoffs_path(&data)).unwrap();
+        assert!(text.contains(r#""prompt": "h1a2b3c400-a3""#), "{text}");
+        assert!(text.contains(r#""delivery": "taken""#), "{text}");
+        assert!(text.contains(r#""roundsFrom": 3"#), "{text}");
+        assert_eq!(load(&data), book);
+    }
+
+    /// #257: each step back to Claude has its own id, the same however many
+    /// times it is tried, and a new one only once the plugin gave the words
+    /// up; words given up are not 「sent already」.
+    #[test]
+    fn words_back_keep_one_id_until_the_plugin_gives_them_up() {
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        let handoff = book.get(&id).unwrap();
+        let prompt = handoff.prompt_for(StepKind::Back);
+        assert!(crate::claude_plugin::valid_name(&prompt), "{prompt}");
+        assert_eq!(prompt, handoff.prompt_for(StepKind::Back), "fixed");
+        assert_ne!(prompt, handoff.prompt_for(StepKind::Again));
+        assert!(book.returned(&id, StepKind::Back, "意见", &prompt, true, 5));
+        let back = book.get(&id).unwrap().steps.last().unwrap().clone();
+        assert_eq!(back.prompt.as_deref(), Some(prompt.as_str()));
+        assert_eq!(back.delivery, Some(Delivery::Waiting));
+        assert!(book.returned_already(&id, "意见"));
+        assert_eq!(book.get(&id).unwrap().prompt_for(StepKind::Back), prompt);
+        // Taken and started: the step says so.
+        assert!(book.delivery(&id, &prompt, Delivery::Taken, 6));
+        assert!(!book.delivery(&id, &prompt, Delivery::Taken, 6), "once");
+        assert!(book.delivery(&id, &prompt, Delivery::Started, 7));
+        let kept = book.get(&id).unwrap();
+        assert_eq!(kept.steps.last().unwrap().delivery, Some(Delivery::Started));
+        // Given up: back with the person at once, and it may go again
+        // under a new id.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        let prompt = book.get(&id).unwrap().prompt_for(StepKind::Back);
+        book.returned(&id, StepKind::Back, "意见", &prompt, true, 5);
+        book.queued(&id, 5);
+        assert!(book.undelivered(&id, &prompt, Delivery::Expired, "过期", 9));
+        let kept = book.get(&id).unwrap();
+        assert_eq!(
+            kept.steps[kept.steps.len() - 2].delivery,
+            Some(Delivery::Expired)
+        );
+        assert_eq!(kept.phase, Phase::Replied, "the answer waits again");
+        assert!(!kept.auto && kept.halt.as_deref() == Some("过期"));
+        assert_eq!(kept.queued_at, None);
+        assert!(!book.returned_already(&id, "意见"));
+        let again = book.get(&id).unwrap().prompt_for(StepKind::Back);
+        assert_eq!(again, format!("{prompt}-1"));
+    }
+
+    /// #258: once the person spoke up since words last went back to Claude,
+    /// the auto round trip counts its rounds from one again; words of
+    /// PostPane's own begin no new count, and the limit stays.
+    #[test]
+    fn the_rounds_count_from_one_once_the_person_spoke_up() {
+        use crate::claude_plugin::Opener;
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        let prompt = book.get(&id).unwrap().prompt_for(StepKind::Back);
+        book.returned(&id, StepKind::Back, "意见全文", &prompt, true, 5);
+        let handoff = book.get(&id).unwrap();
+        assert!(!handoff.spoke_up(None), "not told: no restart");
+        assert!(!handoff.spoke_up(Some(&(Opener::Person, 4))), "before");
+        assert!(!handoff.spoke_up(Some(&(Opener::Plugin("意见全文".into()), 6))));
+        assert!(handoff.spoke_up(Some(&(Opener::Person, 6))));
+        assert!(handoff.spoke_up(Some(&(Opener::Plugin("先改第 2 条".into()), 6))));
+        assert!(book.restart_rounds(&id));
+        book.asked(&id, Some("按意见改完"), "第二轮", 7);
+        assert!(
+            !book.get(&id).unwrap().spoke_up(Some(&(Opener::Person, 6))),
+            "the same turn handing over again"
+        );
+        book.replied("c1", "1. 还差一点\n结论：需修改", Some("m2"), 8);
+        let kept = book.get(&id).unwrap();
+        assert_eq!(kept.counted(), 1);
+        assert_eq!(kept.next(), Some(Next::Back), "counted from one");
+        let prompt = kept.prompt_for(StepKind::Back);
+        book.returned(&id, StepKind::Back, "意见二", &prompt, true, 9);
+        book.asked(&id, None, "第三轮", 10);
+        book.replied("c1", "1. 还有\n结论：需修改", Some("m3"), 11);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Limit));
     }
 }

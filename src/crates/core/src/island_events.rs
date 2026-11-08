@@ -2,6 +2,9 @@
 //! Ported from IslandEvents/QuotaAlerts/ResetCreditGrants; UI preferences consume
 //! then suppress facts rather than keeping another independent diff history.
 use super::*;
+
+mod hook_reviews;
+
 #[derive(Clone)]
 struct Observation {
     at: i64,
@@ -33,6 +36,8 @@ pub(super) struct Tracker {
     credits: HashMap<String, Credits>,
     sign_ins: HashMap<String, SignIn>,
     gateways: HashMap<String, SignIn>,
+    /// When each agent's hooks waiting for the user were last told.
+    reviews: HashMap<String, i64>,
     /// The failed Hermes scheduled tasks already told (`bot:job`), kept on
     /// disk so a restart does not tell them again; loaded on first look.
     cron_told: Option<HashSet<String>>,
@@ -58,6 +63,7 @@ impl Tracker {
             credits: HashMap::new(),
             sign_ins: HashMap::new(),
             gateways: HashMap::new(),
+            reviews: HashMap::new(),
             cron_told: None,
             cron_unsaved: false,
             revision: 0,
@@ -85,6 +91,7 @@ impl Tracker {
         now: i64,
     ) -> Value {
         self.sign_ins(providers, now);
+        self.hook_reviews(providers, now);
         self.seen.retain(|_, at| *at >= now - 31 * 86_400_000);
         let mut completions = sessions
             .iter()

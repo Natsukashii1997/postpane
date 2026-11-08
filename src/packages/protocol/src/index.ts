@@ -743,8 +743,15 @@ export interface IslandEvent {
     /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
     | "bot-offline"
     /** A Hermes scheduled task's last run failed; `title` is the task. */
-    | "cron-failed";
+    | "cron-failed"
+    /** The agent skips PostPane's hooks until the user allows them in the
+     * agent itself; `message` is what that costs, `step` where to allow. */
+    | "hooks-review-needed";
   at: string;
+  /** For `hooks-review-needed`: where to allow the hooks, and the events
+   * whose hook waits, as the agent names them. */
+  step?: string | null;
+  hooks?: string[];
   /** For `cron-failed`: when the failed run was, and when it runs next. */
   failedAt?: string | null;
   nextRunAt?: string | null;
@@ -797,6 +804,13 @@ export interface HandoffStep {
   verdict?: "pass" | "revise" | null;
   /** Done by the auto round trip, not by the person (#72). */
   auto?: boolean;
+  /** Words back to Claude (`back`, `again`, #257): the id they were left
+   * under for the session's plugin. */
+  prompt?: string;
+  /** How those words stand with the plugin: left, taken, its turn on them
+   * started, or given up. */
+  delivery?:
+    "waiting" | "taken" | "started" | "refused" | "expired" | "cancelled";
 }
 /** A Claude Code session and the ChatGPT conversation reviewing its work
  * (relay 1c, docs/chatgpt-channel.md). From the host: the live ones and those
@@ -848,6 +862,10 @@ export interface Handoff {
   /** When ChatGPT's answer was queued for a Claude session paused once its
    * turn was over: it goes in once the session is opened. */
   queuedAt?: number | null;
+  /** The step its rounds count from (#258): the person spoke up in the
+   * Claude session and it handed over again. Earlier reviews, carried ones
+   * too, no longer count. */
+  roundsFrom?: number;
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the
@@ -1245,6 +1263,27 @@ export interface SessionsQuery {
   turnBars?: boolean;
   /** Direct children of this parent; overrides rootsOnly. */
   parentId?: string;
+  /** IANA calendar time zone the response's `days` are cut in, DST-aware; UTC when omitted. */
+  timeZone?: string;
+}
+/** From Core: what the sessions of one local day spent, every matching session, not only a page's. */
+export interface SessionsDay {
+  /** When the day began, RFC3339; null for Earlier: before the six days ahead of today, or with no time. */
+  start: string | null;
+  sessions: number;
+  /** The sessions' tokens, sub-agents' included, as their rows count them. */
+  tokens: number;
+  /** The same by kind; null when no session has a breakdown. */
+  usage: (StatisticsTokens & { total: number }) | null;
+  /** Money as a row has it: the whole cost when every session has one, else null. */
+  cost: number | null;
+  /** The sessions' whole costs, else their priced calls', in US dollars; null when none has one. */
+  pricedCost: number | null;
+  /** The tokens of the calls with no list price, of the sessions with no whole cost. */
+  unpricedTokens: number;
+  /** The five sessions that spent the most tokens, most first, and the others that spent any (the Today card's ranking). */
+  top: { id: string; title: string; tokens: number }[];
+  rest: { count: number; tokens: number };
 }
 export interface SessionsResponse {
   kind: "sessions";
@@ -1257,6 +1296,8 @@ export interface SessionsResponse {
   /** Scope/root facets before source, project and search filters are applied. */
   sources: string[];
   projects: (string | null)[];
+  /** Each local day the matching sessions' last messages fall on (a later one under today), newest first, Earlier last. The days follow `items`: the first day's `sessions` are the first items, the next day's the next. */
+  days: SessionsDay[];
 }
 export type NativeMethod =
   | "snapshot"

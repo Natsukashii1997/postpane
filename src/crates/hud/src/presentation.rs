@@ -13,7 +13,7 @@ use std::{
     collections::HashMap,
     fs,
     path::PathBuf,
-    sync::Mutex,
+    sync::{Mutex, PoisonError},
     time::{SystemTime, UNIX_EPOCH},
 };
 const DEFAULTS: &str = include_str!("../../../packages/protocol/hud-defaults.json");
@@ -170,10 +170,7 @@ impl Presentation {
     }
     /// One-time, read-only legacy import. Existing native preferences always win.
     pub fn seed_if_absent(&self, legacy: &Value) -> Result<(), String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         if s.initialized {
             return Ok(());
         }
@@ -405,10 +402,7 @@ impl Presentation {
         }
     }
     pub fn update(&self, params: Value) -> Result<Value, String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let checkpoint = s.clone();
         let before = s.saved.clone();
         let id = params["screen"].as_str().unwrap_or("all");
@@ -459,10 +453,7 @@ impl Presentation {
         Ok(Self::view_of(&mut s))
     }
     pub fn import(&self, params: Value) -> Result<Value, String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         if !s.initialized {
             if let Some(store) = params.get("store").filter(|v| v["version"] == 3) {
                 let checkpoint = s.clone();
@@ -492,10 +483,7 @@ impl Presentation {
         Ok(Self::view_of(&mut s))
     }
     pub fn source_update(&self, params: Value) -> Result<Value, String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let checkpoint = s.clone();
         let before = s.saved.clone();
         let source = params["source"].as_str().ok_or("Source is required")?;
@@ -515,10 +503,7 @@ impl Presentation {
         Ok(Self::view_of(&mut s))
     }
     pub fn set_layout(&self, params: Value) -> Result<Value, String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let checkpoint = s.clone();
         let before = s.saved.clone();
         let screen = params["screen"].as_str().unwrap_or("all");
@@ -541,10 +526,7 @@ impl Presentation {
         screen: &str,
         commit: impl FnOnce(&Value) -> Result<(), String>,
     ) -> Result<Value, String> {
-        let mut s = self
-            .state
-            .lock()
-            .map_err(|_| "Display preference owner unavailable")?;
+        let mut s = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         let checkpoint = s.clone();
         let before = s.saved.clone();
         let patch = s.app.as_ref().map(tools::app_settings).unwrap_or(json!({}));

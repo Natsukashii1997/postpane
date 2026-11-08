@@ -240,6 +240,90 @@ fn logs_last_written_over_31_days_ago_are_not_read_and_keep_what_they_counted() 
 }
 
 #[test]
+fn token_rows_over_31_days_old_stay_and_the_30_day_statistics_do_not_change() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let log = root.join("recent.jsonl");
+    let at = (Utc::now() - chrono::Duration::minutes(1)).to_rfc3339();
+    fs::write(
+        &log,
+        format!(
+            "{}\n",
+            json!({"sessionId":"s1","type":"assistant","timestamp":at,"message":{"id":"m1","model":"claude-fable-5","usage":{"input_tokens":10,"output_tokens":3}}})
+        ),
+    )
+    .unwrap();
+    let statistics = |backend: &mut AgentHudCore| {
+        let now = Utc::now();
+        backend
+            .request(
+                "statistics",
+                json!({
+                    "from": (now - chrono::Duration::days(30)).to_rfc3339(),
+                    "to": (now + chrono::Duration::minutes(1)).to_rfc3339(),
+                    "timeZone": "UTC",
+                }),
+            )
+            .unwrap()["totals"]
+            .clone()
+    };
+    let mut backend = fixture(home);
+    backend.request("snapshot", json!({})).unwrap();
+    let before = statistics(&mut backend);
+    drop(backend);
+
+    // Rows the ledger wrote 40 days ago, while they were recent.
+    let old = Utc::now().timestamp_millis() - 40 * 86_400_000;
+    let path = log.to_string_lossy().into_owned();
+    let ledger = rusqlite::Connection::open(home.join("app/ingestion.sqlite")).unwrap();
+    ledger
+        .execute(
+            "INSERT INTO usage_meter_event(contribution,event_key,source,model,at_ms,input,output,cache_read,cache_write,reasoning) VALUES(?1,'old','claude','claude-fable-5',?2,7,7,0,0,0)",
+            rusqlite::params![path, old],
+        )
+        .unwrap();
+    ledger
+        .execute(
+            "INSERT INTO usage_meter_bucket(contribution,source,model,at_ms,input,output,cache_read,cache_write,reasoning) VALUES(?1,'claude','claude-fable-5',?2,7,7,0,0,0)",
+            rusqlite::params![path, old.div_euclid(900_000) * 900_000],
+        )
+        .unwrap();
+    ledger
+        .execute(
+            "INSERT INTO usage_meter_mark(contribution,at_ms,kind) VALUES(?1,?2,0)",
+            rusqlite::params![path, old],
+        )
+        .unwrap();
+
+    // A relaunch's passes are where the ledger used to drop rows past 31 days.
+    let mut backend = fixture(home);
+    backend.request("snapshot", json!({})).unwrap();
+    backend.request("refresh", json!({})).unwrap();
+    let cutoff = Utc::now().timestamp_millis() - 31 * 86_400_000;
+    for table in [
+        "usage_meter_event",
+        "usage_meter_bucket",
+        "usage_meter_mark",
+    ] {
+        let kept: i64 = ledger
+            .query_row(
+                &format!("SELECT count(*) FROM {table} WHERE at_ms<?1"),
+                [cutoff],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept, 1, "{table} keeps its row from 40 days ago");
+    }
+    assert_eq!(
+        statistics(&mut backend),
+        before,
+        "the 30-day statistics leave the older rows out"
+    );
+}
+
+#[test]
 fn turn_text_stays_in_memory_and_a_relaunch_starts_without_it() {
     let temp = tempfile::tempdir().unwrap();
     let home = temp.path();

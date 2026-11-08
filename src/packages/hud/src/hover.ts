@@ -42,6 +42,18 @@ export function reduceHover(
   return state;
 }
 
+/** The timer for a deadline: how long to wait, and the time it reports when it
+ * fires. A timer's delay is cut to whole milliseconds and can fire a moment
+ * before the deadline; it was set for the deadline, so it has come. Reading
+ * the clock instead left the machine as it was with no timer set: the panel
+ * stayed half open or half closed until the pointer moved again. */
+export function hoverTimer(deadline: number, now: number) {
+  return {
+    delayMs: Math.max(1, Math.ceil(deadline - now)),
+    firedAt: (at: number) => Math.max(at, deadline),
+  };
+}
+
 export function useHoverMachine(config: HoverTiming) {
   const [state, setState] = useState<HoverState>({ phase: "collapsed" });
   const inside = useRef(false);
@@ -52,9 +64,10 @@ export function useHoverMachine(config: HoverTiming) {
   );
   useEffect(() => {
     if (state.phase !== "opening" && state.phase !== "closing") return;
+    const { delayMs, firedAt } = hoverTimer(state.deadline, performance.now());
     const timer = setTimeout(
-      () => send({ type: "timer", now: performance.now() }),
-      Math.max(1, state.deadline - performance.now()),
+      () => send({ type: "timer", now: firedAt(performance.now()) }),
+      delayMs,
     );
     return () => clearTimeout(timer);
   }, [state, send]);

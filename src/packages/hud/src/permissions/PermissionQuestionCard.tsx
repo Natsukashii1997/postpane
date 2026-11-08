@@ -236,6 +236,21 @@ export function PermissionQuestionCard({
     );
   };
 
+  // Every hook comes before the returns below: a card whose client stops or
+  // starts taking answers renders the other way, and React needs the same
+  // hooks each time (#259).
+  const safePage = Math.min(page, Math.max(0, questions.length - 1));
+  // None when the card cannot answer and was sent no questions.
+  const q = questions[safePage];
+  const editingCustom =
+    editingCustomKey === q?.answerKey || q?.options.length === 0;
+  useEffect(() => {
+    if (!editingCustom) return;
+    const input = customInputRef.current;
+    if (!input || input.closest("[inert], [aria-hidden=true]")) return;
+    input.focus({ preventScroll: true });
+  }, [editingCustom, q?.answerKey]);
+
   if (!canAnswerQuestion) {
     // Only the question and why it waits for the client: offered answers
     // that could not be sent would look like buttons that do nothing.
@@ -348,20 +363,11 @@ export function PermissionQuestionCard({
     );
   }
 
-  const safePage = Math.min(page, Math.max(0, questions.length - 1));
-  const q = questions[safePage];
   if (!q) return null;
   const key = q.answerKey;
   const value = answers[key] ?? { selected: [] };
   const hasCustom = Boolean(value.own && value.custom?.trim());
   const isAnswered = value.selected.length > 0 || hasCustom;
-  const editingCustom = editingCustomKey === key || q.options.length === 0;
-  useEffect(() => {
-    if (!editingCustom) return;
-    const input = customInputRef.current;
-    if (!input || input.closest("[inert], [aria-hidden=true]")) return;
-    input.focus({ preventScroll: true });
-  }, [editingCustom, key]);
   const advanceOrSubmit = () => {
     if (!isAnswered || disabled) return;
     setEditingCustomKey(null);

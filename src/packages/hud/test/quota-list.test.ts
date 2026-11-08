@@ -36,17 +36,18 @@ test("quota notices are a window's, resets added and sign-outs; a window's are t
     "quota-reset",
     "reset-credits",
     "sign-in-needed",
+    "hooks-review-needed",
     "completion",
   ];
   const of = (kind: IslandEvent["kind"]) =>
     ({ id: "e", kind, at: "", source: "" }) as IslandEvent;
   assert.deepEqual(
     kinds.map((kind) => isQuotaEvent(of(kind))),
-    [true, true, true, true, false],
+    [true, true, true, true, true, false],
   );
   assert.deepEqual(
     kinds.map((kind) => isQuotaWindowEvent(of(kind))),
-    [true, true, false, false, false],
+    [true, true, false, false, false, false],
   );
 });
 

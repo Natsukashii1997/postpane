@@ -165,11 +165,10 @@ pub(crate) fn read_lines(
     Ok(())
 }
 
-/// Whether a listed log is read now: one last written within the ledger's
-/// 31-day retention that changed since it was read, was never read, or was
-/// read by another reader version or only partly. An older log holds no usage
-/// the ledger keeps and is not read, even when an earlier version read it;
-/// what it counted stays (agent-hud-native-open TailLogStore.index: logs modified
+/// Whether a listed log is read now: one last written within the 31-day read
+/// window that changed since it was read, was never read, or was read by
+/// another reader version or only partly. An older log is not read, even
+/// when an earlier version read it; what it counted stays (agent-hud-native-open TailLogStore.index: logs modified
 /// since the history cutoff, and older ones outdated or unfinished within the
 /// retention). The Swift app also leaves unread a log 7 to 31 days old it
 /// never read; this app reads it, so a first launch fills the 30-day token history.
@@ -177,11 +176,11 @@ pub(crate) fn due(log: Option<&LogHead>, file: &FileStamp, now_ms: i64) -> bool 
     within_retention(file, now_ms) && needs_read(log, file)
 }
 
-/// Whether a log was last written within the ledger's retention; one whose
-/// time cannot be told counts as recent.
+/// Whether a log was last written within the read window; one whose time
+/// cannot be told counts as recent.
 pub(crate) fn within_retention(file: &FileStamp, now_ms: i64) -> bool {
     file.modified.is_none_or(|modified| {
-        DateTime::<Utc>::from(modified).timestamp_millis() >= now_ms - metering::RETENTION_MS
+        DateTime::<Utc>::from(modified).timestamp_millis() >= now_ms - metering::READ_WINDOW_MS
     })
 }
 
@@ -1052,21 +1051,6 @@ impl AgentHudCore {
             let _ = self.sync_holding(&[&held]);
         }
         self.price_unpriced_logs(64);
-        // Expired usage leaves in its own small statement about once an hour.
-        let now = Utc::now().timestamp_millis();
-        if self
-            .ledger_expired_at
-            .is_none_or(|at| now - at >= 3_600_000)
-        {
-            self.ledger_expired_at = Some(now);
-            if let Some(database) = &self.database {
-                if metering::expire(database, now).is_ok_and(|deleted| deleted > 0) {
-                    self.usage_projection = None;
-                    self.meters.view = None;
-                    self.statistics.revision = self.statistics.revision.wrapping_add(1);
-                }
-            }
-        }
         if errors.is_empty() {
             Ok(())
         } else {

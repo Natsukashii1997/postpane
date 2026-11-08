@@ -54,13 +54,16 @@ const sources: Record<string, { sessions: Words; quota: Words }> = {
   claude: {
     sessions: ["~/.claude/projects", "~/.claude/projects"],
     quota: [
-      "Local claude sign-in; cloud sessions from api.anthropic.com",
-      "本机 claude 登录查额度；云端会话经 api.anthropic.com",
+      "Local claude sign-in (if the first read after a restart fails, Claude Code's own record in ~/.claude.json, same account only); cloud sessions from api.anthropic.com",
+      "本机 claude 登录查额度（重启后第一次就读失败时，退回 ~/.claude.json 里 Claude Code 自己记下的读数，只认同一账号）；云端会话经 api.anthropic.com",
     ],
   },
   codex: {
     sessions: ["~/.codex/sessions", "~/.codex/sessions"],
-    quota: ["Local codex app-server", "本机 codex app-server"],
+    quota: [
+      "Local codex app-server; also whether PostPane's hooks are allowed",
+      "本机 codex app-server；顺带查驿窗钩子是否已允许",
+    ],
   },
   antigravity: {
     sessions: ["~/.gemini/antigravity*/brain", "~/.gemini/antigravity*/brain"],
