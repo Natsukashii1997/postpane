@@ -797,6 +797,13 @@ export interface HandoffStep {
   verdict?: "pass" | "revise" | null;
   /** Done by the auto round trip, not by the person (#72). */
   auto?: boolean;
+  /** Words back to Claude (`back`, `again`, #257): the id they were left
+   * under for the session's plugin. */
+  prompt?: string;
+  /** How those words stand with the plugin: left, taken, its turn on them
+   * started, or given up. */
+  delivery?:
+    "waiting" | "taken" | "started" | "refused" | "expired" | "cancelled";
 }
 /** A Claude Code session and the ChatGPT conversation reviewing its work
  * (relay 1c, docs/chatgpt-channel.md). From the host: the live ones and those
@@ -848,6 +855,10 @@ export interface Handoff {
   /** When ChatGPT's answer was queued for a Claude session paused once its
    * turn was over: it goes in once the session is opened. */
   queuedAt?: number | null;
+  /** The step its rounds count from (#258): the person spoke up in the
+   * Claude session and it handed over again. Earlier reviews, carried ones
+   * too, no longer count. */
+  roundsFrom?: number;
 }
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the

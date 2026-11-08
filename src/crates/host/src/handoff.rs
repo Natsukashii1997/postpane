@@ -7,8 +7,10 @@
 //! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
 use crate::extension::Flight;
 use agent_hud_runtime::chatgpt::handoffs::{
-    self, Book, Exit, Flaw, Handoff, Next, Phase, Review, Risk, Status, Step, StepKind, Verdict,
+    self, Book, Delivery, Exit, Flaw, Handoff, Next, Phase, Review, Risk, Status, Step, StepKind,
+    Verdict,
 };
+use agent_hud_runtime::claude_plugin::Opener;
 
 /// What Claude said about a review besides its words (#217).
 #[derive(Clone, Debug, Default)]
@@ -55,17 +57,30 @@ pub(crate) trait Lines {
     fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, session: &str) -> Result<(), String>;
-    fn reply(&self, session: &str, text: &str) -> Result<(), String>;
+    /// Leaves words for a Claude Code session running now, under `id` (#257):
+    /// words left under it before are `Unsent::Again`.
+    fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
     /// Leaves words for a Claude Code session and says which, to follow
     /// them (`left`).
     fn leave(&self, session: &str, text: &str) -> Result<String, String>;
-    /// Leaves words as `leave` does, also for a session not running now: they
+    /// Leaves words as `reply` does, also for a session not running now: they
     /// wait in its queue until it is opened (#255).
-    fn queue(&self, session: &str, text: &str) -> Result<String, String>;
+    fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
     /// How words left for a session stand (`waiting`, `taken`, `started`,
     /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
     /// the plugin's files are gone.
     fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)>;
+    /// Who began a Claude Code session's current turn, and when (#258);
+    /// None when its transcript cannot tell.
+    fn opener(&self, session: &str) -> Option<(Opener, i64)>;
+}
+
+/// Why words did not go to a Claude Code session.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Unsent {
+    /// Words were left under this id before: they went already (#257).
+    Again,
+    Failed(String),
 }
 
 /// How long a launch that came to nothing stays on its row.
@@ -522,6 +537,12 @@ impl Desk {
         if let Some(handoff) = current {
             match (handoff.status, handoff.chatgpt_conversation.clone()) {
                 (Status::Open, Some(conversation)) => {
+                    // The person spoke up in the session since words went
+                    // back to it (#258): its rounds count from one again.
+                    // Not told who began Claude's turn: they count on.
+                    if handoff.spoke_up(lines.opener(session).as_ref()) {
+                        self.change(|book| book.restart_rounds(&handoff.id));
+                    }
                     let sent = {
                         let _sending = self.claim(&handoff.id)?;
                         self.ask(lines, handoff, &conversation, summary, brief, extra, now)
@@ -829,21 +850,29 @@ impl Desk {
                 if self.lock().returned_already(id, &text) {
                     return Ok(Acted::Done);
                 }
-                let sent = lines
-                    .reaches(&handoff.claude_session)
-                    .and_then(|()| lines.reply(&handoff.claude_session, &text));
-                if let Err(error) = sent {
+                // The step's own id (#257): words left under it before went
+                // already, and are not left twice.
+                let prompt = self
+                    .lock()
+                    .get(id)
+                    .map_or_else(|| handoff.prompt_for(kind), |h| h.prompt_for(kind));
+                let session = &handoff.claude_session;
+                if let Err(Unsent::Failed(error)) = lines
+                    .reaches(session)
+                    .map_err(Unsent::Failed)
+                    .and_then(|()| lines.reply(session, &prompt, &text))
+                {
                     // As the auto round trip's (#223): they wait in the
                     // session's queue and go in once it is opened.
-                    lines
-                        .queue(&handoff.claude_session, &text)
-                        .map_err(|_| error)?;
+                    if let Err(Unsent::Failed(_)) = lines.queue(session, &prompt, &text) {
+                        return Err(error);
+                    }
                     self.change(|book| {
-                        book.returned(id, kind, &text, false, now) && book.queued(id, now)
+                        book.returned(id, kind, &text, &prompt, false, now) && book.queued(id, now)
                     });
                     return Ok(Acted::Done);
                 }
-                self.change(|book| book.returned(id, kind, &text, false, now));
+                self.change(|book| book.returned(id, kind, &text, &prompt, false, now));
                 Ok(Acted::Done)
             }
             "pause" => {
@@ -903,13 +932,14 @@ impl Desk {
     /// lines that do not hold leave it to the person, sending nothing.
     /// Whether anything changed.
     pub(crate) fn drive(&self, lines: &dyn Lines, now: i64) -> bool {
+        let tracked = self.track(lines, now);
         let due = self
             .lock()
             .list
             .iter()
             .filter_map(|h| h.next().map(|next| (h.id.clone(), next, h.budget())))
             .collect::<Vec<_>>();
-        let mut changed = false;
+        let mut changed = tracked;
         for (id, next, budget) in due {
             changed |= match next {
                 Next::Pass => self.change(|book| book.passed(&id, &passed(l10n::chinese()), now)),
@@ -925,6 +955,60 @@ impl Desk {
                     self.auto_back(lines, &id, next, now)
                 }
             };
+        }
+        changed
+    }
+    /// Follows the newest words back to Claude in each handoff shown, as its
+    /// session's plugin has them (#257): taken and started are kept on their
+    /// step; words it gave up — refused, expired, cancelled — leave the
+    /// handoff to the person at once, saying why. Whether anything changed.
+    pub(crate) fn track(&self, lines: &dyn Lines, now: i64) -> bool {
+        let pending = self
+            .lock()
+            .list
+            .iter()
+            .filter(|h| h.live() || now - h.updated_at < FAILED_SHOWN_MS)
+            .filter_map(|h| {
+                let step = h
+                    .steps
+                    .iter()
+                    .rev()
+                    .find(|step| matches!(step.kind, StepKind::Back | StepKind::Again))?;
+                let delivery = step
+                    .delivery
+                    .filter(|d| matches!(d, Delivery::Waiting | Delivery::Taken))?;
+                Some((
+                    h.id.clone(),
+                    h.claude_session.clone(),
+                    step.prompt.clone()?,
+                    delivery,
+                ))
+            })
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (id, session, prompt, was) in pending {
+            let Some((state, reason)) = lines.left(&session, &prompt) else {
+                continue;
+            };
+            let delivery = match state.as_str() {
+                "taken" => Delivery::Taken,
+                "started" => Delivery::Started,
+                "refused" => Delivery::Refused,
+                "expired" => Delivery::Expired,
+                "cancelled" => Delivery::Cancelled,
+                _ => continue,
+            };
+            if delivery == was {
+                continue;
+            }
+            let reason = undelivered(&state, reason.as_deref());
+            changed |= self.change(|book| {
+                if delivery.gave_up() {
+                    book.undelivered(&id, &prompt, delivery, &reason, now)
+                } else {
+                    book.delivery(&id, &prompt, delivery, now)
+                }
+            });
         }
         changed
     }
@@ -957,18 +1041,23 @@ impl Desk {
             Next::Escalate => book.stop(id, &escalated(), true, now),
             _ => true,
         };
+        // The step's own id (#257): tried again, or triggered again, it
+        // leaves no second copy; words left under it before went already.
+        let prompt = handoff.prompt_for(StepKind::Back);
+        let session = &handoff.claude_session;
         let send = || {
             lines
-                .reaches(&handoff.claude_session)
-                .and_then(|()| lines.reply(&handoff.claude_session, &text))
+                .reaches(session)
+                .map_err(Unsent::Failed)
+                .and_then(|()| lines.reply(session, &prompt, &text))
         };
-        if let Err(first) = send() {
+        if let Err(Unsent::Failed(first)) = send() {
             self.change(|book| book.trouble(id, &back_retry(&first), now));
-            if let Err(again) = send() {
+            if let Err(Unsent::Failed(again)) = send() {
                 // A session Claude paused once its turn was over cannot take
                 // words now: they wait in its queue and go in once it is
                 // opened (L5 run 1, 2026-11-07).
-                if lines.queue(&handoff.claude_session, &text).is_err() {
+                if let Err(Unsent::Failed(_)) = lines.queue(session, &prompt, &text) {
                     return self.change(|book| {
                         book.trouble(id, &retry_failed(&again), now);
                         book.stop(id, &back_failed(), true, now)
@@ -976,13 +1065,15 @@ impl Desk {
                 }
                 return self.change(|book| {
                     book.trouble(id, &queued_instead(&again), now);
-                    book.returned(id, StepKind::Back, &text, true, now)
+                    book.returned(id, StepKind::Back, &text, &prompt, true, now)
                         && book.queued(id, now)
                         && then(book)
                 });
             }
         }
-        self.change(|book| book.returned(id, StepKind::Back, &text, true, now) && then(book))
+        self.change(|book| {
+            book.returned(id, StepKind::Back, &text, &prompt, true, now) && then(book)
+        })
     }
 }
 
@@ -1262,6 +1353,29 @@ fn queued_instead(error: &str) -> String {
         ),
     )
 }
+/// Why the person has a handoff whose words back the plugin gave up (#257).
+fn undelivered(state: &str, reason: Option<&str>) -> String {
+    match state {
+        "refused" => l10n::text(
+            &format!(
+                "Claude 会话的插件拒收了转回的话（{}），交还常浩",
+                reason.unwrap_or("没说原因")
+            ),
+            &format!(
+                "The Claude session's plugin refused the words back ({}); left to you",
+                reason.unwrap_or("no reason given")
+            ),
+        ),
+        "expired" => l10n::text(
+            "转回的话 1 小时没被 Claude 会话领走，已过期，交还常浩",
+            "The words back were not taken up by the Claude session within an hour; left to you",
+        ),
+        _ => l10n::text(
+            "转回的话被取消了，交还常浩",
+            "The words back were cancelled; left to you",
+        ),
+    }
+}
 fn no_wake() -> String {
     l10n::text(
         &format!(
@@ -1482,12 +1596,19 @@ impl Lines for AppLines<'_> {
             .reaches(CLAUDE, session)
             .map_err(|unreachable| unreachable.note)
     }
-    fn reply(&self, session: &str, text: &str) -> Result<(), String> {
+    fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+        use agent_hud_runtime::claude_plugin::Refusal;
         let plugin = self
             .0
             .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(no_plugin)?;
-        plugin.replies().reply(CLAUDE, session, text)
+            .ok_or_else(|| Unsent::Failed(no_plugin()))?;
+        let replies = plugin.claude_replies();
+        replies
+            .reply_as(session, id, text)
+            .map_err(|refusal| match refusal {
+                Refusal::IdentityConflict => Unsent::Again,
+                refusal => Unsent::Failed(replies.refusal_text(session, &refusal)),
+            })
     }
     fn leave(&self, session: &str, text: &str) -> Result<String, String> {
         let plugin = self
@@ -1505,20 +1626,24 @@ impl Lines for AppLines<'_> {
                 )
             })
     }
-    fn queue(&self, session: &str, text: &str) -> Result<String, String> {
+    fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+        use agent_hud_runtime::claude_plugin::Refusal;
         let plugin = self
             .0
             .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(no_plugin)?;
+            .ok_or_else(|| Unsent::Failed(no_plugin()))?;
         plugin
             .channel()
-            .queue(session, text, std::time::SystemTime::now())
-            .map_err(|refusal| {
-                eprintln!("转回 Claude could not queue words: {refusal}");
-                l10n::text(
-                    "没能排进这个会话的待发送队列。",
-                    "The words could not be queued for this session.",
-                )
+            .queue_as(session, id, text, std::time::SystemTime::now())
+            .map_err(|refusal| match refusal {
+                Refusal::IdentityConflict => Unsent::Again,
+                refusal => {
+                    eprintln!("转回 Claude could not queue words: {refusal}");
+                    Unsent::Failed(l10n::text(
+                        "没能排进这个会话的待发送队列。",
+                        "The words could not be queued for this session.",
+                    ))
+                }
             })
     }
     fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
@@ -1538,6 +1663,21 @@ impl Lines for AppLines<'_> {
         };
         Some((state.to_owned(), reason))
     }
+    fn opener(&self, session: &str) -> Option<(Opener, i64)> {
+        let home = super::mcp_clients::home().ok()?;
+        agent_hud_runtime::claude_plugin::current_turn(
+            &agent_hud_runtime::claude_plugin::claude_config_directory(&home),
+            session,
+        )
+    }
+}
+
+/// The snapshot's `handoffs`, with the words back to Claude followed first
+/// (#257).
+pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
+    let now = now_ms();
+    desk.track(&AppLines(app), now);
+    desk.projection(now)
 }
 
 /// The snapshot's `relayLaunches` as the app's ways out have them.
@@ -1843,6 +1983,28 @@ mod tests {
         leave_fails: std::cell::Cell<bool>,
         /// How many replies to Claude fail before one goes through.
         reply_fails: std::cell::Cell<u32>,
+        /// Words left for Claude under each id (session, id), as the
+        /// plugin's folder keeps them: the same id twice is refused (#257).
+        prompts: RefCell<Vec<(String, String)>>,
+        /// How words left under an id stand; words left and not set here
+        /// wait, as the plugin's file says until it takes them.
+        left_by: RefCell<HashMap<String, (String, Option<String>)>>,
+        /// Who began the Claude session's current turn, and when (#258).
+        opener: RefCell<Option<(Opener, i64)>>,
+    }
+    impl Fake {
+        /// Leaves words under `id` as `ClaudeChannel::put` does.
+        fn put(&self, kind: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+            let left = (session.to_owned(), id.to_owned());
+            if self.prompts.borrow().contains(&left) {
+                return Err(Unsent::Again);
+            }
+            self.prompts.borrow_mut().push(left);
+            self.sent
+                .borrow_mut()
+                .push((kind.into(), session.into(), text.into()));
+            Ok(())
+        }
     }
     impl Lines for Fake {
         fn connected(&self) -> bool {
@@ -1889,15 +2051,16 @@ mod tests {
                 Ok(())
             }
         }
-        fn reply(&self, session: &str, text: &str) -> Result<(), String> {
+        fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+            // As `ClaudeChannel::hand_as`: only a session checked in now.
+            if self.unreachable {
+                return Err(Unsent::Failed("这个会话还没加载 Agent HUD 插件".into()));
+            }
             if self.reply_fails.get() > 0 {
                 self.reply_fails.set(self.reply_fails.get() - 1);
-                return Err("会话的待发送目录写不进".into());
+                return Err(Unsent::Failed("会话的待发送目录写不进".into()));
             }
-            self.sent
-                .borrow_mut()
-                .push(("reply".into(), session.into(), text.into()));
-            Ok(())
+            self.put("reply", session, id, text)
         }
         fn leave(&self, session: &str, text: &str) -> Result<String, String> {
             // As `ClaudeChannel::hand`: only a session checked in now (#255).
@@ -1911,17 +2074,31 @@ mod tests {
             sent.push(("leave".into(), session.into(), text.into()));
             Ok(format!("p{}", sent.len()))
         }
-        fn queue(&self, session: &str, text: &str) -> Result<String, String> {
+        fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
             if self.leave_fails.get() {
-                return Err("plugin folder not writable".into());
+                return Err(Unsent::Failed("plugin folder not writable".into()));
             }
-            let mut sent = self.sent.borrow_mut();
-            sent.push(("queue".into(), session.into(), text.into()));
-            Ok(format!("p{}", sent.len()))
+            self.put("queue", session, id, text)
         }
-        fn left(&self, _session: &str, _id: &str) -> Option<(String, Option<String>)> {
+        fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
+            if let Some(state) = self.left_by.borrow().get(id) {
+                return Some(state.clone());
+            }
+            let left = (session.to_owned(), id.to_owned());
+            if self.prompts.borrow().contains(&left) {
+                return Some(("waiting".into(), None));
+            }
             self.left_as.borrow().clone()
         }
+        fn opener(&self, _session: &str) -> Option<(Opener, i64)> {
+            self.opener.borrow().clone()
+        }
+    }
+    fn left_by(lines: &Fake, id: &str, state: &str, reason: Option<&str>) {
+        lines
+            .left_by
+            .borrow_mut()
+            .insert(id.to_owned(), (state.to_owned(), reason.map(str::to_owned)));
     }
     fn left_as(lines: &Fake, state: Option<&str>, reason: Option<&str>) {
         *lines.left_as.borrow_mut() =
@@ -3778,5 +3955,214 @@ mod tests {
             desk.projection(7)[0]["halt"],
             bad_review_tail(Flaw::Mismatch)
         );
+    }
+
+    /// The newest step's id and delivery as the card has them.
+    fn last_back(desk: &Desk, now: i64) -> (String, String) {
+        let shown = desk.projection(now);
+        let step = shown[0]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|step| step["kind"] == "back" || step["kind"] == "again")
+            .unwrap()
+            .clone();
+        (
+            step["prompt"].as_str().unwrap_or("").to_owned(),
+            step["delivery"].as_str().unwrap_or("").to_owned(),
+        )
+    }
+
+    /// #257: a step back to Claude goes under its own id, so triggered again
+    /// — by the person, by the auto round trip, or after a restart that lost
+    /// the record of it — it leaves no second copy.
+    #[test]
+    fn a_step_back_to_claude_leaves_one_copy_under_its_own_id() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        let (prompt, delivery) = last_back(&desk, 5);
+        assert!(prompt.starts_with(&handoff.id), "{prompt}");
+        assert_eq!(delivery, "waiting");
+        assert_eq!(
+            lines.prompts.borrow().as_slice(),
+            [("s1".to_owned(), prompt.clone())]
+        );
+        desk.act(&lines, &handoff.id, "back", 6).unwrap();
+        assert!(!desk.drive(&lines, 6));
+        assert_eq!(replies(&lines), 1);
+
+        // Words left before the record of them was kept (the app stopped
+        // in between): the same step again finds them there and counts them
+        // as sent, leaving nothing more.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+        let prompt = desk
+            .lock()
+            .get(&handoff.id)
+            .unwrap()
+            .prompt_for(StepKind::Back);
+        lines
+            .prompts
+            .borrow_mut()
+            .push(("s1".to_owned(), prompt.clone()));
+        desk.act(&lines, &handoff.id, "back", 5).unwrap();
+        assert!(lines.sent.borrow().iter().all(|s| s.0 == "open"));
+        assert_eq!(desk.projection(5)[0]["phase"], "returned");
+        assert_eq!(last_back(&desk, 5).0, prompt);
+    }
+
+    /// #257: words back are followed as the plugin has them — waiting,
+    /// taken, started — and the card's data says which; queued words taken
+    /// no longer wait in the queue.
+    #[test]
+    fn words_back_to_claude_are_followed_until_its_turn_on_them_starts() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        let ended = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        assert!(desk.drive(&ended, 5));
+        assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
+        let (prompt, delivery) = last_back(&desk, 5);
+        assert_eq!(delivery, "waiting");
+        assert!(!desk.track(&ended, 6), "still waiting");
+        left_by(&ended, &prompt, "taken", None);
+        assert!(desk.track(&ended, 7));
+        assert_eq!(last_back(&desk, 7).1, "taken");
+        let shown = desk.projection(7);
+        assert!(shown[0]["queuedAt"].is_null(), "no longer queued");
+        assert_eq!(shown[0]["phaseAt"], 7, "the wait for changes begins");
+        left_by(&ended, &prompt, "started", None);
+        assert!(desk.track(&ended, 8));
+        assert_eq!(last_back(&desk, 8).1, "started");
+        // The plugin's file gone a minute after: it stays started.
+        ended.left_by.borrow_mut().clear();
+        ended.prompts.borrow_mut().clear();
+        assert!(!desk.track(&ended, 70_000));
+        assert_eq!(last_back(&desk, 70_000).1, "started");
+        assert_eq!(desk.projection(70_000)[0]["auto"], true);
+    }
+
+    /// #257: words the plugin gave up (expired, refused) leave the handoff
+    /// to the person at once, saying why, not an hour on; sent again by
+    /// hand, they go under a new id.
+    #[test]
+    fn words_back_the_plugin_gave_up_are_left_to_the_person_at_once() {
+        let (_temp, desk) = desk();
+        let lines = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        let handoff = opened(&desk, &Fake::default());
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        let (prompt, _) = last_back(&desk, 5);
+        left_by(&lines, &prompt, "expired", None);
+        assert!(desk.track(&lines, 10));
+        let shown = desk.projection(10);
+        assert_eq!(shown[0]["phase"], "replied", "the answer waits again");
+        assert_eq!(shown[0]["auto"], false);
+        assert_eq!(shown[0]["halt"], undelivered("expired", None));
+        assert!(shown[0]["queuedAt"].is_null());
+        assert_eq!(last_back(&desk, 10).1, "expired");
+        assert!(!desk.track(&lines, 11), "once");
+        desk.act(&lines, &handoff.id, "back", 12).unwrap();
+        let queued = lines
+            .sent
+            .borrow()
+            .iter()
+            .filter(|s| s.0 == "queue")
+            .count();
+        assert_eq!(queued, 2, "sent again");
+        assert_eq!(
+            last_back(&desk, 12),
+            (format!("{prompt}-1"), "waiting".into())
+        );
+
+        // Refused: the plugin's reason is on the card.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        let (prompt, _) = last_back(&desk, 5);
+        left_by(&lines, &prompt, "refused", Some("busy"));
+        assert!(desk.track(&lines, 6));
+        let shown = desk.projection(6);
+        assert_eq!(shown[0]["halt"], undelivered("refused", Some("busy")));
+        assert_eq!(last_back(&desk, 6).1, "refused");
+    }
+
+    /// #258: the person spoke up in the Claude session since words went
+    /// back, and Claude handed over again: the auto rounds count from one,
+    /// so the answer goes back by itself. Words of PostPane's own alone
+    /// stop at the last round as before.
+    #[test]
+    fn the_rounds_count_from_one_once_the_person_spoke_up_in_claude() {
+        let round_two = |opener: fn(&str) -> Opener| {
+            let (temp, desk) = self::desk();
+            let lines = Fake::default();
+            opened(&desk, &lines);
+            desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+            desk.drive(&lines, 5);
+            let back = lines.sent.borrow().last().unwrap().2.clone();
+            *lines.opener.borrow_mut() = Some((opener(&back), 6));
+            desk.start(
+                &lines,
+                "s1",
+                Some("/w"),
+                "修登录",
+                Some("按意见改完"),
+                "第二轮",
+                false,
+                7,
+            )
+            .unwrap();
+            desk.observe(
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"1. 还差一点\n结论：需修改","messageId":"m2"}),
+                8,
+            );
+            desk.drive(&lines, 9);
+            (temp, desk, lines)
+        };
+        // PostPane's words began Claude's turn: the last round, it stops.
+        let (_temp, desk, lines) = round_two(|back| Opener::Plugin(back.to_owned()));
+        let shown = desk.projection(9);
+        assert_eq!(shown[0]["halt"], at_limit(2));
+        assert!(shown[0]["roundsFrom"].is_null());
+        assert_eq!(replies(&lines), 1);
+        // The person's own words began it: round one again, back it goes.
+        let (_temp, desk, lines) = round_two(|_| Opener::Person);
+        let shown = desk.projection(9);
+        assert!(shown[0]["halt"].is_null(), "{}", shown[0]["halt"]);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["roundsFrom"], 4);
+        assert_eq!(replies(&lines), 2);
+        // Not told who began it: as before, it stops.
+        let (_temp, desk, _lines) = {
+            let (temp, desk) = self::desk();
+            let lines = Fake::default();
+            opened(&desk, &lines);
+            desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+            desk.drive(&lines, 5);
+            desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 7)
+                .unwrap();
+            desk.observe(
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：需修改","messageId":"m2"}),
+                8,
+            );
+            desk.drive(&lines, 9);
+            (temp, desk, lines)
+        };
+        assert_eq!(desk.projection(9)[0]["halt"], at_limit(2));
     }
 }
