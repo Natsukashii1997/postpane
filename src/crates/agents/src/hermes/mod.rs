@@ -74,9 +74,12 @@ pub fn bot(log_path: &str) -> Option<Bot> {
 fn soul_name_cached(path: &Path) -> Option<String> {
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Mutex, OnceLock, PoisonError};
     static NAMES: OnceLock<Mutex<HashMap<PathBuf, Option<String>>>> = OnceLock::new();
-    let mut names = NAMES.get_or_init(Default::default).lock().ok()?;
+    let mut names = NAMES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     names
         .entry(path.to_owned())
         .or_insert_with(|| {

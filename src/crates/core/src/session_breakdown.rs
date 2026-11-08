@@ -24,9 +24,10 @@ pub(crate) struct SessionRows(pub(crate) std::sync::Mutex<HashMap<PathBuf, (u64,
 impl SessionRows {
     /// Forgets the sessions no longer listed, so the map follows the logs.
     pub(crate) fn retain(&self, listed: &HashSet<&Path>) {
-        if let Ok(mut rows) = self.0.lock() {
-            rows.retain(|path, _| listed.contains(path.as_path()));
-        }
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|path, _| listed.contains(path.as_path()));
     }
 }
 
@@ -303,9 +304,11 @@ impl AgentHudCore {
             (log.offset, log.length, log.usage.total()).hash(&mut hash);
         }
         let key = hash.finish();
-        let Ok(mut rows) = self.session_rows.0.lock() else {
-            return Value::Null;
-        };
+        let mut rows = self
+            .session_rows
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((kept, value)) = rows.get(&own.path) {
             if *kept == key {
                 return value.clone();

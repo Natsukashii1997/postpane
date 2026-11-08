@@ -173,8 +173,8 @@ export function AiAccessPane({
               [
                 t("Reads", "读"),
                 t(
-                  "What Claude hands over: its summary and the change. ChatGPT cannot read files on this computer.",
-                  "Claude 交来的说明和改动摘要；ChatGPT 读不到本机文件",
+                  "What Claude hands over: its summary and the change. ChatGPT cannot read files on this computer. PostPane also reads the end of that Claude session's transcript, only to see who began its current turn (rounds count again once you spoke up), and how the plugin has the words sent back (queued, taken, started).",
+                  "Claude 交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读该 Claude 会话记录末尾，只看当前这一轮是谁开的头（你插话就重算轮数），并读插件留话的状态（排队中 / 已领取 / 已开始）",
                 ),
               ],
               [

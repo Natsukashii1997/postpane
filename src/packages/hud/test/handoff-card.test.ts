@@ -423,3 +423,77 @@ test("an engineering review counts by its risk level and its pull request (#217)
   // None named: two, as before.
   assert.deepEqual(round(handoff()), { at: 1, of: 2 });
 });
+
+test("words back to Claude say how its plugin has them: queued, taken, started (#257)", () => {
+  const back = (delivery: HandoffStep["delivery"]) =>
+    handoff({
+      phase: "returned",
+      phaseAt: T + 12 * minute,
+      steps: [
+        ...handoff().steps!,
+        reply,
+        step("back", T + 12 * minute, { auto: true, delivery }),
+      ],
+    });
+  const sub = (delivery: HandoffStep["delivery"], zh: boolean) =>
+    timeline(back(delivery), T + 14 * minute, zh).find(
+      (row) =>
+        row.state === "done" &&
+        (row.title.includes("转回 Claude") ||
+          row.title.includes("back to Claude")),
+    )?.sub;
+  assert.equal(sub("waiting", true), "附 ChatGPT 的回信全文 · 排队中");
+  assert.equal(sub("taken", true), "附 ChatGPT 的回信全文 · 已领取");
+  assert.equal(sub("started", true), "附 ChatGPT 的回信全文 · 已开始");
+  assert.equal(sub("expired", true), "附 ChatGPT 的回信全文 · 过期没领");
+  assert.equal(
+    sub("started", false),
+    "With ChatGPT's answer in full · started",
+  );
+  // Kept before receipts: as before.
+  assert.equal(sub(undefined, true), "附 ChatGPT 的回信全文");
+  // The ask to hand over again says so too.
+  const again = handoff({
+    phase: "returned",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute),
+      step("again", T + 13 * minute, { delivery: "taken" }),
+    ],
+  });
+  const row = timeline(again, T + 14 * minute, true).find(
+    (row) => row.title === "驿窗请 Claude 交回复审",
+  );
+  assert.equal(row?.sub, "已领取");
+});
+
+test("rounds count from one once the person spoke up in Claude (#258)", () => {
+  const spoke = handoff({
+    phase: "delivered",
+    carried: 1,
+    roundsFrom: 4,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute),
+      step("work", T + 20 * minute, { text: "按常浩说的改完" }),
+      step("ask", T + 20 * minute),
+    ],
+  });
+  assert.deepEqual(round(spoke), { at: 1, of: 2 });
+  const rows = timeline(spoke, T + 21 * minute, true);
+  const asked = rows.filter((row) => row.title.startsWith("驿窗送出"));
+  assert.equal(asked.at(-1)?.title, "驿窗送出「请审核」");
+  assert.equal(asked.at(-1)?.sub, "ChatGPT 已收到 · 你插话后轮数从 1 重算");
+  assert.equal(
+    timeline(spoke, T + 21 * minute, false)
+      .filter((row) => row.title.startsWith("PostPane asked"))
+      .at(-1)?.sub,
+    "ChatGPT has it · rounds count from 1 again after you spoke up",
+  );
+  assert.ok(
+    rows.some((row) => row.title === "第 2 轮：ChatGPT 再审核"),
+    "one round is left",
+  );
+});

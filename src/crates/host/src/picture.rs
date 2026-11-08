@@ -28,7 +28,7 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
         let backend = service
             .backend
             .lock()
-            .map_err(|_| "Application state unavailable")?;
+            .unwrap_or_else(PoisonError::into_inner);
         let snapshot = backend
             .snapshot
             .as_ref()
@@ -67,7 +67,7 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
     let payload = json!({"id":id,"params":params,"metadata":metadata});
     {
         let pictures = app.state::<Pictures>();
-        let mut pending = pictures.0.lock().map_err(|_| "Picture owner unavailable")?;
+        let mut pending = pictures.0.lock().unwrap_or_else(PoisonError::into_inner);
         if pending.is_some() {
             return Err("Another HUD picture is being rendered".into());
         }
@@ -137,13 +137,12 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
 }
 fn complete(app: &tauri::AppHandle, id: &str, result: Result<Value, String>) {
     let pictures = app.state::<Pictures>();
-    if let Ok(mut pending) = pictures.0.lock() {
-        if pending.as_ref().is_some_and(|job| job.id == id) {
-            if let Some(job) = pending.take() {
-                let _ = job.reply.send(result);
-            }
+    let mut pending = pictures.0.lock().unwrap_or_else(PoisonError::into_inner);
+    if pending.as_ref().is_some_and(|job| job.id == id) {
+        if let Some(job) = pending.take() {
+            let _ = job.reply.send(result);
         }
-    };
+    }
 }
 #[tauri::command]
 pub fn picture_payload(window: tauri::WebviewWindow, id: String) -> Result<Value, String> {
@@ -165,7 +164,7 @@ pub fn picture_payload(window: tauri::WebviewWindow, id: String) -> Result<Value
     let backend = service
         .backend
         .lock()
-        .map_err(|_| "Application state unavailable")?;
+        .unwrap_or_else(PoisonError::into_inner);
     let snapshot = backend
         .snapshot
         .as_ref()
