@@ -50,13 +50,17 @@ impl ClaudePlugin {
 
     /// The HUD's way to answer Claude's questions in a session running the plugin.
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
+        Arc::new(self.claude_replies())
+    }
+
+    /// `replies` as they are, for words back from a relay under their own
+    /// id (#257).
+    pub(crate) fn claude_replies(&self) -> ClaudeReplies {
         let claude_config = super::mcp_clients::home()
             .map(|home| plugin::claude_config_directory(&home))
             .unwrap_or_default();
-        Arc::new(
-            ClaudeReplies::new(self.channel.clone(), claude_config)
-                .recording_deliveries(agent_hud_runtime::local_tools_directory().ok()),
-        )
+        ClaudeReplies::new(self.channel.clone(), claude_config)
+            .recording_deliveries(agent_hud_runtime::local_tools_directory().ok())
     }
 }
 

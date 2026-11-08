@@ -56,18 +56,21 @@ export function handoffFor(
   return undefined;
 }
 
-/** How many reviews were asked for. */
+/** How many reviews were asked for, since its rounds last began (#258). */
 export const reviews = (handoff: Handoff) =>
-  (handoff.steps ?? []).filter((step) => step.kind === "ask").length;
+  (handoff.steps ?? [])
+    .slice(handoff.roundsFrom ?? 0)
+    .filter((step) => step.kind === "ask").length;
 
 /** The reviews it gets (#217): one at L1, `ROUNDS` otherwise, and those
  * the person allowed past it. */
 export const budget = (handoff: Handoff) =>
   (handoff.risk === "L1" ? 1 : ROUNDS) + (handoff.extra ?? 0);
 
-/** Reviews counted against its budget: its pull request's earlier ones too. */
+/** Reviews counted against its budget: its pull request's earlier ones too,
+ * unless its rounds began again once the person spoke up (#258). */
 export const counted = (handoff: Handoff) =>
-  (handoff.carried ?? 0) + reviews(handoff);
+  (handoff.roundsFrom ? 0 : (handoff.carried ?? 0)) + reviews(handoff);
 
 /** The round it is in, and of how many: 「第 1 / 2 轮」. */
 export function round(handoff: Handoff): { at: number; of: number } {
@@ -215,6 +218,36 @@ function progress(handoff: Handoff, now: number, zh: boolean) {
   }
 }
 
+/** How words back to Claude stand with its plugin (#257). */
+function deliveryWord(
+  delivery: HandoffStep["delivery"],
+  zh: boolean,
+): string | undefined {
+  switch (delivery) {
+    case "waiting":
+      return zh ? "排队中" : "queued";
+    case "taken":
+      return zh ? "已领取" : "taken";
+    case "started":
+      return zh ? "已开始" : "started";
+    case "refused":
+      return zh ? "被拒收" : "refused";
+    case "expired":
+      return zh ? "过期没领" : "expired";
+    case "cancelled":
+      return zh ? "已取消" : "cancelled";
+    default:
+      return undefined;
+  }
+}
+/** `text`, then how the words stand, when known. */
+const withDelivery = (
+  text: string | undefined,
+  delivery: HandoffStep["delivery"],
+  zh: boolean,
+) =>
+  [text, deliveryWord(delivery, zh)].filter(Boolean).join(" · ") || undefined;
+
 const cut = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 const oneLine = (text: string | null | undefined) =>
@@ -244,8 +277,11 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
   const newest = handoff.steps?.at(-1);
   let asks = 0,
     works = 0;
-  for (const step of handoff.steps ?? []) {
+  // Rounds that began again once the person spoke up (#258).
+  const from = handoff.roundsFrom ?? 0;
+  for (const [index, step] of (handoff.steps ?? []).entries()) {
     const time = clock(step.at);
+    if (from > 0 && index === from) asks = 0;
     switch (step.kind) {
       case "work":
         works++;
@@ -277,7 +313,14 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
               : zh
                 ? "驿窗送出「请审核」"
                 : "PostPane asked for a review",
-          sub: zh ? "ChatGPT 已收到" : "ChatGPT has it",
+          sub:
+            from > 0 && asks === 1 && index >= from
+              ? zh
+                ? "ChatGPT 已收到 · 你插话后轮数从 1 重算"
+                : "ChatGPT has it · rounds count from 1 again after you spoke up"
+              : zh
+                ? "ChatGPT 已收到"
+                : "ChatGPT has it",
           quote: step.text ? cut(oneLine(step.text), 90) : undefined,
           state: "done",
         });
@@ -312,7 +355,11 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
             : zh
               ? "驿窗转回 Claude「按意见处理」"
               : "PostPane sent it back to Claude",
-          sub: zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
+          sub: withDelivery(
+            zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
+            step.delivery,
+            zh,
+          ),
           state: "done",
         });
         break;
@@ -323,6 +370,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           title: zh
             ? "驿窗请 Claude 交回复审"
             : "PostPane asked Claude to hand it over again",
+          sub: withDelivery(undefined, step.delivery, zh),
           state: "done",
         });
         break;

@@ -60,7 +60,7 @@ impl Backend {
             system.project(&mut value);
         }
         if let Some(desk) = app.try_state::<handoff::Desk>() {
-            value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
+            value["handoffs"] = handoff::projection(app, &desk);
             fly_tosses(app, &desk);
         }
         value["relayLaunches"] = handoff::launch_projection(app);
@@ -144,7 +144,7 @@ impl Backend {
         let Some(desk) = app.try_state::<handoff::Desk>() else {
             return;
         };
-        let handoffs = desk.projection(chrono::Utc::now().timestamp_millis());
+        let handoffs = handoff::projection(app, &desk);
         fly_tosses(app, &desk);
         let launches = handoff::launch_projection(app);
         if let Some(snapshot) = &mut self.snapshot {
