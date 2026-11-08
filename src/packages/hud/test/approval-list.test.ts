@@ -263,10 +263,25 @@ test("a request's folded tag names its session's title, else the folder", () => 
 });
 
 test("a request's folded tag is boxed as REPLY is: ANSWER, PLAN or APPROVE (#243)", () => {
-  assert.deepEqual(requestBadge("question"), { label: "ANSWER", tone: "ask" });
-  assert.deepEqual(requestBadge("plan"), { label: "PLAN", tone: "ask" });
-  assert.deepEqual(requestBadge("permission"), {
+  assert.deepEqual(requestBadge({ kind: "question" }), {
+    label: "ANSWER",
+    tone: "ask",
+  });
+  assert.deepEqual(requestBadge({ kind: "plan" }), {
+    label: "PLAN",
+    tone: "ask",
+  });
+  assert.deepEqual(requestBadge({ kind: "permission" }), {
     label: "APPROVE",
     tone: "permission",
   });
+});
+
+test("a handoff card's tag reads START, in green (#245)", () => {
+  assert.deepEqual(requestBadge({ kind: "question", badge: "START" }), {
+    label: "START",
+    tone: "start",
+  });
+  assert.equal(tagTone("START"), "start");
+  assert.equal(tagColor("start", true), "#2f7d4f");
 });

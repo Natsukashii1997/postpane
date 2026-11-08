@@ -25,6 +25,7 @@ test("a waiting agent is sealed", () => {
   assert.deepEqual(stubMarks(idle), {
     sealed: false,
     answer: false,
+    handoff: false,
     warn: false,
   });
   const asking = stubMarks({ ...idle, waiting: 1 });
@@ -44,6 +45,32 @@ test("the seal reads 答 only while every waiting request is a question", () => 
   assert.equal(stubMarks({ ...idle, waiting: 2, questions: 1 }).answer, false);
   assert.equal(stubMarks({ ...idle, waiting: 1 }).answer, false);
   assert.equal(stubMarks({ ...idle, waiting: 0, questions: 0 }).answer, false);
+});
+
+test("the seal reads 换 only while every waiting request is a handoff card (#245)", () => {
+  const idle = { used: 30 };
+  // A handoff card is a question underneath; the seal still reads 换, not 答.
+  const switching = stubMarks({
+    ...idle,
+    waiting: 1,
+    questions: 1,
+    handoffs: 1,
+  });
+  assert.equal(switching.handoff, true);
+  assert.equal(switching.answer, false);
+  // Beside a real question it is 答, beside a permission 批.
+  const asking = stubMarks({ ...idle, waiting: 2, questions: 2, handoffs: 1 });
+  assert.equal(asking.handoff, false);
+  assert.equal(asking.answer, true);
+  const approving = stubMarks({
+    ...idle,
+    waiting: 2,
+    questions: 1,
+    handoffs: 1,
+  });
+  assert.equal(approving.handoff, false);
+  assert.equal(approving.answer, false);
+  assert.equal(stubMarks({ ...idle, waiting: 0, handoffs: 0 }).handoff, false);
 });
 
 test("the relay's two ends print one stamp on one paper (#218)", () => {

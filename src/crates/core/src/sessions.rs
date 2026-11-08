@@ -31,8 +31,18 @@ impl AgentHudCore {
             let candidates = listed
                 .into_iter()
                 .filter(|log| log.source == claude)
-                .filter_map(|log| {
-                    let ask = log.live.activity.as_ref()?.desktop_ask.as_ref()?;
+                .flat_map(|log| {
+                    // Its question, and a handoff card it proposed (#245).
+                    let activity = log.live.activity.as_ref();
+                    [
+                        activity.and_then(|activity| activity.desktop_ask.as_ref()),
+                        activity.and_then(|activity| activity.handoff.as_ref()),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .map(move |ask| (log, ask))
+                })
+                .filter_map(|(log, ask)| {
                     // A question whose words this run could not read has no card.
                     if !ask.is_worded() {
                         return None;

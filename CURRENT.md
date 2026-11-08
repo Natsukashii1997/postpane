@@ -4,6 +4,18 @@
 
 
 
+## 交接卡挂 START 小签提醒切换会话（#245）（2026-11-08，Claude，常浩确认 issue 里的推荐做法，票根小章选「绿章」；已提交、squash 合并、已发布 `d1975a4e6235` 回读通过）
+
+- 时间：开工 `2026-11-08 16:06`（本会话接手；读取层、核心与前端标签是上一会话的 WIP `89f0d61`，15:14 提交）。来由：常浩在 #243 同轮提出，Claude 会话上下文快满写「【交接】」交接卡时，侧栏要提醒他切换会话。
+- 改了哪些文件：读取层 `src/crates/agents/src/transcript/live.rs`（`Activity.handoff`，新回合清空、被拒的调用清空）、`claude/transcript.rs`（`claude_handoff`：只认会话自己提出、标题以「【交接】」开头、结果 Proposed 的 `start_session`；遇到 `dismiss_task` 或带 `proposal_id` 的 `start_session` 清掉；`desktop_ask_view` 给 header「切换会话」、`badge: "START"`）、`transcript/log.rs`（记行偏移）；核心 `src/crates/core/src/sessions.rs`、`clients/claude_desktop.rs`（交接卡变只读卡，说明「回到会话，在 Claude 窗口里点交接卡开始新会话。」，也会重读）；前端 `permissions/approval-list.ts`（`START_BADGE`、绿色 `start` 色调）、`alerts/CompactAlertView.tsx`（START 绿框、刘海状态「待切换会话」）、`alerts/PendingEventRows.tsx`、`permissions/ApprovalContent.tsx`（章「切换」绿色；回到会话跳成功后发 `{kind:"leave"}` 收起）、`permissions/ListCard.tsx`（章支持绿色）、`permissions/PermissionQuestionCard.tsx`（交接卡写「请到 Claude 里开始」而不是「回答」）、`model.ts` + `ticket-stub.ts` + `scene/HUDMarkStrip.tsx`（票根小章：等待的全是交接卡时盖绿色「换」，英文「→」；和问题 / 审批混着时照旧「答」/「批」）；测试 `core/src/tests/claude_desktop.rs`（新 `a_handoff_card_hangs_a_start_tag_until_the_user_moves_on`）、`agents` 重读测试、`hud/test/approval-list.test.ts`、`hud/test/ticket-stub.test.ts`（新 1 条）。
+- 测试：`pnpm run check` 第一次 exit 1（`ticket-stub.test.ts` 没过 Prettier），格式化后重跑 exit 0（`check2.log`）；`pnpm test` exit 0：Rust 各包 `test result: ok`（278、198、177、89、32 等，0 failed，含两条新的 handoff 测试，编译行是本 worktree 路径），前端 `ℹ pass 358` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-start-tag/{check,check2,test,rules,build}.log`。
+- 验证：真实 `HUDScene` + 今天的真实快照，把那条 Claude 提问改成交接卡（`?kind=start`），内置浏览器视口模拟 900×700，用 JS 读位置与颜色（L-29）：开场完整小签「会话标题 + START 1」绿框；约 7 秒后缩成竖签、计数绿色；票根小章「换」绿色；清单卡显示 START、交接标题、「切换会话」、「请到 Claude 里开始」和说明、章「切换」绿色；接上 `openSession` 返回成功后点「回到会话」，发出 `{kind:"leave"}`，START 与「换」都消失；`?kind=question` 对照仍是 ANSWER 和红色「答」。记录 `evidence/2026-11-08-start-tag/preview-check.md`，脚手架 `preview-245/`（没提交）。
+- 截图：无存盘截图（面板隐藏，以 JS 回读数据为准）。
+- 发布与回读：`install.sh start-tag`：装前 `a755cab0bae9` 已备份，16:44:55 退出、16:44:56 启动，产物 `d1975a4e6235` / 已装 `d1975a4e6235`，签名 leaf `H"b773068e`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-start-tag/PostPane-a755cab0bae9.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**实机小签未看到**：`get_hud_screenshot` 不画小签、电脑控制点不动侧栏（L-09），要等下一次真有会话写「【交接】」卡时常浩看一眼：挂 START 1 绿框、5 秒缩竖签、点「回到会话」后收起；未截「想访问文稿」弹窗检查。
+- 与授权不一致之处、遗留问题、范围外发现：清单卡的章「切换」和只读提示「请到 Claude 里开始」是自查时顺着绿章补的（原来是红章和「请到 Claude 里回答」）。常浩点交接卡启动新会话这件事在原会话记录里看不到，所以靠「跳回即收 / 再发言即收 / 侧栏手动收」；交接卡不能在侧栏直接开始新会话（那是 Claude 窗口自己的按钮）。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 常驻小签 5 秒后缩成竖签；待回答改 ANSWER 框（#243）（2026-11-08，Claude，常浩从三版预览选乙「竖签」，没说「只改 ANSWER」，APPROVE / PLAN 一起改；已提交、squash 合并、已发布 `a755cab0bae9` 回读通过；装机后常浩试出「滑到侧栏任何位置都弹」，同轮改成一一对应后重装）
 
 - 时间：开工 `2026-11-08 14:20`（`date '+%F %H:%M'` 记录）。来由：常浩截图，Claude「待回答」和 Hermes 回复小签一直完整挂着挡内容；11-07 两轮设计（https://claude.ai/artifact/Es4WzEigfQwQ2kjUAiojJX 、https://claude.ai/artifact/AZgkYyfbV8toQmaLnVmK3F ）没定下来，这次重出三版 https://claude.ai/artifact/P1vt5nHeY4rV4Nf2uGiFQE ，常浩选乙。

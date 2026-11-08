@@ -44,7 +44,9 @@ const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 const STUB_INK = "#2a2925",
   // Tokens on a stub with no window: what was used, not what is left.
   STUB_DIM = "rgba(42,41,37,.5)",
-  STUB_RED = "rgba(196,38,30,.92)";
+  STUB_RED = "rgba(196,38,30,.92)",
+  // A handoff's 「换」 seal, in the START tag's green on light paper (#245).
+  STUB_GREEN = "rgba(47,125,79,.92)";
 /** ChatGPT's stub (#145): a review waiting for you, answering, today's chats. */
 const DESK_TONE = {
   amber: "#97600f",
@@ -541,6 +543,7 @@ export function StubFace({
   const marks = stubMarks({
     waiting: vendor.waiting,
     questions: vendor.questions,
+    handoffs: vendor.handoffs,
     used: markUsed(vendor),
   });
   const print = stubFoot({
@@ -580,14 +583,24 @@ export function StubFace({
               width: 12 * unit,
               height: 12 * unit,
               boxSizing: "border-box",
-              border: `${1.2 * unit}px solid ${STUB_RED}`,
+              border: `${1.2 * unit}px solid ${marks.handoff ? STUB_GREEN : STUB_RED}`,
               borderRadius: 2.5 * unit,
-              color: STUB_RED,
+              color: marks.handoff ? STUB_GREEN : STUB_RED,
               font: `900 ${8 * unit}px/1 "Songti SC", "STSong", serif`,
               transform: "rotate(-10deg)",
             }}
           >
-            {zh ? (marks.answer ? "答" : "批") : marks.answer ? "?" : "!"}
+            {zh
+              ? marks.handoff
+                ? "换"
+                : marks.answer
+                  ? "答"
+                  : "批"
+              : marks.handoff
+                ? "→"
+                : marks.answer
+                  ? "?"
+                  : "!"}
           </span>
         ) : print.shows === "stamp" && vendor.relay ? (
           // ChatGPT has a relay's words: the 「审」 stamp lands over the

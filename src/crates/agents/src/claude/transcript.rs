@@ -647,6 +647,16 @@ impl LiveLog {
                     request: request.map(str::to_owned),
                 };
                 let input = call_input(value, id);
+                // A handoff card stands through the rest of the turn; one
+                // started on the user's word or withdrawn is done (#245).
+                if let Some(card) = claude_handoff(name, input, id, response_id.clone(), at) {
+                    activity.handoff = Some(card);
+                } else if name == "mcp__ccd_session__dismiss_task"
+                    || (name == "mcp__ccd_session__start_session"
+                        && input["proposal_id"].is_string())
+                {
+                    activity.handoff = None;
+                }
                 if let Some(ask) = claude_desktop_ask(name, input, id, response_id.clone(), at) {
                     if ask.kind == "next_step" {
                         activity.standing_question = Some(Call {
@@ -1016,6 +1026,33 @@ pub fn claude_desktop_ask(
     }
 }
 
+/// A handoff card the session proposed of its own initiative, near the end
+/// of its context: a `start_session` card titled 「【交接】…」 (the owner's
+/// handoff convention). Its title is what the sidebar's START tag shows
+/// (#245).
+pub fn claude_handoff(
+    name: &str,
+    input: &Value,
+    id: &str,
+    response: Option<String>,
+    at: i64,
+) -> Option<DesktopAsk> {
+    if name != "mcp__ccd_session__start_session" || input["initiation"] != "own_initiative" {
+        return None;
+    }
+    let title = trimmed_str(&input["title"]).filter(|title| title.starts_with("【交接】"))?;
+    Some(DesktopAsk {
+        id: id.into(),
+        response,
+        kind: "handoff".into(),
+        question: title,
+        recap: None,
+        options: Vec::new(),
+        at,
+        offset: None,
+    })
+}
+
 /// The ask `ask` with its words, read again from the one line its call is on
 /// in the log at `path`, after a checkpoint gave it back without them; at
 /// most 64 KiB of the log are read. None when that line is gone, longer, or
@@ -1037,13 +1074,9 @@ pub fn reworded_desktop_ask(path: &Path, ask: &DesktopAsk) -> Option<DesktopAsk>
         .iter()
         .find(|block| block["type"] == "tool_use" && block["id"] == ask.id.as_str())?;
     let response = value["message"]["id"].as_str().map(str::to_owned);
-    let worded = claude_desktop_ask(
-        call["name"].as_str()?,
-        &call["input"],
-        &ask.id,
-        response,
-        ask.at,
-    )?;
+    let name = call["name"].as_str()?;
+    let worded = claude_desktop_ask(name, &call["input"], &ask.id, response.clone(), ask.at)
+        .or_else(|| claude_handoff(name, &call["input"], &ask.id, response, ask.at))?;
     (worded.kind == ask.kind).then_some(DesktopAsk {
         offset: ask.offset,
         ..worded
@@ -1061,15 +1094,15 @@ pub fn desktop_ask_view(
     ask: &DesktopAsk,
     unanswerable: Option<crate::replies::Unreachable>,
 ) -> Value {
-    let tool = if ask.kind == "offer" {
+    let tool = if ask.kind == "offer" || ask.kind == "handoff" {
         "mcp__ccd_session__start_session"
     } else {
         "mcp__ccd_turn__wrap_up"
     };
-    let header = if ask.kind == "offer" {
-        crate::l10n::text("新任务", "New task")
-    } else {
-        crate::l10n::text("下一步", "Next step")
+    let header = match ask.kind.as_str() {
+        "offer" => crate::l10n::text("新任务", "New task"),
+        "handoff" => crate::l10n::text("切换会话", "Switch session"),
+        _ => crate::l10n::text("下一步", "Next step"),
     };
     let options = ask
         .options
@@ -1112,6 +1145,8 @@ pub fn desktop_ask_view(
         "answerNote": unanswerable.as_ref().map(|why| why.note.as_str()),
         "answerFix": unanswerable.and_then(|why| why.fix).map(|fix| fix.as_str()),
         "answersPlan": false,
+        // A handoff card's tag reads START (#245).
+        "badge": (ask.kind == "handoff").then_some("START"),
     })
 }
 
@@ -1780,6 +1815,40 @@ mod tests {
             offer.recap.is_none(),
             "an offer card shows its title and buttons only"
         );
+    }
+
+    #[test]
+    fn a_handoff_card_is_a_start_session_of_its_own_titled_as_a_handoff_and_reads_back() {
+        let handoff = |initiation: &str, title: &str| {
+            claude_handoff(
+                "mcp__ccd_session__start_session",
+                &json!({"initiation": initiation, "title": title}),
+                "t1",
+                None,
+                0,
+            )
+        };
+        let card = handoff("own_initiative", "【交接】驿窗｜START 小签").unwrap();
+        assert_eq!(card.kind, "handoff");
+        assert_eq!(card.question, "【交接】驿窗｜START 小签");
+        assert!(handoff("own_initiative", "Clean the build folder").is_none());
+        assert!(handoff("offer", "【交接】驿窗｜START 小签").is_none());
+
+        // After a relaunch its title is read again from its call's line.
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("s.jsonl");
+        let line = json!({"message": {"id": "m1", "content": [{"type": "tool_use", "id": "t1",
+            "name": "mcp__ccd_session__start_session",
+            "input": {"initiation": "own_initiative", "title": "【交接】驿窗｜START 小签"}}]}});
+        fs::write(&path, format!("{line}\n")).unwrap();
+        let unworded = DesktopAsk {
+            question: String::new(),
+            offset: Some(0),
+            ..card
+        };
+        let worded = reworded_desktop_ask(&path, &unworded).unwrap();
+        assert_eq!(worded.question, "【交接】驿窗｜START 小签");
+        assert_eq!(worded.kind, "handoff");
     }
 
     #[test]
