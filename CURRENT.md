@@ -4,12 +4,12 @@
 
 
 
-## 磁盘瘦身挂件悬停马上摇晃（#240）（2026-11-08，Claude，常浩要求鼠标滑上去挂绳要像数码世界猫球一样晃、小扫帚同时动；已提交、squash 合并、已发布 `e0a8ff934edb` 回读通过）
+## 磁盘瘦身挂件悬停马上摇晃（#240）（2026-11-08，Claude，常浩要求鼠标滑上去挂绳要像数码世界猫球一样晃、小扫帚同时动；已提交、squash 合并、已发布 `e0a8ff934edb` 回读通过；常浩实机验收通过）
 
 - 时间：开工 `2026-11-08 11:32`。来由：常浩截图说磁盘瘦身挂件悬停时没有猫球那种挂绳摇晃。代码里有摇晃，但磁盘瘦身单写了 `-1.6s` 负延迟，悬停约 2.74 秒才开始摆（L-28）。
 - 改了哪些文件：`src/packages/ui/src/global.css`（删掉磁盘瘦身单独的摇晃时间，改用和猫球同一条共用规则 `7s -4.2s`；扫帚、眨眼、星光、气泡不变）；`src/packages/ui/test/pendant-sway.test.ts`（新增 2 条：每条悬停摇晃第一下 ≤0.5 秒、磁盘瘦身不再单写摇晃时间；在旧样式上报「2.74 s after the hover」失败，改后通过）；`docs/LESSONS.md`（L-28）。
 - 测试：`pnpm run check` exit 0（第一次因测试放在 hud 包跨包读 ui 文件被边界检查拦下，移到 ui 包后通过）；`pnpm test` exit 0：Rust 合计 `784 passed / 0 failed`，test:ts `ℹ pass 346` / `ℹ fail 0`，mcp `ℹ pass 9` / `ℹ fail 0`，plugins `ℹ pass 14` / `ℹ fail 0`，extension `ℹ pass 13` / `ℹ fail 0`；测试文件移包后补跑 test:ts `ℹ pass 346` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-240-disk-sway/{check,test,test-ts,rules,build}.log`。
-- 验证：用打包产物里的真实 CSS（`dist/assets/index-nZPUrv0O.css`，已确认只剩共用摇晃规则）在内置浏览器搭同结构挂件，真实鼠标悬停逐帧读旋转角：猫球 270ms 开始摆、磁盘瘦身 283ms 开始摆，最大偏角都是 4.5°；悬停时扫帚动画 `hud-disk-sweep` 在跑。结果 `evidence/2026-11-08-240-disk-sway/browser-check/result.json`。实机侧栏上用鼠标悬停未做（要接管整个屏幕），留给常浩看一眼。
+- 验证：用打包产物里的真实 CSS（`dist/assets/index-nZPUrv0O.css`，已确认只剩共用摇晃规则）在内置浏览器搭同结构挂件，真实鼠标悬停逐帧读旋转角：猫球 270ms 开始摆、磁盘瘦身 283ms 开始摆，最大偏角都是 4.5°；悬停时扫帚动画 `hud-disk-sweep` 在跑。结果 `evidence/2026-11-08-240-disk-sway/browser-check/result.json`。实机侧栏上常浩用鼠标悬停验收通过（2026-11-08 回复「晃了，没问题」）。
 - 截图：无（动画以逐帧角度数据为准）。
 - 发布与回读：worktree `claude/240-disk-sway` 打包，`install.sh 240-disk-sway`：装前 `de24114e20a2`（已备份），12:07:41 退出、12:07:42 启动，产物 `e0a8ff934edb` / 已装 `e0a8ff934edb`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-240-disk-sway/PostPane-de24114e20a2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：#155 原意「和猫球错开节奏」随之取消（两个挂件不会同时被悬停，错开无意义）；未截「想访问文稿」弹窗检查。
