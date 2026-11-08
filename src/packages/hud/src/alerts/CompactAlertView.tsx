@@ -21,6 +21,7 @@ import { paperLevel, type Paper } from "../paper";
 import { ApprovalTag } from "../permissions/ApprovalTag";
 import {
   REPLY_BADGE,
+  START_BADGE,
   requestBadge,
   requestTitle,
   tagColor,
@@ -96,17 +97,21 @@ export function compactAlertLabels(
         clientDisplayName(request.source),
     );
     const status =
-      request.kind === "question"
+      request.badge === START_BADGE
         ? zh
-          ? "待回答"
-          : "Question"
-        : request.kind === "plan"
+          ? "待切换会话"
+          : "Switch session"
+        : request.kind === "question"
           ? zh
-            ? "待确认计划"
-            : "Plan"
-          : zh
-            ? "待批准"
-            : "Waiting";
+            ? "待回答"
+            : "Question"
+          : request.kind === "plan"
+            ? zh
+              ? "待确认计划"
+              : "Plan"
+            : zh
+              ? "待批准"
+              : "Waiting";
     return {
       who,
       status,
@@ -226,7 +231,7 @@ export function compactAlertDockWidth(
     // Printed on paper: the name in bold (a session's title cut as a reply's
     // is), a tear, then the boxed ANSWER / PLAN / APPROVE tag with its count,
     // as a reply's REPLY tag (#243).
-    const { label } = requestBadge(request.kind);
+    const { label } = requestBadge(request);
     const title = Math.min(
       Math.ceil(labelWidth(who, font) * 1.05),
       replyTitleWidth(scale),
@@ -347,9 +352,13 @@ export function CompactAlertView({
 
   // A request printed on paper: its boxed ANSWER / PLAN / APPROVE tag with
   // the count, as a reply's REPLY tag (#243).
-  const asked = request ? requestBadge(request.kind) : null;
+  const asked = request ? requestBadge(request) : null;
   const askedColor = (tone: TagTone, on: Paper) =>
-    tone === "ask" ? on.red : paperLevel("warning", on);
+    tone === "ask"
+      ? on.red
+      : tone === "start"
+        ? on.green
+        : paperLevel("warning", on);
   const printedWhat =
     request && paper && asked ? (
       <ApprovalTag

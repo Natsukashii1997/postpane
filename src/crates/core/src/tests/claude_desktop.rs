@@ -646,3 +646,147 @@ fn every_replies_setting_is_a_setting_that_starts_on() {
     }
     assert_eq!(with_replies, 1, "Claude Code alone takes words today");
 }
+
+/// One line of a Claude desktop session's log.
+fn desktop_line(session: &str, at: &str, kind: &str, message: Value) -> String {
+    json!({"sessionId": session, "entrypoint": "claude-desktop", "timestamp": at, "type": kind,
+           "uuid": format!("u-{}", message["id"].as_str().unwrap_or(at)), "message": message})
+    .to_string()
+}
+
+/// A session that proposed a handoff card titled `title` near the end of its
+/// context, then closed the turn with a next-step box of no question.
+fn handing_off(root: &Path, session: &str, title: &str) -> std::path::PathBuf {
+    let at = Utc::now().to_rfc3339();
+    let path = root.join(format!("{session}.jsonl"));
+    let lines = [
+        desktop_line(
+            session,
+            &at,
+            "user",
+            json!({"role": "user", "content": "继续做"}),
+        ),
+        desktop_line(
+            session,
+            &at,
+            "assistant",
+            json!({"id": "m1", "role": "assistant", "model": "claude-opus-4-6",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "content": [{"type": "tool_use", "id": "toolu_hand", "name": "mcp__ccd_session__start_session",
+                         "input": {"initiation": "own_initiative", "context": "fresh", "title": title, "prompt": "① 目标…"}}]}),
+        ),
+        desktop_line(
+            session,
+            &at,
+            "user",
+            json!({"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_hand",
+            "content": [{"type": "text", "text": "Proposed \"x\" (task_id: task_1). The user sees a card."}]}]}),
+        ),
+        desktop_line(
+            session,
+            &at,
+            "assistant",
+            json!({"id": "m2", "role": "assistant", "model": "claude-opus-4-6",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "content": [{"type": "tool_use", "id": "toolu_wrap", "name": "mcp__ccd_turn__wrap_up",
+                         "input": {"recap": "上下文已到约 50%。"}}]}),
+        ),
+        desktop_line(
+            session,
+            &at,
+            "user",
+            json!({"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_wrap",
+            "content": [{"type": "text", "text": "Shown."}]}]}),
+        ),
+        desktop_line(
+            session,
+            &at,
+            "assistant",
+            json!({"id": "m3", "role": "assistant", "model": "claude-opus-4-6",
+            "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 5},
+            "content": [{"type": "text", "text": "上下文已到约 50%，建议切到新会话。"}]}),
+        ),
+    ];
+    fs::write(&path, lines.join("\n") + "\n").unwrap();
+    path
+}
+
+fn append_line(path: &Path, line: String) {
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new().append(true).open(path).unwrap();
+    writeln!(file, "{line}").unwrap();
+}
+
+#[test]
+fn a_handoff_card_hangs_a_start_tag_until_the_user_moves_on() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let handing = "11111111-2222-3333-4444-555555555555";
+    let other = "66666666-7777-8888-9999-000000000000";
+    let path = handing_off(&root, handing, "【交接】驿窗｜START 小签");
+    // A card of its own initiative that is not a handoff hangs nothing.
+    handing_off(&root, other, "Clean the build folder");
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 1, "only the handoff card: {cards:?}");
+    let card = &cards[0];
+    assert_eq!(card["sessionId"], handing);
+    assert_eq!(card["badge"], "START");
+    assert_eq!(card["title"], "【交接】驿窗｜START 小签");
+    // It is started in Claude's own window; the sidebar only reminds.
+    assert_eq!(card["answersQuestion"], false);
+    assert!(card["answerNote"].is_string());
+
+    // The user's next words in that session: the reminder has done its work.
+    let at = Utc::now().to_rfc3339();
+    append_line(
+        &path,
+        desktop_line(
+            handing,
+            &at,
+            "user",
+            json!({"role": "user", "content": "先不切"}),
+        ),
+    );
+    assert!(
+        desktop_cards(&mut backend).is_empty(),
+        "gone once the user writes again"
+    );
+
+    // A new handoff card, then put away on the sidebar (back to the session, or dismissed): it does not
+    // come back while it stands.
+    handing_off(
+        &root,
+        "aaaaaaaa-2222-3333-4444-555555555555",
+        "【交接】驿窗｜START 小签 第二张",
+    );
+    let card = desktop_cards(&mut backend).remove(0);
+    backend
+        .request(
+            "answer_request",
+            json!({"id": card["id"], "decision": "leave"}),
+        )
+        .unwrap();
+    assert!(desktop_cards(&mut backend).is_empty(), "put away");
+
+    // A card the session withdraws itself, or starts on the user's word, hangs nothing either.
+    let withdrawing = "bbbbbbbb-2222-3333-4444-555555555555";
+    let withdrawn = handing_off(&root, withdrawing, "【交接】撤回的那张");
+    assert_eq!(desktop_cards(&mut backend).len(), 1);
+    append_line(
+        &withdrawn,
+        desktop_line(
+            withdrawing,
+            &at,
+            "assistant",
+            json!({"id": "m4", "role": "assistant", "model": "claude-opus-4-6",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "content": [{"type": "tool_use", "id": "toolu_dismiss", "name": "mcp__ccd_session__dismiss_task",
+                         "input": {"task_id": "task_1", "reason": "done here"}}]}),
+        ),
+    );
+    assert!(desktop_cards(&mut backend).is_empty(), "withdrawn");
+}

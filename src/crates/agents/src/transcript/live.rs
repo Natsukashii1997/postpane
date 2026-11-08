@@ -97,6 +97,12 @@ pub struct Activity {
     pub standing_question: Option<Call>,
     #[serde(default)]
     pub desktop_ask: Option<DesktopAsk>,
+    /// A handoff card the session proposed (a 「【交接】」 card of its own
+    /// initiative, near the end of its context): it stands through the rest
+    /// of the turn, until the user writes again or the card is started or
+    /// withdrawn (#245). Kind "handoff", its title as the question.
+    #[serde(default)]
+    pub handoff: Option<DesktopAsk>,
     pub latest: Option<Work>,
 }
 
@@ -134,6 +140,10 @@ impl Activity {
             .is_some_and(|ask| ask.id == id && (ask.kind == "offer" || failed))
         {
             self.desktop_ask = None;
+        }
+        // A handoff card the app refused was never shown.
+        if failed && self.handoff.as_ref().is_some_and(|card| card.id == id) {
+            self.handoff = None;
         }
         newer(&mut self.tool_at, at);
         self.line = Some("result".into());
@@ -273,6 +283,20 @@ impl LiveLog {
             self.prompt = earlier.prompt.clone();
             kept = true;
         }
+        if let (Some(card), Some(old)) = (
+            self.activity
+                .as_mut()
+                .and_then(|activity| activity.handoff.as_mut()),
+            earlier
+                .activity
+                .as_ref()
+                .and_then(|activity| activity.handoff.as_ref()),
+        ) {
+            if card.id == old.id && !card.is_worded() && old.is_worded() {
+                card.question = old.question.clone();
+                kept = true;
+            }
+        }
         if let (Some(ask), Some(old)) = (
             self.activity
                 .as_mut()
@@ -301,6 +325,13 @@ impl LiveLog {
             .and_then(|turn| turn.message.as_ref())
             .hash(state);
         self.final_answer.hash(state);
+        if let Some(card) = self
+            .activity
+            .as_ref()
+            .and_then(|activity| activity.handoff.as_ref())
+        {
+            card.question.hash(state);
+        }
         if let Some(ask) = self
             .activity
             .as_ref()

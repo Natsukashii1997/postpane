@@ -23,6 +23,7 @@ import { usePaper } from "../paper";
 import {
   REPLY_BADGE,
   SHOWN_ENTRIES,
+  START_BADGE,
   approvalGroups,
   entryTitle,
   findSession,
@@ -144,6 +145,10 @@ export function ApprovalContent({
     // Where it could not get there, the line says why a few seconds (#220).
     const reason = failureOf(await services?.openSession?.(target), zh);
     if (reason) fail(entry.id, reason);
+    // Back in the session, the handoff card is the user's to start there:
+    // its START tag has done its work (#245).
+    else if (entry.kind === "request" && entry.request.badge === START_BADGE)
+      void decide?.(entry.request.id, { kind: "leave" });
   };
 
   const fallbackTitle = (entry: ApprovalEntry) =>
@@ -209,7 +214,19 @@ export function ApprovalContent({
       <ListHead
         label={zh ? "待审批" : "Waiting"}
         entries={entries}
-        stamp={asking ? (zh ? "待答" : "ASK") : zh ? "待批" : "WAIT"}
+        stamp={
+          selected.badge === START_BADGE
+            ? zh
+              ? "切换"
+              : "START"
+            : asking
+              ? zh
+                ? "待答"
+                : "ASK"
+              : zh
+                ? "待批"
+                : "WAIT"
+        }
         stampInk="red"
         paper={paper}
         inks={inks}

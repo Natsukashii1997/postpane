@@ -15,8 +15,18 @@ impl crate::AgentHudCore {
             .logs
             .values()
             .filter(|log| log.source == CLAUDE.id && !log.gone)
-            .filter_map(|log| {
-                let ask = log.live.activity.as_ref()?.desktop_ask.as_ref()?;
+            .flat_map(|log| {
+                // A question, and a handoff card (#245).
+                let activity = log.live.activity.as_ref();
+                [
+                    activity.and_then(|activity| activity.desktop_ask.as_ref()),
+                    activity.and_then(|activity| activity.handoff.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .map(move |ask| (log, ask))
+            })
+            .filter_map(|(log, ask)| {
                 // Read again for as long as the box can be shown (#184).
                 (!ask.is_worded() && ask.offset.is_some() && self.requests.still_held(ask.at, now))
                     .then(|| {
@@ -29,12 +39,11 @@ impl crate::AgentHudCore {
             })
             .collect::<Vec<_>>();
         fn asked<'a>(head: &'a mut crate::LogHead, id: &str) -> Option<&'a mut DesktopAsk> {
-            head.live
-                .activity
-                .as_mut()?
-                .desktop_ask
-                .as_mut()
-                .filter(|kept| kept.id == id)
+            let activity = head.live.activity.as_mut()?;
+            if activity.handoff.as_ref().is_some_and(|kept| kept.id == id) {
+                return activity.handoff.as_mut();
+            }
+            activity.desktop_ask.as_mut().filter(|kept| kept.id == id)
         }
         for (key, file, ask) in unworded {
             let worded = reworded_desktop_ask(&file, &ask);
@@ -83,6 +92,15 @@ impl crate::AgentHudCore {
         session: &str,
         ask: &DesktopAsk,
     ) -> Result<(), Unreachable> {
+        if ask.kind == "handoff" {
+            return Err(Unreachable::new(
+                crate::l10n::text(
+                    "回到会话，在 Claude 窗口里点交接卡开始新会话。",
+                    "Go back to the session and start the new one from the handoff card in Claude's window.",
+                ),
+                None,
+            ));
+        }
         if ask.kind == "offer" {
             return Err(Unreachable::new(
                 crate::l10n::text(

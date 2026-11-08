@@ -12,6 +12,7 @@ import {
   Sparkles,
   Terminal,
   Wrench,
+  ArrowRightLeft,
 } from "lucide-react";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { HUDArtwork } from "../HUDArtwork";
@@ -32,6 +33,9 @@ export function permissionToolBadge(request: Approval): {
   badge: string;
   Icon: typeof Terminal;
 } {
+  // A handoff card: switch to a new session (#245).
+  if (request.badge === "START")
+    return { badge: "START", Icon: ArrowRightLeft };
   if (request.kind === "question" || request.toolName === "AskUserQuestion")
     return { badge: "ASK", Icon: HelpCircle };
   if (request.kind === "plan" || request.toolName === "ExitPlanMode")

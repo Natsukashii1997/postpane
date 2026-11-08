@@ -3,17 +3,24 @@ import { paperLevel, paperOf } from "../paper.ts";
 
 /** What a tag's colour says: the agent asks you (ASK, PLAN), it needs a
  * permission (BASH, EDIT, MCP, READ and the rest), or a session replied. */
-export type TagTone = "ask" | "permission" | "reply";
+export type TagTone = "ask" | "permission" | "reply" | "start";
 
 export const REPLY_BADGE = "REPLY";
+/** A handoff card's tag: the session proposed moving to a new one (#245). */
+export const START_BADGE = "START";
 
 /** A request's folded tag beside the dock, boxed as a reply's REPLY is
  * (owner, 2026-11-08, #243): ANSWER for a question, PLAN for a plan,
  * APPROVE for a permission. */
-export function requestBadge(kind: Approval["kind"]): {
+export function requestBadge({
+  kind,
+  badge,
+}: Pick<Approval, "kind" | "badge">): {
   label: string;
   tone: TagTone;
 } {
+  // A handoff card asks the person to switch sessions (#245).
+  if (badge === START_BADGE) return { label: START_BADGE, tone: "start" };
   if (kind === "question") return { label: "ANSWER", tone: "ask" };
   if (kind === "plan") return { label: "PLAN", tone: "ask" };
   return { label: "APPROVE", tone: "permission" };
@@ -22,6 +29,7 @@ export function requestBadge(kind: Approval["kind"]): {
 export function tagTone(badge: string): TagTone {
   if (badge === "ASK" || badge === "PLAN") return "ask";
   if (badge === REPLY_BADGE) return "reply";
+  if (badge === START_BADGE) return "start";
   return "permission";
 }
 
@@ -33,7 +41,9 @@ export function tagColor(tone: TagTone, light: boolean): string {
     ? paper.red
     : tone === "reply"
       ? paper.blue
-      : paperLevel("warning", paper);
+      : tone === "start"
+        ? paper.green
+        : paperLevel("warning", paper);
 }
 
 /** One line of the waiting list: a request, or a reply waiting beside them. */
@@ -207,7 +217,13 @@ export function tagCounts(
   for (const entry of orderEntries(entries))
     counts.set(entry.badge, (counts.get(entry.badge) ?? 0) + 1);
   const rank = (badge: string) =>
-    badge === "ASK" ? 0 : badge === "PLAN" ? 1 : badge === REPLY_BADGE ? 3 : 2;
+    badge === "ASK"
+      ? 0
+      : badge === "PLAN" || badge === START_BADGE
+        ? 1
+        : badge === REPLY_BADGE
+          ? 3
+          : 2;
   return [...counts]
     .map(([badge, count]) => ({ badge, count }))
     .sort((a, b) => rank(a.badge) - rank(b.badge));
