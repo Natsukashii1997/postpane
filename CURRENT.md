@@ -4,6 +4,18 @@
 
 
 
+## 侧栏小签在鼠标附近来回跳（#238）（2026-11-08，Claude，常浩发录屏说「一直在跳来跳去」；已提交、PR 未合并（扩展测试因本机缺 Playwright 浏览器没跑起来）、已发布 `de24114e20a2` 回读通过）
+
+- 时间：开工 `2026-11-08 10:54`。来由：常浩录屏 `~/Downloads/iShot_2026-11-08_10.49.10.mp4`，鼠标停在侧栏左侧小签那一列时，Claude「待回答」和 ChatGPT「REPLY 2」不停上下跳、互相叠住。抽帧看到前卡在两家小人之间的中间位置出现，确认是位移动画加悬停换位的循环（L-27）。
+- 改了哪些文件：`src/packages/hud/src/scene/side-tag-stack.ts`（新增 `SIDE_TAG_REST_MS = 250` 与 `frontTagSwapped`）；`scene/HUDExpandedSurface.tsx`（前卡换成另一家时位置、大小直接到位，不再 0.4 秒滑过去；同一家、展开收起仍照旧动画）；`scene/SideTags.tsx`（鼠标在别家小签上停 250ms 才把那家换到最前，离开就取消，路过不算）；`test/side-tag-stack.test.ts`（3 条新测试）；`docs/LESSONS.md`（L-27）。
+- 测试：`pnpm run check` exit 0（第一次因 React 19 `useRef` 要初值报 TS2554，补上后重跑通过）；`pnpm test` exit 1：Rust 合计 `784 passed / 0 failed`，test:ts `ℹ pass 344` / `ℹ fail 0`，mcp `ℹ pass 9` / `ℹ fail 0`，plugins `ℹ pass 14` / `ℹ fail 0`，extension `ℹ pass 1` / `ℹ fail 12`——12 条全是 `browserType.launch: Executable doesn't exist at ~/Library/Caches/ms-playwright/chromium_headless_shell-1248/...`，本机 `~/Library/Caches/ms-playwright` 整个不存在，与本次改动无关（未改扩展），装上浏览器后需重跑；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-238-side-tag-jump/{check,check2,test,node,build}.log`。
+- 验证：录屏抽帧对照（`evidence/2026-11-08-238-side-tag-jump/sheet_*.png`、`fine.png`、`start.png`）定位原因；修后未在实机用鼠标悬停复现——侧栏悬停要真实鼠标，电脑控制未授权（L-09），实测留给常浩。
+- 截图：录屏抽帧见上；修后无实机截图（未做，原因同上）。未截「想访问文稿」弹窗检查。
+- 发布与回读：worktree `claude/238-side-tag-jump` 打包，`install.sh 238-side-tag-jump`：装前 `f009fe1bbfe1`（已备份），11:07:19 退出、11:07:20 启动，产物 `de24114e20a2` / 已装 `de24114e20a2`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-238-side-tag-jump/PostPane-f009fe1bbfe1.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「停在别家小签上把它换到最前」从立即改成停 250ms（#162 原意是「停在上面」，路过不算更贴原意）；本机 Playwright 浏览器缓存缺失，`test:extension` 在任何目录都会挂，需 `pnpm exec playwright install chromium`（要下载，待常浩同意）。
+- 本轮新坑：L-27。
+- skill 进化：无。
+
 ## 全操作审核与 5 批缺陷修复（2026-11-08，Claude，常浩反馈「点 ↗ 没跳过去、回复却没了」，要求多个子 agent 深度审核所有操作并修复，看审核清单后回复「按计划修」；5 个 PR 全量通过，按授权 squash 合并；已从 main `fb62a6a` 打包装机回读一致）
 
 - 时间：开工 `2026-11-07 23:47`（`date '+%F %H:%M'` 记录；审核从 23:20 起）。来由：常浩在新回复卡上多次点 ↗ 没跳到会话，回复却被收起。5 个子 agent 只读审核跳转、回复队列、审批、接力、侧栏与设置五块（汇总 `evidence/2026-11-07-ops-audit/汇总.md`），确认后开 #220–#224 五张 issue，各由一个子 agent 在独立 worktree 先写复现测试再修，主会话逐个审 diff、变基复测后合并。

@@ -230,3 +230,11 @@
 - 证据：`evidence/2026-11-07-fix-220/main-f441f73-cargo-test.log`（主目录补验 765 passed，含 #227 的 4 条新测试）；`evidence/2026-11-07-fix-224/core-host-after-rebase.log`（core 176 = 174 + 2）；`evidence/2026-11-08-ops-fixes/test.log`（合完 5 批后 774 = 761 + 13）。
 - 升级：未写成测试（构建环境问题）；写进驿窗一轮 SKILL.md 第 1、2 步（E-11）。
 - 提升：已提升为全局 G-23（2026-11-08，agent-kit#40）。
+
+## L-27 鼠标停着不动，侧栏小签却来回跳：悬停触发换位，换位又带位移动画（2026-11-08）
+
+- 现象：常浩录屏（`~/Downloads/iShot_2026-11-08_10.49.10.mp4`）：鼠标停在侧栏左侧小签那一列，Claude「待回答」和 ChatGPT「REPLY 2」两张不停上下跳、互相叠住，在别家小人那一行也出现过 Claude 的签。
+- 根因：两件事叠在一起。① 鼠标一进入别家小签（`SideTags` 的 `onPointerEnter`）就把那家换到最前；② 最前那张卡（`HUDExpandedSurface`）换家时用 0.4 秒从旧位置滑到新位置，别家小签却瞬间换位。滑动中的卡、刚冒出来的小签经过鼠标下，WebKit 在布局变化后会补发鼠标移动，于是又进入另一张小签、又换位，循环下去。鼠标只是路过一列小签，也会连换好几次。
+- 正确做法：悬停能改变布局时，变化后的东西不能再从鼠标下经过——换家时前卡直接出现在那家原来小签的位置（不滑），小签要停留 250ms 才置前，路过不算。凡是「悬停 → 改排序 / 改位置」的交互，都要想一遍「改完以后鼠标下面是什么」。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-238-side-tag-jump/`（录屏抽帧、测试日志）。
+- 升级：已写成测试 `side-tag-stack.test.ts` 的「the front tag handed to another agent jumps to its place (#238)」等 3 条；动画与停留只能实机看，留给常浩实测。
