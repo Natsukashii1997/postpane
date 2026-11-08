@@ -337,7 +337,7 @@ pub(super) fn periods(query: &Query) -> Result<Vec<(i64, i64)>, String> {
     Ok(result)
 }
 
-pub(super) fn day_start(zone: Tz, mut date: NaiveDate) -> Result<i64, String> {
+pub(crate) fn day_start(zone: Tz, mut date: NaiveDate) -> Result<i64, String> {
     for _ in 0..3 {
         for minute in 0..1440 {
             let local = date
@@ -374,11 +374,11 @@ pub(super) fn provider_name(id: &str) -> &str {
         .unwrap_or(id)
 }
 
-pub(super) fn local_date(zone: Tz, at: i64) -> NaiveDate {
+pub(crate) fn local_date(zone: Tz, at: i64) -> NaiveDate {
     zone.timestamp_millis_opt(at).single().unwrap().date_naive()
 }
 
-pub(super) fn iso(at: i64) -> String {
+pub(crate) fn iso(at: i64) -> String {
     DateTime::<Utc>::from_timestamp_millis(at)
         .unwrap()
         .to_rfc3339()

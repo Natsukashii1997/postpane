@@ -178,6 +178,9 @@ impl PartialEq<str> for Unread {
 
 /// A provider's account reader.
 pub type Read = fn(&dyn Host) -> Result<Reading, Unread>;
+/// What the agent itself last recorded of its windows, read without asking
+/// anyone; None when it has no record.
+pub type Kept = fn(&dyn Host) -> Option<Reading>;
 
 /// What the engine needs to know about one provider's account reading. Each
 /// provider states it in its own folder; the engine treats every provider
@@ -211,6 +214,10 @@ pub struct Provider {
     /// Window keys never shown or counted, even a row an earlier reading kept
     /// or a restart copy restored (row ids end `:<key>`).
     pub dropped_windows: &'static [&'static str],
+    /// What the agent itself last recorded, shown stale when a reading fails
+    /// while nothing read before is on screen: after a restart with no kept
+    /// reading, before the first good one.
+    pub kept: Option<Kept>,
 }
 impl Provider {
     pub const fn new(id: &'static str, read: Read) -> Self {
@@ -224,6 +231,7 @@ impl Provider {
             status: None,
             every: None,
             dropped_windows: &[],
+            kept: None,
         }
     }
     /// Whether a quota row is one of `dropped_windows`.

@@ -133,7 +133,8 @@ Agent HUD adds its tools to this client as an MCP server named `agent-hud`. This
 - **What it shows:** the app's own panel, or one display's resting HUD, with drafts included. It renders offscreen and never captures the desktop.
 - **Masking:** accounts are masked, and session titles and notices are left out.
 - **Display key required:** `show: "hud"` and `agent` need one. `agent` also needs a `dynamic` or `simple` HUD, not the notch.
-- **One at a time:** it renders one picture at a time and times out after 25 s.
+- **One at a time:** it renders one picture at a time and times out after 25 s, naming the step it was waiting for.
+- **Slow data:** a panel picture waits about 8 s for the token chart and the sessions list. If a section has not loaded by then, it is drawn as it looks while loading and is named in `loading`. Take the picture again to see it filled.
 - **Motion:** an animated glow may not show in a still picture.
 
 ## Other tools

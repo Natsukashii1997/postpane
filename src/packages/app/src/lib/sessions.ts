@@ -269,23 +269,40 @@ export function contextRuns(
   return runs;
 }
 
-/** The sessions that spent the most, largest first, and how many the rest are and what they spent. */
-export function topSessions<T extends { tokens: number }>(
-  sessions: readonly T[],
-  n: number,
-): { top: T[]; rest: { count: number; tokens: number } } {
-  const sorted = [...sessions]
-    .filter((session) => session.tokens > 0)
-    .sort((a, b) => b.tokens - a.tokens);
-  const top = sorted.slice(0, Math.max(0, n));
-  const rest = sorted.slice(top.length);
-  return {
-    top,
-    rest: {
-      count: rest.length,
-      tokens: rest.reduce((sum, session) => sum + session.tokens, 0),
-    },
-  };
+/**
+ * A timeline row's calls as runs: a call less than `gap` ms after the one
+ * before joins its run, so a busy stretch draws as one bar instead of a comb
+ * of ticks. A run of one call is a tick. Only runs that reach into
+ * `from`–`to` come back; they are grouped over every call, so panning never
+ * regroups them.
+ */
+export function callRuns(
+  calls: readonly { at: number }[],
+  from: number,
+  to: number,
+  gap: number,
+): { from: number; to: number; calls: number }[] {
+  const runs: { from: number; to: number; calls: number }[] = [];
+  for (const { at } of calls) {
+    const last = runs.at(-1);
+    if (last && at - last.to < gap) {
+      last.to = at;
+      last.calls += 1;
+    } else runs.push({ from: at, to: at, calls: 1 });
+  }
+  return runs.filter((run) => run.to >= from && run.from <= to);
+}
+
+/** A zoomed window moved `by` ms, kept inside `start`–`end` at the same length. */
+export function panWindow(
+  [from, to]: readonly [number, number],
+  by: number,
+  start: number,
+  end: number,
+): [number, number] {
+  const length = to - from;
+  const next = Math.max(start, Math.min(from + by, end - length));
+  return [next, next + length];
 }
 
 /** What a session's list-price money is made of (Session's `cost`, `pricedCost`, `unpricedTokens`). */
@@ -308,18 +325,6 @@ export function sessionMoney(session: MoneyFacts): ListMoney {
     value: session.pricedCost ?? null,
     unpriced: session.unpricedTokens ?? 0,
   };
-}
-
-/** What sessions spent together at list prices; the value is null when none has a priced call. */
-export function sessionsMoney(sessions: MoneyFacts[]): ListMoney {
-  let value: number | null = null;
-  let unpriced = 0;
-  for (const session of sessions) {
-    const money = sessionMoney(session);
-    if (money.value !== null) value = (value ?? 0) + money.value;
-    unpriced += money.unpriced;
-  }
-  return { value, unpriced };
 }
 
 /** What a cost leaves out, as its tooltip says it; undefined when nothing. */
