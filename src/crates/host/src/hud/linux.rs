@@ -15,7 +15,7 @@ use std::{
     collections::HashMap,
     sync::{
         atomic::{AtomicBool, AtomicU8, Ordering},
-        mpsc, Mutex,
+        mpsc, Mutex, PoisonError,
     },
     time::Duration,
 };
@@ -48,7 +48,12 @@ fn layer_shell() -> bool {
 }
 
 fn surface(label: &str) -> Option<(Point, f64)> {
-    SURFACES.lock().ok()?.as_ref()?.get(label).copied()
+    SURFACES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()?
+        .get(label)
+        .copied()
 }
 
 pub(super) fn native_drag() -> bool {
@@ -171,8 +176,11 @@ pub(super) fn place(
     let Some(canvas) = placed else {
         return Err(edge_hud_unsupported().unwrap_or_default().into());
     };
-    if let Ok(mut surfaces) = SURFACES.lock() {
-        surfaces.get_or_insert_with(HashMap::new).insert(
+    SURFACES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_or_insert_with(HashMap::new)
+        .insert(
             window.label().to_owned(),
             (
                 Point {
@@ -182,7 +190,6 @@ pub(super) fn place(
                 scale,
             ),
         );
-    }
     window.show().map_err(|error| error.to_string())?;
     let actual = Rect {
         x: (canvas.x * scale).round() as i32,
@@ -215,9 +222,7 @@ fn track_pointer(webview: &webkit2gtk::WebView, label: String) {
                 y: (origin.y + y) * scale,
             })
         });
-        if let Ok(mut pointer) = POINTER.lock() {
-            *pointer = global;
-        }
+        *POINTER.lock().unwrap_or_else(PoisonError::into_inner) = global;
     };
     let moved = record.clone();
     webview.connect_motion_notify_event(move |_, event| {
@@ -297,7 +302,7 @@ pub(super) fn global_pointer(app: &tauri::AppHandle) -> Result<Point, String> {
     }
     POINTER
         .lock()
-        .map_err(|_| "The HUD pointer is unavailable")?
+        .unwrap_or_else(PoisonError::into_inner)
         .ok_or_else(|| "The pointer is not over a HUD surface".to_owned())
 }
 
