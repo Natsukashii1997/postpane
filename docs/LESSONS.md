@@ -231,6 +231,10 @@
 - 证据：`evidence/2026-11-07-fix-220/main-f441f73-cargo-test.log`（主目录补验 765 passed，含 #227 的 4 条新测试）；`evidence/2026-11-07-fix-224/core-host-after-rebase.log`（core 176 = 174 + 2）；`evidence/2026-11-08-ops-fixes/test.log`（合完 5 批后 774 = 761 + 13）。
 - 升级：未写成测试（构建环境问题）；写进驿窗一轮 SKILL.md 第 1、2 步（E-11）。
 - 提升：已提升为全局 G-23（2026-11-08，agent-kit#40）。
+- 补充（2026-11-09，#249 批量 7 个子 agent 共用主目录 `target`）：
+  - 共用时每次测试前把本 worktree **全部** `.rs`、`Cargo.toml`、`build.rs` 的修改时间改到未来，比只改动过的文件更稳：每次都从本路径重编，代价是多编几分钟。
+  - 基线还在后台编译时不要改源码，否则改动会混进基线，只能存补丁、还原、重跑（#261）。
+  - 文档测试可能报 `extern location for agent_hud_l10n does not exist`：别的 agent 同时编译换掉了 rlib 的文件名。先重跑一次再判断，交接里把单元测试数和文档测试结果分开写（#265，`evidence/2026-11-09-265-upstream-small/baseline-cargo-test.txt` 第 880–891 行）。
 
 ## L-27 鼠标停着不动，侧栏小签却来回跳：悬停触发换位，换位又带位移动画（2026-11-08）
 
@@ -255,6 +259,7 @@
 - 正确做法：截图前先看 `tabs_context` 是否「hidden」。隐藏时不用截图判断位置、尺寸和动画结果，改用 `javascript_tool` 读元素的 `getBoundingClientRect()` 确认最终几何；截图只用来看样式。能把面板显示出来就先显示（`show_pane` 只在会话开在窗口里时有效）。
 - 补充（#247）：隐藏面板里按截图坐标点击也不可靠。截图的坐标框架在 800×600 和 800×622 之间来回变，和模拟视口 900×700 对不上，点「去开始」落在按钮外，看着像按钮没反应。用 JS 读元素位置确认按钮在、命中检测（`elementFromPoint`）也落在按钮上之后，改用 `find` 拿到 ref，再用 `computer` 按 ref 点击（同样是真实输入事件），一次就点中了。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。；#247 的记录在 `evidence/2026-11-08-go-start/preview-check.md`。
+- 补充（2026-11-09）：面板隐藏时 `requestAnimationFrame` 完全暂停。脚本里等 rAF 会让 `javascript_tool` 45 秒超时（#259）；`PerformanceObserver` 的 longtask 也不报，测到的性能数不算（#264）。读几何不等帧，`getBoundingClientRect` 本身会强制排版，要等用 `setTimeout`。性能测量改用无头 Chrome（独立临时配置目录、调试协议发真实鼠标、每轮重新加载），并固定好指针历史（测量副本会停在最后悬停的那家）。注意它是 Chromium，不是驿窗的 WKWebView（`evidence/2026-11-09-264-deferred-measure/measure.md`）。
 - 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。
 
 ## L-30 测试替身比真实实现宽松，兜底路径一直是绿的却从没生效过（2026-11-09）
@@ -264,3 +269,32 @@
 - 正确做法：给兜底、重试这类「第一条路失败后走的路」写测试时，先列出真实实现在这个场景下每一步会做的检查，替身逐条照做（同一个开关同时影响 `reaches`、`reply`、`leave`）；模拟场景用真实的失败原因（会话不在线），不用一个方便的替代原因（写入失败）。再加一条用真实组件（临时目录里的 `ClaudeChannel`）的测试，确认兜底那一步在该场景下真的能成。
 - 证据：`handoff::tests::words_back_to_a_claude_session_that_ended_wait_in_its_queue`、`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 在替身改成照真实规则拒收后先红（前者 `left: 0, right: 1`，即一句也没排进去；红色输出只在本轮会话记录里，没另存文件），改走 `queue` 后变绿（全量日志 `evidence/2026-11-09-queue-back/test.log`）；`claude_plugin::tests::words_queued_for_a_session_that_ended_wait_for_it_to_open` 用真实通道验证。
 - 可提议提升为全局坑：换个项目也成立（测试替身比真实实现宽松，掩盖兜底失效）。
+
+## L-31 照搬上游的 CSS 修复，去掉 `position: fixed` 后小票打印槽横跨整个窗口（2026-11-09）
+
+- 现象：#259 移植上游「设置页滚到底不再整页回弹」（`2e094e4`）时，按上游去掉设置侧栏的 `position: fixed`，小票顶上那条打印槽宽度从 184 变成 952，横跨整个窗口。
+- 根因：fixed 的侧栏原本是打印槽这类 `position: absolute` 子元素的定位容器。上游没有小票样式，所以去掉 fixed 没出问题。驿窗分叉后加的视觉依赖它。
+- 正确做法：移植上游的样式改动前，先查被改元素里有没有依赖它定位的 absolute 子元素；改完在预览里逐页比对每个元素的位置尺寸（#259 比对 5 个设置页，差异为 0）。这次保留 `position: relative` 当定位容器。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-259-upstream-fixes/a4-preview-check.md`。
+
+## L-32 「临时改源码 → 跑测试 → 还原」写在一条前台命令里，被超时打断后文件留在改过的状态（2026-11-09）
+
+- 现象：#257 为补「先红」证据，临时去掉新行为再跑测试。命令在等共用构建目录的锁时超过 2 分钟，被切走（exit 144），后面的还原步骤没执行。
+- 根因：共用 `target` 时等锁的时间不可控，前台命令有超时；三步写在一条命令里，中间断了，最后一步就丢了。
+- 正确做法：临时改文件前先备份；测试放后台跑；还原单独一步做，并用 `cmp` 核对已还原。更好的办法是一开始就先写测试、跑出红，再写实现，不用事后补红。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-257-relay-receipts/red-host.log`。
+
+## L-33 并行子 agent 共用一台机器，宽泛的 `pkill -f` 把别人正在跑的测试也杀了（2026-11-09）
+
+- 现象：#261 为停掉自己的基线测试，执行 `pkill -f 'pnpm test'; pkill -f 'cargo test'`。同时在跑的 #264、#265 的全量测试被中断，以 143 / 144 退出，只能重跑。
+- 根因：`-f` 匹配所有进程的完整命令行，不分是谁开的。
+- 正确做法：只停自己的后台任务（用任务 ID，或按本 worktree 的绝对路径精确匹配），不按命令名广撒。
+- 证据：#261、#265 的子 agent 报告（2026-11-09），#265 第一次基线以 144 退出。
+- 可提议提升为全局坑：换个项目也成立（多个会话或子 agent 并行时都会碰上）。
+
+## L-34 共用 `CARGO_TARGET_DIR` 时，`package-resources` 先于导出变量跑，又在 worktree 里生成了自己的 `target`（2026-11-09）
+
+- 现象：#260 的新 worktree 按顺序先跑 `node src/tooling/package-resources.mjs`、再导出 `CARGO_TARGET_DIR`，结果 worktree 里生成了 387 MB 的 `target`。磁盘只剩约 18 GB。
+- 根因：这个脚本会编译打包用的程序，它用哪个构建目录取决于当时有没有设 `CARGO_TARGET_DIR`。主会话写给子 agent 的共用规矩把两步顺序写反了。
+- 正确做法：共用构建目录时，先 `export CARGO_TARGET_DIR=…`，再跑 `package-resources` 和其他任何会编译的命令。
+- 证据：#260 子 agent 报告（已删掉那 387 MB）；共用规矩已在第二批改过来。

@@ -108,3 +108,27 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 证据：L-26；`evidence/2026-11-07-fix-220/main-f441f73-cargo-test.log`；`evidence/2026-11-08-ops-fixes/test-fb62a6a.log`（784 passed）。
 - 状态：已采纳（本 PR，#237）
 - 批准：常浩 2026-11-08 经驿窗侧栏回复「都采纳」（同时批了 L-25、L-26 提升为 G-22、G-23）。
+
+## E-12 一次授权多张 issue 并行做：子 agent 不写 CURRENT / LESSONS、不装机，主会话审完逐张合并后统一收尾（2026-11-09）
+
+- 步骤：handoff
+- 发生了什么：常浩一句「都做，一口气全做了」批了 #257–#265。主会话分两批开 7 个子 agent，各开 worktree、各开一张 PR（#266–#273）。为免几张 PR 同时改 CURRENT.md 顶部和 LESSONS 编号而互相冲突，子 agent 只在 PR 正文和报告里交接、提新坑草稿，不装机不合并；主会话逐张审 diff 后 squash 合并，最后一张收尾 PR 统一写 CURRENT 一节和 L-31～L-34，再从 main 打包装机一次。#269（300 行棘轮）会挡住加长基线文件的 PR，所以放在最后合，合前按当时的 main 重新生成基线。
+- 建议：第 4 步加一段「多张并行」：子 agent 的交接写进 PR 正文；CURRENT、LESSONS、装机由主会话在最后一张收尾 PR 里统一做；会改仓库检查规则的 PR（如棘轮）最后合。
+- 证据：PR #266–#273、#269 合并记录；本条所在的收尾 PR。
+- 状态：待批
+
+## E-13 第 1 步备环境：共用构建目录时先导出 CARGO_TARGET_DIR 再跑 package-resources（2026-11-09）
+
+- 步骤：start
+- 发生了什么：#260 的 worktree 先跑 `package-resources` 后导出变量，生成了 387 MB 的自己的 `target`（L-34）。
+- 建议：第 1 步「新 worktree 先备环境」那句改成：要共用构建目录时，先 `export CARGO_TARGET_DIR=…`，再 `pnpm install`、`package-resources`；`pnpm install` 统一写 `--frozen-lockfile`（#261 报 skill 与批量规矩写法不一致）。
+- 证据：L-34；#261 子 agent 报告。
+- 状态：待批
+
+## E-14 第 2 步测试：先写测试、跑出红，再写实现；性能测量不在隐藏面板里做（2026-11-09）
+
+- 步骤：test
+- 发生了什么：#257 把测试和实现一起写好才跑，第一次就全绿，只能临时去掉新行为补红，还因命令超时差点留下改过的文件（L-32）。#264 在隐藏的内置浏览器面板里测长任务，rAF 和 longtask 都不出数，改用无头 Chrome（L-29 补充）。
+- 建议：第 2 步加两句：一、新测试先单独跑出红并存输出，再写实现；二、性能或动画时长的测量不在隐藏的内置浏览器面板里做，见 L-29 的补充。
+- 证据：L-32；L-29 补充；`evidence/2026-11-09-264-deferred-measure/measure.md`。
+- 状态：待批

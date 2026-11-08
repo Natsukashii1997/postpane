@@ -6,6 +6,55 @@
 
 
 
+## 上游 Agent HUD 可学点第二批 9 张一次做完（#257–#265）（2026-11-09，Claude 主会话 + 7 个子 agent，常浩「都做，一口气全做了，我现在直接通过」；已提交、8 张 PR squash 合并、已发布 `b977cfc5aa5e` 回读通过）
+
+- 时间：开工 `2026-11-09 01:00` 前后（常浩回「都做」后立即分派，按会话记录估记）。来由：上游对比报告（`docs/design/上游AgentHUD对比-2026-11-09.md`）列出的第二批可学点开成 #257–#265 后，常浩一次授权全部直接做。
+- 做法：分两批开 7 个子 agent，各开 worktree、各开一张 PR，共用主目录 `target`（每次测试前把本 worktree 全部 Rust 源时间改到未来，核对编译路径和通过数，L-26 补充）。子 agent 不写本文件和 LESSONS、不装机；主会话逐张审 diff 后合并，最后由本收尾 PR 统一写交接、新坑，并打包装机一次（E-12 待批）。
+- 合并了哪些（squash 提交）：
+  - #260 Codex 钩子信任提醒 `f509614`（PR #267）：读 Codex 额度时同一个 app-server 发 `hooks/list`；驿窗钩子是 `untrusted` / `modified` 时，侧栏出细条「Codex · 没在运行驿窗的钩子」。本机 codex-cli 0.166.0 已核实有这个接口、字段对得上。
+  - #259 上游 6 个小缺陷 `dd07759`（PR #268）：MCP 引擎回答按流解码、悬停计时到点才触发、问题卡钩子移到 return 前、设置页滚到底不回弹、加载更多保留已选轮次的调用、同一错误只提示一次。
+  - #262 token 账本不再 31 天过期 `03c57b4`（PR #266）：只做「不删」，读取窗口仍是 31 天，没做全量回读旧日志。
+  - #257 + #258 `768250f`（PR #270）：
+    - 转回 Claude 的每一步用固定 id，跟进「排队中 / 已领取 / 已开始」，被拒、过期、取消时立刻交还。
+    - Claude 续接时，如果这一轮是常浩自己开的头，自动轮数从 1 重算；判断依据是会话记录里 `origin.kind`，已用本机真实记录核实。
+  - #261 锁被毒化后继续运行 `ff6282b`（PR #271）：27 个文件统一改成 `unwrap_or_else(PoisonError::into_inner)`，清单见证据目录 `sites.tsv`。`handoff.rs` 的 `republish` 留到本 PR 改。
+  - #265 上游低优先级 6 条 `285d8d8`（PR #272）：侧栏截图等数据设上限、子智能体时间线合并相邻调用并可平移、Claude 额度冷启动退回 `~/.claude.json` 的 `cachedUsageUtilization`（只认同一账号、30 天内）、HUD 工具不再拒收已存旧字段、价格表随账本重读、「今天」卡改由 Core 全量计算。另 3 条不做：要新视觉、本机单屏、不急。
+  - #264 卡片离开时测量副本延后重画 `3c7addd`（PR #273）：无头 Chrome 实测改前审批卡离开、「知道了」有 53–152 ms 长任务，改后基本消失，首开高度不变。
+  - #263 源文件 300 行棘轮 `3858c36`（PR #269）：最后合，合前按当时的 main 重新生成基线（153 个文件）。
+- 改了哪些文件（本收尾 PR）：
+  - `src/crates/host/src/handoff.rs`：`republish` 锁被毒化后照样刷新接力卡（#261 遗留）。写成 3 行，没加长，棘轮通过。
+  - `CURRENT.md`：本节。
+  - `docs/LESSONS.md`：L-26、L-29 补充；新 L-31 至 L-34。
+  - `.agents/skills/postpane-round/EVOLUTION.md`：E-12 至 E-14，待批。
+- 替常浩定的事（他说「直接通过」）：
+  - #257 只给「回 Claude」这段加回执，ChatGPT 那侧保留「30 秒没回话算失败、可重试」。
+  - #258 常浩插话时，自动轮数和审查预算（#217）一起从这一段重算（代码里是同一个计数），每段上限仍是 2 轮、L1 1 轮；已停的自动往返不会自己打开。
+  - #262 只做第一步。
+  - #265 跳过 3 条。
+  - #264 实测有卡顿，所以改了。
+- 测试：在本收尾分支（= 合并完 8 张 PR 的 main `3858c36` + `republish` 一处）跑：
+  - `pnpm run check` exit 0；
+  - `pnpm test` exit 0：Rust 合计 `813 passed / 0 failed`（788 基线 + #260 6 + #270 9 + #271 2 + #272 7 + #266 1 = 813），前端 `ℹ pass 380` / `ℹ fail 0`，MCP 9、插件 14、扩展 13，均 `ℹ fail 0`；编译行没有一行来自别处路径；
+  - `node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`（#263 加了 4 条）。
+  - 日志在 `evidence/2026-11-09-batch-wrapup/{check,test,build}.log`；各 PR 的先红输出在各自的 `evidence/2026-11-09-<号>-*/`。
+- 验证：各 PR 只到单元测试、真实通道测试和浏览器预览（#259 设置页逐元素比对、#265 时间线平移、#264 无头 Chrome 测量）。实机没走的：
+  - 钩子提醒要改一个字符触发；
+  - 设置页触控板回弹；
+  - 接力回执和插话重算要等真实接力；
+  - 额度冷启动兜底要重启后第一次就读失败才触发。
+- 截图：`evidence/2026-11-09-265-upstream-small/preview/`（5 张）、`evidence/2026-11-09-259-upstream-fixes/a4-settings-after.jpg`；装机后截图 `evidence/2026-11-09-batch-wrapup/after-install.png`。
+- 发布与回读：从本收尾分支打包（树与合并后的 main 相同；编译行没有别处路径），装前 `70ad4a4648bb`、产物与已装都是 `b977cfc5aa5e`，签名证书 leaf `b773068e`；已装程序里能搜到 `hooks/list`、`cachedUsageUtilization`、`roundsFrom`；装后侧栏、设置窗正常，没有「想访问文稿」弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-batch-wrapup/PostPane-70ad4a4648bb.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 要常浩定：子智能体时间线合并的一段画成「加宽的竖线」，没用上游「扁条 + 图例新项」；要换得出三版。
+  - 范围外：
+    - 本机 agent-kit 的两条 Codex 钩子 `guard-git.mjs`、`lessons-remind.mjs` 是 `untrusted`，Codex 不跑它们，建议到 Codex 里允许；
+    - `hud/.../rules.rs` 的拒收文案说 columns 适用于 `ring`，与规则不符，没改；
+    - `ClaudeChannel::queue`（#255）生产代码已不用，只剩测试在用，没删；
+    - #261 的子 agent 曾用宽泛 `pkill -f` 误杀其他 agent 的测试，已重跑（L-33）。
+  - 第一批 #250–#254 不在这次授权的 9 张里，仍开着；#249 总清单未改。
+- 本轮新坑：L-31、L-32、L-33、L-34（另 L-26、L-29 补充）；L-30、L-33 可提议提升为全局坑。
+- skill 进化：E-12、E-13、E-14 待批
+
 ## 自动转回 Claude 的排队兜底改成真能排进去（#255）（2026-11-09，Claude，常浩选「先修排队兜底」；已提交、已发布 `70ad4a4648bb` 回读通过）
 
 - 时间：开工 `2026-11-09 00:18`。来由：对照上游 Agent HUD 的投递代码（`docs/design/上游AgentHUD对比-2026-11-09.md` 二·1）时读出，#173 加的「直接送两次失败就排队」从没生效：`Lines::leave` 底下是 `ClaudeChannel::hand`，和直接送话一样先查 20 秒内签到，L-14 那种会话结束的场景三次都被同一道检查拒掉。
