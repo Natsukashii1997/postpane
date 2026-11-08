@@ -1,4 +1,10 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type {
   Approval,
@@ -12,6 +18,7 @@ import type { ReplyChip } from "../alerts/reply-list";
 import { RequestDeliveryNotice } from "../permissions/ApprovalContent";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
+import { frontTagSwapped } from "./side-tag-stack";
 import {
   HUD_METRICS,
   statusColor,
@@ -164,8 +171,16 @@ export function HUDExpandedSurface({
   }, [atNotchRow, settle]);
   const inNotchRow = atNotchRow && rowSettled;
   const rowLight = inNotchRow ? false : light;
+  // The tag in front handed to another agent stands where that agent's tag
+  // hung; sliding there, it crossed the other tags and the pointer (#238).
+  const tagAgent = !open && (request || event) ? focusedVendor?.key : undefined;
+  const lastTagAgent = useRef(tagAgent);
+  const swapped = frontTagSwapped(lastTagAgent.current, tagAgent);
+  useEffect(() => {
+    lastTagAgent.current = tagAgent;
+  });
   const transition = {
-    duration: reduceMotion || dragging ? 0 : 0.4,
+    duration: reduceMotion || dragging || swapped ? 0 : 0.4,
     ease: HUD_METRICS.ease,
   };
   const from = {

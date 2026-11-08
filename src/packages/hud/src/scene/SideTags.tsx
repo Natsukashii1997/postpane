@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Session } from "@agent-hud/protocol";
 import type { QuotaDisplay } from "@agent-hud/ui/format";
 import {
@@ -10,6 +11,7 @@ import { replyChip } from "../alerts/reply-list";
 import { cardRect, type HUDRect } from "../geometry";
 import type { HUDEdge } from "../model";
 import { paperFace, perforatedSide, perforation, type Paper } from "../paper";
+import { SIDE_TAG_REST_MS } from "./side-tag-stack";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 
@@ -93,13 +95,24 @@ export function SideTags({
   onFront: (id: string) => void;
 }) {
   const punched = perforation(perforatedSide(edge), 10 * scale, 2.1 * scale);
+  // Only a pointer resting on a tag brings its agent forward (#238).
+  const resting = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const stopResting = () => clearTimeout(resting.current);
+  useEffect(() => stopResting, []);
   return (
     <>
       {tags.map(({ side, rect }) => (
         <div
           key={side.vendor}
           className="hud-side-tag"
-          onPointerEnter={() => onFront(side.id)}
+          onPointerEnter={() => {
+            stopResting();
+            resting.current = setTimeout(
+              () => onFront(side.id),
+              SIDE_TAG_REST_MS,
+            );
+          }}
+          onPointerLeave={stopResting}
           style={{
             position: "absolute",
             left: rect.x,
