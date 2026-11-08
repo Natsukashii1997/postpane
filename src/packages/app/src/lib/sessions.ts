@@ -305,25 +305,6 @@ export function panWindow(
   return [next, next + length];
 }
 
-/** The sessions that spent the most, largest first, and how many the rest are and what they spent. */
-export function topSessions<T extends { tokens: number }>(
-  sessions: readonly T[],
-  n: number,
-): { top: T[]; rest: { count: number; tokens: number } } {
-  const sorted = [...sessions]
-    .filter((session) => session.tokens > 0)
-    .sort((a, b) => b.tokens - a.tokens);
-  const top = sorted.slice(0, Math.max(0, n));
-  const rest = sorted.slice(top.length);
-  return {
-    top,
-    rest: {
-      count: rest.length,
-      tokens: rest.reduce((sum, session) => sum + session.tokens, 0),
-    },
-  };
-}
-
 /** What a session's list-price money is made of (Session's `cost`, `pricedCost`, `unpricedTokens`). */
 export interface MoneyFacts {
   cost: number | null;
@@ -344,18 +325,6 @@ export function sessionMoney(session: MoneyFacts): ListMoney {
     value: session.pricedCost ?? null,
     unpriced: session.unpricedTokens ?? 0,
   };
-}
-
-/** What sessions spent together at list prices; the value is null when none has a priced call. */
-export function sessionsMoney(sessions: MoneyFacts[]): ListMoney {
-  let value: number | null = null;
-  let unpriced = 0;
-  for (const session of sessions) {
-    const money = sessionMoney(session);
-    if (money.value !== null) value = (value ?? 0) + money.value;
-    unpriced += money.unpriced;
-  }
-  return { value, unpriced };
 }
 
 /** What a cost leaves out, as its tooltip says it; undefined when nothing. */
