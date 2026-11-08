@@ -220,6 +220,7 @@
 - 正确做法：任何「做完就改界面状态」的动作，成功判定要对准用户可见的结果（目标到了前台、回答到了客户端、话进了对话），只确认了请求发出的一律按未成功处理，前端保留状态、在原地写明原因、几秒后可重试。对外连接要么给回应、要么只在自己真退出时才无声断开。验收跳转照 L-22 看目标应用和打开到哪里。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-ops-audit/`（`汇总.md`、`nav/` 本机会话统计脚本）；Claude 日志 `~/Library/Logs/Claude/main.log` 23:16:42 实测 `claude://claude.ai/epitaxy/local_…` 能切会话。
 - 升级：已写成测试 `a_claude_desktop_session_without_its_tab_is_not_reported_open`、`a_tab_that_moved_to_a_new_claude_code_session_is_found_by_the_old_id`、`a_print_run_under_the_desktop_app_has_no_tab_to_go_back_to`、`starting_the_move_is_not_reported_as_the_session_open`、`a_request_postpane_leaves_alone_goes_straight_back_to_the_client`、`words_sent_after_the_wait_gave_up_still_count`，前端 `open-result.test.ts`（#227、#228、#230）。可提议提升为全局坑：「把请求发出当成功」换个项目也成立，与 G-21 同源但更宽。
+- 提升：已提升为全局 G-22（2026-11-08，agent-kit#40）。
 
 ## L-26 几个 worktree 共用 CARGO_TARGET_DIR，测试跑的是别的 worktree 编出的代码（2026-11-08）
 
@@ -227,4 +228,5 @@
 - 根因：同名 crate 在不同目录编出的产物文件名哈希相同（main 与共享目录里 `agent_hud_core-16f50467…` 一模一样），cargo 判断要不要重编只看 dep-info 里记的源文件路径与修改时间，记的是上一次编译它的那个 worktree 的路径。于是一个 worktree 的改动被当成「已编」，测试跑的是别人的代码，结果照样是绿的。
 - 正确做法：并行 worktree 各用各的构建目录；磁盘不够非共用不可时，每次跑测试前把本 worktree 的 `.rs` 和 `Cargo.toml` 修改时间改到未来（`find src/crates src/apps/desktop/src-tauri \( -name '*.rs' -o -name Cargo.toml \) -exec touch -t <未来时间> {} +`），并核对三件事：输出里有本 worktree 路径的 `Compiling` 行、新测试名出现且通过、Rust 通过总数等于基线加新增条数。合并前在主目录用 main 自己的构建目录再跑一次全量。
 - 证据：`evidence/2026-11-07-fix-220/main-f441f73-cargo-test.log`（主目录补验 765 passed，含 #227 的 4 条新测试）；`evidence/2026-11-07-fix-224/core-host-after-rebase.log`（core 176 = 174 + 2）；`evidence/2026-11-08-ops-fixes/test.log`（合完 5 批后 774 = 761 + 13）。
-- 升级：未写成测试（构建环境问题）。可提议提升为全局坑：换个 Rust 项目也成立。
+- 升级：未写成测试（构建环境问题）；写进驿窗一轮 SKILL.md 第 1、2 步（E-11）。
+- 提升：已提升为全局 G-23（2026-11-08，agent-kit#40）。
