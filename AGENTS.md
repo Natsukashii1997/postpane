@@ -118,7 +118,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - **对外开放**：只在本机，不开网络端口（stdio → `<数据目录>/tools/mcp.sock`，0600）。
   - 侧栏工具，MCP「agent-hud」：可装到 Claude Code、Codex、Cursor、DeepSeek Harness、Antigravity。能读侧栏布局、快照、会话、用量统计、侧栏截图（账户打码）；能写侧栏草稿（面板里保存才生效）、外观和动画两项偏好。开关是设置 `hudTools`（「允许智能体调整侧栏」，「AI 接入」页和「智能体插件」页是同一个），同时管读和写。
   - 发起接力 `relay_to_chatgpt`：只接 Claude Code 会话，能新开或续接一次审核；不受 `hudTools` 管，在「智能体插件」移除 ChatGPT 插件登记即关。
-- **数据对象**：只读取、不替驿窗产出、不放进可切换项。本机检测到且在「智能体」页开着的才读；每家读哪里见 `lib/ai-access.ts` 的 `sources`。主要几家：Claude Code（`~/.claude/projects`，额度用本机 claude 登录，云端会话经 api.anthropic.com）、Codex（`~/.codex/sessions`，本机 codex app-server）、Hermes（`~/.hermes/state.db`、`profiles/*/state.db`，不联网）、ChatGPT 网页（Chrome 插件报回合，不读文件）、Antigravity（`~/.gemini/antigravity*/brain`，本机 language server）。DeepSeek、Kimi、GLM、OpenCode 的额度可用驿窗保存的 API Key，存 `<数据目录>/account-credentials/`，界面只显示「已保存」。
+- **数据对象**：只读取、不替驿窗产出、不放进可切换项。本机检测到且在「智能体」页开着的才读；每家读哪里见 `lib/ai-access.ts` 的 `sources`。主要几家：Claude Code（`~/.claude/projects`，额度用本机 claude 登录，云端会话经 api.anthropic.com）、Codex（`~/.codex/sessions`，本机 codex app-server，顺带查驿窗钩子是否已允许）、Hermes（`~/.hermes/state.db`、`profiles/*/state.db`，不联网）、ChatGPT 网页（Chrome 插件报回合，不读文件）、Antigravity（`~/.gemini/antigravity*/brain`，本机 language server）。DeepSeek、Kimi、GLM、OpenCode 的额度可用驿窗保存的 API Key，存 `<数据目录>/account-credentials/`，界面只显示「已保存」。
 
 `<数据目录>` 在 macOS 上是 `~/Library/Application Support/app.postpane.mac`。
 

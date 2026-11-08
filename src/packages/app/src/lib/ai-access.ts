@@ -60,7 +60,10 @@ const sources: Record<string, { sessions: Words; quota: Words }> = {
   },
   codex: {
     sessions: ["~/.codex/sessions", "~/.codex/sessions"],
-    quota: ["Local codex app-server", "本机 codex app-server"],
+    quota: [
+      "Local codex app-server; also whether PostPane's hooks are allowed",
+      "本机 codex app-server；顺带查驿窗钩子是否已允许",
+    ],
   },
   antigravity: {
     sessions: ["~/.gemini/antigravity*/brain", "~/.gemini/antigravity*/brain"],

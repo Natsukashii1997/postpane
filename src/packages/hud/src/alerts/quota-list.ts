@@ -6,12 +6,13 @@ export const isQuotaWindowEvent = (event: IslandEvent) =>
   event.kind === "quota-exhaustion" || event.kind === "quota-reset";
 
 /** Quota news of any kind: a window's, resets added to an account, an
- * agent signed out, or a Hermes bot down or its scheduled task failed. One
- * card lists them all as strips. */
+ * agent signed out or skipping PostPane's hooks, or a Hermes bot down or its
+ * scheduled task failed. One card lists them all as strips. */
 export const isQuotaEvent = (event: IslandEvent) =>
   isQuotaWindowEvent(event) ||
   event.kind === "reset-credits" ||
   event.kind === "sign-in-needed" ||
+  event.kind === "hooks-review-needed" ||
   event.kind === "bot-offline" ||
   event.kind === "cron-failed";
 

@@ -78,6 +78,21 @@ fn optional_array(parent: &Map<String, Value>, key: &str) -> Result<Vec<Value>, 
             .ok_or_else(|| "Unrecognized hook event layout".into()),
     }
 }
+/// Whether a client's hook command is one of PostPane's, whatever the hook:
+/// like every command PostPane puts in, it ends in a `--…-hook` flag and the
+/// client's id or an older name of it, wherever the app lives.
+pub fn agent_hud_command(source: &str, command: &str) -> bool {
+    let Ok((id, hooks)) = hooks_of(source) else {
+        return false;
+    };
+    let mut words = command.trim_end().rsplit(' ');
+    let (Some(name), Some(flag)) = (words.next(), words.next()) else {
+        return false;
+    };
+    flag.starts_with("--")
+        && flag.ends_with("-hook")
+        && (name == id || hooks.aliases.contains(&name))
+}
 /// Whether a handler's command is Agent HUD's for this hook: it ends in the
 /// flag and the client's id or an older name of it. A compaction hook also
 /// owns its older flag's command, checked only inside PreCompact.

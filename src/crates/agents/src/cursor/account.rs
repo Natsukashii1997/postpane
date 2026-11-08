@@ -431,6 +431,7 @@ pub fn read(host: &dyn Host) -> Result<Reading, Unread> {
         session_records: Vec::new(),
         services: Vec::new(),
         live_sessions: Vec::new(),
+        unreviewed_hooks: Vec::new(),
         account: Some(
             json!({"id":account_identity,"provider":"cursor","label":email,"plan":body["membershipType"],"checkedAt":Utc::now().to_rfc3339()}),
         ),

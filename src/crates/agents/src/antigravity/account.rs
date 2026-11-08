@@ -236,6 +236,7 @@ fn parse(scope: &str, body: &Value, summary: &Value) -> Result<Reading, String> 
         session_records: Vec::new(),
         services: Vec::new(),
         live_sessions: Vec::new(),
+        unreviewed_hooks: Vec::new(),
         account: Some(
             json!({"id":account_identity,"provider":"antigravity","label":email,
             "identity":if email.is_some(){"account"}else{"local-home"},

@@ -743,8 +743,15 @@ export interface IslandEvent {
     /** A Hermes bot's gateway went down; `title` is the bot, `message` why. */
     | "bot-offline"
     /** A Hermes scheduled task's last run failed; `title` is the task. */
-    | "cron-failed";
+    | "cron-failed"
+    /** The agent skips PostPane's hooks until the user allows them in the
+     * agent itself; `message` is what that costs, `step` where to allow. */
+    | "hooks-review-needed";
   at: string;
+  /** For `hooks-review-needed`: where to allow the hooks, and the events
+   * whose hook waits, as the agent names them. */
+  step?: string | null;
+  hooks?: string[];
   /** For `cron-failed`: when the failed run was, and when it runs next. */
   failedAt?: string | null;
   nextRunAt?: string | null;
