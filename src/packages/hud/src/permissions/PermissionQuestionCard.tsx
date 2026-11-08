@@ -18,6 +18,7 @@ import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
 import { ApprovalTag } from "./ApprovalTag";
+import { START_BADGE } from "./approval-list";
 import { sendThenForget } from "./answer-gate";
 
 /** A question's draft: the offered answers picked, the words typed, and
@@ -262,7 +263,9 @@ export function PermissionQuestionCard({
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 600, color: primary }}>
-            {t(`Answer in ${vendor}`, `请到 ${vendor} 里回答`)}
+            {request.badge === START_BADGE
+              ? t(`Start it in ${vendor}`, `请到 ${vendor} 里开始`)
+              : t(`Answer in ${vendor}`, `请到 ${vendor} 里回答`)}
           </span>
           {request.answerNote && (
             <span

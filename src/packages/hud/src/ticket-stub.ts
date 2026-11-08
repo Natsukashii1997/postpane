@@ -26,6 +26,9 @@ export interface StubMarks {
   sealed: boolean;
   /** The seal reads 答, not 批: every request it waits on is a question. */
   answer: boolean;
+  /** The seal reads 换 in green: every request it waits on is a handoff
+   * card asking you to switch sessions (#245). */
+  handoff: boolean;
   /** The reading is printed in red: its tightest quota is nearly spent. */
   warn: boolean;
 }
@@ -34,12 +37,16 @@ export function stubMarks(vendor: {
   waiting: number;
   /** How many of the `waiting` requests are questions. */
   questions?: number;
+  /** How many of the `waiting` requests are handoff cards (#245). */
+  handoffs?: number;
   used: number | null;
 }): StubMarks {
   const sealed = vendor.waiting > 0;
+  const handoff = sealed && vendor.handoffs === vendor.waiting;
   return {
     sealed,
-    answer: sealed && vendor.questions === vendor.waiting,
+    answer: sealed && !handoff && vendor.questions === vendor.waiting,
+    handoff,
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,
   };
 }

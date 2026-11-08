@@ -227,7 +227,7 @@ export function ApprovalContent({
                 ? "待批"
                 : "WAIT"
         }
-        stampInk="red"
+        stampInk={selected.badge === START_BADGE ? "green" : "red"}
         paper={paper}
         inks={inks}
         light={light}

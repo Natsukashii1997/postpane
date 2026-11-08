@@ -10,6 +10,7 @@ import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
+import { START_BADGE } from "./permissions/approval-list.ts";
 import { relaysAnswering } from "./relays-answering.ts";
 import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
 import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
@@ -124,6 +125,8 @@ export interface HUDVendor {
   waiting: number;
   /** How many of the `waiting` requests are questions. */
   questions: number;
+  /** How many of the `waiting` requests are handoff cards (#245). */
+  handoffs: number;
   balance: string | null;
   /** What an agent with no window shows on the strip instead: its last 24 hours in tokens (`recentLabel`); its balance stays in the peek and the panel. */
   usage: string | null;
@@ -216,6 +219,9 @@ export function vendorsFromSnapshot(
         (a) =>
           vendorKey(a.source) === key &&
           (a.kind === "question" || Boolean(a.questions?.length)),
+      ).length,
+      handoffs: snapshot.approvals.filter(
+        (a) => vendorKey(a.source) === key && a.badge === START_BADGE,
       ).length,
       balance: deepseekBalances.length
         ? deepseekBalances

@@ -248,7 +248,8 @@ export function entryClient(entry: ApprovalEntry) {
 }
 
 /** The card's head: its spaced label, the count tags, and on paper the
- * stamp in the paper's `stampInk` (red for the waiting, blue for replies). */
+ * stamp in the paper's `stampInk` (red for the waiting, blue for replies,
+ * green for a handoff card's 切换, #245). */
 export function ListHead({
   label,
   entries,
@@ -263,7 +264,7 @@ export function ListHead({
   label: string;
   entries: readonly ApprovalEntry[];
   stamp: string;
-  stampInk: "red" | "blue";
+  stampInk: "red" | "blue" | "green";
   paper: Paper | null;
   inks: Inks;
   light: boolean;
