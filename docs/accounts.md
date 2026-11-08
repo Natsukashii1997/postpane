@@ -9,7 +9,7 @@ The implementation follows the original Swift account readers:
 
 | Provider     | Existing source                                     | Read operation                                                       |
 | ------------ | --------------------------------------------------- | -------------------------------------------------------------------- |
-| Claude       | Installed Claude Code and its current account       | SDK `get_usage`, hooks disabled, `skip_behaviors`, no prompt         |
+| Claude       | Installed Claude Code and its current account       | SDK `get_usage`, hooks disabled, `skip_behaviors`, no prompt; when that fails and nothing read before is kept (after a restart), Claude Code's own `cachedUsageUtilization` in `.claude.json`, same account only, shown stale |
 | Codex        | Installed Codex, its current home and selected additional homes | `initialize`, `account/rateLimits/read`, `account/read`, no turn |
 | Pi / ChatGPT | Existing, unexpired Pi OAuth home                   | Official ChatGPT usage endpoint; no OAuth flow or credential rewrite |
 | Cursor       | Read-only Cursor account SQLite database; a sealed sign-in (`cursor-safe-storage:v1:`) opens with Cursor's "Cursor Safe Storage" keychain item, which macOS asks about once (Electron files it under "Cursor Key", older builds under "Cursor") | Current usage-summary endpoint and billing-cycle reset; for an account merged into SuperGrok (plan `super`), or when the summary is refused, the period Cursor itself shows (`DashboardService/GetCurrentPeriodUsage`): its percentages where it reports them (a merged plan), else the cents spent of each limit (a plan metered in dollars), as Cursor's usage bar works them out; a meter with neither is not shown |

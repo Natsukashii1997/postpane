@@ -789,14 +789,22 @@ fn run(context: AccountContext, shared: Arc<Shared>, gate: CollectionGate, reade
         let attempted = Instant::now();
         let attempted_ms = chrono::Utc::now().timestamp_millis();
         // The gate, not the shared state or the Runtime, is held across the I/O.
-        let result = {
+        let (result, record) = {
             let _turn = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if shared.cancelled.load(Ordering::Acquire) {
                 return;
             }
             let mut reading_context = context.clone();
             reading_context.account_homes = selected.2.clone();
-            (selected.1.read)(&reading_context)
+            let result = (selected.1.read)(&reading_context);
+            // What the agent itself last recorded, for a failure with
+            // nothing read before on screen.
+            let record = selected
+                .1
+                .kept
+                .filter(|_| result.is_err())
+                .and_then(|kept| kept(&reading_context));
+            (result, record)
         };
         let (waker, copy) = {
             let Ok(mut state) = shared.state.lock() else {
@@ -853,7 +861,7 @@ fn run(context: AccountContext, shared: Arc<Shared>, gate: CollectionGate, reade
                         failing_since: None,
                         retry_at: None,
                     });
-                    failed_reading(entry, unread, attempted, attempted_ms);
+                    failed_reading_with(entry, unread, record, attempted, attempted_ms);
                     entry.spread = spread;
                 }
             }
@@ -931,6 +939,34 @@ fn failed_reading(entry: &mut Entry, unread: Unread, attempted: Instant, attempt
     entry.failure = Some(unread.kind());
     entry.notice = Some(unread.reason().to_owned());
     entry.failed = true;
+}
+
+/// Records a failed reading as `failed_reading` does. While nothing read
+/// before is on screen (no good reading in this run, none restored at
+/// launch), what the agent itself last recorded (`Provider::kept`) stands in:
+/// its rows show stale, as old as they are, and its notice, which says how
+/// old, follows the failure's reason. The failure keeps its kind, so a
+/// signed-out agent is still told to sign in again. Such an entry has no
+/// `checked_at`, so the restart copy never keeps it.
+fn failed_reading_with(
+    entry: &mut Entry,
+    unread: Unread,
+    record: Option<AccountReading>,
+    attempted: Instant,
+    attempted_ms: i64,
+) {
+    let shown = match record.filter(|_| entry.checked_at.is_none()) {
+        Some(mut record) => {
+            let shown = record.notice.take();
+            entry.reading = record;
+            shown
+        }
+        None => None,
+    };
+    failed_reading(entry, unread, attempted, attempted_ms);
+    if let (Some(shown), Some(notice)) = (shown, entry.notice.as_mut()) {
+        *notice = format!("{notice} · {shown}");
+    }
 }
 
 /// An absent reading is not a reset (agent-hud-native-open
@@ -1813,5 +1849,66 @@ mod tests {
         // Codex reports its whole inventory.
         assert!(agents::claude::account::PROVIDER.keeps_unreported_windows);
         assert!(!agents::codex::account::PROVIDER.keeps_unreported_windows);
+    }
+
+    /// A failed reading with nothing read before on screen, neither in this
+    /// run nor restored at launch, shows the agent's own last record, stale
+    /// and as old as it says, and the failure keeps its kind. A reading kept
+    /// from the restart copy stays as it was (#265).
+    #[test]
+    fn a_failed_reading_with_nothing_kept_shows_the_agents_own_record() {
+        let record = || {
+            let mut record = AccountReading::empty("claude");
+            record.account = Some(json!({"id":"acct","checkedAt":"2026-11-08T10:00:00+00:00"}));
+            record.quotas = vec![
+                json!({"id":"acct:claude-session","usedPercent":30,"accountId":"acct","observedAt":"2026-11-08T10:00:00+00:00"}),
+            ];
+            record.notice = Some("Showing Claude Code's own reading from 2h ago".into());
+            record
+        };
+        let now = Instant::now();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+
+        let mut fresh = entry(AccountReading::empty("claude"), None, false);
+        failed_reading_with(
+            &mut fresh,
+            Unread::SignedOut("sign in again".into()),
+            Some(record()),
+            now,
+            now_ms,
+        );
+        assert!(fresh.failed);
+        assert_eq!(fresh.failure, Some("signedOut"));
+        assert_eq!(
+            fresh.notice.as_deref(),
+            Some("sign in again · Showing Claude Code's own reading from 2h ago")
+        );
+        assert_eq!(fresh.checked_at, None, "no good reading yet");
+        assert_eq!(fresh.reading.quotas[0]["usedPercent"], 30);
+        // Each further failure takes the newest record again.
+        failed_reading_with(
+            &mut fresh,
+            Unread::transient("offline"),
+            Some(record()),
+            now,
+            now_ms,
+        );
+        assert_eq!(fresh.reading.quotas.len(), 1);
+        assert!(fresh.notice.as_deref().unwrap().ends_with("from 2h ago"));
+
+        let mut good = AccountReading::empty("claude");
+        good.quotas = vec![json!({"id":"acct:claude-session","usedPercent":40})];
+        let saved = (chrono::Utc::now() - chrono::Duration::hours(3)).to_rfc3339();
+        let mut restored = entry(good, Some(&saved), true);
+        failed_reading_with(
+            &mut restored,
+            Unread::SignedOut("sign in again".into()),
+            Some(record()),
+            now,
+            now_ms,
+        );
+        assert!(restored.failed);
+        assert_eq!(restored.reading.quotas[0]["usedPercent"], 40);
+        assert_eq!(restored.notice.as_deref(), Some("sign in again"));
     }
 }

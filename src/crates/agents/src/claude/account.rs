@@ -3,6 +3,9 @@
 //! engine from an API-key login. The signed-in account is the one Claude
 //! Code's .claude.json names, read before and after. Without a Claude Code
 //! sign-in, the Claude desktop app's own claude.ai sign-in answers instead.
+//! When a reading fails and nothing read before is kept, Claude Code's own
+//! record of its last usage answer stands in (`kept`).
+use super::usage_record;
 use crate::account::{
     account_id, client_home_key, legacy_account, legacy_unresolved, read_json, status, variable,
     Answer, EngineStart, Host, HttpFailure, HttpRequest, Provider, Reading, StatusPage, Unread,
@@ -24,11 +27,17 @@ fn engine_env() -> [(&'static str, String); 1] {
 pub(super) fn config_dir(host: &dyn Host) -> PathBuf {
     variable(host, "CLAUDE_CONFIG_DIR").unwrap_or_else(|| host.home().join(".claude"))
 }
-pub(super) fn profile(host: &dyn Host) -> Value {
+/// Claude Code's global configuration, `.claude.json`: the signed-in
+/// account (`oauthAccount`) and Claude Code's own usage record. It is in
+/// `CLAUDE_CONFIG_DIR` when that is set, and in the home folder otherwise.
+fn global_config(host: &dyn Host) -> Value {
     let path = variable(host, "CLAUDE_CONFIG_DIR")
         .unwrap_or_else(|| host.home().to_path_buf())
         .join(".claude.json");
-    read_json(host, &path).unwrap_or(Value::Null)["oauthAccount"].clone()
+    read_json(host, &path).unwrap_or(Value::Null)
+}
+pub(super) fn profile(host: &dyn Host) -> Value {
+    global_config(host)["oauthAccount"].clone()
 }
 fn identity(value: &Value) -> Option<String> {
     let user = value["accountUuid"].as_str().unwrap_or_default();
@@ -121,6 +130,7 @@ pub static PROVIDER: Provider = Provider {
     status: Some(&STATUS),
     // Fable's week from before it was left out (see `IGNORED_FAMILY`).
     dropped_windows: &["claude-weekly-fable"],
+    kept: Some(kept),
     ..Provider::new("claude", read)
 };
 /// Claude's status page: Claude Code runs on the API.
@@ -142,6 +152,29 @@ pub fn read(host: &dyn Host) -> Result<Reading, Unread> {
                 Unread::Failed(reason)
             })),
     }
+}
+
+/// The windows Claude Code itself last recorded (`usage_record`), for the
+/// account its `.claude.json` is signed in to, as of when Claude Code fetched
+/// them and under the ids the engine's reading gives them; the notice says
+/// how old they are. None without such a record, or one that holds neither
+/// the session nor the weekly window.
+pub fn kept(host: &dyn Host) -> Option<Reading> {
+    let config = global_config(host);
+    let now = chrono::Utc::now().timestamp_millis();
+    let record = usage_record::read(&config, now)?;
+    let windows = windows(record.utilization)?;
+    let who = &config["oauthAccount"];
+    let mut reading = plan_reading(host, windows, who, profile_plan(who));
+    let fetched = crate::iso(record.fetched_ms);
+    for row in &mut reading.quotas {
+        row["observedAt"] = fetched.clone();
+    }
+    if let Some(account) = &mut reading.account {
+        account["checkedAt"] = fetched;
+    }
+    reading.notice = Some(record.shown(now));
+    Some(reading)
 }
 
 fn from_engine(host: &dyn Host) -> Result<Reading, EngineUnread> {
@@ -1062,5 +1095,56 @@ mod tests {
         );
         assert_eq!(read(&host).unwrap().quotas.len(), 2);
         assert!(host.asked.borrow().is_empty());
+    }
+
+    /// After a restart with no kept reading, a failed first reading shows the
+    /// windows Claude Code itself last recorded in `.claude.json`
+    /// (`cachedUsageUtilization`), only for the account the same file is
+    /// signed in to, as old as they are (#265, upstream 5482ba7).
+    #[test]
+    fn claude_codes_own_record_stands_in_only_for_the_account_signed_in() {
+        let now = chrono::Utc::now().timestamp_millis();
+        let fetched = now - 2 * 3_600_000;
+        let file = |record: Value| {
+            FakeHost::new("/u").file(
+                "/u/.claude.json",
+                &json!({"oauthAccount": {
+                    "accountUuid": "user-1", "organizationUuid": "org-1",
+                    "emailAddress": "me@example.com", "organizationType": "claude_max",
+                }, "cachedUsageUtilization": record})
+                .to_string(),
+            )
+        };
+        let limits =
+            json!({"five_hour": {"utilization": 12.0}, "seven_day": {"utilization": 40.0}});
+        let host =
+            file(json!({"accountUuid": "user-1", "fetchedAtMs": fetched, "utilization": limits}));
+        let reading = kept(&host).expect("the record of the signed-in account");
+        let id = account_id("claude", &["user-1", "org-1"]);
+        assert_eq!(reading.quotas.len(), 2);
+        assert_eq!(reading.quotas[0]["id"], format!("{id}:claude-session"));
+        assert_eq!(reading.quotas[0]["usedPercent"], 12.0);
+        assert_eq!(reading.quotas[0]["observedAt"], crate::iso(fetched));
+        let account = reading.account.unwrap();
+        assert_eq!(
+            account["id"],
+            legacy_account("Claude", "user-1", "org-1")
+                .unwrap()
+                .as_str()
+        );
+        assert_eq!(account["checkedAt"], crate::iso(fetched));
+        assert!(reading.notice.unwrap().contains("2h"));
+
+        for other in [
+            json!({"accountUuid": "user-2", "fetchedAtMs": fetched, "utilization": limits}),
+            json!({"fetchedAtMs": fetched, "utilization": limits}),
+            json!({"accountUuid": "user-1", "fetchedAtMs": now - 31 * 86_400_000_i64, "utilization": limits}),
+            json!({"accountUuid": "user-1", "fetchedAtMs": fetched, "utilization": {}}),
+            Value::Null,
+        ] {
+            assert!(kept(&file(other.clone())).is_none(), "{other}");
+        }
+        assert!(kept(&FakeHost::new("/u")).is_none(), "no .claude.json");
+        assert!(PROVIDER.kept.is_some());
     }
 }
