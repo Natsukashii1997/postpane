@@ -96,6 +96,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - 本机服务只监听 127.0.0.1；新增依赖先改 `scripts/check-rules.mjs` 的 `ALLOWED_DEPS`，并在交接里说明理由（`check-rules` 会查）。
 - 页面上的时间经统一的格式化函数按北京时间显示，不直接截取 ISO 字符串（全局坑 G-02，`check-rules` 会查）。
 - 默认只做电脑版；涉及 UI 时每次出 3 版明显不同的方案并附可打开的预览。
+- 源文件 300 行棘轮（`pnpm run check` 里的 `check:file-size`）：`src/` 下 `.rs` `.ts` `.tsx` `.mjs` 自己的代码（不含测试）超过 300 行的记在 `src/tooling/file-size-baseline.json`，只许变短，新文件不许超；变短后跑 `node src/tooling/check-file-size.mjs --update` 收紧基线。确有理由要超的，写进 `src/tooling/file-size-allowlist.json`：`{ "路径": { "max": 上限, "reason": "一句理由" } }`。
 - 手写设置文件必须带 `"providers": {}`，否则数据服务报错。
 - 图形界面应用找的是 `/usr/local/bin/claude`，不是 nvm 里那份。
 - Clawd 小人素材版权归 Anthropic，不可对外发布。
