@@ -27,6 +27,7 @@ import {
   approvalGroups,
   entryTitle,
   findSession,
+  goesToStart,
   sessionToOpen,
   type ApprovalEntry,
 } from "./approval-list";
@@ -162,7 +163,7 @@ export function ApprovalContent({
       ? (entry.request.summary ?? entry.request.title)
       : entry.event.message?.trim() || newsTitle(entry.event, zh);
 
-  const openDetail = (request: Approval) => {
+  const openDetail = (request: Approval, goStart?: () => void) => {
     const isQuestion =
       request.kind === "question" || Boolean(request.questions?.length);
     const detail = request.detail ?? request.input;
@@ -197,6 +198,7 @@ export function ApprovalContent({
           light={light}
           language={language}
           onOpenSettings={openSettings}
+          onGoStart={goStart}
           onDecision={
             decide ? (decision) => decide(request.id, decision) : undefined
           }
@@ -274,7 +276,17 @@ export function ApprovalContent({
                     style={{ padding: "0 0 10px 30px", marginTop: -4 }}
                   />
                 )}
-                {open && entry.kind === "request" && openDetail(entry.request)}
+                {open &&
+                  entry.kind === "request" &&
+                  openDetail(
+                    entry.request,
+                    goesToStart(
+                      entry,
+                      Boolean(services?.openSession) && !failure(entry.id),
+                    )
+                      ? () => void goBack(entry)
+                      : undefined,
+                  )}
               </div>
             );
           })}

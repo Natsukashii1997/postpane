@@ -4,6 +4,18 @@
 
 
 
+## 交接卡「知道了」改「去开始」（#247）（2026-11-08，Claude，常浩评估后定：不做侧栏直接开启，只把「知道了」改成「去开始」三个字，点了跳回原会话并收起；已提交、squash 合并、已发布 `b18150e21b61` 回读通过）
+
+- 时间：开工 `2026-11-08 17:05`（`date '+%F %H:%M'` 估记）。来由：常浩装了 #245 后说交接卡只有「知道了」，点了还得自己找回原会话去点 START。先评估过「侧栏直接开启」（经驿窗插件把「开始」送进原会话）：新会话开起来照样要回 Claude 用，还多出十几到几十秒等待和插件、开关、会话忙等失败环节，常浩同意不做。
+- 改了哪些文件：`src/packages/hud/src/permissions/approval-list.ts`（新 `goesToStart`：交接卡、能跳回、上次没失败时按钮读「去开始」）；`permissions/PermissionQuestionCard.tsx`（只读提示下的按钮有 `goStart` 时读「↗ 去开始」并调用它，否则仍是「✕ 知道了」只收起）；`RequestActions.tsx`（转交 `onGoStart`）；`permissions/ApprovalContent.tsx`（展开的交接卡传入 `goBack`：跳回成功即发 `{kind:"leave"}` 收起，失败照旧在那一行写原因，按钮退回「知道了」）；`test/approval-list.test.ts`（新 1 条，先红后绿）；`docs/LESSONS.md`（L-29 补充：隐藏面板里按截图坐标点不中，改用 ref 点击）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 各包 `test result: ok`（278、198、177、89、32 等，0 failed），前端 `ℹ pass 359` / `ℹ fail 0`（比 #245 多 1 条，即新测试），MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-go-start/{check,test,rules,build}.log`。
+- 验证：真实 `HUDScene` 预览（端口 1463，视口模拟 900×700，脚手架 `evidence/2026-11-08-go-start/preview-247/`，没提交）：交接卡底部是「↗ 去开始」，页面里没有「知道了」；按 ref 真实点击「去开始」，`openSession` 调用 1 次、发出 `{kind:"leave"}`，START 小签和票根「换」章消失。按截图坐标点了两次点不中（隐藏面板坐标框架变动，记入 L-29 补充）。记录 `preview-check.md`。
+- 截图：浏览器自查截图未存盘（卡片样子见上文核对数据）。
+- 发布与回读：`install.sh go-start`：装前 `d1975a4e6235` 已备份，17:37:15 退出并启动，产物 `b18150e21b61` / 已装 `b18150e21b61`，签名 leaf `H"b773068e`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-go-start/PostPane-d1975a4e6235.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机未看到，要等下一次真实交接卡时常浩点一次「去开始」；未截「想访问文稿」弹窗检查。
+- 与授权不一致之处、遗留问题、范围外发现：卡片里「切换会话」小标题框仍是红色虚线（沿用提问卡样式，没改）。
+- 本轮新坑：L-29（补充）。
+- skill 进化：无。
+
 ## 交接卡挂 START 小签提醒切换会话（#245）（2026-11-08，Claude，常浩确认 issue 里的推荐做法，票根小章选「绿章」；已提交、squash 合并、已发布 `d1975a4e6235` 回读通过）
 
 - 时间：开工 `2026-11-08 16:06`（本会话接手；读取层、核心与前端标签是上一会话的 WIP `89f0d61`，15:14 提交）。来由：常浩在 #243 同轮提出，Claude 会话上下文快满写「【交接】」交接卡时，侧栏要提醒他切换会话。

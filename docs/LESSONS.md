@@ -252,5 +252,6 @@
 - 现象：#243 用真实 `HUDScene` 在内置浏览器里自查竖签，两次截到前卡停在 Codex 那一行、宽度是整条小签、里面却是竖签内容，像是位置和尺寸算错了。用 JS 读 `.hud-expanded-surface` 的实际位置，是正确的 28×53、贴在 Hermes 票根上。
 - 根因：`tabs_context` 显示浏览器面板是隐藏的（会话没在窗口里打开，常浩在手机上）。隐藏的页面按后台页处理，`requestAnimationFrame` 被节流，前卡的位移、尺寸动画停在中途，截图拍到的是半路帧。面板可见的那一轮截图完全正常。
 - 正确做法：截图前先看 `tabs_context` 是否「hidden」。隐藏时不用截图判断位置、尺寸和动画结果，改用 `javascript_tool` 读元素的 `getBoundingClientRect()` 确认最终几何；截图只用来看样式。能把面板显示出来就先显示（`show_pane` 只在会话开在窗口里时有效）。
-- 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。
+- 补充（#247）：隐藏面板里按截图坐标点击也不可靠。截图的坐标框架在 800×600 和 800×622 之间来回变，和模拟视口 900×700 对不上，点「去开始」落在按钮外，看着像按钮没反应。用 JS 读元素位置确认按钮在、命中检测（`elementFromPoint`）也落在按钮上之后，改用 `find` 拿到 ref，再用 `computer` 按 ref 点击（同样是真实输入事件），一次就点中了。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。；#247 的记录在 `evidence/2026-11-08-go-start/preview-check.md`。
 - 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。
