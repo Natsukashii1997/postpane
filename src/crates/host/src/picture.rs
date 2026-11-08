@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc, Mutex,
+        mpsc, Mutex, PoisonError,
     },
     time::Duration,
 };
@@ -14,7 +14,12 @@ struct Job {
     id: String,
     payload: Value,
     reply: mpsc::Sender<Result<Value, String>>,
+    /// What the picture was waiting for last, named when it times out.
+    step: &'static str,
 }
+const LOADING: &str = "loading the picture page";
+const DRAWING: &str = "drawing the panel and waiting for its data";
+const CAPTURING: &str = "waiting for WebKit to take the picture";
 #[derive(Default)]
 pub struct Pictures(Mutex<Option<Job>>);
 pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
@@ -70,6 +75,7 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
             id: id.clone(),
             payload,
             reply: tx,
+            step: LOADING,
         });
     }
     let handle = app.clone();
@@ -100,15 +106,27 @@ pub fn capture(app: &tauri::AppHandle, params: Value) -> Result<Value, String> {
         }
     })
     .map_err(|e| e.to_string())?;
-    let result = rx
-        .recv_timeout(Duration::from_secs(25))
-        .map_err(|_| "HUD picture rendering timed out".to_string())
-        .and_then(|r| r);
-    if let Ok(mut pending) = app.state::<Pictures>().0.lock() {
-        if pending.as_ref().is_some_and(|job| job.id == id) {
+    let result = rx.recv_timeout(Duration::from_secs(25));
+    let step = {
+        let pictures = app.state::<Pictures>();
+        let mut pending = pictures.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let step = pending
+            .as_ref()
+            .filter(|job| job.id == id)
+            .map(|job| job.step);
+        if step.is_some() {
             *pending = None;
         }
-    }
+        step
+    };
+    let result = result
+        .map_err(|_| {
+            format!(
+                "HUD picture rendering timed out while {}",
+                step.unwrap_or(LOADING)
+            )
+        })
+        .and_then(|r| r);
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Some(window) = handle.get_webview_window("hud-picture") {
@@ -135,13 +153,13 @@ pub fn picture_payload(window: tauri::WebviewWindow, id: String) -> Result<Value
     let app = window.app_handle();
     let mut payload = {
         let pictures = app.state::<Pictures>();
-        let pending = pictures.0.lock().map_err(|_| "Picture owner unavailable")?;
-        pending
-            .as_ref()
+        let mut pending = pictures.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let job = pending
+            .as_mut()
             .filter(|job| job.id == id)
-            .ok_or("Picture is no longer requested")?
-            .payload
-            .clone()
+            .ok_or("Picture is no longer requested")?;
+        job.step = DRAWING;
+        job.payload.clone()
     };
     let service = app.state::<Service>();
     let backend = service
@@ -190,10 +208,13 @@ pub fn picture_resize(
     }
     {
         let pictures = window.app_handle().state::<Pictures>();
-        let pending = pictures.0.lock().map_err(|_| "Picture owner unavailable")?;
-        if pending.as_ref().is_none_or(|job| job.id != id) {
-            return Err("Picture is no longer requested".into());
-        }
+        let mut pending = pictures.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let job = pending
+            .as_mut()
+            .filter(|job| job.id == id)
+            .ok_or("Picture is no longer requested")?;
+        // The page resizes itself right before it asks for the picture.
+        job.step = CAPTURING;
     }
     if !width.is_finite()
         || !height.is_finite()
