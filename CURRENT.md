@@ -26,6 +26,7 @@
   - `send_message` 发给空闲的「撤回 #264」会话：`queued` → `started`（约 18 秒）→ `done`，`get_message` 取回答「收到，互发消息测试通过」。日志只存指纹（`messages-journal.json`）。
   - 对方会话的 MCP 在开关打开前就已启动，没有 `send_message`，所以按上游的兜底直接作答，由发件方取回。
   - 未实测：第 11 次被拒、常浩插话后重新计数、关掉开关工具消失。这几项由上游的单元测试覆盖（messaging 55 条）。
+  - Codex（常浩同意后补测）：常浩自己开的 Codex 空会话还没建线程（Codex 要等第一条消息发出才写会话记录），驿窗看不到。改用 `start_session` 新开 Codex 会话 `01a1be3c…`（不绑项目目录），第一条消息送进去约 10 秒后，Codex 用 `send_message` 回信「Codex 收到，互发消息测试通过」（`m-7b694ccc4660`，回复 `m-921b3708b480`）。回信等本会话空闲才作为新一轮送进来，带首行来源标签和「还需要再说时才回」。日志里两条在同一条链上，计数 1 → 2（`messages-journal-codex.json`）。Codex 那一趟纸飞机没截到：回信那一刻侧栏窗口不在可截取的列表里。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-278-agent-messages/`，有 `settings-agent-messages-off.jpg`、`settings-agent-messages-on.jpg`、`hud-flight-envelope.jpg`（回信时 Claude 小人旁弹出信封、准备折成纸飞机）。
 - 发布与回读：`1aaf637728ae`，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-09-2026-11-09-278-agent-messages/PostPane-3600980d505d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 遗留：
@@ -33,7 +34,7 @@
   - 两个 Claude 会话互发时，纸飞机起点和终点是同一个小人（只看到信封在 Claude 旁弹出），观感要常浩看；
   - 上游插件卡片上的「Send messages」开关没搬：驿窗没有 `KnownClientCard`，两个设置都默认开；
   - #253 正文里「不借以我的名义发」一条待改；
-  - Codex 收发还没实测：本机当时没有 Codex 会话；
+  - 常浩那个空的 Codex 会话可以关掉；测试用的 Codex 会话 `01a1be3c…` 也可以归档；
   - 300 行棘轮：三个文件为了保持上游原样，进了白名单。
 - 本轮新坑：无
 - skill 进化：无
