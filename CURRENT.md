@@ -6,6 +6,29 @@
 
 
 
+## Codex 调接力工具免批准（#286 方案 1A）（2026-11-09，Claude，常浩回「做 1A」；已提交、PR 待合并、已装 `7126cf631f47` 回读一致后被并行会话覆盖）
+
+- 时间：开工 `2026-11-09 13:19`。来由：#282 实测时 Codex 调 `relay_to_chatgpt` 每次都要批准，调用会挂住；方案见 `docs/design/Codex调接力工具的批准卡-方案-2026-11-09.md`（#286，PR #287 已合并），常浩选 1A。
+- 改了哪些文件：
+  - 本机配置（不在仓库）：`~/.codex/config.toml` 在 `[mcp_servers.agent-hud]` 后加 `[mcp_servers.agent-hud.tools.relay_to_chatgpt]`、`approval_mode = "approve"` 两行；原文件备份在证据目录 `config.toml.before-1a`。
+  - `src/packages/app/src/settings/AiAccessPane.tsx`：「AI 接入」页 Codex 一行补一句「Codex 每次调接力工具默认要你批准；在 ~/.codex/config.toml 给 relay_to_chatgpt 设 approval_mode = "approve" 就免批准（#286，新开的线程才生效）」；行数不变。
+  - `AGENTS.md`「对外开放」发起接力一行同步同一说明。
+  - 方案文档加第六节「1A 实施结果」；`docs/LESSONS.md` 新增 L-38。
+- 测试：`pnpm run check` 退出码 0；`pnpm test`：Rust 合计 `924 passed; 0 failed`，前端 `ℹ pass 382` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`（写本节前跑的，写完后复跑见 PR）。
+- 验证（实机）：
+  - 新开的 Codex 线程 `01a1bec7-a276-…`（驿窗 `start_session`，13:28）：调用到完成 0.02 秒，没出批准，建单 `h1a1bec7ca0802`。
+  - 10:57 开的老线程 `01a1be3c…`（13:22）：照样触发 `PermissionRequest` 钩子，60 秒没返回；模型 13:23:12 终止等待后钩子结束、侧栏没留卡、调用没执行。结论：配置只对新开的线程生效（L-38）。
+  - `codex exec` 两组（`approve`、对照 `auto`）都直接执行，不能当证据；多建了测试接力单 `h1a1bec6d6da00`、`h1a1bec74c5b01`。
+  - 「AI 接入」页没截图：请求驿窗的电脑控制授权被拒。改为核对打包产物 `src/apps/desktop/dist/assets/SettingsPanes-D1Wp8WTr.js` 里有新文字、已装与产物 shasum 一致。
+- 截图：无（见上）。证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/`（`tests.log`、`build.log`、`exec-test/`、`config.toml.before-1a`）。
+- 发布与回读：`install.sh` 输出「产物 7126cf631f47 / 已装 7126cf631f47」，13:43:11 启动。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/PostPane-20ebf1fa5d5d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**13:45:18 被 B 单会话（#283，`283-codex-transcript`）用它的分支包覆盖，现装 `3f9546077c11`，不含本轮文字**；没有装回去，免得两边来回覆盖（L-05），合进 main 后下次从 main 装机带上。
+- 遗留与范围外发现：
+  - 已经开着的 Codex 线程（含测试线程 `01a1be3c…`）仍要逐次批准，重开线程才免。
+  - 方案 2A（那一轮结束后驿窗替常浩拒绝并撤卡）要先发改动确认，未做。
+  - 本轮共多建了 3 张测试接力单（`h1a1bec6d6da00`、`h1a1bec74c5b01`、`h1a1bec7ca0802`），ChatGPT 那边各开了一个测试会话。
+- 本轮新坑：L-38
+- skill 进化：无
+
 ## 接力 C：Codex 发起时的侧栏表现与左滑发起（#282）（2026-11-09，Claude，常浩改动确认「四项都改」；已提交、PR 待常浩实测后合并、已发布 `491ba714697a` 回读通过）
 
 - 时间：开工 `2026-11-09 11:28`。来由：#253 方案的 C 单；改的是定过的内容（#171、#218 纸飞机与方章，2026-11-06 甲·时间线展开卡，#128 左滑发起），2026-11-09 发改动确认，常浩回「四项都改」。
