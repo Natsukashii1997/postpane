@@ -339,6 +339,8 @@
 - 证据：`main.log` 第 61278、62034 行（2026-11-09 12:02:37、12:25:37）。
 - 可提议提升为全局坑：换个项目也成立（Claude 桌面应用里的任何长命令都可能碰上）。
 - 补正（#292）：同一现象还有一条已查实的原因：命令被 Claude Code 的安全检查拦下，批准卡只挂在驿窗侧栏，见 L-41。
+- 补正（2026-11-09，agent-kit#49 实测后）：两次大概率都不是上面写的原因，而是和 L-41 同一条链。两条命令都是 `source ~/.cargo/env` 之后 `rm -f $L/*.log`；用桌面版自带的 Claude Code 2.1.317 实测，`source` 之后 rm 目标是「变量 + 通配符」时，危险 rm 安全检查要求人工批准（原话「The target '$L/*.log' is a shell variable expansion: when $L is unset or empty it becomes `/`…」）。第 2 次「命令一行都没执行」也对得上：检查在执行前就停住了。第 1 次的 `pkill -f` 自杀不能排除，但不是必要条件。正确做法补一条：rm 目标里的变量写成 `"${L:?}"`。证据：`~/Library/Application Support/agent-kit/evidence/2026-11-09-49-bash-precheck/probes/out4/x_source_var_glob.txt`。
+- 提升：已提升为全局 G-25（2026-11-09）。
 
 ## L-38 改了 Codex 的 MCP 工具批准配置，已经开着的 Codex 线程照旧要批准；`codex exec` 不能拿来做对照（2026-11-09）
 
@@ -378,6 +380,12 @@
   - 会话弹「stopped responding」时，在 `main.log` 搜 `timed out after`；`last_tool_name=Bash` 且 `outstanding_host_request=none` 时，先看侧栏有没有挂着的权限卡。
 - 证据：`~/Library/Logs/Claude/main.log` 第 64221、65243 行；复现输出与预览截图在 `~/Library/Application Support/postpane/evidence/2026-11-09-292-start-bash/`。
 - 升级：可提议提升为全局坑（任何项目在 Claude 桌面版里写这类命令都会碰上），等常浩批。终端里的 Claude Code 是否同时弹窗未核实。
+- 补正（2026-11-09，agent-kit#49）：
+  - 触发写法不止「解析不了」一类。rm 目标拿不准也会要批准：变量加通配符（`"$O"/*.zip`、`$L/*.log`）、整目录通配（`shots/*`）、`$TMPDIR` 下的通配。当天 6 次里有 3 次是这类（10:10、12:02、12:25）。同样的写法在先 `cd` 到工作目录外、或有 `source` 时才被拦，其他时候能过，所以容易误以为没事。
+  - 解析类比上面写的窄：单独的「美元符加左括号」、heredoc 里的命令替换都不会出事；出事的是「两个美元符加左括号」（前面带点的 Playwright 写法除外）和「两个反斜杠加美元符加左括号」。上面「正确做法」第一条可以照旧遵守，只是范围比实际宽。
+  - 实测能过的改写：`"${O:?}"/*.zip`、`shots/*.png`、要嵌的代码先写成文件。
+  - 升级：agent-kit#49（PR #50）加了 Bash 预检钩子 `hooks/bash-precheck.mjs`，已装进本机，执行前当场拒绝这几类写法并给出改写。证据 `~/Library/Application Support/agent-kit/evidence/2026-11-09-49-bash-precheck/`。
+- 提升：已提升为全局 G-25（2026-11-09）。
 
 ## L-42 审核纸条上的行用面板墨色，`get_hud_screenshot` 看着清楚，换成纸张外观后浅字落在浅纸上看不清（2026-11-09）
 
