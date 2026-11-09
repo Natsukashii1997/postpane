@@ -700,7 +700,7 @@ function LiveRow({
         throw new Error(
           zh ? "只能在驿窗里发起接力" : "Only PostPane can start a handoff",
         );
-      const left = await services.relayLaunch(session.id, launch);
+      const left = await services.relayLaunch(session, launch);
       // Words left now show on the second line (`waits`, kept by the host
       // in the snapshot) until the session's handoff takes over.
       if (ask === asked.current)

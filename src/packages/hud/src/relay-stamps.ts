@@ -1,19 +1,20 @@
 import type { Handoff, Snapshot } from "@agent-hud/protocol";
 import { STALE_REVIEW } from "./chatgpt-desk.ts";
+import { doerOf, type Doer } from "./alerts/handoff-doer.ts";
 import { STORY } from "./scene/flight-plan.ts";
 
 /** What relays print on the stubs (#171), by the phase they are in rather
  * than by the letter flying: ChatGPT's reading gives way to a blue 「审」
- * stamp while it has the words, rippling while it answers; Claude's stub
- * takes the same stamp as 「回」 over its reading while an answer waits for the
- * person. `since` is when the words moved (the step), so a stamp that comes
+ * stamp while it has the words, rippling while it answers; the doer's stub
+ * (Claude's, or Codex's for a review Codex handed over, #282) takes the same
+ * stamp as 「回」 over its reading while an answer waits for the person. `since` is when the words moved (the step), so a stamp that comes
  * while its letter is still in the air waits for it to land. */
 export interface RelayStamps {
   /** ChatGPT has the words of a relay (delivered or answering). */
   review: boolean;
   /** ChatGPT is answering one now. */
   answering: boolean;
-  /** An answer is back with Claude, waiting for the person. */
+  /** An answer is back with the doer, waiting for the person. */
   replied: boolean;
   /** When the latest of those words moved, in milliseconds. */
   since: number | null;
@@ -59,13 +60,13 @@ const latest = (times: (number | null)[]) =>
     null,
   );
 
-/** The stamps for ChatGPT's mark or Claude's (`end`); none for other
- * agents, or when no relay stands where it would print one. `yields`: the
+/** The stamps for ChatGPT's mark or a doer's (`end`: Claude, Codex); none
+ * for other agents, or when no relay stands where it would print one. `yields`: the
  * ChatGPT stub has something more pressing to say (answering, a reply to
  * read), so an overdue review prints nothing meanwhile (owner, #213). */
 export function relayStamps(
   snapshot: Pick<Snapshot, "handoffs">,
-  end: "chatgpt" | "claude" | null,
+  end: "chatgpt" | Doer | null,
   now = Date.now(),
   yields = false,
 ): RelayStamps | undefined {
@@ -115,8 +116,10 @@ export function relayStamps(
       until: turns.length ? Math.min(...turns) : null,
     };
   }
-  if (end === "claude") {
-    const replied = open.filter((handoff) => handoff.phase === "replied");
+  if (end) {
+    const replied = open.filter(
+      (handoff) => handoff.phase === "replied" && doerOf(handoff) === end,
+    );
     if (!replied.length) return undefined;
     return {
       review: false,

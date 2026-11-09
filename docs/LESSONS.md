@@ -325,3 +325,16 @@
 - 正确做法：钩子在等待时检查父进程，换了就结束等待（`hooks/client_unix.rs`），由连接断开走原有撤卡逻辑。进程登记只用来结束「登记过、进程已死」的会话；从没登记过的会话不能当作已结束，因为终端会话第一次回复前可能还没登记。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-251-process-gone/`：`after-kill-15s.png` 改前卡还挂着，`after-hook-exit-3s-side.png` 孤儿钩子退出后撤卡；`accept/1-card-side.png`、`accept/2-after-kill-side.png` 装机后 kill 约 1.5 秒撤卡。
 - 升级：已写成测试 `hooks::transport::client::tests` 两条、`claude::processes::tests` 六条、`presentation::tests::a_session_whose_process_was_killed_is_no_longer_running`。
+
+## L-37 启动全量测试的那条 Bash 一直不返回，桌面应用判会话「Claude Code stopped responding」（2026-11-09）
+
+- 现象：#282 两次用 Bash 的 `run_in_background` 启动「check → test → node」三条全量，工具调用都没返回，约 16 分钟后应用弹「Claude Code stopped responding」，常浩只能点「Try again」。应用日志 `~/Library/Logs/Claude/main.log` 两次都是 `timed out after 1016s / 970s of inactivity … last_tool_name=Bash`。
+- 根因：
+  - 第 1 次：命令里先跑了 `pkill -f 'cargo test --workspace'`。`-f` 按整行匹配，包着这条命令的那个 shell 的命令行里也有这串字，被它自己杀了，工具调用永远等不到结果（L-33 的另一面）。
+  - 第 2 次：命令一行都没执行（日志文件的时间没变），卡在应用的后台任务启动上，原因没查清；当天 10:10 别的会话也出现过同样的超时。
+- 正确做法：
+  - 不用 `pkill -f` 停自己的测试，用后台任务 ID（TaskStop）停。
+  - 长时间的全量测试写成脚本，用 `nohup 脚本 > 日志 2>&1 &` 自己放到后台，Bash 当场返回；再用 Monitor 按日志里的「exit」行等结果。
+  - 会话弹「stopped responding」时，先在 `main.log` 里搜 `timed out after`，看 `last_tool_name` 是哪个工具卡住了。
+- 证据：`main.log` 第 61278、62034 行（2026-11-09 12:02:37、12:25:37）。
+- 可提议提升为全局坑：换个项目也成立（Claude 桌面应用里的任何长命令都可能碰上）。

@@ -182,8 +182,8 @@ export function vendorsFromSnapshot(
       snapshot,
       key === vendorKey("chatgpt")
         ? "chatgpt"
-        : key === vendorKey("claude")
-          ? "claude"
+        : key === "claude" || key === "codex"
+          ? key
           : null,
       now,
       desk?.pressing,

@@ -528,3 +528,26 @@ test("rounds count from one once the person spoke up in Claude (#258)", () => {
     "one round is left",
   );
 });
+
+test("a review Codex handed over is found by its thread and speaks of Codex (#282)", () => {
+  const codexs = handoff({
+    doer: "codex",
+    claudeSession: "t1",
+    phase: "replied",
+    phaseAt: T + 11 * minute,
+    steps: [...handoff().steps!, reply],
+  });
+  assert.equal(handoffFor([codexs], "codex", "t1")?.id, "h1");
+  assert.equal(handoffFor([codexs], "claude", "t1"), undefined);
+  const rows = timeline(codexs, T + 12 * minute, true);
+  assert.equal(rows[0].who, "codex");
+  assert.equal(rows[0].title, "Codex 做完本轮改动");
+  assert.ok(rows.some((row) => row.title === "转回 Codex「按意见处理」"));
+  assert.ok(!rows.some((row) => row.title.includes("Claude")));
+  assert.equal(relayLegend(codexs, true).trip, "Codex ⇄ ChatGPT · 第 1 / 2 轮");
+  // A Claude review reads as before.
+  assert.equal(
+    timeline(handoff(), T + 2 * minute, true)[0].title,
+    "Claude 做完本轮改动",
+  );
+});

@@ -6,6 +6,33 @@
 
 
 
+## 接力 C：Codex 发起时的侧栏表现与左滑发起（#282）（2026-11-09，Claude，常浩改动确认「四项都改」；已提交、PR 待常浩实测后合并、已发布 `491ba714697a` 回读通过）
+
+- 时间：开工 `2026-11-09 11:28`。来由：#253 方案的 C 单；改的是定过的内容（#171、#218 纸飞机与方章，2026-11-06 甲·时间线展开卡，#128 左滑发起），2026-11-09 发改动确认，常浩回「四项都改」。
+- 改了哪些文件：
+  - `host/src/handoff.rs`：纸飞机起落点改成发起方（Codex 发起时在 ChatGPT 与 Codex 之间飞）；自动往返的停下理由、转回失败等时间线文字按发起方写（`by_doer`）；左滑发起收 Codex 线程，话经 Codex 队列送（request id 用这次左滑的 code），`launches.json` 记 `doer`；`relay_launch` 多收 `source`。
+  - `host/src/handoff/texts.rs`（新）：时间线文字函数从 handoff.rs 原样挪出（为 300 行棘轮），并同步 #177 改过的「改为排进待发送队列」那句。
+  - `platform/.../handoffs/doer.rs`（新）：`doer_name`、`by_doer`；`set_doer` 挪进来；`overdue` 的「2 小时没交回复审」按发起方写。
+  - 前端：`alerts/handoff-doer.ts`（新，`handoffFor`、`doerSession`、`chatgptSession` 挪进来，认 Codex 线程）；`handoff-card.ts` 时间线、进度行、航空框文字按发起方写，「意见已排队」Claude 沿用 #177 原句、Codex 写「Codex 空闲了就送进去」；`HandoffCard.tsx` 头像、名字、「回到 … 会话」「转回 …」按发起方，头像挪到 `HandoffAvatar.tsx` 并加 Codex 云朵；`relay-stamps.ts`、`model.ts`「回」章盖在发起方脚上；`relay-tray.ts` Codex 会话也有「审核 / 讨论」；`app/lib/relay-launch.ts`（新）。
+  - `protocol/src/handoffs.ts`（新）：`Handoff`、`HandoffStep` 从 index.ts 挪出（驿窗自己的类型，不属上游对照范围），加 `doer`。
+  - 同步：「AI 接入」页「谁发起」、`AGENTS.md` 功能清单、行数基线；`docs/LESSONS.md` L-37。
+- 测试：变基到 `740f5ef` 后跑，原样结果如下。
+  - `pnpm run check` 退出码 0；
+  - `pnpm test`：Rust 合计 `924 passed; 0 failed`（新增 4 条：Codex 发起的纸飞机、时间线写 Codex、左滑送进 Codex 队列、`by_doer`），前端 `ℹ pass 382` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`（新增：「回」章归属、Codex 接力认线程且写 Codex、Codex 会话有左滑）；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机）：
+  - L-35 对照：装机前后侧栏各隔 2 秒截两张，Claude 格（螃蟹 +「答」）、ChatGPT、Hermes 不变，Codex 云朵两张表情不同（在动）。`compare-side.png`。
+  - 接力 `h1a1beb129a000`（`doer: codex`，线程 `01a1be3c…`）：13:04:11 送到 ChatGPT，13:04:13 回「收到」，时间线「回信没写结论，自动往返停下，交还常浩」。连拍拍到回信那趟纸飞机从 ChatGPT 飞到 Codex 云朵（`flight-sheet.png` 第 3–5 帧），Codex 脚换成接力纸。
+  - 发起方式：请 Codex 线程自己调用两次都没返回。查实是 Codex 每次调 `relay_to_chatgpt` 要先批准，批准卡挂在侧栏 Codex 格上（12:45:27 那条 `permission`，脚上「批」章），Codex 那边只看到调用不返回。第三次改为按 MCP 协议直接调驿窗的工具、带同一个 Codex 线程 id（`scratchpad/mcp-relay.mjs`），0.1 秒建单。
+  - **未做（要常浩动手）**：①Codex 脚上的「回」章：被那张过期的批准卡挡着（定稿规则「答 / 批」优先），拒掉批准卡后才看得到；②展开卡上的「Codex」文字与「回到 Codex 会话」按钮；③Codex 会话左滑「审核」（L-09 侧栏悬停面板电脑控制点不动）。三项都有单测覆盖。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-282-codex-relay-side/`：`before-*`、`after-*`、`compare-side.png`、`flight-sheet.png`、`burst/`。
+- 发布与回读：`491ba714697a`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-282-codex-relay-side/PostPane-c9a5d531025f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留与范围外发现：
+  - Codex 调 `relay_to_chatgpt` 要逐次批准，批准前调用一直挂着；Codex 停下后批准卡仍挂在侧栏。要不要给这个工具免批准、批准卡何时撤，另开一单再议。
+  - B 单 #283（Codex 插话后重算轮数、转回回执推进）未做。
+- 本轮新坑：L-37
+- skill 进化：无
+
 ## 接力自动往返：会话进程被停时后台续接 Claude（#175）（2026-11-09，Claude，常浩「按方案开工」「可以发」「放行」；已提交、PR #177 合并中、已发布 `0d33a93ee7ec` 回读通过，文案修正待合并后重装）
 
 - 时间：开工 `2026-11-07 08:46`。来由：常浩实测接力，ChatGPT 判「需修改」后没有转回 Claude，侧栏全是「待你看」，要人工介入。查桌面版日志和三次实验后确认：桌面版在内存紧张时会回收空闲会话的 Claude 进程（`CliGovernor pressure evicting`），而打开会话只会「预热」，不会重启进程。所以排队的话没人领。

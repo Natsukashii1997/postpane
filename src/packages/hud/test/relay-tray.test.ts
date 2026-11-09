@@ -28,7 +28,7 @@ const session = (extra: Partial<Session>): Session =>
     ...extra,
   }) as Session;
 
-test("only a Claude Code session on this machine can hand its work over", () => {
+test("a Claude Code session on this machine or a Codex thread can hand its work over", () => {
   assert.deepEqual(trayKinds(session({})), [
     "review",
     "test",
@@ -37,7 +37,14 @@ test("only a Claude Code session on this machine can hand its work over", () => 
     "rm",
   ]);
   assert.deepEqual(trayKinds(session({ client: "claude-cloud" })), ["rm"]);
-  assert.deepEqual(trayKinds(session({ source: "codex" })), ["rm"]);
+  // #282: Codex threads hand their work over too.
+  assert.deepEqual(trayKinds(session({ source: "codex" })), [
+    "review",
+    "test",
+    "cont",
+    "disc",
+    "rm",
+  ]);
   assert.deepEqual(trayKinds(session({ source: "hermes" })), ["rm"]);
 });
 

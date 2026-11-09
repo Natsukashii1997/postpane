@@ -147,13 +147,13 @@ export function AiAccessPane({
                 t("Started by", "谁发起"),
                 <>
                   {t(
-                    "A Claude Code session: it calls ",
-                    "Claude Code 会话：自己调 ",
+                    "A Claude Code session or Codex thread: it calls ",
+                    "Claude Code 或 Codex 会话：自己调 ",
                   )}
                   {path("relay_to_chatgpt")}
                   {t(
-                    ", or you swipe Review or Discuss in the HUD",
-                    "，或你在侧栏左滑「审核」「讨论」",
+                    ", or you swipe Review or Discuss on its row in the HUD",
+                    "，或你在侧栏它那一行左滑「审核」「讨论」",
                   )}
                 </>,
               ],

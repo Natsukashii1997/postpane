@@ -1,6 +1,8 @@
-import type { Handoff, HandoffStep, Session } from "@agent-hud/protocol";
+import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { paperOf, type Paper } from "../paper.ts";
+import { doerName, doerOf } from "./handoff-doer.ts";
+export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */
@@ -8,10 +10,8 @@ import { paperOf, type Paper } from "../paper.ts";
 /** How many reviews a handoff is meant to take (handoffs.rs `ROUNDS`). */
 export const ROUNDS = 2;
 
-const CHATGPT_PREFIX = "chatgpt:";
-
 /** Who a timeline row is about: the two sides, or PostPane passing words. */
-export type Who = "claude" | "chatgpt" | "post";
+export type Who = "claude" | "codex" | "chatgpt" | "post";
 
 export interface Row {
   who: Who;
@@ -32,29 +32,6 @@ export type Action =
 
 const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
-
-/** The live handoff a session belongs to: a Claude Code session by its id,
- * a ChatGPT conversation by `chatgpt:<id>`. */
-export function handoffFor(
-  handoffs: readonly Handoff[] | undefined,
-  source: string,
-  sessionId: string | null | undefined,
-): Handoff | undefined {
-  if (!sessionId || !handoffs) return undefined;
-  const newest = [...handoffs].reverse();
-  if (source === "claude")
-    return newest.find(
-      (handoff) => live(handoff) && handoff.claudeSession === sessionId,
-    );
-  if (source === "chatgpt" && sessionId.startsWith(CHATGPT_PREFIX)) {
-    const conversation = sessionId.slice(CHATGPT_PREFIX.length);
-    return newest.find(
-      (handoff) =>
-        live(handoff) && handoff.chatgptConversation === conversation,
-    );
-  }
-  return undefined;
-}
 
 /** How many reviews were asked for, since its rounds last began (#258). */
 export const reviews = (handoff: Handoff) =>
@@ -128,12 +105,13 @@ export function relayLegend(
   handoff: Handoff,
   zh: boolean,
 ): { trip: string; verdict?: string } {
+  const D = doerName(handoff);
   const { at, of } = round(handoff);
   const reply = lastReply(handoff);
   return {
     trip: zh
-      ? `Claude ⇄ ChatGPT · 第 ${at} / ${of} 轮`
-      : `Claude ⇄ ChatGPT · round ${at} / ${of}`,
+      ? `${D} ⇄ ChatGPT · 第 ${at} / ${of} 轮`
+      : `${D} ⇄ ChatGPT · round ${at} / ${of}`,
     verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
   };
 }
@@ -186,6 +164,7 @@ export function progressLine(handoff: Handoff, now: number, zh: boolean) {
     : line;
 }
 function progress(handoff: Handoff, now: number, zh: boolean) {
+  const D = doerName(handoff);
   const at = handoff.phaseAt ?? handoff.updatedAt;
   switch (phaseOf(handoff)) {
     case "sending":
@@ -210,11 +189,15 @@ function progress(handoff: Handoff, now: number, zh: boolean) {
           : `Claude runs in the background · ${since(handoff.wakingSince, now, zh)}`;
       if (handoff.queuedAt)
         return zh
-          ? "意见已排队 · 会话不在线就在后台续接"
-          : "Answer queued · runs in the background if the session stays quiet";
+          ? D === "Codex"
+            ? "意见已排队 · Codex 空闲了就送进去"
+            : "意见已排队 · 会话不在线就在后台续接"
+          : D === "Codex"
+            ? "Answer queued · goes in once Codex is idle"
+            : "Answer queued · runs in the background if the session stays quiet";
       return zh
         ? `已转回，按意见修改 · ${since(at, now, zh)}`
-        : `Back with Claude · ${since(at, now, zh)}`;
+        : `Back with ${D} · ${since(at, now, zh)}`;
     case "failed":
       return zh ? "没送出去 · 可重试" : "Not sent · retry";
     default:
@@ -259,17 +242,18 @@ const oneLine = (text: string | null | undefined) =>
 
 /** What the auto round trip, just turned on, waits for. */
 function waitsFor(handoff: Handoff, zh: boolean): string | undefined {
+  const D = doerName(handoff);
   switch (phaseOf(handoff)) {
     case "returned":
       return zh
-        ? "等 Claude 改完送审，回信需修改就自动转回"
-        : "Waits for Claude to hand it over; answers go back by themselves";
+        ? `等 ${D} 改完送审，回信需修改就自动转回`
+        : `Waits for ${D} to hand it over; answers go back by themselves`;
     case "sending":
     case "delivered":
     case "working":
       return zh
-        ? "等 ChatGPT 回信，需修改就自动转回 Claude"
-        : "Waits for ChatGPT; changes needed go back to Claude by themselves";
+        ? `等 ChatGPT 回信，需修改就自动转回 ${D}`
+        : `Waits for ChatGPT; changes needed go back to ${D} by themselves`;
     default:
       return undefined;
   }
@@ -277,6 +261,8 @@ function waitsFor(handoff: Handoff, zh: boolean): string | undefined {
 
 /** The timeline: each step done, then where it stands, then what is to come. */
 export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
+  const D = doerName(handoff);
+  const W = doerOf(handoff);
   const rows: Row[] = [];
   const newest = handoff.steps?.at(-1);
   let asks = 0,
@@ -290,16 +276,16 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       case "work":
         works++;
         rows.push({
-          who: "claude",
+          who: W,
           time,
           title:
             works > 1
               ? zh
-                ? "Claude 按意见改完"
-                : "Claude made the changes"
+                ? `${D} 按意见改完`
+                : `${D} made the changes`
               : zh
-                ? "Claude 做完本轮改动"
-                : "Claude finished this round",
+                ? `${D} 做完本轮改动`
+                : `${D} finished this round`,
           sub: oneLine(step.text) || undefined,
           state: "done",
         });
@@ -354,11 +340,11 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           time,
           title: step.auto
             ? zh
-              ? "驿窗自动转回 Claude「按意见处理」"
-              : "PostPane sent it back to Claude by itself"
+              ? `驿窗自动转回 ${D}「按意见处理」`
+              : `PostPane sent it back to ${D} by itself`
             : zh
-              ? "驿窗转回 Claude「按意见处理」"
-              : "PostPane sent it back to Claude",
+              ? `驿窗转回 ${D}「按意见处理」`
+              : `PostPane sent it back to ${D}`,
           sub: withDelivery(
             zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
             step.delivery,
@@ -372,8 +358,8 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           who: "post",
           time,
           title: zh
-            ? "驿窗请 Claude 交回复审"
-            : "PostPane asked Claude to hand it over again",
+            ? `驿窗请 ${D} 交回复审`
+            : `PostPane asked ${D} to hand it over again`,
           sub: withDelivery(undefined, step.delivery, zh),
           state: "done",
         });
@@ -472,13 +458,13 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
   const todoBack: Row = {
     who: "post",
     time: "",
-    title: zh ? "驿窗转回 Claude「按意见处理」" : "Back to Claude",
+    title: zh ? `驿窗转回 ${D}「按意见处理」` : `Back to ${D}`,
     state: "todo",
   };
   const todoFix: Row = {
-    who: "claude",
+    who: W,
     time: "",
-    title: zh ? "Claude 按意见修改" : "Claude works on it",
+    title: zh ? `${D} 按意见修改` : `${D} works on it`,
     state: "todo",
   };
   switch (phaseOf(handoff)) {
@@ -515,7 +501,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     case "replied":
       rows.push({
         ...todoBack,
-        title: zh ? "转回 Claude「按意见处理」" : "Send it back to Claude",
+        title: zh ? `转回 ${D}「按意见处理」` : `Send it back to ${D}`,
         sub: zh ? "等你决定：转回，或结束接力" : "Your call: send back, or end",
         state: "await",
       });
@@ -523,17 +509,21 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       break;
     case "returned":
       rows.push({
-        who: "claude",
+        who: W,
         time: curTime,
-        title: zh ? "Claude 按意见修改" : "Claude works on it",
+        title: zh ? `${D} 按意见修改` : `${D} works on it`,
         sub: handoff.wakingSince
           ? zh
             ? `驿窗在后台续接 · ${since(handoff.wakingSince, now, zh)}`
             : `Running in the background · ${since(handoff.wakingSince, now, zh)}`
           : handoff.queuedAt
             ? zh
-              ? "意见已排队 · 会话 3 分钟仍不在线就在后台续接"
-              : "Answer queued · runs in the background if the session stays quiet for 3 minutes"
+              ? W === "codex"
+                ? "意见已排队 · Codex 空闲了就送进去"
+                : "意见已排队 · 会话 3 分钟仍不在线就在后台续接"
+              : W === "codex"
+                ? "Answer queued · goes in once Codex is idle"
+                : "Answer queued · runs in the background if the session stays quiet for 3 minutes"
             : lasted,
         state: "cur",
       });
@@ -587,26 +577,4 @@ export function actions(handoff: Handoff): Action[] {
     default:
       return ["end", ...open];
   }
-}
-
-/** The Claude Code session a handoff is about, when listed. */
-export function claudeSession(
-  handoff: Handoff,
-  sessions: readonly Session[],
-): Session | undefined {
-  return sessions.find(
-    (session) =>
-      session.source === "claude" && session.id === handoff.claudeSession,
-  );
-}
-
-/** The ChatGPT conversation a handoff is reviewed in, as a session to open. */
-export function chatgptSession(
-  handoff: Handoff,
-  sessions: readonly Session[],
-): Session | undefined {
-  const conversation = handoff.chatgptConversation;
-  if (!conversation) return undefined;
-  const id = `${CHATGPT_PREFIX}${conversation}`;
-  return sessions.find((session) => session.id === id);
 }

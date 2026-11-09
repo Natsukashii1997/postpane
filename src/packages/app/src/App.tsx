@@ -56,6 +56,7 @@ import {
 } from "./lib/use-hud-config";
 import { useHUDGeometry } from "./lib/use-hud-geometry";
 import { storageKeys } from "./lib/storage-keys";
+import { relayLaunch } from "./lib/relay-launch";
 import type { HUDConfig } from "@agent-hud/hud/model";
 import type { Session, Snapshot } from "./lib/types";
 import appIcon from "./assets/app-icon.png";
@@ -672,14 +673,7 @@ function AppContent({
       if (!isTauri()) throw new Error("只能在驿窗里操作接力");
       return invoke("handoff_act", { id, action });
     },
-    // 左滑发起: the sessions panel asks a Claude session to relay its work.
-    relayLaunch: async (sessionId, kind) => {
-      if (!isTauri()) throw new Error("只能在驿窗里发起接力");
-      return invoke<{ queued: boolean; already: boolean }>("relay_launch", {
-        sessionId,
-        kind,
-      });
-    },
+    relayLaunch,
     selectSession: (session) => {
       setSelectedSession(session);
       if (isTauri()) {
