@@ -106,6 +106,8 @@ export function QuietRelayRow({
           letterSpacing: "0.04em",
           lineHeight: 1,
           whiteSpace: "nowrap",
+          // Every row's title starts at one place (#288).
+          fontVariantNumeric: "tabular-nums",
         }}
       >
         {zh ? `接力 ${at}/${of}` : `Relay ${at}/${of}`}
