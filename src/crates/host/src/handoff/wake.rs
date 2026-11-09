@@ -26,7 +26,7 @@ impl Desk {
                 continue;
             };
             let taken = lines
-                .left(CLAUDE, &session, &prompt)
+                .left(CLAUDE, &session, &prompt, "")
                 .is_some_and(|(state, _)| state != "waiting");
             if taken || !lines.stopped(&session) || !lines.withdraw(&session, &prompt) {
                 continue;

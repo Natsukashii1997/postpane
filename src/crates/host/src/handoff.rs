@@ -78,8 +78,15 @@ pub(crate) trait Lines {
     fn queue(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
     /// How words left for a session stand (`waiting`, `taken`, `started`,
     /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
-    /// the plugin's files are gone.
-    fn left(&self, doer: &str, session: &str, id: &str) -> Option<(String, Option<String>)>;
+    /// the plugin's files are gone. A Codex thread's are followed by `words`
+    /// in its rollout too (#283).
+    fn left(
+        &self,
+        doer: &str,
+        session: &str,
+        id: &str,
+        words: &str,
+    ) -> Option<(String, Option<String>)>;
     /// Who began a Claude Code session's current turn, and when (#258);
     /// None when its transcript cannot tell.
     fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)>;
@@ -1022,14 +1029,14 @@ impl Desk {
                         h.doer.clone().unwrap_or_else(|| CLAUDE.into()),
                         h.claude_session.clone(),
                     ),
-                    step.prompt.clone()?,
+                    (step.prompt.clone()?, step.text.clone().unwrap_or_default()),
                     delivery,
                 ))
             })
             .collect::<Vec<_>>();
         let mut changed = false;
-        for (id, (doer, session), prompt, was) in pending {
-            let Some((state, reason)) = lines.left(&doer, &session, &prompt) else {
+        for (id, (doer, session), (prompt, words), was) in pending {
+            let Some((state, reason)) = lines.left(&doer, &session, &prompt, &words) else {
                 continue;
             };
             let delivery = match state.as_str() {
@@ -1308,10 +1315,12 @@ fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     if !launch.pending() {
         return;
     }
+    let words = launch_text(&launch.kind, &launch.code).unwrap_or_default();
     match lines.left(
         launch.doer.as_deref().unwrap_or(CLAUDE),
         session,
         &launch.id,
+        &words,
     ) {
         Some((state, reason)) => match state.as_str() {
             "taken" => {
@@ -1734,6 +1743,8 @@ mod tests {
         left_by: RefCell<HashMap<String, (String, Option<String>)>>,
         /// Who began the Claude session's current turn, and when (#258).
         opener: RefCell<Option<(Opener, i64)>>,
+        /// The words each look at words left was asked with (#283).
+        words: RefCell<Vec<String>>,
         /// The session's process stopped (L-14).
         stopped: std::cell::Cell<bool>,
         /// Queued words cannot be taken back (the session took them).
@@ -1836,7 +1847,14 @@ mod tests {
             }
             self.put("queue", session, id, text)
         }
-        fn left(&self, _doer: &str, session: &str, id: &str) -> Option<(String, Option<String>)> {
+        fn left(
+            &self,
+            _doer: &str,
+            session: &str,
+            id: &str,
+            words: &str,
+        ) -> Option<(String, Option<String>)> {
+            self.words.borrow_mut().push(words.to_owned());
             if let Some(state) = self.left_by.borrow().get(id) {
                 return Some(state.clone());
             }
@@ -2419,6 +2437,34 @@ mod tests {
             Launched::AlreadyQueued
         );
         assert_eq!(lines.sent.borrow().len(), 1);
+    }
+
+    /// #283: words back to a Codex thread are followed by what they said,
+    /// which its rollout shows a turn begun with once Codex started on them.
+    #[test]
+    fn words_back_to_a_codex_thread_are_followed_by_their_words() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = codex_opened(&desk, &lines, None);
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        let (prompt, delivery) = last_back(&desk, 5);
+        assert_eq!(delivery, "waiting");
+        let said = desk
+            .lock()
+            .get(&handoff.id)
+            .unwrap()
+            .steps
+            .iter()
+            .rev()
+            .find(|s| s.kind == StepKind::Back)
+            .and_then(|s| s.text.clone())
+            .unwrap();
+        assert!(said.contains("少一项"));
+        left_by(&lines, &prompt, "started", None);
+        assert!(desk.track(&lines, 6));
+        assert_eq!(lines.words.borrow().last(), Some(&said));
+        assert_eq!(last_back(&desk, 6).1, "started");
     }
 
     /// A review started without naming its doer stays Claude Code's.

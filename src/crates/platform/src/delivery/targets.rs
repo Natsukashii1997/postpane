@@ -28,6 +28,19 @@ impl LocalClients {
     pub fn update_targets(&self, targets: Vec<SessionTarget>) {
         *self.targets.lock().unwrap_or_else(PoisonError::into_inner) = targets;
     }
+    /// Make one session known, keeping the rest (#283): a handoff's words go
+    /// back to the very thread that asked, which the projection may not
+    /// list (it is empty until agent messages first run). One known already
+    /// keeps its entry, so a child stays a child.
+    pub fn know_target(&self, target: SessionTarget) {
+        let mut targets = self.targets.lock().unwrap_or_else(PoisonError::into_inner);
+        if !targets
+            .iter()
+            .any(|t| t.provider == target.provider && t.session_id == target.session_id)
+        {
+            targets.push(target);
+        }
+    }
     pub fn capabilities(&self) -> Vec<Capability> {
         vec![
             Capability {

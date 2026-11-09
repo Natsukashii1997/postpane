@@ -347,3 +347,12 @@
   - `codex exec` 没有交互批准，同一个工具不论设成什么都直接执行，所以拿它做对照没有意义。
 - 正确做法：改了 Codex 的 MCP 或批准配置后，在新开的线程里实测（驿窗 `start_session` 开一个就行）。对照组也要在同类线程里做，不要用 `codex exec`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/`：老线程 rollout 第 347～399 行（13:22 调用、13:23:12 终止），`~/.codex/logs_2.sqlite` 13:22:01.147 `hook/started` 之后没有 `hook/completed`；新线程 `rollout-2026-11-09T13-28-36-01a1bec7-a276-…` 第 19～21 行；`exec-test/exec.jsonl`、`exec-test/control.jsonl`。
+
+## L-39 驿窗重启后接力转回 Codex 报「Unknown or child session target」，失败两次后自动往返停下（2026-11-09）
+
+- 现象：#283 实测 (a)：为装新版重启过驿窗之后，ChatGPT 回了「需修改」，驿窗自动转回 Codex 线程时连续两次报 `Unavailable("Unknown or child session target")`，自动往返停下、交还常浩。#281 实测时没出这个问题。
+- 根因：投递服务只往「已知会话目标表」里的会话送话（`platform/src/delivery/sending.rs`）。这张表在驿窗启动时是空的（`host/src/messages.rs` 传 `Vec::new()`），只有「智能体互发消息」的工具被调用时才按当时的快照刷新；接力转回 Codex（`handoff/lines.rs` 的 `codex_send`）从不刷新。#281 那次能通过，是因为表里碰巧已经填过。
+- 正确做法：借用别的功能的投递通道时，先查它的前置状态由谁填、什么时候填，不假设已经有了。接力转回前用 `LocalClients::know_target` 把发起线程补进表；已知的会话保留原条目，子会话仍不收。
+- 实测要先重启：凡是依赖进程内状态的通道，实机验收前先重启一次驿窗再测，才测得出「冷启动」这条路。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/`（`h1a1bed7307000` 的步骤：`fail`、`fail`、`stop`）。
+- 升级：已写成测试 `delivery::tests::a_session_made_known_keeps_the_rest_and_a_child_stays_a_child`。

@@ -6,6 +6,27 @@
 
 
 
+## 接力 B：读 Codex 会话记录——插话后重算轮数、转回回执推进（#283）（2026-11-09，Claude，常浩「按计划开工」「在 #283 里修」；已提交、PR 待开、已发布 `0dada9ced3a5` 回读通过，实机两项通过）
+
+- 时间：开工 `2026-11-09 13:15`。来由：#253 方案 B 单；常浩确认分三批做（批 1 读记录、批 2 接到接力、批 3 测试装机实测）。
+- 改了哪些文件：
+  - `platform/src/clients/codex/turns.rs`（新）：按线程 id 找 `~/.codex/sessions/年/月/日/rollout-…-<线程>.jsonl`，读末尾，取每轮开始时间、`turn_attribution.turn_trigger`（亲手打字 `composer`、队列送进 `queue`）和第一句用户原话（`user_words` 跳过 AGENTS.md、环境说明）；只解析含 `task_started` 或用户发言的行。
+  - `platform/.../handoffs/doer.rs`：加 `codex_turn`、`codex_began` 两个薄封装（经已导出的 `chatgpt::handoffs` 给 host 用，为 300 行棘轮不加 re-export 行）；`claude_plugin/opener.rs` 的 `tail` 改成 `pub`。
+  - `host/src/handoff.rs`：`Lines::left` 加「原话」参数（`track` 传这一步全文，左滑按 code 重拼原话）；新测试 `words_back_to_a_codex_thread_are_followed_by_their_words`。
+  - `host/src/handoff/lines.rs`：`opener` 的 Codex 分支读当前轮（打字算插话，队列送的按原话比对指纹）；`codex_left` 队列还说排队时，会话记录里见到以原话开头的一轮就算「已开始」（Codex 没有单独的「已领取」）。
+  - 同步：`AGENTS.md` 功能清单、「AI 接入」页（去掉「Codex 暂不重算」）。
+  - 实测中修的 #280 遗留问题（常浩「在 #283 里修」，L-39）：驿窗重启后投递目标表是空的，转回 Codex 报 `Unknown or child session target`。`platform/src/delivery/targets.rs` 加 `know_target`（补一个会话、保留其余、子会话不变），`handoff/lines.rs` 的 `codex_send` 转回前先补上发起线程；新测试 `a_session_made_known_keeps_the_rest_and_a_child_stays_a_child`。
+- 测试：`pnpm run check` 退出码 0；`pnpm test`：变基到 `2e2fed2` 并加上修复后重跑，Rust 合计 `930 passed; 0 failed`（新增 6 条），前端 `ℹ pass 382` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机，测试线程 `01a1be3c…`，发起用脚本按 MCP 协议直接调 `relay_to_chatgpt`）：
+  - (a) 第一次（`h1a1bed7307000`，修前、驿窗刚重启）：ChatGPT 回「需修改」后转回 Codex 两次失败，`fail`、`fail`、`stop`，即 L-39。修后装 `0dada9ced3a5`、重启后重测（`h1a1beddd04200`）：回信与 back 步同一毫秒，back 步 `delivery` 为 `started`；Codex 会话记录 05:53:12 一轮 `turn_trigger: queue`。`waiting` 只持续约 2 秒，3 秒一采的监视没采到，只见到终态。
+  - (b) 常浩在该线程亲手打一句（05:55:03 一轮 `turn_trigger: composer`），之后同线程续接送审：`roundsFrom` 设为 4（从新 `work` 步起重算，即第 1 轮）；ChatGPT 回「通过」，自动结束接力。
+  - 截屏无「想访问文稿」弹窗。实测中顺带发现开着的接力在发起会话停了后打不开接力卡，记 #288，本轮不修；为此旧单 `h1a1beb129a000`、`h1a1bed7307000` 是驿窗退出时按 `Book::end` 同样的改法改 `handoffs.json` 结束的，改前备份在证据目录。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/after-install.png`、`after-fix-install.png`；接力记录 `a-handoff-h1a1beddd04200.json`、`b-handoff-h1a1beddd04200.json`，Codex 记录摘录 `a-rollout-tail.txt`。
+- 发布与回读：`0dada9ced3a5`（含修复），`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript-fix/PostPane-3f9546077c11.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：#288（接力卡入口）；Codex 调 `relay_to_chatgpt` 逐次批准见 #287 方案，本轮不处理。
+- 本轮新坑：L-39
+- skill 进化：无
+
 ## Codex 调接力工具免批准（#286 方案 1A）（2026-11-09，Claude，常浩回「做 1A」；已提交、PR 待合并、已装 `7126cf631f47` 回读一致后被并行会话覆盖）
 
 - 时间：开工 `2026-11-09 13:19`。来由：#282 实测时 Codex 调 `relay_to_chatgpt` 每次都要批准，调用会挂住；方案见 `docs/design/Codex调接力工具的批准卡-方案-2026-11-09.md`（#286，PR #287 已合并），常浩选 1A。
@@ -27,6 +48,7 @@
   - 方案 2A（那一轮结束后驿窗替常浩拒绝并撤卡）要先发改动确认，未做。
   - 本轮共多建了 3 张测试接力单（`h1a1bec6d6da00`、`h1a1bec74c5b01`、`h1a1bec7ca0802`），ChatGPT 那边各开了一个测试会话。
 - 本轮新坑：L-38
+
 - skill 进化：无
 
 ## 接力 C：Codex 发起时的侧栏表现与左滑发起（#282）（2026-11-09，Claude，常浩改动确认「四项都改」；已提交、PR 待常浩实测后合并、已发布 `491ba714697a` 回读通过）

@@ -98,6 +98,37 @@ fn codex_targets_defer_owner_availability_until_submission() {
     assert_eq!(service.targets(SystemTime::now())[0].reachable, Some(false));
 }
 
+/// After a restart the senders know no session until agent messages run: a
+/// handoff going back to the Codex thread that asked makes it known, and
+/// never turns a known child into a target (#283).
+#[test]
+fn a_session_made_known_keeps_the_rest_and_a_child_stays_a_child() {
+    let fixture = Fixture::new();
+    let service = LocalClients::new(fixture.paths(), vec![]).unwrap();
+    let mut send = request(Provider::Codex);
+    send.operation = Operation::Enqueue;
+    assert!(matches!(
+        service.send(send),
+        Err(Failure::Unavailable(reason)) if reason == "Unknown or child session target"
+    ));
+    let mut other = target(Provider::Claude);
+    other.session_id = "other".into();
+    service.update_targets(vec![other]);
+    service.know_target(target(Provider::Codex));
+    service.know_target(target(Provider::Codex));
+    let known = service.targets(SystemTime::now());
+    assert_eq!(known.len(), 2, "kept the rest, added once");
+    assert!(known
+        .iter()
+        .any(|t| t.target.provider == Provider::Codex && t.target.session_id == SESSION));
+
+    let mut child = target(Provider::Codex);
+    child.parent_id = Some("parent".into());
+    service.update_targets(vec![child]);
+    service.know_target(target(Provider::Codex));
+    assert!(service.targets(SystemTime::now()).is_empty());
+}
+
 struct FakeAntigravity {
     calls: Arc<AtomicUsize>,
 }
