@@ -3,7 +3,6 @@ import type { Handoff } from "@agent-hud/protocol";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { progressLine, round } from "../alerts/handoff-card";
 import { airmailStripes, relayPaperOf } from "../paper";
-import { useBoardInks } from "./AgentBoard";
 import { noButtonChrome } from "./theme";
 
 /** ChatGPT's reviews in the list (#145): a slip of the reviews' paper under
@@ -69,8 +68,8 @@ export function QuietRelayRow({
   zh: boolean;
 }) {
   const card = useHandoffCard();
-  const inks = useBoardInks(true);
-  const blue = relayPaperOf(true).blue;
+  // The slip's own inks, whatever the panel's look (#288).
+  const sheet = relayPaperOf(true);
   const { at, of } = round(handoff);
   return (
     <button
@@ -100,7 +99,7 @@ export function QuietRelayRow({
           boxSizing: "border-box",
           border: "1.5px dashed currentColor",
           borderRadius: 2,
-          color: blue,
+          color: sheet.blue,
           fontSize: 10.5,
           fontWeight: 700,
           letterSpacing: "0.04em",
@@ -116,7 +115,7 @@ export function QuietRelayRow({
         style={{
           fontSize: 13.5,
           fontWeight: 600,
-          color: inks.text,
+          color: sheet.ink,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -130,7 +129,7 @@ export function QuietRelayRow({
           gridColumn: "2 / 3",
           marginTop: 2,
           fontSize: 12,
-          color: inks.secondary,
+          color: sheet.dim,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
