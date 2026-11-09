@@ -6,6 +6,22 @@
 
 
 
+## #251 Claude 进程没了：审批卡随即撤下、会话不再显示正在进行（2026-11-09，Claude，常浩选「A+B 开工」；已提交、已装机 `3600980d505d` 回读通过）
+
+- 时间：开工 `2026-11-09 08:41`（调研从 08:33 起）。来由：上游可学点 #251，常浩定「先做 #251」，看过改前改后表后选 A+B。
+- 改前复现：终端 Claude 停在审批上 `kill -9`，`PostPane --permission-hook` 被 launchd 收养继续等，侧栏「1」加「批」印 15 秒后还在，要挂满 10 分钟（L-36）。
+- 改了哪些文件：
+  - A：新增 `src/crates/platform/src/hooks/client_unix.rs`（钩子等待时父进程换了就结束等待）；`hooks/unix.rs` 两处等待条件改走它（行数变短）。
+  - B：新增 `src/crates/agents/src/claude/processes.rs`（读 `~/.claude/sessions/*.json`，登记过、进程已死的会话算结束；从没登记过的不算）；`platform/src/os/{macos,linux,windows}/process.rs` 加 `process_runs`（macOS 用 signal 0 加进程启动时间防 pid 复用），`platform/src/lib.rs` 启动时登记；`core/src/clients/claude_desktop.rs` 每 3 秒的 look 与收集轮次一起刷新，`settle_ended` 把已结束的会话改为空闲、清掉待回答；`core/src/presentation.rs` 接上；`agents/claude/jobs.rs` 放开 `small_file`。
+  - 文档：`docs/session-data.md` 新增一节，`docs/agent-contract.md` 一句。
+- 测试：共用主目录 `target`，先把全部 `.rs`、`Cargo.toml`、`build.rs` 时间改到未来，输出里有 9 行本 worktree 路径的 `Compiling`。`pnpm run check` `check exit=0`；`pnpm test` Rust 823 passed / 0 failed（基线 813 + 新增 10：agents 6、platform 3、core 1），前端 `ℹ pass 379` / `ℹ fail 0`，MCP 9、插件 14、扩展 13 全过；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。core 新测试先红：去掉 `settle_ended` 调用时报 `left: "running"` / `right: "idle"`。日志在 `evidence/2026-11-09-251-process-gone/full-*.log`、`targeted.log`。
+- 验证：装机后按 #251 验收实测：终端 Claude 停在审批上（侧栏出现「批」），`kill -9` 后约 0.5 秒钩子退出，约 1.5 秒内「批」变回「回」、小签消失，命令没被执行。小人隔 2 秒两张截图不同，在动。我自己这个正在跑的会话在驿窗里仍是 `running`，没被误判。
+- 截图：`evidence/2026-11-09-251-process-gone/accept/`：`1-card-side.png` 有卡，`2-after-kill-side.png` 撤卡，`m1/m2-bots.png` 小人在动，`0-installed.png` 无权限弹窗。
+- 发布与回读：`install.sh 251-process-gone`：装前 `6349cc384273` 已备份，08:53:37 退出、08:53:38 启动，产物 `3600980d505d` / 已装 `3600980d505d`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-09-251-process-gone/PostPane-6349cc384273.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：B「会话不再显示正在进行」没能在真实进程上复现，只有测试覆盖。终端版 Claude 2.1.319 在两次实验里都没写登记和会话记录，`claude -p` 也没写，所以造不出「被杀的会话还挂着」的现场。上游「进程说在等就超过 30 分钟也显示等你回答」没做，常浩没定。钩子由 `sh -c` 中间进程启动时，父进程检查看不到 Claude 被杀，目前实测父进程就是 Claude 本身。
+- 本轮新坑：L-36（另在 L-32 补了一条还原教训）
+- skill 进化：无
+
 ## 撤回 #264：侧栏小人全变静态图标的回归（2026-11-09，Claude，常浩指出「侧边栏的动态小人为什么都没有了」；已提交、PR 待全量测试后合并、已装机 `6349cc384273`）
 
 - 时间：开工 `2026-11-09 08:04`。来由：第二批合并装机（`b977cfc5aa5e`）后，侧栏小人全部变成静态 logo。
