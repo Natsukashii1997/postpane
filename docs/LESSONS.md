@@ -378,3 +378,10 @@
   - 会话弹「stopped responding」时，在 `main.log` 搜 `timed out after`；`last_tool_name=Bash` 且 `outstanding_host_request=none` 时，先看侧栏有没有挂着的权限卡。
 - 证据：`~/Library/Logs/Claude/main.log` 第 64221、65243 行；复现输出与预览截图在 `~/Library/Application Support/postpane/evidence/2026-11-09-292-start-bash/`。
 - 升级：可提议提升为全局坑（任何项目在 Claude 桌面版里写这类命令都会碰上），等常浩批。终端里的 Claude Code 是否同时弹窗未核实。
+
+## L-42 审核纸条上的行用面板墨色，`get_hud_screenshot` 看着清楚，换成纸张外观后浅字落在浅纸上看不清（2026-11-09）
+
+- 现象：#288 第一版审核纸条上的接力行用 `useBoardInks(true)` 取墨色。装机后 `get_hud_screenshot` 拍的面板字是深色的，看着没问题；浏览器预览真实 `HUDScene` 时面板是纸张外观，标题算出来是 `rgb(236, 231, 220)`，浅字落在浅蓝审核纸上几乎看不见。
+- 根因：`useBoardInks` 有纸张时取纸张的墨（深色纸配浅墨），不看传进去的 `light`；审核纸条本身永远是浅色纸（`relayPaperOf(true)`），两者对不上。
+- 正确做法：画在审核纸条上的字一律用 `relayPaperOf(true)` 自己的 `ink`、`dim`、`blue`，和悬停小收据（`DeskLines`）一样，不用面板墨。验收界面时至少换一种外观再看一次，不能只看 `get_hud_screenshot` 的一张。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-288-open-relays/preview-paper-ink-before-fix.png`；修正在 `src/packages/hud/src/panel/ReviewSlip.tsx`。同一纸条上 `LiveRow` 的审核会话行仍用面板墨，是否也有这个问题未核实，记为范围外发现。
