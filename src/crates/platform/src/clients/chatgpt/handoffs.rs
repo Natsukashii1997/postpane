@@ -12,9 +12,11 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-pub use wake::WAKE_AFTER_MS;
+mod doer;
 mod pull_request;
+pub use doer::{by_doer, doer_name};
 pub use pull_request::pull_request;
+pub use wake::WAKE_AFTER_MS;
 
 /// How many handoffs are kept, newest first.
 pub const KEEP: usize = 200;
@@ -654,12 +656,6 @@ impl Book {
     fn get_mut(&mut self, id: &str) -> Option<&mut Handoff> {
         self.list.iter_mut().find(|handoff| handoff.id == id)
     }
-    /// Names the client doing `id`'s work, when not Claude Code (#280).
-    pub fn set_doer(&mut self, id: &str, doer: &str) {
-        self.get_mut(id)
-            .into_iter()
-            .for_each(|h| h.doer = Some(doer.into()));
-    }
     fn live_mut(&mut self, id: &str) -> Option<&mut Handoff> {
         self.get_mut(id).filter(|handoff| handoff.live())
     }
@@ -1146,12 +1142,14 @@ impl Book {
                 let waited = now - h.phase_at;
                 match h.phase {
                     Phase::Delivered | Phase::Working if waited > REPLY_WAIT_MS => {
-                        Some((h.id.clone(), no_answer))
+                        Some((h.id.clone(), no_answer.to_owned()))
                     }
                     Phase::Returned if h.queued_at.is_some_and(|at| now - at > QUEUE_WAIT_MS) => {
-                        Some((h.id.clone(), no_wake))
+                        Some((h.id.clone(), no_wake.to_owned()))
                     }
-                    Phase::Returned if waited > FIX_WAIT_MS => Some((h.id.clone(), no_handover)),
+                    Phase::Returned if waited > FIX_WAIT_MS => {
+                        Some((h.id.clone(), by_doer(no_handover, h.doer.as_deref())))
+                    }
                     _ => None,
                 }
             })

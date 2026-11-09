@@ -216,3 +216,21 @@ test("「未审」 gives way while the stub has more to say, and ripples once it
     undefined,
   );
 });
+
+test("an answer back for Codex stamps Codex's stub, not Claude's (#282)", () => {
+  const codexs = {
+    ...relay("replied", [{ at: 60, kind: "reply" }]),
+    doer: "codex" as const,
+  };
+  assert.equal(relayStamps({ handoffs: [codexs] }, "claude", NOW), undefined);
+  assert.equal(
+    relayStamps({ handoffs: [codexs] }, "codex", NOW)?.replied,
+    true,
+  );
+  const claudes = relay("replied", [{ at: 60, kind: "reply" }]);
+  assert.equal(relayStamps({ handoffs: [claudes] }, "codex", NOW), undefined);
+  assert.equal(
+    relayStamps({ handoffs: [claudes] }, "claude", NOW)?.replied,
+    true,
+  );
+});

@@ -7,21 +7,21 @@ import { usePanelServices } from "../PanelContext";
 import { failureOf } from "../open-result";
 import { usePaper, paperLevel, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
-import { agentArtwork } from "../agent-artwork";
+import { Avatar } from "./HandoffAvatar";
+import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
 import {
   actions,
   autoLabel,
   chatgptSession,
-  claudeSession,
+  doerSession,
   clock,
   round,
   stamp,
   timeline,
   type Action,
   type Row,
-  type Who,
 } from "./handoff-card";
 
 /** The handoff card opened in the sidebar (HUDScene shows it): from a reply,
@@ -113,7 +113,8 @@ export function HandoffCard({
   const { at, of } = round(handoff);
   const mark = stamp(handoff, zh);
   const autoMark = autoLabel(handoff, zh);
-  const claude = claudeSession(handoff, snapshot.sessions);
+  const claude = doerSession(handoff, snapshot.sessions);
+  const D = doerName(handoff);
   const chatgpt: Session | undefined =
     chatgptSession(handoff, snapshot.sessions) ??
     (handoff.chatgptConversation
@@ -272,7 +273,7 @@ export function HandoffCard({
           )}
         </b>
         <GoButton
-          label={zh ? "回到 Claude 会话" : "Return to the Claude session"}
+          label={zh ? `回到 ${D} 会话` : `Return to the ${D} session`}
           enabled={Boolean(claude)}
           inks={{
             line: inks.line,
@@ -305,8 +306,8 @@ export function HandoffCard({
             color: inks.mid,
           }}
         >
-          <Avatar who="claude" size={16} light={light} inks={inks} />
-          Claude
+          <Avatar who={doerOf(handoff)} size={16} light={light} inks={inks} />
+          {D}
         </span>
         <span>⇄</span>
         <span
@@ -686,10 +687,11 @@ function Foot({
   act: (action: Action) => void;
 }) {
   const list = actions(handoff);
+  const D = doerName(handoff);
   const label: Record<Action, string> = {
     end: zh ? "结束接力" : "End handoff",
     open: zh ? "查看 ChatGPT 对话" : "Open ChatGPT",
-    back: zh ? "转回 Claude" : "Send back to Claude",
+    back: zh ? `转回 ${D}` : `Send back to ${D}`,
     again: zh ? "再审一轮" : "Review again",
     retry: zh ? "重试" : "Retry",
     close: zh ? "知道了" : "Got it",
@@ -724,8 +726,8 @@ function Foot({
               title={
                 action === "again"
                   ? zh
-                    ? `Claude 改完后送 ChatGPT，第 ${at + 1} / ${Math.max(of, at + 1)} 轮`
-                    : `Claude hands its changes to ChatGPT, round ${at + 1}`
+                    ? `${D} 改完后送 ChatGPT，第 ${at + 1} / ${Math.max(of, at + 1)} 轮`
+                    : `${D} hands its changes to ChatGPT, round ${at + 1}`
                   : undefined
               }
               onClick={() => act(action)}
@@ -751,83 +753,5 @@ function Foot({
         );
       })}
     </div>
-  );
-}
-
-/** A timeline's avatar: Clawd for Claude, ChatGPT's knot, PostPane's 「驿」. */
-function Avatar({
-  who,
-  size,
-  light,
-  inks,
-}: {
-  who: Who;
-  size: number;
-  light: boolean;
-  inks: Inks;
-}) {
-  if (who === "post")
-    return (
-      <span
-        aria-hidden="true"
-        style={{
-          display: "inline-grid",
-          placeItems: "center",
-          width: 18,
-          height: 18,
-          boxSizing: "border-box",
-          border: `1.3px solid ${inks.dim}`,
-          borderRadius: 3,
-          color: inks.dim,
-          font: `900 11px/1 ${PAPER_SEAL}`,
-        }}
-      >
-        驿
-      </span>
-    );
-  if (who === "claude") {
-    const scale = (size / 24) * 1.05;
-    return (
-      <svg
-        width={24 * scale}
-        height={16 * scale}
-        viewBox="0 0 24 16"
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path
-          fill="#d97757"
-          d="M4 0H20V4H24V8H20V12H4V8H0V4H4Z M4 12h2v4h-2z M8 12h2v4h-2z M14 12h2v4h-2z M18 12h2v4h-2z"
-        />
-        <g fill="#141413">
-          <rect x="6" y="2" width="2" height="2" />
-          <rect x="14" y="2" width="2" height="2" />
-        </g>
-      </svg>
-    );
-  }
-  const artwork = agentArtwork("chatgpt", light);
-  const side = size - 2;
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: "inline-block",
-        width: side,
-        height: side,
-        background: "#10a37f",
-        ...(artwork
-          ? {
-              maskImage: `url("${artwork.url}")`,
-              WebkitMaskImage: `url("${artwork.url}")`,
-              maskSize: "contain",
-              WebkitMaskSize: "contain",
-              maskRepeat: "no-repeat",
-              WebkitMaskRepeat: "no-repeat",
-              maskPosition: "center",
-            }
-          : { borderRadius: "50%" }),
-      }}
-    />
   );
 }

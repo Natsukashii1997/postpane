@@ -7,12 +7,13 @@ export type TrayKind = "review" | "test" | "cont" | "disc" | "rm";
 /** Each block's width; the tray is as wide as its blocks. */
 export const TRAY_BLOCK = 62;
 
-/** The blocks a row's tray shows: a Claude Code session on this machine
- * can hand its work over (it calls `relay_to_chatgpt` itself); any other
- * only leaves the sidebar. */
+/** The blocks a row's tray shows: a Claude Code session on this machine,
+ * or a Codex thread (#282), can hand its work over (it calls
+ * `relay_to_chatgpt` itself); any other only leaves the sidebar. */
 export function trayKinds(session: Session): TrayKind[] {
   const local =
-    session.source === "claude" && session.client !== "claude-cloud";
+    (session.source === "claude" && session.client !== "claude-cloud") ||
+    session.source === "codex";
   return local ? ["review", "test", "cont", "disc", "rm"] : ["rm"];
 }
 

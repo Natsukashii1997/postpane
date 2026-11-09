@@ -7,8 +7,8 @@
 //! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
 use crate::extension::Flight;
 use agent_hud_runtime::chatgpt::handoffs::{
-    self, Book, Delivery, Exit, Flaw, Handoff, Next, Phase, Review, Risk, Status, Step, StepKind,
-    Verdict,
+    self, by_doer, Book, Delivery, Exit, Handoff, Next, Phase, Review, Risk, Status, Step,
+    StepKind, Verdict,
 };
 use agent_hud_runtime::claude_plugin::Opener;
 
@@ -32,8 +32,10 @@ use std::{
 use tauri::Manager;
 
 mod lines;
+mod texts;
 use lines::AppLines;
 mod wake;
+use texts::*;
 use wake::{wake_failed, woke_stopped};
 
 /// Claude Code's source id, the only client words go back into.
@@ -137,6 +139,9 @@ struct Launch {
     taken_at: Option<i64>,
     /// When it came to nothing.
     settled_at: Option<i64>,
+    /// `codex` when the swipe was on a Codex thread (#282); none is Claude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    doer: Option<String>,
 }
 
 impl Launch {
@@ -356,7 +361,7 @@ impl Desk {
         for handoff in &book.list {
             let seen = tossed.entry(handoff.id.clone()).or_insert(0);
             if let Some(toss) = toss(&handoff.steps, *seen) {
-                flights.push(toss.flight(&handoff.id));
+                flights.push(toss.flight(&handoff.id, handoff.doer.as_deref().unwrap_or(CLAUDE)));
             }
             *seen = handoff.steps.len();
         }
@@ -917,7 +922,8 @@ impl Desk {
             "resume" => {
                 // Every round used: an answer can only stop it again (#194).
                 if handoff.spent() {
-                    return Err(no_rounds_left(handoff.budget()));
+                    let text = no_rounds_left(handoff.budget());
+                    return Err(by_doer(&text, handoff.doer.as_deref()));
                 }
                 if !self.change(|book| book.resume(id, now)) {
                     return Err(l10n::text(
@@ -966,19 +972,23 @@ impl Desk {
             .lock()
             .list
             .iter()
-            .filter_map(|h| h.next().map(|next| (h.id.clone(), next, h.budget())))
+            .filter_map(|h| {
+                h.next()
+                    .map(|next| (h.id.clone(), next, h.budget(), h.doer.clone()))
+            })
             .collect::<Vec<_>>();
         let mut changed = tracked;
-        for (id, next, budget) in due {
+        for (id, next, budget, doer) in due {
+            let named = |text: String| by_doer(&text, doer.as_deref());
             changed |= match next {
                 Next::Pass => self.change(|book| book.passed(&id, &passed(l10n::chinese()), now)),
                 Next::Limit => self.change(|book| book.stop(&id, &at_limit(budget), true, now)),
                 Next::BadTail(flaw) => {
-                    self.change(|book| book.stop(&id, &bad_review_tail(flaw), true, now))
+                    self.change(|book| book.stop(&id, &named(bad_review_tail(flaw)), true, now))
                 }
                 Next::NoVerdict => self.change(|book| book.stop(&id, &no_verdict(), true, now)),
                 Next::Invalid(flaw) => {
-                    self.change(|book| book.stop(&id, &invalid_tail(flaw), true, now))
+                    self.change(|book| book.stop(&id, &named(invalid_tail(flaw)), true, now))
                 }
                 Next::Back | Next::Close | Next::Pause | Next::Escalate | Next::Settle => {
                     self.auto_back(lines, &id, next, now)
@@ -1033,7 +1043,7 @@ impl Desk {
             if delivery == was {
                 continue;
             }
-            let reason = undelivered(&state, reason.as_deref());
+            let reason = by_doer(&undelivered(&state, reason.as_deref()), Some(&doer));
             changed |= self.change(|book| {
                 if delivery.gave_up() {
                     book.undelivered(&id, &prompt, delivery, &reason, now)
@@ -1066,20 +1076,21 @@ impl Desk {
         if self.lock().returned_already(id, &text) {
             return false;
         }
+        let (doer, session) = (
+            handoff.doer.as_deref().unwrap_or(CLAUDE),
+            &handoff.claude_session,
+        );
+        let named = |text: String| by_doer(&text, Some(doer));
         let then = |book: &mut Book| match next {
-            Next::Close => book.passed(id, &thinking_closed(), now),
-            Next::Settle => book.passed(id, &settled(), now),
-            Next::Pause => book.stop(id, &evidence_paused(), true, now),
-            Next::Escalate => book.stop(id, &escalated(), true, now),
+            Next::Close => book.passed(id, &named(thinking_closed()), now),
+            Next::Settle => book.passed(id, &named(settled()), now),
+            Next::Pause => book.stop(id, &named(evidence_paused()), true, now),
+            Next::Escalate => book.stop(id, &named(escalated()), true, now),
             _ => true,
         };
         // The step's own id (#257): tried again, or triggered again, it
         // leaves no second copy; words left under it before went already.
         let prompt = handoff.prompt_for(StepKind::Back);
-        let (doer, session) = (
-            handoff.doer.as_deref().unwrap_or(CLAUDE),
-            &handoff.claude_session,
-        );
         let send = || {
             lines
                 .reaches(doer, session)
@@ -1103,7 +1114,7 @@ impl Desk {
                     }),
                 };
             }
-            self.change(|book| book.trouble(id, &back_retry(&first), now));
+            self.change(|book| book.trouble(id, &named(back_retry(&first)), now));
             if let Err(Unsent::Failed(again)) = send() {
                 // Quiet for now (a stall, or a session Claude paused once its
                 // turn was over): the words wait in its queue and go in once
@@ -1112,7 +1123,7 @@ impl Desk {
                 if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
                     return self.change(|book| {
                         book.trouble(id, &retry_failed(&again), now);
-                        book.stop(id, &back_failed(), true, now)
+                        book.stop(id, &named(back_failed()), true, now)
                     });
                 }
                 return self.change(|book| {
@@ -1218,22 +1229,22 @@ fn launch_text(kind: &str, code: &str) -> Option<String> {
     ))
 }
 
-/// 左滑发起: asks the Claude Code `session` to hand its work to ChatGPT
-/// (`kind`: review or discuss). Its words wait in line while it runs; it
-/// then calls `relay_to_chatgpt` itself, so the handoff is its own.
+/// 左滑发起: asks the Claude Code `session`, or the Codex thread when `doer`
+/// is Codex (#282), to hand its work to ChatGPT (`kind`: review or
+/// discuss). Its words wait in line while it runs; it then calls
+/// `relay_to_chatgpt` itself, so the handoff is its own.
 /// Words still waiting for the session are not left again.
 pub(crate) fn launch(
     desk: &Desk,
     lines: &dyn Lines,
+    doer: &str,
     session: &str,
     kind: &str,
     now: i64,
 ) -> Result<Launched, String> {
     if !agent_hud_runtime::claude_plugin::valid_name(session) {
-        return Err(l10n::text(
-            "Claude 会话 id 不对",
-            "Invalid Claude session id",
-        ));
+        let text = l10n::text("Claude 会话 id 不对", "Invalid Claude session id");
+        return Err(by_doer(&text, Some(doer)));
     }
     let code = launch_code(now);
     let text = launch_text(kind, &code).ok_or_else(|| {
@@ -1255,8 +1266,16 @@ pub(crate) fn launch(
             return Ok(Launched::AlreadyQueued);
         }
     }
-    lines.reaches(CLAUDE, session)?;
-    let id = lines.leave(session, &text)?;
+    lines.reaches(doer, session)?;
+    // Codex takes them into its queue under the swipe's own code (#282).
+    let id = if doer == CODEX {
+        match lines.queue(CODEX, session, &code, &text) {
+            Ok(()) | Err(Unsent::Again) => code.clone(),
+            Err(Unsent::Failed(error)) => return Err(error),
+        }
+    } else {
+        lines.leave(session, &text)?
+    };
     launches.insert(
         session.to_owned(),
         Launch {
@@ -1268,6 +1287,7 @@ pub(crate) fn launch(
             reason: None,
             taken_at: None,
             settled_at: None,
+            doer: (doer == CODEX).then(|| CODEX.to_owned()),
         },
     );
     desk.keep_launches(&launches);
@@ -1288,7 +1308,11 @@ fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     if !launch.pending() {
         return;
     }
-    match lines.left(CLAUDE, session, &launch.id) {
+    match lines.left(
+        launch.doer.as_deref().unwrap_or(CLAUDE),
+        session,
+        &launch.id,
+    ) {
         Some((state, reason)) => match state.as_str() {
             "taken" => {
                 launch.taken_at.get_or_insert(now);
@@ -1327,235 +1351,6 @@ fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     }
 }
 
-fn passed(chinese: bool) -> String {
-    in_language(
-        chinese,
-        "结论：通过，自动结束接力",
-        "Passed; the handoff ended",
-    )
-}
-fn thinking_closed() -> String {
-    l10n::text(
-        "思维评审收口，回信已转回 Claude，自动结束接力",
-        "The thinking review settled; its answer went back to Claude and the handoff ended",
-    )
-}
-fn evidence_paused() -> String {
-    l10n::text(
-        "证据不足暂停，等 Claude 取证",
-        "Paused for evidence; Claude is to gather it",
-    )
-}
-fn escalated() -> String {
-    l10n::text(
-        "决策升级：已请 Claude 整理选项，自动往返停下，交常浩裁决",
-        "Escalated: Claude is to lay out the options; left to you to decide",
-    )
-}
-fn invalid_tail(flaw: Flaw) -> String {
-    l10n::text(
-        &format!(
-            "思维评审回信末两行无效：{}；没有转回 Claude，自动往返停下，交还常浩",
-            flaw_text(flaw)
-        ),
-        &format!(
-            "The thinking review's last two lines do not hold: {}; nothing went back to Claude, left to you",
-            flaw_text_en(flaw)
-        ),
-    )
-}
-/// What is wrong with a 思维评审 answer's last two lines, for Claude and the card.
-fn flaw_text(flaw: Flaw) -> &'static str {
-    match flaw {
-        Flaw::NoVerdict => "最后一行不是「结论：…」",
-        Flaw::UnknownVerdict => "结论只认 通过 / 需修改 / 交常浩裁决",
-        Flaw::NoExit => "倒数第二行不是「评审出口：…」",
-        Flaw::UnknownExit => {
-            "评审出口只认 成熟退出 / 继续深化 / 证据不足暂停 / 决策升级 / 转其他路径"
-        }
-        Flaw::Mismatch => "评审出口与结论对不上",
-    }
-}
-fn flaw_text_en(flaw: Flaw) -> &'static str {
-    match flaw {
-        Flaw::NoVerdict => "the last line is not 「结论：…」",
-        Flaw::UnknownVerdict => "the verdict is none of 通过 / 需修改 / 交常浩裁决",
-        Flaw::NoExit => "the line before it is not 「评审出口：…」",
-        Flaw::UnknownExit => "the way out is none of the five",
-        Flaw::Mismatch => "the way out and the verdict do not go together",
-    }
-}
-fn back_retry(error: &str) -> String {
-    l10n::text(
-        &format!("自动转回 Claude 失败：{error}；马上重试一次"),
-        &format!("Could not send it back to Claude: {error}; trying once more"),
-    )
-}
-fn retry_failed(error: &str) -> String {
-    l10n::text(
-        &format!("重试仍失败：{error}"),
-        &format!("Failed again: {error}"),
-    )
-}
-fn queued_instead(error: &str) -> String {
-    l10n::text(
-        &format!("重试仍失败：{error}；改为排进这个会话的待发送队列，会话一直不在线就在后台续接"),
-        &format!(
-            "Failed again: {error}; queued for the session instead, to run in the background if it stays quiet"
-        ),
-    )
-}
-/// Why the person has a handoff whose words back the plugin gave up (#257).
-fn undelivered(state: &str, reason: Option<&str>) -> String {
-    match state {
-        "refused" => l10n::text(
-            &format!(
-                "Claude 会话的插件拒收了转回的话（{}），交还常浩",
-                reason.unwrap_or("没说原因")
-            ),
-            &format!(
-                "The Claude session's plugin refused the words back ({}); left to you",
-                reason.unwrap_or("no reason given")
-            ),
-        ),
-        "expired" => l10n::text(
-            "转回的话 1 小时没被 Claude 会话领走，已过期，交还常浩",
-            "The words back were not taken up by the Claude session within an hour; left to you",
-        ),
-        _ => l10n::text(
-            "转回的话被取消了，交还常浩",
-            "The words back were cancelled; left to you",
-        ),
-    }
-}
-fn no_wake() -> String {
-    l10n::text(
-        &format!(
-            "转回的意见排队 {} 分钟没被会话领走，自动往返停下，交还常浩",
-            handoffs::QUEUE_WAIT_MS / 60_000
-        ),
-        "The queued answer was not taken up within an hour; left to you",
-    )
-}
-fn no_answer() -> String {
-    l10n::text(
-        &format!(
-            "ChatGPT {} 分钟没回信，自动往返停下，交还常浩",
-            handoffs::REPLY_WAIT_MS / 60_000
-        ),
-        "ChatGPT has not answered in 30 minutes; left to you",
-    )
-}
-fn no_handover() -> String {
-    l10n::text(
-        &format!(
-            "Claude {} 小时没交回复审，自动往返停下，交还常浩",
-            handoffs::FIX_WAIT_MS / 3_600_000
-        ),
-        "Claude has not handed it over again in 2 hours; left to you",
-    )
-}
-fn restart_paused(chinese: bool) -> String {
-    in_language(
-        chinese,
-        "驿窗重启，自动往返先暂停",
-        "PostPane restarted; the auto round trip is paused",
-    )
-}
-fn paused() -> String {
-    l10n::text("常浩暂停", "Paused by the person")
-}
-fn at_limit(budget: u32) -> String {
-    l10n::text(
-        &format!("已审 {budget} 轮仍需修改，自动往返停下，交还常浩"),
-        &format!("Still to fix after {budget} rounds; left to you"),
-    )
-}
-fn no_rounds_left(budget: u32) -> String {
-    l10n::text(
-        &format!(
-            "已审满 {budget} 轮，自动往返没有可做的了：要再审，请让 Claude 重新送审（工程审查要你授权，Claude 调用时填 extra），或结束接力"
-        ),
-        &format!(
-            "All {budget} rounds are used; nothing is left for the auto round trip. Have Claude send it for review afresh (an engineering review needs your leave, given as extra), or end the handoff"
-        ),
-    )
-}
-fn settled() -> String {
-    l10n::text(
-        "L1 审查预算用完：意见已转回 Claude 改完收口，自动结束接力",
-        "L1's one review is used: the answer went back to Claude to fix and close; the handoff ended",
-    )
-}
-fn l0_refused() -> String {
-    l10n::text(
-        "L0 只做机械检查，不送审；确实要审，risk 改填 L1。",
-        "L0 gets mechanical checks only and is not sent for review; to have it reviewed, give risk L1.",
-    )
-}
-fn bad_risk(text: &str) -> String {
-    l10n::text(
-        &format!("risk 只认 L1 / L2 / L3，收到的是「{text}」，没有发出。"),
-        &format!("risk takes L1 / L2 / L3, not 「{text}」; nothing was sent."),
-    )
-}
-fn budget_spent(counted: u32) -> String {
-    l10n::text(
-        &format!(
-            "这个 PR 已审 {counted} 轮，审查预算用完了，没有发出：请先问常浩。常浩明确授权再审一次时，调用时 extra 写明谁授权、为什么。"
-        ),
-        &format!(
-            "This pull request had {counted} reviews and its budget is used; nothing was sent. Ask the person first; with their leave for one more, give extra saying who allowed it and why."
-        ),
-    )
-}
-fn bad_review_tail(flaw: Flaw) -> String {
-    l10n::text(
-        &format!(
-            "审查出口与结论对不上：{}；没有转回 Claude，自动往返停下，交还常浩",
-            review_flaw_text(flaw)
-        ),
-        &format!(
-            "The review's way out and verdict do not hold together: {}; nothing went back to Claude, left to you",
-            review_flaw_text(flaw)
-        ),
-    )
-}
-/// What is wrong with an engineering answer's 「审查出口」 and verdict (#217).
-fn review_flaw_text(flaw: Flaw) -> &'static str {
-    match flaw {
-        Flaw::NoVerdict => "审查出口下面一行不是「结论：…」",
-        Flaw::UnknownVerdict => "结论只认 通过 / 需修改",
-        Flaw::NoExit | Flaw::UnknownExit => "审查出口只认 通过 / 返修 / 证据不足暂停 / 决策升级",
-        Flaw::Mismatch => "审查出口与结论对不上（通过配通过，其余配需修改）",
-    }
-}
-fn no_verdict() -> String {
-    l10n::text(
-        "回信没写结论，自动往返停下，交还常浩",
-        "The answer has no verdict; left to you",
-    )
-}
-fn back_failed() -> String {
-    l10n::text(
-        "转回 Claude 失败两次，自动往返停下，交还常浩",
-        "Could not send it back to Claude twice; left to you",
-    )
-}
-fn timed_out() -> String {
-    l10n::text(
-        "ChatGPT 新会话两分钟没打开",
-        "The ChatGPT conversation did not open within two minutes",
-    )
-}
-fn interrupted(chinese: bool) -> String {
-    in_language(
-        chinese,
-        "驿窗重启时 ChatGPT 新会话还在打开",
-        "PostPane restarted while the ChatGPT conversation was opening",
-    )
-}
-
 /// Whether the Language setting kept in `data` (`settings.json`, as Core
 /// keeps it) means Chinese.
 fn stored_chinese(data: &std::path::Path) -> bool {
@@ -1569,11 +1364,6 @@ fn stored_chinese(data: &std::path::Path) -> bool {
         language => language.starts_with("zh"),
     }
 }
-/// The text in Chinese or not, whatever the app's language now.
-fn in_language(chinese: bool, zh: &str, en: &str) -> String {
-    if chinese { zh } else { en }.to_owned()
-}
-
 fn too_long() -> String {
     l10n::text(
         "内容太长（超过 768 KB）：改动请只带摘要和关键片段，完整改动让 ChatGPT 去看 PR。",
@@ -1643,18 +1433,20 @@ pub(crate) enum Toss {
 }
 
 impl Toss {
-    fn flight(self, id: &str) -> Flight {
+    /// The letter between ChatGPT and the doer's mark (#282: Codex's when
+    /// Codex does the work).
+    fn flight(self, id: &str, doer: &str) -> Flight {
         let to_chatgpt = matches!(self, Self::ToChatGPT | Self::FallsToChatGPT);
         let (from, to) = if to_chatgpt {
-            ("claude", "chatgpt")
+            (doer, "chatgpt")
         } else {
-            ("chatgpt", "claude")
+            ("chatgpt", doer)
         };
         Flight {
             lane: format!("relay:{id}:{from}"),
             from: from.into(),
             to: to.into(),
-            // Around the notch Claude stands on the left either way.
+            // Around the notch the doer stands on the left either way.
             from_left: to_chatgpt,
             arrives: false,
             falls: matches!(self, Self::FallsToChatGPT | Self::FallsToClaude),
@@ -1864,10 +1656,22 @@ pub async fn relay_launch(
     app: tauri::AppHandle,
     session_id: String,
     kind: String,
+    source: Option<String>,
 ) -> Result<Value, String> {
+    // Claude Code's or, from #282, a Codex thread's row.
+    let doer = match source.as_deref() {
+        None | Some(CLAUDE) => CLAUDE,
+        Some(CODEX) => CODEX,
+        Some(_) => {
+            return Err(l10n::text(
+                "这个会话不能发起接力",
+                "This session cannot start a handoff",
+            ))
+        }
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let desk = app.try_state::<Desk>().ok_or_else(demo)?;
-        let launched = launch(&desk, &AppLines(&app), &session_id, &kind, now_ms())?;
+        let launched = launch(&desk, &AppLines(&app), doer, &session_id, &kind, now_ms())?;
         // The row says how the words stand from now on.
         republish(&app);
         Ok(json!({"queued": true, "already": launched == Launched::AlreadyQueued}))
@@ -1898,6 +1702,7 @@ pub fn chatgpt_project(
 mod tests {
     use super::wake::{wake_arguments, woke_without_handover};
     use super::*;
+    use agent_hud_runtime::chatgpt::handoffs::Flaw;
     use std::cell::RefCell;
 
     /// Lines that write down what was sent and answer as told.
@@ -2281,7 +2086,7 @@ mod tests {
         // The session already has a review open: its next round goes into it.
         opened(&desk, &lines);
         left_as(&lines, Some("started"), None);
-        launch(&desk, &lines, "s1", "review", 10).unwrap();
+        launch(&desk, &lines, CLAUDE, "s1", "review", 10).unwrap();
         let code = code_of(&lines);
         assert!(code.starts_with('L'));
         // A handoff of the same session for something else settles nothing.
@@ -2323,12 +2128,12 @@ mod tests {
         let lines = Fake::default();
         left_as(&lines, Some("taken"), None);
         let desk = Desk::new(Some(data.clone()));
-        launch(&desk, &lines, "s1", "review", 1).unwrap();
+        launch(&desk, &lines, CLAUDE, "s1", "review", 1).unwrap();
         desk.launch_projection(&lines, 2);
         drop(desk);
         let desk = Desk::new(Some(data.clone()));
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 3).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 3).unwrap(),
             Launched::AlreadyQueued
         );
         assert_eq!(
@@ -2353,7 +2158,7 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         left_as(&lines, Some("waiting"), None);
-        launch(&desk, &lines, "s1", "review", 0).unwrap();
+        launch(&desk, &lines, CLAUDE, "s1", "review", 0).unwrap();
         // Waiting 55 minutes, then taken.
         let taken = 55 * 60_000;
         left_as(&lines, Some("taken"), None);
@@ -2526,6 +2331,94 @@ mod tests {
         let (kind, session, text) = back.expect("words went back");
         assert_eq!((kind.as_str(), session.as_str()), ("codex", "t1"));
         assert!(text.contains("少一项"));
+    }
+
+    /// A review Codex hands over, opened (#282), with `risk` if any.
+    fn codex_opened(desk: &Desk, lines: &Fake, risk: Option<&str>) -> Handoff {
+        let rule = Rule {
+            doer: Some(CODEX.to_owned()),
+            risk: risk.map(str::to_owned),
+            ..Rule::default()
+        };
+        let Started::Opening { handoff, project } = desk
+            .start_ruled(lines, "t1", None, "修登录", None, "改动", false, &rule, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(lines, &handoff.id, "改动", project.as_deref(), || 2)
+            .unwrap();
+        handoff
+    }
+
+    /// #282: the letters of a review Codex handed over fly between ChatGPT
+    /// and Codex's mark, Codex standing where Claude stands.
+    #[test]
+    fn letters_fly_between_chatgpt_and_codex_for_a_codex_doer() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = codex_opened(&desk, &lines, None);
+        let sent = desk.tosses();
+        assert_eq!(
+            (sent[0].from.as_str(), sent[0].to.as_str()),
+            ("codex", "chatgpt")
+        );
+        assert!(sent[0].from_left);
+        assert_eq!(sent[0].lane, format!("relay:{}:codex", handoff.id));
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        let back = desk.tosses();
+        assert_eq!(
+            (back[0].from.as_str(), back[0].to.as_str()),
+            ("chatgpt", "codex")
+        );
+    }
+
+    /// #282: the timeline says Codex where a Codex review's words go back.
+    #[test]
+    fn a_codex_reviews_timeline_names_codex() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = codex_opened(&desk, &lines, Some("L1"));
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        let said = serde_json::to_string(&desk.projection(5)).unwrap();
+        assert!(said.contains(&by_doer(&settled(), Some(CODEX))), "{said}");
+        assert!(!said.contains("Claude"), "{said}");
+        // A Claude review's words stay as they were.
+        assert_eq!(by_doer(&settled(), None), settled());
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().doer.as_deref(),
+            Some(CODEX)
+        );
+    }
+
+    /// #282: 左滑发起 on a Codex thread leaves its words in Codex's queue
+    /// under the swipe's code, and follows them there.
+    #[test]
+    fn a_swipe_on_a_codex_thread_goes_into_its_queue() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        assert_eq!(
+            launch(&desk, &lines, CODEX, "t1", "review", 1).unwrap(),
+            Launched::Queued
+        );
+        {
+            let sent = lines.sent.borrow();
+            assert_eq!(sent.len(), 1, "{sent:?}");
+            assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("codex", "t1"));
+            assert!(sent[0].2.contains("relay_to_chatgpt"));
+        }
+        let launches = desk.launches();
+        let left = launches.get("t1").unwrap();
+        assert_eq!(left.doer.as_deref(), Some(CODEX));
+        assert_eq!(left.id, left.code);
+        drop(launches);
+        // Still waiting in the queue: the same swipe leaves nothing more.
+        assert_eq!(
+            launch(&desk, &lines, CODEX, "t1", "review", 2).unwrap(),
+            Launched::AlreadyQueued
+        );
+        assert_eq!(lines.sent.borrow().len(), 1);
     }
 
     /// A review started without naming its doer stays Claude Code's.
@@ -3203,11 +3096,11 @@ mod tests {
         let lines = Fake::default();
         left_as(&lines, Some("waiting"), None);
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 1).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 1).unwrap(),
             Launched::Queued
         );
         assert_eq!(
-            launch(&desk, &lines, "s2", "discuss", 1).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s2", "discuss", 1).unwrap(),
             Launched::Queued
         );
         let sent = lines.sent.borrow().clone();
@@ -3216,18 +3109,18 @@ mod tests {
         assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("结论：通过"));
         assert!(sent[1].2.contains("relay_to_chatgpt") && sent[1].2.contains("不改代码"));
         // Kinds not open yet, a bad id, no way out: nothing is sent.
-        assert!(launch(&desk, &lines, "s3", "test", 1).is_err());
-        assert!(launch(&desk, &lines, "../x", "review", 1).is_err());
+        assert!(launch(&desk, &lines, CLAUDE, "s3", "test", 1).is_err());
+        assert!(launch(&desk, &lines, CLAUDE, "../x", "review", 1).is_err());
         let offline = Fake {
             offline: true,
             ..Fake::default()
         };
-        assert!(launch(&desk, &offline, "s3", "review", 1).is_err());
+        assert!(launch(&desk, &offline, CLAUDE, "s3", "review", 1).is_err());
         let unreachable = Fake {
             unreachable: true,
             ..Fake::default()
         };
-        assert!(launch(&desk, &unreachable, "s3", "review", 1).is_err());
+        assert!(launch(&desk, &unreachable, CLAUDE, "s3", "review", 1).is_err());
         assert!(offline.sent.borrow().is_empty() && unreachable.sent.borrow().is_empty());
         assert_eq!(lines.sent.borrow().len(), 2);
     }
@@ -3237,26 +3130,26 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         left_as(&lines, Some("waiting"), None);
-        launch(&desk, &lines, "s1", "review", 1).unwrap();
+        launch(&desk, &lines, CLAUDE, "s1", "review", 1).unwrap();
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 2).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 2).unwrap(),
             Launched::AlreadyQueued
         );
         // Another kind for the same session waits too: one ask at a time.
         assert_eq!(
-            launch(&desk, &lines, "s1", "discuss", 2).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "discuss", 2).unwrap(),
             Launched::AlreadyQueued
         );
         // Taken words wait for the session to be idle: still queued.
         left_as(&lines, Some("taken"), None);
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 3).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 3).unwrap(),
             Launched::AlreadyQueued
         );
         // In the session but no handoff yet: still asked, and said so.
         left_as(&lines, Some("started"), None);
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 4).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 4).unwrap(),
             Launched::AlreadyQueued
         );
         assert_eq!(desk.launch_projection(&lines, 4)[0]["state"], "started");
@@ -3268,7 +3161,7 @@ mod tests {
         assert_eq!(desk.launch_projection(&lines, 5), json!([]));
         left_as(&lines, Some("waiting"), None);
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 6).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 6).unwrap(),
             Launched::Queued
         );
         assert_eq!(
@@ -3287,17 +3180,17 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         lines.leave_fails.set(true);
-        assert!(launch(&desk, &lines, "s1", "review", 1).is_err());
+        assert!(launch(&desk, &lines, CLAUDE, "s1", "review", 1).is_err());
         assert_eq!(desk.launch_projection(&lines, 1), json!([]));
         lines.leave_fails.set(false);
         left_as(&lines, Some("waiting"), None);
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 2).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 2).unwrap(),
             Launched::Queued
         );
         // Another session is its own line.
         assert_eq!(
-            launch(&desk, &lines, "s2", "review", 2).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s2", "review", 2).unwrap(),
             Launched::Queued
         );
     }
@@ -3307,14 +3200,14 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         left_as(&lines, Some("waiting"), None);
-        launch(&desk, &lines, "s1", "review", 0).unwrap();
+        launch(&desk, &lines, CLAUDE, "s1", "review", 0).unwrap();
         left_as(&lines, Some("refused"), Some("session ended"));
         let shown = desk.launch_projection(&lines, 10);
         assert_eq!(shown[0]["state"], "refused");
         assert_eq!(shown[0]["reason"], "session ended");
         // A refusal can be swiped again at once.
         assert_eq!(
-            launch(&desk, &lines, "s1", "review", 11).unwrap(),
+            launch(&desk, &lines, CLAUDE, "s1", "review", 11).unwrap(),
             Launched::Queued
         );
         left_as(&lines, Some("expired"), None);
@@ -3327,7 +3220,7 @@ mod tests {
         // Words whose file went before they were seen taken: not known to
         // be taken, so not said to be; with no handoff in the hour, lost.
         left_as(&lines, Some("waiting"), None);
-        launch(&desk, &lines, "s3", "review", 0).unwrap();
+        launch(&desk, &lines, CLAUDE, "s3", "review", 0).unwrap();
         desk.launch_projection(&lines, 1);
         left_as(&lines, None, None);
         let shown = desk.launch_projection(&lines, 60_000);
@@ -3338,7 +3231,7 @@ mod tests {
             .any(|l| l["session"] == "s3" && l["state"] == "unknown"));
         // Words never taken expire with their hour.
         left_as(&lines, Some("waiting"), None);
-        launch(&desk, &lines, "s2", "review", 0).unwrap();
+        launch(&desk, &lines, CLAUDE, "s2", "review", 0).unwrap();
         let shown = desk.launch_projection(&lines, LAUNCH_LIFETIME_MS);
         let state = |session: &str| {
             shown
