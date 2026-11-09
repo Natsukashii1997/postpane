@@ -6,6 +6,33 @@
 
 
 
+## 智能体互发消息：移植上游 b1217c3（#278）（2026-11-09，Claude，常浩「提交报告，然后开始做……直接拿过来代码，不要自己从头开始做」；已提交、PR 待合并、未发布）
+
+- 时间：开工 `2026-11-09 10:33`。来由：常浩要学上游「智能体之间用纸飞机互发消息」，调研报告 `docs/design/智能体互发消息-现状与差距-2026-11-09.md`（`0dc2b5b`）。
+- 改了哪些文件：
+  - 原样搬入上游：`src/crates/messaging/`、`src/crates/platform/src/delivery/`、`claude_plugin/mod.rs` 的 `unwrap_prompt`、`AgentMessagesRow.tsx`（只改了 `Menu` 的导入）；
+  - 手工接线：`host/src/{lib,tools,extension,claude_plugin,messages}.rs`；
+  - 设置：`core/src/{lib,settings}.rs`、`protocol/src/index.ts`、`ToolsSection.tsx`；
+  - P-13：`AiAccessAgentRows.tsx`（新）、`AiAccessPane.tsx`、`AGENTS.md`「AI 接入」；
+  - 其他：`docs/platform-architecture.md`，以及 `file-size-allowlist.json` 和基线。
+- 测试：
+  - `pnpm run check` 退出码 0；
+  - `pnpm test`：Rust 合计 `912 passed; 0 failed`，前端 `ℹ pass 379` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+  - 原样输出在 `~/Library/Application Support/postpane/evidence/2026-11-09-278-agent-messages/`。
+- 验证：只做了编译和测试，未装机，未实机互发。
+- 截图：无，未装机。
+- 发布与回读：未发布。等常浩答复下面两项改动确认，再装机实测、合并。
+- 遗留：
+  - **P-14 改动确认待常浩答复**：
+    - ① 互发消息飞不飞纸飞机。`messages.rs` 的飞行回调现在是空操作；
+    - ② 设置那一节的标题「让智能体调整侧栏」改不改成「智能体工具」。
+  - 上游插件卡片上的「Send messages」开关没搬：驿窗没有 `KnownClientCard`，两个设置都默认开。
+  - #253 正文里「不借以我的名义发」一条待改。
+  - 300 行棘轮：三个文件为了保持上游原样，进了白名单。
+- 本轮新坑：无
+- skill 进化：无
+
 ## AGENTS.md 加「已定内容要改，先单独确认」（2026-11-09，Claude，常浩口述底线：「明确确定过的内容，后续涉及修改要给出指示……批量授权里单独项要摘出来询问」；已提交、无需发布）
 
 - 时间：开工 `2026-11-09 09:50`。来由：#264 在「直接通过」的批量授权下改坏侧栏小人（L-35），常浩两次明确底线。

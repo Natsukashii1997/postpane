@@ -208,6 +208,7 @@ export function AgentPluginsPane({
           tools={tools}
           groups={items.filter((item) => item.place === "tools")}
           snapshot={snapshot}
+          action={action}
           request={request}
           active={active}
           t={t}

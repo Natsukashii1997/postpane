@@ -140,6 +140,10 @@ impl crate::AgentHudCore {
             | "showMenuBarIcon"
             | "appearanceFollowsScreen"
             | "hudTools"
+            | "agentMessages"
+            | "agentMessagesAsUser"
+            | "claudeMessages"
+            | "deepseekMessages"
             | "claudeAnswers"
             | "readCopilotQuota"
             | "clientHooks"
@@ -147,6 +151,10 @@ impl crate::AgentHudCore {
             | "launchAtLogin"
             | "hudVisible"
                 if value.is_boolean() => {}
+            // Passes in a row agents may message each other before the user
+            // looks; null for no limit (upstream b1217c3, #278).
+            "agentMessagesLimit"
+                if value.is_null() || value.as_u64().is_some_and(|v| (1..=1000).contains(&v)) => {}
             "approvalWaitMinutes"
                 if value
                     .as_u64()

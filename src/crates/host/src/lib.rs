@@ -25,6 +25,7 @@ mod handoff;
 mod hud;
 mod instance;
 mod mcp_clients;
+mod messages;
 mod picture;
 mod screens;
 mod shell;
@@ -40,6 +41,8 @@ struct Backend {
     projected: Option<u64>,
     error: Option<String>,
     tools: Option<Arc<tools::ToolsChannel>>,
+    /// Agent messages (#278): agents on this computer message each other.
+    messages: Option<Arc<messages::AgentMessages>>,
     extension: Option<Arc<dyn extension::ProductExtension>>,
 }
 /// Every HUD flies the letters handoffs moved since the last look (#171).
@@ -66,7 +69,7 @@ impl Backend {
         value["relayLaunches"] = handoff::launch_projection(app);
         if let Some(tools) = &self.tools {
             value["connection"]["localTools"] = tools.configure(tools::channel_wanted(
-                value["settings"]["hudTools"].as_bool().unwrap_or(false),
+                tools::agent_tools_on(&value["settings"]),
                 self.extension.as_deref(),
                 chatgpt_registered(app),
             ));
@@ -125,7 +128,7 @@ impl Backend {
         let wanted = tools::channel_wanted(
             self.snapshot
                 .as_ref()
-                .is_some_and(|snapshot| snapshot["settings"]["hudTools"] == true),
+                .is_some_and(|snapshot| tools::agent_tools_on(&snapshot["settings"])),
             self.extension.as_deref(),
             chatgpt_registered(app),
         );
@@ -284,12 +287,13 @@ impl Service {
             projected: None,
             error: None,
             tools: None,
+            messages: None,
             extension: extension.clone(),
         }));
         let tools = Arc::new(tools::ToolsChannel::new(
             app.clone(),
             Arc::downgrade(&backend),
-            tools_directory,
+            tools_directory.clone(),
         ));
         backend.lock().unwrap_or_else(PoisonError::into_inner).tools = Some(tools);
         if let Some(product) = &extension {
@@ -330,6 +334,17 @@ impl Service {
                 update: Arc::new(move |notice| coordinator::update_notice(&updates, notice)),
             })?;
         }
+        // Agent messages, over the product's senders when it has some.
+        let messages = messages::AgentMessages::start(
+            &app,
+            Arc::downgrade(&backend),
+            extension.as_ref().and_then(|product| product.delivery()),
+            tools_directory,
+        )?;
+        backend
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .messages = Some(messages);
         // Before the first collection pass, so a Claude desktop question the
         // app can answer never shows first as one it cannot: the product's own
         // way into sessions, else Agent HUD's Claude Code plugin.
@@ -1080,6 +1095,15 @@ pub fn run_with_options(
                             .lock()
                             .unwrap_or_else(PoisonError::into_inner)
                             .stop();
+                    }
+                    let messages = service
+                        .backend
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .messages
+                        .clone();
+                    if let Some(messages) = messages {
+                        messages.stop();
                     }
                     let backend = service
                         .backend

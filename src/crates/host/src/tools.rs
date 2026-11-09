@@ -1,5 +1,5 @@
 //! Public local MCP channel, attached to the application's existing owners.
-use super::{presentation::Presentation, Backend};
+use super::{messages::AgentMessages, presentation::Presentation, Backend};
 use agent_hud_runtime::local_tools::{self, Server};
 use serde_json::{json, Value};
 use std::{
@@ -112,17 +112,30 @@ fn handle(
         // The product's own tool groups and switches: not HUD tools', and
         // never with the application's lock held, which the product's own
         // work takes.
-        let extension = backend
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extension
-            .clone();
+        let (extension, messages, snapshot) = {
+            let owner = backend.lock().unwrap_or_else(PoisonError::into_inner);
+            (
+                owner.extension.clone(),
+                owner.messages.clone(),
+                owner.snapshot.clone(),
+            )
+        };
         if !active.load(Ordering::Acquire) {
             return Err("Local tools are disabled".into());
+        }
+        // Without a product of its own the host answers with agent messages
+        // (#278, upstream b1217c3).
+        if extension.is_none() && method == "host_tools" {
+            return Ok(AgentMessages::tools(
+                snapshot.as_deref().unwrap_or(&Value::Null),
+            ));
         }
         let plugin = app.try_state::<super::deepseek_plugin::DeepSeekPlugin>();
         let channel = plugin.as_deref().map(|plugin| plugin.channel());
         let params = with_caller(channel, params, std::time::SystemTime::now());
+        if extension.is_none() {
+            return messages.ok_or("Application data is loading")?.call(&params);
+        }
         return host_request(extension.as_deref(), method, params);
     }
     if method == super::handoff::RELAY_METHOD {
@@ -203,6 +216,13 @@ const HOST_METHODS: [&str; 2] = ["host_tools", "host_tool"];
 /// Whether the channel listens: for HUD tools while their switch is on, for
 /// the product's own tools while one of its groups is on, and for
 /// `relay_to_chatgpt` while the ChatGPT extension is registered.
+/// Whether agents may arrange the HUD or message each other: either keeps
+/// the local tools channel listening; HUD tools still answer only while
+/// their own switch is on.
+pub(super) fn agent_tools_on(settings: &Value) -> bool {
+    settings["hudTools"] == true || settings["agentMessages"] == true
+}
+
 pub(super) fn channel_wanted(
     hud_tools: bool,
     extension: Option<&dyn crate::extension::ProductExtension>,

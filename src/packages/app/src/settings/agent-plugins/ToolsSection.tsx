@@ -3,7 +3,12 @@
 // `children` (Details) close the group.
 import { Fragment, type ReactNode } from "react";
 import type { Snapshot } from "@agent-hud/protocol";
-import { Section, type Text } from "../SettingsPrimitives";
+import {
+  Section,
+  type SettingsPaneProps,
+  type Text,
+} from "../SettingsPrimitives";
+import { AgentMessagesRow } from "./AgentMessagesRow";
 import { ToolSwitchRow } from "./rows";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import type { HudTools } from "./use-status";
@@ -12,6 +17,7 @@ export function ToolsSection({
   tools,
   groups,
   snapshot,
+  action,
   request,
   active,
   t,
@@ -20,6 +26,7 @@ export function ToolsSection({
   tools: HudTools;
   groups: AgentPluginItem[];
   snapshot: Snapshot;
+  action: SettingsPaneProps["action"];
   request: AgentPluginContext["request"];
   active: boolean;
   t: Text;
@@ -49,6 +56,8 @@ export function ToolsSection({
         error={tools.error ?? (problem ? t(...problem) : null)}
         onChange={(value) => void tools.set(value)}
       />
+      {/* Agent messages (#278, upstream b1217c3). */}
+      <AgentMessagesRow snapshot={snapshot} action={action} t={t} />
       {groups.map((item) => (
         <Fragment key={item.id}>
           {item.render({

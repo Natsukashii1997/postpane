@@ -1,1 +1,14 @@
-{}
+{
+  "src/crates/host/src/lib.rs": {
+    "max": 1126,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+  },
+  "src/crates/platform/src/claude_plugin/mod.rs": {
+    "max": 752,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+  },
+  "src/packages/protocol/src/index.ts": {
+    "max": 1334,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+  }
+}

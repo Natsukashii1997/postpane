@@ -48,6 +48,10 @@ impl ClaudePlugin {
         &self.channel
     }
 
+    /// The folder the plugin shares with the app.
+    pub(crate) fn channel_directory(&self) -> PathBuf {
+        self.channel.directory().to_path_buf()
+    }
     /// The HUD's way to answer Claude's questions in a session running the plugin.
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
         Arc::new(self.claude_replies())
