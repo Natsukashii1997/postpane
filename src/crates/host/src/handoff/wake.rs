@@ -167,10 +167,13 @@ pub(super) fn wake_arguments(
     Ok(arguments.into_iter().map(str::to_owned).collect())
 }
 
-pub(super) fn woke_stopped(error: &str) -> String {
+/// Why a session runs in the background: its process stopped. The reason
+/// sending failed is not repeated, as it tells the person to open the
+/// session, which PostPane does for them here.
+pub(super) fn woke_stopped() -> String {
     l10n::text(
-        &format!("直接送话没送到：{error}。这个会话的 Claude 进程已被桌面版停掉，驿窗改在后台续接它，按意见修改"),
-        &format!("Could not send it straight: {error}. The desktop app stopped this session's Claude process, so PostPane runs it in the background to work on the answer"),
+        "这个会话的 Claude 进程已停（桌面版会回收空闲会话），直接送话送不到；驿窗改在后台续接它，按意见修改",
+        "This session's Claude process stopped (the desktop app reclaims idle sessions), so the answer could not go straight to it; PostPane runs it in the background to work on the answer",
     )
 }
 pub(super) fn woke_queued() -> String {

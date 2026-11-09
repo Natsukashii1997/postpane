@@ -1094,7 +1094,7 @@ impl Desk {
                 return match lines.wake(id, session, &text) {
                     Ok(()) => self.change(|book| {
                         book.returned(id, StepKind::Back, &text, &prompt, true, now)
-                            && book.woke(id, &woke_stopped(&first), now)
+                            && book.woke(id, &woke_stopped(), now)
                             && then(book)
                     }),
                     Err(error) => self.change(|book| {
@@ -4237,6 +4237,8 @@ mod tests {
         assert_eq!(shown[0]["phase"], "returned");
         assert_eq!(shown[0]["auto"], true);
         assert_eq!(shown[0]["wakingSince"], 5);
+        let steps_shown = shown[0]["steps"].as_array().unwrap();
+        assert_eq!(steps_shown.last().unwrap()["text"], woke_stopped());
         // The run has the words: nothing waits with the plugin to follow.
         assert_eq!(last_back(&desk, 5).1, "started");
         assert!(!desk.track(&lines, 6));
