@@ -11,6 +11,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+mod pull_request;
+pub use pull_request::pull_request;
 
 /// How many handoffs are kept, newest first.
 pub const KEEP: usize = 200;
@@ -222,8 +224,11 @@ pub struct Handoff {
     pub id: String,
     /// The task's name, which the review conversation is about.
     pub title: String,
-    /// The Claude Code session doing the work.
+    /// The Claude Code session doing the work, or the Codex thread (#280).
     pub claude_session: String,
+    /// `codex` when Codex does the work; none is Claude Code (#280).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doer: Option<String>,
     #[serde(default)]
     pub cwd: Option<String>,
     /// The ChatGPT conversation reviewing it, once open.
@@ -640,6 +645,12 @@ impl Book {
     fn get_mut(&mut self, id: &str) -> Option<&mut Handoff> {
         self.list.iter_mut().find(|handoff| handoff.id == id)
     }
+    /// Names the client doing `id`'s work, when not Claude Code (#280).
+    pub fn set_doer(&mut self, id: &str, doer: &str) {
+        self.get_mut(id)
+            .into_iter()
+            .for_each(|h| h.doer = Some(doer.into()));
+    }
     fn live_mut(&mut self, id: &str) -> Option<&mut Handoff> {
         self.get_mut(id).filter(|handoff| handoff.live())
     }
@@ -671,6 +682,7 @@ impl Book {
             id: new_id(now),
             title: title.to_owned(),
             claude_session: session.to_owned(),
+            doer: None,
             cwd: cwd.filter(|cwd| !cwd.is_empty()).map(str::to_owned),
             chatgpt_conversation: None,
             status: Status::Opening,
@@ -1445,36 +1457,6 @@ pub fn review_exit(reply: &str) -> Result<Option<Review>, Flaw> {
     Ok(Some(way))
 }
 
-/// The first pull request `text` links to, as 「owner/repo#n」 (#217).
-pub fn pull_request(text: &str) -> Option<String> {
-    text.match_indices("github.com/").find_map(|(at, found)| {
-        let mut parts = text[at + found.len()..].split('/');
-        let owner = parts.next()?;
-        let repo = parts.next()?;
-        if parts.next()? != "pull" {
-            return None;
-        }
-        let number = parts
-            .next()?
-            .chars()
-            .take_while(char::is_ascii_digit)
-            .collect::<String>();
-        let fine = |part: &str| {
-            !part.is_empty()
-                && part
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-        };
-        (fine(owner) && fine(repo) && !number.is_empty()).then(|| {
-            format!(
-                "{}/{}#{number}",
-                owner.to_ascii_lowercase(),
-                repo.to_ascii_lowercase()
-            )
-        })
-    })
-}
-
 fn new_id(now: i64) -> String {
     use std::sync::atomic::{AtomicU32, Ordering};
     static SEQUENCE: AtomicU32 = AtomicU32::new(0);
@@ -2240,6 +2222,7 @@ mod tests {
         let kept = load(&data);
         let handoff = &kept.list[0];
         assert_eq!(handoff.rounds_from, 0);
+        assert_eq!(handoff.doer, None);
         let back = handoff.steps.last().unwrap();
         assert_eq!((back.prompt.as_deref(), back.delivery), (None, None));
         assert_eq!(handoff.counted(), 1);
