@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronLeft,
   LoaderCircle,
@@ -18,6 +19,8 @@ import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
 import { ApprovalTag } from "./ApprovalTag";
+import { START_BADGE } from "./approval-list";
+import { sendThenForget } from "./answer-gate";
 
 /** A question's draft: the offered answers picked, the words typed, and
  * whether those words are the answer (`own`). Skipping or picking a single
@@ -55,15 +58,19 @@ export function PermissionQuestionCard({
   zh = false,
   answer,
   openSettings,
+  goStart,
 }: {
   request: Approval;
   disabled: boolean;
   pending: boolean;
   light?: boolean;
   zh?: boolean;
-  answer: (decision: RequestDecision) => void | Promise<void>;
+  answer: (decision: RequestDecision) => Promise<boolean>;
   /** Settings, on a page such as "agent-plugins"; without it the card only says where to go. */
   openSettings?: (page: string) => void;
+  /** A handoff card's 去开始 in place of 知道了: back to its session, where
+   * the person starts the new one, the card put away (#247). */
+  goStart?: () => void;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
   const [answers, setAnswers] = useState<Record<string, Draft>>(
@@ -224,9 +231,25 @@ export function PermissionQuestionCard({
             key !== omitKey && (value.selected.length > 0 || "custom" in value),
         ),
     );
-    drafts.delete(request.id);
-    void answer({ kind: "answer", answers: written });
+    void sendThenForget(answer, { kind: "answer", answers: written }, () =>
+      drafts.delete(request.id),
+    );
   };
+
+  // Every hook comes before the returns below: a card whose client stops or
+  // starts taking answers renders the other way, and React needs the same
+  // hooks each time (#259).
+  const safePage = Math.min(page, Math.max(0, questions.length - 1));
+  // None when the card cannot answer and was sent no questions.
+  const q = questions[safePage];
+  const editingCustom =
+    editingCustomKey === q?.answerKey || q?.options.length === 0;
+  useEffect(() => {
+    if (!editingCustom) return;
+    const input = customInputRef.current;
+    if (!input || input.closest("[inert], [aria-hidden=true]")) return;
+    input.focus({ preventScroll: true });
+  }, [editingCustom, q?.answerKey]);
 
   if (!canAnswerQuestion) {
     // Only the question and why it waits for the client: offered answers
@@ -260,7 +283,9 @@ export function PermissionQuestionCard({
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 600, color: primary }}>
-            {t(`Answer in ${vendor}`, `请到 ${vendor} 里回答`)}
+            {request.badge === START_BADGE
+              ? t(`Start it in ${vendor}`, `请到 ${vendor} 里开始`)
+              : t(`Answer in ${vendor}`, `请到 ${vendor} 里回答`)}
           </span>
           {request.answerNote && (
             <span
@@ -306,8 +331,10 @@ export function PermissionQuestionCard({
             type="button"
             disabled={disabled}
             onClick={() => {
-              drafts.delete(request.id);
-              void answer({ kind: "leave" });
+              if (goStart) return goStart();
+              void sendThenForget(answer, { kind: "leave" }, () =>
+                drafts.delete(request.id),
+              );
             }}
             style={{
               display: "inline-flex",
@@ -324,28 +351,23 @@ export function PermissionQuestionCard({
               cursor: disabled ? "default" : "pointer",
             }}
           >
-            <X size={9} strokeWidth={2.6} />
-            {t("Dismiss", "知道了")}
+            {goStart ? (
+              <ArrowUpRight size={9} strokeWidth={2.6} />
+            ) : (
+              <X size={9} strokeWidth={2.6} />
+            )}
+            {goStart ? t("Go start", "去开始") : t("Dismiss", "知道了")}
           </button>
         </div>
       </div>
     );
   }
 
-  const safePage = Math.min(page, Math.max(0, questions.length - 1));
-  const q = questions[safePage];
   if (!q) return null;
   const key = q.answerKey;
   const value = answers[key] ?? { selected: [] };
   const hasCustom = Boolean(value.own && value.custom?.trim());
   const isAnswered = value.selected.length > 0 || hasCustom;
-  const editingCustom = editingCustomKey === key || q.options.length === 0;
-  useEffect(() => {
-    if (!editingCustom) return;
-    const input = customInputRef.current;
-    if (!input || input.closest("[inert], [aria-hidden=true]")) return;
-    input.focus({ preventScroll: true });
-  }, [editingCustom, key]);
   const advanceOrSubmit = () => {
     if (!isAnswered || disabled) return;
     setEditingCustomKey(null);

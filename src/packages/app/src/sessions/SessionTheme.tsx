@@ -19,12 +19,7 @@ import {
   type ListMoney,
   type TokenKindName,
 } from "../lib/sessions";
-export {
-  sessionMoney,
-  sessionsMoney,
-  unpricedHelp,
-  type ListMoney,
-} from "../lib/sessions";
+export { sessionMoney, unpricedHelp, type ListMoney } from "../lib/sessions";
 
 export type Arrangement = "day" | "active";
 export type Entry = SessionDetail["turns"][number];
@@ -59,11 +54,6 @@ export interface Theme {
   pick: string;
   /** A card's colour as one solid, for halos behind chart labels. */
   surface: string;
-}
-
-export interface SessionGroup {
-  day: number;
-  sessions: Session[];
 }
 
 export const ALL = "__all__";

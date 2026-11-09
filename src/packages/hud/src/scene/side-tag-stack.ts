@@ -30,3 +30,18 @@ export function clearOf(
   }
   return at;
 }
+
+/** How long the pointer rests on another agent's tag before that agent comes
+ * to the front. Crossing a tag on the way elsewhere, or a tag coming in under
+ * a still pointer, does not bring it forward (#238). */
+export const SIDE_TAG_REST_MS = 250;
+
+/** Whether the tag in front changed agents since the last frame: it then
+ * takes the new agent's place at once, where that agent's own tag hung,
+ * instead of sliding there across the other tags (#238). */
+export function frontTagSwapped(
+  previous: string | undefined,
+  next: string | undefined,
+): boolean {
+  return previous != null && next != null && previous !== next;
+}

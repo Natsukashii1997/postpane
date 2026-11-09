@@ -201,6 +201,40 @@ fn the_huds_answer_goes_to_a_loaded_session_and_tidies_what_was_taken() {
     assert!(!file.exists());
 }
 
+/// #255 (L-14): a session that ended once its turn was over refuses words
+/// handed to it now, yet queued words wait for it as the plugin reads them,
+/// under the same refusals for empty words and slash commands.
+#[test]
+fn words_queued_for_a_session_that_ended_wait_for_it_to_open() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("data"));
+    let now = SystemTime::now();
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    assert_eq!(
+        channel.hand(SESSION, "Fix the three points", now),
+        Err(Refusal::NotLoaded)
+    );
+    for refused in ["/clear", "   "] {
+        assert!(channel.queue(SESSION, refused, now).is_err(), "{refused:?}");
+    }
+    assert!(channel.queue("../x", "Fix it", now).is_err());
+    let id = channel.queue(SESSION, "Fix the three points", now).unwrap();
+    let file = channel
+        .directory()
+        .join("prompts")
+        .join(SESSION)
+        .join(format!("{id}.json"));
+    let left: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+    assert_eq!(left["text"], "Fix the three points");
+    assert_eq!(left["asUser"], false);
+    let expires = left["expiresAt"].as_u64().unwrap() - left["at"].as_u64().unwrap();
+    assert_eq!(expires, PROMPT_LIFETIME.as_millis() as u64);
+    assert_eq!(
+        channel.state(SESSION, &id, now).unwrap(),
+        Some((PromptState::Waiting, None))
+    );
+}
+
 #[test]
 fn words_left_under_an_identity_report_how_they_went() {
     let temp = tempfile::tempdir().unwrap();
@@ -304,6 +338,17 @@ fn an_unreached_session_names_the_step_that_lets_the_hud_answer() {
     assert_eq!(paused.fix, None);
     assert!(paused.note.contains("paused"), "{}", paused.note);
 
+    // It ended (Claude quit or restarted and stopped it): reloading plugins has
+    // nowhere to run, so the card says to open it in Claude, however long ago.
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    for seconds_ago in [0, 3_600] {
+        checked_in(seconds_ago);
+        let ended = replies.reaches("claude", SESSION).unwrap_err();
+        assert_eq!(ended.fix, None);
+        assert!(ended.note.contains("stopped"), "{}", ended.note);
+    }
+
+    check_in(&channel, SESSION, br#"{"at":1}"#);
     checked_in(0);
     assert!(replies.reaches("claude", SESSION).is_ok());
 
@@ -334,4 +379,129 @@ fn a_session_whose_process_stopped_is_told_apart_from_one_never_seen() {
     assert!(channel.stopped(SESSION, now, quiet));
     assert!(channel.last_check_in(SESSION).is_none());
     assert!(!channel.stopped("not a session", now, quiet));
+}
+
+/// A session that ended stays known as ended for a week, so its question
+/// still says to open it in Claude; other check-ins go after a day.
+#[test]
+fn an_ended_session_is_remembered_for_a_week() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("channel"));
+    let ended = "55555555-5555-4555-8555-555555555555";
+    check_in(&channel, SESSION, br#"{"at":1}"#);
+    check_in(&channel, ended, br#"{"ended":1}"#);
+    let now = SystemTime::now();
+    let day = Duration::from_secs(86_400);
+
+    channel.sweep(now + 2 * day);
+    assert!(channel.ended(ended), "kept past a day");
+    assert_eq!(
+        channel.last_check_in(SESSION),
+        None,
+        "a plain check-in goes after a day"
+    );
+
+    channel.sweep(now + 8 * day);
+    assert!(!channel.ended(ended), "gone after a week");
+}
+
+/// #257: words back to Claude go under the caller's own id, so the same step
+/// sent twice leaves one copy: the second is refused as used before, whether
+/// handed to a session running now or queued for one that ended.
+#[test]
+fn words_left_under_the_callers_id_go_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("data"));
+    let now = SystemTime::now();
+    let id = "h1a2b3c400-b5";
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    assert_eq!(
+        channel.hand_as(SESSION, id, "Fix the three points", now),
+        Err(Refusal::NotLoaded)
+    );
+    assert!(channel.queue_as(SESSION, "../x", "Fix it", now).is_err());
+    channel
+        .queue_as(SESSION, id, "Fix the three points", now)
+        .unwrap();
+    assert_eq!(
+        channel.queue_as(SESSION, id, "Fix the three points", now),
+        Err(Refusal::IdentityConflict)
+    );
+    check_in(&channel, SESSION, b"{}");
+    assert_eq!(
+        channel.hand_as(SESSION, id, "Fix the three points", now),
+        Err(Refusal::IdentityConflict)
+    );
+    let folder = channel.directory().join("prompts").join(SESSION);
+    assert_eq!(fs::read_dir(&folder).unwrap().count(), 1, "one copy");
+    let left: Value =
+        serde_json::from_slice(&fs::read(folder.join(format!("{id}.json"))).unwrap()).unwrap();
+    assert_eq!(left["id"], id);
+    assert_eq!(
+        channel.state(SESSION, id, now).unwrap(),
+        Some((PromptState::Waiting, None))
+    );
+}
+
+/// #258: who began a session's current turn, read from the end of its
+/// transcript: the person's own words, words Agent HUD's plugin submitted,
+/// or neither that can be told (a task notification, a system line).
+#[test]
+fn the_current_turn_is_begun_by_the_person_or_by_the_plugin() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join("claude");
+    let folder = config.join("projects").join("-w");
+    fs::create_dir_all(&folder).unwrap(); // plain directory
+    let line = |value: Value| format!("{value}\n");
+    let human = |text: &str, at: &str| {
+        line(
+            json!({"type":"user","timestamp":at,"origin":{"kind":"human"},"message":{"role":"user","content":text}}),
+        )
+    };
+    let plugin = |text: &str, at: &str| {
+        line(
+            json!({"type":"user","timestamp":at,"origin":{"kind":"plugin","name":"agent-hud"},"pluginPrompt":{"name":"agent-hud","text":text},"message":{"role":"user","content":format!("The agent-hud plugin sent a message:\n{text}")}}),
+        )
+    };
+    let tool = line(
+        json!({"type":"user","timestamp":"2026-11-09T01:00:09Z","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}),
+    );
+    let answer = line(
+        json!({"type":"assistant","timestamp":"2026-11-09T01:00:10Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}),
+    );
+    let file = folder.join(format!("{SESSION}.jsonl"));
+    assert_eq!(current_turn(&config, SESSION), None, "no transcript");
+    fs::write(
+        &file,
+        [
+            human("开工", "2026-11-09T01:00:00Z"),
+            answer.clone(),
+            plugin("ChatGPT 的意见", "2026-11-09T01:00:08Z"),
+            tool.clone(),
+            answer.clone(),
+        ]
+        .concat(),
+    )
+    .unwrap();
+    assert_eq!(
+        current_turn(&config, SESSION),
+        Some((Opener::Plugin("ChatGPT 的意见".into()), 1_794_186_008_000))
+    );
+    let mut more = fs::read_to_string(&file).unwrap();
+    more.push_str(&human("先改第 2 条", "2026-11-09T01:01:00Z"));
+    more.push_str(&line(
+        json!({"type":"user","timestamp":"2026-11-09T01:01:01Z","message":{"role":"user","content":"[Request interrupted by user]"}}),
+    ));
+    more.push_str(&tool);
+    fs::write(&file, &more).unwrap();
+    assert_eq!(
+        current_turn(&config, SESSION),
+        Some((Opener::Person, 1_794_186_060_000))
+    );
+    more.push_str(&line(
+        json!({"type":"user","timestamp":"2026-11-09T01:02:00Z","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>done</task-notification>"}}),
+    ));
+    fs::write(&file, &more).unwrap();
+    assert_eq!(current_turn(&config, SESSION), None, "not told");
+    assert_eq!(current_turn(&config, "../x"), None);
 }

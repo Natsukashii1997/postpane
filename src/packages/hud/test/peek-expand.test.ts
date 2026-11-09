@@ -4,9 +4,25 @@ import {
   cardAgent,
   inlineAlertAllowed,
   peekExpandWait,
+  PEEK_GROWS_INTO,
 } from "../src/peek-expand.ts";
 
-test("a peek grows into the board 1.5 s after it shows, 1.9 s after the mark", () => {
+test("a peek left on its mark grows into that agent's own panel, not the board", () => {
+  // As a click on the mark does: pinned, the board not out.
+  assert.deepEqual(PEEK_GROWS_INTO, { pinned: true, expanded: false });
+  assert.equal(
+    cardAgent({
+      notch: false,
+      inUsagePanel: false,
+      hovered: "hermes",
+      expanded: PEEK_GROWS_INTO.expanded,
+    }),
+    "hermes",
+  );
+  assert.equal(inlineAlertAllowed({ notch: false, ...PEEK_GROWS_INTO }), true);
+});
+
+test("a peek grows into its panel 1.5 s after it shows, 1.9 s after the mark", () => {
   // Pointer came to the mark at 1000; the peek showed at 1400.
   assert.equal(peekExpandWait(400, 1000, 1400), 1500);
   assert.equal(peekExpandWait(400, 1000, 2800), 100);

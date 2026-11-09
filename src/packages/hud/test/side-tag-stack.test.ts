@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clearOf } from "../src/scene/side-tag-stack.ts";
+import {
+  clearOf,
+  frontTagSwapped,
+  SIDE_TAG_REST_MS,
+} from "../src/scene/side-tag-stack.ts";
 
 const rect = (x: number, y: number, width = 170, height = 30) => ({
   x,
@@ -39,4 +43,18 @@ test("on a side edge it steps away from the screen's edge", () => {
     clearOf(rect(57, 300), [rect(57, 290, 200)], "left"),
     rect(57 + 200 + 4, 300),
   );
+});
+
+test("the front tag handed to another agent jumps to its place (#238)", () => {
+  assert.equal(frontTagSwapped("claude", "chatgpt"), true);
+});
+
+test("the same agent's front tag, or a tag coming or going, still slides", () => {
+  assert.equal(frontTagSwapped("claude", "claude"), false);
+  assert.equal(frontTagSwapped(undefined, "claude"), false);
+  assert.equal(frontTagSwapped("claude", undefined), false);
+});
+
+test("a tag brings its agent forward only after a short rest, not a pass", () => {
+  assert.ok(SIDE_TAG_REST_MS >= 150 && SIDE_TAG_REST_MS <= 400);
 });

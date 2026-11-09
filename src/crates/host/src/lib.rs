@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Condvar, Mutex,
+    Arc, Condvar, Mutex, PoisonError,
 };
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
@@ -60,8 +60,7 @@ impl Backend {
             system.project(&mut value);
         }
         if let Some(desk) = app.try_state::<handoff::Desk>() {
-            handoff::wake_queued(app, &desk);
-            value["handoffs"] = desk.projection(chrono::Utc::now().timestamp_millis());
+            value["handoffs"] = handoff::projection(app, &desk);
             fly_tosses(app, &desk);
         }
         value["relayLaunches"] = handoff::launch_projection(app);
@@ -145,7 +144,7 @@ impl Backend {
         let Some(desk) = app.try_state::<handoff::Desk>() else {
             return;
         };
-        let handoffs = desk.projection(chrono::Utc::now().timestamp_millis());
+        let handoffs = handoff::projection(app, &desk);
         fly_tosses(app, &desk);
         let launches = handoff::launch_projection(app);
         if let Some(snapshot) = &mut self.snapshot {
@@ -241,10 +240,9 @@ const DATA: u8 = 1;
 const REQUEST: u8 = 2;
 
 fn wake_collector(wake: &(Mutex<u8>, Condvar), bits: u8) {
-    if let Ok(mut changed) = wake.0.lock() {
-        *changed |= bits;
-        wake.1.notify_one();
-    }
+    let mut changed = wake.0.lock().unwrap_or_else(PoisonError::into_inner);
+    *changed |= bits;
+    wake.1.notify_one();
 }
 
 impl Service {
@@ -264,17 +262,21 @@ impl Service {
         let wake = Arc::new((Mutex::new(0u8), Condvar::new()));
         let watcher_wake = Arc::clone(&wake);
         runtime.set_change_waker(Arc::new(move || {
-            if let Ok(mut changed) = watcher_wake.0.lock() {
-                *changed |= DATA;
-                watcher_wake.1.notify_one();
-            }
+            let mut changed = watcher_wake
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            *changed |= DATA;
+            watcher_wake.1.notify_one();
         }));
         let request_wake = Arc::clone(&wake);
         runtime.set_request_waker(Arc::new(move || {
-            if let Ok(mut changed) = request_wake.0.lock() {
-                *changed |= REQUEST;
-                request_wake.1.notify_one();
-            }
+            let mut changed = request_wake
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            *changed |= REQUEST;
+            request_wake.1.notify_one();
         }));
         let backend = Arc::new(Mutex::new(Backend {
             runtime,
@@ -289,10 +291,7 @@ impl Service {
             Arc::downgrade(&backend),
             tools_directory,
         ));
-        backend
-            .lock()
-            .map_err(|_| "Runtime lock is unavailable")?
-            .tools = Some(tools);
+        backend.lock().unwrap_or_else(PoisonError::into_inner).tools = Some(tools);
         if let Some(product) = &extension {
             let snapshots = Arc::downgrade(&backend);
             let queries = snapshots.clone();
@@ -303,9 +302,7 @@ impl Service {
             product.start(extension::HostContext {
                 snapshot: Arc::new(move || {
                     let backend = snapshots.upgrade().ok_or("Application is stopping")?;
-                    let backend = backend
-                        .lock()
-                        .map_err(|_| "Application state unavailable")?;
+                    let backend = backend.lock().unwrap_or_else(PoisonError::into_inner);
                     backend
                         .snapshot
                         .as_ref()
@@ -314,16 +311,12 @@ impl Service {
                 }),
                 query: Arc::new(move |method, params| {
                     let backend = queries.upgrade().ok_or("Application is stopping")?;
-                    let mut backend = backend
-                        .lock()
-                        .map_err(|_| "Application state unavailable")?;
+                    let mut backend = backend.lock().unwrap_or_else(PoisonError::into_inner);
                     backend.runtime.local_query(method, params)
                 }),
                 answer: Arc::new(move |id, decision| {
                     let backend = answers.upgrade().ok_or("Application is stopping")?;
-                    let mut backend = backend
-                        .lock()
-                        .map_err(|_| "Application state unavailable")?;
+                    let mut backend = backend.lock().unwrap_or_else(PoisonError::into_inner);
                     backend.runtime.request(
                         "answer_request",
                         serde_json::json!({"id":id,"decision":decision}),
@@ -350,7 +343,7 @@ impl Service {
         if let Some(replies) = replies {
             backend
                 .lock()
-                .map_err(|_| "Runtime lock is unavailable")?
+                .unwrap_or_else(PoisonError::into_inner)
                 .runtime
                 .set_session_replies(Some(replies));
         }
@@ -362,7 +355,7 @@ impl Service {
         {
             backend
                 .lock()
-                .map_err(|_| "Runtime lock is unavailable")?
+                .unwrap_or_else(PoisonError::into_inner)
                 .runtime
                 .set_conversation_sink(Some(sink));
         }
@@ -400,9 +393,7 @@ impl Service {
                 // indexing interval).
                 let mut indexing = false;
                 while !worker_stopped.load(Ordering::Acquire) {
-                    let Ok(mut changed) = worker_wake.0.lock() else {
-                        return;
-                    };
+                    let mut changed = worker_wake.0.lock().unwrap_or_else(PoisonError::into_inner);
                     let turn = loop {
                         if worker_stopped.load(Ordering::Acquire) {
                             return;
@@ -433,13 +424,10 @@ impl Service {
                         .flatten()
                         .min()
                         .unwrap_or(look_at);
-                        let Ok((woken, _)) = worker_wake
+                        (changed, _) = worker_wake
                             .1
                             .wait_timeout(changed, next.saturating_duration_since(now))
-                        else {
-                            return;
-                        };
-                        changed = woken;
+                            .unwrap_or_else(PoisonError::into_inner);
                     };
                     match turn {
                         Turn::Pass => *changed = 0,
@@ -449,10 +437,10 @@ impl Service {
                     drop(changed);
                     let _turn = worker_collection
                         .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let Ok(mut backend) = worker_backend.lock() else {
-                        return;
-                    };
+                        .unwrap_or_else(PoisonError::into_inner);
+                    let mut backend = worker_backend
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner);
                     let method = match turn {
                         Turn::Pass => Some("snapshot"),
                         Turn::Request => Some("request_snapshot"),
@@ -563,9 +551,10 @@ async fn native_request(
                 params["method"].as_str().ok_or("Extension method is required")?,
                 params.get("params").cloned().unwrap_or(Value::Null),
                 || {
-                    if let Ok(mut backend) = backend.lock() {
-                        backend.refresh_tools(&app);
-                    }
+                    backend
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .refresh_tools(&app);
                 },
             );
         }
@@ -578,24 +567,18 @@ async fn native_request(
         if method=="set_setting" {if let Some(value)=app.state::<system::System>().set_setting(params["key"].as_str().ok_or("Setting key is required")?,&params["value"])? {params["value"]=value;}}
         if method=="set_setting" && params["key"]=="clientHooks" {
             let enabled=params["value"].as_bool().ok_or("clientHooks must be a boolean")?;
-            let _action=hook_actions.lock().map_err(|_|"Hook action owner unavailable")?;
+            let _action=hook_actions.lock().unwrap_or_else(PoisonError::into_inner);
             if stopped.load(Ordering::Acquire){return Err("The application is stopping".into());}
             // The transport owns waiting connections and may join on stop. It
             // must be configured before taking the serial collector's lock.
             let previous={
-                let mut hooks=hooks.lock().map_err(|_|"Hook service unavailable")?;
+                let mut hooks=hooks.lock().unwrap_or_else(PoisonError::into_inner);
                 let previous=hooks.is_listening();hooks.set_enabled(enabled)?;previous
             };
-            let result={
-                match backend.lock(){
-                    Ok(mut backend)=>backend.request(&app,&method,params),
-                    Err(_)=>Err("Runtime lock is unavailable".into())
-                }
-            };
+            let result=backend.lock().unwrap_or_else(PoisonError::into_inner).request(&app,&method,params);
             if result.is_err(){
-                if let Ok(mut hooks)=hooks.lock(){
-                    if hooks.set_enabled(previous).is_err(){return Err("The hook setting failed and its previous listener state could not be restored".into());}
-                }
+                let mut hooks=hooks.lock().unwrap_or_else(PoisonError::into_inner);
+                if hooks.set_enabled(previous).is_err(){return Err("The hook setting failed and its previous listener state could not be restored".into());}
             }
             return result;
         }
@@ -603,22 +586,15 @@ async fn native_request(
         // first, then they start or stop.
         if method=="set_setting" && params["key"]=="deepseekQuestions" {
             let wanted=params["value"].as_bool().ok_or("deepseekQuestions must be a boolean")?;
-            let result={
-                match backend.lock(){
-                    Ok(mut backend)=>backend.request(&app,&method,params),
-                    Err(_)=>Err("Runtime lock is unavailable".into())
-                }
-            };
+            let result=backend.lock().unwrap_or_else(PoisonError::into_inner).request(&app,&method,params);
             if result.is_ok(){
-                hooks.lock().map_err(|_|"Hook service unavailable")?.set_deepseek(wanted)?;
+                hooks.lock().unwrap_or_else(PoisonError::into_inner).set_deepseek(wanted)?;
             }
             return result;
         }
         let _turn = matches!(method.as_str(), "snapshot" | "refresh" | "request_snapshot")
-            .then(|| collection.lock().unwrap_or_else(|poisoned| poisoned.into_inner()));
-        let mut backend = backend
-            .lock()
-            .map_err(|_| "Runtime lock is unavailable".to_owned())?;
+            .then(|| collection.lock().unwrap_or_else(PoisonError::into_inner));
+        let mut backend = backend.lock().unwrap_or_else(PoisonError::into_inner);
         // Success and failure notifications share this serial application owner.
         let edited=if method=="set_setting"{params["key"].as_str().map(str::to_owned)}else{None};
         let result=backend.request(&app,&method,params);
@@ -644,7 +620,7 @@ async fn presentation_request(
             "save"=>{
                 let service=app.try_state::<Service>().ok_or("The live runtime is unavailable")?;
                 // Lock order is Backend then Presentation, as it is for all local tools.
-                let mut backend=service.backend.lock().map_err(|_|"Application state unavailable")?;
+                let mut backend=service.backend.lock().unwrap_or_else(PoisonError::into_inner);
                 let previous=backend.snapshot.as_ref().map(|v|v["settings"].clone()).unwrap_or(Value::Null);
                 let mut committed=Value::Null;
                 let result=owner.save_panel_with(params["screen"].as_str().unwrap_or("all"),|patch|{
@@ -666,16 +642,14 @@ async fn presentation_request(
 async fn cached_snapshot(service: tauri::State<'_, Service>) -> Result<CachedSnapshot, String> {
     let backend = Arc::clone(&service.backend);
     tauri::async_runtime::spawn_blocking(move || {
-        let backend = backend
-            .lock()
-            .map_err(|_| "Runtime lock is unavailable".to_owned())?;
-        Ok(CachedSnapshot {
+        let backend = backend.lock().unwrap_or_else(PoisonError::into_inner);
+        CachedSnapshot {
             snapshot: backend.snapshot.clone(),
             error: backend.error.clone(),
-        })
+        }
     })
     .await
-    .map_err(|error| format!("Snapshot reader failed: {error}"))?
+    .map_err(|error| format!("Snapshot reader failed: {error}"))
 }
 
 fn backend(
@@ -693,10 +667,7 @@ fn backend(
 /// the UI thread: Windows WebView2 creation can deadlock there.
 fn show_settings(app: &tauri::AppHandle) -> Result<(), String> {
     let windows = app.state::<AuxiliaryWindows>();
-    let _guard = windows
-        .lock
-        .lock()
-        .map_err(|_| "Settings window owner is unavailable")?;
+    let _guard = windows.lock.lock().unwrap_or_else(PoisonError::into_inner);
     let window = match app.get_webview_window("main") {
         Some(window) => window,
         None => {
@@ -732,9 +703,10 @@ fn show(app: &tauri::AppHandle) {
 /// Settings, on `page`. A Settings page already open moves there; one that
 /// opens takes the page when it starts (`take_settings_page`).
 fn show_settings_page(app: &tauri::AppHandle, page: String) {
-    if let Ok(mut pending) = app.state::<AuxiliaryWindows>().page.lock() {
-        *pending = Some(page.clone());
-    }
+    *app.state::<AuxiliaryWindows>()
+        .page
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(page.clone());
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || match show_settings(&app) {
         Ok(()) => {
@@ -750,8 +722,8 @@ fn take_settings_page(windows: tauri::State<'_, AuxiliaryWindows>) -> Option<Str
     windows
         .page
         .lock()
-        .ok()
-        .and_then(|mut pending| pending.take())
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
 }
 
 /// Settings, on `page` when the HUD names one, as a card's Open Agent
@@ -783,10 +755,12 @@ fn refresh_data(app: &tauri::AppHandle) {
         let _turn = service
             .collection
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Ok(mut backend) = service.backend.lock() {
-            let _ = backend.request(&app, "refresh", Value::Null);
-        };
+            .unwrap_or_else(PoisonError::into_inner);
+        let _ = service
+            .backend
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .request(&app, "refresh", Value::Null);
     });
 }
 
@@ -798,12 +772,13 @@ async fn open_statistics(
 ) -> Result<(), String> {
     if tab.is_some() || session_id.is_some() {
         let windows = app.state::<AuxiliaryWindows>();
-        if let Ok(mut pending) = windows.target.lock() {
-            *pending = Some(StatisticsTarget {
-                tab: tab.clone(),
-                session_id: session_id.clone(),
-            });
-        };
+        *windows
+            .target
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(StatisticsTarget {
+            tab: tab.clone(),
+            session_id: session_id.clone(),
+        });
     }
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || show_statistics(&handle))
@@ -822,16 +797,13 @@ fn take_statistics_target(windows: tauri::State<'_, AuxiliaryWindows>) -> Option
     windows
         .target
         .lock()
-        .ok()
-        .and_then(|mut pending| pending.take())
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
 }
 
 fn show_statistics(app: &tauri::AppHandle) -> Result<(), String> {
     let windows = app.state::<AuxiliaryWindows>();
-    let _guard = windows
-        .lock
-        .lock()
-        .map_err(|_| "Statistics window owner is unavailable")?;
+    let _guard = windows.lock.lock().unwrap_or_else(PoisonError::into_inner);
     let window = match app.get_webview_window("statistics") {
         Some(window) => window,
         None => {
@@ -940,6 +912,7 @@ pub fn run_with_options(
             hud::hud_text_focus,
             hud_show_main,
             float_notes::toggle_float_notes,
+            float_notes::float_notes_shown,
             disk_slim::disk_slim_status,
             disk_slim::toggle_disk_slim,
             quit_app,
@@ -1087,22 +1060,35 @@ pub fn run_with_options(
                     if let Some(extension) = &service.extension {
                         extension.stop();
                     }
-                    if let Ok(_changed) = service.wake.0.lock() {
+                    {
+                        let _changed = service
+                            .wake
+                            .0
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner);
                         service.wake.1.notify_one();
                     }
                     // No Backend lock is held while hooks cancel connections
                     // and join their own IPC workers.
-                    if let Ok(_action) = service.hook_actions.lock() {
-                        if let Ok(mut hooks) = service.hooks.lock() {
-                            hooks.stop();
-                        }
+                    {
+                        let _action = service
+                            .hook_actions
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner);
+                        service
+                            .hooks
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .stop();
                     }
-                    if let Ok(backend) = service.backend.lock() {
-                        if let Some(tools) = &backend.tools {
-                            tools.stop();
-                        }
-                        backend.runtime.stop_accounts();
+                    let backend = service
+                        .backend
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner);
+                    if let Some(tools) = &backend.tools {
+                        tools.stop();
                     }
+                    backend.runtime.stop_accounts();
                 }
                 if let Some(windows) = app.try_state::<hud::HudWindows>() {
                     windows.stop();
@@ -1112,4 +1098,26 @@ pub fn run_with_options(
                 show(app);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_poisoned_wake_lock_still_wakes_the_collector() {
+        let wake = Arc::new((Mutex::new(0u8), Condvar::new()));
+        let held = Arc::clone(&wake);
+        std::thread::spawn(move || {
+            let _changed = held.0.lock().unwrap();
+            panic!("poison the collector's wake lock");
+        })
+        .join()
+        .unwrap_err();
+        assert!(wake.0.is_poisoned());
+        wake_collector(&wake, REQUEST);
+        wake_collector(&wake, DATA);
+        let changed = *wake.0.lock().unwrap_or_else(PoisonError::into_inner);
+        assert_eq!(changed, DATA | REQUEST, "both wakes reach the worker");
+    }
 }

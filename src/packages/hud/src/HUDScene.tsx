@@ -1,6 +1,7 @@
 import {
   memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useLayoutEffect,
@@ -17,11 +18,13 @@ export { HUDArtwork as HUDLogo } from "./HUDArtwork";
 import { DockMemory, type Direction } from "./bots/mark-director";
 import {
   useIslandNews,
+  useSideClocks,
   NewsContent,
   PendingEventRows,
   clientDisplayName,
 } from "./IslandNews";
 import { replyChip } from "./alerts/reply-list";
+import { sideClocks } from "./alerts/reply-stays";
 import { useCardHeld } from "./alerts/card-hold";
 import {
   HandoffCard,
@@ -35,6 +38,8 @@ import {
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
 import { clearOf } from "./scene/side-tag-stack";
+import { agentUnder, tagFoldKey, tagWaits } from "./scene/tag-fold";
+import { useTagFold } from "./scene/useTagFold";
 import { AppPendant } from "./scene/AppPendant";
 import { DiskPendant, type DiskSlimState } from "./scene/DiskPendant";
 import { pendantChain } from "./app-pendant";
@@ -66,7 +71,11 @@ import {
 } from "./model";
 import { glowAlert } from "./HUDGlow";
 import { InlineEventRow } from "./alerts/InlineEventRow";
-import { inlineAlertAllowed, peekExpandWait } from "./peek-expand";
+import {
+  inlineAlertAllowed,
+  peekExpandWait,
+  PEEK_GROWS_INTO,
+} from "./peek-expand";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import {
   ListedSessionsContext,
@@ -92,14 +101,18 @@ export type { DiskSlimState } from "./scene/DiskPendant";
 export interface HUDSceneProps {
   snapshot: Snapshot;
   config: HUDConfig;
-  onConfigure?: () => void;
+  /** Opens Settings; may reject with why it could not. */
+  onConfigure?: () => unknown;
   /** Opens or hides 随手记 beside its ball; resolves to whether it shows. */
   onFloatNotes?: (anchor: HUDRect) => Promise<boolean>;
+  /** Whether 随手记's window shows, as the host last said (#224). */
+  floatNotesShown?: boolean;
   /** 磁盘瘦身's last status; it hangs under 随手记 while it is installed (#155). */
   diskSlim?: DiskSlimState | null;
   /** Asks 磁盘瘦身 to open or hide its panel beside its ball. */
   onDiskSlim?: (anchor: HUDRect) => Promise<void>;
-  onStats?: (target?: StatsTarget) => void;
+  /** Opens Statistics; may reject with why it could not. */
+  onStats?: (target?: StatsTarget) => unknown;
   /** The product's newer version, and the way to it (the panel footer's arrow). */
   update?: HUDUpdateNotice | null;
   onUpdate?: () => void;
@@ -176,6 +189,20 @@ const Redraw = memo(
   (previous, next) => previous.version === next.version,
 );
 
+/** The hidden copy's drawing: again only when `version` changes, and then in
+ * the background (#264, upstream e07cd7e). React draws it after what shows
+ * has changed, so a card leaving never waits for the whole panel. */
+function MeasuringCopy({
+  version,
+  draw,
+}: {
+  version: unknown;
+  draw: () => ReactNode;
+}) {
+  const shown = useDeferredValue(version);
+  return <Redraw version={shown} draw={draw} />;
+}
+
 /**
  * A DOM renderer of one screen's HUD. The host owns native windows and their screen coordinates.
  * Geometry, hover timing, logo identity, three modes and the approval surface follow the Swift source.
@@ -186,6 +213,7 @@ export function HUDScene({
   config: supplied,
   onConfigure,
   onFloatNotes,
+  floatNotesShown = false,
   diskSlim,
   onDiskSlim,
   onStats,
@@ -231,9 +259,13 @@ export function HUDScene({
   const [systemLight, setSystemLight] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState(false);
-  // The hovered mark's peek has grown into the whole board (「停久看全」).
+  // The whole board is out: opened from the menu or held for an edit. A peek
+  // left on its mark grows into its own panel instead (pinned, #202).
   const [expanded, setExpanded] = useState(false);
   const [pointerInside, setPointerInside] = useState(false);
+  // The agent whose mark, tag or slip the pointer is on (#243).
+  const [tagUnder, setTagUnder] = useState<string | null>(null);
+  const otherMarkRef = useRef(false);
   const [domTyping, setDomTyping] = useState(false);
   const checkDomTyping = useCallback(() => {
     const active = document.activeElement;
@@ -409,9 +441,30 @@ export function HUDScene({
     underPointer,
     open && allowsInlineUsageAlert,
     config.panelLayout,
+    open,
+    // Only the front news's own card being out counts as a look at it.
+    otherMarkRef,
   );
-  const event = news.event;
-  const request = news.request;
+  // Another agent's mark under the pointer shows that agent's own peek, not
+  // the news in front (owner, 2026-11-08, #243): every mark answers for its
+  // own agent. An agent with news of its own comes to the front instead.
+  // The agent the open sidebar answers for stays until it folds away, so
+  // the pointer leaving while it closes does not hand the card to the news.
+  const frontOf = news.request ?? news.event;
+  const openFor = useRef<string | null>(null);
+  if (!open) openFor.current = null;
+  else if (pointerInside && tagUnder) openFor.current = tagUnder;
+  const peekOf = openFor.current;
+  const otherMark = Boolean(
+    peekOf &&
+    frontOf &&
+    vendorKey(frontOf.source) !== peekOf &&
+    vendors.some((vendor) => vendor.key === peekOf) &&
+    !news.sides.some((side) => side.vendor === peekOf),
+  );
+  otherMarkRef.current = otherMark;
+  const event = otherMark ? undefined : news.event;
+  const request = otherMark ? undefined : news.request;
   // The handoff card opened from a reply or 「正在进行」, in place of what the
   // sidebar showed until it closes or the sidebar folds away.
   const cardId = useOpenedHandoffCard();
@@ -427,6 +480,49 @@ export function HUDScene({
   // The replies' folded tag: the newest reply's session and the count.
   const reply = replyChip(news.replies, snapshot.sessions, (each) =>
     clientDisplayName(each.source),
+  );
+  // Tags that wait (a request, an unseen Hermes or ChatGPT reply) fold into
+  // their narrow slip once they have hung whole for five seconds; only the
+  // agent under the pointer opens out whole (#243). Ages count from the
+  // news itself, so a tag hidden under an open card keeps its age.
+  const docked = config.mode !== "notch";
+  const frontNews = news.request ?? news.event;
+  const frontVendor = frontNews ? vendorKey(frontNews.source) : null;
+  const frontKey =
+    docked &&
+    frontNews &&
+    tagWaits(
+      { id: frontNews.id, request: news.request, event: news.event },
+      news.looked,
+    )
+      ? tagFoldKey(
+          vendorKey(frontNews.source),
+          frontNews.id,
+          news.request ? news.requests.length : news.replies.length,
+        )
+      : null;
+  const sideKey = (side: (typeof news.sides)[number]) =>
+    docked && tagWaits(side, news.looked)
+      ? tagFoldKey(
+          side.vendor,
+          side.id,
+          side.request ? side.requests.length : side.replies.length,
+        )
+      : null;
+  const fold = useTagFold(
+    [
+      ...(frontKey && frontVendor
+        ? [{ key: frontKey, vendor: frontVendor }]
+        : []),
+      ...news.sides.flatMap((side) => {
+        const key = sideKey(side);
+        return key ? [{ key, vendor: side.vendor }] : [];
+      }),
+    ],
+    new Set([
+      ...(pointerInside && tagUnder ? [tagUnder] : []),
+      ...(typing && frontVendor ? [frontVendor] : []),
+    ]),
   );
   // The rim flashes once for each island alert, over its sender's colours.
   const glowFlash = useMemo(
@@ -495,6 +591,8 @@ export function HUDScene({
     measurementWidth,
     receipt,
     receiptInset,
+    narrow: narrowTag,
+    narrowFrame,
   } = useHUDLayout({
     config,
     snapshot,
@@ -515,6 +613,7 @@ export function HUDScene({
     inUsagePanel,
     requestsCount: news.requests.length,
     reply,
+    narrowTag: frontKey !== null && fold.narrow.has(frontKey),
   });
 
   // When the pointer came to the mark it is on: entering the strip, or moving
@@ -527,14 +626,21 @@ export function HUDScene({
       markSince.current = performance.now();
     lastMark.current = hovered;
   }, [hovered, pointerInside]);
-  // A peek left on its mark grows into the whole board; the line along its
-  // foot runs out over the same wait.
+  // A peek left on its mark grows into its agent's own panel, as a click on
+  // the mark opens it (#202); the line along its foot runs out over the same
+  // wait.
   const [expandMeter, setExpandMeter] = useState<{
     key: string;
     ms: number;
   } | null>(null);
   useEffect(() => {
-    if (!peek || expanded || !hovered || focusedVendor?.key !== hovered) {
+    if (
+      !peek ||
+      pinned ||
+      expanded ||
+      !hovered ||
+      focusedVendor?.key !== hovered
+    ) {
       setExpandMeter(null);
       return;
     }
@@ -544,9 +650,19 @@ export function HUDScene({
       performance.now(),
     );
     setExpandMeter({ key: `${hovered}:${markSince.current}`, ms });
-    const timer = setTimeout(() => setExpanded(true), ms);
+    const timer = setTimeout(() => {
+      setExpanded(PEEK_GROWS_INTO.expanded);
+      setPinned(PEEK_GROWS_INTO.pinned);
+    }, ms);
     return () => clearTimeout(timer);
-  }, [peek, expanded, hovered, focusedVendor?.key, config.hoverDelayMs]);
+  }, [
+    peek,
+    pinned,
+    expanded,
+    hovered,
+    focusedVendor?.key,
+    config.hoverDelayMs,
+  ]);
 
   // A request beside the dock is printed on paper, its tag and its card, and
   // so are a notice's and the usage panel, as receipts; in the notch they
@@ -594,12 +710,83 @@ export function HUDScene({
           zh: snapshotLanguage(snapshot) === "zh",
           quotaDisplay: snapshot.settings.quotaDisplay,
           sessions: snapshot.sessions,
-        }).flatMap(({ side, rect }) => {
+          folded: (side) => {
+            const key = sideKey(side);
+            if (!key || !fold.aged.has(key)) return null;
+            return fold.narrow.has(key) ? "narrow" : "open";
+          },
+        }).flatMap(({ side, rect, narrow, slip }) => {
           const placed = clearOf(rect, sideHung, edge);
           if (cardVisible && !mainTag && rectsMeet(placed, frame)) return [];
           sideHung.push(placed);
-          return [{ side, rect: placed }];
+          return [{ side, rect: placed, narrow, slip }];
         });
+  // Whose mark, tag or slip the pointer is on: only that agent's tag opens
+  // out whole (#243). A tag open whole still claims its slip's place, so the
+  // pointer in the gap by the stub does not fold it back under itself.
+  const agentAt = (point: { x: number; y: number } | null | undefined) =>
+    agentUnder(point, {
+      strip,
+      edge,
+      marks: vendors.map((vendor, index) => ({
+        vendor: vendor.key,
+        center: metrics.centers[index] ?? -Infinity,
+      })),
+      tags: [
+        ...(mainTag && frontVendor
+          ? [
+              {
+                vendor: frontVendor,
+                rects: [
+                  frame,
+                  frontKey && fold.aged.has(frontKey) ? narrowFrame : null,
+                ],
+              },
+            ]
+          : []),
+        ...sideTags.map(({ side, rect, slip }) => ({
+          vendor: side.vendor,
+          rects: [rect, slip],
+        })),
+      ],
+    });
+  const tagPlaces = JSON.stringify([
+    frame,
+    sideTags.map(({ rect }) => rect),
+    fold.aged.size,
+  ]);
+  useLayoutEffect(() => {
+    if (!nativePointer) return;
+    setTagUnder(
+      nativePointer.inside && nativePointer.point
+        ? agentAt(nativePointer.point)
+        : null,
+    );
+  }, [
+    nativePointer?.inside,
+    nativePointer?.point?.x,
+    nativePointer?.point?.y,
+    tagPlaces,
+  ]);
+  // Where the slips of the tags open whole under the pointer stand: still the
+  // sidebar's, so the pointer resting there keeps them open (#243).
+  const slipKeepers = [
+    ...(mainTag && !narrowTag && frontKey && fold.aged.has(frontKey)
+      ? [narrowFrame]
+      : []),
+    ...sideTags.flatMap(({ narrow, slip }) => (!narrow && slip ? [slip] : [])),
+  ];
+  // Only a tag drawn folds away on its clock, and none under the pointer or
+  // while a reply is typed (#221).
+  useSideClocks(
+    sideClocks(
+      news.sides,
+      sideTags.map(({ side }) => side.id),
+      news.looked,
+      pointerInside || typing,
+    ),
+    news.drop,
+  );
   const sidePaper = useMemo(() => paperOf(light), [light]);
   // Resting on another agent's tag or mark brings it to the front before the
   // card opens, so the card that opens there is that agent's own.
@@ -715,6 +902,8 @@ export function HUDScene({
     handoff,
     configurePanel,
     showPanelStats,
+    openFromPanel,
+    panelFailure,
   } = useHUDInteraction({
     config,
     edge,
@@ -743,8 +932,10 @@ export function HUDScene({
     setPinned,
     setExpanded,
     setPointerInside,
-    request,
-    event,
+    // The news itself, not what the open card shows: a peek of another
+    // agent is not the last alert handled (#243).
+    request: news.request,
+    event: news.event,
     inUsagePanel,
     typing,
     nativePointer,
@@ -844,15 +1035,15 @@ export function HUDScene({
     newsContent
   );
 
-  // The panel's session rows hand over as Open's ScreenHUD does: the HUD
-  // collapses first, then the Statistics window opens.
+  // The panel's session rows hand over to the Statistics window; the HUD
+  // collapses once it opened (#220).
   const openStatsAt = useCallback(
     (target: StatsTarget) => {
       if (!onStats) return;
       endHold();
-      handoff(() => onStats(target));
+      openFromPanel(() => onStats(target));
     },
-    [onStats, endHold, handoff],
+    [onStats, endHold, openFromPanel],
   );
   const listedSessions = useMemo<ListedSessions>(
     () => ({ openStats: openStatsAt }),
@@ -943,6 +1134,7 @@ export function HUDScene({
               y: event.clientY - bounds.top,
             };
             lastPointerPointRef.current = pt;
+            setTagUnder(agentAt(pt));
             if (
               heldFrame &&
               (rectContains(frame, pt) || rectContains(strip, pt))
@@ -970,7 +1162,7 @@ export function HUDScene({
               paddingLeft: bodyPadding.left,
             }}
           >
-            <Redraw
+            <MeasuringCopy
               version={measured}
               draw={() => {
                 const drawn = (
@@ -1002,6 +1194,7 @@ export function HUDScene({
                                 }
                               : undefined
                           }
+                          openFailure={panelFailure}
                           update={update}
                           onUpdate={
                             onUpdate
@@ -1068,6 +1261,22 @@ export function HUDScene({
               }}
             />
           )}
+          {slipKeepers.map((rect, index) => (
+            <div
+              key={index}
+              className="hud-side-tag hud-slip-keeper"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: rect.x,
+                top: rect.y,
+                width: rect.width,
+                height: rect.height,
+                zIndex: 0,
+                pointerEvents: "auto",
+              }}
+            />
+          ))}
           <SideTags
             tags={sideTags}
             edge={edge}
@@ -1115,12 +1324,14 @@ export function HUDScene({
             request={request}
             event={event}
             reply={reply}
+            narrowTag={narrowTag}
             requests={news.requests}
             snapshot={snapshot}
             forceOpen={forceOpen}
             dismissNews={news.dismiss}
             showPanelStats={showPanelStats}
             configurePanel={configurePanel}
+            panelFailure={panelFailure}
             surfacePadding={surfacePadding}
             eventContent={eventContent}
             inlineAlert={inlineAlert(snapshot)}
@@ -1239,6 +1450,7 @@ export function HUDScene({
                 zh={snapshotLanguage(snapshot) === "zh"}
                 still={reduceMotion || dragVisual}
                 carried={dragVisual}
+                shown={floatNotesShown}
                 onToggle={onFloatNotes!}
               />
             ) : (

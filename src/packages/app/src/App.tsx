@@ -24,6 +24,7 @@ import {
   Puzzle,
   Settings2,
   Waypoints,
+  Workflow,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { Button } from "@agent-hud/ui/components/button";
@@ -56,7 +57,7 @@ import {
 import { useHUDGeometry } from "./lib/use-hud-geometry";
 import { storageKeys } from "./lib/storage-keys";
 import type { HUDConfig } from "@agent-hud/hud/model";
-import type { NativeMethod, Session, Snapshot } from "./lib/types";
+import type { Session, Snapshot } from "./lib/types";
 import appIcon from "./assets/app-icon.png";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import type { AgentPluginItem } from "./settings/AgentPluginsPane";
@@ -157,6 +158,16 @@ const pages: {
     group: "agents",
   },
   {
+    // Which AI makes what PostPane shows, who connects in, whose data it reads.
+    id: "ai-access",
+    label: "AI access",
+    icon: Workflow,
+    color: "#30b0c7",
+    description:
+      "Which AI writes for PostPane, who connects to it, whose data it reads.",
+    group: "agents",
+  },
+  {
     // Relays, one per address, whichever agents use them.
     id: "relays",
     label: "Relays",
@@ -188,6 +199,10 @@ const chinesePages: Record<string, [string, string]> = {
   display: ["显示", ""],
   agents: ["智能体", "驿窗关注哪些智能体，以及它们的账户。"],
   "agent-plugins": ["智能体插件", "驿窗为这台电脑上的智能体添加的功能。"],
+  "ai-access": [
+    "AI 接入",
+    "谁替驿窗产出内容、谁能连进驿窗、驿窗读了谁的数据。",
+  ],
   relays: ["中转站", "智能体经过的中转站。"],
   prices: ["价格", "每个模型的价格，不对时可以自己改。"],
   updates: ["更新", "驿窗的更新与 Beta 版本。"],
@@ -466,7 +481,10 @@ function AppContent({
     localStorage.setItem(selectedScreenKey, id);
   }
   function toggleHUDVisibility() {
-    void action("set_setting", { key: "hudVisible", value: !hudVisible });
+    // The menu has no place for a failure, so it shows as a toast.
+    void act("set_setting", { key: "hudVisible", value: !hudVisible }).catch(
+      (failure) => toast.error(String(failure)),
+    );
   }
   useEffect(() => {
     if (settings && selectedId && !preferredScreenId) selectScreen(selectedId);
@@ -529,17 +547,6 @@ function AppContent({
       void subscription.then((unlisten) => unlisten());
     };
   }, [statistics]);
-  async function action(
-    method: NativeMethod,
-    params?: Record<string, unknown>,
-  ) {
-    try {
-      return await act(method, params);
-    } catch (failure) {
-      toast.error(String(failure));
-      throw failure;
-    }
-  }
   async function showStatistics(tab = "tokens") {
     if (isTauri()) {
       await invoke("open_statistics", { tab });
@@ -638,12 +645,22 @@ function AppContent({
   }, [statistics]);
   const panelServices: PanelServices = {
     sources: snapshot?.sourcePreferences ?? store.sources,
+    // The reason a session or chat could not be reached goes back to the
+    // line that asked, where the side panel says it (#220).
     openSession: async (session) => {
       try {
-        await action("open_session", { id: session.id });
+        await act("open_session", { id: session.id });
         return true;
-      } catch {
-        return false;
+      } catch (failure) {
+        return failure instanceof Error ? failure.message : String(failure);
+      }
+    },
+    openFeishuChat: async (chatId) => {
+      try {
+        await act("open_feishu_chat", { chatId });
+        return true;
+      } catch (failure) {
+        return failure instanceof Error ? failure.message : String(failure);
       }
     },
     query: (method, params) => act(method, params),
@@ -731,7 +748,7 @@ function AppContent({
             config={config}
             geometry={measured}
             monitors={monitors}
-            action={action}
+            action={act}
           />
         </PanelServicesProvider>
       ) : null,
@@ -775,7 +792,7 @@ function AppContent({
                   <Statistics
                     snapshot={snapshot}
                     light={theme === "light"}
-                    action={action}
+                    action={act}
                     active={windowActive && statisticsTab === "tokens"}
                     onSelectSession={(session) => {
                       setSelectedSession(session);
@@ -791,7 +808,7 @@ function AppContent({
                   <SessionStatistics
                     snapshot={snapshot}
                     light={theme === "light"}
-                    action={action}
+                    action={act}
                     active={windowActive && statisticsTab === "sessions"}
                     initialSessionId={selectedSession?.id ?? null}
                     onClearSelection={() => setSelectedSession(null)}
@@ -826,7 +843,13 @@ function AppContent({
     ? `第 ${pageNumber} / ${allPages.length} 页`
     : `Page ${pageNumber} of ${allPages.length}`;
   const settingsProps = snapshot
-    ? { snapshot, config, update: updateConfig, action, active: windowActive }
+    ? {
+        snapshot,
+        config,
+        update: updateConfig,
+        action: act,
+        active: windowActive,
+      }
     : null;
   return provide(
     <PanelServicesProvider value={panelServices}>
@@ -972,6 +995,7 @@ function AppContent({
                           page === "display" ||
                           page === "agents" ||
                           page === "agent-plugins" ||
+                          page === "ai-access" ||
                           page === "updates") && (
                           <SettingsPane
                             page={page}

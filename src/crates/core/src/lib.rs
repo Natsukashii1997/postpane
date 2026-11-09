@@ -112,6 +112,8 @@ pub struct AgentHudCore {
     projection_sources: u64,
     database: Option<Connection>,
     storage_issue: Option<String>,
+    /// Why settings.json could not be read again, until it reads or is rewritten.
+    settings_issue: Option<String>,
     /// The data version the ledger records (`data_version`).
     data_version: Option<String>,
     /// Why the ledger is being read through, until it has been.
@@ -125,8 +127,6 @@ pub struct AgentHudCore {
     accounts: AccountProjection,
     /// The platform each client's models are priced on, from `accounts`.
     price_regions: pricing::PriceRegions,
-    /// When usage older than the retention was last deleted.
-    ledger_expired_at: Option<i64>,
     meters: metering::Meters,
     legacy_quota_database: Option<PathBuf>,
     account_samples: HashMap<String, String>,
@@ -200,7 +200,7 @@ impl AgentHudCore {
         requests.set_hold_ms(
             settings["approvalWaitMinutes"]
                 .as_u64()
-                .filter(|v| [0, 1, 3, 5, 10, 30, 60].contains(v))
+                .filter(|v| settings::APPROVAL_WAIT_MINUTES.contains(v))
                 .unwrap_or(10)
                 * 60_000,
         );
@@ -233,6 +233,7 @@ impl AgentHudCore {
             projection_sources: 0,
             database,
             storage_issue,
+            settings_issue: None,
             data_version: recorded,
             indexing_run,
             listed_once: false,
@@ -241,7 +242,6 @@ impl AgentHudCore {
             usage_projection: None,
             accounts: AccountProjection::default(),
             price_regions: pricing::PriceRegions::default(),
-            ledger_expired_at: None,
             meters: Default::default(),
             legacy_quota_database: None,
             account_samples: HashMap::new(),
@@ -448,7 +448,7 @@ impl AgentHudCore {
     }
 
     pub fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
-        self.reload_preferences()?;
+        self.reload_preferences();
         match method {
             "snapshot" => {
                 self.collect();
@@ -508,6 +508,7 @@ impl AgentHudCore {
             }
             "sessions" => self.sessions(params),
             "session_detail" => self.session_detail(params),
+            "hermes_chat_target" => self.hermes_chat(&params),
             _ => Err(format!("{method} is not supported by the local runtime")),
         }
     }

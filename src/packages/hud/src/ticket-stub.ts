@@ -26,6 +26,9 @@ export interface StubMarks {
   sealed: boolean;
   /** The seal reads 答, not 批: every request it waits on is a question. */
   answer: boolean;
+  /** The seal reads 换 in green: every request it waits on is a handoff
+   * card asking you to switch sessions (#245). */
+  handoff: boolean;
   /** The reading is printed in red: its tightest quota is nearly spent. */
   warn: boolean;
 }
@@ -34,12 +37,40 @@ export function stubMarks(vendor: {
   waiting: number;
   /** How many of the `waiting` requests are questions. */
   questions?: number;
+  /** How many of the `waiting` requests are handoff cards (#245). */
+  handoffs?: number;
   used: number | null;
 }): StubMarks {
   const sealed = vendor.waiting > 0;
+  const handoff = sealed && vendor.handoffs === vendor.waiting;
   return {
     sealed,
-    answer: sealed && vendor.questions === vendor.waiting,
+    answer: sealed && !handoff && vendor.questions === vendor.waiting,
+    handoff,
     warn: vendor.used != null && vendor.used >= STUB_WARN_PERCENT,
+  };
+}
+
+/** What the tear-off foot prints, and on which paper. The agent's own seal
+ * (「答」/「批」) comes first; then a relay's stamp, 「审」 on ChatGPT or 「回」
+ * on Claude, over the reading. The relay's paper and airmail band go under
+ * ChatGPT's foot while it holds a review, and under Claude's while an answer
+ * waits — still under its seal, so the reply is not lost (owner, #218). */
+export function stubFoot(stub: {
+  sealed: boolean;
+  /** ChatGPT's desk holds a review. */
+  deskReview: boolean;
+  /** ChatGPT has a relay's words (「审」). */
+  review: boolean;
+  /** An answer is back with Claude (「回」). */
+  replied: boolean;
+}): { relayPaper: boolean; shows: "seal" | "stamp" | "reading" } {
+  return {
+    relayPaper: (stub.deskReview && !stub.sealed) || stub.replied,
+    shows: stub.sealed
+      ? "seal"
+      : stub.review || stub.replied
+        ? "stamp"
+        : "reading",
   };
 }

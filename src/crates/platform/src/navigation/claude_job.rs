@@ -26,6 +26,8 @@ const STOP: Duration = Duration::from_secs(30);
 const GONE: Duration = Duration::from_secs(10);
 
 /// False when this host cannot move the job; the caller then falls back.
+/// Otherwise the move starts, which is reported as an error saying so: the
+/// session is not open until the job has gone (#220).
 pub(super) fn open(home: &Path, session: &str, job: &str) -> Result<bool, String> {
     if !crate::os::MOVES_CLAUDE_JOBS || !super::uuid(session) || !job_name(job) {
         return Ok(false);
@@ -45,43 +47,58 @@ pub(super) fn open(home: &Path, session: &str, job: &str) -> Result<bool, String
     let config = crate::os::variable(&env, "CLAUDE_CONFIG_DIR", home)
         .unwrap_or_else(|| home.join(".claude"));
     let path = crate::os::engine_path(home, &env);
+    let session = session.to_owned();
+    let job = job.to_owned();
+    begin(session.clone(), move || {
+        let _ = run(
+            Steps {
+                at_work: || at_work(&config, &session),
+                stop: || stop(&claude, &job, &path),
+                live: || holds(&config, &session),
+                open: || crate::os::open_session_url(&format!("claude://resume?session={session}")),
+            },
+            [TURN, GONE],
+            Duration::from_millis(250),
+        );
+    })
+}
+
+/// Starts the move on its own thread, once per session; it answers with
+/// the move under way, never with the session open.
+fn begin(session: String, moving: impl FnOnce() + Send + 'static) -> Result<bool, String> {
     if !MOVING
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(session.to_owned())
+        .insert(session.clone())
     {
-        return Ok(true);
+        return Err(moving_text());
     }
-    let (session, job) = (session.to_owned(), job.to_owned());
-    let moving = session.clone();
+    let done = session.clone();
     let spawned = std::thread::Builder::new()
         .name("agenthud-claude-job".into())
         .spawn(move || {
-            let _ = run(
-                Steps {
-                    at_work: || at_work(&config, &session),
-                    stop: || stop(&claude, &job, &path),
-                    live: || holds(&config, &session),
-                    open: || {
-                        crate::os::open_session_url(&format!("claude://resume?session={session}"))
-                    },
-                },
-                [TURN, GONE],
-                Duration::from_millis(250),
-            );
+            moving();
             MOVING
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .remove(&session);
+                .remove(&done);
         });
     if spawned.is_err() {
         MOVING
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .remove(&moving);
+            .remove(&session);
         return Err("The session could not be moved into the Claude desktop app".into());
     }
-    Ok(true)
+    Err(moving_text())
+}
+/// The desktop app opens the session itself once the job is gone, so
+/// starting the move is not reported as the session open (#220).
+fn moving_text() -> String {
+    agent_hud_core::l10n::text(
+        "后台任务正在转进 Claude 桌面，转好后会自动打开",
+        "The background job is moving into the Claude desktop app and opens there once moved",
+    )
 }
 
 /// The move's steps, passed in so tests run them without a process.
@@ -243,6 +260,30 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(checks.get(), 3);
         assert_eq!(*steps.borrow(), vec!["stop", "open"]);
+    }
+
+    #[test]
+    fn starting_the_move_is_not_reported_as_the_session_open() {
+        // #220: the desktop app opens the session only once the job is gone,
+        // so neither the first click nor one while it moves says it is open.
+        let session = "22222222-3333-4444-8555-666666666666".to_owned();
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let (held, hold) = std::sync::mpsc::channel::<()>();
+        let first = begin(session.clone(), move || {
+            tx.send(()).unwrap();
+            let _ = hold.recv();
+        });
+        rx.recv().unwrap();
+        let again = begin(session.clone(), || panic!("a second move started"));
+        held.send(()).unwrap();
+        assert!(
+            first.as_ref().is_err_and(|reason| !reason.is_empty()),
+            "{first:?}"
+        );
+        assert!(
+            again.as_ref().is_err_and(|reason| !reason.is_empty()),
+            "{again:?}"
+        );
     }
 
     #[test]

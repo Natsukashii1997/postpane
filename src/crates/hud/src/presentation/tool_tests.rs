@@ -162,6 +162,26 @@ fn the_layout_get_hud_returned_sent_back_changes_nothing() {
     assert_eq!(drafts(&owner)["layouts"], json!([]));
 }
 
+/// Settings keeps a block's columns and ring size when its widget changes; a proposal
+/// that sends the layout back with them is not refused for fields the agent never
+/// touched. A value the layout does not hold yet still is.
+#[test]
+fn a_field_settings_kept_through_a_change_of_widget_is_no_issue() {
+    let (_folder, owner) = owner();
+    owner
+        .set_layout(json!({"screen": "main", "layout": {"blocks": {"claude": {"widget": "bar", "columns": 3, "ringSize": "small"}}}}))
+        .unwrap();
+    draft(
+        &owner,
+        json!({"screen": "main", "blocks": {"claude": {"widget": "bar", "columns": 3, "ringSize": "small"}, "codex": {"hidden": true}}}),
+    );
+    let error = refused(
+        &owner,
+        json!({"screen": "main", "blocks": {"claude": {"widget": "bar", "columns": 4}}}),
+    );
+    assert!(error.contains("blocks.claude.columns"), "{error}");
+}
+
 #[test]
 fn a_screen_proposal_of_the_shared_layout_uses_it() {
     let (_folder, owner) = owner();

@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Notice,
   Page,
@@ -11,6 +11,7 @@ import {
   useText,
   type SettingsPaneProps,
 } from "./SettingsPrimitives";
+import { settingSaves } from "../lib/setting-saves";
 
 type Failure = { key: string; message: string };
 
@@ -26,24 +27,30 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
       );
   }, []);
   const t = useText(snapshot);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState(0);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const latest = useRef(action);
+  latest.current = action;
+  const [queued] = useState(() =>
+    settingSaves(async (key, value) => {
+      setFailure(null);
+      await latest.current("set_setting", { key, value });
+    }),
+  );
 
-  /** One save at a time; a failure shows in the card of the setting that
-   * failed. */
+  /** One save at a time, a click during a save waiting its turn; a failure
+   * shows in the card of the setting that failed. */
   const save = async (key: string, value: unknown) => {
-    if (pending) return;
-    setPending(true);
-    setFailure(null);
+    setPending((count) => count + 1);
     try {
-      await action("set_setting", { key, value });
+      await queued(key, value);
     } catch (error) {
       setFailure({
         key,
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setPending(false);
+      setPending((count) => count - 1);
     }
   };
   const setting = (key: string) => (value: unknown) => void save(key, value);
@@ -104,8 +111,11 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
     />
   );
 
+  const settingsIssue = snapshot.connection.settingsIssue;
+
   return (
     <Page>
+      {settingsIssue && <Notice tone="error">{settingsIssue}</Notice>}
       <Section
         title={t("Window & language", "窗口和语言")}
         action={`${
@@ -193,7 +203,7 @@ export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
         <ToggleRow
           title={t("Launch at login", "登录时启动")}
           checked={launches}
-          disabled={pending || !login?.supported}
+          disabled={pending > 0 || !login?.supported}
           reason={loginReason}
           change={setting("launchAtLogin")}
         />

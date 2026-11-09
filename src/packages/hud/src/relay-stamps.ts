@@ -1,10 +1,11 @@
 import type { Handoff, Snapshot } from "@agent-hud/protocol";
+import { STALE_REVIEW } from "./chatgpt-desk.ts";
 import { STORY } from "./scene/flight-plan.ts";
 
 /** What relays print on the stubs (#171), by the phase they are in rather
  * than by the letter flying: ChatGPT's reading gives way to a blue 「审」
  * stamp while it has the words, rippling while it answers; Claude's stub
- * takes a red 「回」 wax seal in its corner while an answer waits for the
+ * takes the same stamp as 「回」 over its reading while an answer waits for the
  * person. `since` is when the words moved (the step), so a stamp that comes
  * while its letter is still in the air waits for it to land. */
 export interface RelayStamps {
@@ -16,7 +17,26 @@ export interface RelayStamps {
   replied: boolean;
   /** When the latest of those words moved, in milliseconds. */
   since: number | null;
+  /** A relay's words have sat with ChatGPT past {@link REPLY_WAIT_MS} with no
+   * answer: 「未审」 in red, and the mark goes to that conversation. */
+  overdue: boolean;
+  /** An overdue one has sat past {@link LINGERS_MS}: its 「未审」 ripples
+   * as 「审」 does while ChatGPT answers, until the relay ends (#213). */
+  lingering: boolean;
+  /** The ChatGPT conversation the mark goes to while one is overdue. */
+  conversation?: string;
+  /** When the stamps next change on their own (a review falls overdue, or
+   * an overdue one starts to linger). */
+  until: number | null;
 }
+
+/** How long ChatGPT has to answer before the review counts as overdue; the
+ * host hands the relay back at the same mark (REPLY_WAIT_MS in handoffs.rs). */
+export const REPLY_WAIT_MS = 30 * 60 * 1000;
+
+/** How long an overdue review sits before its 「未审」 ripples (owner,
+ * 2026-11-07, #213): when the panel stops listing the review. */
+export const LINGERS_MS = STALE_REVIEW;
 
 /** How long after the words move the letter lands in the receiver: the
  * flight's story up to the letter sliding in. */
@@ -40,24 +60,59 @@ const latest = (times: (number | null)[]) =>
   );
 
 /** The stamps for ChatGPT's mark or Claude's (`end`); none for other
- * agents, or when no relay stands where it would print one. */
+ * agents, or when no relay stands where it would print one. `yields`: the
+ * ChatGPT stub has something more pressing to say (answering, a reply to
+ * read), so an overdue review prints nothing meanwhile (owner, #213). */
 export function relayStamps(
   snapshot: Pick<Snapshot, "handoffs">,
   end: "chatgpt" | "claude" | null,
+  now = Date.now(),
+  yields = false,
 ): RelayStamps | undefined {
   const open = (snapshot.handoffs ?? []).filter(
     (handoff) => handoff.status === "open",
   );
   if (end === "chatgpt") {
-    const reviewing = open.filter(
+    const waiting = open.filter(
       (handoff) => handoff.phase === "delivered" || handoff.phase === "working",
     );
-    if (!reviewing.length) return undefined;
+    const since = (handoff: Handoff) =>
+      handoff.phaseAt ?? moved(handoff, "ask") ?? now;
+    // Owner, 2026-11-07: 「审」 only while ChatGPT really has it; a relay
+    // stopped or handed back prints nothing, and one left unanswered past
+    // the wait prints 「未审」 so it is seen and taken to ChatGPT.
+    const overdue = waiting
+      .filter((handoff) => !yields && now - since(handoff) > REPLY_WAIT_MS)
+      .sort((a, b) => since(b) - since(a));
+    const lingering = overdue.some(
+      (handoff) => now - since(handoff) > LINGERS_MS,
+    );
+    const reviewing = waiting.filter(
+      (handoff) => !handoff.halt && now - since(handoff) <= REPLY_WAIT_MS,
+    );
+    if (!overdue.length && !reviewing.length) return undefined;
+    // A review falling overdue, or an overdue one starting to linger.
+    const turns = [
+      ...reviewing.map((handoff) => since(handoff) + REPLY_WAIT_MS + 1),
+      ...(lingering
+        ? []
+        : overdue.map((handoff) => since(handoff) + LINGERS_MS + 1)),
+    ];
     return {
       review: true,
-      answering: reviewing.some((handoff) => handoff.phase === "working"),
+      answering:
+        !overdue.length &&
+        reviewing.some((handoff) => handoff.phase === "working"),
       replied: false,
-      since: latest(reviewing.map((handoff) => moved(handoff, "ask"))),
+      since: latest(
+        (overdue.length ? overdue : reviewing).map((handoff) =>
+          moved(handoff, "ask"),
+        ),
+      ),
+      overdue: overdue.length > 0,
+      lingering,
+      conversation: overdue[0]?.chatgptConversation ?? undefined,
+      until: turns.length ? Math.min(...turns) : null,
     };
   }
   if (end === "claude") {
@@ -68,6 +123,9 @@ export function relayStamps(
       answering: false,
       replied: true,
       since: latest(replied.map((handoff) => moved(handoff, "reply"))),
+      overdue: false,
+      lingering: false,
+      until: null,
     };
   }
   return undefined;

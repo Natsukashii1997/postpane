@@ -15,15 +15,19 @@ import {
   projectName,
 } from "../IslandNews";
 import { usePanelServices } from "../PanelContext";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import { alertText } from "../tokens";
 import { useGround } from "../ground";
 import { usePaper } from "../paper";
 import {
   REPLY_BADGE,
   SHOWN_ENTRIES,
+  START_BADGE,
   approvalGroups,
   entryTitle,
   findSession,
+  goesToStart,
   sessionToOpen,
   type ApprovalEntry,
 } from "./approval-list";
@@ -107,9 +111,7 @@ export function ApprovalContent({
   const paper = usePaper();
   const inks = cardInks(paper, light);
   const services = usePanelServices();
-  const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const { failure, fail } = useOpenFailures();
   const [unfolded, setUnfolded] = useState(false);
   const asking =
     selected.kind === "question" || Boolean(selected.questions?.length);
@@ -141,9 +143,13 @@ export function ApprovalContent({
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     if (!target) return;
-    const opened = await services?.openSession?.(target);
-    if (opened === false)
-      setUnreachable((previous) => new Set(previous).add(entry.id));
+    // Where it could not get there, the line says why a few seconds (#220).
+    const reason = failureOf(await services?.openSession?.(target), zh);
+    if (reason) fail(entry.id, reason);
+    // Back in the session, the handoff card is the user's to start there:
+    // its START tag has done its work (#245).
+    else if (entry.kind === "request" && entry.request.badge === START_BADGE)
+      void decide?.(entry.request.id, { kind: "leave" });
   };
 
   const fallbackTitle = (entry: ApprovalEntry) =>
@@ -157,7 +163,7 @@ export function ApprovalContent({
       ? (entry.request.summary ?? entry.request.title)
       : entry.event.message?.trim() || newsTitle(entry.event, zh);
 
-  const openDetail = (request: Approval) => {
+  const openDetail = (request: Approval, goStart?: () => void) => {
     const isQuestion =
       request.kind === "question" || Boolean(request.questions?.length);
     const detail = request.detail ?? request.input;
@@ -192,6 +198,7 @@ export function ApprovalContent({
           light={light}
           language={language}
           onOpenSettings={openSettings}
+          onGoStart={goStart}
           onDecision={
             decide ? (decision) => decide(request.id, decision) : undefined
           }
@@ -209,8 +216,20 @@ export function ApprovalContent({
       <ListHead
         label={zh ? "待审批" : "Waiting"}
         entries={entries}
-        stamp={asking ? (zh ? "待答" : "ASK") : zh ? "待批" : "WAIT"}
-        stampInk="red"
+        stamp={
+          selected.badge === START_BADGE
+            ? zh
+              ? "切换"
+              : "START"
+            : asking
+              ? zh
+                ? "待答"
+                : "ASK"
+              : zh
+                ? "待批"
+                : "WAIT"
+        }
+        stampInk={selected.badge === START_BADGE ? "green" : "red"}
         paper={paper}
         inks={inks}
         light={light}
@@ -242,7 +261,7 @@ export function ApprovalContent({
                   summary={summaryOf(entry)}
                   canOpen={
                     Boolean(target && services?.openSession) &&
-                    !unreachable.has(entry.id)
+                    !failure(entry.id)
                   }
                   onSelect={() => select(entry.id)}
                   onOpen={() => void goBack(entry)}
@@ -250,7 +269,24 @@ export function ApprovalContent({
                   light={light}
                   zh={zh}
                 />
-                {open && entry.kind === "request" && openDetail(entry.request)}
+                {failure(entry.id) && (
+                  <OpenNotice
+                    text={failure(entry.id)!}
+                    light={light}
+                    style={{ padding: "0 0 10px 30px", marginTop: -4 }}
+                  />
+                )}
+                {open &&
+                  entry.kind === "request" &&
+                  openDetail(
+                    entry.request,
+                    goesToStart(
+                      entry,
+                      Boolean(services?.openSession) && !failure(entry.id),
+                    )
+                      ? () => void goBack(entry)
+                      : undefined,
+                  )}
               </div>
             );
           })}

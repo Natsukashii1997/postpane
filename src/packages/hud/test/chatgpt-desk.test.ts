@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Handoff, Session } from "@agent-hud/protocol";
-import { chatgptDesk, isReview } from "../src/chatgpt-desk.ts";
+import { chatgptDesk, isReview, reviewsInDay } from "../src/chatgpt-desk.ts";
 
 const now = Date.parse("2026-11-06T04:00:00Z"); // 12:00 in Beijing
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -125,4 +125,68 @@ test("an old open relay nobody is on any more is left out", () => {
     desk([relay({ status: "closed", phase: "ended", phaseAt: now })]),
     [],
   );
+});
+
+test("answering or a reply to read is more pressing than an overdue review", () => {
+  // Owner, #213: the stub's 「未审」 waits while either is up.
+  const pressing = (sessions: Session[], handoffs: Handoff[]) =>
+    chatgptDesk({ sessions, handoffs }, now, true).pressing;
+  assert.equal(pressing([chat("a", now, "running")], []), true);
+  assert.equal(
+    pressing([], [relay({ phase: "replied", phaseAt: now - 5 * min })]),
+    true,
+  );
+  assert.equal(pressing([chat("a", now - min)], []), false);
+  assert.equal(pressing([], []), false);
+});
+
+test("the panel lists every chat of today, as many as the stub counts", () => {
+  // #219: the stub said 「5 对话」 and the panel listed none.
+  const desk = chatgptDesk(
+    {
+      sessions: [
+        chat("a", now - 20 * min),
+        chat("b", now - 2 * min, "running"),
+        chat("c", now - 40 * min),
+        chat("d", now - 50 * min),
+        chat("e", now - 60 * min),
+        chat("r1", now - 30 * min, "idle", true),
+        chat("old", now - 20 * 60 * min),
+      ],
+      handoffs: [relay({})],
+    },
+    now,
+    true,
+  );
+  assert.deepEqual(
+    desk.day.map((c) => [c.id, c.state]),
+    [
+      ["chatgpt:b", "answering"],
+      ["chatgpt:a", "replied"],
+      ["chatgpt:c", "replied"],
+      ["chatgpt:d", "replied"],
+      ["chatgpt:e", "replied"],
+    ],
+  );
+  assert.equal(desk.day.length, desk.today);
+  // The receipt still lists three of them.
+  assert.deepEqual(desk.chats, desk.day.slice(0, 3));
+  // Nothing answering: the stub's count is the panel's list.
+  const quiet = chatgptDesk(
+    { sessions: [chat("a", now - 20 * min), chat("c", now - 40 * min)] },
+    now,
+    true,
+  );
+  assert.equal(quiet.stub.text, `${quiet.day.length} 对话`);
+});
+
+test("the panel counts the last day's reviews apart from the chats", () => {
+  const sessions = [
+    chat("a", now - 20 * min),
+    chat("r1", now - 30 * min, "idle", true),
+    chat("r2", now - 23 * 60 * min, "idle", true),
+    chat("r3", now - 25 * 60 * min, "idle", true),
+    claude("s1", "idle"),
+  ];
+  assert.equal(reviewsInDay({ sessions, handoffs: [] }, now), 2);
 });

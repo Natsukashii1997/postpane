@@ -10,6 +10,7 @@
 | 构建、测试、打包 | [docs/development.md](docs/development.md)、[docs/platform-builds.md](docs/platform-builds.md)；下面「运行」 |
 | 接客户端、改钩子、审批卡 | [docs/agent-contract.md](docs/agent-contract.md)、[docs/client-hooks.md](docs/client-hooks.md) |
 | 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
+| 加或改 AI 功能、MCP 工具、读取哪家数据 | 下面「AI 接入」一节；改完同步设置 →「AI 接入」页 |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
 | 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
@@ -95,12 +96,32 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - 本机服务只监听 127.0.0.1；新增依赖先改 `scripts/check-rules.mjs` 的 `ALLOWED_DEPS`，并在交接里说明理由（`check-rules` 会查）。
 - 页面上的时间经统一的格式化函数按北京时间显示，不直接截取 ISO 字符串（全局坑 G-02，`check-rules` 会查）。
 - 默认只做电脑版；涉及 UI 时每次出 3 版明显不同的方案并附可打开的预览。
+- 源文件 300 行棘轮（`pnpm run check` 里的 `check:file-size`）：`src/` 下 `.rs` `.ts` `.tsx` `.mjs` 自己的代码（不含测试）超过 300 行的记在 `src/tooling/file-size-baseline.json`，只许变短，新文件不许超；变短后跑 `node src/tooling/check-file-size.mjs --update` 收紧基线。确有理由要超的，写进 `src/tooling/file-size-allowlist.json`：`{ "路径": { "max": 上限, "reason": "一句理由" } }`。
 - 手写设置文件必须带 `"providers": {}`，否则数据服务报错。
 - 图形界面应用找的是 `/usr/local/bin/claude`，不是 nvm 里那份。
 - Clawd 小人素材版权归 Anthropic，不可对外发布。
 - agent-hud 插件转进会话的消息可能与实际状态不符，据此改动前先核实。
 - GitHub Actions 已停用，只允许 squash 合并。
 - PR 合并后，马上在那个 worktree 里跑 `cargo clean`（或直接 `git worktree remove` 删掉整个 worktree），不把 6–9 GB 的 `target/` 留着；还要接着用这个 worktree 的除外。漏了的由磁盘瘦身兜底：PR 已合并、静置 2 小时、没在用的会被它清掉。
+
+## AI 接入
+
+全局规则 P-13（`~/.claude/CLAUDE.md` 第 14 节）。和设置 →「AI 接入」页内容一致；改了 AI 功能、对外接口或数据来源，两处一起改：页面在 `src/packages/app/src/settings/AiAccessPane.tsx`，文字和取数在 `src/packages/app/src/lib/ai-access.ts`。
+
+- **默认执行方**：只有 ChatGPT 网页一家，不可切换。用常浩 Chrome 里登录的 chatgpt.com，模型由网页决定、驿窗拿不到。设置页实时显示可用 / 插件没连上 / 插件未登记，附检查时间。插件没连上时接力直接报错，不换别家。Claude 只能发起接力，不能当执行方；Codex 还没接进接力。
+- **功能清单**（1 项）：
+
+  | 功能 | 执行方 | 接入方式 | 读什么 | 写到哪里 |
+  |---|---|---|---|---|
+  | ChatGPT 接力审核（含侧栏左滑「审核 / 讨论」、自动往返） | ChatGPT 网页（跟随默认），**仅支持 ChatGPT 网页** | 网页桥：Chrome 插件 → Native Messaging `com.postpane.chatgpt` → 驿窗 | Claude Code 会话交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读该 Claude 会话记录末尾，只看当前这一轮是谁开的头（常浩插话就重算轮数，#258），并读插件留话的状态（排队中 / 已领取 / 已开始，#257） | `<数据目录>/chatgpt/handoffs.json`（另有 `turns.jsonl`、`launches.json`）；回信转回原 Claude 会话 |
+
+  仅支持 ChatGPT 网页的原因：审核要用常浩 ChatGPT 账号里的项目和记忆；发起方只认 Claude Code 会话（`src/crates/host/src/handoff.rs` 的 `relay`），因为回信要按会话 id 送回去。Codex 发起或审核要另开一单。留痕：接力卡时间线记每一步的时间、谁做的、是不是驿窗自动做的（`handoffs.json` 的 `steps`）。
+- **对外开放**：只在本机，不开网络端口（stdio → `<数据目录>/tools/mcp.sock`，0600）。
+  - 侧栏工具，MCP「agent-hud」：可装到 Claude Code、Codex、Cursor、DeepSeek Harness、Antigravity。能读侧栏布局、快照、会话、用量统计、侧栏截图（账户打码）；能写侧栏草稿（面板里保存才生效）、外观和动画两项偏好。开关是设置 `hudTools`（「允许智能体调整侧栏」，「AI 接入」页和「智能体插件」页是同一个），同时管读和写。
+  - 发起接力 `relay_to_chatgpt`：只接 Claude Code 会话，能新开或续接一次审核；不受 `hudTools` 管，在「智能体插件」移除 ChatGPT 插件登记即关。
+- **数据对象**：只读取、不替驿窗产出、不放进可切换项。本机检测到且在「智能体」页开着的才读；每家读哪里见 `lib/ai-access.ts` 的 `sources`。主要几家：Claude Code（`~/.claude/projects`，额度用本机 claude 登录，重启后第一次就读失败时退回 `~/.claude.json` 里 Claude Code 自己记下的读数、只认同一账号，云端会话经 api.anthropic.com）、Codex（`~/.codex/sessions`，本机 codex app-server，顺带查驿窗钩子是否已允许）、Hermes（`~/.hermes/state.db`、`profiles/*/state.db`，不联网）、ChatGPT 网页（Chrome 插件报回合，不读文件）、Antigravity（`~/.gemini/antigravity*/brain`，本机 language server）。DeepSeek、Kimi、GLM、OpenCode 的额度可用驿窗保存的 API Key，存 `<数据目录>/account-credentials/`，界面只显示「已保存」。
+
+`<数据目录>` 在 macOS 上是 `~/Library/Application Support/app.postpane.mac`。
 
 ## 交接格式
 

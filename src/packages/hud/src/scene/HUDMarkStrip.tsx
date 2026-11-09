@@ -1,4 +1,6 @@
 import type { CSSProperties, MutableRefObject } from "react";
+import type { Session } from "@agent-hud/protocol";
+import { usePanelServices } from "../PanelContext";
 import { BotMark } from "../BotMark";
 import { botKey } from "../bots/artwork";
 import { botState, facingFromEdge, isAttention } from "../bots/bot-state";
@@ -20,10 +22,11 @@ import { quotaDisplayLabel } from "@agent-hud/ui/format";
 import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
-import { ReplySeal, ReviewStamp } from "./RelayStamps";
+import { ReviewStamp } from "./RelayStamps";
 import {
   stubBotTop,
   stubFootHeight,
+  stubFoot,
   stubMarks,
   stubSize,
 } from "../ticket-stub";
@@ -41,7 +44,9 @@ const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
 const STUB_INK = "#2a2925",
   // Tokens on a stub with no window: what was used, not what is left.
   STUB_DIM = "rgba(42,41,37,.5)",
-  STUB_RED = "rgba(196,38,30,.92)";
+  STUB_RED = "rgba(196,38,30,.92)",
+  // A handoff's 「换」 seal, in the START tag's green on light paper (#245).
+  STUB_GREEN = "rgba(47,125,79,.92)";
 /** ChatGPT's stub (#145): a review waiting for you, answering, today's chats. */
 const DESK_TONE = {
   amber: "#97600f",
@@ -114,6 +119,7 @@ export function HUDMarkStrip({
   pin: (key?: string) => void;
 }) {
   const format = useFormat();
+  const services = usePanelServices();
   const { quotaDisplay } = format;
   const zh = format.language === "zh";
   // A ring's figure is text: on a see-through ground, its level's see-through shade.
@@ -213,7 +219,24 @@ export function HUDMarkStrip({
                 setHovered(vendor.key);
                 if (!hasAlert && !suppressHover.current) forceOpen();
               }}
-              onClick={() => pin(vendor.key)}
+              onClick={() => {
+                // 「未审」: the mark goes to that ChatGPT conversation, so the
+                // review can be picked up there (owner, 2026-11-07).
+                const conversation =
+                  vendor.relay?.overdue && vendor.relay.conversation;
+                // Where it could not get there, the panel opens on ChatGPT's
+                // row instead, as a click on the mark does (#220).
+                if (conversation && services?.openSession) {
+                  const key = vendor.key;
+                  void services
+                    .openSession(chatgptConversation(conversation))
+                    .then((opened) => {
+                      if (opened !== true) pin(key);
+                    });
+                  return;
+                }
+                pin(vendor.key);
+              }}
               style={{
                 position: "relative",
                 zIndex: 1,
@@ -369,16 +392,6 @@ export function HUDMarkStrip({
                   reduceMotion={reduceMotion}
                 />
               )}
-              {stubbed && vendor.relay?.replied && (
-                // An answer is back with Claude: the 「回」 seal in its corner (#171).
-                <ReplySeal
-                  unit={unit}
-                  side={side}
-                  zh={zh}
-                  since={vendor.relay.since}
-                  reduceMotion={reduceMotion}
-                />
-              )}
               {config.mode === "simple" && metrics.bar > 0 && (
                 <MarkBars
                   items={markItems(vendor, quotaDisplay, config.panelLayout)}
@@ -428,6 +441,15 @@ type StubSide = "left" | "right" | "top" | "bottom";
 /** A stub's own box: its size, with the bot's room at its top. The bot sits
  * on the stub like a sticker; the paper is its own layer behind it, so the
  * bot's moves and props are never clipped by the paper. */
+/** A ChatGPT conversation to open, as the handoff card names one. */
+function chatgptConversation(id: string): Session {
+  return {
+    id: `chatgpt:${id}`,
+    source: "chatgpt",
+    navigationTarget: { kind: "chatgpt-conversation", id },
+  } as unknown as Session;
+}
+
 export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
   const stub = stubSize(logo),
     unit = logo / 20;
@@ -521,7 +543,14 @@ export function StubFace({
   const marks = stubMarks({
     waiting: vendor.waiting,
     questions: vendor.questions,
+    handoffs: vendor.handoffs,
     used: markUsed(vendor),
+  });
+  const print = stubFoot({
+    sealed: marks.sealed,
+    deskReview: vendor.desk?.stub.review ?? false,
+    review: vendor.relay?.review ?? false,
+    replied: vendor.relay?.replied ?? false,
   });
   return (
     <>
@@ -537,9 +566,8 @@ export function StubFace({
           borderTop: `${unit}px dashed rgba(42,41,37,.34)`,
           display: "grid",
           placeItems: "center",
-          // A review on ChatGPT's desk: its foot is on the reviews' paper,
-          // under an airmail band (#145).
-          ...(vendor.desk?.stub.review && !marks.sealed
+          // The relay's paper under an airmail band (#145, #218).
+          ...(print.relayPaper
             ? {
                 borderTop: "none",
                 background: `${airmailStripes(2 * unit)} 0 0 / 100% ${2.5 * unit}px no-repeat, ${REVIEW_PAPER}`,
@@ -547,7 +575,7 @@ export function StubFace({
             : null),
         }}
       >
-        {marks.sealed ? (
+        {print.shows === "seal" ? (
           <span
             style={{
               display: "grid",
@@ -555,21 +583,36 @@ export function StubFace({
               width: 12 * unit,
               height: 12 * unit,
               boxSizing: "border-box",
-              border: `${1.2 * unit}px solid ${STUB_RED}`,
+              border: `${1.2 * unit}px solid ${marks.handoff ? STUB_GREEN : STUB_RED}`,
               borderRadius: 2.5 * unit,
-              color: STUB_RED,
+              color: marks.handoff ? STUB_GREEN : STUB_RED,
               font: `900 ${8 * unit}px/1 "Songti SC", "STSong", serif`,
               transform: "rotate(-10deg)",
             }}
           >
-            {zh ? (marks.answer ? "答" : "批") : marks.answer ? "?" : "!"}
+            {zh
+              ? marks.handoff
+                ? "换"
+                : marks.answer
+                  ? "答"
+                  : "批"
+              : marks.handoff
+                ? "→"
+                : marks.answer
+                  ? "?"
+                  : "!"}
           </span>
-        ) : vendor.relay?.review ? (
-          // ChatGPT has a relay's words: the 「审」 stamp lands over the reading (#171).
+        ) : print.shows === "stamp" && vendor.relay ? (
+          // ChatGPT has a relay's words: the 「审」 stamp lands over the
+          // reading (#171); an answer back with Claude lands the same stamp
+          // as 「回」 (#218).
           <ReviewStamp
             unit={unit}
             zh={zh}
+            reply={vendor.relay.replied}
             answering={vendor.relay.answering}
+            overdue={vendor.relay.overdue}
+            lingering={vendor.relay.lingering}
             since={vendor.relay.since}
             reduceMotion={reduceMotion}
           >

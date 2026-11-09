@@ -243,6 +243,16 @@ impl Log {
         {
             ask.offset = Some(self.meter_line_start);
         }
+        // So does a handoff card (#245).
+        if let Some(card) = self
+            .live
+            .activity
+            .as_mut()
+            .and_then(|activity| activity.handoff.as_mut())
+            .filter(|card| card.offset.is_none() && card.is_worded())
+        {
+            card.offset = Some(self.meter_line_start);
+        }
         if let Some(timestamp) = value.get("timestamp").and_then(Value::as_str) {
             if timestamp > self.updated.as_str() {
                 self.updated = timestamp.into();

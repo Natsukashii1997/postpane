@@ -150,21 +150,10 @@ impl NativePlatform {
                 return Ok(true);
             }
         }
+        // Bringing the Claude desktop app forward is not reaching a session
+        // it has no tab for, so that says why rather than reporting it open (#220).
         let Some(url) = navigation::session_url(target) else {
-            if matches!(
-                target["kind"].as_str(),
-                Some(
-                    "claude-desktop"
-                        | "claude-desktop-session"
-                        | "claudeDesktopSession"
-                        | "claude-cowork"
-                        | "claude-cowork-session"
-                        | "claudeCoworkSession"
-                )
-            ) {
-                return Ok(navigation::activate_app("com.anthropic.claudefordesktop"));
-            }
-            return Ok(false);
+            return navigation::without_link(target);
         };
         os::open_session_url(&url)?;
         Ok(true)

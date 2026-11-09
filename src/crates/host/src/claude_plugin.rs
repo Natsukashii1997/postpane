@@ -10,7 +10,7 @@ use agent_hud_runtime::replies::SessionReplies;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
     time::{Duration, SystemTime},
 };
 use tauri::Manager;
@@ -50,13 +50,17 @@ impl ClaudePlugin {
 
     /// The HUD's way to answer Claude's questions in a session running the plugin.
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
+        Arc::new(self.claude_replies())
+    }
+
+    /// `replies` as they are, for words back from a relay under their own
+    /// id (#257).
+    pub(crate) fn claude_replies(&self) -> ClaudeReplies {
         let claude_config = super::mcp_clients::home()
             .map(|home| plugin::claude_config_directory(&home))
             .unwrap_or_default();
-        Arc::new(
-            ClaudeReplies::new(self.channel.clone(), claude_config)
-                .recording_deliveries(agent_hud_runtime::local_tools_directory().ok()),
-        )
+        ClaudeReplies::new(self.channel.clone(), claude_config)
+            .recording_deliveries(agent_hud_runtime::local_tools_directory().ok())
     }
 }
 
@@ -147,9 +151,7 @@ pub(crate) fn repair_on_launch(app: &tauri::AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<ClaudePlugin>();
-        let Ok(_owner) = state.owner.lock() else {
-            return;
-        };
+        let _owner = state.owner.lock().unwrap_or_else(PoisonError::into_inner);
         let result = super::mcp_clients::home().and_then(|home| {
             let executable = super::mcp_clients::executable("claudeCode", &home);
             let config = plugin::claude_config_directory(&home);
@@ -226,10 +228,7 @@ pub async fn native_claude_plugin(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<ClaudePlugin>();
-        let _owner = state
-            .owner
-            .lock()
-            .map_err(|_| "The plugin's owner is unavailable")?;
+        let _owner = state.owner.lock().unwrap_or_else(PoisonError::into_inner);
         let home = super::mcp_clients::home()?;
         let executable = super::mcp_clients::executable("claudeCode", &home);
         let config = plugin::claude_config_directory(&home);

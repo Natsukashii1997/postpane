@@ -26,7 +26,7 @@ pub(super) fn open_claude_job(home: &std::path::Path, target: &Value) -> Result<
         target["job"].as_str().unwrap_or(""),
     )
 }
-pub(super) use crate::os::{activate_app, app_running};
+pub(super) use crate::os::app_running;
 fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
     desktop_record(id, cowork)?["sessionId"]
         .as_str()
@@ -40,15 +40,27 @@ pub fn claude_desktop_session(id: &str) -> Option<Value> {
 }
 fn desktop_record(id: &str, cowork: bool) -> Option<Value> {
     let home = crate::os::home_dir().ok()?;
+    let env = std::env::vars().collect::<crate::os::Environment>();
+    record_in(&crate::os::claude_desktop_bases(&home, &env), id, cowork)
+}
+/// The desktop app's tab (`local_<uuid>`) that holds the Claude Code session
+/// `id`, in the app's data folders `bases`.
+#[cfg(test)]
+fn local_id_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<String> {
+    record_in(bases, id, cowork)?["sessionId"]
+        .as_str()
+        .map(str::to_owned)
+}
+/// The desktop app's record of that tab.
+fn record_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<Value> {
     let folder = if cowork {
         "local-agent-mode-sessions"
     } else {
         "claude-code-sessions"
     };
-    let env = std::env::vars().collect::<crate::os::Environment>();
-    let mut matched = Vec::new();
-    for org in crate::os::claude_desktop_bases(&home, &env)
-        .into_iter()
+    let (mut matched, mut before) = (Vec::new(), Vec::new());
+    for org in bases
+        .iter()
         .filter_map(|base| std::fs::read_dir(base.join(folder)).ok())
         .flat_map(|entries| entries.flatten())
     {
@@ -76,14 +88,24 @@ fn desktop_record(id: &str, cowork: bool) -> Option<Value> {
                 let Ok(meta) = serde_json::from_slice::<Value>(&bytes) else {
                     continue;
                 };
-                if meta["cliSessionId"].as_str() == Some(id)
-                    && meta["sessionId"].as_str() == Some(stem)
-                    && meta["isArchived"] != true
-                {
+                if meta["sessionId"].as_str() != Some(stem) || meta["isArchived"] == true {
+                    continue;
+                }
+                // A tab that went on in a new Claude Code session keeps the
+                // ones it ran before (#220); a tab running `id` now wins.
+                if meta["cliSessionId"].as_str() == Some(id) {
                     matched.push((stem.to_owned(), meta));
+                } else if meta["priorCliSessionIds"]
+                    .as_array()
+                    .is_some_and(|ids| ids.iter().any(|prior| prior.as_str() == Some(id)))
+                {
+                    before.push((stem.to_owned(), meta));
                 }
             }
         }
+    }
+    if matched.is_empty() {
+        matched = before;
     }
     matched.sort_by(|a, b| a.0.cmp(&b.0));
     matched.dedup_by(|a, b| a.0 == b.0);
@@ -91,6 +113,27 @@ fn desktop_record(id: &str, cowork: bool) -> Option<Value> {
         .then(|| matched.pop())
         .flatten()
         .map(|(_, meta)| meta)
+}
+/// What a target with no link comes to. A Claude desktop or Cowork session
+/// whose tab cannot be found is not reached by bringing the app forward.
+pub(super) fn without_link(target: &Value) -> Result<bool, String> {
+    if matches!(
+        target["kind"].as_str(),
+        Some(
+            "claude-desktop"
+                | "claude-desktop-session"
+                | "claudeDesktopSession"
+                | "claude-cowork"
+                | "claude-cowork-session"
+                | "claudeCoworkSession"
+        )
+    ) {
+        return Err(agent_hud_core::l10n::text(
+            "Claude 桌面里找不到这个会话的标签（可能已归档，或是 claude -p 跑出来的）",
+            "The Claude desktop app has no tab for this session (archived, or a claude -p run)",
+        ));
+    }
+    Ok(false)
 }
 fn uuid(value: &str) -> bool {
     value.len() == 36
@@ -174,6 +217,20 @@ fn session_url_on(target: &Value, os: Os, registered: impl Fn(&str) -> bool) -> 
         // cannot bring its tab forward.
         "chatgpt-conversation" if agent_hud_agents::chatgpt::conversation_id(id) => {
             Some(format!("https://chatgpt.com/c/{id}"))
+        }
+        // A Hermes bot's Feishu chat opens in the Feishu app by its own
+        // `feishu://` applink, which brings Feishu forward. The https applink
+        // goes to the default browser, where it stays behind (#198), so it
+        // is only for a host without Feishu.
+        "feishu-chat" if agent_hud_agents::hermes::feishu_chat_id(id) => {
+            let mut url =
+                reqwest::Url::parse("feishu://applink.feishu.cn/client/chat/open").ok()?;
+            url.query_pairs_mut().append_pair("openChatId", id);
+            if !registered(url.as_str()) {
+                url = reqwest::Url::parse("https://applink.feishu.cn/client/chat/open").ok()?;
+                url.query_pairs_mut().append_pair("openChatId", id);
+            }
+            Some(url.into())
         }
         "iterm-session" | "iTermSession" if !id.trim().is_empty() && id.len() <= 4096 => {
             let mut url = reqwest::Url::parse("iterm2:reveal").ok()?;

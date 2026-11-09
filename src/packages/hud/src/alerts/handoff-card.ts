@@ -1,5 +1,6 @@
 import type { Handoff, HandoffStep, Session } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
+import { paperOf, type Paper } from "../paper.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */
@@ -55,14 +56,26 @@ export function handoffFor(
   return undefined;
 }
 
-/** How many reviews were asked for. */
+/** How many reviews were asked for, since its rounds last began (#258). */
 export const reviews = (handoff: Handoff) =>
-  (handoff.steps ?? []).filter((step) => step.kind === "ask").length;
+  (handoff.steps ?? [])
+    .slice(handoff.roundsFrom ?? 0)
+    .filter((step) => step.kind === "ask").length;
+
+/** The reviews it gets (#217): one at L1, `ROUNDS` otherwise, and those
+ * the person allowed past it. */
+export const budget = (handoff: Handoff) =>
+  (handoff.risk === "L1" ? 1 : ROUNDS) + (handoff.extra ?? 0);
+
+/** Reviews counted against its budget: its pull request's earlier ones too,
+ * unless its rounds began again once the person spoke up (#258). */
+export const counted = (handoff: Handoff) =>
+  (handoff.roundsFrom ? 0 : (handoff.carried ?? 0)) + reviews(handoff);
 
 /** The round it is in, and of how many: 「第 1 / 2 轮」. */
 export function round(handoff: Handoff): { at: number; of: number } {
-  const at = Math.max(1, reviews(handoff));
-  return { at, of: Math.max(ROUNDS, at) };
+  const at = Math.max(1, counted(handoff));
+  return { at, of: Math.max(budget(handoff), at) };
 }
 
 const phaseOf = (handoff: Handoff) =>
@@ -108,6 +121,32 @@ const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
 /** The newest reply step. */
 export const lastReply = (handoff: Handoff) =>
   [...(handoff.steps ?? [])].reverse().find((step) => step.kind === "reply");
+
+/** What the frame round a relay's reply says (owner, 2026-11-07, 甲 ·
+ * 航空虚线框): the round it is in and ChatGPT's verdict, once there is one. */
+export function relayLegend(
+  handoff: Handoff,
+  zh: boolean,
+): { trip: string; verdict?: string } {
+  const { at, of } = round(handoff);
+  const reply = lastReply(handoff);
+  return {
+    trip: zh
+      ? `Claude ⇄ ChatGPT · 第 ${at} / ${of} 轮`
+      : `Claude ⇄ ChatGPT · round ${at} / ${of}`,
+    verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
+  };
+}
+
+/** The legend's airmail inks: the paper's own, and where there is none (the
+ * notch, #190) the paper's of that appearance, not plain ink. */
+export function relayLegendInks(
+  paper: Paper | null,
+  light: boolean,
+): { relay: string; verdict: string } {
+  const inks = paper ?? paperOf(light);
+  return { relay: inks.blue, verdict: inks.red };
+}
 
 /** The stamp in the card's corner, by where it stands. */
 export function stamp(
@@ -183,18 +222,70 @@ function progress(handoff: Handoff, now: number, zh: boolean) {
   }
 }
 
+/** How words back to Claude stand with its plugin (#257). */
+function deliveryWord(
+  delivery: HandoffStep["delivery"],
+  zh: boolean,
+): string | undefined {
+  switch (delivery) {
+    case "waiting":
+      return zh ? "排队中" : "queued";
+    case "taken":
+      return zh ? "已领取" : "taken";
+    case "started":
+      return zh ? "已开始" : "started";
+    case "refused":
+      return zh ? "被拒收" : "refused";
+    case "expired":
+      return zh ? "过期没领" : "expired";
+    case "cancelled":
+      return zh ? "已取消" : "cancelled";
+    default:
+      return undefined;
+  }
+}
+/** `text`, then how the words stand, when known. */
+const withDelivery = (
+  text: string | undefined,
+  delivery: HandoffStep["delivery"],
+  zh: boolean,
+) =>
+  [text, deliveryWord(delivery, zh)].filter(Boolean).join(" · ") || undefined;
+
 const cut = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 const oneLine = (text: string | null | undefined) =>
   (text ?? "").replace(/\s+/g, " ").trim();
 
+/** What the auto round trip, just turned on, waits for. */
+function waitsFor(handoff: Handoff, zh: boolean): string | undefined {
+  switch (phaseOf(handoff)) {
+    case "returned":
+      return zh
+        ? "等 Claude 改完送审，回信需修改就自动转回"
+        : "Waits for Claude to hand it over; answers go back by themselves";
+    case "sending":
+    case "delivered":
+    case "working":
+      return zh
+        ? "等 ChatGPT 回信，需修改就自动转回 Claude"
+        : "Waits for ChatGPT; changes needed go back to Claude by themselves";
+    default:
+      return undefined;
+  }
+}
+
 /** The timeline: each step done, then where it stands, then what is to come. */
 export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
   const rows: Row[] = [];
+  const newest = handoff.steps?.at(-1);
   let asks = 0,
     works = 0;
-  for (const step of handoff.steps ?? []) {
+  // Rounds that began again once the person spoke up (#258).
+  const from = handoff.roundsFrom ?? 0;
+  for (const [index, step] of (handoff.steps ?? []).entries()) {
     const time = clock(step.at);
+    if (from > 0 && index === from) asks = 0;
     switch (step.kind) {
       case "work":
         works++;
@@ -226,7 +317,14 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
               : zh
                 ? "驿窗送出「请审核」"
                 : "PostPane asked for a review",
-          sub: zh ? "ChatGPT 已收到" : "ChatGPT has it",
+          sub:
+            from > 0 && asks === 1 && index >= from
+              ? zh
+                ? "ChatGPT 已收到 · 你插话后轮数从 1 重算"
+                : "ChatGPT has it · rounds count from 1 again after you spoke up"
+              : zh
+                ? "ChatGPT 已收到"
+                : "ChatGPT has it",
           quote: step.text ? cut(oneLine(step.text), 90) : undefined,
           state: "done",
         });
@@ -261,7 +359,11 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
             : zh
               ? "驿窗转回 Claude「按意见处理」"
               : "PostPane sent it back to Claude",
-          sub: zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
+          sub: withDelivery(
+            zh ? "附 ChatGPT 的回信全文" : "With ChatGPT's answer in full",
+            step.delivery,
+            zh,
+          ),
           state: "done",
         });
         break;
@@ -272,6 +374,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           title: zh
             ? "驿窗请 Claude 交回复审"
             : "PostPane asked Claude to hand it over again",
+          sub: withDelivery(undefined, step.delivery, zh),
           state: "done",
         });
         break;
@@ -324,6 +427,8 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           who: "post",
           time,
           title: zh ? "你打开了自动往返" : "You turned the auto round trip on",
+          sub:
+            step === newest && handoff.auto ? waitsFor(handoff, zh) : undefined,
           state: "done",
         });
         break;
@@ -341,7 +446,16 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     }
   }
   const at = handoff.phaseAt ?? handoff.updatedAt;
-  const next = reviews(handoff) + 1;
+  // Steps after it began (paused, turned on) are listed above it: its clock
+  // goes into the line instead, so the times read in order (#194).
+  const later = (newest?.at ?? 0) > at;
+  const curTime = later ? "" : clock(at);
+  const lasted = later
+    ? zh
+      ? `${clock(at)} 起 · ${since(at, now, zh)}`
+      : `since ${clock(at)} · ${since(at, now, zh)}`
+    : since(at, now, zh);
+  const next = counted(handoff) + 1;
   const again: Row = {
     who: "chatgpt",
     time: "",
@@ -349,12 +463,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       ? `第 ${next} 轮：ChatGPT 再审核`
       : `Round ${next}: ChatGPT again`,
     sub: zh
-      ? `最多 ${ROUNDS} 轮；写「结论：通过」就停`
-      : `At most ${ROUNDS} rounds; stops at a pass`,
+      ? `最多 ${budget(handoff)} 轮；写「结论：通过」就停`
+      : `At most ${budget(handoff)} rounds; stops at a pass`,
     state: "todo",
   };
   const passed = lastReply(handoff)?.verdict === "pass";
-  const more = next <= ROUNDS && !passed;
+  const more = next <= budget(handoff) && !passed;
   const todoBack: Row = {
     who: "post",
     time: "",
@@ -391,9 +505,9 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     case "working":
       rows.push({
         who: "chatgpt",
-        time: clock(at),
+        time: curTime,
         title: zh ? "ChatGPT 审核中" : "ChatGPT is reviewing",
-        sub: since(at, now, zh),
+        sub: lasted,
         state: "cur",
       });
       rows.push(todoBack, todoFix);
@@ -410,7 +524,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     case "returned":
       rows.push({
         who: "claude",
-        time: clock(at),
+        time: curTime,
         title: zh ? "Claude 按意见修改" : "Claude works on it",
         sub: handoff.wakingSince
           ? zh
@@ -420,7 +534,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
             ? zh
               ? "意见已排队 · 会话 3 分钟仍不在线就在后台续接"
               : "Answer queued · runs in the background if the session stays quiet for 3 minutes"
-            : since(at, now, zh),
+            : lasted,
         state: "cur",
       });
       if (more) rows.push(again);
@@ -445,12 +559,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
 export function actions(handoff: Handoff): Action[] {
   const phase = phaseOf(handoff);
   // The auto round trip's switch, after 「结束接力」: pause it while on,
-  // turn it back on once it stopped.
+  // turn it back on once it stopped and a round is left for it (#194).
   const toggle: Action[] = !live(handoff)
     ? []
     : handoff.auto
       ? ["pause"]
-      : handoff.halt
+      : handoff.halt && counted(handoff) < budget(handoff)
         ? ["resume"]
         : [];
   const open: Action[] = [
@@ -468,7 +582,7 @@ export function actions(handoff: Handoff): Action[] {
       return [
         "end",
         ...open,
-        ...(reviews(handoff) < ROUNDS ? (["again"] as const) : []),
+        ...(counted(handoff) < budget(handoff) ? (["again"] as const) : []),
       ];
     default:
       return ["end", ...open];

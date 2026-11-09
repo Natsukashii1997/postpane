@@ -220,22 +220,6 @@ impl ClaudeChannel {
     /// When `session` last checked in, however long ago; None when it never
     /// did or has ended.
     pub fn last_check_in(&self, session: &str) -> Option<SystemTime> {
-        let (value, at) = self.check_in(session)?;
-        value.get("ended").is_none().then_some(at)
-    }
-
-    /// Whether `session` ran the plugin and its process has since stopped:
-    /// the plugin said it ended (Claude's desktop app stops idle sessions
-    /// when memory runs short, L-14), or it has not checked in for `quiet`.
-    /// A session that never checked in is not: it may run without the plugin.
-    pub fn stopped(&self, session: &str, now: SystemTime, quiet: Duration) -> bool {
-        self.check_in(session).is_some_and(|(value, at)| {
-            value.get("ended").is_some() || now.duration_since(at).unwrap_or_default() >= quiet
-        })
-    }
-
-    /// The session's check-in and when it was written.
-    fn check_in(&self, session: &str) -> Option<(Value, SystemTime)> {
         if !valid_name(session) {
             return None;
         }
@@ -248,7 +232,37 @@ impl ClaudeChannel {
             return None;
         }
         let value: Value = serde_json::from_slice(&fs::read(&path).ok()?).ok()?;
-        Some((value, metadata.modified().ok()?))
+        if value.get("ended").is_some() {
+            return None;
+        }
+        metadata.modified().ok()
+    }
+
+    /// Whether `session` ran the plugin and its process has since stopped:
+    /// the plugin said it ended (Claude's desktop app stops idle sessions
+    /// when memory runs short, L-14), or it has not checked in for `quiet`.
+    /// A session that never checked in is not: it may run without the plugin.
+    pub fn stopped(&self, session: &str, now: SystemTime, quiet: Duration) -> bool {
+        self.ended(session)
+            || self
+                .last_check_in(session)
+                .is_some_and(|at| now.duration_since(at).unwrap_or_default() >= quiet)
+    }
+
+    /// Whether `session` ran the plugin and then ended, as when Claude quits
+    /// or restarts and stops every session it ran.
+    pub fn ended(&self, session: &str) -> bool {
+        if !valid_name(session) {
+            return false;
+        }
+        let path = self
+            .directory
+            .join("sessions")
+            .join(format!("{session}.json"));
+        fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .is_some_and(|value| value.get("ended").is_some())
     }
 
     /// Writes the plugin's files into `folder` (an absolute path), pointing
@@ -328,6 +342,50 @@ impl ClaudeChannel {
     /// user) or the session is not running the plugin. Returns its identity.
     /// Each answer clears what earlier ones left, so the folder does not grow.
     pub fn hand(&self, session: &str, text: &str, now: SystemTime) -> Result<String, Refusal> {
+        let id = identity(now);
+        self.put(session, &id, text, now, true).map(|()| id)
+    }
+
+    /// Leaves `text` for `session` as `hand` does, also while the session is
+    /// not running: the plugin takes it once the session is opened again
+    /// within `PROMPT_LIFETIME` (#255).
+    pub fn queue(&self, session: &str, text: &str, now: SystemTime) -> Result<String, Refusal> {
+        let id = identity(now);
+        self.put(session, &id, text, now, false).map(|()| id)
+    }
+
+    /// `hand` under the caller's own identity `id` (#257): words left under it
+    /// before are refused as `IdentityConflict`, so one step sent twice
+    /// leaves one copy.
+    pub fn hand_as(
+        &self,
+        session: &str,
+        id: &str,
+        text: &str,
+        now: SystemTime,
+    ) -> Result<(), Refusal> {
+        self.put(session, id, text, now, true)
+    }
+
+    /// `queue` under the caller's own identity `id`, as `hand_as`.
+    pub fn queue_as(
+        &self,
+        session: &str,
+        id: &str,
+        text: &str,
+        now: SystemTime,
+    ) -> Result<(), Refusal> {
+        self.put(session, id, text, now, false)
+    }
+
+    fn put(
+        &self,
+        session: &str,
+        id: &str,
+        text: &str,
+        now: SystemTime,
+        loaded_only: bool,
+    ) -> Result<(), Refusal> {
         if text.trim().is_empty() {
             return Err(Refusal::InvalidInput("Nothing to send".into()));
         }
@@ -339,13 +397,11 @@ impl ClaudeChannel {
         if !valid_name(session) {
             return Err(Refusal::InvalidInput("identity".into()));
         }
-        if !self.loaded(now).contains(session) {
+        if loaded_only && !self.loaded(now).contains(session) {
             return Err(Refusal::NotLoaded);
         }
         self.sweep(now);
-        let id = identity(now);
-        self.leave(session, &id, text, false, now)?;
-        Ok(id)
+        self.leave(session, id, text, false, now)
     }
 
     /// How the words `id` left for `session` stand, and the plugin's reason
@@ -414,13 +470,22 @@ impl ClaudeChannel {
         }
     }
 
-    /// Removes check-ins older than a day, and words taken a minute ago or
-    /// older than an hour.
+    /// Removes check-ins older than a day (a week for a session that ended,
+    /// so its questions still say to open it in Claude), and words taken a
+    /// minute ago or older than an hour.
     pub fn sweep(&self, now: SystemTime) {
         if let Ok(files) = fs::read_dir(self.directory.join("sessions")) {
             for entry in files.flatten() {
                 let path = entry.path();
-                if file_age(&path, now) > Duration::from_secs(86_400) {
+                let age = file_age(&path, now);
+                if age <= Duration::from_secs(86_400) {
+                    continue;
+                }
+                let ended = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(|session| self.ended(session));
+                if !ended || age > Duration::from_secs(7 * 86_400) {
                     let _ = fs::remove_file(path);
                 }
             }
@@ -490,8 +555,9 @@ impl ClaudeReplies {
 
     /// Why words would not reach `session`, which has not checked in lately,
     /// and what would change it: the plugin is not installed; the session
-    /// ran it since it was installed, so the app has paused the session; or
-    /// the session started before the install and has not loaded it.
+    /// ran it and ended, as when Claude restarts; the session ran it since it
+    /// was installed, so the app has paused the session; or the session
+    /// started before the install and has not loaded it.
     fn unreachable(&self, session: &str) -> Unreachable {
         if !installed(&self.claude_config) {
             return Unreachable::new(
@@ -502,17 +568,11 @@ impl ClaudeReplies {
                 Some(AnswerFix::InstallPlugin),
             );
         }
-        // Once the plugin wrote that the session ended, it is not that the
-        // plugin is missing: the process stopped (L-14).
-        if self
-            .channel
-            .check_in(session)
-            .is_some_and(|(value, _)| value.get("ended").is_some())
-        {
+        if self.channel.ended(session) {
             return Unreachable::new(
                 l10n::text(
-                    "这个会话的 Claude 进程已经停了（桌面版会回收空闲会话），给它发一句话就会重新运行。",
-                    "This session's Claude process has stopped (the desktop app reclaims idle sessions); send it a message to run it again.",
+                    "这个会话的 Claude 进程已经停了（Claude 重启、关掉或回收过它）。在 Claude 里给它发一句话让它重新运行，就能在 Agent HUD 里回答。",
+                    "This session's Claude process has stopped (Claude restarted, closed or reclaimed it). Send it a message in Claude to run it again, then answer in Agent HUD.",
                 ),
                 None,
             );
@@ -563,23 +623,26 @@ impl SessionReplies for ClaudeReplies {
             return Err(not_claude());
         }
         let now = SystemTime::now();
-        let handed = self.channel.hand(session, words, now);
-        if let (Ok(_), Some(data)) = (&handed, &self.deliveries) {
-            use agent_hud_agents::naming::surfaces::{Category, Surface, AGENT_HUD};
-            let at = now
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|since| since.as_millis() as i64)
-                .unwrap_or_default();
-            // A tag is a label: a failed write only leaves the log's tag.
-            let _ = crate::hooks::record_delivery(
-                data,
-                source,
-                session,
-                &Surface::new(Category::Desktop, AGENT_HUD),
-                at,
-            );
-        }
-        handed.map(drop).map_err(|refusal| match refusal {
+        let handed = self.channel.hand(session, words, now).map(drop);
+        self.delivered(session, &handed, now);
+        handed.map_err(|refusal| self.refusal_text(session, &refusal))
+    }
+}
+
+impl ClaudeReplies {
+    /// `reply` into a Claude Code session under the caller's own identity
+    /// `id` (#257): words left under it before are refused as
+    /// `IdentityConflict` (`refusal_text` says the rest).
+    pub fn reply_as(&self, session: &str, id: &str, words: &str) -> Result<(), Refusal> {
+        let now = SystemTime::now();
+        let handed = self.channel.hand_as(session, id, words, now);
+        self.delivered(session, &handed, now);
+        handed
+    }
+
+    /// What a refusal to leave words for `session` tells the person.
+    pub fn refusal_text(&self, session: &str, refusal: &Refusal) -> String {
+        match refusal {
             Refusal::NotLoaded => self.unreachable(session).note,
             Refusal::Rejected(_) => l10n::text(
                 "插件不能发送以 / 开头的话。",
@@ -590,7 +653,26 @@ impl SessionReplies for ClaudeReplies {
                 "回答没能交给 Claude Code 插件。",
                 "The answer could not be left for the Claude Code plugin.",
             ),
-        })
+        }
+    }
+
+    /// Words left for `session` are recorded as typed in Agent HUD on this Mac.
+    fn delivered(&self, session: &str, handed: &Result<(), Refusal>, now: SystemTime) {
+        if let (Ok(()), Some(data)) = (handed, &self.deliveries) {
+            use agent_hud_agents::naming::surfaces::{Category, Surface, AGENT_HUD};
+            let at = now
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|since| since.as_millis() as i64)
+                .unwrap_or_default();
+            // A tag is a label: a failed write only leaves the log's tag.
+            let _ = crate::hooks::record_delivery(
+                data,
+                agent_hud_agents::claude::AGENT.id,
+                session,
+                &Surface::new(Category::Desktop, AGENT_HUD),
+                at,
+            );
+        }
     }
 }
 
@@ -661,6 +743,9 @@ fn write_json(file: &Path, value: &Value) -> Result<(), Refusal> {
     write_private(file, value.to_string().as_bytes())?;
     Ok(())
 }
+
+mod opener;
+pub use opener::{current_turn, Opener};
 
 #[cfg(test)]
 mod tests;

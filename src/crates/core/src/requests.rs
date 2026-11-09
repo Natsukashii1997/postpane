@@ -308,6 +308,17 @@ impl Requests {
             self.wake();
         }
     }
+    /// Whether something asked at `at_ms` still waits for an answer: always
+    /// while the hold is 0 (「一直等」), else for the hold (#184).
+    pub fn still_held(&self, at_ms: i64, now_ms: i64) -> bool {
+        let hold_ms = self
+            .0
+            .state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .hold_ms;
+        now_ms < held_until(at_ms, hold_ms)
+    }
     pub fn set_hold_ms(&self, hold_ms: u64) {
         let changed = {
             let mut state = self.0.state.lock().unwrap_or_else(|p| p.into_inner());

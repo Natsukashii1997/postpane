@@ -1,11 +1,24 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
-import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { CheckCheck } from "lucide-react";
+import type { Handoff, IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { cardColumn } from "../card-column";
-import { airmailStripes, relayPaperOf, usePaper, type Paper } from "../paper";
+import {
+  AIRMAIL_BLUE,
+  AIRMAIL_RED,
+  airmailStripes,
+  relayPaperOf,
+  usePaper,
+  type Paper,
+} from "../paper";
 import {
   SHOWN_ENTRIES,
   entryTitle,
@@ -25,14 +38,17 @@ import {
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { useHandoffCard } from "./HandoffCard";
-import { handoffFor } from "./handoff-card";
+import { handoffFor, relayLegend, relayLegendInks } from "./handoff-card";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import {
-  newestReply,
+  openReplyId,
   replyEntries,
   replyFacts,
   replyGroups,
   replyMessage,
   isReviewReply,
+  sessionReplies,
 } from "./reply-list";
 
 /**
@@ -59,35 +75,39 @@ export function CompletionAlertView({
   const paper = usePaper();
   const inks = cardInks(paper, light);
   const services = usePanelServices();
-  const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const { failure, fail } = useOpenFailures();
   const [unfolded, setUnfolded] = useState(false);
+  // The reply whose row was clicked: it opens in place of the newest.
+  const [chosen, setChosen] = useState<string | null>(null);
   const card = useHandoffCard();
 
   const entries = replyEntries(replies, snapshot.sessions);
-  const openId = newestReply(entries)?.id;
+  const openId = openReplyId(entries, chosen);
   const { groups, hidden, sectioned } = replyGroups(
     entries,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
     zh,
   );
 
-  // Going back puts the reply away; where there is no way back, the line
-  // says so.
+  // Only ↗ goes back, and only once the session is in front are its
+  // replies put away; where it could not get there, the line says why a few
+  // seconds and may be tried again (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
-    const opened = target ? await services?.openSession?.(target) : false;
-    if (opened === false) {
-      setUnreachable((previous) => new Set(previous).add(entry.id));
+    const reason = failureOf(
+      target ? await services?.openSession?.(target) : false,
+      zh,
+    );
+    if (reason) {
+      fail(entry.id, reason);
       return;
     }
-    drop([entry.id]);
+    drop(sessionReplies(entries, entry));
     handoff?.();
   };
   const canOpen = (entry: ApprovalEntry) =>
     Boolean(sessionToOpen(entry) && services?.openSession) &&
-    !unreachable.has(entry.id);
+    !failure(entry.id);
 
   // The owner's own replies on the receipt; a review's on the lower slip of
   // the reviews' paper (#145).
@@ -96,22 +116,28 @@ export function CompletionAlertView({
   const reviews = groups.flatMap((group) => group.entries.filter(review));
   const reviewPaper = relayPaperOf(light, paper?.bleed);
   const reviewInks = cardInks(reviewPaper, light);
+  // A reply in a handoff opens its card (查看接力).
+  const relayOf = (entry: ApprovalEntry | undefined) =>
+    entry?.kind === "reply"
+      ? handoffFor(snapshot.handoffs, entry.event.source, entry.event.sessionId)
+      : undefined;
+  // A relay's reply on the receipt sits in the airmail frame; a review's is
+  // on the reviews' paper already.
+  const framed = (entry: ApprovalEntry | undefined) =>
+    Boolean(entry && relayOf(entry) && !review(entry));
   const line = (
     entry: ApprovalEntry,
     index: number,
     inks: Inks,
     paper: Paper | null,
+    previous?: ApprovalEntry,
   ) => {
     if (entry.kind !== "reply") return null;
     const open = entry.id === openId;
-    const failed = unreachable.has(entry.id);
+    const failed = failure(entry.id);
     const bot = entry.session?.bot;
-    // A reply in a handoff opens its card (查看接力).
-    const handoff = handoffFor(
-      snapshot.handoffs,
-      entry.event.source,
-      entry.event.sessionId,
-    );
+    const handoff = relayOf(entry);
+    const inFrame = framed(entry);
     // A handoff's reply is titled by the handoff: its question is the
     // whole brief.
     const title =
@@ -122,10 +148,32 @@ export function CompletionAlertView({
     return (
       <div
         key={entry.id}
-        style={{
-          borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
-        }}
+        style={
+          inFrame
+            ? {
+                position: "relative",
+                margin: "12px -8px 10px",
+                padding: "4px 8px 0",
+                borderRadius: 6,
+                background: `color-mix(in srgb, ${paper?.blue ?? inks.dim} 5%, transparent)`,
+              }
+            : {
+                borderTop:
+                  index > 0 && !framed(previous)
+                    ? `1px dotted ${inks.line}`
+                    : undefined,
+              }
+        }
       >
+        {inFrame && handoff && (
+          <RelayFrame
+            handoff={handoff}
+            paper={paper}
+            inks={inks}
+            light={Boolean(light)}
+            zh={zh}
+          />
+        )}
         <EntryRow
           entry={entry}
           open={open}
@@ -135,7 +183,7 @@ export function CompletionAlertView({
             newsTitle(entry.event, zh)
           }
           canOpen={canOpen(entry)}
-          onSelect={() => void goBack(entry)}
+          onSelect={() => setChosen(entry.id)}
           onOpen={() => void goBack(entry)}
           inks={inks}
           light={light}
@@ -154,30 +202,23 @@ export function CompletionAlertView({
               padding: `14px 0 18px ${indent}px`,
             }}
           >
-            <ReplyBody entry={entry} inks={inks} zh={zh} failed={failed} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => drop(entries.map((each) => each.id))}
+            <ReplyBody entry={entry} inks={inks} zh={zh} />
+            {failed && <OpenNotice text={failed} light={light} />}
+            {/* Only what acts on this reply: going back is the ↗ in its
+                title row, putting them all away the head's (owner,
+                2026-11-07). */}
+            {handoff && card && (
+              <div
                 style={{
-                  ...buttonFace,
-                  border: `1.5px solid ${inks.faint}`,
-                  background: "transparent",
-                  color: inks.ink,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 8,
                 }}
               >
-                {entries.length > 1
-                  ? zh
-                    ? "全部知道了"
-                    : "Dismiss all"
-                  : zh
-                    ? "知道了"
-                    : "Got it"}
-              </button>
-              <span style={{ flex: 1 }} />
-              {handoff && card && (
                 <button
                   type="button"
+                  className="hud-press"
                   onClick={() => card.open(handoff.id)}
                   style={{
                     ...buttonFace,
@@ -188,33 +229,14 @@ export function CompletionAlertView({
                 >
                   {zh ? "查看接力" : "Handoff"}
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void goBack(entry)}
-                style={{
-                  ...buttonFace,
-                  border: `1.5px solid ${inks.ink}`,
-                  background: inks.ink,
-                  color: paper
-                    ? paper.paper
-                    : light
-                      ? "#ffffff"
-                      : "rgba(0,0,0,0.88)",
-                  fontWeight: 600,
-                  opacity: canOpen(entry) ? 1 : 0.5,
-                }}
-              >
-                <ArrowUpRight size={12} strokeWidth={2.4} />
-                {zh ? "回到会话" : "Return to session"}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           failed && (
-            <Unreachable
-              inks={inks}
-              zh={zh}
+            <OpenNotice
+              text={failed}
+              light={light}
               style={{
                 padding: `0 0 12px ${indent}px`,
                 marginTop: -4,
@@ -240,6 +262,32 @@ export function CompletionAlertView({
         inks={inks}
         light={light}
         zh={zh}
+        action={
+          <button
+            type="button"
+            className="hud-press"
+            onClick={() => drop(entries.map((each) => each.id))}
+            style={{
+              ...buttonFace,
+              height: 24,
+              padding: "0 10px",
+              fontSize: 12,
+              flex: "none",
+              border: `1.5px solid ${inks.faint}`,
+              background: "transparent",
+              color: inks.mid,
+            }}
+          >
+            <CheckCheck size={13} strokeWidth={2.2} />
+            {entries.length > 1
+              ? zh
+                ? "全部知道了"
+                : "Dismiss all"
+              : zh
+                ? "知道了"
+                : "Got it"}
+          </button>
+        }
       />
       <ListTear paper={paper} inks={inks} />
       {groups
@@ -253,7 +301,9 @@ export function CompletionAlertView({
             )}
             {group.entries
               .filter((entry) => !review(entry))
-              .map((entry, index) => line(entry, index, inks, paper))}
+              .map((entry, index, list) =>
+                line(entry, index, inks, paper, list[index - 1]),
+              )}
           </div>
         ))}
       {reviews.length > 0 && (
@@ -274,6 +324,129 @@ export function CompletionAlertView({
       {/* A review slip runs to the foot. */}
       {!reviews.length && <div style={{ height: 6 }} />}
     </div>
+  );
+}
+
+/** Where the frame's legend starts along its top edge. */
+const LEGEND_LEFT = 14;
+
+/** The airmail frame round a relay's reply on the receipt (owner,
+ * 2026-11-07, 甲 · 航空虚线框): red and blue dashes in turn, as an airmail
+ * envelope's edge, with 「接力」, the round and ChatGPT's verdict set into its
+ * top edge. */
+function RelayFrame({
+  handoff,
+  paper,
+  inks,
+  light,
+  zh,
+}: {
+  handoff: Handoff;
+  paper: Paper | null;
+  inks: Inks;
+  light: boolean;
+  zh: boolean;
+}) {
+  const { trip, verdict } = relayLegend(handoff, zh);
+  const tone = relayLegendInks(paper, light);
+  // The legend breaks the top edge instead of covering it: in the notch there
+  // is no paper to cover it with, and on paper a flat patch shows against the
+  // grain (#190).
+  const legend = useRef<HTMLSpanElement>(null);
+  const [gap, setGap] = useState(0);
+  useLayoutEffect(() => {
+    const element = legend.current;
+    if (!element) return;
+    const measure = () => setGap(element.offsetWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const mask = `relay-gap-${useId().replace(/[^\w-]/g, "")}`;
+  const dash = {
+    x: 0.75,
+    y: 0.75,
+    width: "calc(100% - 1.5px)",
+    height: "calc(100% - 1.5px)",
+    rx: 6,
+    fill: "none",
+    strokeWidth: 1.5,
+    strokeDasharray: "7 7",
+  } as const;
+  return (
+    <>
+      <svg
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          overflow: "visible",
+          pointerEvents: "none",
+          opacity: 0.9,
+        }}
+      >
+        <mask
+          id={mask}
+          maskUnits="userSpaceOnUse"
+          x="-5%"
+          y="-5%"
+          width="110%"
+          height="110%"
+        >
+          <rect x="-5%" y="-5%" width="110%" height="110%" fill="white" />
+          <rect x={LEGEND_LEFT} y={-4} width={gap} height={8} fill="black" />
+        </mask>
+        <g mask={`url(#${mask})`}>
+          <rect style={{ ...dash, stroke: AIRMAIL_RED }} />
+          <rect
+            style={{ ...dash, stroke: AIRMAIL_BLUE, strokeDashoffset: 7 }}
+          />
+        </g>
+      </svg>
+      <span
+        ref={legend}
+        style={{
+          position: "absolute",
+          top: -8,
+          left: LEGEND_LEFT,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 6px",
+          maxWidth: "calc(100% - 28px)",
+          fontSize: 11,
+          lineHeight: "16px",
+          fontWeight: 500,
+          color: inks.dim,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 700,
+            letterSpacing: "0.2em",
+            color: tone.relay,
+          }}
+        >
+          {zh ? "接力" : "RELAY"}
+        </span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {trip}
+          {verdict && (
+            <>
+              {" · "}
+              <span style={{ color: tone.verdict, fontWeight: 600 }}>
+                {verdict}
+              </span>
+            </>
+          )}
+        </span>
+      </span>
+    </>
   );
 }
 
@@ -336,12 +509,10 @@ function ReplyBody({
   entry,
   inks,
   zh,
-  failed,
 }: {
   entry: Extract<ApprovalEntry, { kind: "reply" }>;
   inks: Inks;
   zh: boolean;
-  failed: boolean;
 }) {
   const message = replyMessage(entry.event, entry.session);
   const { took, tokens } = replyFacts(entry.event, entry.session, zh);
@@ -395,31 +566,6 @@ function ReplyBody({
           )}
         </div>
       )}
-      {failed && <Unreachable inks={inks} zh={zh} />}
     </>
-  );
-}
-
-function Unreachable({
-  inks,
-  zh,
-  style,
-}: {
-  inks: Inks;
-  zh: boolean;
-  style?: CSSProperties;
-}) {
-  return (
-    <p
-      role="status"
-      style={{
-        margin: 0,
-        fontSize: 11.5,
-        color: inks.dim,
-        ...style,
-      }}
-    >
-      {zh ? "无法回到这个会话" : "Couldn't return to this session"}
-    </p>
   );
 }

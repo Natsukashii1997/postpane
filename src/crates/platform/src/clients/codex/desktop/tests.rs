@@ -320,3 +320,68 @@ fn native_waiting_is_phase_only_and_clears_on_disconnect_and_stop() {
         .is_none_or(|sessions| sessions.is_empty()));
     assert!(requests.views(crate::hooks::now_ms()).is_empty());
 }
+
+#[test]
+fn a_failed_answer_puts_the_card_back() {
+    let temporary = tempfile::Builder::new().prefix("").tempdir().unwrap();
+    let directory = temporary.path().join("f");
+    fs::create_dir_all(directory.join("ipc")).unwrap();
+    let listener = UnixListener::bind(directory.join("ipc/ipc.sock")).unwrap();
+    let requests = Requests::default();
+    let mut observer =
+        CodexDesktopObserver::start(directory.clone(), requests.clone(), Arc::new(|| {})).unwrap();
+    let (go, ready) = std::sync::mpsc::channel();
+    let worker = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(4)))
+            .unwrap();
+        let init = read(&mut stream);
+        response(&mut stream, &init, json!({"clientId":"stream-client"}));
+        let discovery = read(&mut stream);
+        response(&mut stream, &discovery, json!({}));
+        assert_eq!(read(&mut stream)["params"]["following"], true);
+        send(
+            &mut stream,
+            json!({"type":"broadcast","method":"thread-stream-state-changed","version":11,"sourceClientId":"owner","params":{"hostId":"local","conversationId":THREAD,"change":{"type":"snapshot","revision":1,"conversationState":snapshot(vec![permission("computer-use", json!(["session"]))])}}}),
+        );
+        let (mut answer, _) = listener.accept().unwrap();
+        let init = read(&mut answer);
+        response(&mut answer, &init, json!({"clientId":"answer-client"}));
+        let discovery = read(&mut answer);
+        response(&mut answer, &discovery, json!({}));
+        let mutation = read(&mut answer);
+        // Codex refuses the answer: the request is still open there.
+        send(
+            &mut answer,
+            json!({"type":"response","requestId":mutation["requestId"],"resultType":"error","error":"no-handler"}),
+        );
+        ready.recv_timeout(Duration::from_secs(4)).unwrap();
+        // The next state Codex sends still holds the request.
+        send(
+            &mut stream,
+            json!({"type":"broadcast","method":"thread-stream-state-changed","version":11,"sourceClientId":"owner","params":{"hostId":"local","conversationId":THREAD,"change":{"type":"patches","baseRevision":1,"revision":2,"patches":[{"op":"replace","path":["cwd"],"value":"/fixture"}]}}}),
+        );
+        ready.recv_timeout(Duration::from_secs(4)).unwrap();
+    });
+    observer.update_sessions(&[json!({"id":THREAD,"source":AGENT.id,"state":"running","navigationTarget":{"kind":"codex-thread","id":THREAD}})]);
+    wait(|| requests.views(crate::hooks::now_ms()).len() == 1);
+    let id = requests.views(crate::hooks::now_ms())[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    requests
+        .answer(&id, &json!({"kind":"allow"}), crate::hooks::now_ms())
+        .unwrap();
+    wait(|| {
+        requests
+            .deliveries(crate::hooks::now_ms())
+            .iter()
+            .any(|row| row["id"] == id && row["state"] == "failed")
+    });
+    go.send(()).unwrap();
+    wait(|| requests.views(crate::hooks::now_ms()).len() == 1);
+    go.send(()).unwrap();
+    worker.join().unwrap();
+    observer.stop();
+}

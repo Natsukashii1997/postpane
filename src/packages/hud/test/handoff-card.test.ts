@@ -6,10 +6,13 @@ import {
   autoLabel,
   handoffFor,
   progressLine,
+  relayLegend,
+  relayLegendInks,
   round,
   stamp,
   timeline,
 } from "../src/alerts/handoff-card.ts";
+import { paperOf } from "../src/paper.ts";
 
 const T = Date.UTC(2026, 10, 6, 8, 15);
 const minute = 60_000;
@@ -227,7 +230,8 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
     [last.at(-1)?.title, last.at(-1)?.sub],
     ["自动往返停下", "已审 2 轮仍需修改，自动往返停下，交还常浩"],
   );
-  assert.deepEqual(actions(stopped), ["end", "resume", "open", "back"]);
+  // Every round used: nothing left for it to do, so no 「继续自动」 (#194).
+  assert.deepEqual(actions(stopped), ["end", "open", "back"]);
   assert.equal(autoLabel(stopped, true), "自动已停");
   assert.equal(
     progressLine(stopped, T, true),
@@ -261,6 +265,81 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
   // Handoffs from before the auto round trip offer no switch.
   assert.deepEqual(actions(handoff()), ["end", "open"]);
   assert.equal(autoLabel(handoff(), true), null);
+});
+
+test("「继续自动」 only while a round is left, and the card says what it waits for (#194)", () => {
+  // Round 1 sent back, then stopped: turning it back on still has work.
+  const back = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("stop", T + 13 * minute, { text: "常浩暂停" }),
+  ];
+  const stopped = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: false,
+    halt: "常浩暂停",
+    steps: back,
+  });
+  assert.deepEqual(actions(stopped), ["end", "resume", "open", "again"]);
+  // Turned back on: the row says what it waits for now.
+  const resumed = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: true,
+    steps: [...back, step("resume", T + 14 * minute)],
+  });
+  const rows = timeline(resumed, T + 15 * minute, true);
+  const on = rows.find((row) => row.title === "你打开了自动往返");
+  assert.equal(on?.sub, "等 Claude 改完送审，回信需修改就自动转回");
+  // Round 2 of 2 back with Claude (DT-ORC, 2026-11-07): no 「继续自动」.
+  const last = handoff({
+    phase: "returned",
+    phaseAt: T + 30 * minute,
+    auto: false,
+    halt: "已审 2 轮仍需修改，自动往返停下，交还常浩",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("ask", T + 20 * minute),
+      { ...reply, at: T + 25 * minute },
+      step("stop", T + 25 * minute, { text: "已审 2 轮仍需修改", auto: true }),
+      step("back", T + 30 * minute),
+    ],
+  });
+  assert.deepEqual(actions(last), ["end", "open"]);
+});
+
+test("where it stands keeps the timeline in order: no earlier clock after later steps (#194)", () => {
+  const steps = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("resume", T + 70 * minute),
+    step("stop", T + 72 * minute, { text: "常浩暂停" }),
+  ];
+  const rows = timeline(
+    handoff({ phase: "returned", phaseAt: T + 12 * minute, steps }),
+    T + 80 * minute,
+    true,
+  );
+  const cur = rows.find((row) => row.state === "cur")!;
+  assert.equal(cur.title, "Claude 按意见修改");
+  assert.equal(cur.time, "");
+  assert.match(cur.sub ?? "", /^\d\d:\d\d 起 · 已 1 小时$/);
+  // With nothing after it, it keeps its own clock.
+  const plain = timeline(
+    handoff({
+      phase: "returned",
+      phaseAt: T + 12 * minute,
+      steps: steps.slice(0, 4),
+    }),
+    T + 20 * minute,
+    true,
+  ).find((row) => row.state === "cur")!;
+  assert.match(plain.time, /^\d\d:\d\d$/);
+  assert.equal(plain.sub, "已 8 分钟");
 });
 
 test("an answer queued for a quiet Claude session says it runs in the background if need be", () => {
@@ -314,5 +393,138 @@ test("a session run in the background shows the run and why", () => {
   assert.match(
     progressLine(woke, T + 15 * minute, true),
     /^驿窗在后台续接 Claude · /,
+  );
+});
+
+test("a relay's reply is framed with its round and ChatGPT's verdict", () => {
+  // Owner, 2026-11-07 (甲 · 航空虚线框): the frame's label says which
+  // round it is and what ChatGPT said, and nothing more.
+  assert.deepEqual(relayLegend(handoff(), true), {
+    trip: "Claude ⇄ ChatGPT · 第 1 / 2 轮",
+    verdict: undefined,
+  });
+  const answered = handoff({
+    phase: "replied",
+    steps: [
+      step("ask", T + minute),
+      step("reply", T + 2 * minute, { verdict: "revise" }),
+      step("back", T + 3 * minute),
+      step("ask", T + 4 * minute),
+      step("reply", T + 5 * minute, { verdict: "pass" }),
+    ],
+  });
+  assert.deepEqual(relayLegend(answered, true), {
+    trip: "Claude ⇄ ChatGPT · 第 2 / 2 轮",
+    verdict: "通过",
+  });
+  assert.deepEqual(relayLegend(answered, false), {
+    trip: "Claude ⇄ ChatGPT · round 2 / 2",
+    verdict: "Pass",
+  });
+});
+
+test("the relay legend keeps airmail blue and red where there is no paper", () => {
+  // In the notch (#190) the card has no paper: the legend still says 接力 in
+  // blue and the verdict in red, in the dark paper's inks, not plain white.
+  const dark = paperOf(false);
+  assert.deepEqual(relayLegendInks(null, false), {
+    relay: dark.blue,
+    verdict: dark.red,
+  });
+  const light = paperOf(true);
+  assert.deepEqual(relayLegendInks(light, true), {
+    relay: light.blue,
+    verdict: light.red,
+  });
+});
+
+test("an engineering review counts by its risk level and its pull request (#217)", () => {
+  // L1 gets one review: once asked, nothing is left for 「再审一轮」.
+  const l1 = handoff({ risk: "L1", phase: "returned" });
+  assert.deepEqual(round(l1), { at: 1, of: 1 });
+  assert.ok(!actions(l1).includes("again"));
+  // A follow-up from another session carries the first one's review.
+  const carried = handoff({ risk: "L2", carried: 1, phase: "returned" });
+  assert.deepEqual(round(carried), { at: 2, of: 2 });
+  assert.ok(!actions(carried).includes("again"));
+  // The person's leave adds one.
+  const allowed = handoff({ risk: "L1", extra: 1, phase: "returned" });
+  assert.deepEqual(round(allowed), { at: 1, of: 2 });
+  assert.ok(actions(allowed).includes("again"));
+  // None named: two, as before.
+  assert.deepEqual(round(handoff()), { at: 1, of: 2 });
+});
+
+test("words back to Claude say how its plugin has them: queued, taken, started (#257)", () => {
+  const back = (delivery: HandoffStep["delivery"]) =>
+    handoff({
+      phase: "returned",
+      phaseAt: T + 12 * minute,
+      steps: [
+        ...handoff().steps!,
+        reply,
+        step("back", T + 12 * minute, { auto: true, delivery }),
+      ],
+    });
+  const sub = (delivery: HandoffStep["delivery"], zh: boolean) =>
+    timeline(back(delivery), T + 14 * minute, zh).find(
+      (row) =>
+        row.state === "done" &&
+        (row.title.includes("转回 Claude") ||
+          row.title.includes("back to Claude")),
+    )?.sub;
+  assert.equal(sub("waiting", true), "附 ChatGPT 的回信全文 · 排队中");
+  assert.equal(sub("taken", true), "附 ChatGPT 的回信全文 · 已领取");
+  assert.equal(sub("started", true), "附 ChatGPT 的回信全文 · 已开始");
+  assert.equal(sub("expired", true), "附 ChatGPT 的回信全文 · 过期没领");
+  assert.equal(
+    sub("started", false),
+    "With ChatGPT's answer in full · started",
+  );
+  // Kept before receipts: as before.
+  assert.equal(sub(undefined, true), "附 ChatGPT 的回信全文");
+  // The ask to hand over again says so too.
+  const again = handoff({
+    phase: "returned",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute),
+      step("again", T + 13 * minute, { delivery: "taken" }),
+    ],
+  });
+  const row = timeline(again, T + 14 * minute, true).find(
+    (row) => row.title === "驿窗请 Claude 交回复审",
+  );
+  assert.equal(row?.sub, "已领取");
+});
+
+test("rounds count from one once the person spoke up in Claude (#258)", () => {
+  const spoke = handoff({
+    phase: "delivered",
+    carried: 1,
+    roundsFrom: 4,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute),
+      step("work", T + 20 * minute, { text: "按常浩说的改完" }),
+      step("ask", T + 20 * minute),
+    ],
+  });
+  assert.deepEqual(round(spoke), { at: 1, of: 2 });
+  const rows = timeline(spoke, T + 21 * minute, true);
+  const asked = rows.filter((row) => row.title.startsWith("驿窗送出"));
+  assert.equal(asked.at(-1)?.title, "驿窗送出「请审核」");
+  assert.equal(asked.at(-1)?.sub, "ChatGPT 已收到 · 你插话后轮数从 1 重算");
+  assert.equal(
+    timeline(spoke, T + 21 * minute, false)
+      .filter((row) => row.title.startsWith("PostPane asked"))
+      .at(-1)?.sub,
+    "ChatGPT has it · rounds count from 1 again after you spoke up",
+  );
+  assert.ok(
+    rows.some((row) => row.title === "第 2 轮：ChatGPT 再审核"),
+    "one round is left",
   );
 });

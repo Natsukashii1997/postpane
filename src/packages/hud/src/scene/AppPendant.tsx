@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { PendantLayout, PendantRect } from "../app-pendant";
 import { PendantShell } from "./PendantShell";
 
@@ -19,13 +18,16 @@ const STAR = { x: 0.5, y: 0.19 };
  * pointer the pendant sways now and then, the cat blinks and its star
  * twinkles (at rest it stays still); a hover lifts the ball and lights the
  * eyes, and a press squashes it; while the notes show, a faint gold halo
- * breathes round the ring. `still` stops them all. */
+ * breathes round the ring. `still` stops them all. Whether they show is the
+ * host's word (`shown`), so the halo goes out when the page's own 收起 hides
+ * them and is right after the sidebar reloads (#224). */
 export function AppPendant({
   layout,
   light,
   zh,
   still,
   carried = false,
+  shown,
   onToggle,
 }: {
   layout: PendantLayout;
@@ -36,9 +38,10 @@ export function AppPendant({
   /** The strip is being dragged: the pendant rides along with it and takes
    * no pointer. */
   carried?: boolean;
+  /** Whether the notes' window shows. */
+  shown: boolean;
   onToggle: (anchor: PendantRect) => Promise<boolean>;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <PendantShell
       app="notes"
@@ -47,9 +50,9 @@ export function AppPendant({
       light={light}
       still={still}
       carried={carried}
-      open={open}
+      open={shown}
       onPress={(anchor) => {
-        void onToggle(anchor).then(setOpen, () => setOpen(false));
+        void onToggle(anchor).catch(() => {});
       }}
     >
       <img

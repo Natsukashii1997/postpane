@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ArrowUpRight,
   CornerDownRight,
   EyeOff,
   FileSearch,
@@ -14,13 +13,16 @@ import {
   MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
+import { GoButton } from "../GoButton";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import type {
   PanelLayout,
   SessionsResponse,
   Snapshot,
 } from "@agent-hud/protocol";
 import { tokensShort } from "@agent-hud/ui/format";
-import { sourceID, sourcesForMark } from "../model";
+import { sourceID, sourcesForMark, vendorKey } from "../model";
 import { usePanelQuery, usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
 import { noButtonChrome, tabular, type Logo } from "./theme";
@@ -36,7 +38,14 @@ import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { airmailStripes, relayPaperOf, usePaper } from "../paper";
-import { isReview } from "../chatgpt-desk";
+import {
+  chatgptDesk,
+  isReview,
+  reviewsInDay,
+  type DeskChat,
+} from "../chatgpt-desk";
+import { replyTime } from "../scene/hermes-peek";
+import { dateFormat } from "@agent-hud/ui/format";
 import { handoffFor, progressLine, round } from "../alerts/handoff-card";
 import type { Handoff, RelayLaunch } from "@agent-hud/protocol";
 import {
@@ -113,6 +122,22 @@ export function SourceSessions({
     entry.session.source === "chatgpt" && isReview(entry.session, handoffs);
   const upper = live.filter((entry) => !isReviewRow(entry));
   const lower = live.filter(isReviewRow);
+  // ChatGPT's own panel lists every chat of today, the replied ones under
+  // those answering, as many as its stub counts (#219).
+  const desk =
+    focusVendor && vendorKey(focusVendor) === vendorKey("chatgpt")
+      ? chatgptDesk(snapshot, now, zh)
+      : null;
+  const replied = desk
+    ? desk.day.flatMap((chat) => {
+        const session =
+          chat.state === "replied" &&
+          !live.some((entry) => entry.session.id === chat.id)
+            ? snapshot.sessions.find((s) => s.id === chat.id)
+            : undefined;
+        return session ? [{ chat, session }] : [];
+      })
+    : [];
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Removals end once their session has something new, or has stopped.
   useEffect(() => {
@@ -156,11 +181,11 @@ export function SourceSessions({
   useLayoutEffect(() => {
     const last = rows.current?.children[limit - 1] as HTMLElement | undefined;
     setRowsHeight(
-      upper.length > limit && last
+      upper.length + replied.length > limit && last
         ? last.offsetTop + last.offsetHeight
         : undefined,
     );
-  }, [upper.length, limit]);
+  }, [upper.length, replied.length, limit]);
   const row = (
     entry: (typeof live)[number],
     index: number,
@@ -215,12 +240,20 @@ export function SourceSessions({
           color: inks.secondary,
         }}
       >
-        <span>{zh ? "正在进行" : "IN PROGRESS"}</span>
+        <span>
+          {desk
+            ? zh
+              ? "今天的对话"
+              : "TODAY'S CHATS"
+            : zh
+              ? "正在进行"
+              : "IN PROGRESS"}
+        </span>
         <span
           style={{ flex: 1, borderTop: `1px solid ${inks.divider}`, order: 1 }}
         />
         <span style={{ order: 2, letterSpacing: 0, ...tabular }}>
-          {live.length}
+          {desk ? desk.today : live.length}
         </span>
       </div>
       <div
@@ -232,13 +265,24 @@ export function SourceSessions({
         }}
       >
         {upper.map((entry, index) => row(entry, index, upper))}
+        {replied.map(({ chat, session }, index) => (
+          <RepliedRow
+            key={chat.id}
+            chat={chat}
+            session={session}
+            now={now}
+            light={light}
+            first={!upper.length && index === 0}
+            onStats={onStats}
+          />
+        ))}
       </div>
       {lower.length > 0 && (
         <ReviewRows zh={zh}>
           {lower.map((entry, index) => row(entry, index, lower, true))}
         </ReviewRows>
       )}
-      {!live.length && (
+      {!live.length && !replied.length && (
         <span
           style={{
             padding: "6px 6px 8px",
@@ -246,9 +290,13 @@ export function SourceSessions({
             color: inks.tertiary,
           }}
         >
-          {zh
-            ? "没有会话在跑，也没有在等你的"
-            : "Nothing running, and nothing waiting on you"}
+          {desk
+            ? zh
+              ? "今天还没有对话"
+              : "No chats today"
+            : zh
+              ? "没有会话在跑，也没有在等你的"
+              : "Nothing running, and nothing waiting on you"}
         </span>
       )}
       <button
@@ -270,18 +318,26 @@ export function SourceSessions({
       >
         <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
           <span style={{ fontSize: 12.5, color: inks.text, opacity: 0.84 }}>
-            {showTokens
+            {desk
               ? zh
-                ? `近 24 小时 ${tokensShort(day.total)} Token`
-                : `${tokensShort(day.total)} tokens in the last 24 hours`
-              : zh
-                ? `近 24 小时 ${dayTotal} 个会话`
-                : `${dayTotal} sessions in the last 24 hours`}
+                ? `今天 ${desk.today} 个对话 · 近 24 小时 ${reviewsInDay(snapshot, now)} 个审核`
+                : `${desk.today} chats today · ${reviewsInDay(snapshot, now)} reviews in the last 24 hours`
+              : showTokens
+                ? zh
+                  ? `近 24 小时 ${tokensShort(day.total)} Token`
+                  : `${tokensShort(day.total)} tokens in the last 24 hours`
+                : zh
+                  ? `近 24 小时 ${dayTotal} 个会话`
+                  : `${dayTotal} sessions in the last 24 hours`}
           </span>
           <span style={{ fontSize: 12, color: inks.secondary }}>
-            {zh
-              ? `另有 ${stopped} 个会话已停 · 去统计看全部`
-              : `${stopped} more stopped · see all in Statistics`}
+            {desk
+              ? zh
+                ? "去统计看全部"
+                : "See all in Statistics"
+              : zh
+                ? `另有 ${stopped} 个会话已停 · 去统计看全部`
+                : `${stopped} more stopped · see all in Statistics`}
           </span>
         </span>
         {showTokens && (
@@ -321,6 +377,150 @@ const TRAY: Record<
  * button (owner, 2026-11-05); a Claude Code session on this machine shows
  * a tray of handoffs before it (#124). A click elsewhere, a drag right, →
  * or Esc puts it back. */
+/** A chat of today ChatGPT has answered (#219): its tag, title and a way
+ * back to it, and under the title when it replied. Nothing to swipe: there
+ * is nothing waiting on it to put away. */
+function RepliedRow({
+  chat,
+  session,
+  now,
+  light,
+  first,
+  onStats,
+}: {
+  chat: DeskChat;
+  session: Snapshot["sessions"][number];
+  now: number;
+  light: boolean;
+  first: boolean;
+  onStats?: () => void;
+}) {
+  const { language, calendar } = useFormat();
+  const zh = language === "zh";
+  const services = usePanelServices();
+  const listed = useListedSessions();
+  const inks = useBoardInks(light);
+  const { failure, fail } = useOpenFailures();
+  const [hover, setHover] = useState(false);
+  const failed = failure(session.id);
+  const canOpen =
+    Boolean(session.navigationTarget && services?.openSession) && !failed;
+  // As a live row (#220): where it could not get there, the second line
+  // says why a few seconds.
+  const goBack = async () => {
+    if (!canOpen) return;
+    const reason = failureOf(await services?.openSession?.(session), zh);
+    if (reason) fail(session.id, reason);
+  };
+  const open = () => {
+    if (canOpen) return void goBack();
+    if (listed) listed.openStats({ tab: "sessions", sessionId: session.id });
+    else if (services?.selectSession) services.selectSession(session);
+    else onStats?.();
+  };
+  const locale = zh ? "zh-CN" : "en-US";
+  const timeZone = calendar.timeZone;
+  const time = replyTime(chat.at, now, {
+    time: dateFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    }),
+    date: dateFormat(locale, {
+      month: zh ? "long" : "short",
+      day: "numeric",
+      timeZone,
+    }),
+  });
+  return (
+    <div
+      className="hud-live-session"
+      role="button"
+      tabIndex={0}
+      title={session.title}
+      onClick={open}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        open();
+      }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto minmax(0, 1fr) 26px",
+        columnGap: 10,
+        alignItems: "center",
+        padding: "8px 6px",
+        cursor: "pointer",
+        opacity: hover ? 0.78 : 1,
+        borderTop: first ? undefined : `1px dotted ${inks.divider}`,
+      }}
+    >
+      <ApprovalTag
+        label={zh ? "已回" : "REPLIED"}
+        tone="ask"
+        light={light}
+        color={inks.secondary}
+      />
+      <span
+        style={{
+          fontSize: 13.5,
+          fontWeight: 600,
+          color: inks.text,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+        }}
+      >
+        {chat.title?.trim() || (zh ? "（未命名会话）" : "(untitled session)")}
+      </span>
+      <GoButton
+        label={
+          canOpen
+            ? zh
+              ? "回到会话"
+              : "Return to session"
+            : zh
+              ? "暂时无法回到原会话"
+              : "Session return unavailable"
+        }
+        enabled={canOpen}
+        inks={{
+          line: inks.divider,
+          ink: inks.secondary,
+          faint: inks.tertiary,
+          strong: inks.text,
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          void goBack();
+        }}
+      />
+      {failed ? (
+        <OpenNotice
+          text={failed}
+          light={light}
+          style={{ gridColumn: "2 / 3" }}
+        />
+      ) : (
+        <span
+          style={{
+            gridColumn: "2 / 3",
+            marginTop: 2,
+            fontSize: 12,
+            color: inks.secondary,
+          }}
+        >
+          {zh ? `${time} 回复` : `Replied ${time}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** ChatGPT's reviews in the list (#145): a slip of the reviews' paper under
  * an airmail band, below the owner's own sessions. */
 function ReviewRows({ zh, children }: { zh: boolean; children: ReactNode }) {
@@ -400,15 +600,18 @@ function LiveRow({
   const inks = useBoardInks(light);
   const card = useHandoffCard();
   const paper = usePaper();
-  const [failed, setFailed] = useState(false);
+  const { failure, fail } = useOpenFailures();
   const [hover, setHover] = useState(false);
   const { session } = entry;
+  const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
+  // Where it could not get there, the second line says why a few seconds,
+  // then ↗ may be tried again (#220).
   const goBack = async () => {
     if (!canOpen) return;
-    const opened = await services?.openSession?.(session);
-    if (opened === false) setFailed(true);
+    const reason = failureOf(await services?.openSession?.(session), zh);
+    if (reason) fail(session.id, reason);
   };
   const details = () =>
     listed
@@ -747,11 +950,15 @@ function LiveRow({
               <BotSeal bot={bot} light={light} color={inks.secondary} />
             </span>
           )}
-          <button
-            type="button"
-            aria-label={goTitle}
-            title={goTitle}
-            aria-disabled={!canOpen}
+          <GoButton
+            label={goTitle}
+            enabled={canOpen}
+            inks={{
+              line: inks.divider,
+              ink: inks.secondary,
+              faint: inks.tertiary,
+              strong: inks.text,
+            }}
             onClick={(event) => {
               event.stopPropagation();
               if (dragged.current) {
@@ -761,24 +968,14 @@ function LiveRow({
               if (open) return onOpen(false);
               void goBack();
             }}
-            style={{
-              display: "inline-grid",
-              placeItems: "center",
-              width: 26,
-              height: 26,
-              boxSizing: "border-box",
-              padding: 0,
-              border: `1.5px solid ${inks.divider}`,
-              borderRadius: 3,
-              background: "transparent",
-              color: canOpen ? inks.secondary : inks.tertiary,
-              opacity: canOpen ? 1 : 0.6,
-              cursor: canOpen ? "pointer" : "default",
-            }}
-          >
-            <ArrowUpRight size={13} strokeWidth={2} />
-          </button>
-          {notice ? (
+          />
+          {failed ? (
+            <OpenNotice
+              text={failed}
+              light={light}
+              style={{ gridColumn: "2 / 3" }}
+            />
+          ) : notice ? (
             <span
               role="status"
               style={{

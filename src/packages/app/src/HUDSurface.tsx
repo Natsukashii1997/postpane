@@ -16,6 +16,7 @@ import type {
 } from "@agent-hud/hud/model";
 import type { Direction } from "@agent-hud/hud/bots/mark-director";
 import type { Snapshot, NativeMethod } from "./lib/types";
+import { watchFloatNotes } from "./lib/float-notes";
 import type {
   NativeHUDGeometry,
   NativeHUDMonitor,
@@ -366,14 +367,28 @@ export default function NativeHUDSurface({
     return () => clearTimeout(timer);
   }, [held, config.mode, config.edge, config.offset]);
   const shownConfig = held ? { ...config, ...held } : config;
-  const configure = useCallback(() => {
-    void invoke("hud_show_main");
-  }, []);
+  // Settings and Statistics resolve once open, or reject with why not: the
+  // panel goes away only once they opened (#220).
+  const configure = useCallback(() => invoke("hud_show_main"), []);
   const floatNotes = useCallback(
     (anchor: { x: number; y: number; width: number; height: number }) =>
       invoke<boolean>("toggle_float_notes", { anchor }),
     [],
   );
+  // 随手记's halo follows its window (#224): the host's word on each show and
+  // hide, the 收起 inside the page included, and its answer after a reload.
+  const [floatNotesShown, setFloatNotesShown] = useState(false);
+  useEffect(() => {
+    if (!isTauri()) return;
+    return watchFloatNotes(
+      {
+        ask: () => invoke<boolean>("float_notes_shown"),
+        follow: (heard) =>
+          listen<boolean>("float-notes:shown", ({ payload }) => heard(payload)),
+      },
+      setFloatNotesShown,
+    );
+  }, []);
   // 磁盘瘦身's status file (#155): read every 30 s, and every second for a
   // while after its pendant is clicked or while its panel shows, so the halo
   // follows the panel when it is closed with Esc or a click elsewhere.
@@ -421,12 +436,14 @@ export default function NativeHUDSurface({
     [],
   );
   // Statistics opens on Tokens (Open's footer button), or where a session row points.
-  const stats = useCallback((target?: { tab?: string; sessionId?: string }) => {
-    void invoke("open_statistics", {
-      tab: target?.tab ?? "tokens",
-      sessionId: target?.sessionId,
-    });
-  }, []);
+  const stats = useCallback(
+    (target?: { tab?: string; sessionId?: string }) =>
+      invoke("open_statistics", {
+        tab: target?.tab ?? "tokens",
+        sessionId: target?.sessionId,
+      }),
+    [],
+  );
   const looked = useCallback((keys: string[] | null) => {
     void invoke("hud_bot_looked", { keys });
   }, []);
@@ -681,6 +698,7 @@ export default function NativeHUDSurface({
       height={geometry?.canvas.height ?? window.innerHeight}
       onConfigure={configure}
       onFloatNotes={floatNotes}
+      floatNotesShown={floatNotesShown}
       diskSlim={diskSlim}
       onDiskSlim={toggleDiskSlim}
       onStats={stats}

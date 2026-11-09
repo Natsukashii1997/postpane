@@ -74,9 +74,12 @@ pub fn bot(log_path: &str) -> Option<Bot> {
 fn soul_name_cached(path: &Path) -> Option<String> {
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::{Mutex, OnceLock, PoisonError};
     static NAMES: OnceLock<Mutex<HashMap<PathBuf, Option<String>>>> = OnceLock::new();
-    let mut names = NAMES.get_or_init(Default::default).lock().ok()?;
+    let mut names = NAMES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     names
         .entry(path.to_owned())
         .or_insert_with(|| {
@@ -191,6 +194,22 @@ pub fn gateways(home: &Path, now: i64) -> Vec<Gateway> {
         .collect()
 }
 
+/// The navigation kind of a Feishu chat: it opens in the Feishu app.
+pub const NAVIGATION_KIND: &str = "feishu-chat";
+
+/// Whether `id` is a Feishu chat id (`oc_` and letters, digits or `_`).
+pub fn feishu_chat_id(id: &str) -> bool {
+    id.len() <= 64
+        && id.strip_prefix("oc_").is_some_and(|rest| {
+            !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        })
+}
+
+/// Where a Feishu chat opens.
+pub fn chat_target(id: &str) -> Option<serde_json::Value> {
+    feishu_chat_id(id).then(|| serde_json::json!({"kind": NAVIGATION_KIND, "id": id}))
+}
+
 /// One Hermes scheduled task (`cron/jobs.json`) and how its last run went.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CronJob {
@@ -256,6 +275,39 @@ impl Gateway {
         crate::sqlite::ReadOnlyDatabase::open(&self.home.join("state.db"))
             .and_then(|db| transcript::recent_asks(&db.connection, now, limit))
             .unwrap_or_default()
+    }
+
+    /// Who its bot answers to: the open id its `config.yaml` names for the
+    /// Feishu home channel (`platforms.feishu.home_channel.user_id`).
+    pub fn owner(&self) -> Option<String> {
+        let text = std::fs::read_to_string(self.home.join("config.yaml")).ok()?;
+        let config = serde_saphyr::from_str::<serde_json::Value>(&text).ok()?;
+        config["platforms"]["feishu"]["home_channel"]["user_id"]
+            .as_str()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string)
+    }
+
+    /// The latest `limit` asks at `now` (ms), each with the chat it opens:
+    /// a group or topic, or a private chat the owner had with the bot. A
+    /// colleague's private chat with the bot is theirs, not the owner's to
+    /// open.
+    pub fn asks_with_chats(
+        &self,
+        now: i64,
+        limit: usize,
+    ) -> Vec<(transcript::Ask, Option<String>)> {
+        let owner = self.owner();
+        self.asks(now, limit)
+            .into_iter()
+            .map(|ask| {
+                let mine =
+                    ask.chat.as_deref() != Some("dm") || (owner.is_some() && ask.user == owner);
+                let chat = ask.chat_id.clone().filter(|id| mine && feishu_chat_id(id));
+                (ask, chat)
+            })
+            .collect()
     }
 
     /// Its bot's Feishu activity since `since` (ms); none when its database
@@ -326,6 +378,77 @@ mod gateway_tests {
             down(&state("running", "connected", false, SILENT_MS + 1), NOW),
             Some(Down::Stopped)
         );
+    }
+
+    #[test]
+    fn an_ask_opens_its_group_or_the_owners_own_private_chat() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "platforms:\n  feishu:\n    enabled: true\n    home_channel:\n      platform: feishu\n      chat_id: oc_mine\n      user_id: ou_me\n",
+        )
+        .unwrap();
+        let db = rusqlite::Connection::open(home.path().join("state.db")).unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, title TEXT, chat_id TEXT, user_id TEXT);
+             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL);
+             INSERT INTO sessions VALUES
+               ('mine','feishu','dm','我问的','oc_mine','ou_me'),
+               ('theirs','feishu','dm','同事问的','oc_theirs','ou_colleague'),
+               ('grp','feishu','group','群里问的','oc_grp','ou_colleague'),
+               ('odd','feishu','group','怪 id','oc_a/b','ou_me');
+             INSERT INTO messages (session_id,role,content,timestamp) VALUES
+               ('mine','user','我问的',40),('theirs','user','同事问的',30),
+               ('grp','user','群里问的',20),('odd','user','怪 id',10);",
+        )
+        .unwrap();
+        drop(db);
+        let gateway = Gateway {
+            bot: Bot {
+                id: "default".into(),
+                name: "猛鬼兽".into(),
+            },
+            down: None,
+            down_since: None,
+            home: home.path().to_path_buf(),
+        };
+        assert_eq!(gateway.owner().as_deref(), Some("ou_me"));
+        let chats = gateway
+            .asks_with_chats(NOW, 4)
+            .into_iter()
+            .map(|(ask, chat)| (ask.session, chat))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            chats,
+            vec![
+                ("mine".into(), Some("oc_mine".into())),
+                ("theirs".into(), None),
+                ("grp".into(), Some("oc_grp".into())),
+                ("odd".into(), None),
+            ]
+        );
+        // Without a home channel no private chat is known to be the owner's.
+        std::fs::write(home.path().join("config.yaml"), "platforms: {}\n").unwrap();
+        assert_eq!(gateway.asks_with_chats(NOW, 1)[0].1, None);
+    }
+
+    #[test]
+    fn only_a_feishu_chat_id_becomes_a_target() {
+        assert_eq!(
+            chat_target("oc_08a1_B2"),
+            Some(json!({"kind": "feishu-chat", "id": "oc_08a1_B2"}))
+        );
+        for id in [
+            "",
+            "oc_",
+            "ou_08a1",
+            "oc_a/b",
+            "oc_a?x=1",
+            "oc_a b",
+            &format!("oc_{}", "a".repeat(62)),
+        ] {
+            assert_eq!(chat_target(id), None, "{id}");
+        }
     }
 
     #[test]

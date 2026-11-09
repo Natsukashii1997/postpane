@@ -136,6 +136,59 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert_eq!(heard[0]["type"], "opened");
     assert_eq!(heard[0]["requestId"], "h1");
     assert_eq!(heard[1]["phase"], "start");
+    // ...and the start is kept in the inbox, which is how the sidebar shows
+    // the conversation answering (#206: it used to be refused there).
+    let started = || {
+        fs::read_dir(&inbox)
+            .unwrap()
+            .flatten()
+            .filter_map(|entry| fs::read(entry.path()).ok())
+            .filter_map(|bytes| serde_json::from_slice::<HookEvent>(&bytes).ok())
+            .find(|event| event.session_id == "chatgpt:68b2")
+    };
+    wait_for(|| started().is_some());
+    let running = started().unwrap();
+    assert_eq!(running.kind, "session-observation");
+    assert_eq!(running.data["state"], "running");
+
+    // #223: the listener hears words reached a conversation, also when the
+    // answer comes after the wait for it gave up, under the caller's request id.
+    let sent_heard = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let sent_log = sent_heard.clone();
+    channel.listen(Arc::new(move |message: &Value| {
+        sent_log.lock().unwrap().push(message.clone())
+    }));
+    // Asked under the caller's id, answered in time.
+    let sender = channel.clone();
+    let sending = std::thread::spawn(move || sender.send_as("68a1", "第 2 轮", Some("h1~send4")));
+    let send = next(&mut extension);
+    assert_eq!(send["requestId"], "h1~send4");
+    write_frame(
+        &mut extension,
+        &json!({"type":"sent","requestId":"h1~send4","ok":true}),
+        OUTBOUND_LIMIT,
+    )
+    .unwrap();
+    sending.join().unwrap().unwrap();
+    wait_for(|| sent_heard.lock().unwrap().len() == 1);
+    // One no one waits for any more is heard too; a refused one is not.
+    for (request, ok) in [("h1~send5", false), ("h1~send6", true)] {
+        write_frame(
+            &mut extension,
+            &json!({"type":"sent","requestId":request,"ok":ok}),
+            OUTBOUND_LIMIT,
+        )
+        .unwrap();
+    }
+    wait_for(|| sent_heard.lock().unwrap().len() == 2);
+    let sent_heard = sent_heard.lock().unwrap().clone();
+    assert_eq!(
+        (
+            sent_heard[0]["requestId"].as_str(),
+            sent_heard[1]["requestId"].as_str()
+        ),
+        (Some("h1~send4"), Some("h1~send6"))
+    );
 
     // Navigation brings the tab forward through the extension.
     assert!(focus("68a1"));

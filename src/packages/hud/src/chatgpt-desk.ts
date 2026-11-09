@@ -30,12 +30,19 @@ export interface DeskReview {
 }
 
 export interface ChatGPTDesk {
+  /** The receipt's chats: the first `DESK_CHATS` of `day`. */
   chats: DeskChat[];
+  /** Every chat of today, answering first: ChatGPT's own panel lists them
+   * all, as many as the stub counts (#219). */
+  day: DeskChat[];
   /** Today's chats past the ones listed. */
   more: number;
   /** How many chats had a turn today. */
   today: number;
   reviews: DeskReview[];
+  /** The stub says something more pressing than an overdue review: ChatGPT
+   * answering, or a reply to read. 「未审」 waits meanwhile (owner, #213). */
+  pressing: boolean;
   stub: {
     text: string;
     tone: "amber" | "blue" | "ink" | "dim";
@@ -92,13 +99,14 @@ export function chatgptDesk(
       (a, b) =>
         Number(live.has(b.id)) - Number(live.has(a.id)) || at(b) - at(a),
     );
-  const chats = todays.slice(0, DESK_CHATS).map((s): DeskChat => ({
+  const listed = todays.map((s): DeskChat => ({
     id: s.id,
     title: s.title,
     state: live.has(s.id) ? "answering" : "replied",
     at:
       (live.has(s.id) && Date.parse(s.liveFacts?.turnStartedAt ?? "")) || at(s),
   }));
+  const chats = listed.slice(0, DESK_CHATS);
   const reviews = handoffs
     .filter((h) => h.status === "open" || h.status === "opening")
     .filter(
@@ -137,9 +145,29 @@ export function chatgptDesk(
         : { text: "--", tone: "dim", review };
   return {
     chats,
+    day: listed,
     more: Math.max(0, todays.length - chats.length),
     today: todays.length,
     reviews,
+    pressing: stub.tone === "amber" || stub.tone === "blue",
     stub,
   };
+}
+
+/** The reviews PostPane opened that had a word in the last day: ChatGPT's
+ * panel counts them on its folded line apart from the chats (#219). */
+export function reviewsInDay(
+  snapshot: {
+    sessions: readonly Session[];
+    handoffs?: readonly Handoff[] | null;
+  },
+  now: number,
+): number {
+  const handoffs = snapshot.handoffs ?? [];
+  return snapshot.sessions.filter(
+    (s) =>
+      s.source === "chatgpt" &&
+      isReview(s, handoffs) &&
+      at(s) >= now - 86_400_000,
+  ).length;
 }

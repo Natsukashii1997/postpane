@@ -3,14 +3,20 @@
 // they run, how the last run went and when the next is, then the latest
 // thing it was asked; a bot without lists the latest three asks and whether
 // each was answered.
-import type { CSSProperties } from "react";
+import { type CSSProperties } from "react";
+import { GoButton } from "../GoButton";
+import { OpenNotice, useOpenFailures } from "../OpenNotice";
+import { failureOf } from "../open-result";
 import type { HermesAsk, HermesBotStatus, Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePaper } from "../paper";
+import { usePanelServices } from "../PanelContext";
 import { tabular } from "./theme";
 import { useBoardInks } from "./AgentBoard";
 import { BotStamp } from "./BotStamp";
 import {
+  askChat,
+  askGoTitle,
   askLimit,
   askWhen,
   chatLabel,
@@ -66,11 +72,15 @@ function AskRow({
   now,
   light,
   last,
+  slot,
 }: {
   ask: HermesAsk;
   now: number;
   light: boolean;
   last: boolean;
+  /** Another ask of the desk opens: this one keeps the arrow's place, so
+   * the times line up. */
+  slot: boolean;
 }) {
   const inks = useDeskInks(light);
   const { language, calendar } = useFormat();
@@ -80,16 +90,47 @@ function AskRow({
     ? askWhen(at, now, calendar.timeZone, language)
     : "";
   const waiting = ask.answer === "waiting";
+  const services = usePanelServices();
+  const { failure, fail } = useOpenFailures();
+  const chatId = askChat(ask);
+  const failed = chatId ? failure(chatId) : null;
+  // Like a session's row: the ask goes back to its chat, here in Feishu;
+  // where it could not, the row says why a few seconds (#220).
+  const jumps = Boolean(chatId && services?.openFeishuChat);
+  const canOpen = jumps && !failed;
+  const goTitle = askGoTitle(Boolean(failed), language);
+  const go = async () => {
+    if (!canOpen || !chatId) return;
+    const reason = failureOf(await services?.openFeishuChat?.(chatId), zh);
+    if (reason) fail(chatId, reason);
+  };
   return (
     <div
+      className={jumps ? "hud-hermes-ask" : undefined}
+      role={canOpen ? "button" : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      onClick={canOpen ? () => void go() : undefined}
+      onKeyDown={
+        canOpen
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              void go();
+            }
+          : undefined
+      }
       style={{
         display: "grid",
-        gridTemplateColumns: "auto minmax(0, 1fr) auto",
+        gridTemplateColumns:
+          jumps || slot
+            ? "auto minmax(0, 1fr) auto 20px"
+            : "auto minmax(0, 1fr) auto",
         gap: 8,
         alignItems: "center",
         padding: "5px 0",
         borderBottom: last ? undefined : `1px dotted ${inks.rule}`,
         fontSize: 12.5,
+        cursor: canOpen ? "pointer" : undefined,
       }}
     >
       <span
@@ -128,6 +169,31 @@ function AskRow({
         )}
         {when}
       </span>
+      {jumps && (
+        <GoButton
+          label={goTitle}
+          enabled={canOpen}
+          size={20}
+          inks={{
+            line: inks.divider,
+            ink: inks.secondary,
+            faint: inks.tertiary,
+            strong: inks.text,
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            void go();
+          }}
+        />
+      )}
+      {!jumps && slot && <span aria-hidden />}
+      {failed && (
+        <OpenNotice
+          text={failed}
+          light={light}
+          style={{ gridColumn: "2 / -1", marginTop: -2 }}
+        />
+      )}
     </div>
   );
 }
@@ -152,6 +218,7 @@ function Desk({
   const state = deskState(bot, replying, now, language);
   const jobs = jobRows(bot.jobs ?? [], now, calendar.timeZone, language);
   const asks = (bot.asks ?? []).slice(0, askLimit(jobs));
+  const services = usePanelServices();
   const stateColor =
     state.tone === "down"
       ? inks.red
@@ -273,6 +340,7 @@ function Desk({
               now={now}
               light={light}
               last={index === asks.length - 1}
+              slot={Boolean(services?.openFeishuChat) && asks.some(askChat)}
             />
           ))}
         </div>

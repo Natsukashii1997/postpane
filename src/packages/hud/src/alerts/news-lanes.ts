@@ -1,5 +1,6 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
+import { staysUntilSeen } from "./reply-stays.ts";
 
 /** One card of the sidebar's news queue (IslandNews keeps the queue). */
 export type LaneCard =
@@ -20,6 +21,38 @@ export interface NewsLane {
    * agent's oldest waiting request, else its first card. */
   front: LaneCard;
   cards: LaneCard[];
+}
+
+/** The queue with the request waiting longest in front (IslandAlertQueue.
+ * dismiss(): requests wait since they were asked and come before notices,
+ * which keep their order). */
+export function promoteOldestWaiting(pending: LaneCard[]): LaneCard[] {
+  if (pending.length < 2) return pending;
+  const best = pending.reduce((at, card, index) => {
+    const waiting = card.type === "request";
+    const prior = pending[at],
+      priorWaiting = prior.type === "request";
+    return waiting &&
+      (!priorWaiting || Date.parse(card.at) < Date.parse(prior.at))
+      ? index
+      : at;
+  }, 0);
+  return [pending[best], ...pending.filter((_, index) => index !== best)];
+}
+
+/** The queue without the requests no longer waiting, settled as the queue
+ * itself will be a render later. The snapshot drops an answered request
+ * first; read from the queue alone, that render had no card in front, and
+ * the open card folded away into the small tag (owner, 2026-11-07). */
+export function liveQueue(
+  queue: LaneCard[],
+  requests: readonly Approval[],
+): LaneCard[] {
+  const waiting = (card: LaneCard) =>
+    card.type !== "request" || requests.some((each) => each.id === card.id);
+  if (queue.every(waiting)) return queue;
+  const kept = queue.filter(waiting);
+  return waiting(queue[0]) ? kept : promoteOldestWaiting(kept);
 }
 
 /** The agent a card is about; a request no longer waiting has none. */
@@ -89,4 +122,24 @@ export function sideLanes(
     const mark = marks.indexOf(lane.vendor);
     return mark < 0 ? [] : [{ lane, mark }];
   });
+}
+
+/** The queue with at most `limit` notices: past that, the oldest notice that
+ * folds away by itself makes room, else the oldest one, never the card in
+ * front nor the one just come; requests are never put away (#221). */
+export function roomForNews(queue: LaneCard[], limit = 32): LaneCard[] {
+  const next = [...queue];
+  let news = next.filter((card) => card.type === "news").length;
+  while (news > limit) {
+    const notices = next.flatMap((card, index) =>
+      index > 0 && index < next.length - 1 && card.type === "news"
+        ? [{ card, index }]
+        : [],
+    );
+    const out =
+      notices.find(({ card }) => !staysUntilSeen(card.event)) ?? notices[0];
+    next.splice(out.index, 1);
+    news -= 1;
+  }
+  return next;
 }

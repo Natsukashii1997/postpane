@@ -5,7 +5,9 @@ import {
   approvalGroups,
   entryTitle,
   findSession,
+  goesToStart,
   modelLine,
+  requestBadge,
   requestTitle,
   sessionToOpen,
   tagColor,
@@ -259,4 +261,53 @@ test("a request's folded tag names its session's title, else the folder", () => 
     "postpane",
   );
   assert.equal(requestTitle(request("d", at), sessions, "Claude"), "Claude");
+});
+
+test("a request's folded tag is boxed as REPLY is: ANSWER, PLAN or APPROVE (#243)", () => {
+  assert.deepEqual(requestBadge({ kind: "question" }), {
+    label: "ANSWER",
+    tone: "ask",
+  });
+  assert.deepEqual(requestBadge({ kind: "plan" }), {
+    label: "PLAN",
+    tone: "ask",
+  });
+  assert.deepEqual(requestBadge({ kind: "permission" }), {
+    label: "APPROVE",
+    tone: "permission",
+  });
+});
+
+test("a handoff card's tag reads START, in green (#245)", () => {
+  assert.deepEqual(requestBadge({ kind: "question", badge: "START" }), {
+    label: "START",
+    tone: "start",
+  });
+  assert.equal(tagTone("START"), "start");
+  assert.equal(tagColor("start", true), "#2f7d4f");
+});
+
+test("a handoff card goes back to start, where its session has a way back (#247)", () => {
+  const reachable = session("a", {
+    navigationTarget: { kind: "claude-desktop", id: "local_a" },
+  });
+  const handoff: ApprovalEntry = {
+    kind: "request",
+    id: "a",
+    at: "2026-11-08T00:00:00Z",
+    badge: "START",
+    request: request("a", "2026-11-08T00:00:00Z", { badge: "START" }),
+    session: reachable,
+  };
+  assert.equal(goesToStart(handoff, true), true);
+  // No way back, or the way back just failed: it is only put away.
+  assert.equal(goesToStart(handoff, false), false);
+  assert.equal(goesToStart({ ...handoff, session: undefined }, true), false);
+  // Any other question keeps its own buttons.
+  const question = {
+    ...asked("q", "2026-11-08T00:00:00Z", ""),
+    session: reachable,
+  };
+  assert.equal(goesToStart(question, true), false);
+  assert.equal(goesToStart(reply("r", "2026-11-08T00:00:00Z"), true), false);
 });

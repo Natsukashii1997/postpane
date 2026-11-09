@@ -1,11 +1,508 @@
 # 当前状态
 
+当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
+
 更新：2026-11-06。阶段 0 至阶段 2 全部完成；阶段 4 静止侧栏为「撕角票」、审批横条与展开框为「票签」（PR #27）、额度面板为「收据」（PR #31）、悬停小卡为「小收据」（PR #33）、新回复等通知为「回执」（PR #35），所有屏幕默认动态形态（PR #29），菜单栏图标本机关掉、新装或缺这项设置时默认也不显示（PR #57）；侧栏 Codex 小人改为常驻并补齐「花瓣身体语言」动作（PR #43），第二版打盹加强、各动作更明显（PR #47），Hermes 改为头像常驻加 9 个带颜色的细微动作（PR #45），其他小人之后各做一版；侧栏面板内容逐个梳理，面板清单见 https://claude.ai/artifact/P2u7uDGFzNy4ivv5QhDsKc ，第一个待审批卡已改成「清单卡」（PR #49），侧栏静止条不再显示金额、无额度智能体改显示 24 小时 Token（PR #51），悬停面板改成额度看板（PR #53），新回复通知卡改成「清单回执」（PR #55），额度预警卡改成「细条」（PR #62），重置到账、登出提醒与面板事件行并入细条、待审批小签显示会话标题、侧栏各处不显示面板设置里隐藏的额度行（PR #65），面板清单 17 项至此全部定完（02 悬停小卡、04 合并面板不改），「正在进行」加入 Claude 云端会话、超过 5 条可滚动（PR #63），Claude 额度看板加「云端额度」（PR #58），每周 Fable 从读取层与额度出口彻底去掉、各处不显示不计入（PR #94、#96）；后台页面换「热敏小票」分 4 批，第 1 批设置窗口外框（PR #37）、第 2 批设置四页正文与网纹框滑块（PR #39）、第 3 批统计窗口外壳与用量页（PR #41）已合并，批次见 [docs/ROADMAP.md](docs/ROADMAP.md)。设置页页头与正文对齐、「显示」页 HUD 预览改成壁纸入框与四联票、形态去掉「简约」、「正在进行」滚动条停下淡出（PR #67）。设置页整体优化：外框统一收据、内容分组框加控件右齐、面板真实预览，设置里「HUD」改叫「侧栏」（PR #73）。光晕只留柔光，设置页修纸面滚动分块错位、Hermes 图标、智能体卡片截断（PR #77）。插件页「各客户端」表格统一成一套三列网格、按层级对齐（PR #83）。侧栏 Hermes 接两个飞书机器人猛鬼兽、亚古兽：会话、回执、断线细条盖各自的方印，按回合租约判断正在回复与回复完成，网关断线出细条（PR #86、#88），回执与正在进行用这一轮的问题当标题（PR #90），Hermes 新回复看过才收起（PR #93）、不被别的智能体的待回答挡住（PR #97），新回复的小签和回执左侧换成机器人印章（PR #102）、印章摆正不再倾斜（PR #107）。侧栏悬停 Hermes 的小收据不再显示「额度 --」，改为两个机器人各自的在线 / 正在回复 / 断线、最近一次回复与今天轮数，加 24 小时 Token（PR #111）。随手记猫球轻摆幅度调大（PR #91）。DeepSeek 监听提问加开关、默认关，不再每 2 秒扫全机进程（PR #100）。侧栏「正在进行」会话可左滑露出「移除」，拿掉不想回复的会话，有新内容时自动回来（PR #110、#113）。多智能体接力批 A 已收尾（PR #121、#122、#123）。接力展开卡改浅蓝航空信纸、只留顶边航空斜纹（PR #125）；侧栏票根去掉左上角打孔圆点（PR #126）；Hermes 定时任务失败时侧栏弹一次细条（PR #115，此前交接写了已合并，实际今天才合并）；随手记猫球只在悬停时动（PR #127）；批 B「正在进行」本机 Claude 会话左滑发起审核 / 讨论（PR #128）。两指左划拉托盘时整个悬停面板不再横向错位（PR #130）。悬停面板两指左划不再横向错位（PR #130）。ChatGPT 接力处理中时侧栏 OpenAI 小人动起来（PR #131）。左滑「审核」实机已跑通：常浩点后本会话收到固定请求并调用 `relay_to_chatgpt`，ChatGPT 回信「需修改」3 条。左滑发起跟进留给会话的话、排队中 / 被拒 / 过期写在那一行（PR #132，已装机 `453575a7b643`）。侧栏 Codex 与网页 ChatGPT 改为各占一个位置，Codex 换云朵小人（PR #138），Codex 云朵有了自己的 21 段动作：待机漂移变形、打盹散成三朵、思考往上堆、跑命令下雨、找你变对话气泡（PR #143，已装机 `9c06aa25b640`）；打盹按常浩选的乙改成「满尺寸呼吸 + 鼻涕泡」、弯线闭眼、不挂 Z（PR #144，已装机 `621500c59f09`）；Codex 标记改成自己的小云 / 思考泡泡、没新消息改雾、长命令云环、盖章放慢（PR #152）；ChatGPT 打盹按常浩要求改回原版（PR #153，已装机 `3220e7b028aa`）。随手记点收起直接缩回猫球，不再留「打开便签栏」（PR #157，已装机 `62c788033f0e`）。侧栏每家智能体挂自己的小签、点开是自己的展开卡，常浩选甲「各挂全签」（PR #163，已装机 `c2c76c0b5e63`）。左滑发起复审返修收尾（PR #164）。接力自动往返上线（#72，PR #168，已装机 `b0bb150f84cf`）：需修改未满 2 轮自动转回 Claude、通过自动结束、到上限 / 无结论 / 送话失败两次 / 超时交还常浩，重启先暂停。ChatGPT 第 2 轮复审左滑发起的 5 条，常浩说「现在返修」：按编号归因、记录落盘、从领取起计时、状态不明（PR #170，已装机 `98ea78960937`），第 3 轮已交回同一个审核会话（`h1a1b076a94400`，#72 之前的记录，不自动往返，回信由常浩定）。#173 自动转回失败改排队已装机 `4638968249ee`；L4–L6 证据整理进 `docs/evidence/`，给第二人的说明是 `docs/安装与使用.md`（见下节索引表）。唯一下一步：L-14 排队等下一单自然触发后，核对 `handoffs.json` 补进 L6 文档（常浩定，C 单不再手动验证）；补 L4 同事使用材料；约第二人照说明复现；常浩还要在 Chrome 扩展程序页重新加载驿窗插件，下一轮 ChatGPT 处理时看 OpenAI 小人动；接力批 C 传信动效按 2026-11-07 定稿「纸飞机 + 票根印章」做完（#171）；后台第 4 批「统计会话」与其他小人各做一版仍待做。悬停面板：随手记猫球不再弹面板、「等待更新」的额度按占用变红、Hermes 标题图标改黑色女孩、去掉 Hermes 与 OpenAI 的「近 24 小时 Token」（PR #135，已随 #138 装机）；Hermes 区按常浩选定的丙「各管一摊」做完：猛鬼兽定时任务表、亚古兽最近被问、在岗 / 断线圆章（PR #139，已从 main `0677fe1` 打包装机，回读一致）。侧栏小收据、单家面板、整张看板在同一块屏并存，常浩选乙「停久看全」：悬停一格 0.4 秒出小收据，同一格停满 1.2 秒展开成整张看板并滚到这一家（PR #158 起小收据出现后再等 1.5 秒，即悬停 1.9 秒才展开），点一格出单家面板，「按智能体分开」开关去掉（PR #141，已装机 `54e5f63c063f`，实机鼠标操作待常浩试）。小收据底边等待线按常浩选的甲改成从中间展开、两端羽化（PR #149，已装机 `97e641b60d45`）。ChatGPT 读取全部会话：常浩自己在 Chrome 里开的「对话」和驿窗发起的「审核」分开，侧栏按常浩选的「一格两栏 · 两联 · 旧信纸」显示，所有审核纸统一成旧信纸（PR #150，已装机 `966e3ef93773`；常浩要在 Chrome 扩展程序页重新加载驿窗插件 0.2.0 后实测）。
 
 
 
+## 上游 Agent HUD 可学点第二批 9 张一次做完（#257–#265）（2026-11-09，Claude 主会话 + 7 个子 agent，常浩「都做，一口气全做了，我现在直接通过」；已提交、8 张 PR squash 合并、已发布 `b977cfc5aa5e` 回读通过）
 
-## 侧栏读数固定每周、审批重启后重挂与「一直等」（2026-11-07，Claude，常浩反映「数字成了 5 小时」「真实任务的审批侧栏没弹」，请深度自检修复；四项方案常浩逐项选定；PR #181 全量通过，按授权 squash 合并 `2fe2329`；已打包、未装机）
+- 时间：开工 `2026-11-09 01:00` 前后（常浩回「都做」后立即分派，按会话记录估记）。来由：上游对比报告（`docs/design/上游AgentHUD对比-2026-11-09.md`）列出的第二批可学点开成 #257–#265 后，常浩一次授权全部直接做。
+- 做法：分两批开 7 个子 agent，各开 worktree、各开一张 PR，共用主目录 `target`（每次测试前把本 worktree 全部 Rust 源时间改到未来，核对编译路径和通过数，L-26 补充）。子 agent 不写本文件和 LESSONS、不装机；主会话逐张审 diff 后合并，最后由本收尾 PR 统一写交接、新坑，并打包装机一次（E-12 待批）。
+- 合并了哪些（squash 提交）：
+  - #260 Codex 钩子信任提醒 `f509614`（PR #267）：读 Codex 额度时同一个 app-server 发 `hooks/list`；驿窗钩子是 `untrusted` / `modified` 时，侧栏出细条「Codex · 没在运行驿窗的钩子」。本机 codex-cli 0.166.0 已核实有这个接口、字段对得上。
+  - #259 上游 6 个小缺陷 `dd07759`（PR #268）：MCP 引擎回答按流解码、悬停计时到点才触发、问题卡钩子移到 return 前、设置页滚到底不回弹、加载更多保留已选轮次的调用、同一错误只提示一次。
+  - #262 token 账本不再 31 天过期 `03c57b4`（PR #266）：只做「不删」，读取窗口仍是 31 天，没做全量回读旧日志。
+  - #257 + #258 `768250f`（PR #270）：
+    - 转回 Claude 的每一步用固定 id，跟进「排队中 / 已领取 / 已开始」，被拒、过期、取消时立刻交还。
+    - Claude 续接时，如果这一轮是常浩自己开的头，自动轮数从 1 重算；判断依据是会话记录里 `origin.kind`，已用本机真实记录核实。
+  - #261 锁被毒化后继续运行 `ff6282b`（PR #271）：27 个文件统一改成 `unwrap_or_else(PoisonError::into_inner)`，清单见证据目录 `sites.tsv`。`handoff.rs` 的 `republish` 留到本 PR 改。
+  - #265 上游低优先级 6 条 `285d8d8`（PR #272）：侧栏截图等数据设上限、子智能体时间线合并相邻调用并可平移、Claude 额度冷启动退回 `~/.claude.json` 的 `cachedUsageUtilization`（只认同一账号、30 天内）、HUD 工具不再拒收已存旧字段、价格表随账本重读、「今天」卡改由 Core 全量计算。另 3 条不做：要新视觉、本机单屏、不急。
+  - #264 卡片离开时测量副本延后重画 `3c7addd`（PR #273）：无头 Chrome 实测改前审批卡离开、「知道了」有 53–152 ms 长任务，改后基本消失，首开高度不变。
+  - #263 源文件 300 行棘轮 `3858c36`（PR #269）：最后合，合前按当时的 main 重新生成基线（153 个文件）。
+- 改了哪些文件（本收尾 PR）：
+  - `src/crates/host/src/handoff.rs`：`republish` 锁被毒化后照样刷新接力卡（#261 遗留）。写成 3 行，没加长，棘轮通过。
+  - `CURRENT.md`：本节。
+  - `docs/LESSONS.md`：L-26、L-29 补充；新 L-31 至 L-34。
+  - `.agents/skills/postpane-round/EVOLUTION.md`：E-12 至 E-14，待批。
+- 替常浩定的事（他说「直接通过」）：
+  - #257 只给「回 Claude」这段加回执，ChatGPT 那侧保留「30 秒没回话算失败、可重试」。
+  - #258 常浩插话时，自动轮数和审查预算（#217）一起从这一段重算（代码里是同一个计数），每段上限仍是 2 轮、L1 1 轮；已停的自动往返不会自己打开。
+  - #262 只做第一步。
+  - #265 跳过 3 条。
+  - #264 实测有卡顿，所以改了。
+- 测试：在本收尾分支（= 合并完 8 张 PR 的 main `3858c36` + `republish` 一处）跑：
+  - `pnpm run check` exit 0；
+  - `pnpm test` exit 0：Rust 合计 `813 passed / 0 failed`（788 基线 + #260 6 + #270 9 + #271 2 + #272 7 + #266 1 = 813），前端 `ℹ pass 380` / `ℹ fail 0`，MCP 9、插件 14、扩展 13，均 `ℹ fail 0`；编译行没有一行来自别处路径；
+  - `node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`（#263 加了 4 条）。
+  - 日志在 `evidence/2026-11-09-batch-wrapup/{check,test,build}.log`；各 PR 的先红输出在各自的 `evidence/2026-11-09-<号>-*/`。
+- 验证：各 PR 只到单元测试、真实通道测试和浏览器预览（#259 设置页逐元素比对、#265 时间线平移、#264 无头 Chrome 测量）。实机没走的：
+  - 钩子提醒要改一个字符触发；
+  - 设置页触控板回弹；
+  - 接力回执和插话重算要等真实接力；
+  - 额度冷启动兜底要重启后第一次就读失败才触发。
+- 截图：`evidence/2026-11-09-265-upstream-small/preview/`（5 张）、`evidence/2026-11-09-259-upstream-fixes/a4-settings-after.jpg`；装机后截图 `evidence/2026-11-09-batch-wrapup/after-install.png`。
+- 发布与回读：从本收尾分支打包（树与合并后的 main 相同；编译行没有别处路径），装前 `70ad4a4648bb`、产物与已装都是 `b977cfc5aa5e`，签名证书 leaf `b773068e`；已装程序里能搜到 `hooks/list`、`cachedUsageUtilization`、`roundsFrom`；装后侧栏、设置窗正常，没有「想访问文稿」弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-batch-wrapup/PostPane-70ad4a4648bb.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 要常浩定：子智能体时间线合并的一段画成「加宽的竖线」，没用上游「扁条 + 图例新项」；要换得出三版。
+  - 范围外：
+    - 本机 agent-kit 的两条 Codex 钩子 `guard-git.mjs`、`lessons-remind.mjs` 是 `untrusted`，Codex 不跑它们，建议到 Codex 里允许；
+    - `hud/.../rules.rs` 的拒收文案说 columns 适用于 `ring`，与规则不符，没改；
+    - `ClaudeChannel::queue`（#255）生产代码已不用，只剩测试在用，没删；
+    - #261 的子 agent 曾用宽泛 `pkill -f` 误杀其他 agent 的测试，已重跑（L-33）。
+  - 第一批 #250–#254 不在这次授权的 9 张里，仍开着；#249 总清单未改。
+- 本轮新坑：L-31、L-32、L-33、L-34（另 L-26、L-29 补充）；L-30、L-33 可提议提升为全局坑。
+- skill 进化：E-12、E-13、E-14 待批
+
+## 自动转回 Claude 的排队兜底改成真能排进去（#255）（2026-11-09，Claude，常浩选「先修排队兜底」；已提交、已发布 `70ad4a4648bb` 回读通过）
+
+- 时间：开工 `2026-11-09 00:18`。来由：对照上游 Agent HUD 的投递代码（`docs/design/上游AgentHUD对比-2026-11-09.md` 二·1）时读出，#173 加的「直接送两次失败就排队」从没生效：`Lines::leave` 底下是 `ClaudeChannel::hand`，和直接送话一样先查 20 秒内签到，L-14 那种会话结束的场景三次都被同一道检查拒掉。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（新 `ClaudeChannel::queue`：与 `hand` 同样拒空话、斜杠开头、非法 id，但不要求会话在线；两者共用 `put`）；`src/crates/host/src/handoff.rs`（`Lines` 加 `queue`，`AppLines::queue` 调它；自动转回 `auto_back` 与手动「转回」的兜底从 `leave` 改用 `queue`；左滑发起仍 `reaches` + `leave`，行为不变；测试替身的 `leave` 改成会话不在线就拒，与真实一致，并加 `queue`；新测试 `words_back_to_a_claude_session_that_ended_wait_in_its_queue`；4 处兜底断言从 `"leave"` 改 `"queue"`）；`src/crates/platform/src/claude_plugin/tests.rs`（新 `words_queued_for_a_session_that_ended_wait_for_it_to_open`，用临时目录里的真实通道：签到文件写 `ended` 后 `hand` 返回 `NotLoaded`，`queue` 写进 `prompts/<会话>/`、1 小时过期、状态 Waiting）；`docs/LESSONS.md`（L-14 加补充，新 L-30）。
+- 测试：先红：替身照真实规则拒收后，`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 与新测试 `words_back_to_a_claude_session_that_ended_wait_in_its_queue` FAILED（后者 `left: 0 right: 1`，一句也没排进去）。改后 `pnpm run check` exit 0（第一次 exit 1：`check-test-paths` 不许把 tempdir 根目录交给私有目录代码，新测试改用 `temp.path().join("data")` 后通过）；`pnpm test` exit 0：Rust 合计 `788 passed / 0 failed`，各包 278、199、177、90、32 等，比上一轮的 278、198、177、89、32 正好多 platform、host 各 1 条，编译行是本 worktree 路径（共用主目录 `target`，按 L-26 把改动文件时间改到未来再测），前端 `ℹ pass 359` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` 见 PR。日志 `evidence/2026-11-09-queue-back/{check,test,build}.log`。
+- 验证：只到单元与真实通道测试。没有实机走一单「会话已结束 → 自动转回排队 → 打开会话后插件领走」：要一单真实接力恰好碰上会话结束，沿用 L-14 时常浩定的「等下一单自然触发」。插件领取逻辑没改：`register.ts` 每秒扫 `prompts/<会话>/`，会话重新打开就会领走。
+- 截图：`evidence/2026-11-09-queue-back/after-install.png`（装后侧栏与设置窗正常，没有「想访问文稿」弹窗）；无界面改动。
+- 发布与回读：从本分支打包装机，产物 `70ad4a4648bb` / 已装 `70ad4a4648bb`，签名证书 leaf `b773068e`，已装二进制里能搜到新提示「没能排进这个会话的待发送队列」。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-queue-back/PostPane-b18150e21b61.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留与范围外：上游对比报告里另有可学点（回执状态机、Codex 走队列不走 steer、插话自动重置轮次、照抄级小缺陷 A1–A6、Codex 钩子信任提醒等）还没开 issue；#253 正文有一处说错（上游传话一律走队列，不是先交桌面应用），未改。本轮在 `tests.rs` 第 241 行误改过别人的测试一行，已还原，diff 里没有。
+- 本轮新坑：L-30
+- skill 进化：无
+
+## 交接卡「知道了」改「去开始」（#247）（2026-11-08，Claude，常浩评估后定：不做侧栏直接开启，只把「知道了」改成「去开始」三个字，点了跳回原会话并收起；已提交、squash 合并、已发布 `b18150e21b61` 回读通过）
+
+- 时间：开工 `2026-11-08 17:05`（`date '+%F %H:%M'` 估记）。来由：常浩装了 #245 后说交接卡只有「知道了」，点了还得自己找回原会话去点 START。先评估过「侧栏直接开启」（经驿窗插件把「开始」送进原会话）：新会话开起来照样要回 Claude 用，还多出十几到几十秒等待和插件、开关、会话忙等失败环节，常浩同意不做。
+- 改了哪些文件：`src/packages/hud/src/permissions/approval-list.ts`（新 `goesToStart`：交接卡、能跳回、上次没失败时按钮读「去开始」）；`permissions/PermissionQuestionCard.tsx`（只读提示下的按钮有 `goStart` 时读「↗ 去开始」并调用它，否则仍是「✕ 知道了」只收起）；`RequestActions.tsx`（转交 `onGoStart`）；`permissions/ApprovalContent.tsx`（展开的交接卡传入 `goBack`：跳回成功即发 `{kind:"leave"}` 收起，失败照旧在那一行写原因，按钮退回「知道了」）；`test/approval-list.test.ts`（新 1 条，先红后绿）；`docs/LESSONS.md`（L-29 补充：隐藏面板里按截图坐标点不中，改用 ref 点击）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 各包 `test result: ok`（278、198、177、89、32 等，0 failed），前端 `ℹ pass 359` / `ℹ fail 0`（比 #245 多 1 条，即新测试），MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-go-start/{check,test,rules,build}.log`。
+- 验证：真实 `HUDScene` 预览（端口 1463，视口模拟 900×700，脚手架 `evidence/2026-11-08-go-start/preview-247/`，没提交）：交接卡底部是「↗ 去开始」，页面里没有「知道了」；按 ref 真实点击「去开始」，`openSession` 调用 1 次、发出 `{kind:"leave"}`，START 小签和票根「换」章消失。按截图坐标点了两次点不中（隐藏面板坐标框架变动，记入 L-29 补充）。记录 `preview-check.md`。
+- 截图：浏览器自查截图未存盘（卡片样子见上文核对数据）。
+- 发布与回读：`install.sh go-start`：装前 `d1975a4e6235` 已备份，17:37:15 退出并启动，产物 `b18150e21b61` / 已装 `b18150e21b61`，签名 leaf `H"b773068e`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-go-start/PostPane-d1975a4e6235.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机未看到，要等下一次真实交接卡时常浩点一次「去开始」；未截「想访问文稿」弹窗检查。
+- 与授权不一致之处、遗留问题、范围外发现：卡片里「切换会话」小标题框仍是红色虚线（沿用提问卡样式，没改）。
+- 本轮新坑：L-29（补充）。
+- skill 进化：无。
+
+## 交接卡挂 START 小签提醒切换会话（#245）（2026-11-08，Claude，常浩确认 issue 里的推荐做法，票根小章选「绿章」；已提交、squash 合并、已发布 `d1975a4e6235` 回读通过）
+
+- 时间：开工 `2026-11-08 16:06`（本会话接手；读取层、核心与前端标签是上一会话的 WIP `89f0d61`，15:14 提交）。来由：常浩在 #243 同轮提出，Claude 会话上下文快满写「【交接】」交接卡时，侧栏要提醒他切换会话。
+- 改了哪些文件：读取层 `src/crates/agents/src/transcript/live.rs`（`Activity.handoff`，新回合清空、被拒的调用清空）、`claude/transcript.rs`（`claude_handoff`：只认会话自己提出、标题以「【交接】」开头、结果 Proposed 的 `start_session`；遇到 `dismiss_task` 或带 `proposal_id` 的 `start_session` 清掉；`desktop_ask_view` 给 header「切换会话」、`badge: "START"`）、`transcript/log.rs`（记行偏移）；核心 `src/crates/core/src/sessions.rs`、`clients/claude_desktop.rs`（交接卡变只读卡，说明「回到会话，在 Claude 窗口里点交接卡开始新会话。」，也会重读）；前端 `permissions/approval-list.ts`（`START_BADGE`、绿色 `start` 色调）、`alerts/CompactAlertView.tsx`（START 绿框、刘海状态「待切换会话」）、`alerts/PendingEventRows.tsx`、`permissions/ApprovalContent.tsx`（章「切换」绿色；回到会话跳成功后发 `{kind:"leave"}` 收起）、`permissions/ListCard.tsx`（章支持绿色）、`permissions/PermissionQuestionCard.tsx`（交接卡写「请到 Claude 里开始」而不是「回答」）、`model.ts` + `ticket-stub.ts` + `scene/HUDMarkStrip.tsx`（票根小章：等待的全是交接卡时盖绿色「换」，英文「→」；和问题 / 审批混着时照旧「答」/「批」）；测试 `core/src/tests/claude_desktop.rs`（新 `a_handoff_card_hangs_a_start_tag_until_the_user_moves_on`）、`agents` 重读测试、`hud/test/approval-list.test.ts`、`hud/test/ticket-stub.test.ts`（新 1 条）。
+- 测试：`pnpm run check` 第一次 exit 1（`ticket-stub.test.ts` 没过 Prettier），格式化后重跑 exit 0（`check2.log`）；`pnpm test` exit 0：Rust 各包 `test result: ok`（278、198、177、89、32 等，0 failed，含两条新的 handoff 测试，编译行是本 worktree 路径），前端 `ℹ pass 358` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-start-tag/{check,check2,test,rules,build}.log`。
+- 验证：真实 `HUDScene` + 今天的真实快照，把那条 Claude 提问改成交接卡（`?kind=start`），内置浏览器视口模拟 900×700，用 JS 读位置与颜色（L-29）：开场完整小签「会话标题 + START 1」绿框；约 7 秒后缩成竖签、计数绿色；票根小章「换」绿色；清单卡显示 START、交接标题、「切换会话」、「请到 Claude 里开始」和说明、章「切换」绿色；接上 `openSession` 返回成功后点「回到会话」，发出 `{kind:"leave"}`，START 与「换」都消失；`?kind=question` 对照仍是 ANSWER 和红色「答」。记录 `evidence/2026-11-08-start-tag/preview-check.md`，脚手架 `preview-245/`（没提交）。
+- 截图：无存盘截图（面板隐藏，以 JS 回读数据为准）。
+- 发布与回读：`install.sh start-tag`：装前 `a755cab0bae9` 已备份，16:44:55 退出、16:44:56 启动，产物 `d1975a4e6235` / 已装 `d1975a4e6235`，签名 leaf `H"b773068e`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-start-tag/PostPane-a755cab0bae9.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**实机小签未看到**：`get_hud_screenshot` 不画小签、电脑控制点不动侧栏（L-09），要等下一次真有会话写「【交接】」卡时常浩看一眼：挂 START 1 绿框、5 秒缩竖签、点「回到会话」后收起；未截「想访问文稿」弹窗检查。
+- 与授权不一致之处、遗留问题、范围外发现：清单卡的章「切换」和只读提示「请到 Claude 里开始」是自查时顺着绿章补的（原来是红章和「请到 Claude 里回答」）。常浩点交接卡启动新会话这件事在原会话记录里看不到，所以靠「跳回即收 / 再发言即收 / 侧栏手动收」；交接卡不能在侧栏直接开始新会话（那是 Claude 窗口自己的按钮）。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 常驻小签 5 秒后缩成竖签；待回答改 ANSWER 框（#243）（2026-11-08，Claude，常浩从三版预览选乙「竖签」，没说「只改 ANSWER」，APPROVE / PLAN 一起改；已提交、squash 合并、已发布 `a755cab0bae9` 回读通过；装机后常浩试出「滑到侧栏任何位置都弹」，同轮改成一一对应后重装）
+
+- 时间：开工 `2026-11-08 14:20`（`date '+%F %H:%M'` 记录）。来由：常浩截图，Claude「待回答」和 Hermes 回复小签一直完整挂着挡内容；11-07 两轮设计（https://claude.ai/artifact/Es4WzEigfQwQ2kjUAiojJX 、https://claude.ai/artifact/AZgkYyfbV8toQmaLnVmK3F ）没定下来，这次重出三版 https://claude.ai/artifact/P1vt5nHeY4rV4Nf2uGiFQE ，常浩选乙。
+- 改了哪些文件：`src/packages/hud/src/scene/tag-fold.ts`（新：哪些小签算「等你处理」、5 秒计龄、竖签尺寸、贴票根不留缝）；`scene/useTagFold.ts`（新：按「智能体 + 前卡 id + 条数」计龄，新来一条就重新完整挂 5 秒；鼠标在侧栏或正在打字时全部展开）；`HUDScene.tsx`（前卡和别家小签共用计龄；展开时在竖签原位放一块透明「保护区」登记成可悬停区，防止展开后鼠标落在缝里又缩回来回跳，见 L-27）；`scene/useHUDLayout.ts`（前卡竖签尺寸与位置，另算竖签原位）；`scene/SideTags.tsx`（别家小签竖签与原位）；`scene/HUDExpandedSurface.tsx`（把竖签传给前卡）；`alerts/CompactAlertView.tsx`（竖签画法：印章、短撕线、彩色数字；请求小签改成和 REPLY 同款框）；`permissions/approval-list.ts`（`requestBadge`：提问 ANSWER、计划 PLAN、权限 APPROVE）；测试 `test/tag-fold.test.ts`（新 7 条）、`test/approval-list.test.ts`（加 1 条，先红后绿）；`docs/LESSONS.md`（L-29）。
+- 一一对应（常浩装机试后提出：滑到侧边任意票根都会弹出小卡，要求只有滑到 / 点到对应的 AI 才显示它自己的）：第一版是鼠标进侧栏就全部展开，改成只展开鼠标所在那一家（`tag-fold.ts` 新 `agentUnder`：鼠标在哪家票根、小签或竖签上；`useTagFold` 改为按智能体判断）。另修一个更早就有的问题：别家新消息挂在最前时，滑到任何票根弹出的都是最前那家的卡；现在滑到别的 AI 只出它自己的小收据，最前那家的消息不算看过（`HUDScene.tsx` 的 `otherMark`，面板收起前保持不变；`IslandNews.tsx` 加 `elsewhere`；`useHUDInteraction` 仍拿真实消息判断，避免误当「最后一条处理完」收起）。`request-hover.ts`：有待回答时滑到别家票根，从「什么都不出」改为出那家自己的小收据（改了 #79 的一条测试，见下）。
+- 测试：`pnpm run check` 通过（exit 0）。`pnpm test` 第一遍 Rust 一条失败：`clients::chatgpt::tests::unix::the_extension_opens_a_conversation_and_reports_its_reply`（期望 `opened`，先收到 `turn`），本轮没改 Rust，单独重跑通过；第二遍全量 exit 0：Rust 各包 `test result: ok`（277、198、176、89、32 等，0 failed），`ℹ pass 354` / `ℹ fail 0`（前端），MCP `ℹ pass 9`、插件 `ℹ pass 14`、扩展 `ℹ pass 13`，均 `ℹ fail 0`。一一对应改完后重跑：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 无 FAILED，前端 `ℹ pass 356` / `ℹ fail 0`，MCP 9、插件 14、扩展 13 均 0 失败（`check3.log`、`test3.log`）。`node --test tests/*.test.mjs`：`ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-08-narrow-tag/`（`check.log`、`test.log`、`test2.log`、`rules.log`）。
+- 验证：真实 `HUDScene` + 今天的真实快照（Claude 一条提问）+ 注入 Hermes 回复，在内置浏览器里看（脚手架 `evidence/2026-11-08-narrow-tag/preview-243/`，没提交）：刚来两张都完整，ANSWER 1 红框、REPLY 1 蓝框；5 秒后都缩成竖签（Claude 小人 + 红 1，猛鬼兽印章 + 蓝 1）；悬停票根全部展开、移开缩回；点开看过的 Hermes 回复按原规则 4 秒收起；`?kind=permission&more`：APPROVE 1 琥珀框 → 竖签 → 第 2 条到达完整弹出 APPROVE 2 → 5 秒后竖签显示 2；顶边竖签横躺在票根下；左边用 JS 回读竖签 28×53 贴票根。面板隐藏时截到过半路帧，记为 L-29。一一对应复测（JS 回读元素位置和文字）：Hermes 回复在最前时指 Codex 票根，只出「Codex 5h 10% Weekly 32%」小收据，Claude 竖签不动；移开 6 秒后 Hermes 竖签仍在（没被当成看过）；指 Hermes 票根只有 Hermes 展开成整条，Claude 仍是竖签。
+- 截图：浏览器自查截图未存盘；三版预览源文件在 `evidence/2026-11-08-narrow-tag/`。
+- 发布与回读：`install.sh narrow-tag`：装前 `e0a8ff934edb` 已备份，第一版 `2dfec0fd254f`；一一对应版再装：装前 `2dfec0fd254f` 已备份，产物 `a755cab0bae9` / 已装 `a755cab0bae9`，签名 `H"b773068e`；回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/PostPane-e0a8ff934edb.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**实机竖签未截到**：`get_hud_screenshot` 不画小签，电脑控制点不动侧栏（L-09），要常浩看一次：有待回答或 Hermes 回复时 5 秒缩成竖签、鼠标移到侧栏展开、移开缩回，鼠标停在竖签和票根之间的缝里不来回跳；滑到哪家只出哪家。
+- 与授权不一致之处、遗留问题、范围外发现：刘海形态（notch）不缩，保持原样；APPROVE / PLAN 是我推断的写法，常浩没反对。#79「有待回答时只在对应小人上展开」：待回答的卡仍只从它自己的票根打开，但滑到别家票根不再什么都不出，而是出那家自己的小收据（按常浩这次说的「每个动作都有对应关系」改）。别家小收据显示时，最前那家的小签暂时让位，移开后回来。范围外：常浩同轮提出「会话写交接卡时弹 START 小签」，另开一单，计划待常浩确认。
+- 本轮新坑：L-29（可提议提升为全局坑，和 G-11 同类）。
+- skill 进化：无。
+
+## 磁盘瘦身挂件悬停马上摇晃（#240）（2026-11-08，Claude，常浩要求鼠标滑上去挂绳要像数码世界猫球一样晃、小扫帚同时动；已提交、squash 合并、已发布 `e0a8ff934edb` 回读通过；常浩实机验收通过）
+
+- 时间：开工 `2026-11-08 11:32`。来由：常浩截图说磁盘瘦身挂件悬停时没有猫球那种挂绳摇晃。代码里有摇晃，但磁盘瘦身单写了 `-1.6s` 负延迟，悬停约 2.74 秒才开始摆（L-28）。
+- 改了哪些文件：`src/packages/ui/src/global.css`（删掉磁盘瘦身单独的摇晃时间，改用和猫球同一条共用规则 `7s -4.2s`；扫帚、眨眼、星光、气泡不变）；`src/packages/ui/test/pendant-sway.test.ts`（新增 2 条：每条悬停摇晃第一下 ≤0.5 秒、磁盘瘦身不再单写摇晃时间；在旧样式上报「2.74 s after the hover」失败，改后通过）；`docs/LESSONS.md`（L-28）。
+- 测试：`pnpm run check` exit 0（第一次因测试放在 hud 包跨包读 ui 文件被边界检查拦下，移到 ui 包后通过）；`pnpm test` exit 0：Rust 合计 `784 passed / 0 failed`，test:ts `ℹ pass 346` / `ℹ fail 0`，mcp `ℹ pass 9` / `ℹ fail 0`，plugins `ℹ pass 14` / `ℹ fail 0`，extension `ℹ pass 13` / `ℹ fail 0`；测试文件移包后补跑 test:ts `ℹ pass 346` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-240-disk-sway/{check,test,test-ts,rules,build}.log`。
+- 验证：用打包产物里的真实 CSS（`dist/assets/index-nZPUrv0O.css`，已确认只剩共用摇晃规则）在内置浏览器搭同结构挂件，真实鼠标悬停逐帧读旋转角：猫球 270ms 开始摆、磁盘瘦身 283ms 开始摆，最大偏角都是 4.5°；悬停时扫帚动画 `hud-disk-sweep` 在跑。结果 `evidence/2026-11-08-240-disk-sway/browser-check/result.json`。实机侧栏上常浩用鼠标悬停验收通过（2026-11-08 回复「晃了，没问题」）。
+- 截图：无（动画以逐帧角度数据为准）。
+- 发布与回读：worktree `claude/240-disk-sway` 打包，`install.sh 240-disk-sway`：装前 `de24114e20a2`（已备份），12:07:41 退出、12:07:42 启动，产物 `e0a8ff934edb` / 已装 `e0a8ff934edb`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-240-disk-sway/PostPane-de24114e20a2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：#155 原意「和猫球错开节奏」随之取消（两个挂件不会同时被悬停，错开无意义）；未截「想访问文稿」弹窗检查。
+- 本轮新坑：L-28。
+- skill 进化：无。
+
+## 侧栏小签在鼠标附近来回跳（#238）（2026-11-08，Claude，常浩发录屏说「一直在跳来跳去」，常浩经驿窗侧栏回复「同意下载并合并」；已提交、squash 合并、已发布 `de24114e20a2` 回读通过）
+
+- 时间：开工 `2026-11-08 10:54`。来由：常浩录屏 `~/Downloads/iShot_2026-11-08_10.49.10.mp4`，鼠标停在侧栏左侧小签那一列时，Claude「待回答」和 ChatGPT「REPLY 2」不停上下跳、互相叠住。抽帧看到前卡在两家小人之间的中间位置出现，确认是位移动画加悬停换位的循环（L-27）。
+- 改了哪些文件：`src/packages/hud/src/scene/side-tag-stack.ts`（新增 `SIDE_TAG_REST_MS = 250` 与 `frontTagSwapped`）；`scene/HUDExpandedSurface.tsx`（前卡换成另一家时位置、大小直接到位，不再 0.4 秒滑过去；同一家、展开收起仍照旧动画）；`scene/SideTags.tsx`（鼠标在别家小签上停 250ms 才把那家换到最前，离开就取消，路过不算）；`test/side-tag-stack.test.ts`（3 条新测试）；`docs/LESSONS.md`（L-27）。
+- 测试：`pnpm run check` exit 0（第一次因 React 19 `useRef` 要初值报 TS2554，补上后重跑通过）；`pnpm test` exit 1：Rust 合计 `784 passed / 0 failed`，test:ts `ℹ pass 344` / `ℹ fail 0`，mcp `ℹ pass 9` / `ℹ fail 0`，plugins `ℹ pass 14` / `ℹ fail 0`，extension `ℹ pass 1` / `ℹ fail 12`——12 条全是 `browserType.launch: Executable doesn't exist at ~/Library/Caches/ms-playwright/chromium_headless_shell-1248/...`，本机 `~/Library/Caches/ms-playwright` 整个不存在，与本次改动无关（未改扩展）；经常浩同意 `pnpm exec playwright install --only-shell chromium` 装上 `chromium_headless_shell-1248` 后补跑 `pnpm run test:extension` `ℹ pass 13` / `ℹ fail 0`（`extension.log`）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-238-side-tag-jump/{check,check2,test,node,build}.log`。
+- 验证：录屏抽帧对照（`evidence/2026-11-08-238-side-tag-jump/sheet_*.png`、`fine.png`、`start.png`）定位原因；修后未在实机用鼠标悬停复现——侧栏悬停要真实鼠标，电脑控制未授权（L-09），实测留给常浩。
+- 截图：录屏抽帧见上；修后无实机截图（未做，原因同上）。未截「想访问文稿」弹窗检查。
+- 发布与回读：worktree `claude/238-side-tag-jump` 打包，`install.sh 238-side-tag-jump`：装前 `f009fe1bbfe1`（已备份），11:07:19 退出、11:07:20 启动，产物 `de24114e20a2` / 已装 `de24114e20a2`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-238-side-tag-jump/PostPane-f009fe1bbfe1.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「停在别家小签上把它换到最前」从立即改成停 250ms（#162 原意是「停在上面」，路过不算更贴原意）；本机 Playwright 浏览器缓存曾缺失，已补装无头版（缓存目录被清后会再缺，届时同样补装）；修后实机悬停仍待常浩试。
+- 本轮新坑：L-27。
+- skill 进化：无。
+
+## 全操作审核与 5 批缺陷修复（2026-11-08，Claude，常浩反馈「点 ↗ 没跳过去、回复却没了」，要求多个子 agent 深度审核所有操作并修复，看审核清单后回复「按计划修」；5 个 PR 全量通过，按授权 squash 合并；已从 main `fb62a6a` 打包装机回读一致）
+
+- 时间：开工 `2026-11-07 23:47`（`date '+%F %H:%M'` 记录；审核从 23:20 起）。来由：常浩在新回复卡上多次点 ↗ 没跳到会话，回复却被收起。5 个子 agent 只读审核跳转、回复队列、审批、接力、侧栏与设置五块（汇总 `evidence/2026-11-07-ops-audit/汇总.md`），确认后开 #220–#224 五张 issue，各由一个子 agent 在独立 worktree 先写复现测试再修，主会话逐个审 diff、变基复测后合并。
+- 改了哪些文件（按 PR）：
+  - #227（#220 跳转可信）：`platform/src/lib.rs`、`navigation.rs`（找不到 Claude 标签时报原因，不再只叫起 Claude 算成功；认 `priorCliSessionIds`）、`navigation/claude_job.rs`（后台任务不提前报成功）、`agents/src/claude/process.rs`（`claude -p` 不发桌面目标）；前端新增 `open-result.ts`、`OpenNotice.tsx`，回复卡、会话行、Hermes 提问行、审批跳回失败时行内写原因、4 秒后可重试，点回复行只展开、↗ 才跳，跳成功后同会话回复一起收；「设置」「统计」先打开、成功才收起面板。
+  - #226（#221 回复队列不丢）：`IslandNews.tsx`、`HUDScene.tsx`、`reply-stays.ts`、`news-lanes.ts`（没画出的小签不计时；鼠标在侧栏或打字时不插队；满 32 条挤最旧的；卡片展开才算看过）。
+  - #228（#222 审批）：`hooks/unix.rs`（驿窗在线但不处理的请求回 `{}` 交还客户端，只在退出时无声关闭）、`codex/desktop.rs`（送达失败卡片回来）、提问卡与计划卡草稿发送成功后才删、回答后 2 秒内顶上来的卡前 400ms 不受理点击（`answer-gate.ts`；主会话把原实现「之后每张卡」收窄到「紧接着顶上来的那张」）。
+  - #229（#224 设置与挂件）：`core/src/settings.rs`（重读设置容错，坏文件照用内存值并在常规设置页报出，下一次改设置重写）、`host/src/float_notes.rs` 与 `AppPendant.tsx`（随手记光圈跟窗口真实状态）、`GeneralPane.tsx`（保存排队，不丢点击）。
+  - #230（#223 接力）：`handoffs.rs`（「继续自动」重新计时）、`handoff.rs`（迟到的 `sent` 补记 ask；手动转回失败进队列；重启文案按设置语言；新对话打开中「结束接力」提示稍后再试）、`chatgpt/mod.rs`（送话带请求号）、`docs/chatgpt-channel.md`。
+  - 本节：`CURRENT.md`、`docs/LESSONS.md`（L-25、L-26）。
+- 测试：合完 5 批后在主目录用 main 自己的构建目录（不用共享目录，见 L-26）跑 `fb62a6a`：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 `784 passed / 0 failed`（761 基线 + 本轮 13 条 + #233 的 10 条），test:ts `ℹ pass 338` / `ℹ fail 0`，mcp 9/0、plugins 14/0、extension 13/0；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-08-ops-fixes/{check,test}-fb62a6a.log`。各 PR 合并前的变基复测与红/绿输出在 `evidence/2026-11-07-fix-22{0..4}/`。
+- 验证：装机后 `get_hud_screenshot` 渲染悬停面板正常（额度、Hermes、正在进行均有数据）；`hud_sessions` 看到修复前记下的 `claude -p` 会话仍带 `claude-desktop` 目标（目标在采集时写入），按 #227 现在点它的 ↗ 会报「找不到这个会话的标签」并保留回复（有测试，实机未点）。侧栏悬停面板按钮电脑控制点不动（L-09），实点留给常浩。
+- 截图：`evidence/2026-11-08-ops-fixes/` 未存全屏截图；面板渲染图见本会话 `get_hud_screenshot`。未截「想访问文稿」弹窗检查（电脑控制未授权），请常浩看一眼。
+- 发布与回读：从 main `fb62a6a` 打包（`bcf71b2` 只改 CURRENT.md），`install.sh 2026-11-08-ops-fixes`：装前 `b4c7a75cb585`（已备份），01:46:01 退出、01:46:01 启动，产物 `f9039973266c` / 已装 `f9039973266c`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-2026-11-08-ops-fixes/PostPane-b4c7a75cb585.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 暂不修（审核汇总里列了理由）：驿窗重启期间 ChatGPT 回信丢失（要插件缓存，需单独设计）；隐藏光晕时清空通知（与上游一致）；已排队通知不随语言切换；审批 F5/F7/F8；接力「重试」按钮对失败单一律显示、思维评审轮次前后端算法不一致；按住标记 300ms 后点击被吞（上游行为）；`open` 3 秒上限、统计窗打开到旧会话。
+  - #227：后台任务转进桌面最终失败时前端收不到通知；「未审」章跳不过去时改为展开面板、不显示原因文字；审批卡「打开插件设置」仍先收起面板。
+  - #230：「结束接力」遇到新对话正在打开是提示稍后再试，不是阻塞等待；迟到的 `sent` 到之前 ChatGPT 已开始回答时，「审核中」那步会漏记，回信不受影响。
+  - #229：随手记光圈的宿主侧（发通知、新命令）没有 Rust 自动测试，要实机确认。
+  - 子 agent 提的 `check-rules.mjs` 把前端 `.listen(` 误报为「本机服务只监听 127.0.0.1」违规，未改，留作提案。
+  - 常浩实点验收（2026-11-08 回复「都正常」，4 处均通过）：① 新回复点 ↗ 能到会话；点一条修复前的 `claude -p` 回复，回复留着并写原因、4 秒后能再点。② 别家回复小签在刘海模式不再 4 秒没露面就消失；鼠标停在侧栏时来 Hermes 回复不换卡。③ 停下的接力点「继续自动」后不再马上停。④ 随手记用页面里「收起」关掉后光圈熄。
+- 本轮新坑：L-25、L-26（均可提议提升为全局坑）。
+- skill 进化：E-11 待批（并行 worktree 的构建目录与合并后主目录全量复测）。
+
+## 设置加「AI 接入」页，AGENTS.md 加「AI 接入」一节（2026-11-08，Claude，常浩按全局规则 P-13 让母会话分派，看三版预览 https://claude.ai/artifact/Eusos7b3DHkDT4uQ4VrCtY 后选甲「四块收据」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 23:25`（会话创建时间，未单独 `date` 记录）。来由：P-13 要求应用里 AI 产出的东西在设置里看得清谁做、怎么接、读什么、写到哪、能不能用。盘点结论：驿窗有一个执行方（ChatGPT 接力审核，网页桥，仅支持 ChatGPT 网页），一个对外开放（MCP「agent-hud」+ `relay_to_chatgpt`），其余各家都是数据对象；母会话原判断「没有执行方」不准。
+- 改了哪些文件：
+  - `src/packages/app/src/settings/AiAccessPane.tsx`、`ai-access.css`（新）：四块——默认执行方（ChatGPT 网页可用状态 + 检查时间，Claude / Codex 标不支持）、功能清单（接力审核：谁发起、执行方、接入、读、写到、留痕、为什么仅支持）、对外开放（侧栏工具开关即 `hudTools`，能读 / 能写 / 在哪关；发起接力按 ChatGPT 插件登记显示开关）、数据对象（按快照列在读的、已关的、没检测到的）。
+  - `src/packages/app/src/lib/ai-access.ts`（新）：可用状态、MCP 装到哪些客户端、各家读取来源的文字与拆分；`test/ai-access.test.ts` 3 条。
+  - `src/packages/app/src/App.tsx`、`SettingsPanes.tsx`：登记第 5 页「AI 接入」。
+  - `AGENTS.md`：新增「AI 接入」一节，导航表加一行。
+- 测试：变基到 main `bcf71b2` 后 `pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 784 passed / 0 failed，前端 `ℹ pass 341` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-ai-access/`（`check3.log`、`test3.log`、`rules3.log`）。
+- 验证：浏览器预览（隔离数据目录，拷入本机真实 `settings.json`）用真实组件看了两轮：第 1 轮浅色，数据对象与本机一致（在读 Claude Code、Codex、Hermes；7 个已关），发现页尾 API Key 说明单独成行，挪进「数据对象」脚注；第 2 轮深色复看。ChatGPT 插件状态、MCP 装到哪些客户端只在 Tauri 里读得到，浏览器里显示「这个系统不支持」「这里读不到」，逻辑由单测覆盖，实机未看——请求电脑控制截图被拒。
+- 截图：在本会话工具结果里，未另存。
+- 发布与回读：从分支 `claude/ai-access-declare-62dcfa`（基于 main `bcf71b2`）打包，`install.sh ai-access-final`：装前 `f9039973266c`（已备份），01:46:24 退出并启动，产物 `f009fe1bbfe1` / 已装 `f009fe1bbfe1`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-08-ai-access-final/PostPane-f9039973266c.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：各家读取来源的文字写在前端 `lib/ai-access.ts`（不在 agents crate 描述符里），新增客户端时要同步补一行，否则显示「它的本机日志」。范围外：「允许智能体调整侧栏」开关名字只说调整，实际也管读取快照、会话、截图；Codex 发起或审核接力要另开一单。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 工程接力按风险级设审查预算、续审按 PR 跨会话累计、支持暂停/升级与专项续审（2026-11-08，Claude，常浩在 #217 方案评论上回复「按方案开工」；PR 全量通过，按授权 squash 合并；实机往返在合并前的包上做，合并后从 main 重打重装见下）
+
+- 时间：开工 `2026-11-07 23:07`（`date '+%F %H:%M'` 记录）。来由：multi-agent MA-02 工程审查契约 v0.1（`317945b`），常浩 11-07 批准审查预算原则；方案见 #217 评论。
+- 改了哪些文件：
+  - `src/crates/platform/src/clients/chatgpt/handoffs.rs`：Handoff 加 `risk`、`pr`、`carried`、`extra`；`budget`、`counted`（按 ChatGPT 实际回信数计，暂停取证那次不算）、`spent`；`review_exit` 读倒数第二行「审查出口」；`pull_request` 取 brief 第一个 PR；`Book::carried_for`、`pr_counted`、`rule`、`allow_extra`；`next()` 新增 `Settle`（L1 收口）、`BadTail`（出口与结论对不上）；工程审查的「证据不足暂停」也走 #209 的取证续上。
+  - `src/crates/host/src/handoff.rs`：`start_ruled` 拒收 L0 和写错的风险级；新单按同一 PR 已审次数判预算；续发按 PR 累计（`pr_counted`）判预算，用完后不带 `extra` 就拒发；带 `extra` 时加一轮预算并记一步「专项续审：…」；转回话术按「可复审 / L1 收口 / 预算用完 / 证据不足 / 决策升级 / 出口无效」区分；工具返回提示不再写死 2 轮；`Desk::start` 只留给测试。
+  - `src/apps/mcp/src/index.ts`：`relay_to_chatgpt` 加 `risk`、`extra`；工具说明写进预算规则、PR 链接放最前、回信末两行格式。
+  - `src/packages/hud/src/alerts/handoff-card.ts`、`src/packages/protocol/src/index.ts`：卡上「第 n / m 轮」和「再审一轮」按预算与 `carried` 算，只改数字和文字。
+  - 测试：handoffs.rs 5 例、handoff.rs 5 例、`handoff-card.test.ts` 1 例。
+  - 文档：`docs/chatgpt-channel.md`「审查预算」一条与参数说明、`docs/安装与使用.md` 第 89–91 行。
+- 测试：变基到 `f5234ad` 后，`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 784 passed / 0 failed，hud 套件 `ℹ pass 338` / `ℹ fail 0`，其余套件 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-217-review-budget/`。再变基到 `bfa8d60`（只改交接文档）后只重跑了 `node --test tests/*.test.mjs`，见 PR。
+- 验证：在 `d2d9c9cbe121` 包上（基于 `f441f73`，不含 #228–#231）用 `claude -p` 新开会话实机往返，测试 PR 编号 90001、90002，请 ChatGPT 按固定格式回：
+  - L1（`h1a1b708fc4400`）：回「返修 / 需修改」，转回话术含「L1 的审查预算已用完……补改未复审」，随后自动结束，结束原因「L1 审查预算用完」；
+  - 跨会话 L2：会话一 `h1a1b70a066c01` 第 1 轮；会话二 `h1a1b70aa6ed02` 自动关联，卡上「续审 · 原单 h1a1b70a066c01 · 已审 1 次」，`carried` 1，回「需修改」后停下，原因「已审 2 轮仍需修改」；
+  - 会话三不带 `extra` 再送，被拒，返回「这个 PR 已审 2 轮，审查预算用完了，没有发出……」。
+  - 实机中发现工具返回提示还写「没满 2 轮」，已改。
+- 截图：无（没有界面样式改动；卡上数字由单元测试覆盖）。
+- 发布与回读：合并前装 `d2d9c9cbe121`（装前 `f67df8d754e0` 备份在 `evidence/2026-11-08-2026-11-08-217-review-budget/`），用于实机。合并后从 main `fb62a6a` 重打（`build=0`，无警告，打完 main 没有新提交），`install.sh 217-main`：装前 `4ea6f3b36caa`（并行会话装的，已备份到 `evidence/2026-11-08-217-main/`），01:40:14 退出、01:40:14 启动，产物 `b4c7a75cb585` / 已装 `b4c7a75cb585`，签名 leaf `H"b773068e"`；应用在运行，启动后两分钟日志无 error/panic。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-217-main/PostPane-4ea6f3b36caa.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 两张测试卡 `h1a1b70a066c01`（`claude -p` 会话退出，转回失败两次后停下）、`h1a1b70aa6ed02` 停在「等你决定」，请常浩点「结束接力」。
+  - 风险级只在新单第一次送审时记，续发时再填不会改。
+  - multi-agent MA-02 契约第 4 节「正文第一行写暂停/升级」要改成「倒数第二行审查出口」，在 multi-agent 另开 PR。
+- 本轮新坑：无
+- skill 进化：E-10 待批（并行合并频繁时不追变基，先装本分支做实机，合并后从 main 重打重装）。
+
+## ChatGPT 单家面板列出今天的对话，与侧栏「N 对话」一致（2026-11-07，Claude，常浩截图说侧栏显示 5 对话、展开却说没有会话，选甲「沿用一格两联补上已回」；PR 全量通过，按授权 squash 合并；已从 main 装机回读一致）
+
+- 时间：开工 `2026-11-07 23:30`（`date '+%F %H:%M'` 记录）。来由：#219。脚注「5 对话」与悬停小收据由 `chatgpt-desk.ts` 按今天（北京时间）自己的对话计、回完也算；单家面板走通用 `liveSessions`，只列 running / waiting，ChatGPT 回完即 idle，于是「正在进行 0」，底行「近 24 小时 18 个会话」又把 13 个审核算进去。#145 定了「正在进行里列出（在答 / 已回）」，单家面板漏做「已回」。
+- 改了哪些文件：
+  - `src/packages/hud/src/chatgpt-desk.ts`：`ChatGPTDesk` 加 `day`（今天全部自己的对话，在答在前），`chats` 改为取它前 3 条；新增 `reviewsInDay()`（近 24 小时有动静的审核数）。
+  - `src/packages/hud/src/panel/SessionsSection.tsx`：只在 ChatGPT 单家面板生效——标题「正在进行」改「今天的对话」、数字取 `desk.today`（与脚注同一个数）；在答 / 等你的行照旧，其后加「已回」行（`RepliedRow`：灰色「已回」签、标题、「HH:MM 回复」、↗ 回到会话，回不去照 #227 在第二行说原因）；空时写「今天还没有对话」；底行改「今天 N 个对话 · 近 24 小时 M 个审核」「去统计看全部」。下联旧信纸的审核不变；其他智能体的面板不变。
+  - `src/packages/hud/test/chatgpt-desk.test.ts`：新增 2 条（面板列出今天全部对话且与脚注同数、小收据仍取前 3；审核按 24 小时单独计）。
+- 测试：以最后一次为准（底座 `72e9699`，main 在跑测试期间又合进 #229，未再重跑）：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 767 passed / 0 failed，前端 `ℹ pass 331` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。中途两次未过：变基到含 #227 后类型检查报 `Opened` 与 `false` 比较（#227 改了回到会话的返回值），已改成与 `LiveRow` 相同的 `failureOf` / `useOpenFailures`；同一次 Rust 有一条 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 失败（剩余 288.7 秒，断言要 290–300 秒），本 PR 不碰 Rust，单独重跑 1 passed，下一次全量 0 failed，与 L-12 同类。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-219-chatgpt-panel/`（`check5.log`、`test5.log`、`rules5.log`，失败那次是 `check3.log`、`test3.log`）。
+- 验证：单测覆盖三处计数一致。真实组件自查页（`SourceHoverPanel` 原样、`focusVendor="chatgpt"`，常浩 23:28 的真实快照，内置浏览器等字体加载完）：标题「今天的对话 5」，5 行「已回」依次 22:39、22:09、21:54、21:51、19:17，与小收据前 3 条、「另有 2 个对话」一致；底行「今天 5 个对话 · 近 24 小时 13 个审核」；点第一行 ↗，`openSession` 收到「审核需求梳理」，假造的失败原因红字显示在第二行、箭头变灰。装机后 `get_hud_screenshot` 渲染 ChatGPT 单家面板：已过零点（01:32），显示「今天的对话 0」「今天还没有对话」「今天 0 个对话 · 近 24 小时 15 个审核」，与此时脚注「--」一致；带对话的实机样子待常浩今天聊过一轮后点开看。自查页源码备份在证据目录 `preview-219/`，工作区已删（L-13）。
+- 截图：证据目录 `preview-panel.jpg`（5 行已回）、`preview-open-fail.png`（回不去时的提示）、`installed-panel-after-midnight.png`（装机后零点后的空面板）。
+- 发布与回读（补记）：并行会话合并频繁（本轮开工后先后进了 #225–#229），先合并再从 main `cefe5e4` 打包，`install.sh 219-chatgpt-panel`：装前 `d2d9c9cbe121`（已备份），01:31:55 退出并启动，产物 `d0c745534149` / 已装 `d0c745534149`，签名 leaf `H"b773068e"`；`install.sh check` 一致。打包期间 main 又合进 #230（接力），这次装的包不含它，由 #230 那边或下一轮从 main 重装。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-219-chatgpt-panel/PostPane-d2d9c9cbe121.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：整张看板（不指定智能体）的「正在进行」仍按原口径，只列在跑 / 等你；范围外：`the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 在机器忙时会偶发失败（快照一次超过 10 秒），可另开一单把时间放宽或固定。
+- 本轮新坑：无
+- skill 进化：无。
+
+## Claude 那格的「回」改成和「审」同一枚方章（2026-11-07，Claude，常浩说「回」不好看、要和「审」放一起看成接力的两面、一套风格，看三版后选甲「脚上一枚，答优先」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 23:09`（`date '+%F %H:%M'` 记录）。来由：Claude 票根角上的红色立体火漆「回」和其他扁平印章不统一、被打孔切掉、又和「答」同红。设计稿 https://claude.ai/artifact/Rs6zDWu49aKP68SaxuaU2a 第 5 版（ChatGPT 与 Claude 两格并排、接力四个时刻）。issue #218。
+- 改了哪些文件：`src/packages/hud/src/ticket-stub.ts`（新增 `stubFoot`：脚上印什么——自己的「答/批」优先，其次接力章「审 / 回」，再次读数；接力纸给在审的 ChatGPT 脚、和有回信等看的 Claude 脚，Claude 盖着「答」时接力纸也保留）；`src/packages/hud/src/scene/HUDMarkStrip.tsx`（`StubFace` 改用 `stubFoot`，「回」走 `ReviewStamp`，去掉角上的 `ReplySeal`）；`src/packages/hud/src/scene/RelayStamps.tsx`（`ReviewStamp` 加 `reply`：字换成「回」，同色同尺寸、同落下动画、不发散；删掉 `ReplySeal`）；`relay-stamps.ts`、`model.ts` 只改注释；`docs/chatgpt-channel.md`、`docs/ROADMAP.md` 同步规则；`src/packages/hud/test/ticket-stub.test.ts` 加两条 `stubFoot` 测试。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，hud 前端 `ℹ pass 315` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek `ℹ pass 14` / `ℹ fail 0`，插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-reply-stamp/{check,test,rules}.log`。
+- 验证：真实组件自查页（`HUDScene` 原样，#171 那份脱敏快照，`?s=review|replied|ask`）放大看：在审时 ChatGPT 脚上蓝「审」照旧；有回信时 Claude 脚换接力纸加航空斜纹、蓝「回」方章落下（截到落下中途的一帧，读数 82% 随后让开），`data-relay-stamp="reply"`，颜色 `rgb(58, 92, 150)` 与「审」相同；同时有待答时 Claude 脚上是红「答」、接力纸保留。实机：装机后实机有 4 单「已回复」，`get_hud_screenshot` 看到 Claude 格是接力纸加蓝「回」方章。自查页已备份到 `evidence/2026-11-07-reply-stamp/preview-218/` 后删掉。
+- 截图：`evidence/2026-11-07-reply-stamp/hud-after.png`（装机后实机侧栏渲染）；自查页放大截图只在会话里看过，没落盘。
+- 发布与回读：从分支 `claude/218-reply-stamp`（基于 main `785cd28`）打包，`install.sh 2026-11-07-reply-stamp`：装前 `5540cc76bc8e`（已备份），00:09:03 退出、00:09:03 启动，产物 `f67df8d754e0` / 已装 `f67df8d754e0`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-08-2026-11-07-reply-stamp/PostPane-5540cc76bc8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`（脚本给备份目录加了当天日期前缀）。
+- 与授权不一致之处、遗留问题、范围外发现：Claude 有「答」时「回」字不显示，只靠接力纸提示还有回信，这是甲的取舍，常浩已知。设计稿里的小人是示意图，实机用真实素材。可提议提升为全局坑：Artifact 页面脚本顶层 `const claude` 会和运行环境自带的全局 `claude` 撞名，整段脚本不执行、控制台也看不到报错（发布后页面空白才发现），只出提案。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 额度看板「吃紧」红色斜纹调浅（2026-11-07，Claude，常浩截图说红色斜纹太显眼、影响观看，要「稍微再浅一点点」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 21:33`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Claude「每周」照速度会提前用完时，「照速度到重置」那段斜纹用满色红，压过了已用条和文字。
+- 改了哪些文件：`src/packages/hud/src/panel/AgentBoard.tsx`（额度条预测斜纹在 `runsOut` 时加 `opacity: 0.55`；颜色、纹路、灰色斜纹、下方红字和「吃紧」圆章都不变）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，前端各套件 `ℹ fail 0`（hud 套件 `ℹ pass 313` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/2026-11-07-hatch-lighter/hatch-*.log`。
+- 验证：装机后用驿窗 MCP `get_hud_screenshot` 渲染悬停面板，「每周」斜纹亮条像素约 `(163,61,55)`，下方红字约 `(191,56,48)`，斜纹已比文字暗一档；电脑控制截图请求被拒，未做全屏截图。
+- 截图：`evidence/2026-11-07-hatch-lighter/panel-after.png`。
+- 发布与回读：从分支 `claude/hatch-lighter`（基于 main `70763a3`）打包，`install.sh hatch-lighter`：装前 `d18118eff032`（已备份），21:40:41 退出、21:40:41 启动，产物 `5540cc76bc8e` / 已装 `5540cc76bc8e`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-hatch-lighter/PostPane-d18118eff032.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：只出一版（0.55），属单一参数微调，没出三版；常浩觉得还要更浅或偏深，改这个数即可。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 亚古兽「最近被问」来源标签「私聊」改成「私」（2026-11-07，Claude，常浩截图要求「私聊改成私，跟下面的群对齐」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 21:12`（`date '+%F %H:%M'` 记录）。来由：悬停面板 Hermes 区亚古兽「最近被问」里，私聊来源标两个字「私聊」，比下面一个字的「群」宽，标题起点对不齐。
+- 改了哪些文件：`src/packages/hud/src/panel/hermes-board.ts`（`chatLabel` 中文私聊改为「私」，英文仍是 DM）；`src/packages/hud/test/hermes-board.test.ts`（断言同步改为「私」）。标签宽度随文字（`HermesBoard.tsx` 里没有固定宽度），单字后与「群」同宽。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 761 passed / 0 failed，前端各套件 `ℹ fail 0`（hud 套件 `ℹ pass 313` / `ℹ fail 0`，含 `asks read 私 or 群` 一条）；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `evidence/dm-label-*.log`。
+- 验证：单测覆盖文案；实机悬停面板未看（电脑控制点不动悬停面板，见 L-09），请常浩悬停亚古兽一格看一眼。
+- 截图：`evidence/2026-11-07-dm-label/after-install.png`（装机后全屏，无「想访问文稿」弹窗）。
+- 发布与回读：从分支 `claude/dm-label`（基于 main `3207202`）打包，`install.sh dm-label`：装前 `6329ee7a901a`（已备份），21:20:09 退出、21:20:09 启动，产物 `d18118eff032` / 已装 `d18118eff032`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-dm-label/PostPane-6329ee7a901a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：无。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 思维评审接力：严格末两行、终态转回 Claude、按评审出口换话术（2026-11-07，Claude，常浩在 thinking-review skill 审核意见上选「驿窗加窄改动」；PR 全量通过，按授权 squash 合并；装机回读见下）
+
+- 时间：开工 `2026-11-07 19:37`（`date '+%F %H:%M'` 记录）。来由：#209。my-skills#66（thinking-review 1.0.0）经 ChatGPT 审核指出三处驿窗行为（已核对属实）：`Next::Pass` 只关闭接力、不把回信转回 Claude；`review()` 从下往上找「结论：」，认不出的值会继续往上找，可能把正文引用的旧「结论：通过」当结论；`back_text()` 固定是工程返修话术。
+- 改了哪些文件：只对标题以「思维评审｜」开头的接力生效，工程审查接力行为与旧断言不变。
+  - `src/crates/platform/src/clients/chatgpt/handoffs.rs`：新增 `Exit`、`Flaw`、`exit()`（只认最后两个非空行「评审出口：…」「结论：…」且必须对得上，缺失、未知、矛盾都算无效）、`Handoff::thinking()`、`rounds_used()`（证据不足暂停后的自动恢复不计轮）、`waits_for_evidence()`、`Book::evidence_in()`；`Next` 加 `Close`、`Pause`、`Escalate`、`Invalid`；思维评审接力的卡片结论改用严格解析。
+  - `src/crates/host/src/handoff.rs`：`drive()` 按评审出口处理——成熟退出 / 转其他路径先转回 Claude（复用送达、重试、排队）再结束，送不到不关；继续深化转回；证据不足暂停转回后停下、不计等复审超时，Claude 带证据续接时自动往返恢复；决策升级转回并交常浩；无效末两行不放行、不转回、交常浩。新增思维评审版转回、再审一轮、收口话术与卡片文案；启动时直接结束已通过接力的那段跳过思维评审接力。
+- 测试：子 agent 跑 `pnpm run check` exit 0；`pnpm test` exit 0，Rust 合计 760 passed / 0 failed，前端各套件 fail 0；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。我独立复跑 `cargo test -p agent-hud-platform handoffs` 13 passed / 0 failed，`cargo test -p agent-hud-host handoff` 36 passed / 0 failed。新增测试：T1 `a_thinking_review_that_settles_goes_back_to_claude_once_then_ends`，T2 `a_thinking_review_quoting_an_old_pass_is_escalated_not_passed`，T3 `a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again`、`a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence`，T8 `a_thinking_review_whose_last_two_lines_do_not_hold_sends_nothing`，另有继续深化、启动场景、再审一轮、解析单测各一。
+- 验证：单测覆盖 T1、T2、T3、T8；实机往返见「发布与回读」。
+- 截图：无。
+- 发布与回读（补记）：从 main `3ff8684` 打包，`install.sh 209-thinking-relay`：装前 `bfd637730be4`（已备份），19:52:24 退出、19:52:24 启动，产物 `f1b8bdb870a8` / 已装 `f1b8bdb870a8`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-209-thinking-relay/PostPane-bfd637730be4.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机往返（T1，补记）：本会话调 `relay_to_chatgpt` 发测试单「思维评审｜驿窗｜接力实机往返测试」（接力 `h1a1b5da92af00`），ChatGPT 回信末两行「评审出口：成熟退出 / 结论：通过」；本会话收到回信全文加收口话术「这次思维评审已收口……不要再调用 relay_to_chatgpt」。`handoffs.json` 该接力 steps：work、ask、reply、back（自动）、end（自动，「思维评审收口，回信已转回 Claude，自动结束接力」），状态 closed / ended。
+- 与授权不一致之处、遗留问题、范围外发现：转给 Claude 的思维评审话术只写中文（与现有 `back_text` 一致）；回信超过 64KB 被截断时末行损坏，按无效交常浩；MCP 工具说明仍偏工程审查，未改（skill 里写明以 skill 为准）。
+- 本轮新坑：无
+- skill 进化：无。
+
+## ChatGPT 格：在答时「未审」章让位，挂满 2 小时的「未审」边框发散（2026-11-07，Claude，常浩看三版预览 https://claude.ai/artifact/3t7EizoP38kBF8yWqLPYyM 后选乙，并改「长期未审不退场，要像审接力一样闪起来、边框发散」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 20:56`（`date '+%F %H:%M'` 记录）。来由：#213。#212 遗留：18 小时前的接力 `h1a1b1fed89e00` 挂着「未审」，章落下时把脚注淡成 0，常浩聊天时 ChatGPT 格看不出「在答」。同日先在常浩同意下结束了这条接力（退出驿窗改 `handoffs.json`，改前备份在 `evidence/2026-11-07-end-stale-relay/`，重启后读回 closed / ended）。
+- 改了哪些文件：
+  - `src/packages/hud/src/chatgpt-desk.ts`：脚注数据加 `pressing`（在答，或有回信待你看）。
+  - `src/packages/hud/src/relay-stamps.ts`：`relayStamps` 加参数 `yields`，为真时不算「未审」；加 `lingering`（未审挂满 `LINGERS_MS` = `STALE_REVIEW` 2 小时）；`until` 也算「开始发散」的时刻。
+  - `src/packages/hud/src/model.ts`：先算脚注，再把 `desk.pressing` 交给章。
+  - `src/packages/hud/src/scene/RelayStamps.tsx`、`HUDMarkStrip.tsx`：「未审」挂久了照「审」的波纹发散（2.4 秒一圈、放大 1.9 倍淡出），蜡红、17 单位宽的长方框。
+  - 测试：`test/relay-stamps.test.ts` 新增一条并补字段，`test/chatgpt-desk.test.ts` 新增一条；`docs/chatgpt-channel.md` 章的规则补一段。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 761 passed / 0 failed，前端 `ℹ pass 313` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。第一次全量 exit 101：新 worktree 没先跑 `package-resources.mjs`（L-01），补上后重跑即上面的结果。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-stub-yields/`（`check2.log`、`test2.log`）。
+- 验证：真实组件自查页（`HUDScene` 原样，常浩 20:34 的真实快照，右侧停靠、30 pt 票根），内置浏览器等字体加载完后逐种核对：你的对话在答 + 18 小时未审 → 脚注「在答」、无章；未审 40 分钟 → 静止「未审」、无发散圈；未审 18 小时 → 有发散圈，边框 `rgb(179, 38, 30)`、2400 ms、无限循环，暂停在 1.3 秒放大截图可见红框外扩；ChatGPT 在审接力 → 蓝色「审」照常发散（`rgb(58, 92, 150)`）。自查页备份在证据目录 `preview-213/`，工作区里已删除（L-13）。实机：装机后常浩 21:03:44 在 ChatGPT 发问，`get_hud_screenshot` 显示 ChatGPT 格脚注蓝色「在答」（#206 一整条在真实使用中走通）。
+- 截图：自查页截图在本会话工具结果里，未另存；实机未审发散没有现成的未审接力可看，未实看。
+- 发布与回读：`install.sh stub-yields`：装前 `06a7d6cd0a2b`（已备份），21:07:35 退出并启动，产物 `6329ee7a901a` / 已装 `6329ee7a901a`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-07-stub-yields/PostPane-06a7d6cd0a2b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「挂久」的门槛常浩只举了 18 小时的例子，取 2 小时（与悬停面板不再列出该审核一致），如要改只动 `LINGERS_MS`。范围外：接力过了 2 小时悬停面板就不再列出，界面上点不到「结束接力」，常浩这轮没选做。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## ChatGPT「在答」能进驿窗了：收件箱不再拒收开始回合（2026-11-07，Claude，常浩装上 #207 后反馈「还是失败抓不到」，看实测后回「发了，还是没显示」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 20:06`（`date '+%F %H:%M'` 记录）。来由：#206 第二个断点。#207 之后回复已经能进驿窗（19:30「审核需求梳理」4634 字），但 ChatGPT 格仍是「正在进行 0」。
+- 根因（有证据）：`chatgpt/turns.jsonl` 20:01–20:09 有多条 `start`，`hooks/inbox` 里没有任何 chatgpt 的 `session-observation`，`hud_sessions` 里 `chatgpt:6aeed449…` 是 `idle`。`platform/src/hooks/inbox.rs` 的 `valid()` 只认 attention、compaction、completion、account、origin、delivery，写入时直接拒收。别的客户端的开始回合还有钩子通道直连应用，只有 ChatGPT 全靠收件箱，所以只有它坏。
+- 改了哪些文件：
+  - `src/crates/platform/src/hooks/inbox.rs`：只给「自己的通道报回合」的客户端（目前只有 ChatGPT）收 `session-observation`，保留 30 天（与核心一致，核心 15 分钟后不再算在答）；别的客户端仍拒收。新增测试 `a_chatgpt_turn_start_is_kept_so_the_sidebar_shows_it_answering`。
+  - `src/crates/platform/src/clients/chatgpt/tests_unix.rs`：通道测试加断言，开始回合一路落到收件箱。
+  - `docs/chatgpt-channel.md` 补一句；`docs/LESSONS.md` 新增 L-24。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 761 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通用规则检查通过。第一次全量有两处失败：`check-test-paths`（新测试直接用了 tempdir 根，已改成 `join("data")`）、`demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes`（时间戳抖动，单独重跑与全量重跑都通过，与本改动无关）。撤掉修复时收件箱单测 `FAILED`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-running/`（`check2.log`、`test2.log` 为最终结果）。
+- 验证：装机后常浩在 ChatGPT 发问，20:29:44 `start` 落进收件箱（「项目体系重构报告」，`running`）；`hud_snapshot` 里该会话 `state: running`；`get_hud_screenshot` 渲染的 ChatGPT 面板为「正在进行 1 · 在跑 · 正在干活 · 已 5 分钟」。
+- 截图：应用自渲染面板与静止侧栏各一张，在本会话工具结果里，未另存。
+- 发布与回读：`install.sh chatgpt-running`：装前 `f1b8bdb870a8`（已备份），20:14:44 退出并启动，产物 `06a7d6cd0a2b` / 已装 `06a7d6cd0a2b`，签名 leaf `H"b773068e"`；插件 20:14:49 重连。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-running/PostPane-f1b8bdb870a8.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：**遗留，等常浩定**：静止侧栏 ChatGPT 格脚注本应显示蓝色「在答」，但被接力 `h1a1b1fed89e00`「驿窗｜批 C 传信动效实机测试」的红色「未审」章盖住（章落下时把脚注淡成 0）。这条接力 01:54 送达，ChatGPT 早已回「通过」（L-18 当时丢了回信），至今仍是 open / delivered / halt，章已挂了 18 小时。可选：结束这条接力（章立即消失），和 / 或改设计让「在答」压过陈旧的「未审」。另：截图工具渲染的是静态帧，小人「工作中」的动作未实看（`vendors.rs` 已把 ChatGPT running 会话计入 `working`）。
+- 本轮新坑：L-24。
+- skill 进化：无。
+
+## 侧栏收得到自己开的 ChatGPT 对话：插件重载后给已开标签页补装脚本（2026-11-07，Claude，常浩反馈「侧边栏 GPT 还是抓不到他的回话……明显的 bug」，并按提示刷新标签页发了一句测试；PR 全量通过，按授权 squash 合并；常浩重新加载插件 0.2.2 后实机验证通过，驿窗应用无需发布）
+
+- 时间：开工 `2026-11-07 19:05`（`date '+%F %H:%M'` 记录）。来由：#206。常浩在 Chrome 里聊了「审核需求梳理」「审核Skill方法论提炼」等对话，侧栏 ChatGPT 格「正在进行 0」，没有回执。
+- 根因（有证据）：`hooks/inbox` 里 ChatGPT 的 17 条回复全是接力会话（都在 `watched.json`），#145 上线以来没有一条常浩自己开的对话；`chatgpt/turns.jsonl` 也只有接力会话，最后一行 14:29，宿主对任何 turn 都记，所以是插件没报。页面选择器在当前 ChatGPT 页面上仍取得到。常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来，收件箱生成 completion。结论：插件重载（#183 时 12:51）后，Chrome 不给已开标签页装新脚本，旧脚本断开、发消息同步抛错被吞；接力会话由插件新开标签页，所以不受影响。
+- 改了哪些文件：
+  - `src/apps/chrome-extension/background.js`：`runtime.onInstalled` 时给每个已开的 chatgpt.com 标签页 `chrome.scripting.executeScript` 补装 `page.js`、`content.js`，单个标签页失败不影响其余，装完 `resync()`。
+  - `src/apps/chrome-extension/content.js`：再装一次时旧的一份先停（`PostPaneContentStop`）、新的一份接手；发消息同步出错（与插件断开）就停下，不再每次页面变化都抛错。
+  - `src/apps/chrome-extension/manifest.json`：加 `scripting` 权限，版本 0.2.1 → 0.2.2。
+  - `src/apps/chrome-extension/test/content.test.mjs` 两条、新增 `test/background.test.mjs` 一条；`docs/chatgpt-channel.md` 补一条；`docs/LESSONS.md` 新增 L-23。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通用规则检查通过。新加的两条内容脚本测试换回旧 `content.js` 跑是 `ℹ pass 0` / `ℹ fail 2`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-stale-tabs/`。
+- 验证：根因实测见上（常浩刷新后发一句）。修复后实机（补记）：常浩在 `chrome://extensions` 重新加载插件 0.2.2，转接进程 19:16:52 重启；**没刷新**的那个 ChatGPT 标签页里发「测试2」，`turns.jsonl` 19:17:00 start、19:17:05 complete，收件箱生成 completion（回复「测试2：接收成功，回复正常。」），说明重载后补装的脚本在工作。
+- 截图：无。
+- 发布与回读：驿窗应用没改，无需发布；插件靠常浩重新加载生效。
+- 与授权不一致之处、遗留问题、范围外发现：范围外：`manifest.json` 的 description「只报驿窗名单里的会话」、`content.js` 开头注释「只转发名单里的会话」自 #145 起已不符，未改。
+- 本轮新坑：L-23。可提议提升为全局坑：「浏览器插件重载后，已开标签页里的内容脚本断开，要在 onInstalled 里补装」换项目也成立。
+- skill 进化：无。
+
+## 侧栏停满后直接进各家自己的面板，不再展开整张看板（2026-11-07，Claude，常浩说「删除这个图1完整页面，我不需要同时看。单ai小卡黄色线走过之后，直接进入到各自的图3」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 18:17`（`date '+%F %H:%M'` 记录）。来由：#202。#141「停久看全」：悬停一格出小收据，黄线走完（再停 1.5 秒）展开成整张看板（各家叠在一起）。常浩改为黄线走完直接进这一家自己的面板（与点一格相同）。
+- 改了哪些文件：`src/packages/hud/src/peek-expand.ts`（新增 `PEEK_GROWS_INTO = { pinned: true, expanded: false }`，注释改为长成自己的面板）；`src/packages/hud/src/HUDScene.tsx`（黄线计时到点改为钉住这一家，不再置 `expanded`；已钉住时不再计时）；`src/packages/hud/test/peek-expand.test.ts` 新增一条（改前 `PEEK_GROWS_INTO` 不存在而失败）。等待时长 1.5 秒、黄线不变。
+- 范围：只改悬停停满这条路。刘海形态、菜单「打开面板」、助手编辑 HUD 时的保持，没有单独一家可看，仍是整张看板（`expanded`），未删。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 311` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/`。
+- 验证：自查页渲染真实 `HUDScene`（logos、右边，与本机设置相同），喂 16:37 读到的实机快照（去掉审批），内置浏览器真实悬停：Codex 格 1 秒时小卡与黄线在（`.hud-peek-expand-meter` 存在），3 秒后只有 Codex 一家面板；Hermes 格同样只出 Hermes 面板；面板出来后移到 Claude 格，换成 Claude 一家，整张看板没出现。浏览器里小卡阶段的截图没拍到画面（DOM 里在），未补。自查页备份在证据目录 `check-page/`，实机快照副本已删、不留。实机侧栏：常浩 18:3x 悬停试过，回复「对了」（经 agent-hud 插件转来）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/`：`codex-after-wait.jpg`、`hermes-after-wait.jpg`、`move-to-claude.jpg`。
+- 发布与回读：`install.sh 202-peek-to-panel`：装前 `5076014be5bd`（#200 那版，已备份），18:27:16 退出、18:27:17 启动，产物 `bfd637730be4` / 已装 `bfd637730be4`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-202-peek-to-panel/PostPane-5076014be5bd.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：整张看板在刘海形态、菜单打开、编辑保持里仍在；常浩要连这些也去掉，需另定这几处改显示什么。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 侧栏所有跳转箭头统一按钮质感（2026-11-07，Claude，常浩实点 #198 后说「两个都对」，并要求把侧栏所有跳转箭头的效果统一、有点击按钮的质感；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 17:59`（`date '+%F %H:%M'` 记录）。来由：#200。#182 只给清单卡（审批 / 回复）的 ↗ 加了 `.hud-go-button`（悬停变亮、按下下沉），正在进行会话行、Hermes 提问行（#196 新加）、接力卡头部「回到 Claude 会话」各自手写样式，没有反馈。
+- 改了哪些文件：新增 `src/packages/hud/src/GoButton.tsx`（共用 ↗ 按钮，套 `.hud-go-button`，`enabled` 控制变淡与 `aria-disabled`，尺寸 26 或紧凑行 20）；`permissions/ListCard.tsx`、`panel/SessionsSection.tsx`、`panel/HermesBoard.tsx`、`alerts/HandoffCard.tsx` 头部改用它；`HandoffCard.tsx` 的「查看 ChatGPT 对话 ↗」加 `.hud-press` 和 `aria-disabled`。`global.css` 未改。
+- 测试：`pnpm run check` 第一次 exit 1（`ListCard.tsx` 删导入后没重新格式化，E-07），格式化后 exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/`（`check-2.log`、`test-2.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`HermesBoard`、`HandoffCard` 原样，接力用 #194 的 DT-ORC 真实记录），内置浏览器真实悬停：Hermes 提问 ↗ 悬停时边框与箭头变 `rgb(245,245,247)`、底色 14% 填充，旁边的不变；「查看 ChatGPT 对话」悬停 `filter: brightness(1.18)`；这单「回到 Claude 会话」不可用，`aria-disabled="true"`，不亮。按下下沉沿用 `.hud-go-button:active` 规则（已确认在页面样式里），浏览器工具按不住鼠标，**未实测按下那一下**。正在进行会话行、清单卡改用同一组件，靠类型检查与全量测试，未单独截图。实机侧栏：常浩摸过后回复「手感对了」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/`：`page.jpg`、`hermes-hover.png`；自查页备份在 `check-page/`。
+- 发布与回读：`install.sh 200-go-button`：装前 `3e1e0471ecf8`（#198 那版，已备份），18:08:02 退出并启动，产物 `5076014be5bd` / 已装 `5076014be5bd`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-200-go-button/PostPane-3e1e0471ecf8.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：接力卡其余文字按钮（结束接力、转回 Claude 等）仍没有按下反馈，不是跳转箭头，本轮未动；面板底部「统计 ↗」是另一套按钮，未动。
+- 本轮新坑：无
+- skill 进化：无。
+
+## Hermes 提问跳转改用 feishu:// 协议，飞书直接到前台（2026-11-07，Claude，常浩实点 #196 后说「有问题，点不动跳转键」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 17:29`（`date '+%F %H:%M'` 记录；排查从 17:0x 起）。来由：#198。#196 用 `open https://applink.feishu.cn/…` 跳飞书，本机 https 默认交给 Chrome，Chrome 在后台接走，飞书不出来（L-22）。
+- 改了哪些文件：`src/crates/platform/src/navigation.rs`（`feishu-chat` 先拼 `feishu://applink.feishu.cn/client/chat/open?openChatId=…`，飞书没认领这个协议才退回 https）；`navigation/tests.rs` 改为 `a_feishu_chat_opens_in_feishu_and_only_without_it_in_the_browser`（改前旧测试在本机返回 `feishu://` 而失败）；`docs/LESSONS.md` 新增 L-22。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-198-feishu-scheme/`。
+- 验证：终端里三种链接各开一次亚古兽所在的群：`https://` 与 `lark://` 后前台仍是 Claude；`feishu://` 后飞书 `frontmost` 为 `true`，常浩看过确认打开的就是那个群。实机侧栏：常浩点了群与私聊两行，回复「两个都对」。排查时 `open https://…` 给 Chrome 留了 applink 标签页，可直接关。
+- 截图：无（飞书窗口截图授权被拒，由常浩目视确认）。
+- 发布与回读：`install.sh 198-feishu-scheme`：装前 `de58129a128f`（#196 那版，已备份），17:37:20 退出并启动，产物 `3e1e0471ecf8` / 已装 `3e1e0471ecf8`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-198-feishu-scheme/PostPane-de58129a128f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：L-22 可提议提升为全局坑（deeplink 跳本机应用别走 https），待常浩批。
+- 本轮新坑：L-22
+- skill 进化：无。
+
+## 侧栏 Hermes「最近被问」点一下跳到飞书对应私聊 / 群（2026-11-07，Claude，常浩截图问「为什么不能像 Claude、GPT 一样一箭头跳转」，看方案后点「开工」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 15:43`（`date '+%F %H:%M'` 记录）。来由：#196。Hermes 的 `state.db` 每条飞书会话都记着 `chat_id`，但 `recent_asks` 没读，快照里没有，外壳的跳转白名单也不认飞书，所以提问行只能看不能跳。
+- 改了哪些文件：`src/crates/agents/src/hermes/transcript.rs`（`recent_asks` 多读 `chat_id`、`user_id`，旧库没有这两列照常列出）；`src/crates/agents/src/hermes/mod.rs`（`feishu_chat_id` 校验 `oc_` 开头的 id，`chat_target`；`Gateway::owner()` 读 `config.yaml` 的 `platforms.feishu.home_channel.user_id` 认出本人；`asks_with_chats` 只给群 / 话题和本人的私聊配聊天，同事私聊不给）；`src/crates/core/src/snapshot.rs`、`lib.rs`（快照 asks 带 `chatId`；新请求 `hermes_chat_target` 只放行面板列出的聊天）；`src/crates/runtime/src/lib.rs`（`open_feishu_chat`）；`src/crates/platform/src/navigation.rs`（`feishu-chat` → `https://applink.feishu.cn/client/chat/open?openChatId=…`）；前端 `protocol`、`dev-bridge`、`PanelContext`（`openFeishuChat`）、`App.tsx`、`HermesBoard.tsx`（提问行整行可点、末尾 20px 箭头框，打开失败变灰；同卡有一行能跳时其余行留位对齐）、`hermes-board.ts`（`askChat`、`askGoTitle`）。测试：transcript、gateway（本人 / 同事私聊、怪 id）、快照与放行、外壳链接、前端各补一条。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 751 passed / 0 failed，前端 `ℹ pass 310` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`（对齐修改后重跑的结果）。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/`（`check-2.log`、`test-2.log`、`node-test-2.log`、`build.log`）。
+- 验证：真实组件自查页（`HermesBoard` 原样，深浅两种底，数据仿本机：本人私聊、群、同事私聊、猛鬼兽定时任务下的提问），内置浏览器等字体加载完后真实点击：点箭头送出 `oc_aa3_mine`、点群那行标题送出 `oc_08a_group`、点同事私聊那行无反应、模拟打开失败后箭头变灰并改提示「飞书没能打开这个聊天」。第一轮发现同事那行时间没对齐，改成留位后放大复查对齐。装机后用 MCP 读实机快照（16:37:32）：猛鬼兽 3 条私聊、亚古兽私聊与 2 条群都带 `chatId`。自查页备份在证据目录 `check-page/`，不进仓库。**未验证**：实机侧栏里点箭头、飞书是否打开到对的聊天（悬停面板电脑控制点不动，L-09；本轮请求看飞书窗口被常浩拒绝），留给常浩点一次群、一次私聊。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/`：`before-align.jpg`（第一轮，同事行时间偏右）、`after-clicks.jpg`、`after-align-zoom.png`。
+- 发布与回读：`install.sh 196-hermes-jump`：装前 `c9f2c7a3fb42`（#194 那版，已备份），16:37:21 退出并启动，产物 `de58129a128f` / 已装 `de58129a128f`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；`install.sh check` 一致。包从本分支打（基于 main `b8e2a81`，之后 main 无新提交）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-196-hermes-jump/PostPane-c9f2c7a3fb42.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 话题群只能跳到群，跳不到具体话题（`thread_id` 目前都为空，飞书也没有稳定的话题链接）。
+  - 群里不判断常浩是否在群：机器人所在的同事群如果常浩不在，飞书会提示无权限。
+  - 「正在进行」和回执里的 Hermes 会话仍没有跳转（它们走 `open_session`，Hermes 没有 `session_target`），本轮未做。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 接力卡：审满轮数后不再显示「继续自动」；等待行时间顺序（2026-11-07，Claude，常浩截图问「点继续自动毫无反应」，看排查后说「先改之前的问题」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 15:00`（`date '+%F %H:%M'` 记录）。来由：#194。数字分身 DT-ORC 接力卡（`h1a1b344630400`）「第 2 / 2 轮」，点「继续自动」没反应：后台其实记下了（14:53:08 `resume`），但这单已审满 `ROUNDS` 轮、停在「转回 Claude」阶段，打开自动往返没有任何效果，卡上也不说明（L-21）。这单的 PR #63 早已合并，Claude 13:51 回过「不用再做事」。
+- 改了哪些文件：`src/packages/hud/src/alerts/handoff-card.ts`（`actions()` 只在 `reviews < ROUNDS` 时给「继续自动」；刚打开自动往返的那一行写明在等什么；阶段开始后有更晚步骤时，等待行不显示较早时刻，改写「HH:MM 起 · 已 X」）；`src/crates/host/src/handoff.rs`（`act("resume")` 已审满时拒绝并说明，新增 `no_rounds_left()`）；`src/packages/hud/test/handoff-card.test.ts`（新增 2 条，改 1 处期望；修复前 3 处失败）；`handoff.rs` 测试 `the_auto_round_trip_stops_at_the_last_round_or_without_a_verdict` 末段（修复前 `left: None`）；`docs/LESSONS.md` 新增 L-21。轮数仍按 `ROUNDS` 判断，不写死 2。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 748 passed / 0 failed，前端 `ℹ pass 309` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`（`check.log`、`test.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`HandoffCard` 原样，470 宽，接力信纸），喂本机 DT-ORC 真实记录和两个第 1 轮变体，内置浏览器等字体加载完截图、放大核对两轮：真实记录底部只剩「结束接力」「查看 ChatGPT 对话」，时间读作 08:06 → 13:48 → 14:53 → 14:55，等待行写「13:48 起 · 已 1 小时」；第 1 轮暂停仍有「继续自动」；第 1 轮打开后写「等 Claude 改完送审，回信需修改就自动转回」、按钮变「暂停自动」。自查页备份在 `evidence/2026-11-07-194-resume-limit/check-page/`，不进仓库。**未验证**：实机侧栏里这张卡（悬停面板按钮电脑控制点不动，L-09，留给常浩看）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/`：`after-three-cards.jpg`、`after-real-bottom.png`、`after-r1-paused.png`、`after-r1-resumed.png`。
+- 发布与回读：`install.sh 194-resume-limit`：装前 `0612183039f6`（#191 那版，已备份），15:08:57 退出并启动，产物 `c9f2c7a3fb42` / 已装 `c9f2c7a3fb42`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；装时没有开着的自动往返；`install.sh check` 一致。包从本分支打（基于 main `5aaf8dd`，之后 main 无新提交）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-194-resume-limit/PostPane-0612183039f6.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - DT-ORC 这张卡是旧单，要常浩点「结束接力」收掉。
+  - PR #177（#175）也改 `handoffs.rs` / `handoff-card.ts`，已有冲突，与本轮改的不是同一处，未动。
+  - 常浩下一步要讨论：把审核过程重新梳理成审核 skill，由它决定跑几轮，替代固定 2 轮。本轮未做。
+- 本轮新坑：L-21
+- skill 进化：无。
+
+## 已停会话的签到记录留 7 天（2026-11-07，Claude，常浩在 #189 收尾时点「改成 7 天」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
+
+- 时间：开工 `2026-11-07 14:30`（`date '+%F %H:%M'` 记录）。来由：#191。#189 之后，`sweep` 仍把超过一天的签到文件全删，停了一天以上的会话又显示「没加载插件，执行 /reload-plugins」。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（`sweep`：标了 `ended` 的签到文件留 7 天，其余仍一天）；`claude_plugin/tests.rs` 新增 `an_ended_session_is_remembered_for_a_week`（修复前在「kept past a day」处失败）；`docs/LESSONS.md` L-20 升级一行补上。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 748 passed / 0 failed，前端 `ℹ pass 307` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`（以上为变基到含 #192 的 main 后重跑结果）。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-191-ended-week/*-rebased.log`。
+- 验证：单测覆盖 2 天（已停的留、普通的删）与 8 天（已停的也删）。
+- 截图：无。
+- 发布与回读：合并为 `47623e1`，从同树分支（含 #192）打包，`install.sh 191-ended-week`：装前 `eb4bbc557f00`（#192 会话装的，已备份），14:44:11 退出、14:44:12 启动，产物 `0612183039f6` / 已装 `0612183039f6`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-191-ended-week/PostPane-eb4bbc557f00.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：装前已被删掉的记录找不回来，11-04 那 2 张提问卡（会话 `35984513…`、`3182ae78…`）仍显示旧提示，要在侧栏手动拿掉。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 侧栏 11-07 改动实机点验第一批；刘海形态下接力框的签不再被虚线划穿（2026-11-07，Claude，常浩看分批计划后点「按计划开始」，看点验结论后点「现在修」；PR #192 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 14:26`（`date '+%F %H:%M'` 记录，修 #190 那段；点验从 14:17 起）。来由：[【交接】驿窗侧栏｜回复卡与接力章实机点验] 会话，把 #180、#182、#183、#186 在实机上逐项点验。
+- 点验结果（第一批，只读）：
+  - 现装核对：开工时现装 `e0596c0c2a2d`（#187 那版，与 main `68ea84b` 同内容，含今天四个 PR），`install.sh check` 一致。
+  - 接力虚线框（#186）：真实组件自查页三种底色截图。深色、浅色纸面对；刘海形态（无纸面，`usePaper()` 为空）下签底色 `transparent`，虚线从字中间穿过，「接力」「需修改」退成白色 → 开 #190 修掉（见下）。纸面上签的纯色底在纸纹上显出一块略深的矩形，一并修掉。常浩现在用动态形态，回复卡印在纸面上，原本看不到刘海这个问题。
+  - 实机侧栏 14:18 截图：Claude 格挂「回」，ChatGPT 格挂红色「未审」（批 C 那单 `h1a1b1fed89e00`）。
+  - **未验证，等常浩亲手点（L-09）**：点「未审」是否打开那个 ChatGPT 对话；↗ 悬停变亮、按下下沉；两条以上待审批时停在展开卡上回答一条是否直接接下一条；dt-sandbox 两单回复在实机上的虚线框样子。
+- 改了哪些文件（#190 / PR #192）：`hud/src/alerts/CompletionAlertView.tsx`（`RelayFrame` 用 SVG mask 在签的位置给框线留缺口，宽度按签实测、`ResizeObserver` 跟随；签不再铺底色；颜色走 `relayLegendInks`）；`hud/src/alerts/handoff-card.ts` 新增 `relayLegendInks`（无纸面时用同外观纸面的蓝 / 红）；`hud/test/handoff-card.test.ts` 新增 1 条（先红：没有该导出；后绿）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 747 passed / 0 failed，前端 `ℹ pass 307` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/`（`check.log`、`test.log`、`node-test.log`、`build.log`）。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽，深色纸 / 浅色纸 / 刘海黑底各一张，两单接力 + 一单普通回复），内置浏览器等字体加载完截图，放大到签对照两轮：缺口两端距字约 6px，三种底色下框线都不压字，刘海下「接力」蓝、「需修改」红。自查页备份在 `evidence/2026-11-07-sidebar-spot-check/reply-check-page/`，用后已删。**未验证**：实机刘海形态（常浩没在用，没有切形态去看）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/`：`before-notch.jpg`、`after-notch.jpg`、`after-notch-x5.jpg`、`after-dark.jpg`、`after-light.jpg`；点验截图在 `evidence/2026-11-07-sidebar-spot-check/`（`three-modes.jpg`、`hud-real-1418.png` 等）。
+- 发布与回读：`install.sh notch-legend`：装前 `64e4138de2f3`（#189 那版，已备份），14:40:19 退出并启动，产物 `eb4bbc557f00` / 已装 `eb4bbc557f00`，签名 leaf `H"b773068e"`；tccd 无文稿权限请求；装时没有开着的自动往返。包从与 main `2969c84` 同代码的分支打（之后 main 只多了交接文档）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-notch-legend/PostPane-64e4138de2f3.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 顺序：这次先合并 PR 再写本节交接，和 postpane-round「写好交接再合并」不一致；交接内容没有缺项。
+  - 范围外：dt-sandbox 两单（`h1a1b486b8d801`、`h1a1b48f66f200`）「转回 Claude 失败两次」：发起会话是一次性代发会话（只调用一次 `relay_to_chatgpt` 就结束，各约 20 秒），回信时没人接；当时提示「还没加载插件，/reload-plugins」与实情不符。#189 之后已停会话改提示「已经停了」，代发会话正常结束时是否也写 `ended`，未核实。relay 工具回给代发会话的话仍承诺「自动转回这个会话」。排查记录 `evidence/2026-11-07-sidebar-spot-check/dt-sandbox-auto-back-fail.md`。未改。
+  - 挂「回」的各单（左滑复审第 2 轮、GitHub 快速中心 #3、数字分身 DT-ORC、管培生 #1、dt-sandbox 两单）没动，等常浩定。
+- 本轮新坑：无
+- skill 进化：无。
+
+## 审批卡：Claude 重启后停掉的会话不再误报「没加载插件」（2026-11-07，Claude，常浩看排查结论后点「改，在这里做」；PR 全量通过，按授权 squash 合并；装机见「发布与回读」）
+
+- 时间：开工 `2026-11-07 14:17`（`date '+%F %H:%M'` 记录）。来由：#188，常浩截图问数字分身会话的提问卡为什么说「没加载插件」。查到 14:12 Claude 桌面应用重启，约 50 个会话同一秒被插件写成 `ended`，这个会话其实加载过插件（L-20）。
+- 改了哪些文件：`src/crates/platform/src/claude_plugin/mod.rs`（`ClaudeChannel::ended` 新增；`unreachable()` 先判断会话已停，提示「这个会话已经停了（Claude 重启或关掉过它）。在 Claude 里打开这个会话，就能在 Agent HUD 里回答。」，不给 `/reload-plugins` 修复动作）；`claude_plugin/tests.rs`（`an_unreached_session_names_the_step_that_lets_the_hud_answer` 加 ended 一段，修复前在 `fix` 处失败：`Some(ReloadPlugins)` ≠ `None`）；`docs/LESSONS.md` 新增 L-20。前端没改：`fix` 为空时卡片原样显示提示文字（与「被暂停」一样）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 747 passed / 0 failed，前端 `ℹ pass 306` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/`。
+- 验证：单测覆盖 ended 刚写与一小时前两种；实机卡片文案未单独截图。
+- 截图：无。
+- 发布与回读：从与 main `2969c84` 同树的分支打包，`install.sh 188-ended-session`：装前 `e0596c0c2a2d`（已备份），14:28:06 退出并启动，产物 `64e4138de2f3` / 已装 `64e4138de2f3`，签名 leaf `H"b773068e"`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-188-ended-session/PostPane-e0596c0c2a2d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装后数字分身会话 14:28:17 重新签到（常浩在 Claude 里打开了它），那张卡已不在待审批列表。
+- 与授权不一致之处、遗留问题、范围外发现：签到文件超过一天会被 `sweep` 删掉，所以停了一天以上的会话又会退回「没加载插件」的提示；装后待审批里还剩 2 张 11-04 的提问（会话 `35984513…`、`3182ae78…`），都没有签到文件，显示的仍是旧提示，要不要把 ended 记录留得更久未定。#175（会话被桌面版停掉时后台续接）与本题相邻，本轮只改提示，不续接。
+- 本轮新坑：L-20
+- skill 进化：无。
+
+## 驿窗一轮采纳 E-09：同一会话接着做下一张可复用刚合并的 worktree（2026-11-07，Claude，常浩经驿窗侧栏回复「批 E-09」；已提交，无需发布）
+
+- 时间：开工 `2026-11-07 09:27`（`date '+%F %H:%M'` 记录）。来由：#178；E-09 由 #168 的会话提出。动手前核实 main 上 E-09 仍是待批、skill 目录自 `7733bc4` 起没被别处改过、没有别的 PR 在改它。
+- 改了哪些文件：`.agents/skills/postpane-round/SKILL.md`（第 1 步加一条：上一张已合并、原 worktree 干净时可在原地 `git switch -c claude/<号>-<短名> origin/main`，别的会话在用的不碰，并行仍各开各的）；`steps.json`（start 痕迹加 `git switch -c claude/`）；`EVOLUTION.md`（E-09 改为已采纳，记批准来源与落地差异：`main` 写成 `origin/main`、加「干净」判据）。
+- 测试：`node --test tests/*.test.mjs` 原样结果 `ℹ pass 14` / `ℹ fail 0`。未跑 `pnpm run check` / `pnpm test`：只改 skill 文档与 `steps.json`，没碰 `src/` 与脚本。
+- 验证：读回第 1 步全文确认新条目位置与命令；无界面改动。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：批准经 agent-hud 插件转进本会话，按 AGENTS.md 先核实了 E-09 的现状再改。开 issue 时号是 #178，worktree 先按预估的 177 建，已改名为 `178-round-e09`、分支 `claude/178-round-e09`。
+- 本轮新坑：无。
+- skill 进化：E-09 已采纳；当前没有待批条目。
+
+## 回复卡：接力单套航空虚线框，去掉重复的「回到会话」（2026-11-07，Claude，常浩看三轮预览后定「甲 · 航空虚线框」；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 13:35`（`date '+%F %H:%M'` 记录）。来由：常浩说展开那条里的白色「回到会话」和标题行 ↗ 重复，要删；接力单和普通回复混在一起分不出来，要围绕「会话框」本身做区分。预览 https://claude.ai/artifact/GP6JQSmbiUxtFhmoUMm2hQ 第 4 版甲；前两轮（整张换纸、只加斜纹线）被否，理由见记忆 postpane-relay-card-distinct。
+- 改了哪些文件：`hud/src/alerts/CompletionAlertView.tsx`（属于接力的回复整单套红蓝交替虚线框、极淡蓝底，框上左上角嵌签「接力 · Claude ⇄ ChatGPT · 第 n / 2 轮 · 结论」；送审纸条上的不套；展开后只剩「查看接力」，白色「回到会话」删掉，普通回复展开后没有按钮）；`hud/src/alerts/handoff-card.ts` 新增 `relayLegend`；`hud/src/paper.ts` 导出 `AIRMAIL_RED` / `AIRMAIL_BLUE`；测试 `handoff-card.test.ts` 新增 1 条（先红后绿）。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 744 passed / 0 failed，前端 `ℹ pass 306` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-relay-entry-frame/`。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽深色纸，两单接力数据）截图：框、签、「需修改」、只剩「查看接力」都对；自查页备份在证据目录 `reply-check-page/` 后删掉。**未验证**：实机里有接力回复时的样子，等下一单接力回信时看。
+- 截图：无。
+- 发布与回读：`install.sh relay-entry-frame`：装前 `d70c15d14181`（已备份），13:48:43 退出并启动，产物 `93e2849ddb33` / 已装 `93e2849ddb33`，签名 leaf `H"b773068e"`；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-relay-entry-frame/PostPane-d70c15d14181.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：刘海形态（无纸面）下签没有底色衬，压在框线上，未专门看。
+- skill 进化：无。
+- 本轮新坑：无
+
+## 接力回信不再丢：插件不把空占位块报成答完，宿主记回合日志（2026-11-07，Claude，常浩看分批计划后点「按推荐开工」；查到根因后按证据缩小范围：不做「对账」兜底，只修根因加日志；PR 全量通过，按授权 squash 合并；已装机回读一致；常浩重新加载插件 0.2.1 后实测一单真实接力，回信收到并自动结束）
+
+- 时间：开工 `2026-11-07 12:31`（`date '+%F %H:%M'` 记录）。来由：批 C 那单接力 `h1a1b1fed89e00` ChatGPT 实际回了「结论：通过」，驿窗停在 `delivered`，30 分钟后交还常浩（#182 只让它被看见）。
+- 根因（有证据）：`hooks/inbox` 里这个对话在 01:54:19.827（送达后 1.5 秒）收到一条 `turn complete`，回复为空，messageId `e6c1acb9…`；在 Chrome 打开该对话，真回复的 messageId 也是 `e6c1acb9…`。ChatGPT 先出空占位块，答案随后写进同一个块。插件发完话后采样时没看到停止按钮，就把空块报成答完并记为已报；宿主不收空回复；真回复写进来后，插件因为同一 messageId（且 `expecting` 已清）不再报。整轮没采到停止按钮，所以也没有 `turn start`。详见 L-18。
+- 改了哪些文件：
+  - `src/apps/chrome-extension/content.js`：只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`；空的或还在变的，等下一次变化再采样（5 行）。
+  - `src/apps/chrome-extension/manifest.json`：版本 0.2.0 → 0.2.1，重新加载后宿主 `hello` 能看出是新版。
+  - `src/crates/host/src/handoff.rs`：每条 `turn` 记一行 `<数据目录>/chatgpt/turns.jsonl`（`at`、`conversation`、`phase`、`messageId`、`replyChars`、`outcome`：taken / early / caught-up / unused / evicted），不记原文，超过 1 MB 改名 `turns.old.jsonl`。
+  - 测试：`content.test.mjs` 新增「an empty placeholder is not the reply that fills it later」（修复前报 `[['m5', '']]`，与这次故障一致）和「a reply still being written without a stop button waits until it stops changing」（修复前报出半截「一二三」）；`handoff.rs` 新增 `every_turn_is_logged_with_what_became_of_it_but_not_its_words`。
+  - `docs/chatgpt-channel.md`：页面结构补占位块规则，接力一节补回合日志；`docs/LESSONS.md` 新增 L-18。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 744 passed / 0 failed，前端 `ℹ pass 305` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 10` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。还原 `content.js` 的 prettier 重排后重跑 `pnpm run test:extension` `ℹ pass 10` / `ℹ fail 0`，`format:check`、`check-rules` 通过。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`check.log`、`test.log`、`node-tests.log`、`test-extension-2.log`、`build.log`）。
+- 验证：根因证据同目录 `inbox-completion-empty.json`、`handoff-h1a1b1fed89e00.json`、`dom-probe.md`。实机（补记）：#183 合并、主目录拉取后，常浩在扩展程序页重新加载插件，转接进程 12:51:24 重启；本会话用 `relay_to_chatgpt` 在「驿窗审核」项目新开一单（`h1a1b4592f6f00`，请 ChatGPT 只回「结论：通过」，即这次出事的情形）。`turns.jsonl`：12:51:54 `start` 先 `early` 后 `caught-up`，12:51:58 `complete` messageId `4cee2eaa…`、`replyChars` 5、`taken`，没有空回复那一行；接力 12:51:58 记 `reply`（`pass`），同一秒自动 `end`。证据 `turns-after-fix.jsonl`、`handoff-h1a1b4592f6f00.json`。一单只能说明这条路通了，后台标签页久挂、长回复的情形仍靠 `turns.jsonl` 观察。
+- 截图：无界面改动。
+- 发布与回读：`install.sh chatgpt-reply-lost`：装前 `3888d0dec483`（已备份），12:48:30 退出并启动，产物 `d70c15d14181` / 已装 `d70c15d14181`，签名 leaf `H"b773068e"`；`extension.sock` 12:48 重建，tccd 无文稿权限请求；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/PostPane-3888d0dec483.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划里的「对账」兜底（宿主定时请插件读对话最新回复）没做：根因已有证据并修掉，另两处可疑点（`background.js` 丢弃无会话 id 的 `complete`、原生连接断开时 `post` 静默丢消息）这次没有证据，留给 `turns.jsonl` 观察；再丢一次、日志里没有那一行时再做。
+  - 取舍：只有图片、没有文字的回复不再报 `turn complete`（以前报一条空回执）。
+  - 范围外：`early` 只留 16 条，常浩自己聊天的回合也会存进去、一直不清（现在日志里记成 `early` / `evicted`），短时间内不会挤掉接力的回合，未改。
+- skill 进化：无。
+- 本轮新坑：L-18
+
+## 回复卡「全部知道了」移到头部；按钮有按下反馈；接力章改成「审 / 未审 / 回」按实际状态（2026-11-07，Claude，常浩看预览后说「把蓝色标识删掉，上面放一个全部知道了就可以」，章的规则在提问里选定：「审」停掉或交还就撤、30 分钟没回信改「未审」可点去 ChatGPT，「回」通过即结束、需修改留章；PR 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 11:15`（`date '+%F %H:%M'` 记录）。来由：常浩三条反馈：回复卡里「全部知道了」作用于整张却放在单条里；条目右上 ↗ 悬停、按下都没反应；「回」「审」一直挂着，分不清接力结束没有。预览 https://claude.ai/artifact/URiwPVoodUWGH1rPgKtVR2 第 2 版。
+- 改了哪些文件：
+  - `hud/src/alerts/CompletionAlertView.tsx`、`permissions/ListCard.tsx`：`ListHead` 加 `action`，回复卡把「全部知道了」（只有 1 条时写「知道了」）放到头部数量签左边；单条只留「查看接力」「回到会话」，靠右。
+  - `ui/src/global.css` 新增 `.hud-go-button`（↗：悬停描边与图标变亮、浅底；按下下沉缩小）、`.hud-press`（回复卡文字按钮：悬停提亮、按下下沉）；减少动效时不动。
+  - `hud/src/relay-stamps.ts`、`model.ts`、`scene/HUDMarkStrip.tsx`、`scene/RelayStamps.tsx`：「审」只在接力开着、`delivered` / `working`、没有 `halt`、送达不到 30 分钟时盖；送达超过 30 分钟没回信（停没停都算）盖红色「未审」，点 ChatGPT 那一格直接打开那个 ChatGPT 对话；票根缓存到 30 分钟点自动刷新。
+  - `platform/.../chatgpt/handoffs.rs` `next()`：判「通过」不论自动往返开没开都结束；`host/src/handoff.rs` 驿窗启动时结束已判通过、没人驱动的接力。
+  - 测试：`relay-stamps.test.ts` 新增 1 条并给旧用例固定时钟；Rust 新增 `a_pass_ends_the_handoff_even_with_the_auto_round_trip_off`、`a_review_that_passed_with_nothing_driving_it_ends_when_the_app_starts`。
+  - `docs/chatgpt-channel.md` 写明章的规则与通过即结束；`docs/LESSONS.md` 新增 L-17。
+- 测试：`pnpm run check` exit 0；`pnpm test` exit 0：Rust 合计 743 passed / 0 failed，前端 `ℹ pass 305` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展 `ℹ pass 8` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。中途一轮 Grok 计时测试失败（L-17，负载 64–71），负载降下后全量通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all/`（`check-3.log`、`test-3.log`、`node-test-3.log`）。
+- 验证：真实组件自查页（`CompletionAlertView` 原样，470 宽深色纸）：3 条时头部「全部知道了」、点后全部收掉，1 条时写「知道了」，单条只剩右侧按钮；↗ 悬停实测变亮（计算样式与放大截图），按下的 `:active` 规则已生效但截不到那一瞬。侧栏自查页（`HUDScene` 原样）放大看「未审」章。实机：装机后 `get_hud_screenshot` 侧栏 ChatGPT 票根是红色「未审」（批 C 那单），Claude 票根仍有「回」（3 单需修改待处理）；my-skills #16、数码世界 #60 两单已自动结束（`closed` / `ended`）。**未验证**：实机点「未审」跳转、↗ 按下手感，要常浩亲手点（L-09）。自查页已备份到证据目录 `reply-check-page/`、`stub-check-page/` 后删掉。
+- 截图：无（实机截图在本会话里看过，未落盘）。
+- 发布与回读：`install.sh reply-dismiss-all-2`：装前 `324a033ce9cc`（本轮第一次装的，已备份），12:15:46 退出并启动，产物 `3888d0dec483` / 已装 `3888d0dec483`，签名 leaf `H"b773068e"`；装时没有开着的自动往返。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all-2/PostPane-324a033ce9cc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - **ChatGPT 回信没收到（bug，未修）**：批 C 那单（`h1a1b1fed89e00`，对话 `6aee1442-…`，在「驿窗审核」项目里）ChatGPT 实际回了「结论：通过」，驿窗却连「开始回答」都没收到，停在「已送达」。插件代码里项目路径 `/g/…/c/<id>` 是认的；可疑点：新对话地址出现前就答完时完成事件带不上会话 id 被丢、原生连接断开时 `post` 静默丢消息。当时没有插件到宿主的日志，定位不了，建议另开会话先加回合日志再等复现。
+  - 「需修改」交还常浩的 3 单（左滑复审第 2 轮、GitHub 快速中心 #3、数字分身 DT-ORC）仍挂「回」，按常浩选定的规则要在卡上点「结束接力」或转回 Claude 才撤。
+  - 已装这版不含 #177（尚未合并），#181 那节「#177 合并后统一装机」仍有效。
+- skill 进化：无。
+- 本轮新坑：L-17
+
+## 待审批展开卡回答一条后不再收成小签，鼠标在面板上可连续处理（2026-11-07，Claude，常浩反映「处理完一个就弹回小卡、剩下的得再点」请修复，看过方案后说「现在装」；PR #180 全量通过，按授权 squash 合并；已装机回读一致）
+
+- 时间：开工 `2026-11-07 09:31`（`date '+%F %H:%M'` 记录）。来由：常浩截图，在待审批展开卡里回答 / 选一项后，面板收成小签，下一条要再点小签展开。
+- 改了哪些文件：`src/packages/hud/src/alerts/news-lanes.ts`（新增 `liveQueue`：读队首前去掉已不在等的请求，队首被去掉时把等得最久的请求提前；`promoteOldestWaiting` 从 `IslandNews.tsx` 挪来共用）；`src/packages/hud/src/IslandNews.tsx`（`current`、各家小签、返回的 `queue` 都用 `liveQueue` 的结果）；`src/packages/hud/test/news-lanes.test.ts`（两条用例）；`docs/LESSONS.md` 新增 L-16。
+- 根因：回答后快照先去掉那条审批，`useIslandNews` 的队列要到下一次 effect 才跟上；中间那一帧队首还是已回答的请求，`request` 读成空，`useHUDInteraction` 当成「最后一条提醒处理完」（closeAfterLastAlert）：收起面板并压住悬停；下一帧新请求到队首时面板已关，只出小签，鼠标还在也不会再自动展开。
+- 测试：新用例先红（`does not provide an export named 'liveQueue'`）后绿。变基到含 #181 的 main（`2fe2329`）后重跑：`pnpm run check` exit 0；`pnpm test` Rust 合计 741 passed / 0 failed，前端 `ℹ pass 304` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，DeepSeek 插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 扩展第一次 `ℹ pass 0` / `ℹ fail 8`（L-16，Playwright 浏览器缓存被本机清掉），补装后 `pnpm run test:extension` `ℹ pass 8` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 14` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/`（`check-2.log`、`test-2.log`、`test-extension-3.log`、`node-test-2.log`）。
+- 验证：只有单测和代码推演，**实机未验证**：侧栏面板里的「提交」电脑控制点不动（L-09），要常浩下次有两条以上待审批时亲手点一次——鼠标停在展开卡上回答一条，应直接显示下一条；移开后照收起延时缩回小签；全部答完照旧收起。
+- 截图：无。
+- 发布与回读：从 `2fe2329`（含 #181）+ 本修复打包，`install.sh expanded-card-stays`：装前 `bd108f283650`（已备份），10:55:53 退出、10:55:54 启动，产物 `480e26fab1d2` / 已装 `480e26fab1d2`，签名 leaf `H"b773068e"`，`install.sh check` 复核一致；`log show` 里 tccd 没有对驿窗的文稿权限请求。之后 main 只多了 CURRENT.md 两次提交，代码与已装一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-07-expanded-card-stays/PostPane-bd108f283650.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 装机时管培生 #1 后端审核那单接力（`h1a1b3a224a200`）开着自动往返、09:37 「需修改」转回 Claude 后在改；常浩说「现在装」后装机，10:55:55 记 `stop`、`auto` 已关，要常浩在卡上点「继续自动」。
+  - 已装这版含 #181 代码，不含 #177（尚未合并）。上一节「#177、#180 合并后由最后合并的会话统一装、再把等待回答改成一直等」仍有效：#177 合并的会话照做；本会话没改 `approvalWaitMinutes`。
+  - 范围外：`~/Library/Caches/ms-playwright/` 被本机别的清理删掉，没查是哪个程序（L-16）。
+- skill 进化：无。
+- 本轮新坑：L-16
+
+## 侧栏读数固定每周、审批重启后重挂与「一直等」（2026-11-07，Claude，常浩反映「数字成了 5 小时」「真实任务的审批侧栏没弹」，请深度自检修复；四项方案常浩逐项选定；PR #181 全量通过，按授权 squash 合并 `2fe2329`；随 #180 装机，实机回读通过）
 
 - 时间：开工 `2026-11-07 08:44`（`date '+%F %H:%M'` 记录）。来由：#174。
 - 根因（排查证据见 L-15 与 #174）：
@@ -20,13 +517,17 @@
   - 新增 `hooks::transport::tests` 3 条（重启后重挂并能批准、主动结束只回一次 `{}`、一直等不过期），把重挂关掉时第 1 条失败、已还原；前端 `quota-rows`、`held-reading` 各 1 条；Rust `a_mark_leads_with_its_weekly_window_however_full_the_5_hours_are`。
   - `pnpm run check` 退出 0。`pnpm test` 第一次退出 101（我新写的 Rust 测试 `json!` 写法编译不过），改后重跑退出 0：Rust 合计 741 passed / 0 failed；`ℹ pass 302` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 8` / `ℹ fail 0`。
   - `node --test tests/*.test.mjs`（变基到含 #176、#179 的 main 后）`ℹ pass 14` / `ℹ fail 0`。日志 `evidence/2026-11-07-weekly-approvals/check-2.log`、`test-2.log`、`node-test.log`。
-- 验证：只有单测与端到端测试（真起钩子服务、模拟重装）；实机未验证。
+- 验证：单测与端到端测试（真起钩子服务、模拟重装）。实机（11:37–11:44，现装 `480e26fab1d2`，即 #180 会话 10:55 从含 #181 的提交打包装机）：
+  - 读数：采样表里 Claude 5 小时 36%、每周 10%，侧栏 Claude 票根 10%；Codex 5 小时 36%、每周 21%，票根 21%（旧规则两家都会是 36%）。
+  - 审批重挂：用 `PostPane --permission-hook claude` 喂一条测试审批（会话 `postpane-174-selftest`，命令 `echo`），驿窗收到（`hook:claude:…:15`）；11:43:20 退出驿窗，钩子进程没退；11:43:22 启动，11:43:25 新驿窗里同一条重新挂上（`hook:claude:…:1`）；常浩在侧栏点了允许，钩子 11:44:16 拿到 `{"hookSpecificOutput":{"decision":{"behavior":"allow"},…}}` 退出。
+  - 「一直等」：驿窗退出时把 `settings.json` 的 `approvalWaitMinutes` 改为 `0`，重启后快照 `settings.approvalWaitMinutes` 为 `0`。改前备份与钩子输出在 `evidence/2026-11-07-weekly-approvals/real/`。
 - 截图：无。
-- 发布与回读：未装机。产物 `.claude/worktrees/174-weekly-approvals/target/release/bundle/macos/PostPane.app`（与 main `2fe2329` 同码，打包早于变基进来的两个纯文档提交）。暂缓原因：已装的是 `bd108f283650`，即另一会话 09:19 装的未合并 PR #177（接力自动转回续接）实测版；PR #180（展开卡连续处理）10:37 也已打包。直接装会冲掉 #177 的实测。装机时要同时把本机「等待回答」设为「一直等」（`settings.json` 的 `approvalWaitMinutes: 0`，在驿窗退出时改，或装后在设置页选）。
+- 发布与回读：本会话没有单独装机；#180 会话 10:55 装的 `480e26fab1d2` 已含本修复（其分支含 `2fe2329`），常浩选「等合并后统一装」后发现已装上。#177 那份实测版被 #180 的装机换掉，#177 仍未合并。
 - 与授权不一致之处、遗留问题、范围外发现：
   - Windows 钩子传输（`hooks/windows.rs`）未改。
   - 装机前已在等的审批由旧版钩子进程托着，不会重挂；装上本版之后发起的才有效。
   - #177、#180 合并前要变基到含 #181 的 main，否则它们装机会把本修复冲掉（L-05）。
+  - 常浩 2026-11-07 先定「等合并后统一装」，随后发现 #180 已带着本修复装机，常浩说「你来改」，本会话把「等待回答」改成「一直等」并实机验证（见上）。剩下只有 #177：合并前变基到最新 main 再装，否则会冲掉 #181、#180。
 - skill 进化：无。
 - 本轮新坑：L-15
 

@@ -4,6 +4,7 @@
 // card opens by itself only when something in it needs you.
 import { Fragment, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
+import { toast } from "sonner";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
 import type { Snapshot } from "@agent-hud/protocol";
 import {
@@ -102,8 +103,9 @@ function ClaudeAnswers({
       pending={pending}
       onChange={(value) => {
         setPending(true);
+        // The row has no place for a failure, so it shows as a toast.
         void action("set_setting", { key: "claudeAnswers", value })
-          .catch(() => {})
+          .catch((failure) => toast.error(String(failure)))
           .finally(() => setPending(false));
       }}
     />

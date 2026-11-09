@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  askChat,
+  askGoTitle,
   askLimit,
   askWhen,
   cadence,
@@ -163,10 +165,27 @@ test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
   assert.equal(rows[0].title, "日报（新结构·并跑）");
 });
 
-test("asks read 私聊 or 群; a desk with tasks shows one ask, without three", () => {
-  assert.equal(chatLabel("dm", "zh"), "私聊");
+test("asks read 私 or 群; a desk with tasks shows one ask, without three", () => {
+  assert.equal(chatLabel("dm", "zh"), "私");
   assert.equal(chatLabel("group", "zh"), "群");
   assert.equal(chatLabel("thread", "zh"), "群");
   assert.equal(askLimit([{}]), 1);
   assert.equal(askLimit([]), 3);
+});
+
+test("an ask opens its Feishu chat only by a chat id Core gave", () => {
+  assert.equal(askChat({ chatId: "oc_08a1_B2" }), "oc_08a1_B2");
+  for (const chatId of [
+    undefined,
+    null,
+    "",
+    "oc_",
+    "ou_08a1",
+    "oc_a&x=1",
+    "oc_a/b",
+    `oc_${"a".repeat(62)}`,
+  ])
+    assert.equal(askChat({ chatId }), null, String(chatId));
+  assert.equal(askGoTitle(false, "zh"), "在飞书打开这个聊天");
+  assert.equal(askGoTitle(true, "zh"), "飞书没能打开这个聊天");
 });

@@ -40,6 +40,35 @@ export function newestReply(
   return newestFirst(entries)[0];
 }
 
+/** The reply the card shows open: the one its row was clicked on while it
+ * waits, else the newest (#220). */
+export function openReplyId(
+  entries: readonly ApprovalEntry[],
+  chosen: string | null,
+): string | undefined {
+  return chosen && entries.some((entry) => entry.id === chosen)
+    ? chosen
+    : newestReply(entries)?.id;
+}
+
+/** What going back to a reply's session puts away: every reply waiting from
+ * that session (#220). */
+export function sessionReplies(
+  entries: readonly ApprovalEntry[],
+  entry: ApprovalEntry,
+): string[] {
+  if (entry.kind !== "reply" || !entry.event.sessionId) return [entry.id];
+  const { source, sessionId } = entry.event;
+  return entries
+    .filter(
+      (each) =>
+        each.kind === "reply" &&
+        each.event.source === source &&
+        each.event.sessionId === sessionId,
+    )
+    .map((each) => each.id);
+}
+
 /** The card's list: newest first, grouped by sidebar section as the waiting
  * list is, the newest open; the owner's own ChatGPT chats under their own
  * heading (#145). */

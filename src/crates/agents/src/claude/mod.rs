@@ -7,6 +7,7 @@ pub mod plans;
 pub mod process;
 pub mod routes;
 pub mod transcript;
+mod usage_record;
 
 use crate::Discovery;
 use crate::{Agent, Replies};

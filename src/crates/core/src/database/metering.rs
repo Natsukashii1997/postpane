@@ -184,33 +184,11 @@ pub(crate) fn rebuild(db: &Connection, path: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Token history is kept 30 days; rows outlive that by the day that crosses
-/// it (agent-hud-native-open `UsageLedger.retention`).
-pub(crate) const RETENTION_MS: i64 = 31 * 86_400_000;
-
-/// The oldest time a row may have at `now`, aligned to a bucket so no bucket
-/// keeps half its events.
-pub(crate) fn retention_cutoff(now: i64) -> i64 {
-    (now - RETENTION_MS).div_euclid(900_000) * 900_000
-}
-
-/// Deletes the usage rows that left the retention window; the number deleted.
-pub(crate) fn expire(db: &Connection, now: i64) -> rusqlite::Result<usize> {
-    let cutoff = retention_cutoff(now);
-    let events = db.execute(
-        "DELETE FROM usage_meter_event WHERE at_ms < ?1",
-        params![cutoff],
-    )?;
-    let buckets = db.execute(
-        "DELETE FROM usage_meter_bucket WHERE at_ms < ?1",
-        params![cutoff],
-    )?;
-    let marks = db.execute(
-        "DELETE FROM usage_meter_mark WHERE at_ms < ?1",
-        params![cutoff],
-    )?;
-    Ok(events + buckets + marks)
-}
+/// The ledger keeps every token it records: usage rows never expire, so
+/// the record reaches as far back as it was kept. Only a log last written
+/// within this window is read, or read again; an older one keeps what it
+/// counted. The meter view loads only this window's buckets.
+pub(crate) const READ_WINDOW_MS: i64 = 31 * 86_400_000;
 
 pub(crate) fn write(
     db: &Connection,
@@ -219,10 +197,8 @@ pub(crate) fn write(
     events: &[Event],
 ) -> rusqlite::Result<bool> {
     let now_ms = Utc::now().timestamp_millis();
-    // Events the next expiry would delete are not written.
-    let cutoff = retention_cutoff(now_ms);
     let mut changed = false;
-    for event in events.iter().filter(|event| event.at >= cutoff) {
+    for event in events {
         let old = {
             let mut s = db.prepare_cached(
                 "SELECT model,at_ms,input,output,cache_read,cache_write,reasoning,context_window,tools,duration_ms FROM usage_meter_event WHERE contribution=?1 AND event_key=?2",
@@ -421,8 +397,7 @@ pub(crate) fn list_cost(db: &Connection, path: &str) -> rusqlite::Result<Option<
 }
 
 /// Keeps the largest prompt each model was seen with, which tells its context
-/// window where no log states it (agent-hud-native-open `model_context`). It is kept
-/// past the usage retention.
+/// window where no log states it (agent-hud-native-open `model_context`).
 fn note_context(db: &Connection, source: &str, model: &str, prompt: u64) -> rusqlite::Result<()> {
     if prompt == 0 || model.is_empty() {
         return Ok(());
@@ -450,14 +425,13 @@ pub(crate) fn largest_context(
 
 /// Records where a log's turns start and where its client compacted the
 /// conversation; marks already recorded stay as they are, so a line read
-/// again adds nothing. Marks the next expiry would delete are not written.
+/// again adds nothing.
 pub(crate) fn write_marks(db: &Connection, path: &str, marks: &[Mark]) -> rusqlite::Result<bool> {
-    let cutoff = retention_cutoff(Utc::now().timestamp_millis());
     let mut statement = db.prepare_cached(
         "INSERT OR IGNORE INTO usage_meter_mark(contribution,at_ms,kind) VALUES(?1,?2,?3)",
     )?;
     let mut changed = false;
-    for mark in marks.iter().filter(|mark| mark.at >= cutoff) {
+    for mark in marks {
         changed |= statement.execute(params![path, mark.at, mark.kind as i64])? > 0;
     }
     Ok(changed)
@@ -1170,11 +1144,14 @@ impl View {
             ..Self::default()
         };
         {
+            // The metrics need the last month at most; the ledger keeps the
+            // months before it for the record.
             let mut s = db.prepare(
                 "SELECT contribution,source,model,at_ms,input,output,cache_read,cache_write,reasoning
-                 FROM usage_meter_bucket JOIN meter_selected USING(contribution)",
+                 FROM usage_meter_bucket JOIN meter_selected USING(contribution)
+                 WHERE at_ms>=?1",
             )?;
-            let mut rows = s.query([])?;
+            let mut rows = s.query([now - READ_WINDOW_MS])?;
             while let Some(r) = rows.next()? {
                 let key = view.key(r.get(1)?, r.get(2)?);
                 let row = (key, r.get(3)?, usage(r, 4)?);
@@ -1237,9 +1214,9 @@ impl View {
             {
                 let mut s = db.prepare_cached(
                     "SELECT source,model,at_ms,input,output,cache_read,cache_write,reasoning
-                     FROM usage_meter_bucket WHERE contribution=?1",
+                     FROM usage_meter_bucket WHERE contribution=?1 AND at_ms>=?2",
                 )?;
-                let mut rows = s.query([path])?;
+                let mut rows = s.query(params![path, now - READ_WINDOW_MS])?;
                 while let Some(r) = rows.next()? {
                     let key = self.key(r.get(0)?, r.get(1)?);
                     part.buckets.push((key, r.get(2)?, usage(r, 3)?));
@@ -1964,11 +1941,11 @@ mod retention_tests {
     }
 
     #[test]
-    fn usage_older_than_the_retention_is_not_written_and_expires() {
+    fn usage_of_any_age_is_written_and_kept() {
         let db = Connection::open_in_memory().unwrap();
         crate::database::schema(&db).unwrap();
         let now = Utc::now().timestamp_millis();
-        let old = now - 40 * 86_400_000;
+        let old = now - 400 * 86_400_000;
         write(
             &db,
             "/logs/a.jsonl",
@@ -1978,33 +1955,14 @@ mod retention_tests {
         .unwrap();
         assert_eq!(
             count(&db, "usage_meter_event"),
-            1,
-            "an event past the retention is not written"
+            2,
+            "the ledger keeps a call over a year old"
         );
-
-        // A row written while it was still inside the window leaves at expiry.
-        db.execute(
-            "INSERT INTO usage_meter_event(contribution,event_key,source,model,at_ms,input,output,cache_read,cache_write,reasoning) VALUES('/logs/a.jsonl','kept','claude','m',?1,1,1,0,0,0)",
-            params![old],
-        )
-        .unwrap();
-        db.execute(
-            "INSERT INTO usage_meter_bucket(contribution,source,model,at_ms,input,output,cache_read,cache_write,reasoning) VALUES('/logs/a.jsonl','claude','m',?1,1,1,0,0,0)",
-            params![old.div_euclid(900_000) * 900_000],
-        )
-        .unwrap();
-        assert_eq!(expire(&db, now).unwrap(), 2);
-        assert_eq!(count(&db, "usage_meter_event"), 1);
-        assert_eq!(
-            count(&db, "usage_meter_bucket"),
-            1,
-            "the recent event's bucket stays"
-        );
-        assert_eq!(expire(&db, now).unwrap(), 0);
+        assert_eq!(count(&db, "usage_meter_bucket"), 2);
     }
 
     #[test]
-    fn marks_are_kept_once_and_leave_with_their_log_or_their_time() {
+    fn marks_are_kept_once_and_leave_with_their_log() {
         let db = Connection::open_in_memory().unwrap();
         crate::database::schema(&db).unwrap();
         let now = Utc::now().timestamp_millis();
@@ -2029,24 +1987,21 @@ mod retention_tests {
         );
         assert_eq!(
             count(&db, "usage_meter_mark"),
-            2,
-            "past the retention nothing is written"
+            3,
+            "a mark of any age is kept"
         );
         assert_eq!(
             marks(&db, &["/logs/a.jsonl".into()]).unwrap(),
-            (vec![now - 3_000], vec![now - 2_000])
+            (vec![now - 40 * 86_400_000, now - 3_000], vec![now - 2_000])
         );
         remove_between(&db, "/logs/a.jsonl", now - 2_500, now).unwrap();
-        assert_eq!(count(&db, "usage_meter_mark"), 1);
+        assert_eq!(count(&db, "usage_meter_mark"), 2);
         move_contribution(&db, "/logs/a.jsonl", "/logs/b.jsonl", now).unwrap();
         assert_eq!(
             marks(&db, &["/logs/b.jsonl".into()]).unwrap().0,
-            vec![now - 3_000]
+            vec![now - 40 * 86_400_000, now - 3_000]
         );
         reset(&db, "/logs/b.jsonl").unwrap();
-        assert_eq!(count(&db, "usage_meter_mark"), 0);
-        write_marks(&db, "/logs/c.jsonl", &written[..1]).unwrap();
-        expire(&db, now + 32 * 86_400_000).unwrap();
         assert_eq!(count(&db, "usage_meter_mark"), 0);
     }
 

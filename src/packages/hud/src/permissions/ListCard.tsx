@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { GoButton } from "../GoButton";
 import { HUDArtwork } from "../HUDArtwork";
 import { PAPER_SEAL, type Paper } from "../paper";
 import { dateFormat } from "@agent-hud/ui/format";
@@ -168,32 +168,20 @@ export function EntryRow({
           )
         )}
       </span>
-      <button
-        type="button"
-        aria-label={goTitle}
-        title={goTitle}
-        aria-disabled={!canOpen}
+      <GoButton
+        label={goTitle}
+        enabled={canOpen}
+        inks={{
+          line: inks.line,
+          ink: inks.mid,
+          faint: inks.faint,
+          strong: inks.ink,
+        }}
         onClick={(event) => {
           event.stopPropagation();
           if (canOpen) onOpen();
         }}
-        style={{
-          display: "inline-grid",
-          placeItems: "center",
-          width: 26,
-          height: 26,
-          boxSizing: "border-box",
-          padding: 0,
-          border: `1.5px solid ${inks.line}`,
-          borderRadius: 3,
-          background: "transparent",
-          color: canOpen ? inks.mid : inks.faint,
-          opacity: canOpen ? 1 : 0.6,
-          cursor: canOpen ? "pointer" : "default",
-        }}
-      >
-        <ArrowUpRight size={13} strokeWidth={2} />
-      </button>
+      />
       {model && (
         // The model and its reasoning effort, the same size and faint ink, on
         // one line; the model is cut first.
@@ -260,7 +248,8 @@ export function entryClient(entry: ApprovalEntry) {
 }
 
 /** The card's head: its spaced label, the count tags, and on paper the
- * stamp in the paper's `stampInk` (red for the waiting, blue for replies). */
+ * stamp in the paper's `stampInk` (red for the waiting, blue for replies,
+ * green for a handoff card's 切换, #245). */
 export function ListHead({
   label,
   entries,
@@ -270,15 +259,19 @@ export function ListHead({
   inks,
   light,
   zh,
+  action,
 }: {
   label: string;
   entries: readonly ApprovalEntry[];
   stamp: string;
-  stampInk: "red" | "blue";
+  stampInk: "red" | "blue" | "green";
   paper: Paper | null;
   inks: Inks;
   light: boolean;
   zh: boolean;
+  /** What acts on the whole card, before the count tags (the reply card's
+   * 全部知道了). */
+  action?: ReactNode;
 }) {
   return (
     <div
@@ -310,6 +303,7 @@ export function ListHead({
           overflow: "hidden",
         }}
       >
+        {action}
         {tagCounts(entries).map(({ badge, count }) => (
           <ApprovalTag
             key={badge}

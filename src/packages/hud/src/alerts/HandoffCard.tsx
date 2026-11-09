@@ -1,8 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight } from "lucide-react";
+import { GoButton } from "../GoButton";
 import type { Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { usePanelServices } from "../PanelContext";
+import { failureOf } from "../open-result";
 import { usePaper, paperLevel, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
 import { agentArtwork } from "../agent-artwork";
@@ -127,9 +129,9 @@ export function HandoffCard({
 
   const go = async (session: Session | undefined) => {
     if (!session || !services?.openSession) return;
-    const opened = await services.openSession(session);
-    if (opened === false) {
-      setError(zh ? "无法打开这个会话" : "Couldn't open that session");
+    const reason = failureOf(await services.openSession(session), zh);
+    if (reason) {
+      setError(reason);
       return;
     }
     handover?.();
@@ -269,29 +271,19 @@ export function HandoffCard({
             </>
           )}
         </b>
-        <button
-          type="button"
-          aria-label={zh ? "回到 Claude 会话" : "Return to the Claude session"}
-          title={zh ? "回到 Claude 会话" : "Return to the Claude session"}
-          disabled={!claude}
-          onClick={() => void go(claude)}
-          style={{
-            display: "inline-grid",
-            placeItems: "center",
-            width: 26,
-            height: 26,
-            boxSizing: "border-box",
-            padding: 0,
-            border: `1.5px solid ${inks.line}`,
-            borderRadius: 3,
-            background: "transparent",
-            color: inks.dim,
-            opacity: claude ? 1 : 0.5,
-            cursor: claude ? "pointer" : "default",
+        <GoButton
+          label={zh ? "回到 Claude 会话" : "Return to the Claude session"}
+          enabled={Boolean(claude)}
+          inks={{
+            line: inks.line,
+            ink: inks.dim,
+            faint: inks.faint,
+            strong: inks.ink,
           }}
-        >
-          <ArrowUpRight size={13} strokeWidth={2} />
-        </button>
+          onClick={() => {
+            if (claude) void go(claude);
+          }}
+        />
       </div>
       <div
         style={{
@@ -724,7 +716,11 @@ function Foot({
             )}
             <button
               type="button"
+              // The jump to ChatGPT gives under the pointer as every ↗ does
+              // (#200); global.css.
+              className={action === "open" ? "hud-press" : undefined}
               disabled={busy !== null}
+              aria-disabled={busy !== null}
               title={
                 action === "again"
                   ? zh

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Session } from "@agent-hud/protocol";
 import type { QuotaDisplay } from "@agent-hud/ui/format";
 import {
@@ -10,8 +11,17 @@ import { replyChip } from "../alerts/reply-list";
 import { cardRect, type HUDRect } from "../geometry";
 import type { HUDEdge } from "../model";
 import { paperFace, perforatedSide, perforation, type Paper } from "../paper";
+import { SIDE_TAG_REST_MS } from "./side-tag-stack";
+import { narrowTagSize, tagGap } from "./tag-fold";
 
 const horizontal = (edge: HUDEdge) => edge === "top" || edge === "bottom";
+
+type SideTagPlace = {
+  side: SideNews;
+  rect: HUDRect;
+  narrow: boolean;
+  slip: HUDRect | null;
+};
 
 /** Where each other agent's tag hangs: by its own mark, as the first tag
  * hangs by its sender's (#162). */
@@ -26,6 +36,7 @@ export function sideTagRects(
     zh,
     quotaDisplay,
     sessions,
+    folded = () => null,
   }: {
     screen: { width: number; height: number };
     strip: HUDRect;
@@ -35,11 +46,30 @@ export function sideTagRects(
     zh: boolean;
     quotaDisplay?: QuotaDisplay;
     sessions: readonly Session[];
+    /** A waiting tag past its five seconds: drawn as its narrow slip, or
+     * open whole under the pointer (#243). */
+    folded?: (side: SideNews) => "narrow" | "open" | null;
   },
-): { side: SideNews; rect: HUDRect }[] {
-  return sides.flatMap((side) => {
+): SideTagPlace[] {
+  return sides.flatMap((side): SideTagPlace[] => {
     const center = centers[side.mark];
     if (center == null) return [];
+    const along = (horizontal(edge) ? strip.x : strip.y) + center;
+    const fold = folded(side);
+    // Where its narrow slip stands against the stub.
+    const slip = fold
+      ? cardRect(
+          screen,
+          strip,
+          edge,
+          narrowTagSize(scale, edge),
+          true,
+          along,
+          tagGap(true),
+        )
+      : null;
+    if (fold === "narrow" && slip)
+      return [{ side, rect: slip, narrow: true, slip }];
     const width = compactAlertDockWidth(
       side.request,
       side.event,
@@ -56,9 +86,9 @@ export function sideTagRects(
       edge,
       { width: Math.min(width, screen.width), height: 26 * scale },
       true,
-      (horizontal(edge) ? strip.x : strip.y) + center,
+      along,
     );
-    return [{ side, rect }];
+    return [{ side, rect, narrow: false, slip }];
   });
 }
 
@@ -81,7 +111,7 @@ export function SideTags({
   sessions,
   onFront,
 }: {
-  tags: readonly { side: SideNews; rect: HUDRect }[];
+  tags: readonly { side: SideNews; rect: HUDRect; narrow?: boolean }[];
   edge: HUDEdge;
   scale: number;
   paper: Paper;
@@ -93,13 +123,24 @@ export function SideTags({
   onFront: (id: string) => void;
 }) {
   const punched = perforation(perforatedSide(edge), 10 * scale, 2.1 * scale);
+  // Only a pointer resting on a tag brings its agent forward (#238).
+  const resting = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const stopResting = () => clearTimeout(resting.current);
+  useEffect(() => stopResting, []);
   return (
     <>
-      {tags.map(({ side, rect }) => (
+      {tags.map(({ side, rect, narrow }) => (
         <div
           key={side.vendor}
           className="hud-side-tag"
-          onPointerEnter={() => onFront(side.id)}
+          onPointerEnter={() => {
+            stopResting();
+            resting.current = setTimeout(
+              () => onFront(side.id),
+              SIDE_TAG_REST_MS,
+            );
+          }}
+          onPointerLeave={stopResting}
           style={{
             position: "absolute",
             left: rect.x,
@@ -140,6 +181,8 @@ export function SideTags({
             sessions={sessions}
             onOpen={() => onFront(side.id)}
             onDismissAndStats={() => onFront(side.id)}
+            narrow={narrow}
+            across={horizontal(edge)}
           />
         </div>
       ))}

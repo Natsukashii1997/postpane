@@ -17,7 +17,9 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 - 一张 issue 一个分支，从 `origin/main` 拉，开在独立 worktree：
   `git fetch -q origin && git worktree add .claude/worktrees/<号>-<短名> -b claude/<号>-<短名> origin/main`。
   并行会话不共用目录（G-04）。
+- 同一会话接着做下一张、上一张已合并且原 worktree 干净（`git status --short` 为空）时，可以留在原 worktree 里从最新 main 切新分支，保留构建缓存，省掉一次从头编译：`git fetch -q origin && git switch -c claude/<号>-<短名> origin/main`。目录名对不上新号没关系，合并后照第 5 步清理。别的会话还在用的 worktree 不碰，并行会话仍各开各的（E-09）。
 - 新 worktree 先备环境：`source ~/.cargo/env; export PATH=~/.bun/bin:$PATH; pnpm install; node src/tooling/package-resources.mjs`。不生成资源目录，`cargo test` 一项都跑不起来（L-01）。
+- 并行 worktree 各用自己的构建目录。磁盘不够非共用 `CARGO_TARGET_DIR` 时，每次测试前把本 worktree 的 `.rs`、`Cargo.toml` 修改时间改到未来，并核对 `Compiling` 行是本 worktree 路径、新测试名出现、通过总数 = 基线 + 新增；否则跑的可能是别的 worktree 的代码（L-26、G-23、E-11）。
 - 排障、改脚本、装 launchd 之前，先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑。
 - 驿窗的协作骨架 2026-11-04 已由 `project-starter` 铺好，不再重铺；发现骨架（交接模板、格式测试、`scripts/check-rules.mjs`）本身该改，按 `project-starter` 的「骨架怎么进化」出提案。
 
@@ -25,6 +27,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 
 - 先格式化再测：`cargo fmt --all`，改过的前端文件 `pnpm exec prettier --write <文件>`。不先做，`pnpm run check` 常卡在格式检查（E-07）。
 - 三条全跑：`pnpm run check`、`pnpm test`、`node --test tests/*.test.mjs`。改了任何脚本也跑全量，不只验一条路径（G-03）。
+- 多个 PR 连着合并后，在主目录用 main 自己的构建目录再跑一次三条全量，过了再打包装机（E-11）。
 - 报告时照抄原样结果（通过数、失败数那两行），不改写成「测试通过」（`docs/OPERATIONS.md`「报告与验收」第 3 条）。
 - bun 编译出的程序在 macOS 上要 `codesign --force --sign -` 补签，否则一运行就被杀（L-02）。
 - 云端 Linux 容器里失败，先看是不是缺 GTK / WebKit 库或 Node 不到 24，不是代码问题（L-08）。

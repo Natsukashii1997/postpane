@@ -10,6 +10,7 @@ import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
 import { visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
+import { START_BADGE } from "./permissions/approval-list.ts";
 import { relaysAnswering } from "./relays-answering.ts";
 import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
 import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
@@ -124,6 +125,8 @@ export interface HUDVendor {
   waiting: number;
   /** How many of the `waiting` requests are questions. */
   questions: number;
+  /** How many of the `waiting` requests are handoff cards (#245). */
+  handoffs: number;
   balance: string | null;
   /** What an agent with no window shows on the strip instead: its last 24 hours in tokens (`recentLabel`); its balance stays in the peek and the panel. */
   usage: string | null;
@@ -133,7 +136,7 @@ export interface HUDVendor {
   bots?: NonNullable<Snapshot["hermesBots"]>;
   /** ChatGPT's chats and reviews, which its stub and peek show (#145). */
   desk?: ChatGPTDesk;
-  /** The 「审」 stamp or 「回」 seal relays print on this stub (#171). */
+  /** The 「审」 or 「回」 stamp relays print on this stub (#171, #218). */
   relay?: RelayStamps;
 }
 
@@ -158,7 +161,9 @@ export function vendorsFromSnapshot(
   const cached = byMode?.get(mode);
   if (cached && now >= cached.observedAt && now <= cached.expiresAt)
     return cached.value;
-  const { order: sources, expiresAt } = restingAgents(snapshot, mode, now);
+  const resting = restingAgents(snapshot, mode, now);
+  const sources = resting.order;
+  let expiresAt = resting.expiresAt;
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
@@ -169,6 +174,10 @@ export function vendorsFromSnapshot(
     const balance = quotas.length
       ? undefined
       : snapshot.billing.find((b) => vendorKey(b.vendor) === key);
+    const desk =
+      key === vendorKey("chatgpt") && !quotas.length
+        ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
+        : undefined;
     const relay = relayStamps(
       snapshot,
       key === vendorKey("chatgpt")
@@ -176,11 +185,11 @@ export function vendorsFromSnapshot(
         : key === vendorKey("claude")
           ? "claude"
           : null,
+      now,
+      desk?.pressing,
     );
-    const desk =
-      key === vendorKey("chatgpt") && !quotas.length
-        ? chatgptDesk(snapshot, now, snapshotLanguage(snapshot) === "zh")
-        : undefined;
+    // A review falling overdue changes the stamp with no new snapshot.
+    if (relay?.until != null) expiresAt = Math.min(expiresAt, relay.until);
     const deepseekBalances =
       key === "deepseek" && !quotas.length
         ? snapshot.billing.filter((b) => vendorKey(b.vendor) === key)
@@ -210,6 +219,9 @@ export function vendorsFromSnapshot(
         (a) =>
           vendorKey(a.source) === key &&
           (a.kind === "question" || Boolean(a.questions?.length)),
+      ).length,
+      handoffs: snapshot.approvals.filter(
+        (a) => vendorKey(a.source) === key && a.badge === START_BADGE,
       ).length,
       balance: deepseekBalances.length
         ? deepseekBalances

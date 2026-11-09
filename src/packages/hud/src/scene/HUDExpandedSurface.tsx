@@ -1,4 +1,10 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type {
   Approval,
@@ -12,6 +18,7 @@ import type { ReplyChip } from "../alerts/reply-list";
 import { RequestDeliveryNotice } from "../permissions/ApprovalContent";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
+import { frontTagSwapped } from "./side-tag-stack";
 import {
   HUD_METRICS,
   statusColor,
@@ -69,12 +76,14 @@ export function HUDExpandedSurface({
   request,
   event,
   reply,
+  narrowTag = false,
   requests,
   snapshot,
   forceOpen,
   dismissNews,
   showPanelStats,
   configurePanel,
+  panelFailure,
   surfacePadding,
   eventContent,
   inlineAlert,
@@ -120,12 +129,16 @@ export function HUDExpandedSurface({
   event?: IslandEvent;
   /** The replies waiting, for a reply's folded tag. */
   reply?: ReplyChip;
+  /** The folded tag stands as its narrow slip (#243). */
+  narrowTag?: boolean;
   requests: Approval[];
   snapshot: Snapshot;
   forceOpen: () => void;
   dismissNews: () => void;
   showPanelStats?: () => void;
   configurePanel?: () => void;
+  /** Why Settings or Statistics did not open just now (#220). */
+  panelFailure?: string | null;
   surfacePadding: { top: number; right: number; bottom: number; left: number };
   eventContent: ReactNode;
   /** Quota news atop the open usage panel. */
@@ -161,8 +174,16 @@ export function HUDExpandedSurface({
   }, [atNotchRow, settle]);
   const inNotchRow = atNotchRow && rowSettled;
   const rowLight = inNotchRow ? false : light;
+  // The tag in front handed to another agent stands where that agent's tag
+  // hung; sliding there, it crossed the other tags and the pointer (#238).
+  const tagAgent = !open && (request || event) ? focusedVendor?.key : undefined;
+  const lastTagAgent = useRef(tagAgent);
+  const swapped = frontTagSwapped(lastTagAgent.current, tagAgent);
+  useEffect(() => {
+    lastTagAgent.current = tagAgent;
+  });
   const transition = {
-    duration: reduceMotion || dragging ? 0 : 0.4,
+    duration: reduceMotion || dragging || swapped ? 0 : 0.4,
     ease: HUD_METRICS.ease,
   };
   const from = {
@@ -458,6 +479,8 @@ export function HUDExpandedSurface({
                         paper={paper}
                         reply={reply}
                         sessions={snapshot.sessions}
+                        narrow={narrowTag}
+                        across={edge === "top" || edge === "bottom"}
                         onOpen={() => forceOpen()}
                         onDismissAndStats={() => {
                           dismissNews();
@@ -521,6 +544,7 @@ export function HUDExpandedSurface({
                                   Logo={HUDLogo}
                                   onConfigure={configurePanel}
                                   onStats={showPanelStats}
+                                  openFailure={panelFailure}
                                   inlineAlert={inlineAlert}
                                   maxHeight={Math.max(
                                     40,

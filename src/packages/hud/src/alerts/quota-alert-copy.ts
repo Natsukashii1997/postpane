@@ -335,6 +335,24 @@ export function signInCopy(
   };
 }
 
+/** The strip for an agent that skips PostPane's hooks until they are allowed
+ * in the agent (Codex marks a changed hook `modified`): what that costs and
+ * where to allow them, as the reading says, under a framed red tag. */
+export function hooksReviewCopy(event: IslandEvent, language: Language) {
+  return {
+    who: event.title || "Codex",
+    status: say(language, "没在运行驿窗的钩子", "Not running PostPane's hooks"),
+    /** The framed red tag on the right. */
+    tag: say(language, "未允许", "Not allowed"),
+    /** What it costs: approvals, or only how sessions are doing. */
+    message: event.message?.trim() || null,
+    /** The faint line under it: where to allow them. */
+    step: event.step?.trim() || null,
+    /** The folded tag, in red. */
+    chip: say(language, "钩子未允许", "Hooks not allowed"),
+  };
+}
+
 /** A task's name without its note in brackets, for the folded tag:
  * "周报（新结构·并跑）" → "周报". */
 export const cronShortName = (name: string) =>

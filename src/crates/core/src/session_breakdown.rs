@@ -24,9 +24,10 @@ pub(crate) struct SessionRows(pub(crate) std::sync::Mutex<HashMap<PathBuf, (u64,
 impl SessionRows {
     /// Forgets the sessions no longer listed, so the map follows the logs.
     pub(crate) fn retain(&self, listed: &HashSet<&Path>) {
-        if let Ok(mut rows) = self.0.lock() {
-            rows.retain(|path, _| listed.contains(path.as_path()));
-        }
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|path, _| listed.contains(path.as_path()));
     }
 }
 
@@ -115,17 +116,14 @@ impl<'a> Family<'a> {
     pub(crate) fn descendants(&self, source: &str, id: &str) -> Vec<&'a LogHead> {
         let mut found = Vec::<&LogHead>::new();
         let mut seen = HashSet::<&Path>::new();
-        let mut queue = vec![(source.to_owned(), id.to_owned())];
+        // The names are borrowed, never copied: the Sessions page's day
+        // totals walk every matching session.
+        let mut queue = vec![(source, id)];
         while let Some((source, id)) = queue.pop() {
-            for child in self
-                .children
-                .get(&(source.as_str(), id.as_str()))
-                .into_iter()
-                .flatten()
-            {
+            for child in self.children.get(&(source, id)).into_iter().flatten() {
                 if seen.insert(child.path.as_path()) {
                     found.push(child);
-                    queue.push((child.source.clone(), child.id.clone()));
+                    queue.push((child.source.as_str(), child.id.as_str()));
                 }
             }
         }
@@ -306,9 +304,11 @@ impl AgentHudCore {
             (log.offset, log.length, log.usage.total()).hash(&mut hash);
         }
         let key = hash.finish();
-        let Ok(mut rows) = self.session_rows.0.lock() else {
-            return Value::Null;
-        };
+        let mut rows = self
+            .session_rows
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((kept, value)) = rows.get(&own.path) {
             if *kept == key {
                 return value.clone();
