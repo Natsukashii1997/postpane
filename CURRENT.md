@@ -16,7 +16,7 @@
   - 纸飞机：`messages.rs` 接回 `hud:flight`，互发消息也飞接力那种纸飞机，不盖印章（常浩选甲）；
   - P-13：`AiAccessAgentRows.tsx`（新）、`AiAccessPane.tsx`、`AGENTS.md`「AI 接入」；
   - 其他：`docs/platform-architecture.md`，以及 `file-size-allowlist.json` 和基线。
-- 测试（第二次提交 `69b5333` 后重跑）：
+- 测试：第二次提交 `69b5333` 后重跑。
   - `pnpm run check` 退出码 0；
   - `pnpm test`：Rust 合计 `912 passed; 0 failed`，前端 `ℹ pass 379` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
   - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
