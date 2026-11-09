@@ -371,3 +371,54 @@ fn a_hermes_session_names_the_bot_whose_home_it_was_read_from() {
     presentation.overlay(&mut codex, None, None, &Default::default());
     assert_eq!(codex["bot"], Value::Null);
 }
+
+/// A Claude log mid-turn: the user's prompt, just sent, no answer yet.
+fn turn_in_progress(home: &Path, id: &str) {
+    let at = Utc::now().to_rfc3339();
+    let line = json!({"sessionId":id,"timestamp":at,"type":"user","entrypoint":"cli",
+        "message":{"role":"user","content":"Run a long command"}});
+    let path = home
+        .join(".claude/projects/work")
+        .join(format!("{id}.jsonl"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, line.to_string() + "\n").unwrap();
+}
+fn state(core: &mut AgentHudCore, id: &str) -> Value {
+    let snapshot = core.request("snapshot", json!({})).unwrap();
+    snapshot["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == id)
+        .map(|session| session["state"].clone())
+        .expect("the session is listed")
+}
+
+/// Killed outright mid-turn (#251): its log still says it runs, and Claude
+/// Code's registry names a process that no longer does. Another session, whose
+/// process runs, goes on.
+#[test]
+fn a_session_whose_process_was_killed_is_no_longer_running() {
+    use agent_hud_agents::claude::processes::ClaudeProcesses;
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let mut core = core(home);
+    core.claude_desktop.processes =
+        ClaudeProcesses::with_host(agent_hud_agents::Os::MacOs, |pid, _| pid != 41_107);
+    let (killed, running) = (session_id(), session_id());
+    turn_in_progress(home, &killed);
+    turn_in_progress(home, &running);
+    // Before a process registers, the log has its say.
+    assert_eq!(state(&mut core, &killed), "running");
+    for (id, pid) in [(&killed, 41_107), (&running, 500)] {
+        write(
+            &home.join(format!(".claude/sessions/{pid}.json")),
+            json!({"pid":pid,"sessionId":id,"pidDomain":"darwin","status":"busy"}),
+        );
+    }
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    // The next look reads the registry: the killed session has ended.
+    assert!(core.look(), "a process that went is a change");
+    assert_eq!(state(&mut core, &killed), "idle");
+    assert_eq!(state(&mut core, &running), "running");
+}

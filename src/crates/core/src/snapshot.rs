@@ -62,7 +62,7 @@ impl crate::AgentHudCore {
         }
         // Claude Desktop's archive and tabs are read every pass, as Open does,
         // so archiving a session there needs no log change to show.
-        if self.claude_desktop.index.refresh(&self.provider_roots) {
+        if self.claude_desktop.refresh(&self.provider_roots) {
             self.usage_projection = None;
         }
         if self.usage_projection.is_none() {
