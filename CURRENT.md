@@ -6,6 +6,38 @@
 
 
 
+## 智能体互发消息：移植上游 b1217c3（#278）（2026-11-09，Claude，常浩「直接拿过来代码，不要自己从头开始做」，改动确认选「飞机甲、标题乙」；已提交、已发布 `1aaf637728ae` 回读通过）
+
+- 时间：开工 `2026-11-09 10:33`。来由：常浩要学上游「智能体之间用纸飞机互发消息」，调研报告 `docs/design/智能体互发消息-现状与差距-2026-11-09.md`（`0dc2b5b`）。
+- 改了哪些文件：
+  - 原样搬入上游：`src/crates/messaging/`、`src/crates/platform/src/delivery/`、`claude_plugin/mod.rs` 的 `unwrap_prompt`、`AgentMessagesRow.tsx`（只改了 `Menu` 的导入）；
+  - 手工接线：`host/src/{lib,tools,extension,claude_plugin,messages}.rs`；
+  - 设置：`core/src/{lib,settings}.rs`、`protocol/src/index.ts`；`ToolsSection.tsx` 新增 `MessagesSection`，单独一节「智能体互发消息」，「让智能体调整侧栏」原样不动（常浩选乙）；
+  - 纸飞机：`messages.rs` 接回 `hud:flight`，互发消息也飞接力那种纸飞机，不盖印章（常浩选甲）；
+  - P-13：`AiAccessAgentRows.tsx`（新）、`AiAccessPane.tsx`、`AGENTS.md`「AI 接入」；
+  - 其他：`docs/platform-architecture.md`，以及 `file-size-allowlist.json` 和基线。
+- 测试：第二次提交 `69b5333` 后重跑。
+  - `pnpm run check` 退出码 0；
+  - `pnpm test`：Rust 合计 `912 passed; 0 failed`，前端 `ℹ pass 379` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机，`/Applications/PostPane.app`）：
+  - 设置「智能体插件」页最下面多出单独一节「智能体互发消息」；打开后显示「以我的身份发送 · 注意」（关）和「连续来回上限 10」；`settings.json` 回读 `agentMessages: true`、`agentMessagesAsUser: false`、`agentMessagesLimit: 10`。
+  - 本会话的 agent-hud MCP 约 15 秒内收到 `list_sessions` 等四个工具。`list_sessions` 认出本会话 `self: true`，没装插件的会话标 `reachable: false` 并写明原因。
+  - `send_message` 发给空闲的「撤回 #264」会话：`queued` → `started`（约 18 秒）→ `done`，`get_message` 取回答「收到，互发消息测试通过」。日志只存指纹（`messages-journal.json`）。
+  - 对方会话的 MCP 在开关打开前就已启动，没有 `send_message`，所以按上游的兜底直接作答，由发件方取回。
+  - 未实测：第 11 次被拒、常浩插话后重新计数、关掉开关工具消失。这几项由上游的单元测试覆盖（messaging 55 条）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-278-agent-messages/`，有 `settings-agent-messages-off.jpg`、`settings-agent-messages-on.jpg`、`hud-flight-envelope.jpg`（回信时 Claude 小人旁弹出信封、准备折成纸飞机）。
+- 发布与回读：`1aaf637728ae`，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-09-2026-11-09-278-agent-messages/PostPane-3600980d505d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：
+  - 「允许智能体互发消息」实测时已打开、保持开着，在设置里可以关；
+  - 两个 Claude 会话互发时，纸飞机起点和终点是同一个小人（只看到信封在 Claude 旁弹出），观感要常浩看；
+  - 上游插件卡片上的「Send messages」开关没搬：驿窗没有 `KnownClientCard`，两个设置都默认开；
+  - #253 正文里「不借以我的名义发」一条待改；
+  - Codex 收发还没实测：本机当时没有 Codex 会话；
+  - 300 行棘轮：三个文件为了保持上游原样，进了白名单。
+- 本轮新坑：无
+- skill 进化：无
+
 ## AGENTS.md 加「已定内容要改，先单独确认」（2026-11-09，Claude，常浩口述底线：「明确确定过的内容，后续涉及修改要给出指示……批量授权里单独项要摘出来询问」；已提交、无需发布）
 
 - 时间：开工 `2026-11-09 09:50`。来由：#264 在「直接通过」的批量授权下改坏侧栏小人（L-35），常浩两次明确底线。

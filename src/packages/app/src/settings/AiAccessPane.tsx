@@ -15,6 +15,7 @@ import {
   useText,
   type SettingsPaneProps,
 } from "./SettingsPrimitives";
+import { AgentReachRows } from "./AiAccessAgentRows";
 import { ToolSwitchRow } from "./agent-plugins/rows";
 import {
   nativeChatGpt,
@@ -271,22 +272,7 @@ export function AiAccessPane({
               ],
             ]}
           />
-          <Row
-            title={t(
-              "Start a relay (relay_to_chatgpt)",
-              "发起接力（relay_to_chatgpt）",
-            )}
-            subtitle={t(
-              "Claude Code sessions only: start or continue one review. The switch above does not cover it; remove the ChatGPT extension's registration in Agent plugins to turn it off.",
-              "只接 Claude Code 会话，能新开或续接一次审核。不受上面开关管；要关就在「智能体插件」移除 ChatGPT 插件登记。",
-            )}
-          >
-            <Pill tone={registered ? "green" : "gray"} dot>
-              {registered
-                ? t("On · registered", "开 · 插件已登记")
-                : t("Off · not registered", "关 · 插件未登记")}
-            </Pill>
-          </Row>
+          <AgentReachRows snapshot={snapshot} registered={registered} t={t} />
         </Section>
 
         <Section
