@@ -1,4 +1,9 @@
-import type { Approval, IslandEvent, Session } from "@agent-hud/protocol";
+import type {
+  Approval,
+  IslandEvent,
+  RequestDecision,
+  Session,
+} from "@agent-hud/protocol";
 import { paperLevel, paperOf } from "../paper.ts";
 
 /** What a tag's colour says: the agent asks you (ASK, PLAN), it needs a
@@ -103,6 +108,41 @@ export function goesToStart(entry: ApprovalEntry, canOpen: boolean): boolean {
     entry.request.badge === START_BADGE &&
     canOpen &&
     sessionToOpen(entry) !== undefined
+  );
+}
+
+/** What the sidebar's 开始 sends into a handoff card's session: the owner's
+ * word for "start the card you proposed" (CLAUDE.md §5), on which the
+ * session starts it itself (#292). */
+export const START_WORDS = "开始";
+
+/** Whether a handoff card starts from the sidebar: its client takes answers
+ * and sent its question. Otherwise it keeps 去开始 (#247). */
+export function startsHere(request: Approval): boolean {
+  return (
+    request.badge === START_BADGE &&
+    request.answersQuestion !== false &&
+    (request.questions?.length ?? 0) > 0
+  );
+}
+
+/** The answer 开始 gives: 「开始」 as the card's own words. */
+export function startDecision(request: Approval): RequestDecision {
+  const key = request.questions?.[0]?.answerKey ?? request.id;
+  return {
+    kind: "answer",
+    answers: { [key]: { selected: [], custom: START_WORDS } },
+  };
+}
+
+/** Whether a permission waits only here: Claude Code asked through
+ * PostPane's hook, and while the hook holds it Claude's own window shows
+ * nothing; let go unanswered, Claude Code may refuse it (#292). */
+export function asksOnlyHere(request: Approval): boolean {
+  return (
+    request.source === "claude" &&
+    request.kind === "permission" &&
+    request.id.startsWith("hook:")
   );
 }
 

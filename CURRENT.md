@@ -6,6 +6,30 @@
 
 
 
+## 侧栏 START 交接卡一键开始；BASH 卡写明只能在侧栏批（#292）（2026-11-09，Claude，常浩选「替你回原会话『开始』」「保留 BASH，并查清为何弹」后回「开工」；已提交、PR 待合并、已发布 `db5038f37b88` 回读通过）
+
+- 时间：开工 `2026-11-09 14:36`。来由：常浩要「去掉侧栏 BASH，因为不需要我操作」、START 卡像 ANSWER 一样在侧栏直接开始。查实 BASH 卡不是误报：是 Claude Code 内置安全检查在 bypass 下仍要批准，批准只挂在驿窗侧栏、Claude 桌面窗口不弹，没人点 16 分钟后桌面版判「Claude Code stopped responding」（L-41）。常浩据此改选「保留，并查清为何弹」。#247「去开始」是定过的内容，这次常浩点名要改，不另发改动确认。
+- 改了哪些文件：
+  - `core/src/clients/claude_desktop.rs`：`desktop_ask_way` 去掉交接卡的固定「只能在 Claude 窗口开始」，和下一步框一样，能送达会话就可回答。
+  - `hud/src/permissions/HandoffStartCard.tsx`（新）：交接卡能回答时的展开卡，「切换会话」标签、标题、一段「点『开始』会替你在原会话里回一句『开始』」说明、左「跳过」右「开始」。点「开始」送 `{custom: "开始"}`，由原会话照常浩全局规则自己调 `start_session` 启动交接卡；送不到时仍是 #247 的「去开始」。
+  - `hud/src/RequestActions.tsx`：`startsHere` 的交接卡走新卡。
+  - `hud/src/permissions/approval-list.ts`：`START_WORDS`、`startsHere`、`startDecision`、`asksOnlyHere`。
+  - `hud/src/permissions/PermissionToolCard.tsx`：Claude Code 经驿窗钩子来的权限卡加一行「Claude 桌面窗口里不会弹这条，请在这里批；放着不管，Claude 可能直接拒绝，会话也会卡住。」
+  - 测试：`core/src/tests/claude_desktop.rs` 交接卡测试加「能送达时可回答、送出『开始』、卡收起」；`hud/test/approval-list.test.ts` 新 2 条。
+  - `docs/LESSONS.md`：L-41；L-37 补正。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，前端 `ℹ pass 384` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`，Rust 全部通过；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志 `evidence/2026-11-09-292-start-bash/full.log`。之后只改了 LESSONS 与本节。
+- 验证：
+  - 浏览器预览真实 `HUDScene`（端口 1464，脚手架存 `evidence/…/preview-292/`，不提交）：交接卡展开为新卡，用真实点击点「开始」，`onRequestDecision` 收到 `{"kind":"answer","answers":{"toolu_…":{"selected":[],"custom":"开始"}}}`；BASH 卡说明行显示在命令下方、按钮上方。
+  - 原因复现：不挂驿窗钩子的 `claude -p --permission-mode bypassPermissions`，heredoc 里两个美元符加左括号、双引号里反斜杠美元符左括号的两条命令都回「requires explicit approval」，`echo hi` 正常。
+  - **未做（要常浩动手）**：实机侧栏点一次真实交接卡的「开始」，看原会话收到「开始」后启动交接卡、新会话挂在原会话下（L-09：悬停面板里电脑控制点不动）。终端里的 Claude Code 遇到这类请求是否同时弹窗，未核实。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-292-start-bash/`：`preview-start-card.jpg`、`preview-bash-card.jpg`、`before-*`、`after-*`、`compare-side.png`（L-35：装机前后侧栏各隔 2 秒两张，Claude 格「答」、Codex 云朵在动、ChatGPT「3 对话」、Hermes、挂件不变）。
+- 发布与回读：`db5038f37b88`，`install.sh` 回读一致，未见「想访问文稿」弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-292-start-bash/PostPane-9f07d4b0d70e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留与范围外发现：
+  - L-41 可提议提升为全局坑（Claude 桌面版里写含命令替换的 Bash 都会碰上），提案未写，等常浩批。
+  - 本轮会话两次被「stopped responding」掐断，都是自己的 Bash 踩中 L-41（一次 grep、一次用 heredoc 写 L-41 正文）。
+- 本轮新坑：L-41
+- skill 进化：无
+
 ## Codex 那一轮结束后驿窗替常浩拒绝并撤卡（#286 方案 2A）（2026-11-09，Claude，常浩看改动确认后回「改」；已提交、PR 待合并、已发布 `9f07d4b0d70e` 回读通过）
 
 - 时间：开工 `2026-11-09 13:58`。来由：#286 实测到 Codex 结束一轮时不会取消还在等批准的调用。12:45 那张卡挂了 22 分钟，13:07 被批准后补跑，往 ChatGPT 重复送了一轮。2A 会改到常浩 11-07 选定的「一直等」（#174 / PR #181、#184 / PR #187），已发改动确认，常浩回「改」。

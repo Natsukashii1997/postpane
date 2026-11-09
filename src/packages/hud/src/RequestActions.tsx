@@ -3,6 +3,8 @@ import type { Approval, RequestDecision } from "@agent-hud/protocol";
 import { PermissionPlanCard } from "./permissions/PermissionPlanCard";
 import { PermissionQuestionCard } from "./permissions/PermissionQuestionCard";
 import { PermissionToolCard } from "./permissions/PermissionToolCard";
+import { HandoffStartCard } from "./permissions/HandoffStartCard";
+import { startsHere } from "./permissions/approval-list";
 import { useGround } from "./ground";
 import { alertText } from "./tokens";
 import { cardColumn } from "./card-column";
@@ -96,7 +98,17 @@ export function RequestActions({
       data-request-id={request.id}
       style={{ ...cardColumn(9), fontSize: 12 }}
     >
-      {isQuestion ? (
+      {startsHere(request) ? (
+        <HandoffStartCard
+          key={identity}
+          request={request}
+          disabled={disabled}
+          pending={pending}
+          light={light}
+          zh={zh}
+          answer={answer}
+        />
+      ) : isQuestion ? (
         <PermissionQuestionCard
           key={identity}
           request={request}

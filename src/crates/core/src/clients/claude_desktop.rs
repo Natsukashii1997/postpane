@@ -86,21 +86,14 @@ impl crate::AgentHudCore {
     /// Whether a card for `ask` in the session `session` can take its answer
     /// here; Err gives why it can only be answered in the app. An offer's
     /// buttons are the app's own actions, which no words stand for; a box
-    /// needs answering on and a host that reaches its session.
+    /// needs answering on and a host that reaches its session. A handoff card
+    /// is answered as a box is: the sidebar's 开始 sends 「开始」 into its
+    /// session, which starts the card itself (#292).
     pub(crate) fn desktop_ask_way(
         &self,
         session: &str,
         ask: &DesktopAsk,
     ) -> Result<(), Unreachable> {
-        if ask.kind == "handoff" {
-            return Err(Unreachable::new(
-                crate::l10n::text(
-                    "回到会话，在 Claude 窗口里点交接卡开始新会话。",
-                    "Go back to the session and start the new one from the handoff card in Claude's window.",
-                ),
-                None,
-            ));
-        }
         if ask.kind == "offer" {
             return Err(Unreachable::new(
                 crate::l10n::text(
