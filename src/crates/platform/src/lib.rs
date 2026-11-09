@@ -42,6 +42,7 @@ pub struct NativePlatform {
 impl NativePlatform {
     pub fn new() -> Result<Self, String> {
         let home = os::home_dir()?;
+        agent_hud_agents::claude::processes::set_host(os::OS, os::process_runs);
         Ok(Self { home })
     }
     pub fn home_dir(&self) -> &Path {

@@ -284,6 +284,8 @@
 - 正确做法：临时改文件前先备份；测试放后台跑；还原单独一步做，并用 `cmp` 核对已还原。更好的办法是一开始就先写测试、跑出红，再写实现，不用事后补红。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-257-relay-receipts/red-host.log`。
 
+- 补充（2026-11-09，#251）：验红时先 `cp` 了改前副本，还原却用了 `git checkout -- <文件>`，把这个文件里本轮还没提交的改动也一起丢了，靠副本才找回。临时改源码验红，要么先提交，要么只用自己留的副本还原，不用 `git checkout`。
+
 ## L-33 并行子 agent 共用一台机器，宽泛的 `pkill -f` 把别人正在跑的测试也杀了（2026-11-09）
 
 - 现象：#261 为停掉自己的基线测试，执行 `pkill -f 'pnpm test'; pkill -f 'cargo test'`。同时在跑的 #264、#265 的全量测试被中断，以 143 / 144 退出，只能重跑。
@@ -310,3 +312,10 @@
   - 已加守护测试 `hud/test/measuring-copy-sync.test.ts`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-bots-static/`：`now-side.png` 坏、`old-70ad-side.png`、`b768-side.png`、`bff6-side.png`、`b285-side.png` 好、`fix-side.png` 修好；`motion-1/2-side.png` 两张不同，说明小人在动。
 
+## L-36 Claude 进程被直接杀掉，驿窗的审批钩子被 launchd 收养继续等，审批卡挂满 10 分钟（2026-11-09）
+
+- 现象：终端里的 Claude Code 停在审批上时被 `kill -9`，侧栏 Claude 那格的「1」和「批」印 15 秒后还在，要等 `approvalWaitMinutes`（默认 10 分钟）期满才交还。
+- 根因：审批卡由 `PostPane --permission-hook` 子进程连着驿窗的 socket 撑着，连接断开才撤卡。父进程被直接杀掉时子进程不会跟着死，被 launchd（pid 1）收养后继续等。另外，终端版 Claude 2.1.319 停在第一轮审批时，既没写 `~/.claude/sessions/<pid>.json`，也没写会话记录，所以只靠进程登记撤不掉这张卡。
+- 正确做法：钩子在等待时检查父进程，换了就结束等待（`hooks/client_unix.rs`），由连接断开走原有撤卡逻辑。进程登记只用来结束「登记过、进程已死」的会话；从没登记过的会话不能当作已结束，因为终端会话第一次回复前可能还没登记。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-251-process-gone/`：`after-kill-15s.png` 改前卡还挂着，`after-hook-exit-3s-side.png` 孤儿钩子退出后撤卡；`accept/1-card-side.png`、`accept/2-after-kill-side.png` 装机后 kill 约 1.5 秒撤卡。
+- 升级：已写成测试 `hooks::transport::client::tests` 两条、`claude::processes::tests` 六条、`presentation::tests::a_session_whose_process_was_killed_is_no_longer_running`。

@@ -59,3 +59,12 @@ pub(crate) fn codex_cli_on_port(
 ) -> Option<(Vec<String>, HashMap<String, String>)> {
     None
 }
+
+/// Whether a process runs on `pid`, as signal 0 tells it, for Claude Code's
+/// process registry (#251); its start is taken on trust here.
+pub(crate) fn process_runs(pid: i32, _started: Option<i64>) -> bool {
+    // SAFETY: signal 0 delivers nothing; it only checks the pid.
+    pid <= 0
+        || unsafe { libc::kill(pid, 0) } == 0
+        || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}

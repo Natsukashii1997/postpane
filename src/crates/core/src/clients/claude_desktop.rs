@@ -167,6 +167,8 @@ impl crate::AgentHudCore {
 pub(crate) struct ClaudeDesktop {
     pub(crate) index: ClaudeDesktopIndex,
     pub(crate) jobs: crate::claude_jobs::ClaudeJobs,
+    /// Claude Code's process registry: which sessions' processes have gone.
+    pub(crate) processes: agent_hud_agents::claude::processes::ClaudeProcesses,
     /// The cards of the app's questions, by request id: the question's key
     /// (its session and call) and the ticket that keeps the card answerable.
     pub(crate) asks: HashMap<String, (String, crate::requests::Ticket)>,
@@ -176,4 +178,42 @@ pub(crate) struct ClaudeDesktop {
     /// The keys of questions whose session the host has reached since they
     /// were asked: their cards stay answerable while they stand.
     pub(crate) reached: HashSet<String>,
+}
+
+impl ClaudeDesktop {
+    /// Reads what changes without a log changing: the desktop app's archive
+    /// and tabs, and which sessions' processes have gone (#251). True when
+    /// either changed.
+    pub(crate) fn refresh(
+        &mut self,
+        provider_roots: &[(std::path::PathBuf, &'static str)],
+    ) -> bool {
+        let index = self.index.refresh(provider_roots);
+        let now = chrono::Utc::now().timestamp_millis();
+        self.processes.refresh(provider_roots, now) || index
+    }
+}
+
+/// A Claude Code session whose process has gone since its last event is
+/// idle, with nothing waiting on the user: what it waited for will not come.
+pub(crate) fn settle_ended(
+    session: &mut Value,
+    processes: &agent_hud_agents::claude::processes::ClaudeProcesses,
+) {
+    let last = session["liveFacts"]["lastEventAt"]
+        .as_str()
+        .or(session["updatedAt"].as_str())
+        .and_then(crate::metering::date_ms);
+    if session["source"] != "claude"
+        || !session["id"]
+            .as_str()
+            .is_some_and(|id| processes.ended(id, last))
+    {
+        return;
+    }
+    session["state"] = json!("idle");
+    if let Some(facts) = session["liveFacts"].as_object_mut() {
+        facts.insert("requests".to_owned(), json!([]));
+        facts.remove("attention");
+    }
 }

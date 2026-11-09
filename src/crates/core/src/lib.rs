@@ -336,9 +336,9 @@ impl AgentHudCore {
             // The pass rechecks the logs held open at once and reads them.
             self.reads.active_checked_at = None;
         }
-        // Archiving a session in Claude Desktop changes no log. Its files are
-        // stat-checked here and only the changed ones read again.
-        if self.claude_desktop.index.refresh(&self.provider_roots) {
+        // Archiving a session in Claude Desktop or a Claude Code process dying
+        // changes no log. Their files are stat-checked here (#251).
+        if self.claude_desktop.refresh(&self.provider_roots) {
             self.usage_projection = None;
             due = true;
         }
