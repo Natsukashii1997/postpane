@@ -356,3 +356,10 @@
 - 实测要先重启：凡是依赖进程内状态的通道，实机验收前先重启一次驿窗再测，才测得出「冷启动」这条路。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/`（`h1a1bed7307000` 的步骤：`fail`、`fail`、`stop`）。
 - 升级：已写成测试 `delivery::tests::a_session_made_known_keeps_the_rest_and_a_child_stays_a_child`。
+
+## L-40 钩子等待时用 notify 盯 Codex 会话记录，追加写之后迟迟收不到事件，测试等满 10 分钟才失败（2026-11-09）
+
+- 现象：#286 的 2A 第一版在钩子进程里用 `notify` 监听 Codex 会话记录，单测里能收到事件；端到端测试（钩子连着驿窗、在另一个线程里等）在会话记录末尾追加 `task_complete` 后，钩子只在开头读了一次，之后再没读，最后测试用的 `Requests` 等满默认的 10 分钟期限才失败。
+- 根因：只读了一次，说明文件变化的事件没送到等待循环。在 macOS 上用 FSEvents 盯单个文件，同一进程的追加写不一定能及时报出来，具体为什么没查清。驿窗 Claude 那一路的 `hooks/transcript.rs` 也靠 `notify`，它在实机上靠得住，但不能保证别的地方也一样。
+- 正确做法：等待循环本来就有短间隔（钩子是 0.1 秒）时，每一圈直接读文件新增的部分（`read_to_end` 从上次的位置往后读），不要依赖文件监听；测试里先把 `Requests` 的等待期限调短（`set_hold_ms`），失败时几秒就能看到，不要干等 10 分钟。
+- 证据：`src/crates/platform/src/hooks/turn_end.rs`（改成每圈直接读）；测试 `hooks::transport::tests::a_codex_request_whose_turn_ended_is_declined_and_leaves_the_sidebar`。

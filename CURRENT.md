@@ -6,6 +6,23 @@
 
 
 
+## Codex 那一轮结束后驿窗替常浩拒绝并撤卡（#286 方案 2A）（2026-11-09，Claude，常浩看改动确认后回「改」；已提交、PR 待合并、已发布 `9f07d4b0d70e` 回读通过）
+
+- 时间：开工 `2026-11-09 13:58`。来由：#286 实测到 Codex 结束一轮时不会取消还在等批准的调用。12:45 那张卡挂了 22 分钟，13:07 被批准后补跑，往 ChatGPT 重复送了一轮。2A 会改到常浩 11-07 选定的「一直等」（#174 / PR #181、#184 / PR #187），已发改动确认，常浩回「改」。
+- 改了哪些文件：
+  - `platform/src/hooks/turn_end.rs`（新）：钩子进程从 Codex 会话记录（payload 的 `transcript_path`）的当前末尾往后读，每圈（0.1 秒）只读新增部分；看到同一 `turn_id` 的 `task_complete` 或 `turn_aborted`，就按 Codex 的回复格式回「拒绝」，并说明原因（The turn that asked for this has ended…）。只对按轮记批准人的客户端生效（`reviewer_gate`，即 Codex）。
+  - `platform/src/hooks/client_unix.rs`：`Watch` 把原来的「客户端里答了 / 客户端没了」和新的「这一轮结束」合在一起。`unix.rs` 的等待和重连改用它，行数 490 → 487（基线同步收紧）。Windows 没改（Codex 在 Windows 上未验证）。
+  - `docs/client-hooks.md` 补一条说明；`docs/LESSONS.md` 新增 L-40。
+- 测试：`pnpm run check` 退出码 0（第一次被 `check:test-paths` 拦下一处测试里的 `/x` 路径，改用临时目录后复跑通过）；`pnpm test`：Rust 合计 `936 passed; 0 failed`（新增 6 条：轮结束 / 被中断都拒绝、别的轮结束不算、半行写入、只对 Codex、拒绝的格式与说明、端到端：挂卡 → 轮结束 → 回拒绝 → 卡撤下），前端 `ℹ pass 382` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机）：装 `9f07d4b0d70e` 后，用 10:57 开的老测试线程 `01a1be3c…`（这个线程调 `relay_to_chatgpt` 仍要批准）调用一次，不等待、不终止，直接结束这一轮。14:22:18 钩子开始等，14:22:49.105 这一轮 `task_complete`，8 毫秒后调用以 `failed` 收场，带驿窗的拒绝说明；钩子同时退出。之后侧栏 Codex 批准卡为 0，没有建出接力单。证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-turn-ended/`（`realtest-rollout.txt`、`snapshot-after.json`、`run.log`、`check2.log`）。等待期间侧栏是否挂过卡没截到（电脑控制授权上一轮被拒），端到端测试覆盖了这一点。
+- 截图：无（没动侧栏渲染和外观，L-35 对照不适用）。
+- 发布与回读：`install.sh` 输出「产物 9f07d4b0d70e / 已装 9f07d4b0d70e」，14:21:58 启动。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-codex-turn-ended/PostPane-3ea2c2305c8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留与范围外发现：
+  - Codex 那一轮还在进行时，「一直等」照旧，卡一直挂到常浩答复为止。
+  - Claude 不受影响（它的卡在进程被杀时撤，#251）。
+- 本轮新坑：L-40
+- skill 进化：无
+
 ## 接力 B：读 Codex 会话记录——插话后重算轮数、转回回执推进（#283）（2026-11-09，Claude，常浩「按计划开工」「在 #283 里修」；已提交、PR 待开、已发布 `0dada9ced3a5` 回读通过，实机两项通过）
 
 - 时间：开工 `2026-11-09 13:15`。来由：#253 方案 B 单；常浩确认分三批做（批 1 读记录、批 2 接到接力、批 3 测试装机实测）。

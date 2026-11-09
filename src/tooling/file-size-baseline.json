@@ -77,7 +77,7 @@
   "src/crates/platform/src/hooks/inbox.rs": 324,
   "src/crates/platform/src/hooks/mod.rs": 311,
   "src/crates/platform/src/hooks/statusline_install.rs": 365,
-  "src/crates/platform/src/hooks/unix.rs": 490,
+  "src/crates/platform/src/hooks/unix.rs": 487,
   "src/crates/platform/src/json_text.rs": 507,
   "src/crates/platform/src/os/macos/app_cookies.rs": 321,
   "src/crates/platform/src/os/macos/legacy_preferences.rs": 634,
