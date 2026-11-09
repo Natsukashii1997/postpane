@@ -124,17 +124,17 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 
 全局规则 P-13（`~/.claude/CLAUDE.md` 第 14 节）。和设置 →「AI 接入」页内容一致；改了 AI 功能、对外接口或数据来源，两处一起改：页面在 `src/packages/app/src/settings/AiAccessPane.tsx`，文字和取数在 `src/packages/app/src/lib/ai-access.ts`。
 
-- **默认执行方**：只有 ChatGPT 网页一家，不可切换。用常浩 Chrome 里登录的 chatgpt.com，模型由网页决定、驿窗拿不到。设置页实时显示可用 / 插件没连上 / 插件未登记，附检查时间。插件没连上时接力直接报错，不换别家。Claude 只能发起接力，不能当执行方；Codex 还没接进接力。
+- **默认执行方**：只有 ChatGPT 网页一家，不可切换。用常浩 Chrome 里登录的 chatgpt.com，模型由网页决定、驿窗拿不到。设置页实时显示可用 / 插件没连上 / 插件未登记，附检查时间。插件没连上时接力直接报错，不换别家。Claude、Codex 只能发起接力，不能当执行方（Codex 发起见 #280）。
 - **功能清单**（1 项）：
 
   | 功能 | 执行方 | 接入方式 | 读什么 | 写到哪里 |
   |---|---|---|---|---|
-  | ChatGPT 接力审核（含侧栏左滑「审核 / 讨论」、自动往返） | ChatGPT 网页（跟随默认），**仅支持 ChatGPT 网页** | 网页桥：Chrome 插件 → Native Messaging `com.postpane.chatgpt` → 驿窗 | Claude Code 会话交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读该 Claude 会话记录末尾，只看当前这一轮是谁开的头（常浩插话就重算轮数，#258），并读插件留话的状态（排队中 / 已领取 / 已开始，#257） | `<数据目录>/chatgpt/handoffs.json`（另有 `turns.jsonl`、`launches.json`）；回信转回原 Claude 会话 |
+  | ChatGPT 接力审核（含侧栏左滑「审核 / 讨论」、自动往返） | ChatGPT 网页（跟随默认），**仅支持 ChatGPT 网页** | 网页桥：Chrome 插件 → Native Messaging `com.postpane.chatgpt` → 驿窗 | Claude Code 或 Codex 会话交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读 Claude 会话记录末尾，只看当前这一轮是谁开的头（常浩插话就重算轮数，#258；Codex 暂不重算），并读插件留话的状态（排队中 / 已领取 / 已开始，#257） | `<数据目录>/chatgpt/handoffs.json`（另有 `turns.jsonl`、`launches.json`）；回信转回原 Claude 会话 |
 
-  仅支持 ChatGPT 网页的原因：审核要用常浩 ChatGPT 账号里的项目和记忆；发起方只认 Claude Code 会话（`src/crates/host/src/handoff.rs` 的 `relay`），因为回信要按会话 id 送回去。Codex 发起或审核要另开一单。留痕：接力卡时间线记每一步的时间、谁做的、是不是驿窗自动做的（`handoffs.json` 的 `steps`）。
+  仅支持 ChatGPT 网页的原因：审核要用常浩 ChatGPT 账号里的项目和记忆；发起方只认 Claude Code 和 Codex 会话（`src/crates/host/src/handoff.rs` 的 `relay`），因为回信要按会话 id 送回去：Claude 经 agent-hud 插件，Codex 经它自己的队列（`thread/queue/add`，#280，`handoff/lines.rs`）。Codex 审核改用智能体互发消息（#278）。留痕：接力卡时间线记每一步的时间、谁做的、是不是驿窗自动做的（`handoffs.json` 的 `steps`）。
 - **对外开放**：只在本机，不开网络端口（stdio → `<数据目录>/tools/mcp.sock`，0600）。
   - 侧栏工具，MCP「agent-hud」：可装到 Claude Code、Codex、Cursor、DeepSeek Harness、Antigravity。能读侧栏布局、快照、会话、用量统计、侧栏截图（账户打码）；能写侧栏草稿（面板里保存才生效）、外观和动画两项偏好。开关是设置 `hudTools`（「允许智能体调整侧栏」，「AI 接入」页和「智能体插件」页是同一个），同时管读和写。
-  - 发起接力 `relay_to_chatgpt`：只接 Claude Code 会话，能新开或续接一次审核；不受 `hudTools` 管，在「智能体插件」移除 ChatGPT 插件登记即关。
+  - 发起接力 `relay_to_chatgpt`：接 Claude Code 和 Codex 会话，能新开或续接一次审核；不受 `hudTools` 管，在「智能体插件」移除 ChatGPT 插件登记即关。
   - 智能体互发消息（#278，移植上游 `b1217c3`）：同一个 MCP「agent-hud」的 `list_sessions`、`send_message`、`start_session`、`get_message`，本机 Claude Code、Codex、Antigravity、DeepSeek Harness 会话之间列出会话、互发消息（对方空闲才送进去，不打断）、开新会话、取回回答；只送发件方写的那段话，不转发会话记录。开关在「智能体插件」单独一节「智能体互发消息」：「允许智能体互发消息」（`agentMessages`，默认关，关着时工具不列出）；「以我的身份发送」（`agentMessagesAsUser`，默认关，标「注意」，打开后消息不带来源标签，对方当成常浩的话照做）；「连续来回上限」（`agentMessagesLimit`，默认 10，常浩插一句就重新计数）。日志只存指纹，在 `<数据目录>/messaging/messages.json`；送达回执在 `<数据目录>/local-client-receipts/`。互发消息也飞接力那种纸飞机，不盖印章（常浩 2026-11-09 选甲）。
 - **数据对象**：只读取、不替驿窗产出、不放进可切换项。本机检测到且在「智能体」页开着的才读；每家读哪里见 `lib/ai-access.ts` 的 `sources`。主要几家：Claude Code（`~/.claude/projects`，额度用本机 claude 登录，重启后第一次就读失败时退回 `~/.claude.json` 里 Claude Code 自己记下的读数、只认同一账号，云端会话经 api.anthropic.com）、Codex（`~/.codex/sessions`，本机 codex app-server，顺带查驿窗钩子是否已允许）、Hermes（`~/.hermes/state.db`、`profiles/*/state.db`，不联网）、ChatGPT 网页（Chrome 插件报回合，不读文件）、Antigravity（`~/.gemini/antigravity*/brain`，本机 language server）。DeepSeek、Kimi、GLM、OpenCode 的额度可用驿窗保存的 API Key，存 `<数据目录>/account-credentials/`，界面只显示「已保存」。
 

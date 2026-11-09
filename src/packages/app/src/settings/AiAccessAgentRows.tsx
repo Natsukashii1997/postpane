@@ -29,8 +29,8 @@ export function AgentReachRows({
           "发起接力（relay_to_chatgpt）",
         )}
         subtitle={t(
-          "Claude Code sessions only: start or continue one review. The switch above does not cover it; remove the ChatGPT extension's registration in Agent plugins to turn it off.",
-          "只接 Claude Code 会话，能新开或续接一次审核。不受上面开关管；要关就在「智能体插件」移除 ChatGPT 插件登记。",
+          "Claude Code and Codex sessions: start or continue one review. The switch above does not cover it; remove the ChatGPT extension's registration in Agent plugins to turn it off.",
+          "接 Claude Code 和 Codex 会话，能新开或续接一次审核。不受上面开关管；要关就在「智能体插件」移除 ChatGPT 插件登记。",
         )}
       >
         <Pill tone={registered ? "green" : "gray"} dot>

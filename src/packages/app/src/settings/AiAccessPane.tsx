@@ -121,11 +121,11 @@ export function AiAccessPane({
             icon={logo("codex")}
             title="Codex"
             subtitle={t(
-              "Not part of relays yet: it can neither start nor review one.",
-              "还没接进接力，发起和审核都不行。",
+              "Can start a relay (#280), not review one; replies go back into its thread through Codex's queue.",
+              "能发起接力（#280），不能当审核方；回信经 Codex 自己的队列送回原线程。",
             )}
           >
-            <Pill dot>{t("Not supported", "不支持")}</Pill>
+            <Pill dot>{t("Not an executor", "不支持当执行方")}</Pill>
           </Row>
         </Section>
 
@@ -174,8 +174,8 @@ export function AiAccessPane({
               [
                 t("Reads", "读"),
                 t(
-                  "What Claude hands over: its summary and the change. ChatGPT cannot read files on this computer. PostPane also reads the end of that Claude session's transcript, only to see who began its current turn (rounds count again once you spoke up), and how the plugin has the words sent back (queued, taken, started).",
-                  "Claude 交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读该 Claude 会话记录末尾，只看当前这一轮是谁开的头（你插话就重算轮数），并读插件留话的状态（排队中 / 已领取 / 已开始）",
+                  "What Claude or Codex hands over: its summary and the change. ChatGPT cannot read files on this computer. PostPane also reads the end of a Claude session's transcript, only to see who began its current turn (rounds count again once you spoke up; not yet for Codex), and how the words sent back stand (queued, taken, started).",
+                  "Claude 或 Codex 交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读 Claude 会话记录末尾，只看当前这一轮是谁开的头（你插话就重算轮数，Codex 暂不重算），并读回信的送达状态（排队中 / 已领取 / 已开始）",
                 ),
               ],
               [
@@ -183,8 +183,8 @@ export function AiAccessPane({
                 <>
                   {path("app.postpane.mac/chatgpt/handoffs.json")}
                   {t(
-                    "; replies go back to the Claude session",
-                    "；回信转回原 Claude 会话",
+                    "; replies go back to the Claude or Codex session that started it",
+                    "；回信转回发起的那个 Claude 或 Codex 会话",
                   )}
                 </>,
               ],
@@ -199,8 +199,8 @@ export function AiAccessPane({
                 t("Why", "为什么"),
                 <span className="ai-access-why">
                   {t(
-                    "Reviews use the projects and memory in your ChatGPT account; only Claude Code starts one because the reply goes back by session id. Codex starting or reviewing is separate work.",
-                    "审核要用你 ChatGPT 账号里的项目和记忆；发起方只认 Claude Code，是因为回信要按会话 id 送回去。Codex 发起或审核要另开一单。",
+                    "Reviews use the projects and memory in your ChatGPT account. Claude Code and Codex can start one, since the reply goes back by session id; Codex reviewing goes by agent messages instead (#278).",
+                    "审核要用你 ChatGPT 账号里的项目和记忆。Claude Code 和 Codex 能发起，因为回信要按会话 id 送回去；Codex 审核改用智能体互发消息（#278）。",
                   )}
                 </span>,
               ],
