@@ -6,7 +6,7 @@ use super::{no_plugin, Lines, Unsent, CLAUDE, CODEX};
 use crate::messages::DeliveryClients;
 use agent_hud_runtime::claude_plugin::Opener;
 use agent_hud_runtime::delivery::{
-    DeliveryState, LocalClients, Operation, PromptForm, Provider, SendRequest,
+    DeliveryState, LocalClients, Operation, PromptForm, Provider, SendRequest, SessionTarget,
 };
 use agent_hud_runtime::l10n;
 use std::sync::Arc;
@@ -186,6 +186,14 @@ fn codex_clients(app: &tauri::AppHandle) -> Result<Arc<LocalClients>, String> {
 /// the same send, so it goes once.
 fn codex_send(app: &tauri::AppHandle, thread: &str, id: &str, text: &str) -> Result<(), Unsent> {
     let clients = codex_clients(app).map_err(Unsent::Failed)?;
+    // Known to the senders or not: after a restart they know no session
+    // until agent messages run (#283).
+    clients.know_target(SessionTarget {
+        provider: Provider::Codex,
+        session_id: thread.to_owned(),
+        thread_id: Some(thread.to_owned()),
+        parent_id: None,
+    });
     let receipt = clients
         .send(SendRequest {
             provider: Provider::Codex,
