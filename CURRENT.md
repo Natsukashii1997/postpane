@@ -11,7 +11,8 @@
 - 时间：开工 `2026-11-09 08:04`。来由：第二批合并装机（`b977cfc5aa5e`）后，侧栏小人全部变成静态 logo。
 - 定位：数据和设置都没变（`botLogos: true`，系统没开「减少动态」）。Chromium 和 Safari 预览都复现不了。按提交二分装机：`768250f`、`ff6282b`、`285d8d8` 正常，坏在 #264 的 `3c7addd`（测量副本 `useDeferredValue`）。机制没查清（L-35）。
 - 改了哪些文件：撤回 `3c7addd`（`src/packages/hud/src/HUDScene.tsx` 回到同步重画，删掉它的测试）；新增守护测试 `src/packages/hud/test/measuring-copy-sync.test.ts`；`docs/LESSONS.md` 加 L-35。
-- 测试：新守护测试 `ℹ pass 1` / `ℹ fail 0`，在 #264 版本上会红（源码同时含 `useDeferredValue` 和 `MeasuringCopy`）；`check-file-size` 通过。三条全量**未跑**，交给接手会话，合并前必须跑。
+- 测试：新守护测试 `ℹ pass 1` / `ℹ fail 0`，在 #264 版本上会红（源码同时含 `useDeferredValue` 和 `MeasuringCopy`）；`check-file-size` 通过。三条全量由接手会话在本 worktree 跑（共用主目录 `target`，先把全部 `.rs`、`Cargo.toml`、`build.rs` 时间改到未来，输出里有本 worktree 路径的 `Compiling` 行）：`pnpm run check` 通过（第一次因未提交的调试目录 `preview-bots/` 格式不合规失败，删掉后重跑通过）；`pnpm test` Rust 813 passed / 0 failed，前端 `ℹ pass 379` / `ℹ fail 0`（380 − 撤回 2 + 守护 1，守护测试名出现且通过），其余三组 9 / 14 / 13 全过；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。日志在 `evidence/2026-11-09-bots-static/full-*.log`。
+- 回归核查（接手会话）：接力数据 `handoffs.json`、`settings.json`、`presentation.json` 与装旧版前的备份逐字节相同，#257 的回执状态存 `launches.json`（目前没有待送的话，文件不存在），没丢字段。侧栏隔 2 秒两张截图小人区域不同（`evidence/2026-11-09-bots-static/regress/`），版面与第二批前的 `old-70ad-side.png` 逐项一致（螃蟹、航空斜纹与「回」印、云朵 37%、ChatGPT 6.7M、Hermes、猫球、磁盘瘦身挂件）。小签、ANSWER / START 框、接力纸飞机等只在特定状态出现，截图看不到，改读第二批对侧栏的代码改动：只新增「钩子未允许」细条、接力回执状态字、插话后轮数重算，修了问答卡 hook 顺序和悬停计时，新字段缺省时渲染不变。
 - 验证：从本分支打包装机后，侧栏 Claude 螃蟹、Codex 云朵、ChatGPT 打盹都回来了；隔 2 秒两次截图不同，确认在动（`evidence/2026-11-09-bots-static/fix-side.png`、`motion-*-side.png`）。
 - 截图：见上面的证据目录。
 - 发布与回读：产物与已装都是 `6349cc384273`；回滚到坏版本的命令（只供排查）是 install.sh 打印的 `PostPane-3a28d69abd34.app`。
