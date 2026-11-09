@@ -43,6 +43,27 @@ scope boundaries, independently of the snapshot clock. Hidden Sessions windows
 stop querying and retain their last display. Partially loaded list summaries
 are labelled as covering loaded sessions.
 
+## Claude Code processes that have gone (#251)
+
+Claude Code registers each live process in `sessions/<pid>.json` under its
+config home: its pid, when it started (`procStart`, UTC) and the session it
+runs. It removes the file as it exits cleanly; a process killed outright
+(`kill -9`, a crash) leaves the file behind. Every look (3 s) and collection
+pass reads the registry, a file again only when it changed, and asks the
+platform layer whether each pid still runs the process that started when the
+file says (macOS: signal 0 and the process's start time; Linux: signal 0;
+Windows: every process counts as running).
+
+A Claude session a file named whose process has gone (the file left, or its
+pid no longer runs) is idle, with no requests or attention, unless something
+happened in it after the process went. A session no file ever named keeps the
+transcript's 30 minutes: a terminal session may not register before its first
+reply, so the absence of a file is no sign of an ended session.
+
+A permission hook (`PostPane --permission-hook`) waiting on the HUD stops
+waiting once the process that ran it is gone (launchd took it in), so its
+card leaves the sidebar within a second instead of the approval wait.
+
 `session_detail {id}` loads only the requested parser checkpoint and returns
 its session, recorded usage entries, parent and children, including relationships
 outside the HUD projection. With the usage ledger it also returns `sessionUsage`,

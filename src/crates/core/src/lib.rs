@@ -167,7 +167,7 @@ impl AgentHudCore {
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or(Value::Null);
-        let mut settings = json!({"quotaDisplay":"consumed","codexHomes":[],"antigravityCliSettings":[],"appearance":"system","appearanceFollowsScreen":false,"language":"system","clientHooks":false,"deepseekQuestions":false,"readCopilotQuota":false,"approvalWaitMinutes":10,"launchAtLogin":true,"animations":true,"hudVisible":true,"showMenuBarIcon":false,"hudTools":false,"claudeAnswers":true,"relayReading":[],"customPrices":{},"relayMultipliers":{},"localKinds":{}});
+        let mut settings = json!({"quotaDisplay":"consumed","codexHomes":[],"antigravityCliSettings":[],"appearance":"system","appearanceFollowsScreen":false,"language":"system","clientHooks":false,"deepseekQuestions":false,"readCopilotQuota":false,"approvalWaitMinutes":10,"launchAtLogin":true,"animations":true,"hudVisible":true,"showMenuBarIcon":false,"hudTools":false,"claudeAnswers":true,"agentMessages":false,"agentMessagesAsUser":false,"agentMessagesLimit":10,"claudeMessages":true,"deepseekMessages":true,"relayReading":[],"customPrices":{},"relayMultipliers":{},"localKinds":{}});
         if let Some(values) = stored["settings"].as_object() {
             for (key, value) in values {
                 if settings.get(key).is_some() {
@@ -336,9 +336,9 @@ impl AgentHudCore {
             // The pass rechecks the logs held open at once and reads them.
             self.reads.active_checked_at = None;
         }
-        // Archiving a session in Claude Desktop changes no log. Its files are
-        // stat-checked here and only the changed ones read again.
-        if self.claude_desktop.index.refresh(&self.provider_roots) {
+        // Archiving a session in Claude Desktop or a Claude Code process dying
+        // changes no log. Their files are stat-checked here (#251).
+        if self.claude_desktop.refresh(&self.provider_roots) {
             self.usage_projection = None;
             due = true;
         }

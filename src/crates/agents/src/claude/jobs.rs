@@ -120,7 +120,7 @@ impl ClaudeJobs {
     }
 }
 
-fn small_file(path: &Path) -> Option<fs::Metadata> {
+pub(super) fn small_file(path: &Path) -> Option<fs::Metadata> {
     fs::symlink_metadata(path)
         .ok()
         .filter(|meta| meta.is_file() && meta.len() <= 1024 * 1024)

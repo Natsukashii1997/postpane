@@ -3,7 +3,12 @@
 // `children` (Details) close the group.
 import { Fragment, type ReactNode } from "react";
 import type { Snapshot } from "@agent-hud/protocol";
-import { Section, type Text } from "../SettingsPrimitives";
+import {
+  Section,
+  type SettingsPaneProps,
+  type Text,
+} from "../SettingsPrimitives";
+import { AgentMessagesRow } from "./AgentMessagesRow";
 import { ToolSwitchRow } from "./rows";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import type { HudTools } from "./use-status";
@@ -61,6 +66,32 @@ export function ToolsSection({
         </Fragment>
       ))}
       {children}
+    </Section>
+  );
+}
+
+/** Agent messages in a section of their own (#278, upstream b1217c3): the
+ * owner kept 「让智能体调整侧栏」 as it was rather than renaming it 「智能体工具」
+ * for both (2026-11-09). */
+export function MessagesSection({
+  snapshot,
+  action,
+  t,
+}: {
+  snapshot: Snapshot;
+  action: SettingsPaneProps["action"];
+  t: Text;
+}) {
+  return (
+    <Section
+      title={t("Let agents message each other", "智能体互发消息")}
+      action={
+        snapshot.settings.agentMessages === true
+          ? t("On", "已打开")
+          : t("Off", "已关闭")
+      }
+    >
+      <AgentMessagesRow snapshot={snapshot} action={action} t={t} />
     </Section>
   );
 }

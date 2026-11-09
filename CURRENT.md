@@ -6,6 +6,80 @@
 
 
 
+## 智能体互发消息：移植上游 b1217c3（#278）（2026-11-09，Claude，常浩「直接拿过来代码，不要自己从头开始做」，改动确认选「飞机甲、标题乙」；已提交、已发布 `1aaf637728ae` 回读通过）
+
+- 时间：开工 `2026-11-09 10:33`。来由：常浩要学上游「智能体之间用纸飞机互发消息」，调研报告 `docs/design/智能体互发消息-现状与差距-2026-11-09.md`（`0dc2b5b`）。
+- 改了哪些文件：
+  - 原样搬入上游：`src/crates/messaging/`、`src/crates/platform/src/delivery/`、`claude_plugin/mod.rs` 的 `unwrap_prompt`、`AgentMessagesRow.tsx`（只改了 `Menu` 的导入）；
+  - 手工接线：`host/src/{lib,tools,extension,claude_plugin,messages}.rs`；
+  - 设置：`core/src/{lib,settings}.rs`、`protocol/src/index.ts`；`ToolsSection.tsx` 新增 `MessagesSection`，单独一节「智能体互发消息」，「让智能体调整侧栏」原样不动（常浩选乙）；
+  - 纸飞机：`messages.rs` 接回 `hud:flight`，互发消息也飞接力那种纸飞机，不盖印章（常浩选甲）；
+  - P-13：`AiAccessAgentRows.tsx`（新）、`AiAccessPane.tsx`、`AGENTS.md`「AI 接入」；
+  - 其他：`docs/platform-architecture.md`，以及 `file-size-allowlist.json` 和基线。
+- 测试：第二次提交 `69b5333` 后重跑。
+  - `pnpm run check` 退出码 0；
+  - `pnpm test`：Rust 合计 `912 passed; 0 failed`，前端 `ℹ pass 379` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机，`/Applications/PostPane.app`）：
+  - 设置「智能体插件」页最下面多出单独一节「智能体互发消息」；打开后显示「以我的身份发送 · 注意」（关）和「连续来回上限 10」；`settings.json` 回读 `agentMessages: true`、`agentMessagesAsUser: false`、`agentMessagesLimit: 10`。
+  - 本会话的 agent-hud MCP 约 15 秒内收到 `list_sessions` 等四个工具。`list_sessions` 认出本会话 `self: true`，没装插件的会话标 `reachable: false` 并写明原因。
+  - `send_message` 发给空闲的「撤回 #264」会话：`queued` → `started`（约 18 秒）→ `done`，`get_message` 取回答「收到，互发消息测试通过」。日志只存指纹（`messages-journal.json`）。
+  - 对方会话的 MCP 在开关打开前就已启动，没有 `send_message`，所以按上游的兜底直接作答，由发件方取回。
+  - 未实测：第 11 次被拒、常浩插话后重新计数、关掉开关工具消失。这几项由上游的单元测试覆盖（messaging 55 条）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-278-agent-messages/`，有 `settings-agent-messages-off.jpg`、`settings-agent-messages-on.jpg`、`hud-flight-envelope.jpg`（回信时 Claude 小人旁弹出信封、准备折成纸飞机）。
+- 发布与回读：`1aaf637728ae`，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-09-2026-11-09-278-agent-messages/PostPane-3600980d505d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：
+  - 「允许智能体互发消息」实测时已打开、保持开着，在设置里可以关；
+  - 两个 Claude 会话互发时，纸飞机起点和终点是同一个小人（只看到信封在 Claude 旁弹出），观感要常浩看；
+  - 上游插件卡片上的「Send messages」开关没搬：驿窗没有 `KnownClientCard`，两个设置都默认开；
+  - #253 正文里「不借以我的名义发」一条待改；
+  - Codex 收发还没实测：本机当时没有 Codex 会话；
+  - 300 行棘轮：三个文件为了保持上游原样，进了白名单。
+- 本轮新坑：无
+- skill 进化：无
+
+## AGENTS.md 加「已定内容要改，先单独确认」（2026-11-09，Claude，常浩口述底线：「明确确定过的内容，后续涉及修改要给出指示……批量授权里单独项要摘出来询问」；已提交、无需发布）
+
+- 时间：开工 `2026-11-09 09:50`。来由：#264 在「直接通过」的批量授权下改坏侧栏小人（L-35），常浩两次明确底线。
+- 改了哪些文件：`AGENTS.md`（新增一节，导航表加一行）。
+- 测试：`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`；`node scripts/check-rules.mjs` 「通用规则检查通过」。纯文档改动，未跑 Rust 与前端全量（不涉及代码）。
+- 验证：无界面改动。
+- 截图：无。
+- 发布与回读：无需发布。
+- 遗留：这条是否提升为全局规则（`~/.claude/CLAUDE.md` 与 Vault P-xx），常浩未定。
+- 本轮新坑：无
+- skill 进化：无
+
+## #251 Claude 进程没了：审批卡随即撤下、会话不再显示正在进行（2026-11-09，Claude，常浩选「A+B 开工」；已提交、已装机 `3600980d505d` 回读通过）
+
+- 时间：开工 `2026-11-09 08:41`（调研从 08:33 起）。来由：上游可学点 #251，常浩定「先做 #251」，看过改前改后表后选 A+B。
+- 改前复现：终端 Claude 停在审批上 `kill -9`，`PostPane --permission-hook` 被 launchd 收养继续等，侧栏「1」加「批」印 15 秒后还在，要挂满 10 分钟（L-36）。
+- 改了哪些文件：
+  - A：新增 `src/crates/platform/src/hooks/client_unix.rs`（钩子等待时父进程换了就结束等待）；`hooks/unix.rs` 两处等待条件改走它（行数变短）。
+  - B：新增 `src/crates/agents/src/claude/processes.rs`（读 `~/.claude/sessions/*.json`，登记过、进程已死的会话算结束；从没登记过的不算）；`platform/src/os/{macos,linux,windows}/process.rs` 加 `process_runs`（macOS 用 signal 0 加进程启动时间防 pid 复用），`platform/src/lib.rs` 启动时登记；`core/src/clients/claude_desktop.rs` 每 3 秒的 look 与收集轮次一起刷新，`settle_ended` 把已结束的会话改为空闲、清掉待回答；`core/src/presentation.rs` 接上；`agents/claude/jobs.rs` 放开 `small_file`。
+  - 文档：`docs/session-data.md` 新增一节，`docs/agent-contract.md` 一句。
+- 测试：共用主目录 `target`，先把全部 `.rs`、`Cargo.toml`、`build.rs` 时间改到未来，输出里有 9 行本 worktree 路径的 `Compiling`。`pnpm run check` `check exit=0`；`pnpm test` Rust 823 passed / 0 failed（基线 813 + 新增 10：agents 6、platform 3、core 1），前端 `ℹ pass 379` / `ℹ fail 0`，MCP 9、插件 14、扩展 13 全过；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。core 新测试先红：去掉 `settle_ended` 调用时报 `left: "running"` / `right: "idle"`。日志在 `evidence/2026-11-09-251-process-gone/full-*.log`、`targeted.log`。
+- 验证：装机后按 #251 验收实测：终端 Claude 停在审批上（侧栏出现「批」），`kill -9` 后约 0.5 秒钩子退出，约 1.5 秒内「批」变回「回」、小签消失，命令没被执行。小人隔 2 秒两张截图不同，在动。我自己这个正在跑的会话在驿窗里仍是 `running`，没被误判。
+- 截图：`evidence/2026-11-09-251-process-gone/accept/`：`1-card-side.png` 有卡，`2-after-kill-side.png` 撤卡，`m1/m2-bots.png` 小人在动，`0-installed.png` 无权限弹窗。
+- 发布与回读：`install.sh 251-process-gone`：装前 `6349cc384273` 已备份，08:53:37 退出、08:53:38 启动，产物 `3600980d505d` / 已装 `3600980d505d`，签名 leaf `H"b773068e"`；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-09-251-process-gone/PostPane-6349cc384273.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：B「会话不再显示正在进行」没能在真实进程上复现，只有测试覆盖。终端版 Claude 2.1.319 在两次实验里都没写登记和会话记录，`claude -p` 也没写，所以造不出「被杀的会话还挂着」的现场。上游「进程说在等就超过 30 分钟也显示等你回答」没做，常浩没定。钩子由 `sh -c` 中间进程启动时，父进程检查看不到 Claude 被杀，目前实测父进程就是 Claude 本身。
+- 本轮新坑：L-36（另在 L-32 补了一条还原教训）
+- skill 进化：无
+
+## 撤回 #264：侧栏小人全变静态图标的回归（2026-11-09，Claude，常浩指出「侧边栏的动态小人为什么都没有了」；已提交、PR 待全量测试后合并、已装机 `6349cc384273`）
+
+- 时间：开工 `2026-11-09 08:04`。来由：第二批合并装机（`b977cfc5aa5e`）后，侧栏小人全部变成静态 logo。
+- 定位：数据和设置都没变（`botLogos: true`，系统没开「减少动态」）。Chromium 和 Safari 预览都复现不了。按提交二分装机：`768250f`、`ff6282b`、`285d8d8` 正常，坏在 #264 的 `3c7addd`（测量副本 `useDeferredValue`）。机制没查清（L-35）。
+- 改了哪些文件：撤回 `3c7addd`（`src/packages/hud/src/HUDScene.tsx` 回到同步重画，删掉它的测试）；新增守护测试 `src/packages/hud/test/measuring-copy-sync.test.ts`；`docs/LESSONS.md` 加 L-35。
+- 测试：新守护测试 `ℹ pass 1` / `ℹ fail 0`，在 #264 版本上会红（源码同时含 `useDeferredValue` 和 `MeasuringCopy`）；`check-file-size` 通过。三条全量由接手会话在本 worktree 跑（共用主目录 `target`，先把全部 `.rs`、`Cargo.toml`、`build.rs` 时间改到未来，输出里有本 worktree 路径的 `Compiling` 行）：`pnpm run check` 通过（第一次因未提交的调试目录 `preview-bots/` 格式不合规失败，删掉后重跑通过）；`pnpm test` Rust 813 passed / 0 failed，前端 `ℹ pass 379` / `ℹ fail 0`（380 − 撤回 2 + 守护 1，守护测试名出现且通过），其余三组 9 / 14 / 13 全过；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。日志在 `evidence/2026-11-09-bots-static/full-*.log`。
+- 回归核查（接手会话）：接力数据 `handoffs.json`、`settings.json`、`presentation.json` 与装旧版前的备份逐字节相同，#257 的回执状态存 `launches.json`（目前没有待送的话，文件不存在），没丢字段。侧栏隔 2 秒两张截图小人区域不同（`evidence/2026-11-09-bots-static/regress/`），版面与第二批前的 `old-70ad-side.png` 逐项一致（螃蟹、航空斜纹与「回」印、云朵 37%、ChatGPT 6.7M、Hermes、猫球、磁盘瘦身挂件）。小签、ANSWER / START 框、接力纸飞机等只在特定状态出现，截图看不到，改读第二批对侧栏的代码改动：只新增「钩子未允许」细条、接力回执状态字、插话后轮数重算，修了问答卡 hook 顺序和悬停计时，新字段缺省时渲染不变。
+- 验证：从本分支打包装机后，侧栏 Claude 螃蟹、Codex 云朵、ChatGPT 打盹都回来了；隔 2 秒两次截图不同，确认在动（`evidence/2026-11-09-bots-static/fix-side.png`、`motion-*-side.png`）。
+- 截图：见上面的证据目录。
+- 发布与回读：产物与已装都是 `6349cc384273`；回滚到坏版本的命令（只供排查）是 install.sh 打印的 `PostPane-3a28d69abd34.app`。
+- 遗留：#264 原先要解决的「审批卡离开时卡 60–150 ms」又回来了，要另想办法，并且必须在真实侧栏里验证；issue #264 已重新打开。
+- 本轮新坑：L-35
+- skill 进化：无（L-35 的「动侧栏渲染必须装机看小人」建议并入 E-14 一起批）
+
 ## 上游 Agent HUD 可学点第二批 9 张一次做完（#257–#265）（2026-11-09，Claude 主会话 + 7 个子 agent，常浩「都做，一口气全做了，我现在直接通过」；已提交、8 张 PR squash 合并、已发布 `b977cfc5aa5e` 回读通过）
 
 - 时间：开工 `2026-11-09 01:00` 前后（常浩回「都做」后立即分派，按会话记录估记）。来由：上游对比报告（`docs/design/上游AgentHUD对比-2026-11-09.md`）列出的第二批可学点开成 #257–#265 后，常浩一次授权全部直接做。

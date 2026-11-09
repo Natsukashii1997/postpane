@@ -207,6 +207,12 @@ pub(crate) fn codex_cli_on_port(
     None
 }
 
+/// Claude Code's process registry is not read for liveness here (#251):
+/// every process a file names counts as running.
+pub(crate) fn process_runs(_pid: i32, _started: Option<i64>) -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

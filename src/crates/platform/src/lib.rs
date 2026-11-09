@@ -11,6 +11,7 @@ pub mod claude_plugin;
 pub mod clients;
 mod data_folder;
 pub mod deepseek_plugin;
+pub mod delivery;
 pub mod hooks;
 pub mod hud_tools;
 pub mod json_text;
@@ -42,6 +43,7 @@ pub struct NativePlatform {
 impl NativePlatform {
     pub fn new() -> Result<Self, String> {
         let home = os::home_dir()?;
+        agent_hud_agents::claude::processes::set_host(os::OS, os::process_runs);
         Ok(Self { home })
     }
     pub fn home_dir(&self) -> &Path {

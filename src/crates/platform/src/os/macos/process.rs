@@ -93,6 +93,25 @@ pub(crate) fn codex_cli_on_port(
     parse_procargs2(&data, wanted_env)
 }
 
+/// Whether a process runs on `pid` that started at `started` (Unix seconds),
+/// for Claude Code's process registry (#251): a reused pid is another
+/// program. Another user's process, or a start that cannot be read, is
+/// taken on trust.
+pub(crate) fn process_runs(pid: i32, started: Option<i64>) -> bool {
+    if pid <= 0 {
+        return true;
+    }
+    // SAFETY: signal 0 delivers nothing; it only checks the pid.
+    let sent = unsafe { libc::kill(pid, 0) } == 0;
+    if !sent && std::io::Error::last_os_error().raw_os_error() != Some(libc::EPERM) {
+        return false;
+    }
+    match (started, bsd_info(pid)) {
+        (Some(said), Some(info)) => (said - info.pbi_start_tvsec as i64).abs() <= 2,
+        _ => true,
+    }
+}
+
 fn bsd_info(pid: i32) -> Option<libc::proc_bsdinfo> {
     unsafe {
         let mut info: libc::proc_bsdinfo = std::mem::zeroed();
@@ -236,6 +255,25 @@ fn bundle(executable: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pid another program now runs on is not the process a file named (#251).
+    #[test]
+    fn a_pid_runs_while_its_process_does_and_started_when_said() {
+        let own = std::process::id() as i32;
+        let began = bsd_info(own).unwrap().pbi_start_tvsec as i64;
+        assert!(process_runs(own, Some(began)), "the same process");
+        assert!(
+            process_runs(own, None),
+            "a start not said is taken on trust"
+        );
+        assert!(!process_runs(own, Some(began - 86_400)), "a reused pid");
+        let mut finished = std::process::Command::new("true").spawn().unwrap();
+        finished.wait().unwrap();
+        assert!(
+            !process_runs(finished.id() as i32, None),
+            "a process that ended"
+        );
+    }
 
     #[test]
     fn procargs_environment_keeps_only_named_variables() {

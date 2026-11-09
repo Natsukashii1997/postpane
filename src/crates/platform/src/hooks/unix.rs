@@ -402,6 +402,10 @@ fn connect(data: &Path, bytes: &[u8], read: Duration) -> Result<UnixStream, Stri
     Ok(stream)
 }
 
+// Whether the client is still there to answer (#251).
+#[path = "client_unix.rs"]
+mod client;
+
 enum Waited {
     /// PostPane's answer, or `{}` when it ended the request itself.
     Answer(Vec<u8>),
@@ -418,9 +422,7 @@ fn wait(
 ) -> Result<Waited, String> {
     let mut response = Vec::new();
     loop {
-        if transcript.as_mut().is_some_and(|watch| watch.settled())
-            || std::time::Instant::now() >= deadline
-        {
+        if client::ended(transcript) || std::time::Instant::now() >= deadline {
             return Ok(Waited::Over);
         }
         let mut chunk = [0u8; 8192];
@@ -464,9 +466,7 @@ fn reconnect(
     };
     loop {
         std::thread::sleep(Duration::from_millis(500));
-        if transcript.as_mut().is_some_and(|watch| watch.settled())
-            || std::time::Instant::now() >= give_up
-        {
+        if client::ended(transcript) || std::time::Instant::now() >= give_up {
             return None;
         }
         if let Ok(stream) = connect(data, bytes, Duration::from_millis(100)) {

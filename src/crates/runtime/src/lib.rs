@@ -20,7 +20,6 @@ pub use agent_hud_platform::claude_desktop_session;
 pub use agent_hud_platform::claude_plugin;
 pub use agent_hud_platform::client_executable;
 pub use agent_hud_platform::clients::chatgpt;
-pub use agent_hud_platform::deepseek_plugin;
 pub use agent_hud_platform::hooks;
 pub use agent_hud_platform::hud_tools;
 pub use agent_hud_platform::instance;
@@ -28,6 +27,7 @@ pub use agent_hud_platform::local_tools;
 #[cfg(target_os = "macos")]
 pub use agent_hud_platform::registered_applications;
 pub use agent_hud_platform::CollectionGate;
+pub use agent_hud_platform::{deepseek_plugin, delivery};
 
 /// Every collecting entry point claims the data directory before constructing
 /// a Runtime. Owning client hooks additionally claims their shared resource.

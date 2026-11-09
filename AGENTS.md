@@ -15,6 +15,7 @@
 | 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
 | 开需求、拆任务、实现、审查 | 下面「Agent skills」一节 |
+| 改动会碰到常浩定过的内容（含批量授权里的单项） | 下面「已定内容要改，先单独确认」 |
 | 写交接、验收别人的交接 | [docs/templates/handoff.md](docs/templates/handoff.md) 骨架；[OPERATIONS](docs/OPERATIONS.md)「交接写法」「报告与验收」 |
 | 一轮从开工到收尾：worktree、测试、装机回读、交接、合并清理、复盘进化 | [.agents/skills/postpane-round/SKILL.md](.agents/skills/postpane-round/SKILL.md)（Claude `/postpane-round`，Codex `$postpane-round`） |
 | 给别人装驿窗、第二人复现 | [docs/安装与使用.md](docs/安装与使用.md) |
@@ -90,6 +91,21 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 
 改动怎么走、分支怎么起名、交接写在哪、怎么合并：见 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/工程流程.md`。
 
+## 已定内容要改，先单独确认
+
+常浩明确定过的内容，以后要改都得先说清楚、等他再确认，给他留出重新考虑的空隙。来由：2026-11-09 第二批上游借鉴在「直接通过」的批量授权下合进 #264，侧栏小人被改成静态图标（L-35）。
+
+- **什么算已定**：CURRENT.md、PR、issue、记忆里写着常浩「选 / 定 / 定稿 / 验收」的内容，范围包括但不限于外观、动效、交互、文案、行为、数据格式。拿不准算不算，按已定处理。
+- **什么时候要问**：动手前发现改动会改变已定内容，不论是本来就要改它，还是改别处会顺带波及它。
+- **怎么问**：单独发一条「改动确认」，写四件事，问完就停，等他明确回复，不在同一轮里先做后问：
+  1. 原来怎么定的：哪天、在哪定的（CURRENT 哪一节 / PR / issue / 记忆），当时的思路和理由；
+  2. 这次要改成什么、为什么要改；
+  3. 改的风险和代价：会丢掉什么、可能波及什么；有没有不改也能达到目的的做法；
+  4. 请他选：改 / 不改 / 换个改法。
+- **批量授权**：「都做」「一口气做完」「直接通过」不算对已定内容的确认。批里只要有一项涉及已定内容，就把这一项单独摘出来照上面问，其余项照常做。
+- **没打算改、但碰到同一处代码**（侧栏渲染、小人、动效 CSS 等）：合并前装机，隔 2 秒截两张、和改前对比，确认已定内容没变（L-35）。事后发现改坏了，先撤回恢复，再报告。
+- **借鉴上游**：只取做法，不照搬样子。
+
 ## 规则
 
 - 验证用的备份、日志等证据放 `~/Library/Application Support/postpane/evidence/`，不放 `/tmp`（全局坑 G-01）；私人数据与完整日志不进仓库。
@@ -119,6 +135,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 - **对外开放**：只在本机，不开网络端口（stdio → `<数据目录>/tools/mcp.sock`，0600）。
   - 侧栏工具，MCP「agent-hud」：可装到 Claude Code、Codex、Cursor、DeepSeek Harness、Antigravity。能读侧栏布局、快照、会话、用量统计、侧栏截图（账户打码）；能写侧栏草稿（面板里保存才生效）、外观和动画两项偏好。开关是设置 `hudTools`（「允许智能体调整侧栏」，「AI 接入」页和「智能体插件」页是同一个），同时管读和写。
   - 发起接力 `relay_to_chatgpt`：只接 Claude Code 会话，能新开或续接一次审核；不受 `hudTools` 管，在「智能体插件」移除 ChatGPT 插件登记即关。
+  - 智能体互发消息（#278，移植上游 `b1217c3`）：同一个 MCP「agent-hud」的 `list_sessions`、`send_message`、`start_session`、`get_message`，本机 Claude Code、Codex、Antigravity、DeepSeek Harness 会话之间列出会话、互发消息（对方空闲才送进去，不打断）、开新会话、取回回答；只送发件方写的那段话，不转发会话记录。开关在「智能体插件」单独一节「智能体互发消息」：「允许智能体互发消息」（`agentMessages`，默认关，关着时工具不列出）；「以我的身份发送」（`agentMessagesAsUser`，默认关，标「注意」，打开后消息不带来源标签，对方当成常浩的话照做）；「连续来回上限」（`agentMessagesLimit`，默认 10，常浩插一句就重新计数）。日志只存指纹，在 `<数据目录>/messaging/messages.json`；送达回执在 `<数据目录>/local-client-receipts/`。互发消息也飞接力那种纸飞机，不盖印章（常浩 2026-11-09 选甲）。
 - **数据对象**：只读取、不替驿窗产出、不放进可切换项。本机检测到且在「智能体」页开着的才读；每家读哪里见 `lib/ai-access.ts` 的 `sources`。主要几家：Claude Code（`~/.claude/projects`，额度用本机 claude 登录，重启后第一次就读失败时退回 `~/.claude.json` 里 Claude Code 自己记下的读数、只认同一账号，云端会话经 api.anthropic.com）、Codex（`~/.codex/sessions`，本机 codex app-server，顺带查驿窗钩子是否已允许）、Hermes（`~/.hermes/state.db`、`profiles/*/state.db`，不联网）、ChatGPT 网页（Chrome 插件报回合，不读文件）、Antigravity（`~/.gemini/antigravity*/brain`，本机 language server）。DeepSeek、Kimi、GLM、OpenCode 的额度可用驿窗保存的 API Key，存 `<数据目录>/account-credentials/`，界面只显示「已保存」。
 
 `<数据目录>` 在 macOS 上是 `~/Library/Application Support/app.postpane.mac`。

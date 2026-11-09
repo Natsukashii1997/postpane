@@ -1,10 +1,28 @@
 //! Optional host extension interface.
 use serde_json::Value;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 /// The app's language for a product's own words, and the way a product sends
 /// words into a client session.
-pub use agent_hud_runtime::{l10n, replies::SessionReplies};
+pub use agent_hud_runtime::{delivery, l10n, replies::SessionReplies};
+
+/// What agent messages send through when a product has senders of its own
+/// (`ProductExtension::delivery`; upstream b1217c3, #278).
+pub struct Delivery {
+    /// The one owner of sends into sessions on this computer: agent messages
+    /// and the product's own senders go through it, so each session's
+    /// messages keep their order.
+    pub clients: Arc<delivery::LocalClients>,
+    /// How sessions are started, and where their receipts are kept.
+    pub starts: delivery::StartConfig,
+    pub start_receipts: PathBuf,
+    /// Where agent messages keep their journal.
+    pub directory: PathBuf,
+    /// Follows a start whose Claude job will move into the desktop app.
+    pub follow: agent_hud_messaging::Follow,
+    /// The product's store of conversation turns, read before transcript pages.
+    pub conversations: Option<Arc<dyn agent_hud_messaging::Turns>>,
+}
 
 pub type ReadSnapshot = Arc<dyn Fn() -> Result<Value, String> + Send + Sync>;
 pub type Query = Arc<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>;
@@ -91,6 +109,12 @@ pub trait ProductExtension: Send + Sync + 'static {
     /// the host and the product use one. None (the default) keeps both in the
     /// app's data folder.
     fn claude_plugin_paths(&self) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        None
+    }
+    /// The product's own senders into sessions, which agent messages then
+    /// share. Asked once, after `start`; None (the default) has the host send
+    /// and start sessions on its own, from the app's data folder.
+    fn delivery(&self) -> Option<Delivery> {
         None
     }
     fn stop(&self);
