@@ -121,8 +121,8 @@ export function AiAccessPane({
             icon={logo("codex")}
             title="Codex"
             subtitle={t(
-              "Can start a relay (#280), not review one; replies go back into its thread through Codex's queue.",
-              "能发起接力（#280），不能当审核方；回信经 Codex 自己的队列送回原线程。",
+              'Can start a relay (#280), not review one; replies go back into its thread through Codex\'s queue. Codex asks you to approve each relay call unless ~/.codex/config.toml sets approval_mode = "approve" for relay_to_chatgpt (#286; new threads only).',
+              '能发起接力（#280），不能当审核方；回信经 Codex 自己的队列送回原线程。Codex 每次调接力工具默认要你批准；在 ~/.codex/config.toml 给 relay_to_chatgpt 设 approval_mode = "approve" 就免批准（#286，新开的线程才生效）。',
             )}
           >
             <Pill dot>{t("Not an executor", "不支持当执行方")}</Pill>

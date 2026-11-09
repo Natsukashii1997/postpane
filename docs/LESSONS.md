@@ -338,3 +338,12 @@
   - 会话弹「stopped responding」时，先在 `main.log` 里搜 `timed out after`，看 `last_tool_name` 是哪个工具卡住了。
 - 证据：`main.log` 第 61278、62034 行（2026-11-09 12:02:37、12:25:37）。
 - 可提议提升为全局坑：换个项目也成立（Claude 桌面应用里的任何长命令都可能碰上）。
+
+## L-38 改了 Codex 的 MCP 工具批准配置，已经开着的 Codex 线程照旧要批准；`codex exec` 不能拿来做对照（2026-11-09）
+
+- 现象：#286 在 `~/.codex/config.toml` 给 `relay_to_chatgpt` 加了 `approval_mode = "approve"`，随后让 10:57 开的测试线程调这个工具，13:22:01 照样触发了 `PermissionRequest` 钩子，60 秒没返回。用 `codex exec` 新开进程测，设成 `approve` 能直接执行，但对照组临时改回 `auto` 也能直接执行，分不出差别。
+- 根因：
+  - Codex 按线程记下 MCP 工具的配置。已经开着的线程不会重读，app-server 进程本身不用重启：13:28 在同一个 app-server（pid 83594，10:56 起）里新开线程，同一个工具 0.02 秒执行，没出批准。
+  - `codex exec` 没有交互批准，同一个工具不论设成什么都直接执行，所以拿它做对照没有意义。
+- 正确做法：改了 Codex 的 MCP 或批准配置后，在新开的线程里实测（驿窗 `start_session` 开一个就行）。对照组也要在同类线程里做，不要用 `codex exec`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/`：老线程 rollout 第 347～399 行（13:22 调用、13:23:12 终止），`~/.codex/logs_2.sqlite` 13:22:01.147 `hook/started` 之后没有 `hook/completed`；新线程 `rollout-2026-11-09T13-28-36-01a1bec7-a276-…` 第 19～21 行；`exec-test/exec.jsonl`、`exec-test/control.jsonl`。
