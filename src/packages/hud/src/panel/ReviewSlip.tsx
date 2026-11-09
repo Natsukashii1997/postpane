@@ -1,9 +1,13 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Handoff } from "@agent-hud/protocol";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { progressLine, round } from "../alerts/handoff-card";
 import { airmailStripes, relayPaperOf } from "../paper";
 import { noButtonChrome } from "./theme";
+
+/** At most this many rows show on the slip; the rest scroll in place
+ * (owner, 2026-11-09, #288). */
+const SLIP_ROWS = 3;
 
 /** ChatGPT's reviews in the list (#145): a slip of the reviews' paper under
  * an airmail band, below the owner's own sessions. Moved out of
@@ -16,6 +20,17 @@ export function ReviewRows({
   children: ReactNode;
 }) {
   const sheet = relayPaperOf(true);
+  const rows = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number>();
+  useLayoutEffect(() => {
+    const list = rows.current;
+    const last = list?.children[SLIP_ROWS - 1] as HTMLElement | undefined;
+    setHeight(
+      list && last && list.children.length > SLIP_ROWS
+        ? last.offsetTop + last.offsetHeight
+        : undefined,
+    );
+  });
   return (
     <div
       style={{
@@ -51,7 +66,16 @@ export function ReviewRows({
       >
         {zh ? "审核" : "REVIEWS"}
       </div>
-      {children}
+      <div
+        ref={rows}
+        style={{
+          position: "relative",
+          maxHeight: height,
+          overflowY: height ? "auto" : undefined,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
