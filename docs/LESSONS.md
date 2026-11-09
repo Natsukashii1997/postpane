@@ -298,3 +298,15 @@
 - 根因：这个脚本会编译打包用的程序，它用哪个构建目录取决于当时有没有设 `CARGO_TARGET_DIR`。主会话写给子 agent 的共用规矩把两步顺序写反了。
 - 正确做法：共用构建目录时，先 `export CARGO_TARGET_DIR=…`，再跑 `package-resources` 和其他任何会编译的命令。
 - 证据：#260 子 agent 报告（已删掉那 387 MB）；共用规矩已在第二批改过来。
+
+## L-35 移植上游的性能优化后，驿窗侧栏的小人全变成静态图标（2026-11-09）
+
+- 现象：#264 照上游 `e07cd7e` 把侧栏面板的隐藏测量副本改成 `useDeferredValue` 延后重画（PR #273）。合并装机后，侧栏 Claude 像素螃蟹、Codex 云朵、ChatGPT 小人全部变成静态 logo。常浩第二天早上发现。
+- 根因：按提交二分装机定位（`768250f`、`ff6282b`、`285d8d8` 都正常，加上 `3c7addd` 就坏），撤回 #273 后恢复。具体机制没查清：只在驿窗的 WKWebView 里出现，Chromium 和 Safari 加载同一份前端、同一份实时快照都正常。测量阶段也是用无头 Chrome 做的，所以没发现。
+- 正确做法：
+  - 动侧栏渲染的改动（HUDScene、BotMark、测量与重画），合并前必须装机，在真实侧栏里隔 2 秒截两张图，确认小人在动，并和改前对比。浏览器预览不能代替。
+  - 移植上游时，先确认驿窗自己的东西（小人、票根、挂件）没被改动波及。
+  - 装机后的截图不能只看「有没有权限弹窗」。
+  - 已加守护测试 `hud/test/measuring-copy-sync.test.ts`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-bots-static/`：`now-side.png` 坏、`old-70ad-side.png`、`b768-side.png`、`bff6-side.png`、`b285-side.png` 好、`fix-side.png` 修好；`motion-1/2-side.png` 两张不同，说明小人在动。
+
