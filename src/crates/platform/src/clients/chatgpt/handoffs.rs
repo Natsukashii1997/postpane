@@ -14,7 +14,7 @@ use std::{
 };
 mod doer;
 mod pull_request;
-pub use doer::{by_doer, doer_name};
+pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 

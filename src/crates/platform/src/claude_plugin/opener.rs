@@ -66,7 +66,7 @@ fn transcript(claude_config: &Path, session: &str) -> Option<PathBuf> {
 }
 
 /// The last `REACH` bytes, from the first whole line in them.
-fn tail(file: &Path) -> Option<String> {
+pub fn tail(file: &Path) -> Option<String> {
     let mut reader = fs::File::open(file).ok()?;
     let length = reader.metadata().ok()?.len();
     let start = length.saturating_sub(REACH);

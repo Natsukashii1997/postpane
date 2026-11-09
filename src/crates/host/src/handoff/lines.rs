@@ -121,9 +121,15 @@ impl Lines for AppLines<'_> {
                 }
             })
     }
-    fn left(&self, doer: &str, session: &str, id: &str) -> Option<(String, Option<String>)> {
+    fn left(
+        &self,
+        doer: &str,
+        session: &str,
+        id: &str,
+        words: &str,
+    ) -> Option<(String, Option<String>)> {
         if doer == CODEX {
-            return codex_left(self.0, session, id);
+            return codex_left(self.0, session, id, words);
         }
         use agent_hud_runtime::claude_plugin::PromptState;
         let plugin = self.0.try_state::<crate::claude_plugin::ClaudePlugin>()?;
@@ -142,9 +148,9 @@ impl Lines for AppLines<'_> {
         Some((state.to_owned(), reason))
     }
     fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)> {
-        // Who began a Codex turn is not read yet (#253 B): its rounds count on.
+        // A Codex thread's from its rollout (#283).
         if doer == CODEX {
-            return None;
+            return agent_hud_runtime::chatgpt::handoffs::codex_turn(session);
         }
         let home = crate::mcp_clients::home().ok()?;
         agent_hud_runtime::claude_plugin::current_turn(
@@ -202,14 +208,27 @@ fn codex_send(app: &tauri::AppHandle, thread: &str, id: &str, text: &str) -> Res
 }
 
 /// How words left for a Codex thread stand, in the plugin's words
-/// (`waiting`, `taken`, `started`, `refused`, `expired`).
-fn codex_left(app: &tauri::AppHandle, thread: &str, id: &str) -> Option<(String, Option<String>)> {
+/// (`waiting`, `taken`, `started`, `refused`, `expired`). Codex's queue
+/// says no more than queued: a turn its rollout shows begun with `words`
+/// is `started` (#283); Codex takes them up as it starts the turn.
+fn codex_left(
+    app: &tauri::AppHandle,
+    thread: &str,
+    id: &str,
+    words: &str,
+) -> Option<(String, Option<String>)> {
     let receipt = codex_clients(app)
         .ok()?
         .receipt(Provider::Codex, thread, id)
         .ok()??;
     let state = match receipt.state {
-        DeliveryState::Waiting | DeliveryState::Queued | DeliveryState::Uncertain => "waiting",
+        DeliveryState::Waiting | DeliveryState::Queued | DeliveryState::Uncertain => {
+            if agent_hud_runtime::chatgpt::handoffs::codex_began(thread, words) {
+                "started"
+            } else {
+                "waiting"
+            }
+        }
         DeliveryState::Taken | DeliveryState::CancelRequested => "taken",
         DeliveryState::Started | DeliveryState::Steered => "started",
         DeliveryState::Refused | DeliveryState::Failed | DeliveryState::Interrupted => "refused",

@@ -757,7 +757,7 @@ fn write_json(file: &Path, value: &Value) -> Result<(), Refusal> {
 }
 
 mod opener;
-pub use opener::{current_turn, Opener};
+pub use opener::{current_turn, tail, Opener};
 
 #[cfg(test)]
 mod tests;

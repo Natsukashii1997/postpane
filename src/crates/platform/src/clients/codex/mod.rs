@@ -2,6 +2,7 @@
 // The same observer runs over a Unix socket or, on Windows, a named pipe.
 pub mod desktop;
 pub mod desktop_io;
+pub mod turns;
 
 use serde_json::Value;
 use std::{

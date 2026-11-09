@@ -129,7 +129,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 
   | 功能 | 执行方 | 接入方式 | 读什么 | 写到哪里 |
   |---|---|---|---|---|
-  | ChatGPT 接力审核（含侧栏左滑「审核 / 讨论」、自动往返；Claude Code 和 Codex 会话都能左滑发起，#282） | ChatGPT 网页（跟随默认），**仅支持 ChatGPT 网页** | 网页桥：Chrome 插件 → Native Messaging `com.postpane.chatgpt` → 驿窗 | Claude Code 或 Codex 会话交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读 Claude 会话记录末尾，只看当前这一轮是谁开的头（常浩插话就重算轮数，#258；Codex 暂不重算），并读插件留话的状态（排队中 / 已领取 / 已开始，#257） | `<数据目录>/chatgpt/handoffs.json`（另有 `turns.jsonl`、`launches.json`）；回信转回原 Claude 会话 |
+  | ChatGPT 接力审核（含侧栏左滑「审核 / 讨论」、自动往返；Claude Code 和 Codex 会话都能左滑发起，#282） | ChatGPT 网页（跟随默认），**仅支持 ChatGPT 网页** | 网页桥：Chrome 插件 → Native Messaging `com.postpane.chatgpt` → 驿窗 | Claude Code 或 Codex 会话交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读发起方会话记录末尾（Claude 的 `~/.claude/projects`、Codex 的 `~/.codex/sessions`），只看当前这一轮是谁开的头（常浩插话就重算轮数，#258、#283），并读留话的状态（排队中 / 已领取 / 已开始，#257；Codex 的从它会话记录里看到这一轮开始就算已开始） | `<数据目录>/chatgpt/handoffs.json`（另有 `turns.jsonl`、`launches.json`）；回信转回原 Claude 会话 |
 
   仅支持 ChatGPT 网页的原因：审核要用常浩 ChatGPT 账号里的项目和记忆；发起方只认 Claude Code 和 Codex 会话（`src/crates/host/src/handoff.rs` 的 `relay`），因为回信要按会话 id 送回去：Claude 经 agent-hud 插件，Codex 经它自己的队列（`thread/queue/add`，#280，`handoff/lines.rs`）。Codex 审核改用智能体互发消息（#278）。留痕：接力卡时间线记每一步的时间、谁做的、是不是驿窗自动做的（`handoffs.json` 的 `steps`）。
 - **对外开放**：只在本机，不开网络端口（stdio → `<数据目录>/tools/mcp.sock`，0600）。

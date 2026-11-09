@@ -6,6 +6,22 @@
 
 
 
+## 接力 B：读 Codex 会话记录——插话后重算轮数、转回回执推进（#283）（2026-11-09，Claude，常浩「按计划开工」；已提交未推送、PR 未开、已发布 `20ebf1fa5d5d` 回读通过，实机未做）
+
+- 时间：开工 `2026-11-09 13:15`。来由：#253 方案 B 单；常浩确认分三批做（批 1 读记录、批 2 接到接力、批 3 测试装机实测）。
+- 改了哪些文件：
+  - `platform/src/clients/codex/turns.rs`（新）：按线程 id 找 `~/.codex/sessions/年/月/日/rollout-…-<线程>.jsonl`，读末尾，取每轮开始时间、`turn_attribution.turn_trigger`（亲手打字 `composer`、队列送进 `queue`）和第一句用户原话（`user_words` 跳过 AGENTS.md、环境说明）；只解析含 `task_started` 或用户发言的行。
+  - `platform/.../handoffs/doer.rs`：加 `codex_turn`、`codex_began` 两个薄封装（经已导出的 `chatgpt::handoffs` 给 host 用，为 300 行棘轮不加 re-export 行）；`claude_plugin/opener.rs` 的 `tail` 改成 `pub`。
+  - `host/src/handoff.rs`：`Lines::left` 加「原话」参数（`track` 传这一步全文，左滑按 code 重拼原话）；新测试 `words_back_to_a_codex_thread_are_followed_by_their_words`。
+  - `host/src/handoff/lines.rs`：`opener` 的 Codex 分支读当前轮（打字算插话，队列送的按原话比对指纹）；`codex_left` 队列还说排队时，会话记录里见到以原话开头的一轮就算「已开始」（Codex 没有单独的「已领取」）。
+  - 同步：`AGENTS.md` 功能清单、「AI 接入」页（去掉「Codex 暂不重算」）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test`：Rust 合计 `929 passed; 0 failed`（新增 5 条），前端 `ℹ pass 382` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证：未做实机。装机后截屏无权限弹窗；顺带看到 Codex 格脚上已是蓝色「回」章（#282 那单，常浩拒掉过期批准卡后）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/after-install.png`。
+- 发布与回读：`20ebf1fa5d5d`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/PostPane-491ba714697a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：实机两项未做（见交接卡）；main 上有 `2e2fed2`（只加一份方案文档），合并前要变基。
+- 本轮新坑：无
+
 ## Codex 调接力工具免批准（#286 方案 1A）（2026-11-09，Claude，常浩回「做 1A」；已提交、PR 待合并、已装 `7126cf631f47` 回读一致后被并行会话覆盖）
 
 - 时间：开工 `2026-11-09 13:19`。来由：#282 实测时 Codex 调 `relay_to_chatgpt` 每次都要批准，调用会挂住；方案见 `docs/design/Codex调接力工具的批准卡-方案-2026-11-09.md`（#286，PR #287 已合并），常浩选 1A。
@@ -27,6 +43,7 @@
   - 方案 2A（那一轮结束后驿窗替常浩拒绝并撤卡）要先发改动确认，未做。
   - 本轮共多建了 3 张测试接力单（`h1a1bec6d6da00`、`h1a1bec74c5b01`、`h1a1bec7ca0802`），ChatGPT 那边各开了一个测试会话。
 - 本轮新坑：L-38
+
 - skill 进化：无
 
 ## 接力 C：Codex 发起时的侧栏表现与左滑发起（#282）（2026-11-09，Claude，常浩改动确认「四项都改」；已提交、PR 待常浩实测后合并、已发布 `491ba714697a` 回读通过）
