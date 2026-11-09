@@ -137,6 +137,7 @@
   - 正确做法：会话进程已停（签到写着 `ended`，或 3 分钟没签到）就用 `claude -p --resume <CLI 会话号> --permission-mode <会话自己的模式>` 在后台续接，桌面版之后续接同一个会话号、接得上这一轮（`evidence/2026-11-07-headless-resume/`）；只是暂时卡顿的先排队，3 分钟还没领、会话也没恢复，撤回排队再续接。CLI 会话号对应的工作目录、模型、权限模式在桌面版会话记录 `~/Library/Application Support/Claude/claude-code-sessions/**/local_*.json`（`cliSessionId`）里。
   - 升级：已写成测试 `handoff::tests::a_session_whose_process_stopped_is_run_in_the_background_with_the_answer`、`queued_words_for_a_session_that_stays_quiet_are_taken_back_and_run_in_the_background`、`a_background_run_that_cannot_start_or_ends_without_a_handover_is_left_to_the_person`。
 - 补充（#255，2026-11-09）：上面的「正确做法」当时没做成。`Lines::leave` 底下是 `ClaudeChannel::hand`，它和直接送话一样先查 20 秒内的签到，会话结束后排队也被拒，三次尝试被同一道检查挡下；测试替身的 `leave` 不查签到，所以测试一直是绿的（见 L-30）。现在排队改走不查签到的 `Lines::queue`（`ClaudeChannel::queue`），左滑发起仍走 `leave`。
+- 提升：已提升为全局 G-24（2026-11-09，agent-kit PR #48）：Claude 桌面版回收空闲会话的进程，打开会话也不会重新跑起来。
 
 ## L-15 侧栏审批「看不到」：10 分钟就撤回，驿窗一重装也丢（2026-11-07）
 
