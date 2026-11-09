@@ -6,6 +6,29 @@
 
 
 
+## ChatGPT 面板审核纸条列出所有开着的接力，点一行打开接力卡（#288）（2026-11-09，Claude，常浩看改动确认后回「改，用甲」；已提交、PR 按授权合并、已发布 `e3e2ce4b969f` 回读通过）
+
+- 时间：开工 `2026-11-09 16:26`。来由：#288，发起会话停了以后接力卡没有入口，结束不了。查实原因：接力卡只能从活着的发起会话行上的「接力 n/m」小标或回复提醒里的「查看接力」打开；ChatGPT 面板的审核纸条只列 ChatGPT 正在答的审核会话；悬停小收据的审核行点不了，还会藏起发起会话没在跑、超过 2 小时没动静的单子（`STALE_REVIEW`）。本机 12 单开着的接力（停了 3 到 64 小时）都打不开。常浩在甲（审核纸条列出）、乙（Claude / Codex 面板加一行）、丙（自动收尾）里选甲，改动确认写明会动到 #145 定下的下联内容。
+- 改了哪些文件：
+  - `hud/src/panel/ReviewSlip.tsx`（新）：`ReviewRows` 从 `SessionsSection.tsx` 原样搬来（300 行棘轮）；新 `QuietRelayRow`：「接力 n/m」虚线小标（等宽数字，各行标题对齐）、标题、`progressLine` 一行，整行是按钮，点开接力卡；墨色用审核纸自己的 `relayPaperOf(true)`（L-42）。
+  - `hud/src/chatgpt-desk.ts`：新 `quietRelays`，开着或正在开的接力，去掉已经有 ChatGPT 审核会话行的，不论停了多久、发起方是谁，按最近动静倒序。
+  - `hud/src/panel/SessionsSection.tsx`：只在 ChatGPT 单家面板，审核纸条在正在答的行下面接上这些接力行；没有正在答的也照样显示纸条。行数 1179 → 1146，基线只改这一行。
+  - `hud/test/chatgpt-desk.test.ts`：新测试 `open handoffs ChatGPT is not answering are listed, however old (#288)`。
+  - `docs/LESSONS.md`：L-42。
+  - 悬停小收据（`DeskLines`）没改：仍是预览，点它进面板；2 小时规则照旧。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 385` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。以最后一次（提交 `b7256e4`）为准，前两次同样全过。
+- 验证：
+  - 装机后 `get_hud_screenshot` 拍 ChatGPT 面板：改前没有审核纸条，改后列出 12 单，各带轮次、阶段和「自动已停」。
+  - 浏览器预览真实 `HUDScene`（端口 1465，常浩真实侧栏配置 + 驿窗当时的快照，脚手架存证据目录 `preview-288/`，不提交）：真实悬停展开 ChatGPT 面板，点「驿窗实测｜#217 L2 跨会话」一行，接力卡打开，底部有「结束接力」「继续自动」；再点「结束接力」，`handoffAct` 收到 `{id: "h1a1b70a066c01", action: "end"}`，正是这一单（预览里是桩，没有真结束）。第一次预览发现纸张外观下标题看不清，改墨色后重看清楚（L-42）。
+  - 面板超过屏幕高时在面板内滚动，不出屏（`HUDExpandedSurface` 已有最大高度）。
+  - **未做**：在真机上用鼠标点（申请操作驿窗的权限被拒）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-288-open-relays/`：`before-chatgpt-panel.png`、`after-chatgpt-panel.png`、`before-hud.png`、`after-hud.png`（L-35：侧栏除「对话」数字外无变化）、`preview-panel.jpg`、`preview-card-opened.jpg`、`preview-paper-ink-before-fix.png`。
+- 发布与回读：`e3e2ce4b969f`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-288-open-relays/PostPane-db5038f37b88.app" /Applications/PostPane.app; open /Applications/PostPane.app`（装本轮之前的版本）。
+- 遗留与范围外发现：
+  - 12 单老接力本轮没替常浩结束，等他在面板里逐单处理。
+  - 同一纸条上正在答的审核会话行（`LiveRow`）仍用面板墨色，纸张外观下是否也看不清未核实（L-42）。
+- 本轮新坑：L-42
+
 ## 侧栏 START 交接卡一键开始；BASH 卡写明只能在侧栏批（#292）（2026-11-09，Claude，常浩选「替你回原会话『开始』」「保留 BASH，并查清为何弹」后回「开工」；已提交、PR 待合并、已发布 `db5038f37b88` 回读通过）
 
 - 时间：开工 `2026-11-09 14:36`。来由：常浩要「去掉侧栏 BASH，因为不需要我操作」、START 卡像 ANSWER 一样在侧栏直接开始。查实 BASH 卡不是误报：是 Claude Code 内置安全检查在 bypass 下仍要批准，批准只挂在驿窗侧栏、Claude 桌面窗口不弹，没人点 16 分钟后桌面版判「Claude Code stopped responding」（L-41）。常浩据此改选「保留，并查清为何弹」。#247「去开始」是定过的内容，这次常浩点名要改，不另发改动确认。

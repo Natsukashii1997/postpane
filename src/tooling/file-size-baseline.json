@@ -133,7 +133,7 @@
   "src/packages/hud/src/panel/AgentBoard.tsx": 672,
   "src/packages/hud/src/panel/HermesBoard.tsx": 386,
   "src/packages/hud/src/panel/QuotaSection.tsx": 609,
-  "src/packages/hud/src/panel/SessionsSection.tsx": 1179,
+  "src/packages/hud/src/panel/SessionsSection.tsx": 1146,
   "src/packages/hud/src/panel/TokenChartSection.tsx": 489,
   "src/packages/hud/src/panel/agent-board.ts": 450,
   "src/packages/hud/src/permissions/ApprovalContent.tsx": 306,
