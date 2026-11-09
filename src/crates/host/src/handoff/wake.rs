@@ -2,7 +2,7 @@
 //! stopped (L-14, #175): Claude's desktop app reclaims idle sessions, and
 //! opening one does not run it again, so words back to it would wait.
 use super::now_ms;
-use super::{back_failed, back_text, republish, Desk, Lines};
+use super::{back_failed, back_text, republish, Desk, Lines, CLAUDE};
 use agent_hud_runtime::chatgpt::handoffs::{self, Delivery};
 use agent_hud_runtime::l10n;
 use serde_json::Value;
@@ -26,7 +26,7 @@ impl Desk {
                 continue;
             };
             let taken = lines
-                .left(&session, &prompt)
+                .left(CLAUDE, &session, &prompt)
                 .is_some_and(|(state, _)| state != "waiting");
             if taken || !lines.stopped(&session) || !lines.withdraw(&session, &prompt) {
                 continue;

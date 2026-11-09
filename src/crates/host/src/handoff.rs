@@ -19,6 +19,8 @@ pub(crate) struct Rule {
     pub(crate) risk: Option<String>,
     /// The person's leave for one review past the budget, and why.
     pub(crate) extra: Option<String>,
+    /// The client doing the work when it is not Claude Code: `codex` (#280).
+    pub(crate) doer: Option<String>,
 }
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
@@ -29,11 +31,14 @@ use std::{
 };
 use tauri::Manager;
 
+mod lines;
+use lines::AppLines;
 mod wake;
 use wake::{wake_failed, woke_stopped};
 
 /// Claude Code's source id, the only client words go back into.
 const CLAUDE: &str = "claude";
+const CODEX: &str = "codex";
 /// The local tool Claude calls to hand its work to ChatGPT.
 pub(crate) const RELAY_METHOD: &str = "relay_to_chatgpt";
 /// The longest text sent either way: Chrome refuses a message to an
@@ -59,23 +64,23 @@ pub(crate) trait Lines {
     /// may still say it went in after the wait gave up (`Desk::observe`).
     fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
-    fn reaches(&self, session: &str) -> Result<(), String>;
+    fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):
     /// words left under it before are `Unsent::Again`.
-    fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
+    fn reply(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
     /// Leaves words for a Claude Code session and says which, to follow
     /// them (`left`).
     fn leave(&self, session: &str, text: &str) -> Result<String, String>;
     /// Leaves words as `reply` does, also for a session not running now: they
     /// wait in its queue until it is opened (#255).
-    fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
+    fn queue(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent>;
     /// How words left for a session stand (`waiting`, `taken`, `started`,
     /// `refused`, `expired`, `cancelled`) with the plugin's reason; None once
     /// the plugin's files are gone.
-    fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)>;
+    fn left(&self, doer: &str, session: &str, id: &str) -> Option<(String, Option<String>)>;
     /// Who began a Claude Code session's current turn, and when (#258);
     /// None when its transcript cannot tell.
-    fn opener(&self, session: &str) -> Option<(Opener, i64)>;
+    fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)>;
     /// Whether the session ran the plugin and its Claude Code process has
     /// stopped since: Claude's desktop app reclaims idle sessions, and
     /// opening one does not run it again (L-14).
@@ -554,7 +559,11 @@ impl Desk {
                     // The person spoke up in the session since words went
                     // back to it (#258): its rounds count from one again.
                     // Not told who began Claude's turn: they count on.
-                    if handoff.spoke_up(lines.opener(session).as_ref()) {
+                    if handoff.spoke_up(
+                        lines
+                            .opener(handoff.doer.as_deref().unwrap_or(CLAUDE), session)
+                            .as_ref(),
+                    ) {
                         self.change(|book| book.restart_rounds(&handoff.id));
                     }
                     let sent = {
@@ -591,6 +600,9 @@ impl Desk {
         }
         let handoff = self.change(|book| {
             let handoff = book.begin(session, cwd, &title, summary, brief, now);
+            if let Some(doer) = rule.doer.as_deref() {
+                book.set_doer(&handoff.id, doer);
+            }
             if engineering {
                 book.rule(&handoff.id, risk, pr.as_deref());
             }
@@ -870,15 +882,18 @@ impl Desk {
                     .lock()
                     .get(id)
                     .map_or_else(|| handoff.prompt_for(kind), |h| h.prompt_for(kind));
-                let session = &handoff.claude_session;
+                let (doer, session) = (
+                    handoff.doer.as_deref().unwrap_or(CLAUDE),
+                    &handoff.claude_session,
+                );
                 if let Err(Unsent::Failed(error)) = lines
-                    .reaches(session)
+                    .reaches(doer, session)
                     .map_err(Unsent::Failed)
-                    .and_then(|()| lines.reply(session, &prompt, &text))
+                    .and_then(|()| lines.reply(doer, session, &prompt, &text))
                 {
                     // As the auto round trip's (#223): they wait in the
                     // session's queue and go in once it is opened.
-                    if let Err(Unsent::Failed(_)) = lines.queue(session, &prompt, &text) {
+                    if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
                         return Err(error);
                     }
                     self.change(|book| {
@@ -993,15 +1008,18 @@ impl Desk {
                     .filter(|d| matches!(d, Delivery::Waiting | Delivery::Taken))?;
                 Some((
                     h.id.clone(),
-                    h.claude_session.clone(),
+                    (
+                        h.doer.clone().unwrap_or_else(|| CLAUDE.into()),
+                        h.claude_session.clone(),
+                    ),
                     step.prompt.clone()?,
                     delivery,
                 ))
             })
             .collect::<Vec<_>>();
         let mut changed = false;
-        for (id, session, prompt, was) in pending {
-            let Some((state, reason)) = lines.left(&session, &prompt) else {
+        for (id, (doer, session), prompt, was) in pending {
+            let Some((state, reason)) = lines.left(&doer, &session, &prompt) else {
                 continue;
             };
             let delivery = match state.as_str() {
@@ -1058,17 +1076,21 @@ impl Desk {
         // The step's own id (#257): tried again, or triggered again, it
         // leaves no second copy; words left under it before went already.
         let prompt = handoff.prompt_for(StepKind::Back);
-        let session = &handoff.claude_session;
+        let (doer, session) = (
+            handoff.doer.as_deref().unwrap_or(CLAUDE),
+            &handoff.claude_session,
+        );
         let send = || {
             lines
-                .reaches(session)
+                .reaches(doer, session)
                 .map_err(Unsent::Failed)
-                .and_then(|()| lines.reply(session, &prompt, &text))
+                .and_then(|()| lines.reply(doer, session, &prompt, &text))
         };
         if let Err(Unsent::Failed(first)) = send() {
             // Its process stopped: nothing runs in it to take the words, so
-            // Claude Code runs for it in the background (L-14).
-            if lines.stopped(session) {
+            // Claude Code runs for it in the background (L-14). A Codex
+            // thread is left to Codex's queue (#280).
+            if doer == CLAUDE && lines.stopped(session) {
                 return match lines.wake(id, session, &text) {
                     Ok(()) => self.change(|book| {
                         book.returned(id, StepKind::Back, &text, &prompt, true, now)
@@ -1087,7 +1109,7 @@ impl Desk {
                 // turn was over): the words wait in its queue and go in once
                 // it runs again; still waiting once it has been quiet for
                 // long, Claude Code runs for it (`wake_queued`).
-                if let Err(Unsent::Failed(_)) = lines.queue(session, &prompt, &text) {
+                if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
                     return self.change(|book| {
                         book.trouble(id, &retry_failed(&again), now);
                         book.stop(id, &back_failed(), true, now)
@@ -1233,7 +1255,7 @@ pub(crate) fn launch(
             return Ok(Launched::AlreadyQueued);
         }
     }
-    lines.reaches(session)?;
+    lines.reaches(CLAUDE, session)?;
     let id = lines.leave(session, &text)?;
     launches.insert(
         session.to_owned(),
@@ -1266,7 +1288,7 @@ fn follow(launch: &mut Launch, lines: &dyn Lines, session: &str, now: i64) {
     if !launch.pending() {
         return;
     }
-    match lines.left(session, &launch.id) {
+    match lines.left(CLAUDE, session, &launch.id) {
         Some((state, reason)) => match state.as_str() {
             "taken" => {
                 launch.taken_at.get_or_insert(now);
@@ -1579,138 +1601,6 @@ pub(crate) fn caller_session(caller: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The app's own lines: the ChatGPT channel and Agent HUD's Claude Code plugin.
-struct AppLines<'a>(&'a tauri::AppHandle);
-impl Lines for AppLines<'_> {
-    fn connected(&self) -> bool {
-        self.0
-            .try_state::<super::chatgpt::ChatGpt>()
-            .is_some_and(|chatgpt| chatgpt.connected())
-    }
-    fn open(
-        &self,
-        text: &str,
-        project: Option<&str>,
-        title: &str,
-        request: &str,
-    ) -> Result<String, String> {
-        let state = self
-            .0
-            .try_state::<super::chatgpt::ChatGpt>()
-            .ok_or("The ChatGPT channel is unavailable")?;
-        let opened = state
-            .channel()?
-            .open_as(text, project, Some(title), Some(request))?;
-        opened["conversation"]
-            .as_str()
-            .map(str::to_owned)
-            .ok_or_else(|| "The ChatGPT extension named no conversation".into())
-    }
-    fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String> {
-        let state = self
-            .0
-            .try_state::<super::chatgpt::ChatGpt>()
-            .ok_or("The ChatGPT channel is unavailable")?;
-        state
-            .channel()?
-            .send_as(conversation, text, Some(request))
-            .map(drop)
-    }
-    fn reaches(&self, session: &str) -> Result<(), String> {
-        let plugin = self
-            .0
-            .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(no_plugin)?;
-        plugin
-            .replies()
-            .reaches(CLAUDE, session)
-            .map_err(|unreachable| unreachable.note)
-    }
-    fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
-        use agent_hud_runtime::claude_plugin::Refusal;
-        let plugin = self
-            .0
-            .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(|| Unsent::Failed(no_plugin()))?;
-        let replies = plugin.claude_replies();
-        replies
-            .reply_as(session, id, text)
-            .map_err(|refusal| match refusal {
-                Refusal::IdentityConflict => Unsent::Again,
-                refusal => Unsent::Failed(replies.refusal_text(session, &refusal)),
-            })
-    }
-    fn leave(&self, session: &str, text: &str) -> Result<String, String> {
-        let plugin = self
-            .0
-            .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(no_plugin)?;
-        plugin
-            .channel()
-            .hand(session, text, std::time::SystemTime::now())
-            .map_err(|refusal| {
-                eprintln!("左滑发起 could not leave words: {refusal}");
-                l10n::text(
-                    "没能交给这个会话的 Agent HUD 插件。",
-                    "The words could not be left for this session's Agent HUD plugin.",
-                )
-            })
-    }
-    fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
-        use agent_hud_runtime::claude_plugin::Refusal;
-        let plugin = self
-            .0
-            .try_state::<super::claude_plugin::ClaudePlugin>()
-            .ok_or_else(|| Unsent::Failed(no_plugin()))?;
-        plugin
-            .channel()
-            .queue_as(session, id, text, std::time::SystemTime::now())
-            .map_err(|refusal| match refusal {
-                Refusal::IdentityConflict => Unsent::Again,
-                refusal => {
-                    eprintln!("转回 Claude could not queue words: {refusal}");
-                    Unsent::Failed(l10n::text(
-                        "没能排进这个会话的待发送队列。",
-                        "The words could not be queued for this session.",
-                    ))
-                }
-            })
-    }
-    fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
-        use agent_hud_runtime::claude_plugin::PromptState;
-        let plugin = self.0.try_state::<super::claude_plugin::ClaudePlugin>()?;
-        let (state, reason) = plugin
-            .channel()
-            .state(session, id, std::time::SystemTime::now())
-            .ok()??;
-        let state = match state {
-            PromptState::Waiting | PromptState::CancelRequested => "waiting",
-            PromptState::Taken => "taken",
-            PromptState::Started => "started",
-            PromptState::Refused => "refused",
-            PromptState::Cancelled => "cancelled",
-            PromptState::Expired => "expired",
-        };
-        Some((state.to_owned(), reason))
-    }
-    fn opener(&self, session: &str) -> Option<(Opener, i64)> {
-        let home = super::mcp_clients::home().ok()?;
-        agent_hud_runtime::claude_plugin::current_turn(
-            &agent_hud_runtime::claude_plugin::claude_config_directory(&home),
-            session,
-        )
-    }
-    fn stopped(&self, session: &str) -> bool {
-        wake::stopped(self.0, session)
-    }
-    fn withdraw(&self, session: &str, id: &str) -> bool {
-        wake::withdraw(self.0, session, id)
-    }
-    fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
-        wake::wake(self.0, handoff, session, text)
-    }
-}
-
 /// The snapshot's `handoffs`, with the words back to Claude followed first
 /// (#257), and queued ones for a session that went quiet run in the
 /// background (L-14).
@@ -1889,29 +1779,34 @@ pub(crate) fn listen(app: &tauri::AppHandle) {
     }));
 }
 
-/// `relay_to_chatgpt`: Claude Code hands its work to ChatGPT for review.
-/// Only a Claude Code session may, and only for itself (`caller_session`).
+/// `relay_to_chatgpt`: Claude Code or Codex (#280) hands its work to
+/// ChatGPT for review, only for its own session (`caller_session`).
 pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, String> {
     let caller = &params["caller"];
-    if !caller.is_null() && caller["client"] != CLAUDE {
-        return Err(l10n::text(
-            "只有 Claude Code 会话能把工作交给 ChatGPT 审核。",
-            "Only a Claude Code session can hand its work to ChatGPT for review.",
-        ));
-    }
+    let doer = match caller["client"].as_str() {
+        Some(CODEX) => Some(CODEX.to_owned()),
+        Some(CLAUDE) | None => None,
+        Some(_) => {
+            return Err(l10n::text(
+                "只有 Claude Code 和 Codex 会话能把工作交给 ChatGPT 审核。",
+                "Only a Claude Code or Codex session can hand its work to ChatGPT for review.",
+            ))
+        }
+    };
     let title = params["title"].as_str().unwrap_or("").trim();
     let summary = params["summary"].as_str();
     let brief = params["brief"].as_str().unwrap_or("");
     let cwd = params["cwd"].as_str().filter(|cwd| !cwd.is_empty());
     let session = caller_session(caller).ok_or_else(|| {
         l10n::text(
-            "认不出是哪个 Claude Code 会话在调用（调用里没有会话 id），没有发出。请在 Claude Code 会话里调用这个工具。",
-            "Could not tell which Claude Code session is calling (the call names none); nothing was sent. Call this tool from a Claude Code session.",
+            "认不出是哪个会话在调用（调用里没有会话 id），没有发出。请在 Claude Code 或 Codex 会话里调用这个工具。",
+            "Could not tell which session is calling (the call names none); nothing was sent. Call this tool from a Claude Code or Codex session.",
         )
     })?;
     let rule = Rule {
         risk: params["risk"].as_str().map(str::to_owned),
         extra: params["extra"].as_str().map(str::to_owned),
+        doer,
     };
     let mut answer = start(app, &session, cwd, title, summary, brief, false, &rule)?;
     // A swipe's words named here: that swipe is done (左滑发起).
@@ -2024,7 +1919,7 @@ mod tests {
         left_as: RefCell<Option<(String, Option<String>)>>,
         /// Leaving words fails.
         leave_fails: std::cell::Cell<bool>,
-        /// How many replies to Claude fail before one goes through.
+        /// How many replies fail before one goes through.
         reply_fails: std::cell::Cell<u32>,
         /// Words left for Claude under each id (session, id), as the
         /// plugin's folder keeps them: the same id twice is refused (#257).
@@ -2093,21 +1988,25 @@ mod tests {
             }
             Ok(())
         }
-        fn reaches(&self, _session: &str) -> Result<(), String> {
+        fn reaches(&self, _doer: &str, _session: &str) -> Result<(), String> {
             if self.unreachable {
                 Err("这个会话还没加载 Agent HUD 插件".into())
             } else {
                 Ok(())
             }
         }
-        fn reply(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
-            // As `ClaudeChannel::hand_as`: only a session checked in now.
-            if self.unreachable {
-                return Err(Unsent::Failed("这个会话还没加载 Agent HUD 插件".into()));
-            }
+        fn reply(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
             if self.reply_fails.get() > 0 {
                 self.reply_fails.set(self.reply_fails.get() - 1);
                 return Err(Unsent::Failed("会话的待发送目录写不进".into()));
+            }
+            // A Codex doer's words go through Codex's queue (#280).
+            if doer == CODEX {
+                return self.put("codex", session, id, text);
+            }
+            // As `ClaudeChannel::hand_as`: only a session checked in now.
+            if self.unreachable {
+                return Err(Unsent::Failed("这个会话还没加载 Agent HUD 插件".into()));
             }
             self.put("reply", session, id, text)
         }
@@ -2123,13 +2022,16 @@ mod tests {
             sent.push(("leave".into(), session.into(), text.into()));
             Ok(format!("p{}", sent.len()))
         }
-        fn queue(&self, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+        fn queue(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+            if doer == CODEX {
+                return self.put("codex", session, id, text);
+            }
             if self.leave_fails.get() {
                 return Err(Unsent::Failed("plugin folder not writable".into()));
             }
             self.put("queue", session, id, text)
         }
-        fn left(&self, session: &str, id: &str) -> Option<(String, Option<String>)> {
+        fn left(&self, _doer: &str, session: &str, id: &str) -> Option<(String, Option<String>)> {
             if let Some(state) = self.left_by.borrow().get(id) {
                 return Some(state.clone());
             }
@@ -2163,7 +2065,7 @@ mod tests {
             ));
             Ok(())
         }
-        fn opener(&self, _session: &str) -> Option<(Opener, i64)> {
+        fn opener(&self, _doer: &str, _session: &str) -> Option<(Opener, i64)> {
             self.opener.borrow().clone()
         }
     }
@@ -2583,6 +2485,61 @@ mod tests {
     // #255 (L-14): the session ended once its turn was over, so its plugin
     // no longer checks in. Sending is refused twice; the words still wait in
     // its queue, which the plugin takes from when the session is opened.
+    /// #280: a review Codex handed over gets ChatGPT's words back in its
+    /// own thread, through Codex's queue, never Agent HUD's Claude plugin.
+    #[test]
+    fn words_back_to_a_codex_doer_go_into_its_thread() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let rule = Rule {
+            doer: Some(CODEX.to_owned()),
+            ..Rule::default()
+        };
+        let Started::Opening { handoff, project } = desk
+            .start_ruled(
+                &lines,
+                "t1",
+                None,
+                "修登录",
+                None,
+                "改动如下",
+                false,
+                &rule,
+                1,
+            )
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(&lines, &handoff.id, "改动如下", project.as_deref(), || 2)
+            .unwrap();
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().doer.as_deref(),
+            Some(CODEX)
+        );
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        let sent = lines.sent.borrow();
+        let back = sent
+            .iter()
+            .find(|(kind, ..)| kind != "open" && kind != "send");
+        let (kind, session, text) = back.expect("words went back");
+        assert_eq!((kind.as_str(), session.as_str()), ("codex", "t1"));
+        assert!(text.contains("少一项"));
+    }
+
+    /// A review started without naming its doer stays Claude Code's.
+    #[test]
+    fn a_review_with_no_doer_named_is_claude_codes() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().doer, None);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert_eq!(replies(&lines), 1);
+    }
+
     #[test]
     fn words_back_to_a_claude_session_that_ended_wait_in_its_queue() {
         let (_temp, desk) = desk();
@@ -3847,6 +3804,7 @@ mod tests {
         let rule = Rule {
             risk: Some(risk.to_owned()),
             extra: extra.map(str::to_owned),
+            doer: None,
         };
         let started = desk.start_ruled(
             lines,
@@ -3893,6 +3851,7 @@ mod tests {
         let rule = Rule {
             risk: Some("L0".into()),
             extra: None,
+            doer: None,
         };
         assert!(desk
             .start_ruled(
@@ -4459,5 +4418,46 @@ mod tests {
         for mode in [json!("default"), json!("plan"), Value::Null] {
             assert!(wake_arguments("s1", &json!({"permissionMode": mode}), "意见").is_err());
         }
+    }
+
+    /// #175 with #280: only a Claude Code session runs in the background; a
+    /// Codex thread that cannot take the words now keeps them in its queue.
+    #[test]
+    fn a_codex_doer_is_never_run_as_a_claude_session() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        lines.stopped.set(true);
+        lines.reply_fails.set(2);
+        let rule = Rule {
+            doer: Some(CODEX.to_owned()),
+            ..Rule::default()
+        };
+        let Started::Opening { handoff, project } = desk
+            .start_ruled(
+                &lines,
+                "t1",
+                None,
+                "修登录",
+                None,
+                "改动如下",
+                false,
+                &rule,
+                1,
+            )
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(&lines, &handoff.id, "改动如下", project.as_deref(), || 2)
+            .unwrap();
+        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert!(sent_as(&lines, "wake").is_empty());
+        assert_eq!(sent_as(&lines, "codex").len(), 1, "queued for Codex");
+        assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
+        let later = 5 + handoffs::WAKE_AFTER_MS;
+        assert!(!desk.wake_queued(&lines, later));
+        assert!(sent_as(&lines, "withdraw").is_empty());
+        assert!(sent_as(&lines, "wake").is_empty());
     }
 }

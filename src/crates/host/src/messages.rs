@@ -24,6 +24,10 @@ use tauri::Manager;
 
 const LOOK: Duration = Duration::from_secs(5);
 
+/// The host's own senders, shared with handoffs: a Codex doer's words go
+/// back through them (#280).
+pub(crate) struct DeliveryClients(pub(crate) Arc<LocalClients>);
+
 /// The host's own senders: their receipts, and the Claude jobs it follows.
 struct Own {
     clients: Arc<LocalClients>,
@@ -208,6 +212,7 @@ fn own_delivery(
         &data,
     )));
     let clients = Arc::new(clients);
+    app.manage(DeliveryClients(clients.clone()));
     let start_receipts = receipts.join("starts");
     let starts = SessionStarts::new(config.clone(), start_receipts.clone())
         .map_err(|error| error.to_string())?;

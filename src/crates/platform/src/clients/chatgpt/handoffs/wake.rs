@@ -16,6 +16,8 @@ impl Book {
             .iter()
             .filter(|h| h.auto && h.live() && h.phase == Phase::Returned)
             .filter(|h| h.waking_since.is_none())
+            // Only a Claude Code session runs in the background (#280).
+            .filter(|h| h.doer.as_deref().is_none_or(|doer| doer == "claude"))
             .filter(|h| h.queued_at.is_some_and(|at| now - at >= WAKE_AFTER_MS))
             .filter_map(|h| {
                 let back = h

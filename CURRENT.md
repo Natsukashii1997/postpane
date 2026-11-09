@@ -6,6 +6,32 @@
 
 
 
+## 接力 A：Codex 发起 ChatGPT 审核、回信经 Codex 队列送回（#280）（2026-11-09，Claude，常浩「按 A 开工」；已提交、PR 待合并、已发布 `ab85dfb2b7a8` 回读通过）
+
+- 时间：开工 `2026-11-09 11:03`。来由：#253 方案（`docs/design/驿窗接力接入Codex-方案-2026-11-09.md`，`5ec30d2`）的 A 单。
+- 改了哪些文件：
+  - `platform/src/clients/chatgpt/handoffs.rs`：接力记录加 `doer`，没有值就是 Claude Code，旧记录照常读；加 `set_doer`。`pull_request` 挪到 `handoffs/pull_request.rs`，抵掉新增的行数。
+  - `host/src/handoff.rs`：`Rule.doer`；`relay` 收 Codex 调用方；回信通道接口（`reaches`、`reply`、`queue`、`left`、`opener`）加发起方参数；新增两条测试。
+  - `host/src/handoff/lines.rs`（新）：从 handoff.rs 原样挪出 `AppLines`，并加 Codex 分支，走 #278 的 `LocalClients`（`Enqueue`，固定 request id）。
+  - `host/src/messages.rs`：把 `DeliveryClients` 登记给接力用，避开主程序数据锁。
+  - 同步：「AI 接入」页（`AiAccessPane.tsx`、`AiAccessAgentRows.tsx`）、`AGENTS.md`、`docs/ROADMAP.md` 第 83 / 138 行、MCP 工具说明、行数基线。
+- 测试：
+  - `pnpm run check` 退出码 0；
+  - `pnpm test`：Rust 合计 `914 passed; 0 failed`（多出的 2 条是新测试），前端 `ℹ pass 379` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证（实机）：
+  - 用互发消息请测试用的 Codex 线程 `01a1be3c…` 调用 `relay_to_chatgpt`（L1）。接力 `h1a1be4e4e0f00` 记成 `doer: codex`。
+  - ChatGPT 新开会话 `6af13afd…`，按要求回「结论：需修改」。驿窗自动生成转回步骤（`h1a1be4e4e0f00-b2`），11:16:31 作为新一轮送进 Codex 线程，Codex 回「Codex 已收到 ChatGPT 回信」。L1 只审一轮，接力随后自动结束。
+  - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-280-codex-relay/`，有 `handoff-h1a1be4e4e0f00.json` 和 `codex-thread-tail.txt`。
+- 截图：无，侧栏表现没改（C 单）。
+- 发布与回读：`ab85dfb2b7a8`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-09-280-codex-relay/PostPane-1aaf637728ae.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：
+  - **Codex 转回步骤的回执只到「排队中」**：Codex 队列的回执不会自己往前推进，要读 Codex 会话记录才知道它已领取、已开始，并入 B 单。
+  - **时间线文字**：时间线上 6 句写死了「转回 Claude」，例如「L1 审查预算用完：意见已转回 Claude 改完收口」。发起方是 Codex 时说法不对，并入 C 单（展开卡上的 Claude 改成实际客户端，先问常浩）。
+  - 侧栏纸飞机、方章、左滑发起 Codex：C 单。
+- 本轮新坑：无
+- skill 进化：无
+
 ## 智能体互发消息：移植上游 b1217c3（#278）（2026-11-09，Claude，常浩「直接拿过来代码，不要自己从头开始做」，改动确认选「飞机甲、标题乙」；已提交、已发布 `1aaf637728ae` 回读通过）
 
 - 时间：开工 `2026-11-09 10:33`。来由：常浩要学上游「智能体之间用纸飞机互发消息」，调研报告 `docs/design/智能体互发消息-现状与差距-2026-11-09.md`（`0dc2b5b`）。
@@ -26,6 +52,7 @@
   - `send_message` 发给空闲的「撤回 #264」会话：`queued` → `started`（约 18 秒）→ `done`，`get_message` 取回答「收到，互发消息测试通过」。日志只存指纹（`messages-journal.json`）。
   - 对方会话的 MCP 在开关打开前就已启动，没有 `send_message`，所以按上游的兜底直接作答，由发件方取回。
   - 未实测：第 11 次被拒、常浩插话后重新计数、关掉开关工具消失。这几项由上游的单元测试覆盖（messaging 55 条）。
+  - Codex（常浩同意后补测）：常浩自己开的 Codex 空会话还没建线程（Codex 要等第一条消息发出才写会话记录），驿窗看不到。改用 `start_session` 新开 Codex 会话 `01a1be3c…`（不绑项目目录），第一条消息送进去约 10 秒后，Codex 用 `send_message` 回信「Codex 收到，互发消息测试通过」（`m-7b694ccc4660`，回复 `m-921b3708b480`）。回信等本会话空闲才作为新一轮送进来，带首行来源标签和「还需要再说时才回」。日志里两条在同一条链上，计数 1 → 2（`messages-journal-codex.json`）。Codex 那一趟纸飞机没截到：回信那一刻侧栏窗口不在可截取的列表里。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-278-agent-messages/`，有 `settings-agent-messages-off.jpg`、`settings-agent-messages-on.jpg`、`hud-flight-envelope.jpg`（回信时 Claude 小人旁弹出信封、准备折成纸飞机）。
 - 发布与回读：`1aaf637728ae`，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-09-2026-11-09-278-agent-messages/PostPane-3600980d505d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 遗留：
@@ -33,7 +60,7 @@
   - 两个 Claude 会话互发时，纸飞机起点和终点是同一个小人（只看到信封在 Claude 旁弹出），观感要常浩看；
   - 上游插件卡片上的「Send messages」开关没搬：驿窗没有 `KnownClientCard`，两个设置都默认开；
   - #253 正文里「不借以我的名义发」一条待改；
-  - Codex 收发还没实测：本机当时没有 Codex 会话；
+  - 常浩那个空的 Codex 会话可以关掉；测试用的 Codex 会话 `01a1be3c…` 也可以归档；
   - 300 行棘轮：三个文件为了保持上游原样，进了白名单。
 - 本轮新坑：无
 - skill 进化：无
