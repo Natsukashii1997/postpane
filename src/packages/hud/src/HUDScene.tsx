@@ -1,7 +1,6 @@
 import {
   memo,
   useCallback,
-  useDeferredValue,
   useEffect,
   useId,
   useLayoutEffect,
@@ -188,20 +187,6 @@ const Redraw = memo(
   },
   (previous, next) => previous.version === next.version,
 );
-
-/** The hidden copy's drawing: again only when `version` changes, and then in
- * the background (#264, upstream e07cd7e). React draws it after what shows
- * has changed, so a card leaving never waits for the whole panel. */
-function MeasuringCopy({
-  version,
-  draw,
-}: {
-  version: unknown;
-  draw: () => ReactNode;
-}) {
-  const shown = useDeferredValue(version);
-  return <Redraw version={shown} draw={draw} />;
-}
 
 /**
  * A DOM renderer of one screen's HUD. The host owns native windows and their screen coordinates.
@@ -1162,7 +1147,7 @@ export function HUDScene({
               paddingLeft: bodyPadding.left,
             }}
           >
-            <MeasuringCopy
+            <Redraw
               version={measured}
               draw={() => {
                 const drawn = (
