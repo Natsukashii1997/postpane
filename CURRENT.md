@@ -6,6 +6,17 @@
 
 
 
+## 审核纸条最多露 3 行，其余在纸条里滚动（#288 跟进）（2026-11-09，Claude，常浩看实机截图后要求「最多显示三个，剩下的用滚动条」；已提交、PR 按授权合并、已发布 `1bd821b5671e` 回读通过）
+
+- 时间：开工 `2026-11-09 16:52`。来由：#294 合并后常浩截图，12 单接力把 ChatGPT 面板撑得很长。
+- 改了哪些文件：`hud/src/panel/ReviewSlip.tsx`：`ReviewRows` 的行包进一个滚动区，量第 3 行的底边当最大高度（`SLIP_ROWS = 3`），超过 3 行才滚；「审核」标题不滚。正在答的审核会话行和开着的接力行合在一起算 3 行。滑块用全局的 `scroll-thumbs`（滚动时出现、停下淡出），和「今天的对话」列表一样。
+- 测试：`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 385` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。同一次的 `pnpm run check` 因 `ReviewSlip.tsx` 没格式化退出码 1（`check-unformatted.log`），prettier 格式化后单独重跑 `pnpm run check` 退出码 0；格式化只动了导入那一行的排版。
+- 验证：浏览器预览真实 `HUDScene`（端口 1465，常浩真实侧栏配置 + 驿窗快照，脚手架沿用 #288 证据目录的 `preview-288/`）：真实悬停展开 ChatGPT 面板，审核纸条只露 3 行；滚轮在纸条里滚，后面的单子滚出来，面板其余部分不动。装机后 `get_hud_screenshot` 核对。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-09-288-slip-scroll/`：`preview-three-rows.jpg`、`preview-scrolled.jpg`、`after-chatgpt-panel.png`、`after-hud.png`。
+- 发布与回读：`1bd821b5671e`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-288-slip-scroll/PostPane-e3e2ce4b969f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：12 单老接力仍等常浩在面板里逐单处理。
+- 本轮新坑：无
+
 ## ChatGPT 面板审核纸条列出所有开着的接力，点一行打开接力卡（#288）（2026-11-09，Claude，常浩看改动确认后回「改，用甲」；已提交、PR 按授权合并、已发布 `e3e2ce4b969f` 回读通过）
 
 - 时间：开工 `2026-11-09 16:26`。来由：#288，发起会话停了以后接力卡没有入口，结束不了。查实原因：接力卡只能从活着的发起会话行上的「接力 n/m」小标或回复提醒里的「查看接力」打开；ChatGPT 面板的审核纸条只列 ChatGPT 正在答的审核会话；悬停小收据的审核行点不了，还会藏起发起会话没在跑、超过 2 小时没动静的单子（`STALE_REVIEW`）。本机 12 单开着的接力（停了 3 到 64 小时）都打不开。常浩在甲（审核纸条列出）、乙（Claude / Codex 面板加一行）、丙（自动收尾）里选甲，改动确认写明会动到 #145 定下的下联内容。
