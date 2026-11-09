@@ -23,7 +23,7 @@ import {
 } from "./agent-plugins/ClientCards";
 import { DetailsSection } from "./agent-plugins/DetailsSection";
 import { HooksSection } from "./agent-plugins/HooksSection";
-import { ToolsSection } from "./agent-plugins/ToolsSection";
+import { MessagesSection, ToolsSection } from "./agent-plugins/ToolsSection";
 import {
   knownClients,
   nativeChatGpt,
@@ -208,7 +208,6 @@ export function AgentPluginsPane({
           tools={tools}
           groups={items.filter((item) => item.place === "tools")}
           snapshot={snapshot}
-          action={action}
           request={request}
           active={active}
           t={t}
@@ -220,6 +219,7 @@ export function AgentPluginsPane({
             t={t}
           />
         </ToolsSection>
+        <MessagesSection snapshot={snapshot} action={action} t={t} />
       </Page>
     </TooltipProvider>
   );

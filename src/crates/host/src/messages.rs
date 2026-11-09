@@ -8,7 +8,7 @@
 //! (`ProductExtension::delivery`), else through the host's: the app's data
 //! folder keeps their receipts, and the host follows a started Claude job
 //! into the desktop app itself.
-use crate::{claude_plugin::ClaudePlugin, extension::Delivery, Backend};
+use crate::{activity, claude_plugin::ClaudePlugin, extension::Delivery, Backend};
 use agent_hud_messaging::{Host, Messaging, Places, Preferences, Turns};
 use agent_hud_runtime::delivery::{
     Handoffs, LocalClientPaths, LocalClients, NativeCodexTransport, SessionStarts, StartConfig,
@@ -59,16 +59,16 @@ impl AgentMessages {
         };
         let starts = SessionStarts::new(delivery.starts, delivery.start_receipts)
             .map_err(|error| error.to_string())?;
+        let flights = app.clone();
         let messaging = Messaging::new(
             &delivery.directory,
             places,
             delivery.clients,
             starts,
             delivery.follow,
-            // Agent messages fly no paper plane yet: the plane and its stamps
-            // are the owner's settled look for handoffs (#171, #218), and a
-            // flight between other agents waits for his say (P-14, #278).
-            Arc::new(|_flight| {}),
+            // The handoffs' paper plane, with no stamp: the owner chose it for
+            // agent messages too (2026-11-09, #278).
+            Arc::new(move |flight| activity::publish(&flights, "hud:flight", &flight)),
         );
         let owner = Arc::new(Self {
             messaging: Mutex::new(messaging),
