@@ -350,22 +350,18 @@ pub(crate) fn send(
             .map_err(|_| "Hook response did not complete")?;
         return finish(response);
     }
-    let mut transcript = if super::settles_in_transcript(source) {
-        super::transcript::Transcript::new(payload)
-    } else {
-        None
-    };
+    let mut watch = client::Watch::new(source, payload);
     let deadline = std::time::Instant::now() + Duration::from_secs(86_405);
     let mut stream = connect(data, &bytes, Duration::from_millis(100))?;
     loop {
-        match wait(&mut stream, &mut transcript, deadline)? {
+        match wait(&mut stream, &mut watch, deadline)? {
             Waited::Answer(response) => return finish(response),
-            Waited::Over => return Ok(None),
+            Waited::Over(answer) => return Ok(answer),
             // PostPane quit with the request open, as installing a new version
             // does: put it to the PostPane that comes back (#174).
-            Waited::Gone => match reconnect(data, &bytes, &mut transcript, deadline) {
-                Some(next) => stream = next,
-                None => return Ok(None),
+            Waited::Gone => match reconnect(data, &bytes, &mut watch, deadline) {
+                Ok(next) => stream = next,
+                Err(answer) => return Ok(answer),
             },
         }
     }
@@ -409,21 +405,22 @@ mod client;
 enum Waited {
     /// PostPane's answer, or `{}` when it ended the request itself.
     Answer(Vec<u8>),
-    /// Answered in the client's own window, or waited the longest a client does.
-    Over,
+    /// Answered in the client's own window, the client went away, its turn
+    /// ended (with the decline to hand back), or it waited the longest it does.
+    Over(Option<Value>),
     /// PostPane closed without a word: it quit.
     Gone,
 }
 
 fn wait(
     stream: &mut UnixStream,
-    transcript: &mut Option<super::transcript::Transcript>,
+    watch: &mut client::Watch,
     deadline: std::time::Instant,
 ) -> Result<Waited, String> {
     let mut response = Vec::new();
     loop {
-        if client::ended(transcript) || std::time::Instant::now() >= deadline {
-            return Ok(Waited::Over);
+        if let Some(answer) = watch.ended(deadline) {
+            return Ok(Waited::Over(answer));
         }
         let mut chunk = [0u8; 8192];
         match stream.read(&mut chunk) {
@@ -456,9 +453,9 @@ fn wait(
 fn reconnect(
     data: &Path,
     bytes: &[u8],
-    transcript: &mut Option<super::transcript::Transcript>,
+    watch: &mut client::Watch,
     deadline: std::time::Instant,
-) -> Option<UnixStream> {
+) -> Result<UnixStream, Option<Value>> {
     let give_up = if waits_until_answered(data) {
         deadline
     } else {
@@ -466,11 +463,11 @@ fn reconnect(
     };
     loop {
         std::thread::sleep(Duration::from_millis(500));
-        if client::ended(transcript) || std::time::Instant::now() >= give_up {
-            return None;
+        if let Some(answer) = watch.ended(give_up) {
+            return Err(answer);
         }
         if let Ok(stream) = connect(data, bytes, Duration::from_millis(100)) {
-            return Some(stream);
+            return Ok(stream);
         }
     }
 }
@@ -634,5 +631,50 @@ mod tests {
             .unwrap();
             assert_eq!(waits_until_answered(dir.path()), waits, "{minutes} minutes");
         }
+    }
+
+    #[test]
+    fn a_codex_request_whose_turn_ended_is_declined_and_leaves_the_sidebar() {
+        // #286: Codex ended the turn that asked but kept the call waiting;
+        // approving it later would run it long after anyone read the result.
+        let dir = tempfile::tempdir().unwrap();
+        let rollout = dir.path().join("rollout-2026-11-09T10-57-03-thread.jsonl");
+        let context = json!({"type":"turn_context","payload":{"turn_id":"turn-asking","approvals_reviewer":"user"}});
+        std::fs::write(&rollout, format!("{context}\n")).unwrap();
+        let requests = Requests::default();
+        requests.set_hold_ms(15_000);
+        let _server = open(dir.path(), &requests);
+        let payload = json!({
+            "session_id": "thread", "turn_id": "turn-asking",
+            "transcript_path": rollout, "hook_event_name": "PermissionRequest",
+            "tool_name": "mcp__agent_hud__relay_to_chatgpt", "tool_input": {"title": "#286"}, "cwd": "/"
+        });
+        let data = dir.path().to_owned();
+        let callback =
+            std::thread::spawn(move || send(&data, "codex", "--permission-hook", &payload, None));
+        assert_eq!(waiting(&requests).len(), 1, "the sidebar shows it");
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(!callback.is_finished(), "it waits while the turn goes on");
+
+        let ended =
+            json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-asking"}});
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&rollout)
+            .unwrap();
+        std::io::Write::write_all(&mut file, format!("{ended}\n").as_bytes()).unwrap();
+        let response = callback.join().unwrap().unwrap().expect("a decline");
+        assert_eq!(
+            response["hookSpecificOutput"]["decision"]["behavior"],
+            "deny"
+        );
+        let until = Instant::now() + Duration::from_secs(5);
+        while !requests.views(now_ms()).is_empty() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            requests.views(now_ms()).is_empty(),
+            "the card left the sidebar"
+        );
     }
 }
