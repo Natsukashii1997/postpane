@@ -131,6 +131,11 @@
 - 正确做法：自动转回两次失败后，不直接停，改为把同一段话排进该会话的待发送队列（`Lines::leave`，与左滑发起同一机制），记 `queuedAt`，卡上提示「打开 Claude 会话继续」；排队也失败、或排了 1 小时没人领，才交还常浩。插件在会话再次运行时会领走排队的话。
 - 证据：`~/Library/Application Support/app.postpane.mac/chatgpt/handoffs.json` 里上面两条接力的 `fail` / `stop` 步；`~/Library/Application Support/app.postpane.mac/claude-channel/sessions/7c4b4704-….json` 的 `ended`；修复 PR 见本条之后的交接。
 - 升级：已写成测试 `handoff::tests::words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person`（改为排队，排队失败或 1 小时没人领才交还）。
+- 补正（2026-11-07，#175，查桌面版日志与三次实验后）：
+  - 根因要分两单看。D 不是「一轮做完就结束」：`~/Library/Logs/Claude/main.log` 01:46:35 记着 `[CliGovernor] pressure evicting local_9118b1a8… (idle 86s)` 和 `Pausing session … (governor_evict)`，桌面版在内存紧张时回收空闲会话的进程；内存不紧张时空闲会话一直在跑（对照会话 6 小时仍在签到）。C 没被回收：01:34 前后桌面版主进程每一两秒卡 0.5–1 秒，插件签到晚了 20 秒以上，驿窗同一毫秒内连试两次就放弃了，之后它又恢复签到。
+  - 「打开会话就继续」不成立：打开会话链接或在侧栏点开，桌面版只记 `Warming session`，不重启 Claude 进程，插件不签到，排队的话领不走；要有一条消息发进去，桌面版才重启进程（`evidence/2026-11-07-link-wake/`）。会话跑后台任务时桌面版照样按空闲计时，后台等待防不住回收（`evidence/2026-11-07-bg-wait/`）。
+  - 正确做法：会话进程已停（签到写着 `ended`，或 3 分钟没签到）就用 `claude -p --resume <CLI 会话号> --permission-mode <会话自己的模式>` 在后台续接，桌面版之后续接同一个会话号、接得上这一轮（`evidence/2026-11-07-headless-resume/`）；只是暂时卡顿的先排队，3 分钟还没领、会话也没恢复，撤回排队再续接。CLI 会话号对应的工作目录、模型、权限模式在桌面版会话记录 `~/Library/Application Support/Claude/claude-code-sessions/**/local_*.json`（`cliSessionId`）里。
+  - 升级：已写成测试 `handoff::tests::a_session_whose_process_stopped_is_run_in_the_background_with_the_answer`、`queued_words_for_a_session_that_stays_quiet_are_taken_back_and_run_in_the_background`、`a_background_run_that_cannot_start_or_ends_without_a_handover_is_left_to_the_person`。
 - 补充（#255，2026-11-09）：上面的「正确做法」当时没做成。`Lines::leave` 底下是 `ClaudeChannel::hand`，它和直接送话一样先查 20 秒内的签到，会话结束后排队也被拒，三次尝试被同一道检查挡下；测试替身的 `leave` 不查签到，所以测试一直是绿的（见 L-30）。现在排队改走不查签到的 `Lines::queue`（`ClaudeChannel::queue`），左滑发起仍走 `leave`。
 
 ## L-15 侧栏审批「看不到」：10 分钟就撤回，驿窗一重装也丢（2026-11-07）

@@ -242,6 +242,16 @@ pub(crate) fn run_client(
     home: &std::path::Path,
     timeout: Duration,
 ) -> Result<(), String> {
+    run_client_in(executable, arguments, home, home, timeout)
+}
+/// `run_client` in `folder` rather than the home folder.
+pub(crate) fn run_client_in(
+    executable: &std::path::Path,
+    arguments: &[String],
+    home: &std::path::Path,
+    folder: &std::path::Path,
+    timeout: Duration,
+) -> Result<(), String> {
     // A temporary file avoids waiting on descendant processes that keep an output pipe open.
     let output_path = std::env::temp_dir().join(format!(
         "agenthud-client-{}-{}.log",
@@ -257,7 +267,7 @@ pub(crate) fn run_client(
         super::system::configure_client_command(&mut command);
         command
             .args(arguments)
-            .current_dir(home)
+            .current_dir(folder)
             .stdin(Stdio::null())
             .stdout(output.try_clone().map_err(|e| e.to_string())?)
             .stderr(output);

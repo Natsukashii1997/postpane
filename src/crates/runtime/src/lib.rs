@@ -16,6 +16,7 @@ pub use agent_hud_core::demo::DemoScript;
 pub use agent_hud_core::l10n;
 pub use agent_hud_core::projects;
 pub use agent_hud_core::replies;
+pub use agent_hud_platform::claude_desktop_session;
 pub use agent_hud_platform::claude_plugin;
 pub use agent_hud_platform::client_executable;
 pub use agent_hud_platform::clients::chatgpt;

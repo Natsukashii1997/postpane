@@ -28,13 +28,31 @@ pub(super) fn open_claude_job(home: &std::path::Path, target: &Value) -> Result<
 }
 pub(super) use crate::os::app_running;
 fn resolve_claude_desktop_local_id(id: &str, cowork: bool) -> Option<String> {
+    desktop_record(id, cowork)?["sessionId"]
+        .as_str()
+        .map(str::to_owned)
+}
+/// The Claude desktop app's record of the Code session that runs Claude
+/// Code session `id` (its folder, model, effort and permission mode), when
+/// exactly one unarchived record names it.
+pub fn claude_desktop_session(id: &str) -> Option<Value> {
+    desktop_record(id, false)
+}
+fn desktop_record(id: &str, cowork: bool) -> Option<Value> {
     let home = crate::os::home_dir().ok()?;
     let env = std::env::vars().collect::<crate::os::Environment>();
-    local_id_in(&crate::os::claude_desktop_bases(&home, &env), id, cowork)
+    record_in(&crate::os::claude_desktop_bases(&home, &env), id, cowork)
 }
 /// The desktop app's tab (`local_<uuid>`) that holds the Claude Code session
 /// `id`, in the app's data folders `bases`.
+#[cfg(test)]
 fn local_id_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<String> {
+    record_in(bases, id, cowork)?["sessionId"]
+        .as_str()
+        .map(str::to_owned)
+}
+/// The desktop app's record of that tab.
+fn record_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<Value> {
     let folder = if cowork {
         "local-agent-mode-sessions"
     } else {
@@ -76,12 +94,12 @@ fn local_id_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<S
                 // A tab that went on in a new Claude Code session keeps the
                 // ones it ran before (#220); a tab running `id` now wins.
                 if meta["cliSessionId"].as_str() == Some(id) {
-                    matched.push(stem.to_owned());
+                    matched.push((stem.to_owned(), meta));
                 } else if meta["priorCliSessionIds"]
                     .as_array()
                     .is_some_and(|ids| ids.iter().any(|prior| prior.as_str() == Some(id)))
                 {
-                    before.push(stem.to_owned());
+                    before.push((stem.to_owned(), meta));
                 }
             }
         }
@@ -89,9 +107,12 @@ fn local_id_in(bases: &[std::path::PathBuf], id: &str, cowork: bool) -> Option<S
     if matched.is_empty() {
         matched = before;
     }
-    matched.sort();
-    matched.dedup();
-    (matched.len() == 1).then(|| matched.pop()).flatten()
+    matched.sort_by(|a, b| a.0.cmp(&b.0));
+    matched.dedup_by(|a, b| a.0 == b.0);
+    (matched.len() == 1)
+        .then(|| matched.pop())
+        .flatten()
+        .map(|(_, meta)| meta)
 }
 /// What a target with no link comes to. A Claude desktop or Cowork session
 /// whose tab cannot be found is not reached by bringing the app forward.

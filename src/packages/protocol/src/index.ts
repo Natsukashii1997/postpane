@@ -806,7 +806,8 @@ export interface HandoffStep {
     | "fail"
     | "end"
     | "stop"
-    | "resume";
+    | "resume"
+    | "wake";
   /** What was said, cut to a few hundred characters. */
   text?: string | null;
   /** A reply's numbered points. */
@@ -869,9 +870,12 @@ export interface Handoff {
   carried?: number;
   /** Reviews past the budget the person allowed (#217). */
   extra?: number;
-  /** When ChatGPT's answer was queued for a Claude session paused once its
-   * turn was over: it goes in once the session is opened. */
+  /** When ChatGPT's answer was queued for a Claude session that could not
+   * take it then; a session that stays quiet is run in the background. */
   queuedAt?: number | null;
+  /** Since when PostPane runs Claude Code in the background for a session
+   * whose process stopped, with ChatGPT's answer (L-14). */
+  wakingSince?: number | null;
   /** The step its rounds count from (#258): the person spoke up in the
    * Claude session and it handed over again. Earlier reviews, carried ones
    * too, no longer count. */

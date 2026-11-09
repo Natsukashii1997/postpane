@@ -204,10 +204,14 @@ function progress(handoff: Handoff, now: number, zh: boolean) {
         : `Answered · ${verdictWord(reply?.verdict, zh)}`;
     }
     case "returned":
+      if (handoff.wakingSince)
+        return zh
+          ? `驿窗在后台续接 Claude · ${since(handoff.wakingSince, now, zh)}`
+          : `Claude runs in the background · ${since(handoff.wakingSince, now, zh)}`;
       if (handoff.queuedAt)
         return zh
-          ? "意见已排队 · 打开 Claude 会话继续"
-          : "Answer queued · open the Claude session";
+          ? "意见已排队 · 会话不在线就在后台续接"
+          : "Answer queued · runs in the background if the session stays quiet";
       return zh
         ? `已转回，按意见修改 · ${since(at, now, zh)}`
         : `Back with Claude · ${since(at, now, zh)}`;
@@ -428,6 +432,17 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           state: "done",
         });
         break;
+      case "wake":
+        rows.push({
+          who: "post",
+          time,
+          title: zh
+            ? "驿窗在后台续接 Claude"
+            : "PostPane ran Claude in the background",
+          sub: oneLine(step.text) || undefined,
+          state: "done",
+        });
+        break;
     }
   }
   const at = handoff.phaseAt ?? handoff.updatedAt;
@@ -511,11 +526,15 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         who: "claude",
         time: curTime,
         title: zh ? "Claude 按意见修改" : "Claude works on it",
-        sub: handoff.queuedAt
+        sub: handoff.wakingSince
           ? zh
-            ? "意见已排队 · 在 Claude 里打开这个会话就会继续"
-            : "Answer queued · open this session in Claude to go on"
-          : lasted,
+            ? `驿窗在后台续接 · ${since(handoff.wakingSince, now, zh)}`
+            : `Running in the background · ${since(handoff.wakingSince, now, zh)}`
+          : handoff.queuedAt
+            ? zh
+              ? "意见已排队 · 会话 3 分钟仍不在线就在后台续接"
+              : "Answer queued · runs in the background if the session stays quiet for 3 minutes"
+            : lasted,
         state: "cur",
       });
       if (more) rows.push(again);

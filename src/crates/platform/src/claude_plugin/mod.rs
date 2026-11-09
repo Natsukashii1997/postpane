@@ -250,6 +250,17 @@ impl ClaudeChannel {
         metadata.modified().ok()
     }
 
+    /// Whether `session` ran the plugin and its process has since stopped:
+    /// the plugin said it ended (Claude's desktop app stops idle sessions
+    /// when memory runs short, L-14), or it has not checked in for `quiet`.
+    /// A session that never checked in is not: it may run without the plugin.
+    pub fn stopped(&self, session: &str, now: SystemTime, quiet: Duration) -> bool {
+        self.ended(session)
+            || self
+                .last_check_in(session)
+                .is_some_and(|at| now.duration_since(at).unwrap_or_default() >= quiet)
+    }
+
     /// Whether `session` ran the plugin and then ended, as when Claude quits
     /// or restarts and stops every session it ran.
     pub fn ended(&self, session: &str) -> bool {
@@ -572,8 +583,8 @@ impl ClaudeReplies {
         if self.channel.ended(session) {
             return Unreachable::new(
                 l10n::text(
-                    "这个会话已经停了（Claude 重启或关掉过它）。在 Claude 里打开这个会话，就能在 Agent HUD 里回答。",
-                    "This session has stopped (Claude restarted or closed it). Open it in Claude to answer in Agent HUD.",
+                    "这个会话的 Claude 进程已经停了（Claude 重启、关掉或回收过它）。在 Claude 里给它发一句话让它重新运行，就能在 Agent HUD 里回答。",
+                    "This session's Claude process has stopped (Claude restarted, closed or reclaimed it). Send it a message in Claude to run it again, then answer in Agent HUD.",
                 ),
                 None,
             );

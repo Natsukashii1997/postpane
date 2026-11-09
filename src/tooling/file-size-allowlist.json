@@ -1,14 +1,34 @@
 {
+  "src/crates/host/src/handoff.rs": {
+    "max": 2001,
+    "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单"
+  },
   "src/crates/host/src/lib.rs": {
     "max": 1126,
     "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
   },
+  "src/crates/host/src/mcp_clients.rs": {
+    "max": 339,
+    "reason": "#175 后台续接要在会话自己的工作目录里跑 claude：加 run_client_in，原 run_client 委托给它"
+  },
   "src/crates/platform/src/claude_plugin/mod.rs": {
-    "max": 752,
-    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+    "max": 763,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单；另含 #175 后台续接：加 ClaudeChannel::stopped（会话进程已停）"
+  },
+  "src/crates/platform/src/clients/chatgpt/handoffs.rs": {
+    "max": 1583,
+    "reason": "#175 后台续接：方法已拆到 handoffs/wake.rs，这里只剩 wakingSince 字段、Wake 步与清理；拆分本文件原有代码另开单"
+  },
+  "src/crates/runtime/src/lib.rs": {
+    "max": 504,
+    "reason": "#175 后台续接：转出 claude_desktop_session 一行"
+  },
+  "src/packages/hud/src/alerts/handoff-card.ts": {
+    "max": 612,
+    "reason": "#175 后台续接：接力卡显示「驿窗在后台续接」进度与时间线一行"
   },
   "src/packages/protocol/src/index.ts": {
-    "max": 1334,
-    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+    "max": 1338,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单；另含 #175 后台续接：Handoff 加 wakingSince 字段、步骤加 wake"
   }
 }

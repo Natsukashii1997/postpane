@@ -342,7 +342,7 @@ test("where it stands keeps the timeline in order: no earlier clock after later 
   assert.equal(plain.sub, "已 8 分钟");
 });
 
-test("an answer queued for a paused Claude session says to open the session", () => {
+test("an answer queued for a quiet Claude session says it runs in the background if need be", () => {
   const queued = handoff({
     phase: "returned",
     phaseAt: T + 12 * minute,
@@ -358,10 +358,41 @@ test("an answer queued for a paused Claude session says to open the session", ()
     (row) => row.state === "cur",
   );
   assert.equal(now?.title, "Claude 按意见修改");
-  assert.equal(now?.sub, "意见已排队 · 在 Claude 里打开这个会话就会继续");
+  assert.equal(now?.sub, "意见已排队 · 会话 3 分钟仍不在线就在后台续接");
   assert.equal(
     progressLine(queued, T + 14 * minute, true),
-    "意见已排队 · 打开 Claude 会话继续",
+    "意见已排队 · 会话不在线就在后台续接",
+  );
+});
+
+test("a session run in the background shows the run and why", () => {
+  const woke = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: true,
+    wakingSince: T + 12 * minute,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", T + 12 * minute, { auto: true }),
+      step("wake", T + 12 * minute, {
+        auto: true,
+        text: "直接送话没送到。这个会话的 Claude 进程已被桌面版停掉",
+      }),
+    ],
+  });
+  const rows = timeline(woke, T + 15 * minute, true);
+  const ran = rows.find((row) => row.title === "驿窗在后台续接 Claude");
+  assert.equal(
+    ran?.sub,
+    "直接送话没送到。这个会话的 Claude 进程已被桌面版停掉",
+  );
+  const now = rows.find((row) => row.state === "cur");
+  assert.equal(now?.title, "Claude 按意见修改");
+  assert.match(now?.sub ?? "", /^驿窗在后台续接 · /);
+  assert.match(
+    progressLine(woke, T + 15 * minute, true),
+    /^驿窗在后台续接 Claude · /,
   );
 });
 

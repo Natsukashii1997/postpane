@@ -7,10 +7,12 @@ use super::{folder, write_private};
 use agent_hud_agents::chatgpt as agent;
 use agent_hud_core::l10n;
 use serde::{Deserialize, Serialize};
+mod wake;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+pub use wake::WAKE_AFTER_MS;
 mod pull_request;
 pub use pull_request::pull_request;
 
@@ -140,6 +142,9 @@ pub enum StepKind {
     Stop,
     /// The person turned the auto round trip back on.
     Resume,
+    /// The Claude session's process had stopped, so PostPane ran Claude Code
+    /// for it in the background with the words back (`text` says why, L-14).
+    Wake,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -288,6 +293,10 @@ pub struct Handoff {
     /// longer count.
     #[serde(default, skip_serializing_if = "is_nought")]
     pub rounds_from: usize,
+    /// Since when Claude Code runs in the background for the session with
+    /// the words back (`Wake`), until it ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waking_since: Option<i64>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -707,6 +716,7 @@ impl Book {
             carried: 0,
             extra: 0,
             rounds_from: 0,
+            waking_since: None,
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -859,6 +869,7 @@ impl Book {
             .steps
             .push(Step::new(now, StepKind::Ask, Some(text)).keyed(&key(text)));
         handoff.queued_at = None;
+        handoff.waking_since = None;
         handoff.rounds += 1;
         handoff.enter(Phase::Delivered, now);
         true
@@ -1162,7 +1173,9 @@ impl Book {
         for id in &on {
             self.stop(id, reason, true, now);
         }
-        !on.is_empty()
+        // A background run from before is no longer followed.
+        let woke = self.forget_runs();
+        !on.is_empty() || woke
     }
     /// Words went across once more.
     pub fn round(&mut self, id: &str, now: i64) -> bool {

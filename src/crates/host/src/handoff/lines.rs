@@ -152,6 +152,15 @@ impl Lines for AppLines<'_> {
             session,
         )
     }
+    fn stopped(&self, session: &str) -> bool {
+        super::wake::stopped(self.0, session)
+    }
+    fn withdraw(&self, session: &str, id: &str) -> bool {
+        super::wake::withdraw(self.0, session, id)
+    }
+    fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
+        super::wake::wake(self.0, handoff, session, text)
+    }
 }
 
 /// The senders agent messages keep, which Codex words go through.

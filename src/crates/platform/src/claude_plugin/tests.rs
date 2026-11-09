@@ -351,6 +351,34 @@ fn an_unreached_session_names_the_step_that_lets_the_hud_answer() {
     check_in(&channel, SESSION, br#"{"at":1}"#);
     checked_in(0);
     assert!(replies.reaches("claude", SESSION).is_ok());
+
+    // The plugin wrote that it ended: its process stopped, the plugin is
+    // there (L-14), and a message runs it again.
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    let stopped = replies.reaches("claude", SESSION).unwrap_err();
+    assert_eq!(stopped.fix, None);
+    assert!(stopped.note.contains("stopped"), "{}", stopped.note);
+}
+
+#[test]
+fn a_session_whose_process_stopped_is_told_apart_from_one_never_seen() {
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("channel"));
+    let quiet = Duration::from_secs(180);
+    let now = SystemTime::now();
+    // Never checked in: it may run without the plugin, so not stopped.
+    assert!(!channel.stopped(SESSION, now, quiet));
+    check_in(&channel, SESSION, br#"{"at":1}"#);
+    assert!(!channel.stopped(SESSION, now, quiet), "checked in just now");
+    assert!(
+        channel.stopped(SESSION, now + Duration::from_secs(181), quiet),
+        "quiet for longer than asked"
+    );
+    // The desktop app stopped it: the plugin wrote that it ended (L-14).
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    assert!(channel.stopped(SESSION, now, quiet));
+    assert!(channel.last_check_in(SESSION).is_none());
+    assert!(!channel.stopped("not a session", now, quiet));
 }
 
 /// A session that ended stays known as ended for a week, so its question

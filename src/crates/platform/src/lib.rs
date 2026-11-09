@@ -21,7 +21,7 @@ pub mod local_tools;
 mod navigation;
 mod os;
 pub use accounts::{AccountService, CollectionGate};
-pub use navigation::session_url;
+pub use navigation::{claude_desktop_session, session_url};
 #[cfg(target_os = "macos")]
 pub use os::registered_applications;
 

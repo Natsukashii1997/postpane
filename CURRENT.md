@@ -6,6 +6,40 @@
 
 
 
+## 接力自动往返：会话进程被停时后台续接 Claude（#175）（2026-11-09，Claude，常浩「按方案开工」「可以发」「放行」；已提交、PR #177 合并中、已发布 `0d33a93ee7ec` 回读通过，文案修正待合并后重装）
+
+- 时间：开工 `2026-11-07 08:46`。来由：常浩实测接力，ChatGPT 判「需修改」后没有转回 Claude，侧栏全是「待你看」，要人工介入。查桌面版日志和三次实验后确认：桌面版在内存紧张时会回收空闲会话的 Claude 进程（`CliGovernor pressure evicting`），而打开会话只会「预热」，不会重启进程。所以排队的话没人领。
+- 改了哪些文件：
+  - `host/src/handoff/wake.rs`（新）：后台续接。`claude -p --resume <会话> --permission-mode <会话自己的模式>`，带会话的模型、思考强度和工作目录，只接受 auto / acceptEdits / bypassPermissions 三种模式。`wake_queued` 处理排队 3 分钟没领的情况：撤回后续接，起不来就按「取消」交还常浩。`woke_up` 收尾：跑完还没交回复审就交还常浩。
+  - `host/src/handoff.rs`：`Lines` 加 `stopped` / `withdraw` / `wake` 三个方法。`auto_back` 里直接送话失败、发起方是 Claude 且会话已停时，立即续接；`projection` 先 `track` 再 `wake_queued`。
+  - `host/src/handoff/lines.rs`：三个方法的委托。
+  - `host/src/mcp_clients.rs`：`run_client_in`，可以指定工作目录。
+  - `platform/src/claude_plugin/mod.rs`：`ClaudeChannel::stopped`；「会话已停」的提示改为「发一句话让它重新运行」，打开会话不会重启进程。
+  - `platform/src/clients/chatgpt/handoffs.rs` 与 `handoffs/wake.rs`（新）：`wakingSince`、`Wake` 步、`WAKE_AFTER_MS`（3 分钟）。续接时 `back` 步的送达状态记为「已开始」，避免撤回排队后被 #257 的送达跟踪误判为取消、交还常浩。
+  - `platform/src/navigation.rs`：读桌面版会话记录（合入 #220 的 `priorCliSessionIds`）。
+  - 前端：`protocol` 加 `wakingSince` 和 `wake`；`handoff-card.ts` 的进度行和时间线加「驿窗在后台续接 Claude」。
+  - 文档：`docs/chatgpt-channel.md`「出错与处理」；`docs/LESSONS.md` L-14 补正。
+  - `src/tooling/file-size-allowlist.json`：7 个基线文件只多出接入点，常浩 11-09 回复「放行」。
+- 测试：
+  - `pnpm run check`：退出码 0；
+  - `pnpm test`：Rust 合计 `920 passed; 0 failed`，前端 `ℹ pass 380` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；
+  - `node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`；
+  - 日志：`evidence/2026-11-07-resume-back/final-*.log`。
+- 验证（实机，测试会话 `local_db34d4b5`，发送均由常浩在该会话回「执行」）：
+  - 第 1、2 轮会话在线，直接送话：「需修改」自动转回，Claude 追加 fixed、交回复审，「通过」后自动结束。分别是 `h1a1be67939b01`（11:43:56–11:44:15）、`h1a1be8db36200`（12:25:36–12:25:53）。
+  - 第 3 轮 `h1a1be92e9c701` 测后台续接：送到 ChatGPT 后，监视脚本用 SIGTERM 停掉会话进程，模拟回收。12:31:14 ChatGPT 判「需修改」，驿窗记 `back`（已开始）和 `wake`；12:31:20 出现后台 claude 2.1.318 的签到；12:31:24 后台续接追加 `LIVE3 fixed`；12:31:30 交回复审；12:31:35「通过」并自动结束。
+  - 证据：`evidence/2026-11-09-wake-live/`（`watch.py`、`watch.log`）、`evidence/2026-11-07-resume-back/live.log`；三次前期实验在 `evidence/2026-11-07-{bg-wait,link-wake,headless-resume}/`。
+- 截图：无。实机只核对了 `handoffs.json` 时间线，展开卡上新那一行的实物没看。
+- 发布与回读：`0d33a93ee7ec`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-09-resume-back-codex/PostPane-ab85dfb2b7a8.app" /Applications/PostPane.app; open /Applications/PostPane.app`。最后一处文案修正（`wake` 步不再拼接「在 Claude 里给它发一句话」、去掉「。。」）在这之后提交，合并后从 main 重装。
+- 与授权不一致之处、遗留问题：
+  - 我在链接唤醒实验中误把常浩的 Claude 窗口切到了 my-skills 会话，当时已告知。
+  - 第 2 轮监视脚本把接力的「opening」状态当成结束、提前退出，停进程晚了，第 3 轮修好。停进程恰逢测试会话正在调用 `relay_to_chatgpt`，它收到「Connection closed」，但驿窗已收到这次复审。
+  - 未验证：后台续接进行中，桌面版界面会不会实时显示这一轮；常浩同时在桌面版里给同一会话发消息时的并发情况。
+  - Codex 发起的接力不走后台续接（#280 走 Codex 自己的队列），已有测试。
+- 可提议提升为全局坑：「Claude 桌面版内存紧张时回收空闲会话的进程；打开会话只预热、不重启进程，要发一条消息才会重启」。换个项目，凡是给桌面版会话留话的都成立，等常浩批。
+- 本轮新坑：无（L-14 补正，不另编号）
+- skill 进化：无
+
 ## 接力 A：Codex 发起 ChatGPT 审核、回信经 Codex 队列送回（#280）（2026-11-09，Claude，常浩「按 A 开工」；已提交、PR 待合并、已发布 `ab85dfb2b7a8` 回读通过）
 
 - 时间：开工 `2026-11-09 11:03`。来由：#253 方案（`docs/design/驿窗接力接入Codex-方案-2026-11-09.md`，`5ec30d2`）的 A 单。
