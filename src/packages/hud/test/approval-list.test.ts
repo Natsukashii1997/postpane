@@ -5,7 +5,10 @@ import {
   approvalGroups,
   entryTitle,
   findSession,
+  asksOnlyHere,
   goesToStart,
+  startDecision,
+  startsHere,
   modelLine,
   requestBadge,
   requestTitle,
@@ -310,4 +313,47 @@ test("a handoff card goes back to start, where its session has a way back (#247)
   };
   assert.equal(goesToStart(question, true), false);
   assert.equal(goesToStart(reply("r", "2026-11-08T00:00:00Z"), true), false);
+});
+
+test("a handoff card its client can answer starts from the sidebar with 「开始」 (#292)", () => {
+  const question = {
+    id: "toolu_hand",
+    answerKey: "toolu_hand",
+    question: "【交接】驿窗｜下一步",
+    header: "切换会话",
+    options: [],
+    multiSelect: false,
+  };
+  const handoff = request(
+    "claude-desktop-ask:reply:x",
+    "2026-11-09T00:00:00Z",
+    {
+      kind: "question",
+      badge: "START",
+      questions: [question],
+      answersQuestion: true,
+    },
+  );
+  assert.equal(startsHere(handoff), true);
+  assert.deepEqual(startDecision(handoff), {
+    kind: "answer",
+    answers: { toolu_hand: { selected: [], custom: "开始" } },
+  });
+  // One its client cannot answer keeps 去开始; another question keeps its own card.
+  assert.equal(startsHere({ ...handoff, answersQuestion: false }), false);
+  assert.equal(startsHere({ ...handoff, badge: null }), false);
+});
+
+test("a permission Claude Code asks through the hook waits only on the sidebar (#292)", () => {
+  const asked = request("hook:claude:1:1", "2026-11-09T00:00:00Z", {
+    kind: "permission",
+  });
+  assert.equal(asksOnlyHere(asked), true);
+  // Codex's own approvals, and anything that is not a permission, say nothing.
+  assert.equal(asksOnlyHere({ ...asked, source: "codex" }), false);
+  assert.equal(asksOnlyHere({ ...asked, kind: "question" }), false);
+  assert.equal(
+    asksOnlyHere({ ...asked, id: "claude-desktop-ask:reply:y" }),
+    false,
+  );
 });

@@ -4,6 +4,7 @@ import { permissionColors } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
+import { asksOnlyHere } from "./approval-list";
 
 export function PermissionToolCard({
   request,
@@ -139,6 +140,16 @@ export function PermissionToolCard({
             {request.detail ?? request.input}
           </div>
         )
+      )}
+      {/* Claude Code asked through PostPane's hook: Claude's own window shows
+          nothing while it waits, and let go it may be refused (#292). */}
+      {asksOnlyHere(request) && (
+        <div style={{ fontSize: 11, lineHeight: 1.45, color: secondary }}>
+          {t(
+            "The Claude desktop window doesn't show this one: approve it here. Left waiting, Claude may refuse it and the session can stall.",
+            "Claude 桌面窗口里不会弹这条，请在这里批；放着不管，Claude 可能直接拒绝，会话也会卡住。",
+          )}
+        </div>
       )}
       {request.alwaysAllowRule && (
         <div

@@ -736,9 +736,32 @@ fn a_handoff_card_hangs_a_start_tag_until_the_user_moves_on() {
     assert_eq!(card["sessionId"], handing);
     assert_eq!(card["badge"], "START");
     assert_eq!(card["title"], "【交接】驿窗｜START 小签");
-    // It is started in Claude's own window; the sidebar only reminds.
+    // With no host that reaches the session it can only be started in Claude's own window.
     assert_eq!(card["answersQuestion"], false);
     assert!(card["answerNote"].is_string());
+
+    // A host that reaches it: the sidebar's 开始 sends 「开始」 into the session, which starts the
+    // card itself, and the card goes (#292).
+    let host = std::sync::Arc::new(FakeReplies::default());
+    backend.set_session_replies(Some(host.clone()));
+    host.reached.lock().unwrap().insert(handing.to_string());
+    let card = desktop_cards(&mut backend).remove(0);
+    assert_eq!(card["badge"], "START");
+    assert_eq!(card["answersQuestion"], true);
+    let key = card["questions"][0]["answerKey"].clone();
+    let start = json!({"kind": "answer", "answers": {key.as_str().unwrap(): {"selected": [], "custom": "开始"}}});
+    backend
+        .request(
+            "answer_request",
+            json!({"id": card["id"], "decision": start}),
+        )
+        .unwrap();
+    assert_eq!(
+        host.sent.lock().unwrap().clone(),
+        vec![("claude".into(), handing.into(), "开始".into())]
+    );
+    assert!(desktop_cards(&mut backend).is_empty(), "started");
+    backend.set_session_replies(None);
 
     // The user's next words in that session: the reminder has done its work.
     let at = Utc::now().to_rfc3339();

@@ -338,6 +338,7 @@
   - 会话弹「stopped responding」时，先在 `main.log` 里搜 `timed out after`，看 `last_tool_name` 是哪个工具卡住了。
 - 证据：`main.log` 第 61278、62034 行（2026-11-09 12:02:37、12:25:37）。
 - 可提议提升为全局坑：换个项目也成立（Claude 桌面应用里的任何长命令都可能碰上）。
+- 补正（#292）：同一现象还有一条已查实的原因：命令被 Claude Code 的安全检查拦下，批准卡只挂在驿窗侧栏，见 L-41。
 
 ## L-38 改了 Codex 的 MCP 工具批准配置，已经开着的 Codex 线程照旧要批准；`codex exec` 不能拿来做对照（2026-11-09）
 
@@ -363,3 +364,17 @@
 - 根因：只读了一次，说明文件变化的事件没送到等待循环。在 macOS 上用 FSEvents 盯单个文件，同一进程的追加写不一定能及时报出来，具体为什么没查清。驿窗 Claude 那一路的 `hooks/transcript.rs` 也靠 `notify`，它在实机上靠得住，但不能保证别的地方也一样。
 - 正确做法：等待循环本来就有短间隔（钩子是 0.1 秒）时，每一圈直接读文件新增的部分（`read_to_end` 从上次的位置往后读），不要依赖文件监听；测试里先把 `Requests` 的等待期限调短（`set_hold_ms`），失败时几秒就能看到，不要干等 10 分钟。
 - 证据：`src/crates/platform/src/hooks/turn_end.rs`（改成每圈直接读）；测试 `hooks::transport::tests::a_codex_request_whose_turn_ended_is_declined_and_leaves_the_sidebar`。
+
+## L-41 bypass 模式下 Bash 仍要批准，批准卡只挂在驿窗侧栏，没人点，16 分钟后桌面版判「Claude Code stopped responding」（2026-11-09）
+
+- 现象：CarvoMOTO 会话（`708f52e0`，bypass）13:50 发起一条 heredoc 里带「两个美元符加左括号」的 Bash，侧栏挂出 BASH 卡；Claude 窗口里没有任何提示，常浩以为不用管。本会话 14:04 一条双引号里带「反斜杠加美元符加左括号」的 grep 同样一直不返回，14:20 桌面版判「stopped responding」。之后本会话 15:0x 用 Python heredoc 写这一条坑，正文里带了同样的字符，又被拦、又被掐断一次。
+- 根因：
+  - Claude Code 对它不能确定 shell 会怎么解析的命令有一条内置安全检查，bypass 模式也强制要人批准。在不挂驿窗钩子的 `claude -p --permission-mode bypassPermissions` 里复现，两条命令都回「This command could not be checked for dangerous rm operations: the shell may read it differently than it was parsed. This requires explicit approval.」，普通 `echo` 不受影响。
+  - 本机配了驿窗的 PermissionRequest 钩子（超时 86400 秒）。钩子挂着时 Claude Code 不去问桌面版：`main.log` 的超时行写着 `host_requests_in_flight=0, outstanding_host_request=none`，桌面窗口不弹。
+  - 驿窗等满「等待回答」时长（默认 10 分钟）把请求交回，Claude Code 对这类安全检查直接拒绝：CarvoMOTO 那条 06:02:33（UTC）收到「denied by a built-in Claude Code safety check, not by the user」。钩子 16 分钟内没回时，桌面版先按 960 秒左右无动静掐掉这一轮。
+- 正确做法：
+  - Bash 命令里不在 heredoc 或引号中放命令替换的写法（美元符加左括号）；要嵌代码或长文本，先用 Write / Edit 写成文件再执行。
+  - 侧栏 BASH 卡是这类请求唯一的批准入口；#292 起卡上写明「Claude 桌面窗口里不会弹这条，请在这里批」。
+  - 会话弹「stopped responding」时，在 `main.log` 搜 `timed out after`；`last_tool_name=Bash` 且 `outstanding_host_request=none` 时，先看侧栏有没有挂着的权限卡。
+- 证据：`~/Library/Logs/Claude/main.log` 第 64221、65243 行；复现输出与预览截图在 `~/Library/Application Support/postpane/evidence/2026-11-09-292-start-bash/`。
+- 升级：可提议提升为全局坑（任何项目在 Claude 桌面版里写这类命令都会碰上），等常浩批。终端里的 Claude Code 是否同时弹窗未核实。
