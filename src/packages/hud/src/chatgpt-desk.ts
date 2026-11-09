@@ -4,7 +4,7 @@
 // matters most.
 import type { Handoff, Session } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
-import { round } from "./alerts/handoff-card.ts";
+import { handoffFor, round } from "./alerts/handoff-card.ts";
 
 /** A relay left open with its Claude session gone quiet this long is no
  * longer the owner's business on the sidebar. */
@@ -170,4 +170,27 @@ export function reviewsInDay(
       isReview(s, handoffs) &&
       at(s) >= now - 86_400_000,
   ).length;
+}
+
+/** The open handoffs ChatGPT is not answering now (#288): none of the
+ * listed review rows is theirs, so the slip lists them too, newest first,
+ * however long they have been quiet and wherever their doer is. */
+export function quietRelays(
+  handoffs: readonly Handoff[],
+  reviewSessions: readonly string[],
+): Handoff[] {
+  const shown = new Set(
+    reviewSessions.flatMap((id) => {
+      const handoff = handoffFor(handoffs, "chatgpt", id);
+      return handoff ? [handoff.id] : [];
+    }),
+  );
+  const at = (handoff: Handoff) => handoff.phaseAt || handoff.updatedAt;
+  return handoffs
+    .filter(
+      (handoff) =>
+        (handoff.status === "open" || handoff.status === "opening") &&
+        !shown.has(handoff.id),
+    )
+    .sort((a, b) => at(b) - at(a));
 }

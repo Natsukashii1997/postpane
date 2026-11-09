@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Handoff, Session } from "@agent-hud/protocol";
-import { chatgptDesk, isReview, reviewsInDay } from "../src/chatgpt-desk.ts";
+import {
+  chatgptDesk,
+  isReview,
+  quietRelays,
+  reviewsInDay,
+} from "../src/chatgpt-desk.ts";
 
 const now = Date.parse("2026-11-06T04:00:00Z"); // 12:00 in Beijing
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -189,4 +194,38 @@ test("the panel counts the last day's reviews apart from the chats", () => {
     claude("s1", "idle"),
   ];
   assert.equal(reviewsInDay({ sessions, handoffs: [] }, now), 2);
+});
+
+test("open handoffs ChatGPT is not answering are listed, however old (#288)", () => {
+  const old = relay({
+    id: "old",
+    chatgptConversation: "r-old",
+    phaseAt: now - 64 * 60 * min,
+    halt: "常浩停了",
+  });
+  const newer = relay({
+    id: "newer",
+    chatgptConversation: "r-new",
+    doer: "codex",
+    phaseAt: now - 3 * 60 * min,
+  });
+  const answering = relay({ id: "answering", chatgptConversation: "r-live" });
+  const ended = relay({
+    id: "ended",
+    chatgptConversation: "r-end",
+    status: "closed",
+  });
+  const listed = quietRelays(
+    [old, answering, ended, newer],
+    ["chatgpt:r-live"],
+  );
+  // Newest first; the one with its own review row and the ended one are not.
+  assert.deepEqual(
+    listed.map((h) => h.id),
+    ["newer", "old"],
+  );
+  assert.deepEqual(
+    quietRelays([old, answering], []).map((h) => h.id),
+    ["answering", "old"],
+  );
 });

@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   CornerDownRight,
   EyeOff,
@@ -37,10 +31,12 @@ import {
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
-import { airmailStripes, relayPaperOf, usePaper } from "../paper";
+import { usePaper } from "../paper";
+import { QuietRelayRow, ReviewRows } from "./ReviewSlip";
 import {
   chatgptDesk,
   isReview,
+  quietRelays,
   reviewsInDay,
   type DeskChat,
 } from "../chatgpt-desk";
@@ -128,6 +124,13 @@ export function SourceSessions({
     focusVendor && vendorKey(focusVendor) === vendorKey("chatgpt")
       ? chatgptDesk(snapshot, now, zh)
       : null;
+  // Its open handoffs ChatGPT is not answering, to end or go on (#288).
+  const quiet = desk
+    ? quietRelays(
+        handoffs,
+        lower.map((entry) => entry.session.id),
+      )
+    : [];
   const replied = desk
     ? desk.day.flatMap((chat) => {
         const session =
@@ -277,9 +280,17 @@ export function SourceSessions({
           />
         ))}
       </div>
-      {lower.length > 0 && (
+      {lower.length + quiet.length > 0 && (
         <ReviewRows zh={zh}>
           {lower.map((entry, index) => row(entry, index, lower, true))}
+          {quiet.map((handoff) => (
+            <QuietRelayRow
+              key={handoff.id}
+              handoff={handoff}
+              now={now}
+              zh={zh}
+            />
+          ))}
         </ReviewRows>
       )}
       {!live.length && !replied.length && (
@@ -517,50 +528,6 @@ function RepliedRow({
           {zh ? `${time} 回复` : `Replied ${time}`}
         </span>
       )}
-    </div>
-  );
-}
-
-/** ChatGPT's reviews in the list (#145): a slip of the reviews' paper under
- * an airmail band, below the owner's own sessions. */
-function ReviewRows({ zh, children }: { zh: boolean; children: ReactNode }) {
-  const sheet = relayPaperOf(true);
-  return (
-    <div
-      style={{
-        position: "relative",
-        margin: "10px 0 2px",
-        padding: "10px 0 2px",
-        background: sheet.paper,
-        color: sheet.ink,
-        borderRadius: 6,
-        overflow: "hidden",
-        boxShadow: "inset 0 6px 6px -6px rgba(0,0,0,.35)",
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          height: 5,
-          background: airmailStripes(5),
-        }}
-      />
-      <div
-        style={{
-          padding: "2px 6px 0",
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.3em",
-          color: sheet.blue,
-        }}
-      >
-        {zh ? "审核" : "REVIEWS"}
-      </div>
-      {children}
     </div>
   );
 }
