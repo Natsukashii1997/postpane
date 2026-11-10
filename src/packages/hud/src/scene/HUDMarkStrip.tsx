@@ -121,7 +121,7 @@ export function HUDMarkStrip({
   // A ring's figure is text: on a see-through ground, its level's see-through shade.
   const figureColor = useMarkLevelText(light);
   const stubbed = config.mode === "logos";
-  const stub = stubSize(metrics.logo),
+  const stub = stubSize(metrics.logo, horizontal(edge)),
     unit = metrics.logo / 20,
     side = perforatedSide(edge),
     botTop = stubBotTop(metrics.logo);

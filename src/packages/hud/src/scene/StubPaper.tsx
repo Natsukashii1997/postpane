@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { stubBotTop, stubSize } from "../ticket-stub";
+import { stubBotTop, stubHoleStart, stubSize } from "../ticket-stub";
 import { PAPER_GRAIN } from "../paper";
 
 export type StubSide = "left" | "right" | "top" | "bottom";
@@ -8,7 +8,7 @@ export type StubSide = "left" | "right" | "top" | "bottom";
  * on the stub like a sticker; the paper is its own layer behind it, so the
  * bot's moves and props are never clipped by the paper. */
 export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
-  const stub = stubSize(logo),
+  const stub = stubSize(logo, side === "top" || side === "bottom"),
     unit = logo / 20;
   return {
     width: stub.width,
@@ -23,14 +23,16 @@ export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
   };
 }
 
-/** A mask punching the stub's row of holes down `edge`, one every 10 units;
- * `shift` is how far along the row the masked box starts from the stub's
- * corner, so a box laid over part of the stub keeps the stub's holes. */
+/** A mask punching the stub's row of holes down `edge`, one every 10 units,
+ * centred down a side (`stubHoleStart`); `shift` is how far along the row the
+ * masked box starts from the stub's corner, so a box laid over part of the
+ * stub keeps the stub's holes. */
 export function stubHoles(edge: StubSide, unit: number, shift = 0): string {
   const hole = `transparent ${2.1 * unit}px, #000 ${2.5 * unit}px`;
+  const start = stubHoleStart(20 * unit) - 5 * unit;
   return edge === "top" || edge === "bottom"
     ? `radial-gradient(circle at ${5 * unit}px ${edge === "top" ? "0" : "100%"}, ${hole}) ${-shift}px 0 / ${10 * unit}px 100% repeat-x`
-    : `radial-gradient(circle at ${edge === "left" ? "0" : "100%"} ${5 * unit}px, ${hole}) 0 ${-shift}px / 100% ${10 * unit}px repeat-y`;
+    : `radial-gradient(circle at ${edge === "left" ? "0" : "100%"} ${5 * unit}px, ${hole}) 0 ${start - shift}px / 100% ${10 * unit}px repeat-y`;
 }
 
 /** The stub's paper, perforated along the side that meets the screen edge;

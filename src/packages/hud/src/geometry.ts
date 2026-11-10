@@ -137,7 +137,7 @@ export function stripMetrics(
     // Each mark is an upright ticket stub, flush with the edge.
     const logo = clamp(config.logoSize, 20, 60),
       gap = logo * clamp(config.gapScale, 0.1, 0.6),
-      stub = stubSize(logo);
+      stub = stubSize(logo, horizontal);
     const along = horizontal ? stub.width : stub.height,
       thick = horizontal ? stub.height : stub.width;
     const run = n ? n * along + (n - 1) * gap : Math.max(32, along);
