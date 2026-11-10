@@ -5,7 +5,7 @@ import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { BotMark } from "@agent-hud/hud/BotMark";
 import { botKey } from "@agent-hud/hud/bots/artwork";
 import { staysAsBot } from "@agent-hud/hud/bots/bot-spec";
-import { StubPaper } from "@agent-hud/hud/scene/HUDMarkStrip";
+import { StubPaper } from "@agent-hud/hud/scene/StubPaper";
 import { stubBotTop, stubSize } from "@agent-hud/hud/ticket-stub";
 import { HUDGlow } from "@agent-hud/hud/HUDGlow";
 import { SourceHoverPanel } from "@agent-hud/hud/HoverPanel";
