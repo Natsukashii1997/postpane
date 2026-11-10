@@ -6,6 +6,20 @@
 
 
 
+## 侧栏接力票根的灰蓝纸铺到打孔边（2026-11-10，Claude，常浩截图点名「接力时侧边边缘要完全覆盖，现在空了一点」；已提交、PR 按授权合并、已发布 `75fedf42700c` 回读通过）
+
+- 时间：开工 `2026-11-10 16:02`。来由：侧栏票根在接力时（「审」「回」，或盖着「答」又有回信），脚部的旧信纸在打孔那一侧缩进 3 个单位，打孔边条露成一条白纸。接力脚的旧信纸 + 航空斜纹是 #145、#218 定的，本轮是常浩点名改这一处本身。
+- 改了哪些文件：
+  - `hud/src/scene/HUDMarkStrip.tsx`：`StubFace` 在接力纸时脚部铺到打孔边（侧栏在左右边时铺满那一侧，在下边时铺到底），用和票根同一排孔打孔（按脚部在票根里的位置对齐孔位），印章靠补的内边距留在原位；非接力的读数脚不变，仍在打孔边条内侧、带虚线撕口。
+  - `hud/src/scene/StubPaper.tsx`（新）：`StubSide`、`stubBoxStyle`、新 `stubHoles`（打孔遮罩，原来写在 `StubPaper` 里）、`StubPaper` 从 `HUDMarkStrip.tsx` 原样搬来（300 行棘轮：669 → 612，基线只改这一行）；顺手把 `stubBoxStyle` 那段错挂在 `chatgptConversation` 上方的注释放回原处。
+  - `hud/package.json` 加 `./scene/StubPaper` 导出；`app/src/settings/SettingsSamples.tsx` 的 `StubPaper` 改从新路径导入。
+- 测试：`pnpm run check` 退出码 0；第一次 `pnpm test` 退出码 1：`agent-hud-platform` 的 `instance::tests::a_held_lock_turns_the_next_claim_away_and_names_the_holder` 失败（`the lock is free once its holder lets go`），单独重跑 `cargo test -p agent-hud-platform --lib instance::` 为 `9 passed; 0 failed`，与本轮改动无关；整套重跑 `pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 386` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证：装机后 `get_hud_screenshot`（离屏渲染，票根打孔在下边）：Claude、Codex 两张「回」的灰蓝纸铺到底边，孔位与票根一致；改前同一处露白纸带孔。实机屏幕（侧栏在右边、打孔在左边）截图放大：Claude「答」+ 回信、Codex「回」两张的灰蓝纸和航空斜纹都铺到左侧打孔边。整屏无「想访问文稿」弹窗（L-06）。小人和动效代码没动。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-10-2026-11-10-relay-foot-edge/`：`before.png`、`after-offscreen.png`、`zoom-before.png`、`zoom-after-offscreen.png`、`screen-after-zoom.png`、`screen-after-zoom-codex.png`（整屏 `screen-after.png` 含私人窗口，不外发）。
+- 发布与回读：`75fedf42700c`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-10-2026-11-10-relay-foot-edge/PostPane-81008a4a1a79.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：`install.sh` 会自己在证据目录名前加日期，传入的短名再带日期就成了 `2026-11-10-2026-11-10-…`，下次只传短名。范围外发现：Rust 单实例锁测试在全量并发下偶发失败一次，未查。skill 进化：无。
+- 本轮新坑：无
+
 ## 亚古兽印章换成紫藤色，和猛鬼兽区分开（#299）（2026-11-10，Claude，常浩在三版预览里选「甲 · 紫藤」；已提交、PR 按授权合并、已发布 `81008a4a1a79` 回读通过）
 
 - 时间：开工 `2026-11-10 12:13`。来由：常浩截图「新回复」列表，两个机器人的方印都是朱红，分不开。三版预览（紫藤 / 赭金 / 墨印）：https://claude.ai/artifact/EGRmx7KziAvuKXsKQjjkXw 。印章颜色原是 2026-11-05 常浩定的朱红方印，本轮是他点名只改亚古兽这一枚。
