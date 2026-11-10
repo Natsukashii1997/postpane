@@ -14,3 +14,10 @@ export function stampFigure(bot: HermesBot): StampFigure | null {
   if (bot.id === "agumon") return "agumon";
   return null;
 }
+
+/** Seal ink, a lighter shade on dark paper. Vermilion, except 亚古兽's in
+ * wisteria so the two bots tell apart (owner, 2026-11-10, #299). */
+export function sealInk(bot: HermesBot, light: boolean): string {
+  if (stampFigure(bot) === "agumon") return light ? "#6b4a9c" : "#b89ae8";
+  return light ? "#a83a2c" : "#e7826f";
+}
