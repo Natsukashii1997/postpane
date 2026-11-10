@@ -6,6 +6,28 @@
 
 
 
+## DeepSeek 鲸鱼小人有了自己的 9 个动作（2026-11-10，Claude，常浩看过两版预览后回「按这版做」；已提交、PR 按授权合并、已发布 `147ce0068f0b` 回读通过）
+
+- 时间：开工 `2026-11-10 17:38`（本轮 worktree 建立时间；实现与测试从 `2026-11-10 18:31` 起）。来由：常浩把 DeepSeek Harness 加进侧栏后，要它像 Hermes 一样有一套动作，「参考 hermes 这个数量就行，不要太多，重点围绕高频场景的动作」。小人动效按记忆只出一版（不走 UI 三选一）。
+- 预览：https://claude.ai/artifact/3dCuhdNRxQ2ZfbfYvd8oVM （真实代码打包，现在 vs 新动作，31 号票根 + 放大）。第一版后常浩要求「回复完成和打招呼的头顶喷水重复，要区别开；思考可以做得再有趣一点」，第二版改成打招呼挥鳍吐泡泡圈、思考盯小黄鱼，常浩回「按这版做」。
+- 九个动作（场景 → 动作）：待机 浮沉 + 两鳍交替划 + 每 6 秒冒泡；打招呼 靠鼠标那侧鳍快拍挥手、另一侧吐泡泡圈，头顶不喷水；开工 吸气下潜 + 一串泡泡；思考 小黄鱼绕头顶游、眼睛和脑袋跟着转；干活（命令 / 改文件 / 读文件 / 长命令）3 秒一阵猛划水、两侧甩水波；找你 浮起、两鳍举起拍 + 左上角橙色水滴牌 ! ? ≡；回复完成 喷气孔喷水柱、顶上分两片、水珠落下（喷水只在这里）；打盹 侧身沉睡、弯线闭眼、慢泡泡、不挂 Z；出错 咳灰水 + 叉眼 + 红色水滴牌 ×。额度用完沿用通用动作，只把沙漏换成紫色水滴牌。
+- 行为改变（预览里写明、常浩确认）：DeepSeek 在侧栏改成常驻小人（`stays: true`），闲着时不再显示 DeepSeek 图标。
+- 改了哪些文件：
+  - 新 `hud/src/bots/bot-whale.ts`：按状态算每一帧的浮沉、鳍角、泡泡、泡泡圈、小鱼、水柱、水波和眼睛朝向。
+  - 新 `hud/src/bots/bot-whale-water.ts`：水的形状与公用计算（喷气孔位置、上升泡泡、两片水柱、水珠、泡泡圈、绕圈小鱼）。
+  - 新 `hud/src/bots/bot-whale-paint.ts`：画水、泡泡圈、小鱼和左上角水滴牌（避开脸和背鳍）。
+  - `hud/src/bots/bot-spec.ts`：只给 `deepseek` 加 `whale: true`、`stays: true`；`BotSpec` 加 `whale` 开关。
+  - `hud/src/bots/bot-motion.ts`：`whale` 开关接进来（`swim()`，事件保留到 `weather`，鳍、闭眼、眼睛朝向覆盖；打招呼时长给鲸鱼放到 1.5 秒；思考不挂省略号、打盹不挂 Z）；其他小人走的分支不变。
+  - `hud/src/bots/bot-renderer.ts`：画水与水滴牌两处接入。
+  - 300 行棘轮（纯搬移，行为不变）：`bot-motion` 的共用形状与 `petalRatchet` 挪到新 `bot-motion-parts.ts`、原处转出；Hermes 头像的画法（光圈、徽章、道具）挪到新 `bot-avatar-paint.ts`；`bot-spec` 的形状类型挪到新 `bot-spec-types.ts`、原处转出。基线只改这三行：`bot-motion` 1562 → 1532、`bot-renderer` 1452 → 1191、`bot-spec` 434 → 399。
+  - 新 `hud/test/deepseek-whale.test.ts`：11 条（只有 DeepSeek 是鲸鱼并常驻、外形不变；没开关的小人没有水；待机浮沉交替划鳍冒泡；打招呼单侧挥鳍不超过 50° 且另一侧收起、泡泡圈在另一侧、不喷水；思考小鱼绕一圈、眼睛跟着、无省略号；干活一阵一歇；找你举鳍、水滴牌鼓动；只有回复完成喷水；打盹侧身弯线闭眼无 Z；开工下潜冒泡；出错灰水叉眼红 ×）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 398` / `ℹ fail 0`（多出的 11 条是新测试）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志在证据目录 `check.log`、`test.log`、`node.log`。
+- 验证：预览页与「定格胶片」页（真实 BotMotion 按模拟时间逐帧推进，走 BotMark 同一条 renderBot + CSS 姿态路径）逐个动作截帧自查两轮，改过：水柱像棍子、水珠挤成一串 → 重做两片水柱；31 像素下水滴牌太小 → 放大 1.25 倍；放大后挡住背鳍 → 挪到更左上；侧鳍抬过约 45° 会转到身子后面看不见 → 挥手限制在可见范围、靠快拍表现。装机后 `get_hud_screenshot` 离屏渲染：装前与装后隔 2 秒两张逐字节相同（`4553c1d98bcb`，离屏渲染各家都画静态图标），说明 Claude、Codex、ChatGPT、Hermes 没被带坏；新包前端产物（`dist`，18:40 本次构建）含鲸鱼代码。**未做**：实机屏幕截图看鲸鱼动起来（申请截取驿窗窗口的权限被拒），实机动作留给常浩看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-10-deepseek-moves/`：`before-offscreen.png`、`after-offscreen-1.png`、`after-offscreen-2.png`；预览脚手架与胶片页在同目录 `preview/`（`build.sh`、`entry.tsx`、`frames.tsx`、`out/`）。
+- 发布与回读：`147ce0068f0b`，`install.sh` 回读一致，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-10-deepseek-moves/PostPane-87d44c24ff6f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：装机重启把侧栏顺序草稿丢了，已重放 `hud.agents = [claude, codex, chatgpt, hermes, deepseek]`，**仍未保存**，要常浩悬停侧栏在面板里点「保存」。DeepSeek 近 24 小时没会话，票根底下仍是「--」。范围外发现：`check-file-size.mjs --update` 会顺带把白名单里的文件从基线删掉（本轮没提交那部分，只改了三行）。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏票根变矮、小人不变；票根顺序固定为 Claude、Codex、ChatGPT、Hermes（2026-11-10，Claude，常浩截图要求「第三个 GPT、第四个 Hermes」「高度变低，小人不变」；已提交、PR 按授权合并、已发布 `87d44c24ff6f` 回读通过；顺序是待常浩保存的草稿）
 
 - 时间：开工 `2026-11-10 16:58`。来由：常浩要加第五个（DeepSeek Harness），嫌票根占地方；起初说「窄」，追问后明确是高度变低、小人大小不变。票根尺寸是 PR #27「撕角票」定的，本轮是常浩点名改这一项本身。
