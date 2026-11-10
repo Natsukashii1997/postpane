@@ -30,12 +30,8 @@ import {
   stubMarks,
   stubSize,
 } from "../ticket-stub";
-import {
-  PAPER_GRAIN,
-  airmailStripes,
-  perforatedSide,
-  relayPaperOf,
-} from "../paper";
+import { StubPaper, stubBoxStyle, stubHoles } from "./StubPaper";
+import { airmailStripes, perforatedSide, relayPaperOf } from "../paper";
 
 const clampedSize = (size: number) => Math.max(20, Math.min(60, size));
 
@@ -436,11 +432,6 @@ export function HUDMarkStrip({
   );
 }
 
-type StubSide = "left" | "right" | "top" | "bottom";
-
-/** A stub's own box: its size, with the bot's room at its top. The bot sits
- * on the stub like a sticker; the paper is its own layer behind it, so the
- * bot's moves and props are never clipped by the paper. */
 /** A ChatGPT conversation to open, as the handoff card names one. */
 function chatgptConversation(id: string): Session {
   return {
@@ -448,75 +439,6 @@ function chatgptConversation(id: string): Session {
     source: "chatgpt",
     navigationTarget: { kind: "chatgpt-conversation", id },
   } as unknown as Session;
-}
-
-export function stubBoxStyle(logo: number, side: StubSide): CSSProperties {
-  const stub = stubSize(logo),
-    unit = logo / 20;
-  return {
-    width: stub.width,
-    height: stub.height,
-    boxSizing: "border-box",
-    flexDirection: "column",
-    justifyContent: "flex-start",
-    paddingTop: stubBotTop(logo) + (side === "top" ? 3 * unit : 0),
-    paddingLeft: side === "left" ? 3 * unit : 0,
-    paddingRight: side === "right" ? 3 * unit : 0,
-    paddingBottom: side === "bottom" ? 3 * unit : 0,
-  };
-}
-
-/** The stub's paper, perforated along the side that meets the screen edge;
- * `bothEdges` perforates the opposite side too (the joined preview ticket). */
-export function StubPaper({
-  unit,
-  side,
-  light,
-  bothEdges = false,
-}: {
-  unit: number;
-  side: StubSide;
-  light: boolean;
-  bothEdges?: boolean;
-}) {
-  const holes = (edge: StubSide) =>
-    edge === "top" || edge === "bottom"
-      ? `radial-gradient(circle at ${5 * unit}px ${edge === "top" ? "0" : "100%"}, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / ${10 * unit}px 100% repeat-x`
-      : `radial-gradient(circle at ${edge === "left" ? "0" : "100%"} ${5 * unit}px, transparent ${2.1 * unit}px, #000 ${2.5 * unit}px) 0 0 / 100% ${10 * unit}px repeat-y`;
-  const opposite = {
-    top: "bottom",
-    bottom: "top",
-    left: "right",
-    right: "left",
-  } as const;
-  const perforation = bothEdges
-    ? `${holes(side)}, ${holes(opposite[side])}`
-    : holes(side);
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        inset: 0,
-        filter:
-          "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))",
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `${PAPER_GRAIN} 0 0 / 160px 160px, ${light ? "#f3f1eb" : "#e9e6de"}`,
-          WebkitMask: perforation,
-          mask: perforation,
-          // Two rows of holes: the paper is what both masks keep.
-          ...(bothEdges
-            ? { WebkitMaskComposite: "source-in", maskComposite: "intersect" }
-            : null),
-        }}
-      />
-    </span>
-  );
 }
 
 /**
@@ -552,16 +474,26 @@ export function StubFace({
     review: vendor.relay?.review ?? false,
     replied: vendor.relay?.replied ?? false,
   });
+  // The relay's paper runs out over the perforated strip too, holes and all,
+  // so the stub's side is covered to its edge (owner 2026-11-10); the print
+  // stays where it was.
+  const reach = print.relayPaper && side !== "top",
+    strip = 3 * unit,
+    // From the stub's top to the foot's, for the holes down a side.
+    footTop = stubSize(20 * unit).height - foot;
+  const holes = reach
+    ? stubHoles(side, unit, side === "bottom" ? 0 : footTop)
+    : null;
   return (
     <>
       <span
         aria-hidden="true"
         style={{
           position: "absolute",
-          left: side === "left" ? 3 * unit : 0,
-          right: side === "right" ? 3 * unit : 0,
-          bottom: side === "bottom" ? 3 * unit : 0,
-          height: foot,
+          left: side === "left" && !reach ? strip : 0,
+          right: side === "right" && !reach ? strip : 0,
+          bottom: side === "bottom" && !reach ? strip : 0,
+          height: foot + (side === "bottom" && reach ? strip : 0),
           boxSizing: "border-box",
           borderTop: `${unit}px dashed rgba(42,41,37,.34)`,
           display: "grid",
@@ -571,6 +503,17 @@ export function StubFace({
             ? {
                 borderTop: "none",
                 background: `${airmailStripes(2 * unit)} 0 0 / 100% ${2.5 * unit}px no-repeat, ${REVIEW_PAPER}`,
+              }
+            : null),
+          ...(holes
+            ? {
+                ...(side === "left"
+                  ? { paddingLeft: strip }
+                  : side === "right"
+                    ? { paddingRight: strip }
+                    : { paddingBottom: strip }),
+                WebkitMask: holes,
+                mask: holes,
               }
             : null),
         }}

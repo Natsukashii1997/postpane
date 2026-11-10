@@ -24,6 +24,7 @@
     "./paper": "./src/paper.ts",
     "./quota-rows": "./src/quota-rows.ts",
     "./scene/HUDMarkStrip": "./src/scene/HUDMarkStrip.tsx",
+    "./scene/StubPaper": "./src/scene/StubPaper.tsx",
     "./ticket-stub": "./src/ticket-stub.ts",
     "./usage-meter/arcs": "./src/usage-meter/arcs.ts",
     "./usage-meter/mark-usage": "./src/usage-meter/mark-usage.tsx"
