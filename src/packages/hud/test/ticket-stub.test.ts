@@ -4,19 +4,45 @@ import {
   stubBotTop,
   stubFoot,
   stubFootHeight,
+  stubHoleStart,
   stubMarks,
   stubSize,
 } from "../src/ticket-stub.ts";
 
-test("a stub is 34 × 50 at the default 20 pt bot and grows with it", () => {
-  assert.deepEqual(stubSize(20), { width: 34, height: 50 });
-  assert.deepEqual(stubSize(30), { width: 51, height: 75 });
+test("a stub is 34 × 44 at the default 20 pt bot and grows with it", () => {
+  assert.deepEqual(stubSize(20), { width: 34, height: 44 });
+  assert.deepEqual(stubSize(30), { width: 51, height: 66 });
+  // Along a top or bottom edge, 3 units taller for the holes across its end.
+  assert.deepEqual(stubSize(20, true), { width: 34, height: 47 });
 });
 
-test("the bot and the tear-off foot fit the stub", () => {
+test("the holes down a stub's side sit centred, none cut at a corner", () => {
+  for (let logo = 20; logo <= 60; logo++) {
+    const unit = logo / 20,
+      pitch = 10 * unit,
+      radius = 2.5 * unit,
+      { height } = stubSize(logo),
+      start = stubHoleStart(logo);
+    const last = start + Math.floor((height - start) / pitch) * pitch;
+    // The holes before the first and after the last fall off the paper.
+    assert.ok(start - pitch + radius <= 0, `${logo}: one cut at the top`);
+    assert.ok(last + pitch - radius >= height, `${logo}: one cut at the foot`);
+    assert.ok(start - radius >= 0 && last + radius <= height, `${logo}`);
+    assert.ok(Math.abs(start - (height - last)) < 0.001, `${logo}: centred`);
+  }
+});
+
+test("the bot and the tear-off foot fit the stub, with room between", () => {
   for (const logo of [20, 30, 60]) {
-    const { height } = stubSize(logo);
-    assert.ok(stubBotTop(logo) + logo <= height - stubFootHeight(logo));
+    const unit = logo / 20,
+      room = (holes: number, horizontal: boolean) =>
+        stubSize(logo, horizontal).height -
+        stubFootHeight(logo) -
+        holes -
+        (stubBotTop(logo) + logo);
+    // Down a side; along a top or bottom edge the holes take 3 units.
+    assert.ok(room(0, false) >= 2.5 * unit, `${logo} down a side`);
+    assert.ok(room(3 * unit, true) >= 2.5 * unit, `${logo} along an edge`);
   }
 });
 

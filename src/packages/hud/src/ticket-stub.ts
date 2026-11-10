@@ -4,12 +4,30 @@
 // tests can run it; host/src/hud/plans.rs `strip_width` mirrors the width.
 
 /**
- * A stub's width and height for a bot `logo` points tall: 34 × 50 at 20,
- * slim enough for a dozen agents down one laptop edge. The bot is a sticker
- * on its own layer, so Clawd's props may pass over the paper's edges.
+ * A stub's width and height for a bot `logo` points tall: 34 × 44 at 20,
+ * short enough for five agents and more down one laptop edge (owner
+ * 2026-11-10: lower, the bot unchanged). Along a top or bottom edge the
+ * holes run across its end and take 3 units of its height, so it is that
+ * much taller and the bot keeps the same room above the foot. The bot is a
+ * sticker on its own layer, so Clawd's props may pass over the paper's edges.
  */
-export function stubSize(logo: number): { width: number; height: number } {
-  return { width: Math.round(logo * 1.7), height: Math.round(logo * 2.5) };
+export function stubSize(
+  logo: number,
+  horizontal = false,
+): { width: number; height: number } {
+  return {
+    width: Math.round(logo * 1.7),
+    height: Math.round(logo * (horizontal ? 2.35 : 2.2)),
+  };
+}
+
+/** The holes down a stub's side, one every 10 units: how far the first one's
+ * centre sits from the stub's top, so the row is centred on the side and no
+ * hole is cut at a corner. */
+export function stubHoleStart(logo: number): number {
+  const unit = logo / 20,
+    pitch = 10 * unit;
+  return (stubSize(logo).height % pitch) / 2 + pitch / 2;
 }
 
 /** From the stub's top to its bot's top, in points. */

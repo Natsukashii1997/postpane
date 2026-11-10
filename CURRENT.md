@@ -6,6 +6,23 @@
 
 
 
+## 侧栏票根变矮、小人不变；票根顺序固定为 Claude、Codex、ChatGPT、Hermes（2026-11-10，Claude，常浩截图要求「第三个 GPT、第四个 Hermes」「高度变低，小人不变」；已提交、PR 按授权合并、已发布 `87d44c24ff6f` 回读通过；顺序是待常浩保存的草稿）
+
+- 时间：开工 `2026-11-10 16:58`。来由：常浩要加第五个（DeepSeek Harness），嫌票根占地方；起初说「窄」，追问后明确是高度变低、小人大小不变。票根尺寸是 PR #27「撕角票」定的，本轮是常浩点名改这一项本身。
+- 顺序：查实没有写死的顺序，没设顺序时动态侧栏按「有额度的在前，其余按最近会话新的在前」排（`resting-agents.ts`），Hermes 最近有会话就排到了 ChatGPT 前。用侧栏工具给主屏布局放了草稿 `hud.agents = [claude, codex, chatgpt, hermes]`，**未保存**，要常浩悬停侧栏在面板里点「保存」；应用重启会丢草稿（本轮两次装机都重放过一次）。注意：`hud.agents` 只显示列出的几家，DeepSeek Harness 接上后要把它加进这个列表才会出现。
+- 改了哪些文件：
+  - `hud/src/ticket-stub.ts`：`stubSize` 高度系数 2.5 → 2.2（34 × 50 → 34 × 44 @20，常浩的 31 号小人 78 → 68 像素），宽度、小人位置和大小、撕口高度不变，小人到撕口留 3 个单位；新参数 `horizontal`：贴上下边时孔在票根端头占 3 个单位，高度用 2.35，留同样的空；新 `stubHoleStart`：侧边一排孔居中，变矮后不在角上切出半个孔。
+  - `hud/src/scene/StubPaper.tsx`：`stubHoles` 侧边的孔按 `stubHoleStart` 起排（接力脚的孔跟着对齐）；`stubBoxStyle` 按方向取高度。
+  - `hud/src/geometry.ts`、`hud/src/scene/HUDMarkStrip.tsx`：`stubSize` 传方向。
+  - `hud/test/ticket-stub.test.ts`：尺寸断言改新值并加横向；「小人和撕口之间留空」两种方向都查；新测试 `the holes down a stub's side sit centred, none cut at a corner`（20–60 号逐个查）。
+  - `crates/host/src/hud/plans.rs`：测试注释 34 × 50 → 34 × 44（Rust 只镜像宽度，逻辑不动）。
+- 测试：`pnpm run check` 退出码 0；第一次 `pnpm test` 退出码 1：`agent-hud-core` 的 `demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes` 失败（演示快照里两次取时差了毫秒），单独重跑 `5 passed; 0 failed`，与本轮无关；横向改动后整套重跑 `pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 387` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证：实机右侧侧栏截图：四张票根都变矮，小人大小不变，接力脚的灰蓝纸仍铺到打孔边，孔不在角上切半个；离屏横向渲染：第一版（统一 2.2）小人下沿贴到航空斜纹，加 `horizontal` 后留出空隙。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-10-stub-shorter/`：`screen-before-edge.png`、`screen-after2-edge.png`、`screen-after-zoom.png`、`after-offscreen-horizontal.png`（整屏 `screen-after*.png` 含私人窗口，不外发）。
+- 发布与回读：`87d44c24ff6f`，`install.sh` 回读一致（中间装过一版 `cc74dced6ebd`，横向贴斜纹，已被覆盖）。回滚到本轮前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-10-stub-shorter/PostPane-75fedf42700c.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：顺序草稿待常浩保存；DeepSeek Harness 接上时把它加进 `hud.agents`。范围外发现：两条 Rust 测试（单实例锁、演示快照）全量并发下偶发失败，未查。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏接力票根的灰蓝纸铺到打孔边（2026-11-10，Claude，常浩截图点名「接力时侧边边缘要完全覆盖，现在空了一点」；已提交、PR 按授权合并、已发布 `75fedf42700c` 回读通过）
 
 - 时间：开工 `2026-11-10 16:02`。来由：侧栏票根在接力时（「审」「回」，或盖着「答」又有回信），脚部的旧信纸在打孔那一侧缩进 3 个单位，打孔边条露成一条白纸。接力脚的旧信纸 + 航空斜纹是 #145、#218 定的，本轮是常浩点名改这一处本身。

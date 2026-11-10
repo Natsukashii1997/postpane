@@ -358,7 +358,7 @@ mod tests {
             strip_width(&screen, Mode::Notch, Edge::Top, &labels(3), 185.0),
             185.0
         );
-        // Logos: 34 × 50 pt stubs 8 pt apart, or one 34 pt column on a side.
+        // Logos: 34 × 44 pt stubs 8 pt apart, or one 34 pt column on a side.
         assert_eq!(
             strip_width(&screen, Mode::Logos, Edge::Top, &labels(3), 0.0),
             118.0
