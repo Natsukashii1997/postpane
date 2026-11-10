@@ -6,6 +6,17 @@
 
 
 
+## 亚古兽印章换成紫藤色，和猛鬼兽区分开（#299）（2026-11-10，Claude，常浩在三版预览里选「甲 · 紫藤」；已提交、PR 按授权合并、已发布 `81008a4a1a79` 回读通过）
+
+- 时间：开工 `2026-11-10 12:13`。来由：常浩截图「新回复」列表，两个机器人的方印都是朱红，分不开。三版预览（紫藤 / 赭金 / 墨印）：https://claude.ai/artifact/EGRmx7KziAvuKXsKQjjkXw 。印章颜色原是 2026-11-05 常浩定的朱红方印，本轮是他点名只改亚古兽这一枚。
+- 改了哪些文件：`hud/src/panel/bot-stamp.ts`：新 `sealInk(bot, light)`，亚古兽深色外观 `#b89ae8`、浅色外观 `#6b4a9c`，猛鬼兽和其他 profile 的首字印仍是朱红（`#e7826f` / `#a83a2c`）；`hud/src/panel/BotStamp.tsx`：去掉原来只按外观取色的 `sealInk`，改用上面这个。印章用到的地方（新回复列表、Hermes 面板、正在进行行尾、提醒、悬停小卡）都走 `BotStamp`，一起变；`hud/test/bot-stamp.test.ts`：新测试 `亚古兽's seal is wisteria, 猛鬼兽's and any other vermilion (#299)`。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 386` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志在证据目录 `check.log`、`test.log`、`node.log`。
+- 验证：装机后 `get_hud_screenshot` 拍悬停面板，Hermes 区猛鬼兽印章朱红、亚古兽印章紫色；改前同一处两枚都是朱红。整屏截图没有「想访问文稿」弹窗（L-06）。「新回复」列表用的是同一个 `BotStamp`，但本轮没等到新回复出现，**未单独截到**。侧栏小人和动效代码没动。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-10-agumon-seal/`：`before-panel.png`、`after-panel.png`、`screen-after-install.png`。
+- 发布与回读：`81008a4a1a79`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-10-agumon-seal/PostPane-1bd821b5671e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：无；范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 审核纸条最多露 3 行，其余在纸条里滚动（#288 跟进）（2026-11-09，Claude，常浩看实机截图后要求「最多显示三个，剩下的用滚动条」；已提交、PR 按授权合并、已发布 `1bd821b5671e` 回读通过）
 
 - 时间：开工 `2026-11-09 16:52`。来由：#294 合并后常浩截图，12 单接力把 ChatGPT 面板撑得很长。

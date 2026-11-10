@@ -1,8 +1,5 @@
-import { stampFigure, type HermesBot } from "./bot-stamp";
+import { sealInk, stampFigure, type HermesBot } from "./bot-stamp";
 import { PAPER_SEAL } from "../paper";
-
-/** Seal ink: vermilion on light paper, a lighter vermilion on dark. */
-export const sealInk = (light: boolean) => (light ? "#a83a2c" : "#e7826f");
 
 /** 猛鬼兽: a ghost under a sheet, mouth open on its fangs, hem torn. */
 const OGRE = (
@@ -68,7 +65,7 @@ export function BotStamp({
       aria-label={bot.name}
       style={{
         flex: "none",
-        color: sealInk(light),
+        color: sealInk(bot, light),
         opacity: 0.92,
       }}
     >
