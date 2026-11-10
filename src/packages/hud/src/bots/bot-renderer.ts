@@ -12,6 +12,7 @@ import {
 import { easeInOut } from "./bot-moves";
 import type { BotSign } from "./bot-state";
 import { finPath, finSilhouette } from "./bot-fins";
+import { paintWater, whaleTag } from "./bot-whale-paint";
 import { paintSign, signBox } from "./bot-signs";
 import { layHairline } from "./bot-hairline";
 import { BotStill } from "./bot-still";
@@ -112,6 +113,7 @@ export function botRenderLook(motion: BotMotion) {
     s(motion.shade, 40),
     motion.limbs,
     motion.flap,
+    motion.water,
     motion.sign,
     motion.lit,
     motion.helper,
@@ -817,7 +819,9 @@ function drawBody(
       context.restore();
     }
     if (m.dressed > 0) weather(context, form, motion, m.dressed);
-  } else if (motion.ring !== null && m.dressed > 0)
+  } else if (motion.water && m.dressed > 0)
+    paintWater(context, motion.water, m.dressed);
+  else if (motion.ring !== null && m.dressed > 0)
     progressRing(context, form, motion.ring, m.dressed);
   context.translate(0, (s.settle ?? 0) * m.eased);
   if (s.keeps) {
@@ -1365,6 +1369,8 @@ export function drawBot(
   context.restore();
   if (options.signs !== false && motion.sign && form.spec.cloud)
     cloudSign(context, motion, motion.sign, signAlpha(motion));
+  else if (options.signs !== false && motion.sign && form.spec.whale)
+    whaleTag(context, motion.sign, motion.water?.tag ?? 1, signAlpha(motion));
   else if (options.signs !== false && motion.sign && !form.spec.avatar) {
     const t = context.getTransform(),
       side = Math.hypot(t.a, t.b),
@@ -1416,8 +1422,15 @@ export function renderBot(
   context.restore();
   if (motion.sign && form.spec.cloud)
     cloudSign(context, motion, motion.sign, signAlpha(motion));
+  if (motion.sign && form.spec.whale)
+    whaleTag(context, motion.sign, motion.water?.tag ?? 1, signAlpha(motion));
   context.resetTransform();
-  if (motion.sign && !form.spec.avatar && !form.spec.cloud) {
+  if (
+    motion.sign &&
+    !form.spec.avatar &&
+    !form.spec.cloud &&
+    !form.spec.whale
+  ) {
     const place = signBox(form, side, outline);
     paintSign(
       context,

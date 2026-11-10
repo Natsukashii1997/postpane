@@ -77,6 +77,8 @@ export interface BotSpec {
   petals?: boolean;
   /** Floats, rolls its edge, puffs, rains and greys with the work, never turning. */
   cloud?: boolean;
+  /** Floats, paddles its fins, blows bubbles and spouts: the DeepSeek whale. */
+  whale?: boolean;
   /**
    * Acts as its own artwork instead of a drawn bot: the portrait tilts, nods
    * and closes its eyes. Eyes are ellipses [x, y, rx, ry] in artwork shares.
@@ -165,6 +167,8 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
     deepseek: spec({
       face: [0, -0.14],
       crossesEyes: true,
+      stays: true,
+      whale: true,
       decor: [
         {
           kind: "fins",
