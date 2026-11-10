@@ -28,7 +28,8 @@ import {
   type CloudSnot,
   type CloudMist,
 } from "./bot-cloud.ts";
-import { whaleSea, type WhaleWater } from "./bot-whale.ts";
+import { whaleSea } from "./bot-whale.ts";
+import type { WhaleWater } from "./bot-whale-water.ts";
 export interface BotFace {
   open: number;
   look: number;
@@ -221,6 +222,7 @@ export class BotMotion {
   /** The DeepSeek whale: floats, paddles, blows bubbles and spouts. */
   whale = false;
   water: WhaleWater | null = null;
+  private gaze: readonly [number, number] | null = null;
   avatar = false;
   prop: AvatarProp | null = null;
   propAge = 0;
@@ -444,9 +446,11 @@ export class BotMotion {
     if (
       this.greeting !== null &&
       now - this.greeting >=
-        (this.finned || this.cloud
-          ? Math.max(BotMoves.hopSeconds, BotMoves.finWaveSeconds)
-          : BotMoves.hopSeconds)
+        (this.whale
+          ? 1.5
+          : this.finned || this.cloud
+            ? Math.max(BotMoves.hopSeconds, BotMoves.finWaveSeconds)
+            : BotMoves.hopSeconds)
     )
       this.greeting = null;
     if (this.act && now - this.act.start >= this.act.length) {
@@ -898,6 +902,7 @@ export class BotMotion {
           ? { kind: this.weather.kind, time: now - this.weather.start }
           : null,
         greeting: this.greeting === null ? null : now - this.greeting,
+        greetSide: this.greetSide,
       }),
       m = this.morph;
     this.pose.x += sea.x * m;
@@ -911,6 +916,7 @@ export class BotMotion {
     };
     this.lids = sea.lids ? "curve" : null;
     this.water = sea.water;
+    this.gaze = sea.gaze;
   }
   private settleSky(dt: number) {
     const sky = this.sky;
@@ -1305,6 +1311,10 @@ export class BotMotion {
       target.open = 0.72;
     if (this.avatar && this.state.badge === "limited" && !this.event)
       target.open = 0.45;
+    if (this.whale && this.gaze && !this.event && !this.state.hovered) {
+      target.look = this.gaze[0];
+      target.lookY = this.gaze[1];
+    }
     if (this.cloud && this.sky && !this.event) {
       if (this.sky.look !== null) target.look = this.sky.look;
       if (this.sky.lookY !== null) target.lookY = this.sky.lookY;

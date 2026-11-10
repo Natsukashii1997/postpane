@@ -1,5 +1,10 @@
 import type { BotSign } from "./bot-state";
-import { BLOWHOLE, leafTip, type WhaleWater } from "./bot-whale";
+import {
+  BLOWHOLE,
+  leafTip,
+  type WhaleFish,
+  type WhaleWater,
+} from "./bot-whale-water";
 
 /** The whale's water and tag, in mark shares; sized up so they read on a 31 px stub. */
 const SEA_INK = "#2f49d8",
@@ -9,6 +14,8 @@ const SEA_INK = "#2f49d8",
   CHOKED = "#9aa0ad",
   CHOKED_EDGE = "#5d6370",
   WAVE = "#5b74f0",
+  FISH = "#ffc21a",
+  FISH_EDGE = "#a86b00",
   TAG_ASK = "#ff8a00",
   TAG_FAIL = "#e5484d",
   TAG_LIMIT = "#7b5cd6",
@@ -86,6 +93,21 @@ export function paintWater(
       context.lineWidth = line;
     }
   }
+  if (water.ring) {
+    // A ring of air seen a little from above: a deep edge round a pale band.
+    const ring = water.ring;
+    context.globalAlpha = ring.alpha * strength;
+    context.beginPath();
+    context.ellipse(ring.x, ring.y, ring.r, ring.r * 0.5, 0, 0, 2 * Math.PI);
+    context.strokeStyle = SEA_INK;
+    context.lineWidth = Math.max(0.05, 2.4 * hair) + 2 * line;
+    context.stroke();
+    context.strokeStyle = BUBBLE_FILL;
+    context.lineWidth = Math.max(0.05, 2.4 * hair);
+    context.stroke();
+    context.lineWidth = line;
+  }
+  if (water.fish) fish(context, water.fish, line, strength);
   context.strokeStyle = WAVE;
   context.lineWidth = Math.max(0.03, 1.5 * hair);
   for (const wave of water.waves) {
@@ -100,6 +122,35 @@ export function paintWater(
     );
     context.stroke();
   }
+  context.restore();
+}
+/** A little yellow fish facing `dir`: an oval body, a forked tail, one dark eye. */
+function fish(
+  context: CanvasRenderingContext2D,
+  at: WhaleFish,
+  line: number,
+  strength: number,
+) {
+  context.save();
+  context.globalAlpha = strength;
+  context.translate(at.x, at.y);
+  context.scale(at.dir * at.size, at.size);
+  context.fillStyle = FISH;
+  context.strokeStyle = FISH_EDGE;
+  context.lineWidth = line;
+  context.beginPath();
+  context.ellipse(0.01, 0, 0.075, 0.048, 0, 0, 2 * Math.PI);
+  context.moveTo(-0.055, 0);
+  context.lineTo(-0.115, -0.045);
+  context.lineTo(-0.1, 0);
+  context.lineTo(-0.115, 0.045);
+  context.closePath();
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#2a1a00";
+  context.beginPath();
+  context.arc(0.045, -0.01, Math.max(0.012, line * 0.6), 0, 2 * Math.PI);
+  context.fill();
   context.restore();
 }
 /**
