@@ -35,7 +35,7 @@
   - `hud/test/card-running.test.ts`（新）3 条；`src/tooling/file-size-baseline.json` 收紧（`--update` 顺带删掉 5 条已由豁免清单管的旧条目）。
   - 与预览不一致：预览甲里把第一条长 ASK 收成只留标题和问题，实现**没有收**：那一段是回答区（选项按钮 / 「请到 Claude 里回答」/ 知道了），收了会挡回答；卡片超高时本来就在框里滚动。
 - 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 各组全 `0 failed`（`291 passed`、`256 passed`、`183 passed`、`106 passed` 等），前端 `ℹ pass 404` / `ℹ fail 0`（多出 3 条是新测试）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志在证据目录 `307-check.log`、`307-test.log`、`307-build.log`。
-- 验证：装机后用电脑控制把鼠标移到 Claude 票根（只悬停、没点）：待审批卡上半部分与常浩改前截图一致，底下出现「正在进行 · 3」三行在跑会话（在跑 + 标题 + 「正在跑命令 · 已 n 分钟」+ ↗）；正等回答的「Codex 额度」只在上面 ASK 区出现，没有重复。行里的 ↗、左滑托盘**未实机点验**（L-09），留给常浩点一次；回复卡（只有 REPLY 没有 ASK 时）底下这一段**未实机看到**，此刻 Claude 有 ASK。
+- 验证：装机后用电脑控制把鼠标移到 Claude 票根（只悬停、没点）：待审批卡上半部分与常浩改前截图一致，底下出现「正在进行 · 3」三行在跑会话（在跑 + 标题 + 「正在跑命令 · 已 n 分钟」+ ↗）；正等回答的「Codex 额度」只在上面 ASK 区出现，没有重复。行里的 ↗ 由常浩 2026-11-11 实机点过，能跳回会话（L-09，电脑控制点不动）；左滑托盘**未实机点验**；回复卡（只有 REPLY 没有 ASK 时）底下这一段**未实机看到**，此刻 Claude 有 ASK。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-2026-11-11-card-running/after-claude-card.jpg`（目录名日期重复是 `install.sh` 自己加日期前缀，参数里又写了一次）。
 - 发布与回读：`0dc67b339f86`，`install.sh` 回读一致，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-2026-11-11-card-running/PostPane-75a9d8685200.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 遗留：无。范围外发现：无。skill 进化：无。
