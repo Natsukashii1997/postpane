@@ -25,7 +25,7 @@ export function ApprovalTag({
   /** The count's colour: the card's ink. */
   ink?: string;
   /** A colour of its own, for a tag outside the waiting card (the hover
-   * panel's 在跑 and plan tags); the tone's otherwise. */
+   * panel's 等你 and plan tags); the tone's otherwise. */
   color?: string;
 }) {
   const color = own ?? tagColor(tone, light);

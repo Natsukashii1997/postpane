@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Approval, Session, Snapshot } from "@agent-hud/protocol";
-import { runningForMark } from "../src/panel/card-running.ts";
+import { runningForMark } from "../src/panel/running-rows.ts";
 
 function session(
   id: string,
