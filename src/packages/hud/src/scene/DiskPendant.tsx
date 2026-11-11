@@ -44,7 +44,7 @@ function spot(x: number, y: number, size: number): CSSProperties {
 }
 
 /** 磁盘瘦身, hung under 随手记 the same way (#155). A click asks the app to
- * open its own panel beside the ring, or hide it. Under the pointer: the ball
+ * open its own panel beside the ball, or hide it. Under the pointer: the ball
  * lifts, light sweeps the glass, the ghost blinks twice, two stars twinkle, a
  * bubble rises off the broom, the broom sweeps twice kicking up dust and the
  * pendant sways; a press squashes it; an ice halo breathes while the panel
