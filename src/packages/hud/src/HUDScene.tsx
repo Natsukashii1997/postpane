@@ -83,6 +83,7 @@ import {
 } from "./panel/listed-sessions";
 import { HUDGroundProvider } from "./ground";
 import { PaperContext, paperOf, relayPaperOf } from "./paper";
+import { CardRunning } from "./panel/CardRunning";
 
 export type {
   HUDConfig,
@@ -958,53 +959,48 @@ export function HUDScene({
     ) : undefined;
   const newsContent =
     request || event ? (
-      <>
+      <PaperContext.Provider value={paper}>
         {request ? (
-          <PaperContext.Provider value={paper}>
-            <ApprovalContent
-              requests={news.requests}
-              selected={request}
-              select={news.select}
-              decide={onRequestDecision}
-              openSettings={openSettings}
-              light={light}
-              language={snapshotLanguage(snapshot)}
-              sessions={snapshot.sessions}
-              replies={news.replies}
-            />
-          </PaperContext.Provider>
+          <ApprovalContent
+            requests={news.requests}
+            selected={request}
+            select={news.select}
+            decide={onRequestDecision}
+            openSettings={openSettings}
+            light={light}
+            language={snapshotLanguage(snapshot)}
+            sessions={snapshot.sessions}
+            replies={news.replies}
+          />
         ) : event ? (
-          <PaperContext.Provider value={paper}>
-            <NewsContent
-              event={event}
-              snapshot={snapshot}
-              dismiss={news.dismiss}
-              replies={news.replies}
-              quotas={news.quotas}
-              drop={news.drop}
-              onStats={showPanelStats}
-              handoff={handoff}
-              light={light}
-              botLogos={config.botLogos}
-            />
-          </PaperContext.Provider>
+          <NewsContent
+            event={event}
+            snapshot={snapshot}
+            dismiss={news.dismiss}
+            replies={news.replies}
+            quotas={news.quotas}
+            drop={news.drop}
+            onStats={showPanelStats}
+            handoff={handoff}
+            light={light}
+            botLogos={config.botLogos}
+          />
         ) : null}
         {/* A notice's queue is printed on its receipt; a request's card
             lists the replies waiting with it. */}
         {!request && event && (
-          <PaperContext.Provider value={paper}>
-            <PendingEventRows
-              queue={news.laneQueue}
-              currentID={event.id}
-              requests={news.requests}
-              select={news.select}
-              includeRequests
-              light={light}
-              zh={snapshotLanguage(snapshot) === "zh"}
-            />
-          </PaperContext.Provider>
+          <PendingEventRows
+            queue={news.laneQueue}
+            currentID={event.id}
+            requests={news.requests}
+            select={news.select}
+            includeRequests
+            light={light}
+            zh={snapshotLanguage(snapshot) === "zh"}
+          />
         )}
-      </>
+        <CardRunning snapshot={snapshot} mark={frontOf!.source} light={light} />
+      </PaperContext.Provider>
     ) : null;
   const eventContent = cardHandoff ? (
     <PaperContext.Provider value={cardPaper ?? paper}>

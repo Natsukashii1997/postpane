@@ -145,7 +145,7 @@ export function vendorKey(source: string): string {
   return agentArtworkKey(source);
 }
 
-export { restingAgents, sourceID } from "./resting-agents.ts";
+export { restingAgents, sourceID, sourcesForMark } from "./resting-agents.ts";
 
 const vendorProjections = new WeakMap<
   Snapshot,
@@ -337,12 +337,6 @@ function balanceLevel(
   if (rows.some((row) => row.level === "warning")) return "warning";
   if (rows.some((row) => row.level === "normal")) return "normal";
   return "stale";
-}
-
-export function sourcesForMark(snapshot: Snapshot, mark: string): string[] {
-  return snapshot.providers
-    .filter((provider) => vendorKey(provider.id) === vendorKey(mark))
-    .map((provider) => provider.id);
 }
 
 export {
