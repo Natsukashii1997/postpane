@@ -18,6 +18,16 @@ export function sourceID(snapshot: Snapshot, source: string): string {
   );
 }
 
+/** The sources a mark stands for: every provider of its agent. */
+export function sourcesForMark(
+  snapshot: Pick<Snapshot, "providers">,
+  mark: string,
+): string[] {
+  return snapshot.providers
+    .filter((provider) => vendorKey(provider.id) === vendorKey(mark))
+    .map((provider) => provider.id);
+}
+
 /** How long after its last event an agent still belongs on a Dynamic dock
  * (Open's ReportView.queueRecency). */
 const queueRecency = 86_400_000;
