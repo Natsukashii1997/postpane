@@ -43,10 +43,10 @@ const STUB_INK = "#2a2925",
   STUB_RED = "rgba(196,38,30,.92)",
   // A handoff's 「换」 seal, in the START tag's green on light paper (#245).
   STUB_GREEN = "rgba(47,125,79,.92)";
-/** ChatGPT's stub (#145): a review waiting for you, answering, today's chats. */
+/** ChatGPT's stub (#145): 待你看 and 在答 in the word ink (#308), chats, --. */
 const DESK_TONE = {
-  amber: "#97600f",
-  blue: "#2f5fb3",
+  amber: relayPaperOf(false).word,
+  blue: relayPaperOf(false).word,
   ink: STUB_INK,
   dim: STUB_DIM,
 } as const;

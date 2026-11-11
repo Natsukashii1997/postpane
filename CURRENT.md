@@ -6,6 +6,23 @@
 
 
 
+## 侧栏标记配色按乙版统一：状态字黛色、琥珀收成赭金（#308）（2026-11-11，Claude，常浩在三版里选「乙 · 印有色，字一色」，改动确认四项回「按推荐做」；已提交、PR 按授权合并、已发布 `e67b79eead6f` 回读通过）
+
+- 时间：开工 `2026-11-11 12:36`。来由：常浩截图「待你看」和「回」章同色，要求把所有印章和状态字当一层信息整体分配颜色。清单 https://claude.ai/artifact/4aCqgEATaFhRJ9bZBMhpwE ，三版 https://claude.ai/artifact/Nj89us21BZRrSphLtdcCYv 。改动确认四项：甲（换法）状态字统一黛色、出问题的字保留朱；乙（改）「已回」框字灰 → 蓝；丙（改）琥珀收成赭金；丁（换法）额度预警字赭金、用完朱。
+- 改了哪些文件：
+  - `hud/src/paper.ts`：纸上新增两个色：`word` 黛（浅 `#46566e` / 深 `#b2bdcf` / 灰蓝纸 `#3b4a61`），`ochre` 赭金（浅 `#99591a` / 深 `#dba15a` / 灰蓝纸 `#8a4f14`）。
+  - 状态字改黛：`panel/HermesBoard.tsx`（在线 · 空闲、正在回复、回复中、✓、没跑过、停用；圆点颜色不变；断线、没回、✗ 仍红）、`scene/AgentPeek.tsx` + `scene/hermes-peek.ts` 新 `peekTones`（小卡机器人行：字黛、圆点按状态，「正在回复」圆点由琥珀改蓝，和看板一致；断线仍红）、`scene/DeskLines.tsx`（审核阶段字，没送出仍红；「审 核」小标题）、`scene/HUDMarkStrip.tsx`（ChatGPT 票根「待你看」「在答」）、`alerts/handoff-card.ts` + `CompletionAlertView.tsx`（接力框「接力」和结论字；「未写结论」仍红，`relayLegend` 多回 `missing`）、`panel/ReviewSlip.tsx`（「审核」小标题）、`alerts/alert-tones.ts` 新 `quotaWordAccent` + `CompactAlertView.tsx`（收起的额度字：预警赭金、已重置黛、用完红）。
+  - 琥珀改赭金：`permissions/approval-list.ts`（权限类标签 BASH / EDIT / APPROVE / PLAN；新 `tagInk`）、`alerts/PendingEventRows.tsx`（通知下排队的请求框按标签色，权限赭金、提问红；原来一律红）、`alerts/HandoffCard.tsx`（自动已停、时间线等待点）。
+  - 「已回」框字：`panel/SessionsSection.tsx` 改用回复色（蓝）。
+  - 测试：`approval-list.test.ts`（权限赭金、两张纸的新色值）、`handoff-card.test.ts`（接力框改黛、未写结论红）、`hermes-peek.test.ts`（`peekTones`）、`alert-tones.test.ts`（`quotaWordAccent`）。`file-size-baseline.json` 收紧两条（SessionsSection 1141、AgentPeek 602）。
+  - 不动：所有圆章、猛鬼兽朱印、亚古兽紫藤、「回」赭金、「换」绿、REPLY 蓝、「审」蓝；刘海形态（不在纸上）各处保持原色；额度看板进度条的警告琥珀 `#b7791f`（数据图，不是标记）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 404` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。第一次跑 `check:file-size` 没过（8 个文件比基线长），把取色判断收进小函数后重跑全过。第一次装机后发现 main 在开工后合进了 #309（L-05），变基到 `587d172` 后三条重跑：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust `936 passed; 0 failed`，前端 `ℹ pass 407` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 第一次 `ℹ fail 1`（变基解冲突时本节「本轮新坑」一行丢了），补上后 `ℹ pass 18` / `ℹ fail 0`。以变基后为准。
+- 验证：浏览器预览真实 `HUDScene`（端口 1466，沿用 11-08 的真实快照加一条 BASH 请求，面板隐藏，按 ref 点击、JS 读颜色，L-29）：深色纸 Hermes 区「在线 · 空闲」「✓ 11/8」为 `#b2bdcf`、「✗ 11/2」红、在岗圆章绿不变；待审批卡 BASH `#dba15a`、ASK / 待答红；新回复卡 REPLY、已回蓝不变；浅色纸截图同样。记录 `preview-check.md`。预览之后又把取色收进 `peekTones`、`tagInk`、`quotaWordAccent`（行为相同，单测覆盖）。**未在预览里看到**：ChatGPT 票根「待你看」、悬停小卡审核行、接力卡「自动已停」、收起的额度预警字（快照里没有这些状态），由单测和代码覆盖。`get_hud_screenshot` 渲染的面板不在纸上（L-42），看不到这次改的纸面颜色。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-308-mark-inks/`：`before-panel-offscreen.png`、`preview-hermes-dark.jpg`、`preview-hermes-light.jpg`、`screen-after-install.png`（装机后整屏，无权限弹窗）；预览脚手架 `preview-308/`（不提交）。
+- 发布与回读：`e67b79eead6f`（变基后重打，含 #309），`install.sh` 回读一致；第一次装的 `d8ae07c9e320` 不含 #309，已被覆盖。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-2026-11-11-308-mark-inks-install/PostPane-0dc67b339f86.app" /Applications/PostPane.app; open /Applications/PostPane.app`（装本轮之前、已含 #309 的版本）。
+- 遗留：上面「未在预览里看到」的四处等实机出现时看一眼。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏消息卡底下接「正在进行」：有待答消息时也能看到在跑的会话（2026-11-11，Claude，常浩问「为什么 claude 没有显示在跑任务」，看三版预览后选「甲 卡底接一段」；已提交、PR 按授权合并、已发布 `0dc67b339f86` 回读通过）
 
 - 时间：开工 `2026-11-11 11:59`。来由：Claude 几乎一直挂着待答的 ASK / REPLY，#243 定的「有消息先出消息卡」让悬停 Claude 票根只出待审批卡，Claude 面板和面板里的「正在进行」打不开；数据层核实无误（快照里 3 个 Claude 会话 `running`）。三版预览 https://claude.ai/artifact/MXz4rbRDCyQhD81MCdd19v （甲卡底接一段 / 乙卡头分两页 / 丙票根挂在跑签），常浩选甲，#243 的消息优先不变。issue #307。

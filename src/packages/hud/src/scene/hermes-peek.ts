@@ -71,3 +71,19 @@ export function replyTime(
   const day = (ms: number) => format.date.format(ms);
   return day(at) === day(now) ? format.time.format(at) : day(at);
 }
+
+/** A bot line's inks: the dot in its state's colour; the state written out
+ * in the word ink where the paper has one, but red when the bot is down
+ * (#308). */
+export function peekTones(inks: {
+  online: string;
+  replying: string;
+  down: string;
+  word?: string;
+}): { dot: Record<PeekBotState, string>; word: Record<PeekBotState, string> } {
+  const dot = { online: inks.online, replying: inks.replying, down: inks.down };
+  const word = inks.word
+    ? { online: inks.word, replying: inks.word, down: inks.down }
+    : dot;
+  return { dot, word };
+}

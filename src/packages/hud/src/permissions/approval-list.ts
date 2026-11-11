@@ -4,7 +4,7 @@ import type {
   RequestDecision,
   Session,
 } from "@agent-hud/protocol";
-import { paperLevel, paperOf } from "../paper.ts";
+import { paperOf, type Paper } from "../paper.ts";
 
 /** What a tag's colour says: the agent asks you (ASK, PLAN), it needs a
  * permission (BASH, EDIT, MCP, READ and the rest), or a session replied. */
@@ -39,7 +39,7 @@ export function tagTone(badge: string): TagTone {
 }
 
 /** A tag's ink in the HUD's appearance: the paper's red for asking, its
- * warning amber for a permission, its blue for a reply. */
+ * ochre for a permission (#308), its blue for a reply. */
 export function tagColor(tone: TagTone, light: boolean): string {
   const paper = paperOf(light);
   return tone === "ask"
@@ -48,8 +48,13 @@ export function tagColor(tone: TagTone, light: boolean): string {
       ? paper.blue
       : tone === "start"
         ? paper.green
-        : paperLevel("warning", paper);
+        : paper.ochre;
 }
+
+/** A badge's ink on `paper`, as its tag prints it: a queued request's box
+ * beside a notice (#308). */
+export const tagInk = (badge: string, paper: Paper) =>
+  tagColor(tagTone(badge), paper.light);
 
 /** One line of the waiting list: a request, or a reply waiting beside them. */
 export type ApprovalEntry =

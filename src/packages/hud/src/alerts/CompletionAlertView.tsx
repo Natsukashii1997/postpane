@@ -347,8 +347,8 @@ function RelayFrame({
   light: boolean;
   zh: boolean;
 }) {
-  const { trip, verdict } = relayLegend(handoff, zh);
-  const tone = relayLegendInks(paper, light);
+  const { trip, verdict, missing } = relayLegend(handoff, zh);
+  const tone = relayLegendInks(paper, light, missing);
   // The legend breaks the top edge instead of covering it: in the notch there
   // is no paper to cover it with, and on paper a flat patch shows against the
   // grain (#190).
@@ -493,7 +493,7 @@ function ReviewSlip({
           fontSize: 11,
           fontWeight: 700,
           letterSpacing: "0.3em",
-          color: sheet.blue,
+          color: sheet.word,
         }}
       >
         {zh ? "审核" : "REVIEWS"}

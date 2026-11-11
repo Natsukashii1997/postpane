@@ -402,6 +402,7 @@ test("a relay's reply is framed with its round and ChatGPT's verdict", () => {
   assert.deepEqual(relayLegend(handoff(), true), {
     trip: "Claude ⇄ ChatGPT · 第 1 / 2 轮",
     verdict: undefined,
+    missing: false,
   });
   const answered = handoff({
     phase: "replied",
@@ -416,26 +417,36 @@ test("a relay's reply is framed with its round and ChatGPT's verdict", () => {
   assert.deepEqual(relayLegend(answered, true), {
     trip: "Claude ⇄ ChatGPT · 第 2 / 2 轮",
     verdict: "通过",
+    missing: false,
   });
   assert.deepEqual(relayLegend(answered, false), {
     trip: "Claude ⇄ ChatGPT · round 2 / 2",
     verdict: "Pass",
+    missing: false,
   });
+  const silent = handoff({
+    phase: "replied",
+    steps: [step("ask", T + minute), step("reply", T + 2 * minute)],
+  });
+  assert.equal(relayLegend(silent, true).verdict, "未写结论");
+  assert.equal(relayLegend(silent, true).missing, true);
 });
 
-test("the relay legend keeps airmail blue and red where there is no paper", () => {
-  // In the notch (#190) the card has no paper: the legend still says 接力 in
-  // blue and the verdict in red, in the dark paper's inks, not plain white.
+test("the relay legend writes in the word ink, a missing verdict in red (#308)", () => {
+  // Owner 2026-11-11 (乙): words written out take one ink; one saying
+  // something went wrong keeps the red. In the notch (#190) the card has no
+  // paper: the dark paper's inks, not plain white.
   const dark = paperOf(false);
   assert.deepEqual(relayLegendInks(null, false), {
-    relay: dark.blue,
-    verdict: dark.red,
+    relay: dark.word,
+    verdict: dark.word,
   });
   const light = paperOf(true);
   assert.deepEqual(relayLegendInks(light, true), {
-    relay: light.blue,
-    verdict: light.red,
+    relay: light.word,
+    verdict: light.word,
   });
+  assert.equal(relayLegendInks(light, true, true).verdict, light.red);
 });
 
 test("an engineering review counts by its risk level and its pull request (#217)", () => {

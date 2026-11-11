@@ -43,7 +43,7 @@ function useDeskInks(light: boolean) {
   const blue = paper?.blue ?? (light ? "#2f5fb3" : "#8fb0ec");
   // Rows part with a fainter dotted line than the blocks do.
   const rule = paper ? paper.text(0.04) : inks.divider;
-  return { ...inks, blue, rule };
+  return { ...inks, blue, rule, word: paper?.word };
 }
 
 function Dot({ color, pulse }: { color: string; pulse?: boolean }) {
@@ -163,7 +163,7 @@ function AskRow({
           </span>
         )}
         {ask.answer === "replying" && (
-          <span style={{ color: inks.blue }}>
+          <span style={{ color: inks.word ?? inks.blue }}>
             {zh ? "回复中 · " : "Replying · "}
           </span>
         )}
@@ -259,7 +259,7 @@ function Desk({
           style={{
             marginLeft: "auto",
             fontSize: 12,
-            color: stateColor,
+            color: (state.tone !== "down" && inks.word) || stateColor,
             whiteSpace: "nowrap",
           }}
         >
@@ -308,8 +308,8 @@ function Desk({
                     job.last.tone === "fail"
                       ? inks.red
                       : job.last.tone === "ok"
-                        ? inks.green
-                        : inks.tertiary,
+                        ? (inks.word ?? inks.green)
+                        : (inks.word ?? inks.tertiary),
                 }}
               >
                 {job.last.text}

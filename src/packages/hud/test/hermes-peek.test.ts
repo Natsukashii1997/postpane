@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { HermesBotStatus } from "@agent-hud/protocol";
-import { peekBots, replyTime } from "../src/scene/hermes-peek.ts";
+import { peekBots, peekTones, replyTime } from "../src/scene/hermes-peek.ts";
 import { peekBubbleHeight, showsBots } from "../src/scene/peek-size.ts";
 
 const ogre: HermesBotStatus = {
@@ -109,4 +109,14 @@ test("the peek grows by a row per bot and the tokens under them", () => {
   const bare = { bots: [], quotas: [], balance: null, usage: "1.2M" };
   assert.equal(showsBots(bare), false);
   assert.equal(peekBubbleHeight(bare, 1), 20 + 2 * 18 + 6);
+});
+
+test("on paper a bot's state is written in the word ink, down in red (#308)", () => {
+  const inks = { online: "green", replying: "blue", down: "red" };
+  assert.deepEqual(peekTones({ ...inks, word: "slate" }), {
+    dot: inks,
+    word: { online: "slate", replying: "slate", down: "red" },
+  });
+  // Off the paper the word keeps the dot's colour.
+  assert.deepEqual(peekTones(inks).word, inks);
 });

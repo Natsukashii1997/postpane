@@ -10,7 +10,7 @@ import { PAPER_FIGURES, paperLevel, usePaper, type Paper } from "../paper";
 import { peekWindowName } from "../panel/window-labels";
 import { statusColor, type HUDEdge, type HUDVendor } from "../model";
 import { BotStamp } from "../panel/BotStamp";
-import { peekBots, replyTime, type PeekBotState } from "./hermes-peek";
+import { peekBots, peekTones, replyTime } from "./hermes-peek";
 import { PEEK_BOT_ROW, PEEK_RULE, PEEK_TEAR, showsBots } from "./peek-size";
 import { DeskLines } from "./DeskLines";
 
@@ -367,8 +367,9 @@ function ReceiptPeek({
             dim: paper.dim,
             line: paper.line,
             online: paper.green,
-            replying: paperLevel("warning", paper),
+            replying: paper.blue,
             down: paper.red,
+            word: paper.word,
             figures: PAPER_FIGURES,
           }}
         />
@@ -422,6 +423,7 @@ interface BotInks {
   online: string;
   replying: string;
   down: string;
+  word?: string;
   figures?: string;
 }
 
@@ -463,11 +465,7 @@ function BotLines({
   const lines = peekBots(vendor.bots ?? [], vendor.sessions, zh, (at) =>
     replyTime(at, now, format),
   );
-  const tone: Record<PeekBotState, string> = {
-    online: inks.online,
-    replying: inks.replying,
-    down: inks.down,
-  };
+  const tone = peekTones(inks);
   return (
     <>
       {lines.map((line) => (
@@ -521,7 +519,7 @@ function BotLines({
                   fontSize: 11 * scale,
                   fontWeight: 500,
                   whiteSpace: "nowrap",
-                  color: tone[line.state],
+                  color: tone.word[line.state],
                 }}
               >
                 <span
@@ -530,7 +528,7 @@ function BotLines({
                     width: 6 * scale,
                     height: 6 * scale,
                     borderRadius: "50%",
-                    background: "currentColor",
+                    background: tone.dot[line.state],
                   }}
                 />
                 {line.label}

@@ -26,6 +26,7 @@ import {
 import { alertText } from "../tokens";
 import { useGround } from "../ground";
 import { PAPER_FIGURES, usePaper } from "../paper";
+import { tagInk } from "../permissions/approval-list";
 import { cardColumn } from "../card-column";
 import { dateFormat } from "@agent-hud/ui/format";
 
@@ -182,10 +183,9 @@ export function PermissionRowHead({
           gap: 3,
           padding: paper ? "1px 5px" : "1px 4px",
           borderRadius: paper ? 2 : 3,
-          // On paper the kind is a box printed in red.
           background: paper ? "transparent" : "rgba(233, 161, 109, 0.14)",
-          boxShadow: paper ? `inset 0 0 0 1.2px ${paper.red}` : undefined,
-          color: paper ? paper.red : signalText,
+          boxShadow: paper ? "inset 0 0 0 1.2px currentColor" : undefined,
+          color: paper ? tagInk(badge, paper) : signalText,
           flexShrink: 0,
         }}
       >

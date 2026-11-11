@@ -61,7 +61,7 @@ export function ReviewRows({
           fontSize: 11,
           fontWeight: 700,
           letterSpacing: "0.3em",
-          color: sheet.blue,
+          color: sheet.word,
         }}
       >
         {zh ? "审核" : "REVIEWS"}
