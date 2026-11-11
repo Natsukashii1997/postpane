@@ -1,14 +1,10 @@
 // What relays print on the stubs (#171, the owner's 定稿 · 纸飞机 + 票根印章):
 // a blue 「审」 stamp over ChatGPT's reading while it has the words, and the
 // same stamp as 「回」 over Claude's while an answer waits (#218: the relay's
-// two ends in one style). Each lands with its letter (`stampWait`) and
-// simply shows when motion is reduced.
+// two ends in one style), in ochre so the two read apart (`stampInk`). Each
+// lands with its letter (`stampWait`) and simply shows when motion is reduced.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { stampWait } from "../relay-stamps";
-
-/** The relay paper's blue ink (relayPaperOf). */
-const REVIEW_BLUE = "#3a5c96";
-const WAX = "#b3261e";
+import { stampInk, stampWait } from "../relay-stamps";
 
 /** Lands once, `wait` ms after it first shows: pressed down from above. */
 function useLanding(
@@ -83,6 +79,7 @@ export function ReviewStamp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const ripples = overdue ? lingering : answering;
+  const ink = stampInk({ overdue, reply });
   useLayoutEffect(() => {
     if (!ripples || reduceMotion) return;
     const animation = ring.current?.animate(
@@ -120,7 +117,7 @@ export function ReviewStamp({
           style={{
             ...square,
             ...(overdue ? { width: 17 * unit } : null),
-            border: `${unit}px solid ${overdue ? WAX : REVIEW_BLUE}`,
+            border: `${unit}px solid ${ink}`,
             opacity: 0,
           }}
         />
@@ -133,8 +130,8 @@ export function ReviewStamp({
           ...(overdue ? { width: 17 * unit } : null),
           display: "grid",
           placeItems: "center",
-          border: `${1.2 * unit}px solid ${overdue ? WAX : REVIEW_BLUE}`,
-          color: overdue ? WAX : REVIEW_BLUE,
+          border: `${1.2 * unit}px solid ${ink}`,
+          color: ink,
           font: `900 ${overdue ? 6.4 * unit : 8 * unit}px/1 "Songti SC", "STSong", serif`,
           whiteSpace: "nowrap",
         }}

@@ -141,3 +141,20 @@ export function stampWait(since: number | null, now: number): number {
   const left = since + LETTER_LANDS_MS - now;
   return left > 0 && left <= LETTER_LANDS_MS ? left : 0;
 }
+
+/** The relays' stamp inks (owner 2026-11-11, 甲 · 赭金): 「审」 in the relay
+ * paper's blue, 「回」 in ochre so the relay's two ends read apart at a
+ * glance, and 「未审」 in the wax red. */
+export const STAMP_INK = {
+  review: "#3a5c96",
+  reply: "#99591a",
+  overdue: "#b3261e",
+} as const;
+
+export function stampInk(stamp: { overdue: boolean; reply: boolean }): string {
+  return stamp.overdue
+    ? STAMP_INK.overdue
+    : stamp.reply
+      ? STAMP_INK.reply
+      : STAMP_INK.review;
+}
