@@ -6,6 +6,25 @@
 
 
 
+## 侧栏「在跑」从方框章改成转圈小星：卡底与各家面板（2026-11-11，Claude，常浩说「在跑换一个形式吧，既然跟之前的印章不是一个层级的」，看三版预览后选「乙 转圈小星」，并要求「其他所有 ai 的在跑也是同样处理」；已提交、PR 按授权合并、已发布 `ad3eb517db6a` 回读通过）
+
+- 时间：开工 `2026-11-11 14:09`。来由：卡底和面板「正在进行」里的绿色方框章「在跑」和 ASK / REPLY / 等你同一种章，读起来像要你处理的事。三版预览 https://claude.ai/artifact/YDzKw3vdBfWJfKCfdTurr9 （甲呼吸点 / 乙转圈小星 / 丙写进第二行），常浩选乙；常浩本轮点名，不另发改动确认。issue #312。
+- 改了哪些文件：
+  - `hud/src/panel/RunningMark.tsx`（新）：这一家的图标（11 点）外一圈 1.5 点绿色细弧，`.hud-running-ring` 转，1.6 秒一圈。
+  - `ui/src/global.css`：`.hud-running-ring` 复用 `loading-state-spin`，减少动效时停。
+  - `hud/src/panel/SessionsSection.tsx`：`LiveRow` 在跑行左列换成 `RunningMark`（「等你」红章不变）；「已 n 分钟」挪到标题右侧；列表里有「等你」行时，在跑行左格用一枚看不见的「等你」章撑宽，标题对齐（`tagWide`）。卡底（只有在跑行）左格 18 点，和消息行 ✳ 对齐。
+  - `hud/src/panel/agent-board.ts`：`liveSessionLine` 在跑时只回「正在跑命令」这类，去掉用不到的 `now` 参数。
+  - `hud/src/panel/running-rows.ts`（由 `card-running.ts` 改名）：加 `runningSince`（「已 4 分钟」/「4m」，没有回合开始时间就不显示）。
+  - `hud/src/panel/TrayHint.tsx`（新）：`TrayHint` 与 `TRAY` 从 SessionsSection 挪出（SessionsSection 1141 → 1093 行）。
+  - `hud/src/paper.ts`、`hud/src/permissions/ApprovalTag.tsx`：注释里的「在跑」标签改掉。
+  - 测试：`hud/test/agent-board.test.ts` 改在跑行期望并加 `runningSince` 三条断言；`hud/test/card-running.test.ts` 改名 `running-rows.test.ts`。
+- 测试：第二版 `pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 407` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。第一版同样全过（`check.log`、`test.log`）。
+- 验证：两次全屏接管申请常浩都没回应（人不在），改用驿窗 MCP `get_hud_screenshot` 在应用自己的 WebView 里离屏渲染 Claude 面板。第一版（`b5d246fa879a`）发现混排时在跑行标题比「等你」行左缩约 19 点，改成 `tagWide` 后重装第二版，标题对齐；在跑行左边 ✳ 外绿弧、右侧「已 39 分钟」、第二行「正在跑命令」均对。**未核实**：细弧是否在转（离屏渲染每次从头画，两张角度相同）、卡底消息卡里的样子（同一个 `LiveRow`、不撑宽）、Codex 等别家此刻没有在跑的会话没渲染到、悬停实机、「想访问文稿」弹窗。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-running-spinner/`：`claude-panel-v1-misaligned.png`（第一版没对齐）、`claude-panel-v2-aligned.png`（第二版）。预览源文件 `docs/design/card-running-mark-preview.html` 未提交。
+- 发布与回读：`ad3eb517db6a`，`install.sh` 回读一致，`install.sh check` 一致。回滚到本轮之前（#308 会话装的 `e67b79eead6f`）：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-running-spinner/PostPane-e67b79eead6f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：转圈与卡底样子留给常浩实机看一眼。范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏标记配色按乙版统一：状态字黛色、琥珀收成赭金（#308）（2026-11-11，Claude，常浩在三版里选「乙 · 印有色，字一色」，改动确认四项回「按推荐做」；已提交、PR 按授权合并、已发布 `e67b79eead6f` 回读通过）
 
 - 时间：开工 `2026-11-11 12:36`。来由：常浩截图「待你看」和「回」章同色，要求把所有印章和状态字当一层信息整体分配颜色。清单 https://claude.ai/artifact/4aCqgEATaFhRJ9bZBMhpwE ，三版 https://claude.ai/artifact/Nj89us21BZRrSphLtdcCYv 。改动确认四项：甲（换法）状态字统一黛色、出问题的字保留朱；乙（改）「已回」框字灰 → 蓝；丙（改）琥珀收成赭金；丁（换法）额度预警字赭金、用完朱。
