@@ -8,7 +8,7 @@ import type {
 import { agentArtworkKey, agentVendorName } from "./agent-artwork";
 import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
-import { visibleBalances } from "./balance-rows.ts";
+import { stubBalance, visibleBalances } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
 import { START_BADGE } from "./permissions/approval-list.ts";
 import { relaysAnswering } from "./relays-answering.ts";
@@ -128,7 +128,7 @@ export interface HUDVendor {
   /** How many of the `waiting` requests are handoff cards (#245). */
   handoffs: number;
   balance: string | null;
-  /** What an agent with no window shows on the strip instead: its last 24 hours in tokens (`recentLabel`); its balance stays in the peek and the panel. */
+  /** What an agent with no window shows on the strip instead: its last 24 hours in tokens (`recentLabel`); DeepSeek its balance in whole units (`stubBalance`, owner 2026-11-11), the exact one staying in the peek and the panel. */
   usage: string | null;
   quotas: Snapshot["quotas"];
   sessions: Snapshot["sessions"];
@@ -308,7 +308,7 @@ export function configuredVendors(
             .join(" · ")
         : null,
       level: balanceLevel(visible) ?? "stale",
-      usage: null,
+      usage: stubBalance(visible, snapshotLanguage(snapshot)),
     };
   });
   return layoutMarks(available, config.panelLayout);

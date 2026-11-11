@@ -6,6 +6,19 @@
 
 
 
+## 侧栏接力「回」章改赭金；DeepSeek 票根底下显示余额取整（2026-11-11，Claude，常浩在三版预览里选「甲 · 赭金」，并要求「deepseekharness 下面显示余额，取整数」；已提交、PR #304 与本 PR 按授权合并、已发布 `34d0bbbf25d0` 回读通过）
+
+- 时间：开工 `2026-11-11 10:03`。来由：常浩截图「审和回的颜色一致」，两枚章同为接力纸蓝 `#3a5c96`，是 #218 定的「接力两头同一枚章」，本轮常浩点名改这一项；三版预览 https://claude.ai/artifact/RXpnSmQGQFb6rxH8aNwa1v （甲赭金 / 乙墨黑 / 丙紫藤，真实票根组件渲染）。余额是常浩中途追加：PR #51 定的侧栏不显示金额，这次只对 DeepSeek 例外，动手前已在对话里列明原来怎样、改成怎样。
+- 改了哪些文件：
+  - #304：`hud/src/relay-stamps.ts` 新 `STAMP_INK` / `stampInk`（「审」接力纸蓝、「回」赭金 `#99591a`、「未审」蜡红不变）；`hud/src/scene/RelayStamps.tsx` 边框、字色、涟漪取 `stampInk`；`hud/test/relay-stamps.test.ts` 新测试。
+  - 本 PR：`hud/src/balance-rows.ts` 新 `stubBalance`（面板里显示着的余额，四舍五入到整数，用现有 `listPrice` 印「¥811」）；`hud/src/model.ts` `configuredVendors` 里 DeepSeek 的 `usage` 从 `null`（侧栏显示「--」）改为 `stubBalance`；`hud/test/balance-rows.test.ts` 新测试。面板、悬停小卡仍是精确余额；简约模式标记旁的数字同样变成整数余额。
+- 测试：#304 `pnpm run check` 退出码 0；`pnpm test` Chrome 插件组 `ℹ pass 1` / `ℹ fail 12`，本机 Playwright 浏览器缓存又被清掉（L-16），照 L-16 补装后 `pnpm run test:extension` `ℹ pass 13` / `ℹ fail 0`，其余 Rust `936 passed; 0 failed`、前端 `ℹ pass 399` / `ℹ fail 0` 等全过。本 PR 第一次 `pnpm run check` 退出码 1：`ui/src/format.ts` 加了 `moneyWhole` 超出 300 行棘轮（688 > 682），改用现有 `listPrice` 后复原 `format.ts`；重跑 `pnpm run check` 退出码 0，`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 400` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。
+- 验证：装机后离屏渲染：Claude、Codex 两张「回」为赭金，DeepSeek 底下「¥810」；实机右侧侧栏截图同样（Codex「回」赭金、DeepSeek「¥810」）。ChatGPT 此刻没有在审的接力，实机没同屏看到「审」，「审」代码未改、预览里核对过。侧栏顺序常浩已保存（`hud.agents` 五家 + Claude 隐藏每周 Fable 行），重启后仍在。整屏无「想访问文稿」弹窗。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-reply-ochre/`：`screen-before-edge.png`、`screen-after-edge.png`（整屏 `screen-*.png` 含私人窗口，不外发）。
+- 发布与回读：`34d0bbbf25d0`，`install.sh` 回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-reply-ochre/PostPane-147ce0068f0b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：无。范围外发现：L-16 又发生一次（Playwright 缓存被本机清理），照做法补装即可。skill 进化：无。
+- 本轮新坑：无
+
 ## DeepSeek 鲸鱼小人有了自己的 9 个动作（2026-11-10，Claude，常浩看过两版预览后回「按这版做」；已提交、PR 按授权合并、已发布 `147ce0068f0b` 回读通过）
 
 - 时间：开工 `2026-11-10 17:38`（本轮 worktree 建立时间；实现与测试从 `2026-11-10 18:31` 起）。来由：常浩把 DeepSeek Harness 加进侧栏后，要它像 Hermes 一样有一套动作，「参考 hermes 这个数量就行，不要太多，重点围绕高频场景的动作」。小人动效按记忆只出一版（不走 UI 三选一）。
