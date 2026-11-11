@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Approval, Quota, Session } from "@agent-hud/protocol";
 import { quotaWindowLabel } from "../src/panel/window-labels.ts";
 import { agentVendorName } from "../src/agent-artwork.ts";
+import { runningSince } from "../src/panel/running-rows.ts";
 import {
   blockListed,
   panelHidesTokens,
@@ -277,7 +278,6 @@ test("a listed session says what it waits on or what it does", () => {
         status: "waiting",
         approval: request,
       },
-      now,
       "zh",
     );
   assert.equal(
@@ -324,13 +324,20 @@ test("a listed session says what it waits on or what it does", () => {
       requests: [],
     },
   });
+  // How long it has run sits beside the title, not in this line (#312).
   assert.equal(
     liveSessionLine(
       { session: running, status: "running", approval: null },
-      now,
       "zh",
     ),
-    "正在跑命令 · 已 4 分钟",
+    "正在跑命令",
+  );
+  assert.equal(runningSince(running, now, "zh"), "已 4 分钟");
+  assert.equal(runningSince(running, now, "en"), "4m");
+  assert.equal(
+    runningSince({ ...running, liveFacts: undefined }, now, "zh"),
+    null,
+    "no turn start, no time",
   );
 });
 

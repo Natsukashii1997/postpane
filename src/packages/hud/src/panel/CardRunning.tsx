@@ -5,7 +5,7 @@ import { handoffFor } from "../alerts/handoff-card";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
 import { SectionTitle, cardInks } from "../permissions/ListCard";
-import { runningForMark } from "./card-running";
+import { runningForMark } from "./running-rows";
 import {
   removedKey,
   shownSessions,

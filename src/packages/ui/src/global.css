@@ -468,6 +468,10 @@ a:focus-visible {
     opacity: 0;
   }
 }
+/* A session at work (#312): the arc around its agent's mark turns. */
+.hud-running-ring {
+  animation: loading-state-spin 1.6s linear infinite;
+}
 @keyframes loading-state-spin {
   to {
     transform: rotate(360deg);
@@ -475,7 +479,8 @@ a:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .loading-state,
-  .loading-state-spinner {
+  .loading-state-spinner,
+  .hud-running-ring {
     animation: none;
   }
 }

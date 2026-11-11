@@ -25,7 +25,7 @@ export interface Paper {
   red: string;
   /** A reply's mark: the one note of colour a reply's tag and card carry. */
   blue: string;
-  /** Work going on: the hover panel's "在跑" tag and "够用" stamp. */
+  /** Work going on: the arc around a running session's mark and "够用". */
   green: string;
   /** A status written out (待你看, 正在回复, ✓ 今天): one ink for every such
    * word, so the colour stays with what is pressed on — the stamps, tags and
