@@ -5,7 +5,7 @@ import type { Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { usePanelServices } from "../PanelContext";
 import { failureOf } from "../open-result";
-import { usePaper, paperLevel, PAPER_SEAL } from "../paper";
+import { usePaper, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
 import { Avatar } from "./HandoffAvatar";
 import { doerName, doerOf } from "./handoff-doer";
@@ -89,7 +89,7 @@ export function HandoffCard({
     red: paper?.red ?? "#ff6a57",
     green: paper?.green ?? "#6cc59a",
     blue: paper?.blue ?? "#8fb0ec",
-    amber: paper ? paperLevel("warning", paper) : "#e0a948",
+    amber: paper ? paper.ochre : "#e0a948",
     dim: inks.dim,
   };
   const services = usePanelServices();

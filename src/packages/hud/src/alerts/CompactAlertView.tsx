@@ -15,7 +15,7 @@ import {
 import { systemCalendar, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { alertInk, alertText } from "../tokens";
-import { quotaAccent } from "./alert-tones";
+import { quotaWordAccent } from "./alert-tones";
 import { isQuotaEvent } from "./quota-list";
 import { useGround } from "../ground";
 import { paperLevel, type Paper } from "../paper";
@@ -437,7 +437,7 @@ export function CompactAlertView({
         fontSize: font,
         fontWeight: 600,
         fontVariantNumeric: "tabular-nums",
-        color: quotaAccent(quota.tone, ground, paper),
+        color: quotaWordAccent(quota.tone, ground, paper),
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",

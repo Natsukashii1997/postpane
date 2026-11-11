@@ -104,7 +104,7 @@ export const lastReply = (handoff: Handoff) =>
 export function relayLegend(
   handoff: Handoff,
   zh: boolean,
-): { trip: string; verdict?: string } {
+): { trip: string; verdict?: string; missing: boolean } {
   const D = doerName(handoff);
   const { at, of } = round(handoff);
   const reply = lastReply(handoff);
@@ -113,17 +113,20 @@ export function relayLegend(
       ? `${D} ⇄ ChatGPT · 第 ${at} / ${of} 轮`
       : `${D} ⇄ ChatGPT · round ${at} / ${of}`,
     verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
+    missing: !!reply && reply.verdict !== "pass" && reply.verdict !== "revise",
   };
 }
 
-/** The legend's airmail inks: the paper's own, and where there is none (the
- * notch, #190) the paper's of that appearance, not plain ink. */
+/** The legend's inks: the paper's own, and where there is none (the notch,
+ * #190) the paper's of that appearance, not plain ink. Words written out take
+ * the word ink; a missing verdict, something gone wrong, stays red (#308). */
 export function relayLegendInks(
   paper: Paper | null,
   light: boolean,
+  missing = false,
 ): { relay: string; verdict: string } {
   const inks = paper ?? paperOf(light);
-  return { relay: inks.blue, verdict: inks.red };
+  return { relay: inks.word, verdict: missing ? inks.red : inks.word };
 }
 
 /** The stamp in the card's corner, by where it stands. */

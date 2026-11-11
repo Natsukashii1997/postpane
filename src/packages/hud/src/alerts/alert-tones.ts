@@ -65,3 +65,15 @@ export function quotaAccent(
   if (tone === "reset") return paper ? paper.blue : alertText("calm", ground);
   return paper ? paper.dim : alertInk(0.55, ground);
 }
+
+/** A folded quota's words: on paper a warning in the one ochre and a reset
+ * as a word written out (#308); used up stays red. */
+export function quotaWordAccent(
+  tone: "warning" | "critical" | "reset" | "none",
+  ground: Parameters<typeof alertFill>[1],
+  paper: Paper | null,
+): string {
+  if (paper && tone === "warning") return paper.ochre;
+  if (paper && tone === "reset") return paper.word;
+  return quotaAccent(tone, ground, paper);
+}

@@ -27,6 +27,14 @@ export interface Paper {
   blue: string;
   /** Work going on: the hover panel's "在跑" tag and "够用" stamp. */
   green: string;
+  /** A status written out (待你看, 正在回复, ✓ 今天): one ink for every such
+   * word, so the colour stays with what is pressed on — the stamps, tags and
+   * dots (owner 2026-11-11, 乙, #308). A word saying something went wrong
+   * keeps the red. */
+  word: string;
+  /** The one ochre: a permission's tag, 「回」, a warning, a halted relay
+   * (#308: the four ambers made one, the 赭金 picked for 「回」 in #304). */
+  ochre: string;
   /** A wash of ink under a command or a picked answer. */
   fill: string;
   /** Ink at `alpha`. */
@@ -52,6 +60,8 @@ export function paperOf(
     red: light ? "#c4261e" : "#ff6a57",
     blue: light ? "#2f5fb3" : "#8fb0ec",
     green: light ? "#2f7d4f" : "#6cc59a",
+    word: light ? "#46566e" : "#b2bdcf",
+    ochre: light ? "#99591a" : "#dba15a",
     fill: `rgba(${ink},${light ? 0.07 : 0.08})`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,
@@ -76,6 +86,8 @@ export function relayPaperOf(
     red: "#c4261e",
     blue: "#3a5c96",
     green: "#2a7a4c",
+    word: "#3b4a61",
+    ochre: "#8a4f14",
     fill: `rgba(${ink},0.07)`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,

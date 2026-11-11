@@ -79,11 +79,13 @@ export function DeskLines({
   };
   const time = (at: number) => replyTime(at, now, format);
   const paper = relayPaperOf(false);
+  // A phase is a status written out: the word ink, but red when it went
+  // wrong (#308).
   const tone = {
-    amber: "#97600f",
-    blue: paper.blue,
+    amber: paper.word,
+    blue: paper.word,
     red: paper.red,
-    dim: paper.dim,
+    dim: paper.word,
   };
   const label = (text: string, color: string, rule: string, extra?: string) => (
     <div
@@ -207,7 +209,7 @@ export function DeskLines({
           />
           {label(
             zh ? "审 核" : "REVIEWS",
-            paper.blue,
+            paper.word,
             paper.line,
             zh
               ? `开着 ${desk.reviews.length} 条`

@@ -19,7 +19,7 @@ import {
   waitedText,
   type ApprovalEntry,
 } from "../src/permissions/approval-list.ts";
-import { paperLevel, paperOf } from "../src/paper.ts";
+import { paperOf, relayPaperOf } from "../src/paper.ts";
 
 const session = (id: string, extra: Partial<Session> = {}): Session => ({
   id,
@@ -73,7 +73,7 @@ const reply = (
   event: IslandEvent = { id, kind: "completion", at, source: "claude" },
 ): ApprovalEntry => ({ kind: "reply", id, at, badge: "REPLY", event });
 
-test("ASK and PLAN are red, permissions amber, a reply blue", () => {
+test("ASK and PLAN are red, permissions ochre, a reply blue (#308)", () => {
   assert.equal(tagTone("ASK"), "ask");
   assert.equal(tagTone("PLAN"), "ask");
   for (const badge of ["BASH", "EDIT", "MCP", "READ", "WEB", "AGENT", "TOOL"])
@@ -82,7 +82,7 @@ test("ASK and PLAN are red, permissions amber, a reply blue", () => {
   for (const light of [true, false]) {
     const paper = paperOf(light);
     assert.equal(tagColor("ask", light), paper.red);
-    assert.equal(tagColor("permission", light), paperLevel("warning", paper));
+    assert.equal(tagColor("permission", light), paper.ochre);
     assert.equal(tagColor("reply", light), paper.blue);
   }
 });
@@ -356,4 +356,15 @@ test("a permission Claude Code asks through the hook waits only on the sidebar (
     asksOnlyHere({ ...asked, id: "claude-desktop-ask:reply:y" }),
     false,
   );
+});
+
+test("one ochre and one word ink on every paper (#308)", () => {
+  // Owner 2026-11-11 (乙): the four ambers made the 赭金 picked for 「回」,
+  // and a status written out takes one ink of its own.
+  assert.equal(paperOf(true).ochre, "#99591a");
+  assert.equal(paperOf(false).ochre, "#dba15a");
+  assert.equal(paperOf(true).word, "#46566e");
+  assert.equal(paperOf(false).word, "#b2bdcf");
+  assert.equal(relayPaperOf(true).word, "#3b4a61");
+  assert.equal(relayPaperOf(false).ochre, "#8a4f14");
 });

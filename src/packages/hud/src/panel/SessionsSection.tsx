@@ -469,12 +469,7 @@ function RepliedRow({
         borderTop: first ? undefined : `1px dotted ${inks.divider}`,
       }}
     >
-      <ApprovalTag
-        label={zh ? "已回" : "REPLIED"}
-        tone="ask"
-        light={light}
-        color={inks.secondary}
-      />
+      <ApprovalTag label={zh ? "已回" : "REPLIED"} tone="reply" light={light} />
       <span
         style={{
           fontSize: 13.5,
