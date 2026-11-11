@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { visibleBalances } from "../src/balance-rows.ts";
+import { stubBalance, visibleBalances } from "../src/balance-rows.ts";
 
 const rows = [
   {
@@ -53,4 +53,12 @@ test("balance row settings hide and order currencies independently within an acc
     }).map((r) => r.currency),
     ["USD", "CNY"],
   );
+});
+
+test("DeepSeek's stub prints its balance in whole units, rounded half up", () => {
+  const cny = (amount: number) =>
+    ({ ...rows[0], id: "d:CNY", currency: "CNY", amount }) as never;
+  assert.equal(stubBalance([cny(810.77)], "zh"), "¥811");
+  assert.equal(stubBalance([cny(8.49)], "zh"), "¥8");
+  assert.equal(stubBalance([], "zh"), null);
 });
