@@ -19,10 +19,10 @@
   - `hud/src/paper.ts`、`hud/src/permissions/ApprovalTag.tsx`：注释里的「在跑」标签改掉。
   - 测试：`hud/test/agent-board.test.ts` 改在跑行期望并加 `runningSince` 三条断言；`hud/test/card-running.test.ts` 改名 `running-rows.test.ts`。
 - 测试：第二版 `pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 407` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。第一版同样全过（`check.log`、`test.log`）。
-- 验证：两次全屏接管申请常浩都没回应（人不在），改用驿窗 MCP `get_hud_screenshot` 在应用自己的 WebView 里离屏渲染 Claude 面板。第一版（`b5d246fa879a`）发现混排时在跑行标题比「等你」行左缩约 19 点，改成 `tagWide` 后重装第二版，标题对齐；在跑行左边 ✳ 外绿弧、右侧「已 39 分钟」、第二行「正在跑命令」均对。**未核实**：细弧是否在转（离屏渲染每次从头画，两张角度相同）、卡底消息卡里的样子（同一个 `LiveRow`、不撑宽）、Codex 等别家此刻没有在跑的会话没渲染到、悬停实机、「想访问文稿」弹窗。
+- 验证：两次全屏接管申请常浩都没回应（人不在），改用驿窗 MCP `get_hud_screenshot` 在应用自己的 WebView 里离屏渲染 Claude 面板。第一版（`b5d246fa879a`）发现混排时在跑行标题比「等你」行左缩约 19 点，改成 `tagWide` 后重装第二版，标题对齐；在跑行左边 ✳ 外绿弧、右侧「已 39 分钟」、第二行「正在跑命令」均对。常浩 2026-11-11 实机悬停 Claude 票根确认细弧在转、卡底样子没问题。**未核实**：Codex 等别家此刻没有在跑的会话没渲染到、悬停实机、「想访问文稿」弹窗。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-running-spinner/`：`claude-panel-v1-misaligned.png`（第一版没对齐）、`claude-panel-v2-aligned.png`（第二版）。预览源文件 `docs/design/card-running-mark-preview.html` 未提交。
 - 发布与回读：`ad3eb517db6a`，`install.sh` 回读一致，`install.sh check` 一致。回滚到本轮之前（#308 会话装的 `e67b79eead6f`）：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-running-spinner/PostPane-e67b79eead6f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
-- 遗留：转圈与卡底样子留给常浩实机看一眼。范围外发现：无。skill 进化：无。
+- 遗留：无。范围外发现：无。skill 进化：无。
 - 本轮新坑：无
 
 ## 侧栏标记配色按乙版统一：状态字黛色、琥珀收成赭金（#308）（2026-11-11，Claude，常浩在三版里选「乙 · 印有色，字一色」，改动确认四项回「按推荐做」；已提交、PR 按授权合并、已发布 `e67b79eead6f` 回读通过）
