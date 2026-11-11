@@ -128,7 +128,7 @@
   "src/packages/hud/src/panel/AgentBoard.tsx": 672,
   "src/packages/hud/src/panel/HermesBoard.tsx": 386,
   "src/packages/hud/src/panel/QuotaSection.tsx": 609,
-  "src/packages/hud/src/panel/SessionsSection.tsx": 1072,
+  "src/packages/hud/src/panel/SessionsSection.tsx": 1093,
   "src/packages/hud/src/panel/TokenChartSection.tsx": 489,
   "src/packages/hud/src/panel/agent-board.ts": 445,
   "src/packages/hud/src/permissions/ApprovalContent.tsx": 306,

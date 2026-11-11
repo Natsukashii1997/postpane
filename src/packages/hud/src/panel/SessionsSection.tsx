@@ -193,6 +193,7 @@ export function SourceSessions({
     <LiveRow
       key={removedKey(entry)}
       entry={entry}
+      tagWide={list.some((other) => other.status === "waiting")}
       handoff={handoffFor(
         snapshot.handoffs,
         entry.session.source,
@@ -521,6 +522,7 @@ export function LiveRow({
   open,
   onOpen,
   onRemove,
+  tagWide = false,
 }: {
   entry: LiveSession;
   /** The handoff it is in: its second line says how that goes. */
@@ -536,6 +538,9 @@ export function LiveRow({
   open: boolean;
   onOpen(open: boolean): void;
   onRemove(): void;
+  /** Its list has 「等你」 rows: a running row's mark takes their tag's
+   * width, so the titles line up (#312). */
+  tagWide?: boolean;
 }) {
   const { language } = useFormat();
   const zh = language === "zh";
@@ -875,12 +880,28 @@ export function LiveRow({
               color={inks.red}
             />
           ) : (
-            <RunningMark
-              source={session.source}
-              label={zh ? "在跑" : "Running"}
-              color={inks.green}
-              light={light}
-            />
+            <span style={{ display: "grid", justifyItems: "start" }}>
+              {tagWide && (
+                <span
+                  aria-hidden
+                  style={{ gridArea: "1 / 1", visibility: "hidden" }}
+                >
+                  <ApprovalTag
+                    label={zh ? "等你" : "WAITING"}
+                    tone="ask"
+                    light={light}
+                  />
+                </span>
+              )}
+              <span style={{ gridArea: "1 / 1", alignSelf: "center" }}>
+                <RunningMark
+                  source={session.source}
+                  label={zh ? "在跑" : "Running"}
+                  color={inks.green}
+                  light={light}
+                />
+              </span>
+            </span>
           )}
           <span
             style={{
