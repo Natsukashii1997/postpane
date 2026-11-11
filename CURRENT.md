@@ -6,6 +6,24 @@
 
 
 
+## 侧栏消息卡底下接「正在进行」：有待答消息时也能看到在跑的会话（2026-11-11，Claude，常浩问「为什么 claude 没有显示在跑任务」，看三版预览后选「甲 卡底接一段」；已提交、PR 按授权合并、已发布 `0dc67b339f86` 回读通过）
+
+- 时间：开工 `2026-11-11 11:59`。来由：Claude 几乎一直挂着待答的 ASK / REPLY，#243 定的「有消息先出消息卡」让悬停 Claude 票根只出待审批卡，Claude 面板和面板里的「正在进行」打不开；数据层核实无误（快照里 3 个 Claude 会话 `running`）。三版预览 https://claude.ai/artifact/MXz4rbRDCyQhD81MCdd19v （甲卡底接一段 / 乙卡头分两页 / 丙票根挂在跑签），常浩选甲，#243 的消息优先不变。issue #307。
+- 改了哪些文件：
+  - `hud/src/panel/CardRunning.tsx`（新）：消息卡（待审批卡、回复卡）底下「正在进行 · n」，行直接用面板的 `LiveRow`（点 ↗ 回会话、左滑托盘照旧）；没有在跑的就不出这一段。
+  - `hud/src/panel/card-running.ts`（新）：`runningForMark` 取最前那条消息所属这一家在跑的会话；等你回答的已在卡里，不重复列。
+  - `hud/src/HUDScene.tsx`：消息卡外面三层同值的 `PaperContext.Provider` 合成一层，底下接 `CardRunning`（行为不变，行数 1502 → 1498）。
+  - `hud/src/panel/SessionsSection.tsx`：`LiveRow` 改为导出。
+  - `hud/src/resting-agents.ts`、`hud/src/model.ts`：`sourcesForMark` 挪到 `resting-agents.ts`（node 测试能导入），`model.ts` 照旧转出。
+  - `hud/test/card-running.test.ts`（新）3 条；`src/tooling/file-size-baseline.json` 收紧（`--update` 顺带删掉 5 条已由豁免清单管的旧条目）。
+  - 与预览不一致：预览甲里把第一条长 ASK 收成只留标题和问题，实现**没有收**：那一段是回答区（选项按钮 / 「请到 Claude 里回答」/ 知道了），收了会挡回答；卡片超高时本来就在框里滚动。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 各组全 `0 failed`（`291 passed`、`256 passed`、`183 passed`、`106 passed` 等），前端 `ℹ pass 404` / `ℹ fail 0`（多出 3 条是新测试）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志在证据目录 `307-check.log`、`307-test.log`、`307-build.log`。
+- 验证：装机后用电脑控制把鼠标移到 Claude 票根（只悬停、没点）：待审批卡上半部分与常浩改前截图一致，底下出现「正在进行 · 3」三行在跑会话（在跑 + 标题 + 「正在跑命令 · 已 n 分钟」+ ↗）；正等回答的「Codex 额度」只在上面 ASK 区出现，没有重复。行里的 ↗、左滑托盘**未实机点验**（L-09），留给常浩点一次；回复卡（只有 REPLY 没有 ASK 时）底下这一段**未实机看到**，此刻 Claude 有 ASK。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-2026-11-11-card-running/after-claude-card.jpg`（目录名日期重复是 `install.sh` 自己加日期前缀，参数里又写了一次）。
+- 发布与回读：`0dc67b339f86`，`install.sh` 回读一致，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-2026-11-11-card-running/PostPane-75a9d8685200.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：无。范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏挂件去掉纸色垫圈，整串收紧（2026-11-11，Claude，常浩要「侧边这两个球去除白色圆形边框，只保留球本身」，看三版预览后选「丙 整串收紧」；已提交、PR 按授权合并、已发布 `75a9d8685200` 回读通过）
 
 - 时间：开工 `2026-11-11 10:46`。来由：随手记猫球、磁盘瘦身扫帚球外面的白圈就是 2026-11-06 定稿「串挂同款」时定的纸色垫圈，本轮常浩点名去掉，不另发改动确认。三版预览 https://claude.ai/artifact/52473wisEHU15nnZycNM3J （真素材、外接屏真实尺寸：甲 球放大到 49 填满原圈 / 乙 球不变绳子加长接到球 / 丙 球不变整串收紧），常浩选丙。
