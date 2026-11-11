@@ -5,7 +5,9 @@ import {
   LETTER_LANDS_MS,
   LINGERS_MS,
   REPLY_WAIT_MS,
+  STAMP_INK,
   relayStamps,
+  stampInk,
   stampWait,
 } from "../src/relay-stamps.ts";
 
@@ -233,4 +235,11 @@ test("an answer back for Codex stamps Codex's stub, not Claude's (#282)", () => 
     relayStamps({ handoffs: [claudes] }, "claude", NOW)?.replied,
     true,
   );
+});
+
+test("「回」 is inked apart from 「审」, and 「未审」 stays wax red", () => {
+  assert.equal(stampInk({ overdue: false, reply: false }), STAMP_INK.review);
+  assert.equal(stampInk({ overdue: false, reply: true }), "#99591a");
+  assert.notEqual(STAMP_INK.reply, STAMP_INK.review);
+  assert.equal(stampInk({ overdue: true, reply: false }), STAMP_INK.overdue);
 });
