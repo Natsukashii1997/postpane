@@ -6,6 +6,22 @@
 
 
 
+## 侧栏挂件去掉纸色垫圈，整串收紧（2026-11-11，Claude，常浩要「侧边这两个球去除白色圆形边框，只保留球本身」，看三版预览后选「丙 整串收紧」；已提交、PR 按授权合并、已发布 `75a9d8685200` 回读通过）
+
+- 时间：开工 `2026-11-11 10:46`。来由：随手记猫球、磁盘瘦身扫帚球外面的白圈就是 2026-11-06 定稿「串挂同款」时定的纸色垫圈，本轮常浩点名去掉，不另发改动确认。三版预览 https://claude.ai/artifact/52473wisEHU15nnZycNM3J （真素材、外接屏真实尺寸：甲 球放大到 49 填满原圈 / 乙 球不变绳子加长接到球 / 丙 球不变整串收紧），常浩选丙。
+- 改了哪些文件：
+  - `hud/src/app-pendant.ts`：`PendantLayout` 和 `pendantParts` 去掉 `ring`；球大小照旧（票根宽减 4 再减圈的边，31 点小人仍是球 41、绳 17）；每个挂件沿绳方向只占「绳 + 球」，横排时按球居中。
+  - `hud/src/scene/PendantShell.tsx`：按钮就是球本身，不再铺纸色和纸纹、不留内边距；阴影和打开时的金色光圈改在球上。
+  - `hud/src/scene/AppPendant.tsx`、`DiskPendant.tsx`：注释里的「圈」改成「球」。
+  - `hud/test/app-pendant.test.ts`：去掉 `ring` 的断言，新增「球保持原大小、没有 ring」「整串按绳 + 球收紧」两条。
+  - `docs/ROADMAP.md`：随手记挂件一行写明 2026-11-11 起去掉垫圈。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `936 passed; 0 failed`，前端 `ℹ pass 401` / `ℹ fail 0`（多出 2 条是新测试）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs`：`ℹ pass 18` / `ℹ fail 0`。日志在证据目录 `check.log`、`test.log`、`node.log`。
+- 验证：装机前后各截侧栏窗口两张（隔 2 秒）：两个球外的白圈没了，球大小不变，两段绳照旧，整串往上收紧；上面五张票根、小人、印章、余额 ¥810 没变（DeepSeek 鲸鱼姿态不同是它在动，左侧待回答数 3→2 是实时数据）。设置窗口装机后照常打开，应用内没有弹窗；系统「想访问文稿」弹窗本轮用的是后台截窗口，没截整屏，**未核实**。悬停、点击、面板打开时的光圈**未实机点验**，留给常浩看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-11-pendant-no-ring/`：`before-crop.png`、`before-crop-2s.png`、`after-crop.png`、`after-crop-2s.png`、`compare.png`（挂件前后）、`compare-strip.png`（整条侧栏前后）。
+- 发布与回读：`75a9d8685200`，`install.sh` 回读一致，`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-11-pendant-no-ring/PostPane-34d0bbbf25d0.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 遗留：记忆「自建应用挂件一律串挂同款」已改成无垫圈。范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏接力「回」章改赭金；DeepSeek 票根底下显示余额取整（2026-11-11，Claude，常浩在三版预览里选「甲 · 赭金」，并要求「deepseekharness 下面显示余额，取整数」；已提交、PR #304 与本 PR 按授权合并、已发布 `34d0bbbf25d0` 回读通过）
 
 - 时间：开工 `2026-11-11 10:03`。来由：常浩截图「审和回的颜色一致」，两枚章同为接力纸蓝 `#3a5c96`，是 #218 定的「接力两头同一枚章」，本轮常浩点名改这一项；三版预览 https://claude.ai/artifact/RXpnSmQGQFb6rxH8aNwa1v （甲赭金 / 乙墨黑 / 丙紫藤，真实票根组件渲染）。余额是常浩中途追加：PR #51 定的侧栏不显示金额，这次只对 DeepSeek 例外，动手前已在对话里列明原来怎样、改成怎样。

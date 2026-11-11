@@ -13,12 +13,12 @@ const EYE = 0.13;
 const STAR = { x: 0.5, y: 0.19 };
 
 /** 随手记, hanging off the resting strip (app-pendant.ts). A click opens or
- * hides the notes beside it; `anchor` is the ring, in the page's points.
+ * hides the notes beside it; `anchor` is the ball, in the page's points.
  * Five small motions, all in global.css (`hud-pendant-*`): under the
  * pointer the pendant sways now and then, the cat blinks and its star
  * twinkles (at rest it stays still); a hover lifts the ball and lights the
  * eyes, and a press squashes it; while the notes show, a faint gold halo
- * breathes round the ring. `still` stops them all. Whether they show is the
+ * breathes round the ball. `still` stops them all. Whether they show is the
  * host's word (`shown`), so the halo goes out when the page's own 收起 hides
  * them and is right after the sidebar reloads (#224). */
 export function AppPendant({

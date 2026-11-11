@@ -1,13 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { PendantLayout, PendantRect } from "../app-pendant";
-import { PAPER_GRAIN } from "../paper";
 
 const SHADOW =
   "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))";
 
 /** The part every self-built app's pendant shares (串挂同款, #155): the dashed
- * cord, the paper ring holding the app's ball, the sway from where the cord
- * is tied. The app brings its ball's face (`children`) and its own motions,
+ * cord, the app's ball hung bare from it (no paper ring since 2026-11-11), the
+ * sway from where the cord is tied. The app brings its ball's face (`children`) and its own motions,
  * keyed in global.css on `app`. */
 export function PendantShell({
   app,
@@ -32,27 +31,26 @@ export function PendantShell({
   /** The strip is being dragged: the pendant rides along with it and takes
    * no pointer. */
   carried?: boolean;
-  /** The app's panel shows: the ring's halo. */
+  /** The app's panel shows: the ball's halo. */
   open: boolean;
   /** More data-* attributes for the app's styles (its state). */
   data?: Record<string, string | undefined>;
-  /** A click on the ball, with the ring's box in the page's points. */
+  /** A click on the ball, with its box in the page's points. */
   onPress: (anchor: PendantRect) => void;
   children: ReactNode;
 }) {
-  const { frame, horizontal, reversed, cord, ring, ball } = layout;
-  const paper = light ? "#f3f1eb" : "#e9e6de";
+  const { frame, horizontal, reversed, cord, ball } = layout;
   const cordColor = light ? "rgba(42,41,37,.5)" : "rgba(236,231,220,.5)";
-  // Along the top or bottom the cord meets the ring at its middle.
+  // Along the top or bottom the cord meets the ball at its middle.
   const cordStyle: CSSProperties = horizontal
     ? {
         width: cord,
         height: 0,
-        marginTop: ring / 2,
+        marginTop: ball / 2,
         borderTop: `1.5px dashed ${cordColor}`,
       }
     : { width: 0, height: cord, borderLeft: `1.5px dashed ${cordColor}` };
-  const ringButton = (
+  const ballButton = (
     <button
       type="button"
       className="hud-app-pendant-ball"
@@ -64,13 +62,13 @@ export function PendantShell({
       }}
       style={{
         position: "relative",
-        width: ring,
-        height: ring,
+        width: ball,
+        height: ball,
         flex: "none",
-        padding: (ring - ball) / 2,
+        padding: 0,
         border: 0,
         borderRadius: "50%",
-        background: `${PAPER_GRAIN} 0 0 / 160px 160px, ${paper}`,
+        background: "none",
         filter: SHADOW,
         cursor: "pointer",
       }}
@@ -94,8 +92,8 @@ export function PendantShell({
       aria-hidden="true"
       style={{ flex: "none", ...cordStyle }}
     />,
-    <span key="ring" style={{ display: "flex" }}>
-      {ringButton}
+    <span key="ball" style={{ display: "flex" }}>
+      {ballButton}
     </span>,
   ];
   // The pendant swings from where its cord is tied.

@@ -1,5 +1,6 @@
 // A self-built app hangs off the resting ticket strip as a pendant: a dashed
-// cord from the strip's end and the app's own ball in a paper ring. Several
+// cord from the strip's end and the app's own ball, bare (no paper ring since
+// 2026-11-11, the chain drawn up tight where the ring was). Several
 // apps hang one under another, each the same (串挂同款, #155). It sits outside the strip, so hovering it never
 // opens the agents' panel, and the strip's size stays the agents' alone.
 // Kept free of the UI so the tests can run it.
@@ -21,19 +22,19 @@ export interface PendantLayout {
   reversed: boolean;
   horizontal: boolean;
   cord: number;
-  ring: number;
   ball: number;
 }
 
 /** The pendant's parts for a strip of `logo`-point bots, in points. */
 export function pendantParts(logo: number) {
   const stub = stubSize(logo).width;
-  const ring = stub - 4;
+  // The ball keeps the size it had inside the paper ring it used to sit in
+  // (a stub less 4, less the ring's band).
+  const span = stub - 4;
   return {
     stub,
     cord: Math.round(logo * 0.55),
-    ring,
-    ball: ring - 2 * Math.max(3, Math.round(ring * 0.08)),
+    ball: span - 2 * Math.max(3, Math.round(span * 0.08)),
   };
 }
 
@@ -53,7 +54,7 @@ export function pendantLayout(
 
 /**
  * `count` pendants hung one under another (串挂同款, #155): each the same
- * cord and ring, the first off the strip's end and every next off the one
+ * cord and ball, the first off the strip's end and every next off the one
  * before. When the window has no room after the strip for all of them but
  * has before its start, the whole chain hangs there instead, still in order
  * from the strip; with room on neither side it takes the roomier one.
@@ -67,8 +68,8 @@ export function pendantChain(
 ): PendantLayout[] {
   const parts = pendantParts(logo);
   const horizontal = edge === "top" || edge === "bottom";
-  const along = parts.cord + parts.ring;
-  const across = horizontal ? parts.ring : parts.stub;
+  const along = parts.cord + parts.ball;
+  const across = horizontal ? parts.ball : parts.stub;
   const start = horizontal ? strip.x : strip.y;
   const end = start + (horizontal ? strip.width : strip.height);
   const limit = horizontal ? room.width : room.height;
@@ -80,7 +81,7 @@ export function pendantChain(
     const frame = horizontal
       ? {
           x: at,
-          y: strip.y + strip.height / 2 - parts.ring / 2,
+          y: strip.y + strip.height / 2 - parts.ball / 2,
           width: along,
           height: across,
         }
