@@ -84,6 +84,9 @@ import {
 import { HUDGroundProvider } from "./ground";
 import { PaperContext, paperOf, relayPaperOf } from "./paper";
 import { CardRunning } from "./panel/CardRunning";
+import { WeeklyMark } from "./scene/WeeklyMark";
+import { useOpenSettings } from "./scene/useOpenSettings";
+import { weeklyFor } from "./card-weekly";
 
 export type {
   HUDConfig,
@@ -457,7 +460,7 @@ export function HUDScene({
   const cardHandoff = cardId
     ? snapshot.handoffs?.find((handoff) => handoff.id === cardId)
     : undefined;
-  const closeCard = useCallback(() => openHandoffCard(null), []);
+  const weekly = weeklyFor(snapshot, config, cardHandoff, frontOf);
   // It closes with the sidebar: folded away with no card of news out.
   const sidebarShown = open || Boolean(event || request);
   useEffect(() => {
@@ -930,17 +933,10 @@ export function HUDScene({
     onEscape: endHold,
   });
 
-  // A card's Open Agent plugins hands over as the settings button does.
-  const openSettingsPage = panelServices?.openSettingsPage;
-  const openSettings = useMemo(
-    () =>
-      openSettingsPage
-        ? (page: string) => {
-            endHold();
-            handoff(() => openSettingsPage(page));
-          }
-        : undefined,
-    [openSettingsPage, endHold, handoff],
+  const openSettings = useOpenSettings(
+    panelServices?.openSettingsPage,
+    endHold,
+    handoff,
   );
   // Quota news while the usage panel is open: a strip atop the panel.
   const inlineAlert = (shown: Snapshot) =>
@@ -1000,6 +996,7 @@ export function HUDScene({
           />
         )}
         <CardRunning snapshot={snapshot} mark={frontOf!.source} light={light} />
+        <WeeklyMark weekly={weekly} />
       </PaperContext.Provider>
     ) : null;
   const eventContent = cardHandoff ? (
@@ -1008,9 +1005,10 @@ export function HUDScene({
         handoff={cardHandoff}
         snapshot={snapshot}
         light={cardPaper ? cardPaper.light : light}
-        onClose={closeCard}
+        onClose={() => openHandoffCard(null)}
         handover={handoff}
       />
+      <WeeklyMark weekly={weekly} />
     </PaperContext.Provider>
   ) : (
     newsContent

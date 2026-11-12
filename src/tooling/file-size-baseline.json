@@ -105,7 +105,7 @@
   "src/packages/app/src/statistics/UsageChart.tsx": 542,
   "src/packages/hud/src/BotMark.tsx": 416,
   "src/packages/hud/src/HUDGlow.tsx": 830,
-  "src/packages/hud/src/HUDScene.tsx": 1498,
+  "src/packages/hud/src/HUDScene.tsx": 1496,
   "src/packages/hud/src/HoverPanel.tsx": 657,
   "src/packages/hud/src/IslandNews.tsx": 387,
   "src/packages/hud/src/alerts/CompactAlertView.tsx": 628,
