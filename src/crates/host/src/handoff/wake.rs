@@ -33,7 +33,7 @@ impl Desk {
             }
             let Some(text) = self.lock().get(&id).and_then(|handoff| {
                 let reply = handoff.last_reply()?.text.clone()?;
-                Some(back_text(handoff, &reply))
+                Some(back_text(handoff, &reply, None))
             }) else {
                 continue;
             };

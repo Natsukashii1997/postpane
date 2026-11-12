@@ -266,7 +266,7 @@ pub struct Handoff {
     #[serde(default)]
     pub attempt: u32,
     /// The auto round trip (#72) is on: a 「需修改」 answer goes back to
-    /// Claude by itself, a pass ends it, at most `ROUNDS` reviews.
+    /// Claude by itself, a pass goes back and ends it, at most `ROUNDS` reviews.
     #[serde(default)]
     pub auto: bool,
     /// Why the auto round trip stopped, while it is off.
@@ -308,16 +308,17 @@ fn is_nought(n: &usize) -> bool {
     *n == 0
 }
 
-/// What the auto round trip does with an answer that came in.
+/// What the auto round trip does with an answer that came in. Every one
+/// goes back to Claude first (#316), the ends too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Next {
     /// 「需修改」 with rounds to go: back to Claude.
     Back,
-    /// 「结论：通过」: the handoff ends.
+    /// 「结论：通过」: back to Claude, then the handoff ends.
     Pass,
-    /// 「需修改」 after the last round: the person decides.
+    /// 「需修改」 after the last round: back to Claude, then the person decides.
     Limit,
-    /// No verdict written: the person decides.
+    /// No verdict written: back to Claude, then the person decides.
     NoVerdict,
     /// 思维评审 (#209) 成熟退出 / 转其他路径: back to Claude, then the handoff ends.
     Close,
@@ -325,13 +326,14 @@ pub enum Next {
     Pause,
     /// 思维评审 决策升级: back to Claude, then the person decides.
     Escalate,
-    /// 思维评审 whose last two lines do not hold: the person decides.
+    /// 思维评审 whose last two lines do not hold: back to Claude, then the
+    /// person decides.
     Invalid(Flaw),
     /// L1 「需修改」 with its one review used (#217): back to Claude to fix
     /// it and close without another review, then the handoff ends.
     Settle,
     /// An engineering answer whose 「审查出口」 does not go with its
-    /// verdict (#217): the person decides.
+    /// verdict (#217): back to Claude, then the person decides.
     BadTail(Flaw),
 }
 

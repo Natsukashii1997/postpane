@@ -12,6 +12,20 @@ pub(super) fn passed(chinese: bool) -> String {
         "Passed; the handoff ended",
     )
 }
+/// A pass went back to Claude, then the handoff ended (#316).
+pub(super) fn passed_back() -> String {
+    l10n::text(
+        "结论：通过，回信已转回 Claude，自动结束接力",
+        "Passed; the answer went back to Claude and the handoff ended",
+    )
+}
+/// A pass that could not reach Claude: the handoff ends all the same.
+pub(super) fn passed_unsent() -> String {
+    l10n::text(
+        "结论：通过，但回信没能转回 Claude，自动结束接力；请告诉 Claude 审查已通过",
+        "Passed, but the answer could not go back to Claude; the handoff ended. Tell Claude it passed",
+    )
+}
 pub(super) fn thinking_closed() -> String {
     l10n::text(
         "思维评审收口，回信已转回 Claude，自动结束接力",
@@ -33,11 +47,11 @@ pub(super) fn escalated() -> String {
 pub(super) fn invalid_tail(flaw: Flaw) -> String {
     l10n::text(
         &format!(
-            "思维评审回信末两行无效：{}；没有转回 Claude，自动往返停下，交还常浩",
+            "思维评审回信末两行无效：{}；回信已转回 Claude，自动往返停下，交还常浩",
             flaw_text(flaw)
         ),
         &format!(
-            "The thinking review's last two lines do not hold: {}; nothing went back to Claude, left to you",
+            "The thinking review's last two lines do not hold: {}; the answer went back to Claude, left to you",
             flaw_text_en(flaw)
         ),
     )
@@ -145,8 +159,8 @@ pub(super) fn paused() -> String {
 }
 pub(super) fn at_limit(budget: u32) -> String {
     l10n::text(
-        &format!("已审 {budget} 轮仍需修改，自动往返停下，交还常浩"),
-        &format!("Still to fix after {budget} rounds; left to you"),
+        &format!("已审 {budget} 轮仍需修改，回信已转回 Claude，自动往返停下，交还常浩"),
+        &format!("Still to fix after {budget} rounds; the answer went back to Claude, left to you"),
     )
 }
 pub(super) fn no_rounds_left(budget: u32) -> String {
@@ -190,11 +204,11 @@ pub(super) fn budget_spent(counted: u32) -> String {
 pub(super) fn bad_review_tail(flaw: Flaw) -> String {
     l10n::text(
         &format!(
-            "审查出口与结论对不上：{}；没有转回 Claude，自动往返停下，交还常浩",
+            "审查出口与结论对不上：{}；回信已转回 Claude，自动往返停下，交还常浩",
             review_flaw_text(flaw)
         ),
         &format!(
-            "The review's way out and verdict do not hold together: {}; nothing went back to Claude, left to you",
+            "The review's way out and verdict do not hold together: {}; the answer went back to Claude, left to you",
             review_flaw_text(flaw)
         ),
     )
@@ -210,8 +224,8 @@ pub(super) fn review_flaw_text(flaw: Flaw) -> &'static str {
 }
 pub(super) fn no_verdict() -> String {
     l10n::text(
-        "回信没写结论，自动往返停下，交还常浩",
-        "The answer has no verdict; left to you",
+        "回信没写结论，回信已转回 Claude，自动往返停下，交还常浩",
+        "The answer has no verdict; it went back to Claude, left to you",
     )
 }
 pub(super) fn back_failed() -> String {

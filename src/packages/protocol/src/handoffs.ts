@@ -71,7 +71,7 @@ export interface Handoff {
   phaseAt?: number;
   steps?: HandoffStep[];
   /** The auto round trip is on (#72): 「需修改」 goes back to Claude by
-   * itself, a pass ends it, at most two reviews. */
+   * itself, a pass goes back and ends it, at most two reviews. */
   auto?: boolean;
   /** Why the auto round trip stopped, while it is off. */
   halt?: string | null;
