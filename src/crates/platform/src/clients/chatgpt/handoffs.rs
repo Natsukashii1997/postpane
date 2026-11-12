@@ -1491,8 +1491,14 @@ fn read_small(path: &Path) -> Option<Vec<u8>> {
 
 /// The handoffs kept; none when there are none or they cannot be read.
 pub fn load(data: &Path) -> Book {
+    // Unlike project config, saved replies can take the kept history past 4 MiB.
+    // Read every regular file save can write, without a smaller byte limit.
     let path = handoffs_path(data);
-    let read = read_small(&path).and_then(|b| serde_json::from_slice::<Vec<Handoff>>(&b).ok());
+    let read = fs::symlink_metadata(&path)
+        .ok()
+        .filter(|metadata| metadata.is_file())
+        .and_then(|_| fs::read(&path).ok())
+        .and_then(|bytes| serde_json::from_slice::<Vec<Handoff>>(&bytes).ok());
     // Kept but unreadable (#347): set aside, never written over as empty.
     if read.is_none() && path.exists() {
         gate_io::set_aside(&path);
@@ -1635,6 +1641,54 @@ mod tests {
         forged.list[0].claude_session = "../x".into();
         save(&data, &forged).unwrap();
         assert_eq!(load(&data).list.len(), KEEP - 1);
+    }
+
+    #[test]
+    fn saved_long_replies_survive_restart_and_the_next_save() {
+        let temp = tempfile::tempdir().unwrap();
+        for (name, character) in [
+            ("ascii", "a"),
+            ("chinese", "测"),
+            ("emoji", "🦀"),
+            ("escaped", "\0"),
+        ] {
+            let data = temp.path().join(name);
+            let reply = character.repeat(REPLY_KEPT);
+            let mut book = Book::default();
+            for at in 0..24 {
+                let handoff = book.begin(&format!("s{at}"), None, "t", None, "brief", at);
+                let conversation = format!("c-{at}");
+                assert!(book.opened(&handoff.id, &conversation, 24));
+                assert!(book.replied(&conversation, &reply, Some("m1"), 25));
+            }
+            save(&data, &book).unwrap();
+            let bytes = fs::metadata(handoffs_path(&data)).unwrap().len();
+            assert_eq!(bytes > 4 * 1024 * 1024, name != "ascii", "{name}");
+            let mut restarted = load(&data);
+            println!(
+                "{name}: saved=24 bytes={bytes} loaded={}",
+                restarted.list.len()
+            );
+            assert_eq!(
+                restarted.list.len(),
+                24,
+                "{name}: all saved handoffs reload"
+            );
+            assert!(restarted == book, "{name}: replies and state reload intact");
+            let next = restarted.begin("next", None, "next", None, "brief", 26);
+            save(&data, &restarted).unwrap();
+            let saved_again = load(&data);
+            assert_eq!(
+                saved_again.list.len(),
+                25,
+                "{name}: the new handoff is saved"
+            );
+            assert_eq!(saved_again.get(&next.id), Some(&next));
+            assert!(
+                saved_again.list[..24] == book.list,
+                "{name}: the next save keeps the history"
+            );
+        }
     }
 
     #[test]
