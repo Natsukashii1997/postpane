@@ -875,7 +875,7 @@ impl Desk {
                         .ok_or_else(|| {
                             l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
                         })?;
-                    (StepKind::Back, back_text(&handoff, &reply, None))
+                    (StepKind::Back, back_text(&handoff, &reply))
                 } else {
                     let round = handoff.rounds_used() + 1;
                     let text = if handoff.thinking() {
@@ -1035,7 +1035,15 @@ impl Desk {
             if delivery == was {
                 continue;
             }
-            let reason = by_doer(&undelivered(&state, reason.as_deref()), Some(&doer));
+            // Given up after the handoff ended (an end's answer queued,
+            // #316): the card says the session never had it.
+            let ended = !self.lock().get(&id).is_some_and(Handoff::live);
+            let reason = if ended {
+                end_undelivered(&state)
+            } else {
+                undelivered(&state, reason.as_deref())
+            };
+            let reason = by_doer(&reason, Some(&doer));
             changed |= self.change(|book| {
                 if delivery.gave_up() {
                     book.undelivered(&id, &prompt, delivery, &reason, now)
@@ -1047,7 +1055,8 @@ impl Desk {
         changed
     }
     /// Sends the answer back to Claude for `next`, then ends or stops the
-    /// handoff as `next` says — only once it reached Claude or its queue.
+    /// handoff as `next` says — only once it reached Claude or its queue,
+    /// or, for an end, once it could not (#316): the card says which.
     fn auto_back(&self, lines: &dyn Lines, id: &str, next: Next, now: i64) -> bool {
         // A person's button sending meanwhile: theirs goes.
         let Ok(_sending) = self.claim(id) else {
@@ -1064,7 +1073,7 @@ impl Desk {
         let Some(reply) = handoff.last_reply().and_then(|step| step.text.clone()) else {
             return false;
         };
-        let text = back_text(&handoff, &reply, Some(next));
+        let text = back_text(&handoff, &reply);
         if self.lock().returned_already(id, &text) {
             return false;
         }
@@ -1073,23 +1082,28 @@ impl Desk {
             &handoff.claude_session,
         );
         let named = |text: String| by_doer(&text, Some(doer));
-        let then = |book: &mut Book| match next {
-            Next::Pass => book.passed(id, &named(passed_back()), now),
+        // An end's reason keeps what the review came to, and says how its
+        // answer went (#316): reached, queued, or not at all.
+        let then = |book: &mut Book, how: Sent| match next {
+            Next::Pass => book.passed(id, &named(passed_back(how)), now),
             Next::Close => book.passed(id, &named(thinking_closed()), now),
             Next::Settle => book.passed(id, &named(settled()), now),
             Next::Pause => book.stop(id, &named(evidence_paused()), true, now),
             Next::Escalate => book.stop(id, &named(escalated()), true, now),
-            Next::Limit => book.stop(id, &named(at_limit(handoff.budget())), true, now),
-            Next::NoVerdict => book.stop(id, &named(no_verdict()), true, now),
-            Next::BadTail(flaw) => book.stop(id, &named(bad_review_tail(flaw)), true, now),
-            Next::Invalid(flaw) => book.stop(id, &named(invalid_tail(flaw)), true, now),
+            Next::Limit => book.stop(id, &named(at_limit(handoff.budget(), how)), true, now),
+            Next::NoVerdict => book.stop(id, &named(no_verdict(how)), true, now),
+            Next::BadTail(flaw) => book.stop(id, &named(bad_review_tail(flaw, how)), true, now),
+            Next::Invalid(flaw) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
             Next::Back => true,
         };
-        // Could not reach Claude: a pass still ends the handoff (it ends
-        // with the auto round trip off too, so stopping that would leave
-        // it to be tried at every turn); the rest stop for the person.
+        // Could not reach Claude: the ends this round trip added end or
+        // stop all the same, saying so — a pass ends with the auto round
+        // trip off too, so stopping it would leave it tried at every turn;
+        // the rest stop for the person as before.
         let give_up = |book: &mut Book| match next {
-            Next::Pass => book.passed(id, &named(passed_unsent()), now),
+            Next::Pass | Next::Limit | Next::NoVerdict | Next::BadTail(_) | Next::Invalid(_) => {
+                then(book, Sent::Failed)
+            }
             _ => book.stop(id, &named(back_failed()), true, now),
         };
         // The step's own id (#257): tried again, or triggered again, it
@@ -1110,7 +1124,7 @@ impl Desk {
                     Ok(()) => self.change(|book| {
                         book.returned(id, StepKind::Back, &text, &prompt, true, now)
                             && book.woke(id, &woke_stopped(), now)
-                            && then(book)
+                            && then(book, Sent::Back)
                     }),
                     Err(error) => self.change(|book| {
                         book.trouble(id, &wake_failed(&first, &error), now);
@@ -1134,12 +1148,12 @@ impl Desk {
                     book.trouble(id, &queued_instead(&again), now);
                     book.returned(id, StepKind::Back, &text, &prompt, true, now)
                         && book.queued(id, now)
-                        && then(book)
+                        && then(book, Sent::Queued)
                 });
             }
         }
         self.change(|book| {
-            book.returned(id, StepKind::Back, &text, &prompt, true, now) && then(book)
+            book.returned(id, StepKind::Back, &text, &prompt, true, now) && then(book, Sent::Back)
         })
     }
 }
@@ -2241,7 +2255,7 @@ mod tests {
         let shown = desk.projection(8);
         assert_eq!(shown[0]["status"], "open", "the person decides");
         assert_eq!(shown[0]["auto"], false);
-        assert_eq!(shown[0]["halt"], at_limit(2));
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Back));
         // The last answer goes back too, saying it is left to the person.
         assert_eq!(replies(&lines), 2);
         let text = last_sent(&lines).2;
@@ -2249,8 +2263,7 @@ mod tests {
         assert!(text.contains("这是终局") && text.contains("交常浩决定"));
         assert!(!desk.drive(&lines, 8), "sent back once");
         // The person's button sends the same words: they went already.
-        desk.act(&lines, &handoff.id, "back", 9).unwrap();
-        assert_eq!(replies(&lines), 2);
+        button_back_changes_nothing(&desk, &lines, &handoff.id, 9);
         // Every round used: turning it back on would do nothing, so it says
         // so instead of taking the click (#194).
         let refused = desk.act(&lines, &handoff.id, "resume", 10);
@@ -2262,14 +2275,147 @@ mod tests {
         opened(&desk, &lines);
         desk.observe(&turn("complete", "看了，挺好"), 4);
         assert!(desk.drive(&lines, 5));
-        assert_eq!(desk.projection(5)[0]["halt"], no_verdict());
+        assert_eq!(desk.projection(5)[0]["halt"], no_verdict(Sent::Back));
         assert_eq!(desk.projection(5)[0]["auto"], false);
         assert_eq!(replies(&lines), 1);
         let text = last_sent(&lines).2;
         assert!(text.contains("结论：未写") && text.contains("看了，挺好"));
-        assert!(text.contains("不要再调用 relay_to_chatgpt") && text.contains("交常浩决定"));
+        assert!(text.contains("先不要做") && text.contains("再调用 relay_to_chatgpt 送审"));
+        assert!(text.contains("交常浩决定"));
         assert!(!desk.drive(&lines, 6), "sent back once");
         assert_eq!(replies(&lines), 1);
+    }
+
+    /// #316: the person's 「转回 Claude」 after an end went back by itself
+    /// sends nothing more and writes nothing down: the same words, the
+    /// same answer, no second step, its rounds and phase as they were.
+    fn button_back_changes_nothing(desk: &Desk, lines: &Fake, id: &str, now: i64) {
+        let before = desk.lock().get(id).cloned().unwrap();
+        let sent = lines.sent.borrow().len();
+        assert_eq!(desk.act(lines, id, "back", now), Ok(Acted::Done));
+        let after = desk.lock().get(id).cloned().unwrap();
+        assert_eq!(lines.sent.borrow().len(), sent, "nothing sent again");
+        assert_eq!(after.steps.len(), before.steps.len(), "no second step");
+        assert_eq!(
+            (after.rounds, after.phase, after.halt.clone()),
+            (before.rounds, before.phase, before.halt.clone())
+        );
+    }
+
+    /// #316: each end left to the person goes back once, saying what Claude
+    /// may do meanwhile and what not — never 「按意见处理」 beside 「等常浩」 —
+    /// and the button afterwards changes nothing.
+    #[test]
+    fn an_end_left_to_the_person_goes_back_once_without_mixed_asks() {
+        let ended = |desk: &Desk, lines: &Fake, id: &str| {
+            assert!(desk.drive(lines, 5));
+            let text = last_sent(lines).2;
+            assert!(
+                text.contains("这是终局") && text.contains("交常浩决定"),
+                "{text}"
+            );
+            assert!(
+                text.contains("现在可以做") && text.contains("先不要做"),
+                "{text}"
+            );
+            assert!(
+                !text.contains("按意见处理") && !text.contains("请先按意见"),
+                "{text}"
+            );
+            assert!(!desk.drive(lines, 6), "sent back once");
+            button_back_changes_nothing(desk, lines, id, 7);
+            assert_eq!(replies(lines), 1);
+        };
+        // An engineering review: no verdict, and a way out that does not
+        // go with its verdict.
+        for reply in ["看了，挺好", "审查出口：通过\n结论：需修改"] {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let handoff = opened(&desk, &lines);
+            desk.observe(&turn("complete", reply), 4);
+            ended(&desk, &lines, &handoff.id);
+        }
+        // A 思维评审 whose last two lines do not hold.
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "意见如上\n结论：通过"), 4);
+        ended(&desk, &lines, &handoff.id);
+        assert!(last_sent(&lines).2.contains("不要记成已定决策"));
+    }
+
+    /// #316: an end whose answer went into the queue of a quiet session
+    /// says so, not that it went back; no background run takes it up; and
+    /// once the plugin gives it up, the card says the session never had it,
+    /// keeping why the handoff ended.
+    #[test]
+    fn an_end_queued_for_a_quiet_session_says_whether_it_arrived() {
+        let quiet = || Fake {
+            reply_fails: std::cell::Cell::new(2),
+            ..Fake::default()
+        };
+        let later = 5 + handoffs::WAKE_AFTER_MS + 1;
+        // A pass: it ends, its answer queued.
+        let (_temp, desk) = desk();
+        let lines = quiet();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "P2：补注释\n结论：通过"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert_eq!(sent_as(&lines, "queue").len(), 1);
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["status"], "closed");
+        let last = |desk: &Desk, now| {
+            desk.projection(now)[0]["steps"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(last(&desk, 5)["text"], passed_back(Sent::Queued));
+        lines.stopped.set(true);
+        assert!(!desk.wake_queued(&lines, later), "no background run");
+        assert!(sent_as(&lines, "wake").is_empty());
+        let (prompt, _) = last_back(&desk, later);
+        left_by(&lines, &prompt, "expired", None);
+        assert!(desk.track(&lines, later));
+        assert_eq!(last(&desk, later)["kind"], "fail");
+        assert_eq!(last(&desk, later)["text"], end_undelivered("expired"));
+        assert!(!desk.track(&lines, later + 1), "said once");
+
+        // The last round: it stops for the person, its answer queued.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 6)
+            .unwrap();
+        desk.observe(
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n结论：需修改","messageId":"m2"}),
+            7,
+        );
+        lines.reply_fails.set(2);
+        assert!(desk.drive(&lines, 8));
+        assert_eq!(sent_as(&lines, "queue").len(), 1);
+        let shown = desk.projection(8);
+        assert_eq!(shown[0]["status"], "open");
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Queued));
+        lines.stopped.set(true);
+        let later = 8 + handoffs::WAKE_AFTER_MS + 1;
+        assert!(!desk.wake_queued(&lines, later), "no background run");
+        let (prompt, _) = last_back(&desk, later);
+        left_by(&lines, &prompt, "expired", None);
+        assert!(desk.track(&lines, later));
+        let shown = desk.projection(later);
+        assert_eq!(
+            shown[0]["halt"],
+            at_limit(2, Sent::Queued),
+            "why it stopped stays"
+        );
+        assert_eq!(shown[0]["phase"], "replied", "the answer waits to go back");
+        assert_eq!(last(&desk, later)["kind"], "fail");
+        assert_eq!(last(&desk, later)["text"], undelivered("expired", None));
     }
 
     // #255 (L-14): the session ended once its turn was over, so its plugin
@@ -2863,7 +3009,7 @@ mod tests {
             7,
         );
         assert!(desk.drive(&lines, 8));
-        assert_eq!(desk.projection(8)[0]["halt"], at_limit(2));
+        assert_eq!(desk.projection(8)[0]["halt"], at_limit(2, Sent::Back));
         assert_eq!(replies(&lines), 2, "the last round goes back too");
         let text = last_sent(&lines).2;
         assert!(text.contains("评审已用满 2 轮") && text.contains("交常浩决定"));
@@ -2893,7 +3039,7 @@ mod tests {
             assert_eq!(shown[0]["status"], "open", "{reply}");
             assert_eq!(shown[0]["phase"], "returned", "{reply}");
             assert_eq!(shown[0]["auto"], false, "{reply}");
-            assert_eq!(shown[0]["halt"], invalid_tail(flaw), "{reply}");
+            assert_eq!(shown[0]["halt"], invalid_tail(flaw, Sent::Back), "{reply}");
             assert!(!desk.drive(&lines, 6), "{reply}");
         }
     }
@@ -3816,7 +3962,7 @@ mod tests {
             6,
         );
         desk.drive(&lines, 7);
-        assert_eq!(desk.projection(7)[0]["halt"], at_limit(2));
+        assert_eq!(desk.projection(7)[0]["halt"], at_limit(2, Sent::Back));
         // A third review (#60) needs the person's leave.
         assert_eq!(
             ruled(&desk, &lines, "s1", "L2", None, 8).err(),
@@ -3852,7 +3998,7 @@ mod tests {
         desk.drive(&lines, 6);
         let id = handoff.id.clone();
         let kept = desk.lock().get(&id).cloned().unwrap();
-        assert_eq!(kept.halt.as_deref(), Some(at_limit(2).as_str()));
+        assert_eq!(kept.halt.as_deref(), Some(at_limit(2, Sent::Back).as_str()));
         // The first session going on with its own handoff sees round 2.
         assert_eq!(
             ruled(&desk, &lines, "s1", "L2", None, 7).err(),
@@ -3896,10 +4042,10 @@ mod tests {
         assert!(desk.drive(&lines, 7));
         assert_eq!(
             desk.projection(7)[0]["halt"],
-            bad_review_tail(Flaw::Mismatch)
+            bad_review_tail(Flaw::Mismatch, Sent::Back)
         );
         let text = last_reply_to_claude(&lines);
-        assert!(text.contains("驿窗认不出审查出口") && text.contains("交常浩决定"));
+        assert!(text.contains("审查出口与结论对不上") && text.contains("交常浩决定"));
     }
 
     /// #316: a pass goes back even with the auto round trip off (it
@@ -3948,7 +4094,7 @@ mod tests {
             .last()
             .unwrap()
             .clone();
-        assert_eq!(ended["text"], passed_unsent());
+        assert_eq!(ended["text"], passed_back(Sent::Failed));
         assert!(!desk.drive(&lines, 6), "not tried again");
     }
 
@@ -4132,7 +4278,7 @@ mod tests {
         // PostPane's words began Claude's turn: the last round, it stops.
         let (_temp, desk, lines) = round_two(|back| Opener::Plugin(back.to_owned()));
         let shown = desk.projection(9);
-        assert_eq!(shown[0]["halt"], at_limit(2));
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Back));
         assert!(shown[0]["roundsFrom"].is_null());
         // It goes back as the end, left to the person (#316).
         assert_eq!(replies(&lines), 2);
@@ -4160,7 +4306,7 @@ mod tests {
             desk.drive(&lines, 9);
             (temp, desk, lines)
         };
-        assert_eq!(desk.projection(9)[0]["halt"], at_limit(2));
+        assert_eq!(desk.projection(9)[0]["halt"], at_limit(2, Sent::Back));
     }
 
     fn sent_as(lines: &Fake, kind: &str) -> Vec<(String, String)> {

@@ -428,59 +428,53 @@ impl Handoff {
     /// What is to happen now to an answer that waits, if anything: a pass
     /// ends the handoff whether or not the auto round trip is on (owner,
     /// 2026-11-07: a passed review left open kept Claude's 「回」 seal up);
-    /// the rest only while it is on.
+    /// the rest only while it is on. A 思维评审 (#209): nothing by itself
+    /// while it is off — not even a pass, which must reach Claude first.
     pub fn next(&self) -> Option<Next> {
         if !self.live() || self.phase != Phase::Replied {
             return None;
         }
-        // 思维评审 (#209): only its last two lines count, and nothing
-        // happens by itself while the auto round trip is off — not even a
-        // pass, which must reach Claude before the handoff ends.
+        let outcome = self.outcome();
+        (self.auto || (outcome == Next::Pass && !self.thinking())).then_some(outcome)
+    }
+    /// What the newest answer comes to, on or off: what the auto round trip
+    /// does with it, and what words back to Claude say of it, by hand too
+    /// (#316: the same words either way, so they go once).
+    pub fn outcome(&self) -> Next {
+        let reply = self
+            .last_reply()
+            .and_then(|step| step.text.as_deref())
+            .unwrap_or_default();
+        // 思维评审 (#209): only its last two lines count.
         if self.thinking() {
-            if !self.auto {
-                return None;
-            }
-            let reply = self
-                .last_reply()
-                .and_then(|step| step.text.as_deref())
-                .unwrap_or_default();
-            return Some(match exit(reply) {
+            return match exit(reply) {
                 Ok(Exit::Mature | Exit::OtherPath) => Next::Close,
                 Ok(Exit::Deepen) if self.rounds_used() < ROUNDS => Next::Back,
                 Ok(Exit::Deepen) => Next::Limit,
                 Ok(Exit::NeedEvidence) => Next::Pause,
                 Ok(Exit::Escalate) => Next::Escalate,
                 Err(flaw) => Next::Invalid(flaw),
-            });
+            };
         }
-        let reply = self
-            .last_reply()
-            .and_then(|step| step.text.as_deref())
-            .unwrap_or_default();
         // 「审查出口」 (#217), when the answer wrote one; else the verdict alone.
         let way = match review_exit(reply) {
             Ok(way) => way,
-            Err(flaw) => return self.auto.then_some(Next::BadTail(flaw)),
+            Err(flaw) => return Next::BadTail(flaw),
         };
         let verdict = match way {
             Some(Review::Pass) => Some(Verdict::Pass),
             Some(_) => Some(Verdict::Revise),
             None => self.last_reply().and_then(|step| step.verdict),
         };
-        if verdict == Some(Verdict::Pass) {
-            return Some(Next::Pass);
-        }
-        if !self.auto {
-            return None;
-        }
-        Some(match (way, verdict) {
+        match (way, verdict) {
+            (_, Some(Verdict::Pass)) => Next::Pass,
             (Some(Review::NeedEvidence), _) => Next::Pause,
             (Some(Review::Escalate), _) => Next::Escalate,
             (_, Some(Verdict::Revise)) if self.counted() < self.budget() => Next::Back,
             (_, Some(Verdict::Revise)) if self.risk == Some(Risk::L1) => Next::Settle,
             (_, Some(Verdict::Revise)) => Next::Limit,
             _ => Next::NoVerdict,
-        })
+        }
     }
     /// The reviews an engineering handoff gets (#217): by its risk level,
     /// `ROUNDS` when it named none, plus those the person allowed past it.
@@ -1051,7 +1045,14 @@ impl Book {
         step.delivery = Some(delivery);
         let back = step.kind == StepKind::Back;
         handoff.updated_at = now;
-        if !handoff.live() || newest != Some(at) {
+        if newest != Some(at) {
+            return true;
+        }
+        // Ended with them on their way (#316): it says they never arrived.
+        if !handoff.live() {
+            handoff
+                .steps
+                .push(Step::new(now, StepKind::Fail, Some(reason)).by_auto());
             return true;
         }
         handoff.queued_at = None;

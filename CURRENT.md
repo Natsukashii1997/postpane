@@ -20,7 +20,14 @@
 - 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `938 passed; 0 failed`（原 936 + 新增 2），前端 `ℹ pass 407` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 写交接前 `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-12-pass-back-{check,test}.log`。
 - 验证：单测覆盖通过、需修改、上限、没写结论、出口对不上、思维评审用满轮数和末两行无效、关着自动往返的通过、Codex 通过、通过送不到、同一回信不重复送（再 drive 不送、再点「转回 Claude」不送）。实机：见「发布与回读」。
 - 截图：无界面改动。
-- 发布与回读：见本节末追记。
+- 发布与回读：`3d3a05a15fcc`（本分支 `2253b46`），`install.sh` 回读一致、签名证书照常；装前确认没有开着自动往返的接力，重启不打断别的会话。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-12-316-relay-ends-back/PostPane-ad3eb517db6a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做），以送审接力能正常打开作旁证。
+- 送审：L2，接力 `h1a1cdfb139e00`，新版调用后的提示已是新文字。第 1 轮「审查出口：返修 / 结论：需修改」，回信由新版自动转回本会话（实机验证了「需修改」路径照常）。四条意见都核实属实，全部采纳：
+  - P1-02 自动转回带终局句、手动按钮不带，文字指纹对不上，插件拒收同 id 后宿主仍多记一条转回、轮数加 1：`platform handoffs.rs` 把 `next()` 拆出 `Handoff::outcome()`（不看自动往返开关，只看回信），`back.rs` 的 `back_text` 去掉 `next` 参数、自己按 `outcome()` 出文字，自动和按钮同一段话，`returned_already` 就能认出。连带改变：自动往返关着时常浩手动点「转回 Claude」，没写结论 / 出口对不上 / 预算用完的回信也带同样的终局要求（原来手动转回没写结论的回信，会请 Claude 改完再送审）。
+  - P1-01 终局回信排进队列后接力已结束 / 已停，后台续接（要求 auto 开着）和超时兜底都不管，侧栏却写「已转回」：选不做后台续接（终局交常浩，不在后台替会话开工），改成如实标注——`texts.rs` 新增 `Sent`（已转回 / 已排队还没送到 / 没能转回），结束和停止原因按它写；插件放弃已结束接力的终局回信时，`Book::undelivered` 在时间线加一条 `fail`（`end_undelivered`：会话没收到，请告诉它审查结论）。
+  - P2-03 终局文字「请先按意见处理」和「等常浩决定」并存：交常浩的终局改成两层「现在可以做 / 先不要做」（改代码、再送审、合并 PR 都等常浩），思维评审允许起草决策记录但待定的不记成已定；「通过」补一句改到功能要重跑相关测试。
+  - P2-04 送不到时停止原因被「转回失败两次」覆盖：本轮新增的终局送不到时，停止原因保留审查结果，加「回信没能转回 Claude」。
+  - 测试：新增 `an_end_left_to_the_person_goes_back_once_without_mixed_asks`（没写结论、出口对不上、思维评审末两行无效：只送一次、不混写、再点按钮不送不记步、轮数和阶段不变）、`an_end_queued_for_a_quiet_session_says_whether_it_arrived`（通过、预算用完：排队、3 分钟后不后台续接、1 小时过期后的标注、停止原因不变）；预算用完的按钮复点改用同一检查。
+  - 返修后测试：`pnpm run check` 退出码 0；第一次 `pnpm test` 退出码 101，Rust 只有 `agent-hud-core` 的 `demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes` 失败（L-12 再次出现，本 PR 不碰 core），单独重跑 3 次都过；第二次 `pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`（938 + 新增 2），前端 `ℹ pass 407` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`，以第二次为准；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`；`check-rules` 通过。日志 `evidence/2026-11-12-pass-back-{check-r2,test-r2,test-r3}.log`。
 - 遗留：还没回信就出的错（新会话两分钟没打开、ChatGPT 30 分钟没回信）仍只停在侧栏、不通知会话：发生在生成快照时，没有回信可转，要另起「通知」步骤（借用转回步会让迟到的回信收不进来），另开单。驿窗重启时发现的「已通过还没处理」的接力仍只结束不转回（启动时没有送话通道，极少见）。范围外发现：无。
 - 本轮新坑：无
 
