@@ -12,6 +12,55 @@ pub(super) fn passed(chinese: bool) -> String {
         "Passed; the handoff ended",
     )
 }
+/// How an end's answer went to Claude (#316): the review's result and
+/// this are both on the card, one not in place of the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Sent {
+    /// It reached the session (or a background run of it).
+    Back,
+    /// It waits in the session's queue: not there yet.
+    Queued,
+    /// Tried twice and queued, and it could not go.
+    Failed,
+}
+fn sent(how: Sent) -> (&'static str, &'static str) {
+    match how {
+        Sent::Back => ("回信已转回 Claude", "the answer went back to Claude"),
+        Sent::Queued => (
+            "回信已排进 Claude 会话的待发送队列，还没送到",
+            "the answer is queued for the Claude session, not there yet",
+        ),
+        Sent::Failed => (
+            "回信没能转回 Claude，请告诉它审查结论",
+            "the answer could not go back to Claude; tell it the outcome",
+        ),
+    }
+}
+/// A pass, its answer sent `how`, then the handoff ended (#316).
+pub(super) fn passed_back(how: Sent) -> String {
+    let (zh, en) = sent(how);
+    l10n::text(
+        &format!("结论：通过，{zh}，自动结束接力"),
+        &format!("Passed; {en}; the handoff ended"),
+    )
+}
+/// The newest words back that the plugin gave up after the handoff ended
+/// (#316): the session never had them. Not only an end's answer — the
+/// person may have ended it with an answer or an ask to hand over again
+/// on its way — so it does not say which.
+pub(super) fn end_undelivered(state: &str) -> String {
+    let (zh, en) = match state {
+        "refused" => ("被插件拒收", "were refused"),
+        "expired" => ("1 小时没被领走、已过期", "expired untaken after an hour"),
+        _ => ("被取消", "were cancelled"),
+    };
+    l10n::text(
+        &format!("接力已结束，但最后一条转给 Claude 的话{zh}，会话没收到：请看看要不要自己告诉它"),
+        &format!(
+            "The handoff ended, but the last words for Claude {en}; the session never had them. See whether to tell it yourself"
+        ),
+    )
+}
 pub(super) fn thinking_closed() -> String {
     l10n::text(
         "思维评审收口，回信已转回 Claude，自动结束接力",
@@ -30,14 +79,15 @@ pub(super) fn escalated() -> String {
         "Escalated: Claude is to lay out the options; left to you to decide",
     )
 }
-pub(super) fn invalid_tail(flaw: Flaw) -> String {
+pub(super) fn invalid_tail(flaw: Flaw, how: Sent) -> String {
+    let (zh, en) = sent(how);
     l10n::text(
         &format!(
-            "思维评审回信末两行无效：{}；没有转回 Claude，自动往返停下，交还常浩",
+            "思维评审回信末两行无效：{}；{zh}，自动往返停下，交还常浩",
             flaw_text(flaw)
         ),
         &format!(
-            "The thinking review's last two lines do not hold: {}; nothing went back to Claude, left to you",
+            "The thinking review's last two lines do not hold: {}; {en}, left to you",
             flaw_text_en(flaw)
         ),
     )
@@ -143,10 +193,11 @@ pub(super) fn restart_paused(chinese: bool) -> String {
 pub(super) fn paused() -> String {
     l10n::text("常浩暂停", "Paused by the person")
 }
-pub(super) fn at_limit(budget: u32) -> String {
+pub(super) fn at_limit(budget: u32, how: Sent) -> String {
+    let (zh, en) = sent(how);
     l10n::text(
-        &format!("已审 {budget} 轮仍需修改，自动往返停下，交还常浩"),
-        &format!("Still to fix after {budget} rounds; left to you"),
+        &format!("已审 {budget} 轮仍需修改，{zh}，自动往返停下，交还常浩"),
+        &format!("Still to fix after {budget} rounds; {en}, left to you"),
     )
 }
 pub(super) fn no_rounds_left(budget: u32) -> String {
@@ -187,14 +238,15 @@ pub(super) fn budget_spent(counted: u32) -> String {
         ),
     )
 }
-pub(super) fn bad_review_tail(flaw: Flaw) -> String {
+pub(super) fn bad_review_tail(flaw: Flaw, how: Sent) -> String {
+    let (zh, en) = sent(how);
     l10n::text(
         &format!(
-            "审查出口与结论对不上：{}；没有转回 Claude，自动往返停下，交还常浩",
+            "审查出口与结论对不上：{}；{zh}，自动往返停下，交还常浩",
             review_flaw_text(flaw)
         ),
         &format!(
-            "The review's way out and verdict do not hold together: {}; nothing went back to Claude, left to you",
+            "The review's way out and verdict do not hold together: {}; {en}, left to you",
             review_flaw_text(flaw)
         ),
     )
@@ -208,10 +260,11 @@ pub(super) fn review_flaw_text(flaw: Flaw) -> &'static str {
         Flaw::Mismatch => "审查出口与结论对不上（通过配通过，其余配需修改）",
     }
 }
-pub(super) fn no_verdict() -> String {
+pub(super) fn no_verdict(how: Sent) -> String {
+    let (zh, en) = sent(how);
     l10n::text(
-        "回信没写结论，自动往返停下，交还常浩",
-        "The answer has no verdict; left to you",
+        &format!("回信没写结论，{zh}，自动往返停下，交还常浩"),
+        &format!("The answer has no verdict; {en}, left to you"),
     )
 }
 pub(super) fn back_failed() -> String {

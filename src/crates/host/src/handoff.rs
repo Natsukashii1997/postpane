@@ -7,8 +7,7 @@
 //! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
 use crate::extension::Flight;
 use agent_hud_runtime::chatgpt::handoffs::{
-    self, by_doer, Book, Delivery, Exit, Handoff, Next, Phase, Review, Risk, Status, Step,
-    StepKind, Verdict,
+    self, by_doer, Book, Delivery, Handoff, Next, Phase, Risk, Status, Step, StepKind,
 };
 use agent_hud_runtime::claude_plugin::Opener;
 
@@ -31,8 +30,10 @@ use std::{
 };
 use tauri::Manager;
 
+mod back;
 mod lines;
 mod texts;
+use back::back_text;
 use lines::AppLines;
 mod wake;
 use texts::*;
@@ -967,40 +968,24 @@ impl Desk {
 
 impl Desk {
     /// The auto round trip (#72): answers that came in while it is on are
-    /// acted on — 「需修改」 goes back to Claude (tried twice), a pass ends
-    /// the handoff, the last round or no verdict leaves it to the person.
-    /// A 思维评审 answer (#209) goes back to Claude whatever its way out,
-    /// then a pass ends it and 证据不足暂停 / 决策升级 stop it; last two
-    /// lines that do not hold leave it to the person, sending nothing.
-    /// Whether anything changed.
+    /// acted on, and every one goes back to Claude (tried twice) before
+    /// anything else (#316: ends used to stay on the sidebar, and the
+    /// session waited on unaware). 「需修改」 with rounds to go waits for
+    /// Claude's changes; a pass ends the handoff; the last round, no
+    /// verdict or last two lines that do not hold leave it to the person.
+    /// A 思维评审 answer (#209): a pass ends it and 证据不足暂停 / 决策升级
+    /// stop it. Whether anything changed.
     pub(crate) fn drive(&self, lines: &dyn Lines, now: i64) -> bool {
         let tracked = self.track(lines, now);
         let due = self
             .lock()
             .list
             .iter()
-            .filter_map(|h| {
-                h.next()
-                    .map(|next| (h.id.clone(), next, h.budget(), h.doer.clone()))
-            })
+            .filter_map(|h| h.next().map(|next| (h.id.clone(), next)))
             .collect::<Vec<_>>();
         let mut changed = tracked;
-        for (id, next, budget, doer) in due {
-            let named = |text: String| by_doer(&text, doer.as_deref());
-            changed |= match next {
-                Next::Pass => self.change(|book| book.passed(&id, &passed(l10n::chinese()), now)),
-                Next::Limit => self.change(|book| book.stop(&id, &at_limit(budget), true, now)),
-                Next::BadTail(flaw) => {
-                    self.change(|book| book.stop(&id, &named(bad_review_tail(flaw)), true, now))
-                }
-                Next::NoVerdict => self.change(|book| book.stop(&id, &no_verdict(), true, now)),
-                Next::Invalid(flaw) => {
-                    self.change(|book| book.stop(&id, &named(invalid_tail(flaw)), true, now))
-                }
-                Next::Back | Next::Close | Next::Pause | Next::Escalate | Next::Settle => {
-                    self.auto_back(lines, &id, next, now)
-                }
-            };
+        for (id, next) in due {
+            changed |= self.auto_back(lines, &id, next, now);
         }
         changed
     }
@@ -1050,7 +1035,15 @@ impl Desk {
             if delivery == was {
                 continue;
             }
-            let reason = by_doer(&undelivered(&state, reason.as_deref()), Some(&doer));
+            // Given up after the handoff ended (an end's answer queued,
+            // #316): the card says the session never had it.
+            let ended = !self.lock().get(&id).is_some_and(Handoff::live);
+            let reason = if ended {
+                end_undelivered(&state)
+            } else {
+                undelivered(&state, reason.as_deref())
+            };
+            let reason = by_doer(&reason, Some(&doer));
             changed |= self.change(|book| {
                 if delivery.gave_up() {
                     book.undelivered(&id, &prompt, delivery, &reason, now)
@@ -1062,7 +1055,8 @@ impl Desk {
         changed
     }
     /// Sends the answer back to Claude for `next`, then ends or stops the
-    /// handoff as `next` says — only once it reached Claude or its queue.
+    /// handoff as `next` says — only once it reached Claude or its queue,
+    /// or, for an end, once it could not (#316): the card says which.
     fn auto_back(&self, lines: &dyn Lines, id: &str, next: Next, now: i64) -> bool {
         // A person's button sending meanwhile: theirs goes.
         let Ok(_sending) = self.claim(id) else {
@@ -1088,12 +1082,29 @@ impl Desk {
             &handoff.claude_session,
         );
         let named = |text: String| by_doer(&text, Some(doer));
-        let then = |book: &mut Book| match next {
+        // An end's reason keeps what the review came to, and says how its
+        // answer went (#316): reached, queued, or not at all.
+        let then = |book: &mut Book, how: Sent| match next {
+            Next::Pass => book.passed(id, &named(passed_back(how)), now),
             Next::Close => book.passed(id, &named(thinking_closed()), now),
             Next::Settle => book.passed(id, &named(settled()), now),
             Next::Pause => book.stop(id, &named(evidence_paused()), true, now),
             Next::Escalate => book.stop(id, &named(escalated()), true, now),
-            _ => true,
+            Next::Limit => book.stop(id, &named(at_limit(handoff.budget(), how)), true, now),
+            Next::NoVerdict => book.stop(id, &named(no_verdict(how)), true, now),
+            Next::BadTail(flaw) => book.stop(id, &named(bad_review_tail(flaw, how)), true, now),
+            Next::Invalid(flaw) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
+            Next::Back => true,
+        };
+        // Could not reach Claude: the ends this round trip added end or
+        // stop all the same, saying so — a pass ends with the auto round
+        // trip off too, so stopping it would leave it tried at every turn;
+        // the rest stop for the person as before.
+        let give_up = |book: &mut Book| match next {
+            Next::Pass | Next::Limit | Next::NoVerdict | Next::BadTail(_) | Next::Invalid(_) => {
+                then(book, Sent::Failed)
+            }
+            _ => book.stop(id, &named(back_failed()), true, now),
         };
         // The step's own id (#257): tried again, or triggered again, it
         // leaves no second copy; words left under it before went already.
@@ -1113,11 +1124,11 @@ impl Desk {
                     Ok(()) => self.change(|book| {
                         book.returned(id, StepKind::Back, &text, &prompt, true, now)
                             && book.woke(id, &woke_stopped(), now)
-                            && then(book)
+                            && then(book, Sent::Back)
                     }),
                     Err(error) => self.change(|book| {
                         book.trouble(id, &wake_failed(&first, &error), now);
-                        book.stop(id, &back_failed(), true, now)
+                        give_up(book)
                     }),
                 };
             }
@@ -1130,19 +1141,19 @@ impl Desk {
                 if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
                     return self.change(|book| {
                         book.trouble(id, &retry_failed(&again), now);
-                        book.stop(id, &named(back_failed()), true, now)
+                        give_up(book)
                     });
                 }
                 return self.change(|book| {
                     book.trouble(id, &queued_instead(&again), now);
                     book.returned(id, StepKind::Back, &text, &prompt, true, now)
                         && book.queued(id, now)
-                        && then(book)
+                        && then(book, Sent::Queued)
                 });
             }
         }
         self.change(|book| {
-            book.returned(id, StepKind::Back, &text, &prompt, true, now) && then(book)
+            book.returned(id, StepKind::Back, &text, &prompt, true, now) && then(book, Sent::Back)
         })
     }
 }
@@ -1158,57 +1169,6 @@ pub(crate) enum Acted {
     },
 }
 
-/// 转回 Claude: ChatGPT's answer in full, and what to do with it.
-fn back_text(handoff: &Handoff, reply: &str) -> String {
-    if handoff.thinking() {
-        return thinking_back_text(handoff, reply);
-    }
-    let round = handoff.counted().max(1);
-    let budget = handoff.budget();
-    let verdict = match handoff.last_reply().and_then(|step| step.verdict) {
-        Some(Verdict::Pass) => "通过",
-        Some(Verdict::Revise) => "需修改",
-        None => "未写",
-    };
-    // What the answer's 「审查出口」 and the budget left ask of Claude (#217).
-    let ask = match handoffs::review_exit(reply) {
-        Ok(Some(Review::NeedEvidence)) => "审查认为证据不足，先暂停：补齐证据（测试、复现、日志）后再调用 relay_to_chatgpt 送审，summary 写一句补了什么证据；补到证据前不要按意见动手改。".to_owned(),
-        Ok(Some(Review::Escalate)) => "审查要求决策升级：请整理可选做法、各自的依据和你的推荐交给常浩，等常浩决定；不要再调用 relay_to_chatgpt，也不要先动手改。".to_owned(),
-        Err(flaw) => format!("驿窗认不出审查出口（{}）：请先按意见处理，暂不调用 relay_to_chatgpt，等常浩决定下一步。", review_flaw_text(flaw)),
-        _ if handoff.spent() && handoff.risk == Some(Risk::L1) => "L1 的审查预算已用完：请按意见修改，在 PR 上写「补改未复审」后收口，不要再调用 relay_to_chatgpt；如果还有没解决的 P0/P1，交常浩决定。".to_owned(),
-        _ if handoff.spent() => format!("审查预算已用完（已审 {round} 轮，共 {budget} 轮）：请先按意见处理，不要再调用 relay_to_chatgpt，等常浩决定收缩范围、补证据，还是授权一次专项续审（授权后调用时 extra 写明谁授权、为什么）。"),
-        _ => format!("请按意见处理；不同意的意见说明理由即可。改完后调用 relay_to_chatgpt 交回 ChatGPT 复审（最多 {budget} 轮，写「结论：通过」就停），summary 写一句这轮改了什么。"),
-    };
-    format!(
-        "ChatGPT 对「{title}」的审核意见（第 {round} 轮，结论：{verdict}）：\n\n{reply}\n\n{ask}",
-        title = handoff.title,
-    )
-}
-/// 转回 Claude for a 思维评审 (#209): ChatGPT's answer in full, and what
-/// its way out asks of Claude.
-fn thinking_back_text(handoff: &Handoff, reply: &str) -> String {
-    let round = handoff.reviews().max(1);
-    let (tail, ask) = match handoffs::exit(reply) {
-        Ok(exit) => {
-            let (way, verdict, ask) = match exit {
-                Exit::Mature => ("成熟退出", "通过", "这次思维评审已收口。请按回信收尾：把采纳的意见和最终结论写进决策记录，余下的意见记为执行建议；不要再调用 relay_to_chatgpt。".to_owned()),
-                Exit::OtherPath => ("转其他路径", "通过", "这次思维评审已收口，建议转其他路径。请把为什么转、转去哪条路径写进决策记录，再按新路径继续；不要再调用 relay_to_chatgpt 送审本方案。".to_owned()),
-                Exit::Deepen => ("继续深化", "需修改", format!("请逐条处理意见：采纳；不采纳并给出反证；补证据；交常浩；或记为执行建议。然后更新决策记录，只针对「需深化」的项准备下一阶段送审包，再调用 relay_to_chatgpt 交回 ChatGPT 评审（最多 {max} 轮）；内容没有实质变化就不要重送。summary 写一句这轮深化了什么。", max = handoffs::ROUNDS)),
-                Exit::NeedEvidence => ("证据不足暂停", "需修改", "评审认为证据不足，先暂停：请先取证——跑测试、做实验、查数据，或直接问常浩。拿到新证据前不要再调用 relay_to_chatgpt，也不要实施被评审的部分。取得新证据后再调用 relay_to_chatgpt 送审，summary 写一句补了什么证据。".to_owned()),
-                Exit::Escalate => ("决策升级", "交常浩裁决", "评审要求决策升级：请整理可选方案、各自的依据和你的推荐，交给常浩，等常浩决定；不要再调用 relay_to_chatgpt，也不要先动手实施。".to_owned()),
-            };
-            (format!("评审出口：{way}，结论：{verdict}"), ask)
-        }
-        Err(flaw) => (
-            format!("末两行无效：{}", flaw_text(flaw)),
-            "驿窗认不出评审出口：请先按意见逐条处理并更新决策记录，暂不调用 relay_to_chatgpt，等常浩决定下一步。".to_owned(),
-        ),
-    };
-    format!(
-        "ChatGPT 对「{title}」的思维评审回信（第 {round} 轮，{tail}）：\n\n{reply}\n\n{ask}",
-        title = handoff.title,
-    )
-}
 /// 再审一轮: Claude hands its changes over again.
 fn again_text(round: u32) -> String {
     format!(
@@ -1627,13 +1587,13 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         )
     } else if answer["status"] == "sent" {
         l10n::text(
-            "已送进这个会话对应的 ChatGPT 审核会话；回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话，写「通过」就结束。",
-            "Sent into this session's ChatGPT review conversation; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; a pass ends the handoff.",
+            "已送进这个会话对应的 ChatGPT 审核会话；回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话；写「通过」、预算用完或没写结论，也会把回信转回这个会话，写明是否已是终局。",
+            "Sent into this session's ChatGPT review conversation; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; so does a pass, a spent budget or an answer without a verdict, saying whether it is the end.",
         )
     } else {
         l10n::text(
-            "已交给 ChatGPT 审核：新会话正在打开，回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话，写「通过」就结束。",
-            "Handed to ChatGPT for review: a new conversation is opening; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; a pass ends the handoff.",
+            "已交给 ChatGPT 审核：新会话正在打开，回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话；写「通过」、预算用完或没写结论，也会把回信转回这个会话，写明是否已是终局。",
+            "Handed to ChatGPT for review: a new conversation is opening; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; so does a pass, a spent budget or an answer without a verdict, saying whether it is the end.",
         )
     });
     Ok(answer)
@@ -2243,15 +2203,29 @@ mod tests {
         )
         .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：通过","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"P2：日志少一行\nP3：命名\n审查出口：通过\n结论：通过","messageId":"m2"}),
             8,
         );
         assert!(desk.drive(&lines, 9));
         let shown = desk.projection(9);
         assert_eq!(shown[0]["phase"], "ended");
         assert_eq!(shown[0]["status"], "closed");
-        assert_eq!(kinds(&desk, 9).last().unwrap(), &("end".to_owned(), true));
-        assert_eq!(replies(&lines), 1, "a pass sends nothing to Claude");
+        assert_eq!(shown[0]["halt"], Value::Null);
+        assert_eq!(
+            kinds(&desk, 9)[kinds(&desk, 9).len() - 2..],
+            [("back".to_owned(), true), ("end".to_owned(), true)]
+        );
+        // The pass goes back too (#316): the session is told it is
+        // the end, with the points that do not block it.
+        assert_eq!(replies(&lines), 2, "a pass goes back to Claude");
+        let (kind, to, text) = lines.sent.borrow().last().unwrap().clone();
+        assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
+        assert!(text.contains("审查出口：通过，结论：通过"), "{text}");
+        assert!(text.contains("P2：日志少一行") && text.contains("P3：命名"));
+        assert!(text.contains("这是终局") && text.contains("审查预算不再消耗"));
+        assert!(text.contains("不需要再调用 relay_to_chatgpt"));
+        assert!(!desk.drive(&lines, 10), "sent back once");
+        assert_eq!(replies(&lines), 2);
         let _ = handoff;
     }
 
@@ -2279,17 +2253,17 @@ mod tests {
         );
         assert!(desk.drive(&lines, 8));
         let shown = desk.projection(8);
-        assert_eq!(shown[0]["phase"], "replied", "the person decides");
+        assert_eq!(shown[0]["status"], "open", "the person decides");
         assert_eq!(shown[0]["auto"], false);
-        assert_eq!(shown[0]["halt"], at_limit(2));
-        assert_eq!(
-            replies(&lines),
-            1,
-            "the last answer is not sent back by itself"
-        );
-        // The person can still send it back.
-        desk.act(&lines, &handoff.id, "back", 9).unwrap();
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Back));
+        // The last answer goes back too, saying it is left to the person.
         assert_eq!(replies(&lines), 2);
+        let text = last_sent(&lines).2;
+        assert!(text.contains("还差一点") && text.contains("审查预算已用完"));
+        assert!(text.contains("这是终局") && text.contains("交常浩决定"));
+        assert!(!desk.drive(&lines, 8), "sent back once");
+        // The person's button sends the same words: they went already.
+        button_back_changes_nothing(&desk, &lines, &handoff.id, 9);
         // Every round used: turning it back on would do nothing, so it says
         // so instead of taking the click (#194).
         let refused = desk.act(&lines, &handoff.id, "resume", 10);
@@ -2301,8 +2275,147 @@ mod tests {
         opened(&desk, &lines);
         desk.observe(&turn("complete", "看了，挺好"), 4);
         assert!(desk.drive(&lines, 5));
-        assert_eq!(desk.projection(5)[0]["halt"], no_verdict());
-        assert_eq!(replies(&lines), 0);
+        assert_eq!(desk.projection(5)[0]["halt"], no_verdict(Sent::Back));
+        assert_eq!(desk.projection(5)[0]["auto"], false);
+        assert_eq!(replies(&lines), 1);
+        let text = last_sent(&lines).2;
+        assert!(text.contains("结论：未写") && text.contains("看了，挺好"));
+        assert!(text.contains("先不要做") && text.contains("再调用 relay_to_chatgpt 送审"));
+        assert!(text.contains("交常浩决定"));
+        assert!(!desk.drive(&lines, 6), "sent back once");
+        assert_eq!(replies(&lines), 1);
+    }
+
+    /// #316: the person's 「转回 Claude」 after an end went back by itself
+    /// sends nothing more and writes nothing down: the same words, the
+    /// same answer, no second step, its rounds and phase as they were.
+    fn button_back_changes_nothing(desk: &Desk, lines: &Fake, id: &str, now: i64) {
+        let before = desk.lock().get(id).cloned().unwrap();
+        let sent = lines.sent.borrow().len();
+        assert_eq!(desk.act(lines, id, "back", now), Ok(Acted::Done));
+        let after = desk.lock().get(id).cloned().unwrap();
+        assert_eq!(lines.sent.borrow().len(), sent, "nothing sent again");
+        assert_eq!(after.steps.len(), before.steps.len(), "no second step");
+        assert_eq!(
+            (after.rounds, after.phase, after.halt.clone()),
+            (before.rounds, before.phase, before.halt.clone())
+        );
+    }
+
+    /// #316: each end left to the person goes back once, saying what Claude
+    /// may do meanwhile and what not — never 「按意见处理」 beside 「等常浩」 —
+    /// and the button afterwards changes nothing.
+    #[test]
+    fn an_end_left_to_the_person_goes_back_once_without_mixed_asks() {
+        let ended = |desk: &Desk, lines: &Fake, id: &str| {
+            assert!(desk.drive(lines, 5));
+            let text = last_sent(lines).2;
+            assert!(
+                text.contains("这是终局") && text.contains("交常浩决定"),
+                "{text}"
+            );
+            assert!(
+                text.contains("现在可以做") && text.contains("先不要做"),
+                "{text}"
+            );
+            assert!(
+                !text.contains("按意见处理") && !text.contains("请先按意见"),
+                "{text}"
+            );
+            assert!(!desk.drive(lines, 6), "sent back once");
+            button_back_changes_nothing(desk, lines, id, 7);
+            assert_eq!(replies(lines), 1);
+        };
+        // An engineering review: no verdict, and a way out that does not
+        // go with its verdict.
+        for reply in ["看了，挺好", "审查出口：通过\n结论：需修改"] {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let handoff = opened(&desk, &lines);
+            desk.observe(&turn("complete", reply), 4);
+            ended(&desk, &lines, &handoff.id);
+        }
+        // A 思维评审 whose last two lines do not hold.
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(&turn("complete", "意见如上\n结论：通过"), 4);
+        ended(&desk, &lines, &handoff.id);
+        assert!(last_sent(&lines).2.contains("不要记成已定决策"));
+    }
+
+    /// #316: an end whose answer went into the queue of a quiet session
+    /// says so, not that it went back; no background run takes it up; and
+    /// once the plugin gives it up, the card says the session never had it,
+    /// keeping why the handoff ended.
+    #[test]
+    fn an_end_queued_for_a_quiet_session_says_whether_it_arrived() {
+        let quiet = || Fake {
+            reply_fails: std::cell::Cell::new(2),
+            ..Fake::default()
+        };
+        let later = 5 + handoffs::WAKE_AFTER_MS + 1;
+        // A pass: it ends, its answer queued.
+        let (_temp, desk) = desk();
+        let lines = quiet();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "P2：补注释\n结论：通过"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert_eq!(sent_as(&lines, "queue").len(), 1);
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["status"], "closed");
+        let last = |desk: &Desk, now| {
+            desk.projection(now)[0]["steps"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(last(&desk, 5)["text"], passed_back(Sent::Queued));
+        lines.stopped.set(true);
+        assert!(!desk.wake_queued(&lines, later), "no background run");
+        assert!(sent_as(&lines, "wake").is_empty());
+        let (prompt, _) = last_back(&desk, later);
+        left_by(&lines, &prompt, "expired", None);
+        assert!(desk.track(&lines, later));
+        assert_eq!(last(&desk, later)["kind"], "fail");
+        assert_eq!(last(&desk, later)["text"], end_undelivered("expired"));
+        assert!(!desk.track(&lines, later + 1), "said once");
+
+        // The last round: it stops for the person, its answer queued.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.drive(&lines, 5);
+        desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 6)
+            .unwrap();
+        desk.observe(
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n结论：需修改","messageId":"m2"}),
+            7,
+        );
+        lines.reply_fails.set(2);
+        assert!(desk.drive(&lines, 8));
+        assert_eq!(sent_as(&lines, "queue").len(), 1);
+        let shown = desk.projection(8);
+        assert_eq!(shown[0]["status"], "open");
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Queued));
+        lines.stopped.set(true);
+        let later = 8 + handoffs::WAKE_AFTER_MS + 1;
+        assert!(!desk.wake_queued(&lines, later), "no background run");
+        let (prompt, _) = last_back(&desk, later);
+        left_by(&lines, &prompt, "expired", None);
+        assert!(desk.track(&lines, later));
+        let shown = desk.projection(later);
+        assert_eq!(
+            shown[0]["halt"],
+            at_limit(2, Sent::Queued),
+            "why it stopped stays"
+        );
+        assert_eq!(shown[0]["phase"], "replied", "the answer waits to go back");
+        assert_eq!(last(&desk, later)["kind"], "fail");
+        assert_eq!(last(&desk, later)["text"], undelivered("expired", None));
     }
 
     // #255 (L-14): the session ended once its turn was over, so its plugin
@@ -2896,13 +3009,16 @@ mod tests {
             7,
         );
         assert!(desk.drive(&lines, 8));
-        assert_eq!(desk.projection(8)[0]["halt"], at_limit(2));
-        assert_eq!(replies(&lines), 1);
+        assert_eq!(desk.projection(8)[0]["halt"], at_limit(2, Sent::Back));
+        assert_eq!(replies(&lines), 2, "the last round goes back too");
+        let text = last_sent(&lines).2;
+        assert!(text.contains("评审已用满 2 轮") && text.contains("交常浩决定"));
+        assert!(!text.contains("交回 ChatGPT 评审"), "{text}");
     }
 
     // T8
     #[test]
-    fn a_thinking_review_whose_last_two_lines_do_not_hold_sends_nothing() {
+    fn a_thinking_review_whose_last_two_lines_do_not_hold_goes_back_and_stops() {
         for (reply, flaw) in [
             ("看了，挺好", Flaw::NoVerdict),
             ("评审出口：成熟退出\n结论：通过\n以上。", Flaw::NoVerdict),
@@ -2915,13 +3031,15 @@ mod tests {
             thinking(&desk, &lines);
             desk.observe(&turn("complete", reply), 4);
             assert!(desk.drive(&lines, 5), "{reply}");
-            assert_eq!(replies(&lines), 0, "{reply}");
-            assert_eq!(lines.sent.borrow().last().unwrap().0, "open", "{reply}");
+            assert_eq!(replies(&lines), 1, "{reply}");
+            let text = last_sent(&lines).2;
+            assert!(text.contains("驿窗认不出评审出口"), "{reply}");
+            assert!(text.contains("交常浩决定"), "{reply}");
             let shown = desk.projection(5);
             assert_eq!(shown[0]["status"], "open", "{reply}");
-            assert_eq!(shown[0]["phase"], "replied", "{reply}");
+            assert_eq!(shown[0]["phase"], "returned", "{reply}");
             assert_eq!(shown[0]["auto"], false, "{reply}");
-            assert_eq!(shown[0]["halt"], invalid_tail(flaw), "{reply}");
+            assert_eq!(shown[0]["halt"], invalid_tail(flaw, Sent::Back), "{reply}");
             assert!(!desk.drive(&lines, 6), "{reply}");
         }
     }
@@ -3844,7 +3962,7 @@ mod tests {
             6,
         );
         desk.drive(&lines, 7);
-        assert_eq!(desk.projection(7)[0]["halt"], at_limit(2));
+        assert_eq!(desk.projection(7)[0]["halt"], at_limit(2, Sent::Back));
         // A third review (#60) needs the person's leave.
         assert_eq!(
             ruled(&desk, &lines, "s1", "L2", None, 8).err(),
@@ -3880,7 +3998,7 @@ mod tests {
         desk.drive(&lines, 6);
         let id = handoff.id.clone();
         let kept = desk.lock().get(&id).cloned().unwrap();
-        assert_eq!(kept.halt.as_deref(), Some(at_limit(2).as_str()));
+        assert_eq!(kept.halt.as_deref(), Some(at_limit(2, Sent::Back).as_str()));
         // The first session going on with its own handoff sees round 2.
         assert_eq!(
             ruled(&desk, &lines, "s1", "L2", None, 7).err(),
@@ -3924,8 +4042,60 @@ mod tests {
         assert!(desk.drive(&lines, 7));
         assert_eq!(
             desk.projection(7)[0]["halt"],
-            bad_review_tail(Flaw::Mismatch)
+            bad_review_tail(Flaw::Mismatch, Sent::Back)
         );
+        let text = last_reply_to_claude(&lines);
+        assert!(text.contains("审查出口与结论对不上") && text.contains("交常浩决定"));
+    }
+
+    /// #316: a pass goes back even with the auto round trip off (it
+    /// ends the handoff all the same), and into a Codex thread for Codex.
+    #[test]
+    fn a_pass_goes_back_with_the_auto_round_trip_off_and_to_codex() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.act(&lines, &handoff.id, "pause", 3).unwrap();
+        desk.observe(&turn("complete", "P2：补注释\n结论：通过"), 4);
+        assert!(desk.drive(&lines, 5));
+        assert_eq!(desk.projection(5)[0]["status"], "closed");
+        assert_eq!(replies(&lines), 1);
+        assert!(last_sent(&lines).2.contains("P2：补注释"));
+
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        codex_opened(&desk, &lines, Some("L2"));
+        desk.observe(&turn("complete", "审查出口：通过\n结论：通过"), 4);
+        assert!(desk.drive(&lines, 5));
+        let (kind, _, text) = last_sent(&lines);
+        assert_eq!(kind, "codex");
+        assert!(text.contains("这是终局"));
+        assert_eq!(desk.projection(5)[0]["status"], "closed");
+    }
+
+    /// A pass that cannot reach Claude still ends, saying so, and is not
+    /// tried again at the next turn.
+    #[test]
+    fn a_pass_that_cannot_go_back_ends_all_the_same() {
+        let (_temp, desk) = desk();
+        let lines = Fake {
+            unreachable: true,
+            leave_fails: std::cell::Cell::new(true),
+            ..Fake::default()
+        };
+        opened(&desk, &lines);
+        desk.observe(&turn("complete", "结论：通过"), 4);
+        assert!(desk.drive(&lines, 5));
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["status"], "closed");
+        let ended = shown[0]["steps"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(ended["text"], passed_back(Sent::Failed));
+        assert!(!desk.drive(&lines, 6), "not tried again");
     }
 
     /// The newest step's id and delivery as the card has them.
@@ -4108,9 +4278,11 @@ mod tests {
         // PostPane's words began Claude's turn: the last round, it stops.
         let (_temp, desk, lines) = round_two(|back| Opener::Plugin(back.to_owned()));
         let shown = desk.projection(9);
-        assert_eq!(shown[0]["halt"], at_limit(2));
+        assert_eq!(shown[0]["halt"], at_limit(2, Sent::Back));
         assert!(shown[0]["roundsFrom"].is_null());
-        assert_eq!(replies(&lines), 1);
+        // It goes back as the end, left to the person (#316).
+        assert_eq!(replies(&lines), 2);
+        assert!(last_sent(&lines).2.contains("审查预算已用完"));
         // The person's own words began it: round one again, back it goes.
         let (_temp, desk, lines) = round_two(|_| Opener::Person);
         let shown = desk.projection(9);
@@ -4134,7 +4306,7 @@ mod tests {
             desk.drive(&lines, 9);
             (temp, desk, lines)
         };
-        assert_eq!(desk.projection(9)[0]["halt"], at_limit(2));
+        assert_eq!(desk.projection(9)[0]["halt"], at_limit(2, Sent::Back));
     }
 
     fn sent_as(lines: &Fake, kind: &str) -> Vec<(String, String)> {
