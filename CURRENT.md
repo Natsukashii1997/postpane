@@ -6,6 +6,24 @@
 
 
 
+
+## 盖住面板的卡片右下角压本周额度暗印（#319）（2026-11-12，Claude，常浩看两轮预览后选第二轮「甲 · 角落大字」，要求「只显示数字就行，旁边的文字小字不需要」，静止票根「不需要改」；已提交、发布见下）
+
+- 时间：开工 `2026-11-12 16:28`。来由：常浩截图说侧栏挂着待审批卡时看不到额度，「尤其 claude 完全看不见」（当时 Claude 本周已用 98%），要求被挡时也能看到周额度，并追问其他会挡住的情况。查实会盖住额度面板的有三种卡：待审批卡、通知卡（新回复回执、Hermes 回复、额度 / 重置 / 登出 / 定时任务细条）、点开的接力卡；另有静止票根盖章后数字让位（#218 定的，常浩说不改）。预览 https://claude.ai/artifact/S9niXLPZPKCgMXpWoukG4P ：第一轮（卡头一行 / 卡底额度联 / 印章旁小环）常浩说「都不行……额度只是我额外看的，可以作为背景虚化嵌在后面」；第二轮全改成纸面暗印（角落大字 / 邮戳暗印 / 纸面水位），选甲并去掉小字。issue #319。
+- 改了哪些文件：
+  - `hud/src/card-weekly.ts`（新）：`weeklyFor` 取这张卡所属那一家的本周额度：接力卡按执行方（Codex 或 Claude），消息卡按最前那条消息的来源；只认整周、覆盖全部模型、有读数、没过期、不是赠送额度、面板没隐藏的行，几个账号取用得最多的；Hermes、ChatGPT 网页等没有周额度的不出。
+  - `hud/src/scene/WeeklyMark.tsx`（新）：右下角 118 点粗体百分数，纸墨色、不透明度 0.055、0.6 点虚化；读数为 critical 时用纸上的朱色、0.075。只有数字和 %，不写字。`position: sticky; bottom: 0` 停在卡片可见区的底边，卡片滚动时跟着；`z-index: -1` 压在文字后面、不收鼠标。
+  - `ui/src/global.css`：`.hud-panel-content` 加 `isolation: isolate`，暗印才会落在纸面之上、文字之下（不加就沉到纸面底下看不见）。
+  - `hud/src/HUDScene.tsx`：算 `weekly`，在消息卡和接力卡的纸里各放一个 `WeeklyMark`；顺手把「卡片里打开智能体插件设置」的交接逻辑挪到 `scene/useOpenSettings.ts`（新，行为不变），`closeCard` 内联，文件 1498 → 1496 行，基线同步收紧。
+  - 测试：`hud/test/card-weekly.test.ts`（新，4 条：只取周额度不取 5 小时、接力卡按执行方、没有周额度 / 过期 / 赠送 / 没卡时不出、多账号取最高且面板隐藏的行不算）。
+  - 不动：静止票根（盖章时仍不显示数字）；额度面板本身；卡片原有内容与排版。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 411` / `ℹ fail 0`（原 407 + 新增 4）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 写交接前 `ℹ pass 18` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-12-319-weekly-mark/{check,test,rules}.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1467，2026-11-12 16:16 的真实快照，7 条 Claude ASK；预览面板被隐藏，按 L-29 用「减少动效」让动画直接落定再截）：深色纸 Claude 待审批卡右下角淡朱「98%」压在「月度用户策略」一行后面，计算色 `rgb(255, 106, 87)`、不透明度 `0.075`；浅色纸同样；把那条请求改成 Codex 的，右下角是纸墨色「34%」，压在卡底「正在进行」后面。卡片原有文字、按钮、印章不变。**未在预览里看到**：通知卡、接力卡（快照里没这两种状态，由 `weeklyFor` 单测和同一个组件覆盖）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-12-319-weekly-mark/`：`preview-claude-ask-dark.jpg`、`preview-claude-ask-light.jpg`、`preview-codex-ask-dark.jpg`。预览脚手架 `src/apps/desktop/preview-319/` 与预览页源文件 `docs/design/card-weekly-quota-preview.html` 未提交。
+- 发布与回读：`dac821cde448`（从本分支打包，开工后 main 没有新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前确认没有开着自动往返的接力。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-12-2026-11-12-319-weekly-mark-install/PostPane-985cad3a1868.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做），以新版进程已起、最近 1 分钟日志无 error 作旁证。实机悬停看暗印未做，留给常浩。
+- 遗留：通知卡、接力卡上的暗印等实机出现时看一眼。范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 接力终局也转回发起会话：通过、预算用完、没写结论、出口认不出（#316）（2026-11-12，Claude，常浩在 digital-twin #135 会话里要求「这种类似情况我已经收到很多次了，很明显不合理，请在驿窗项目里另起会话，把这个优化改好」，由那个会话派单；已提交、L2 两轮审查通过后按授权合并、已发布 `985cad3a1868` 回读通过）
 
 - 时间：开工 `2026-11-12 11:45`（补记约数，开工时没跑 date）。来由：回信写「结论：通过」时驿窗只在侧栏结束接力，发起会话收不到，常浩和会话都以为卡住（复现：digital-twin PR #169 的 L3 审查，接力 `h1a1cda23b3b01`，第 2 轮通过并附 3 条 P2、1 条 P3）。顺查其他终局：预算用完、没写结论、审查出口 / 评审末两行认不出也只停在侧栏；证据不足暂停、决策升级原来就转回。

@@ -1007,3 +1007,8 @@ a:focus-visible {
     mask-size: 300% 100%;
   }
 }
+/* The weekly figure behind a card (#319) sits under the card's words but over
+   its paper: the card's content is a layer of its own. */
+.hud-panel-content {
+  isolation: isolate;
+}
