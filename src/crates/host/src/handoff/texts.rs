@@ -44,8 +44,10 @@ pub(super) fn passed_back(how: Sent) -> String {
         &format!("Passed; {en}; the handoff ended"),
     )
 }
-/// Words back for an end that the plugin gave up after the handoff ended
-/// (#316): the session never had them.
+/// The newest words back that the plugin gave up after the handoff ended
+/// (#316): the session never had them. Not only an end's answer — the
+/// person may have ended it with an answer or an ask to hand over again
+/// on its way — so it does not say which.
 pub(super) fn end_undelivered(state: &str) -> String {
     let (zh, en) = match state {
         "refused" => ("被插件拒收", "were refused"),
@@ -53,9 +55,9 @@ pub(super) fn end_undelivered(state: &str) -> String {
         _ => ("被取消", "were cancelled"),
     };
     l10n::text(
-        &format!("接力已结束，但转回 Claude 的终局回信{zh}，会话没收到：请告诉它审查结论"),
+        &format!("接力已结束，但最后一条转给 Claude 的话{zh}，会话没收到：请看看要不要自己告诉它"),
         &format!(
-            "The handoff ended, but its last answer back to Claude {en}; the session never had it. Tell it the outcome"
+            "The handoff ended, but the last words for Claude {en}; the session never had them. See whether to tell it yourself"
         ),
     )
 }
