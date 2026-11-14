@@ -7,6 +7,25 @@
 
 
 
+## 接力：重启后自动往返接着跑、专项续审从授权时重新计时、设置页写明互发消息不管接力、装机保护收窄（2026-11-14，Claude，常浩要求「深度思考优化」接力总要他操作，看数据后选「重启接着跑」「以我的身份不管接力」，设计稿回「都按推荐」含装机保护选甲；已提交、已发布 `8df314f44148` 回读通过）
+
+- 时间：开工 `2026-11-14 11:04`（`date '+%F %H:%M'` 记录）。来由：常浩在设置里开了「以我的身份发送」、把「连续来回上限」设成 10，接力仍写「第 2/2 轮」、时不时要他点「继续自动」。查明互发消息三项只管 `crates/messaging`，接力不读；11-07 以来 48 单接力自动往返停 36 次：审满 2 轮 11、重启暂停 7、转回失败两次 6（全在 #173 之前）、没写结论 6（11-09 一阵测试）、Claude 2 小时没交回 2（今天，专项续审 bug）等。审核门（AI 判断轮数、上限 5）另出设计稿 https://claude.ai/artifact/YQd8AFtBR5stBru4vZ65Wc ，常浩回「都按推荐」，先送 ChatGPT 思维评审，本轮未实施。
+- 改了哪些文件：
+  - `platform/src/clients/chatgpt/handoffs.rs`：`restarted()` 不再停自动往返，只忘掉重启前的后台续接（常浩选「接着跑」，改 #72 的「重启先暂停」）；`allow_extra` 像 `resume` 一样重置 `phase_at` / `queued_at`（修专项续审重开旧单当场报「Claude 2 小时没交回复审」，今天两单）。
+  - `host/src/handoff.rs`：新增 `Desk::catch_up`，有回信等着推进时调一次 `drive`；app 层 `projection`（快照刷新）先调它，重启前到了还没转回的回信重启后接着转回、只转一次。`host/src/handoff/texts.rs`：删掉不再用的 `restart_paused`。
+  - `app/src/settings/agent-plugins/AgentMessagesRow.tsx`：「智能体互发消息」说明加「这几项只管互发消息，不管 ChatGPT 接力」（常浩选「不管」）。
+  - 装机保护收窄（常浩选甲）：`.agents/skills/postpane-round/scripts/live-auto-relays.mjs` 只列 `auto` 且 `open` 且 `phase` 为 `replied`（回信刚到、正在转回）的接力；`install.sh` 提示文字、SKILL.md 第 3 步、LESSONS L-44 跟着改；`tests/postpane-round.test.mjs` 改写那条（改前 `ℹ pass 12` / `ℹ fail 1`）。
+  - 测试：平台层新增「专项续审从授权时重新计时」（先红后绿）、重启测试改成「保持开着」；宿主层「重启后接着转回、只转一次」「思维评审重启后由 catch_up 送到 Claude 再结束」、语言测试去掉暂停文字。重启几条和实现同时写，没先单独跑红。
+  - 文档：`docs/chatgpt-channel.md`、`docs/安装与使用.md` 的重启说法。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `941 passed; 0 failed`，前端 `ℹ pass 430` / `ℹ fail 0`，`ℹ pass 9` / `ℹ fail 0`，`ℹ pass 14` / `ℹ fail 0`，`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 21` / `ℹ fail 0`（收窄后再跑一次仍 21/0；收窄只动 skill 脚本与文档，`pnpm test` 不覆盖、未重跑）。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-relay-restart/`。
+- 验证：装机前单独查过，没有开着自动往返的接力；重启后 `handoffs.json` 没有新记的停止步骤。**这次没有开着的自动往返，「重启后接着跑」未在实机上验证**，等下次有接力在跑时装机或重启再看。设置页说明未截图（未做）。
+- 截图：无。
+- 发布与回读：`8df314f44148`（从本分支打包，打包前 main 无新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前 `c8eb178c2ecf`。启动 1 分钟日志无 error。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-relay-restart/PostPane-c8eb178c2ecf.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题：
+  - 审核门本轮未实施：先送 ChatGPT 思维评审，评审后定稿，再分批改 MA-02、agent-kit、DT-ORC 与驿窗。
+  - 范围外发现：thinking-review skill 的 `references/relay.md` 第 4 节仍写「驿窗重启后自动往返默认暂停」「工程审查最多 2 轮」，已过期，待随审核门一起改（my-skills 仓库）。skill 进化：无。
+- 本轮新坑：无
+
 ## 装机脚本：有开着的自动往返接力就拒装（L-44）（2026-11-14，Claude，#336 装机时没停下暂停了一单自动往返，常浩回「加上」；已提交、无需发布）
 
 - 时间：开工 `2026-11-14 10:58`（`date '+%F %H:%M'` 记录）。来由：#336 把查接力和 `install.sh` 写进同一条命令，查出 `h1a1d7a90d8e00` 开着自动往返也照装，重启把它暂停了（见 #336 一节）。常浩回「加上」。

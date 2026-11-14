@@ -114,8 +114,9 @@ test("统计脚本在夹具上：按工作目录筛会话、跳过子代理、�
   assert.equal(since.steps.find((s) => s.id === "merge-clean").sessions, 1, "--since 只数当天起的调用");
 });
 
-// L-44：装机会重启驿窗，重启把开着的自动往返全部暂停。装前先查，有就拒装、要 --force 才装。
-// 只测查的那一步和它在脚本里的位置，不在测试里真跑 install.sh（会退出正在用的驿窗）。
+// L-44：装机会重启驿窗。重启不再暂停自动往返（2026-11-14），只剩「回信刚到、正在转回」那一刻重启可能出岔子，
+// 装前查这一种，有就拒装、要 --force 才装（常浩选甲）。只测查的那一步和它在脚本里的位置，
+// 不在测试里真跑 install.sh（会退出正在用的驿窗）。
 const AUTO = join(SKILL_DIR, "scripts/live-auto-relays.mjs");
 function relays(list) {
   const dir = mkdtempSync(join(tmpdir(), "postpane-auto-"));
@@ -124,15 +125,16 @@ function relays(list) {
   return spawnSync(process.execPath, [AUTO, file], { encoding: "utf8" });
 }
 
-test("live-auto-relays 只列开着自动往返、还没结束的接力（和重启暂停的条件一致）", () => {
+test("live-auto-relays 只列开着自动往返、回信已到还没转回的接力", () => {
   const r = relays([
-    { id: "a", title: "开着自动 · 进行中", auto: true, status: "open" },
-    { id: "b", title: "开着自动 · 正在打开", auto: true, status: "opening" },
-    { id: "c", title: "没开自动", auto: false, status: "open" },
-    { id: "d", title: "已结束", auto: true, status: "closed" },
+    { id: "a", title: "回信刚到", auto: true, status: "open", phase: "replied" },
+    { id: "b", title: "等 ChatGPT 回信", auto: true, status: "open", phase: "delivered" },
+    { id: "c", title: "已转回等 Claude", auto: true, status: "open", phase: "returned" },
+    { id: "d", title: "没开自动", auto: false, status: "open", phase: "replied" },
+    { id: "e", title: "已结束", auto: true, status: "closed", phase: "replied" },
   ]);
   assert.equal(r.status, 0);
-  assert.deepEqual(r.stdout.trim().split("\n"), ["a\t开着自动 · 进行中", "b\t开着自动 · 正在打开"]);
+  assert.deepEqual(r.stdout.trim().split("\n"), ["a\t回信刚到"]);
 });
 
 test("live-auto-relays：没有接力文件算没有；文件坏了报错退出", () => {
@@ -144,7 +146,7 @@ test("live-auto-relays：没有接力文件算没有；文件坏了报错退出"
   assert.match(broken.stderr, /读不了/);
 });
 
-test("install.sh 在备份和退出旧应用之前查自动往返，有就拒装，--force 才装", () => {
+test("install.sh 在备份和退出旧应用之前查正在转回的接力，有就拒装，--force 才装", () => {
   const sh = read(".agents/skills/postpane-round/scripts/install.sh");
   const guard = sh.indexOf("live-auto-relays.mjs");
   assert.ok(guard > 0, "调用了 live-auto-relays.mjs");

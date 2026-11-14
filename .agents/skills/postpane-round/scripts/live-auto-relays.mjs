@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// 列出开着自动往返、还没结束的接力：每行「id<TAB>标题」，没有就什么都不打印。
-// 条件和驿窗重启时暂停的一致（platform/clients/chatgpt/handoffs.rs 的 restarted：auto 且 live，
-// live 即 opening / open）。install.sh 装机前调它，有就拒装（L-44）。
+// 列出开着自动往返、回信已到还没转回 Claude 的接力：每行「id<TAB>标题」，没有就什么都不打印。
+// 驿窗重启不再暂停自动往返（2026-11-14），重启后由 catch_up 接着转回；只有这一刻重启，转回可能
+// 送了一半，所以只查这一种（常浩选甲）。install.sh 装机前调它，有就拒装（L-44）。
 //
 //   node live-auto-relays.mjs [handoffs.json 路径]
 import { readFileSync } from "node:fs";
@@ -22,6 +22,6 @@ try {
 }
 
 for (const handoff of Array.isArray(list) ? list : []) {
-  if (handoff.auto === true && (handoff.status === "open" || handoff.status === "opening"))
+  if (handoff.auto === true && handoff.status === "open" && handoff.phase === "replied")
     console.log(`${handoff.id}\t${handoff.title ?? ""}`);
 }
