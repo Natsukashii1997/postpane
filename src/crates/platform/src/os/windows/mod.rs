@@ -125,6 +125,11 @@ pub(crate) fn configure_command(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     command.creation_flags(0x08000000);
 }
+/// An engine's tree here is the engine alone: nothing groups what it starts.
+pub(crate) fn isolate_process_tree(_command: &mut Command) {}
+pub(crate) fn kill_process_tree(child: &mut std::process::Child) {
+    let _ = child.kill();
+}
 pub(crate) fn is_shell(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())

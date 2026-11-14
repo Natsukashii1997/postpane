@@ -72,6 +72,9 @@ async function onHost(message) {
     case "focus":
       await focus(message.conversation);
       break;
+    case "reread":
+      await reread(message.conversation);
+      break;
   }
 }
 
@@ -172,6 +175,41 @@ async function send(conversation, text) {
       return { ok: false, reason: "timeout" };
   }
   return submit(tabId, text);
+}
+
+/** The tab showing `conversation`: as reported, else by its address. */
+async function tabShowing(conversation) {
+  const known = tabFor(conversation);
+  if (known !== null) return known;
+  const tabs = await chrome.tabs.query({ url: `${HOME}*` });
+  return tabs.find((tab) => tab.url?.includes(`/c/${conversation}`))?.id ?? null;
+}
+
+// PostPane heard nothing of a turn it waits on (#356): the tab tells its
+// newest reply again. A tab whose script was cut off (the extension
+// reloaded) gets one first; a closed one is opened, as for sending.
+async function reread(conversation) {
+  if (!watched.has(conversation)) return;
+  let tabId = await tabShowing(conversation);
+  if (tabId === null) {
+    const tab = await chrome.tabs.create({
+      url: `${HOME}c/${conversation}`,
+      active: false,
+    });
+    tabId = tab.id;
+    await group(tabId);
+    if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
+      return;
+  }
+  const ask = () => chrome.tabs.sendMessage(tabId, { op: "reread" });
+  try {
+    await ask();
+  } catch {
+    await chrome.scripting
+      .executeScript({ target: { tabId }, files: ["page.js", "content.js"] })
+      .catch(() => {});
+    await ask().catch(() => {});
+  }
 }
 
 async function focus(conversation) {

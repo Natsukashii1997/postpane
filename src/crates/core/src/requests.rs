@@ -9,6 +9,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod native_waiting;
+
 type Wake = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Clone)]
@@ -37,7 +39,8 @@ struct State {
     dismissed: HashSet<String>,
     reviewers: HashMap<(String, String, String), Reviewer>,
     deliveries: VecDeque<Value>,
-    native_waiting: HashMap<String, HashSet<String>>,
+    /// Waiting sessions by (source, observer); see `native_waiting`.
+    native_waiting: HashMap<(String, String), HashSet<String>>,
 }
 struct Reviewer {
     value: Option<String>,
@@ -393,45 +396,6 @@ impl Requests {
             };
             Some(serde_json::json!({"id":item.id,"sessionId":session,"kind":kind,"at":chrono::DateTime::<chrono::Utc>::from_timestamp_millis(item.created_ms).map(|v|v.to_rfc3339())}))
         }).collect()
-    }
-    /// Native waiting flags may exist without a HUD-answerable request. Keep
-    /// phase evidence here without fabricating a card or a transcript timestamp.
-    pub fn set_native_waiting(&self, source: &str, sessions: &[String], _now_ms: i64) {
-        let next: HashSet<String> = sessions
-            .iter()
-            .filter(|id| !id.is_empty())
-            .cloned()
-            .collect();
-        let changed = {
-            let mut state = self.0.state.lock().unwrap_or_else(|p| p.into_inner());
-            if state
-                .native_waiting
-                .get(source)
-                .is_none_or(|old| *old != next)
-                && (!next.is_empty() || state.native_waiting.contains_key(source))
-            {
-                if next.is_empty() {
-                    state.native_waiting.remove(source);
-                } else {
-                    state.native_waiting.insert(source.into(), next);
-                }
-                state.revision = state.revision.wrapping_add(1);
-                true
-            } else {
-                false
-            }
-        };
-        if changed {
-            self.wake();
-        }
-    }
-    pub fn native_waiting_sessions(&self) -> HashMap<String, HashSet<String>> {
-        self.0
-            .state
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .native_waiting
-            .clone()
     }
     /// Small per-snapshot index: presentation never locks this owner once for
     /// every historical transcript, or clones tool payloads just to sort sessions.

@@ -181,6 +181,12 @@ impl StdioServer {
             }
         })
     }
+    /// Lets a test give the request under test its own deadline once a slow
+    /// stand-in has had room to start and answer the handshake.
+    #[cfg(test)]
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
+    }
     pub fn end(&mut self) {
         self.input.take();
         self.job.take();

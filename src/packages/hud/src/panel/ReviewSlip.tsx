@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Handoff } from "@agent-hud/protocol";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { progressLine, round } from "../alerts/handoff-card";
-import { airmailStripes, relayPaperOf } from "../paper";
+import { airmailStripes, PaperContext, relayPaperOf } from "../paper";
 import { noButtonChrome } from "./theme";
 
 /** At most this many rows show on the slip; the rest scroll in place
@@ -74,7 +74,9 @@ export function ReviewRows({
           overflowY: height ? "auto" : undefined,
         }}
       >
-        {children}
+        {/* The rows read off this paper, not the panel's (L-42, #351): on
+            dark paper the panel's ink is light and vanished on the slip. */}
+        <PaperContext.Provider value={sheet}>{children}</PaperContext.Provider>
       </div>
     </div>
   );

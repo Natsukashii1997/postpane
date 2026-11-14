@@ -166,14 +166,19 @@ impl LocalClients {
         Ok(attempt.receipt)
     }
     /// The session's gate: sends, reads and withdrawals of one session go
-    /// one at a time, in order.
+    /// one at a time, in order. Only callers keep a gate alive; one no one
+    /// holds is dropped when a new gate is made, so the map stays as small
+    /// as the sessions in use, and a held gate is never replaced.
     pub(super) fn gate(&self, provider: Provider, session: &str) -> Arc<Mutex<()>> {
-        self.gates
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .entry(format!("{provider:?}:{session}"))
-            .or_default()
-            .clone()
+        let mut gates = self.gates.lock().unwrap_or_else(PoisonError::into_inner);
+        let key = format!("{provider:?}:{session}");
+        if let Some(gate) = gates.get(&key).and_then(Weak::upgrade) {
+            return gate;
+        }
+        gates.retain(|_, gate| gate.strong_count() > 0);
+        let gate = Arc::new(Mutex::new(()));
+        gates.insert(key, Arc::downgrade(&gate));
+        gate
     }
     fn deepseek(&self) -> Result<&DeepSeekChannel> {
         self.deepseek

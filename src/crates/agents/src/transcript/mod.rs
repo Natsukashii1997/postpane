@@ -14,6 +14,8 @@ pub mod usage;
 
 #[cfg(test)]
 mod call_timing_tests;
+#[cfg(test)]
+mod open_request_tests;
 
 pub use live::LiveLog;
 pub use log::{Log, RecentCall};

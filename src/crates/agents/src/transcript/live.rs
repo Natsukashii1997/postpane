@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::{collections::VecDeque, path::Path};
 
 const QUIET_MS: i64 = 120_000;
-const ABANDONED_MS: i64 = 1_800_000;
+pub(crate) const ABANDONED_MS: i64 = 1_800_000;
 
 pub fn timestamp(value: &Value) -> Option<i64> {
     value
@@ -235,6 +235,9 @@ pub struct LiveLog {
     /// by them. Kept only while the app runs, as the turn's message is.
     #[serde(skip)]
     pub prompt: Option<String>,
+    /// Background commands still out, by task id, with their launch (#353).
+    #[serde(default)]
+    pub background: std::collections::BTreeMap<String, i64>,
 }
 
 impl LiveLog {
@@ -269,19 +272,16 @@ impl LiveLog {
         }
         let same_turn =
             |log: &LiveLog| log.turns.back().map(|turn| (turn.id.clone(), turn.started));
-        if self.final_answer.is_none()
-            && earlier.final_answer.is_some()
-            && same_turn(self) == same_turn(earlier)
-        {
-            self.final_answer = earlier.final_answer.clone();
-            kept = true;
-        }
-        if self.prompt.is_none()
-            && earlier.prompt.is_some()
-            && same_turn(self) == same_turn(earlier)
-        {
-            self.prompt = earlier.prompt.clone();
-            kept = true;
+        if same_turn(self) == same_turn(earlier) {
+            for (mine, old) in [
+                (&mut self.final_answer, &earlier.final_answer),
+                (&mut self.prompt, &earlier.prompt),
+            ] {
+                if mine.is_none() && old.is_some() {
+                    *mine = old.clone();
+                    kept = true;
+                }
+            }
         }
         if let (Some(card), Some(old)) = (
             self.activity
@@ -352,15 +352,11 @@ impl LiveLog {
             .components()
             .any(|part| part.as_os_str() == "subagents");
         if source == "claude" {
-            live.is_subagent = in_subagents
-                || path
-                    .file_stem()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with("agent-"));
             let stem = path
                 .file_stem()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
+            live.is_subagent = in_subagents || stem.starts_with("agent-");
             if !live.is_subagent && uuid(stem) {
                 live.owned_claude_id = Some(stem.into());
             }
@@ -395,7 +391,7 @@ impl LiveLog {
     pub fn ingest(&mut self, source: &str, value: &Value) {
         match source {
             "codex" => self.codex(value),
-            "claude" => self.claude(value),
+            "claude" => self.claude_line(value),
             _ => {}
         }
     }
@@ -525,6 +521,7 @@ impl LiveLog {
     }
 
     pub fn session_state(&self, now: i64, source: &str, subagents_at: Option<i64>) -> &'static str {
+        let subagents_at = self.with_background(now, subagents_at);
         let Some(last) = self.last_event().filter(|_| !self.is_internal) else {
             // Claude and Codex record every turn, so a session of theirs with no event is unknown.
             // Sources read from a database (Antigravity) or whose session never prompted (DeepSeek)
@@ -536,12 +533,9 @@ impl LiveLog {
                 "idle"
             };
         };
-        if self
-            .activity
-            .as_ref()
-            .and_then(|activity| activity.standing_question.as_ref())
-            .is_some_and(|call| now - call.at < ABANDONED_MS)
-        {
+        // A request the log still holds open waits however long it stands
+        // (ADR 0001 「等你」); `facts` marks one gone quiet as stale.
+        if self.requests().next().is_some() {
             return "waiting";
         }
         let turn = self.turns.back();
@@ -559,29 +553,21 @@ impl LiveLog {
             }
             None => now - last < QUIET_MS || fresh_child,
         };
-        if !in_flight {
-            return "idle";
-        }
-        if self.requests(now).next().is_some() {
-            "waiting"
-        } else {
+        if in_flight {
             "running"
+        } else {
+            "idle"
         }
     }
 
     /// The first time after `now` at which `session_state`, or the requests
-    /// this log shows, can change with no new event: a question or request
-    /// lapsing, a turn going quiet or abandoned, a sub-agent going stale.
+    /// this log shows, can change with no new event: a request turning
+    /// stale, a turn going quiet or abandoned, a sub-agent going stale.
     pub fn next_change(&self, now: i64, source: &str, subagents_at: Option<i64>) -> Option<i64> {
-        let calls = self.activity.iter().flat_map(|activity| {
-            activity
-                .calls
-                .iter()
-                .filter(|call| call.request.is_some())
-                .chain(activity.standing_question.iter())
-        });
-        let mut times = calls
-            .map(|call| call.at + ABANDONED_MS)
+        let subagents_at = self.with_background(now, subagents_at);
+        let mut times = self
+            .requests()
+            .map(|call| self.quiet_since(call) + ABANDONED_MS)
             .chain(subagents_at.map(|at| at + ABANDONED_MS))
             .collect::<Vec<_>>();
         if let Some(last) = self.last_event().filter(|_| !self.is_internal) {
@@ -596,7 +582,8 @@ impl LiveLog {
         times.into_iter().filter(|at| *at > now).min()
     }
 
-    fn requests(&self, now: i64) -> impl Iterator<Item = &Call> {
+    /// The requests the log holds open, however long they have stood.
+    fn requests(&self) -> impl Iterator<Item = &Call> {
         self.activity
             .iter()
             .flat_map(|activity| {
@@ -605,14 +592,25 @@ impl LiveLog {
                     .iter()
                     .chain(activity.standing_question.iter())
             })
-            .filter(move |call| call.request.is_some() && now - call.at < ABANDONED_MS)
+            .filter(|call| call.request.is_some())
+    }
+
+    /// Since when the log has said nothing, `call` asked or later.
+    fn quiet_since(&self, call: &Call) -> i64 {
+        self.last_event().map_or(call.at, |last| last.max(call.at))
+    }
+
+    /// Whether the log has been quiet for half an hour since `call` was asked
+    /// (「待核对」): it still waits, but nothing shows it can be answered.
+    fn stale(&self, call: &Call, now: i64) -> bool {
+        now - self.quiet_since(call) >= ABANDONED_MS
     }
 
     pub fn clock_fingerprint(&self, now: i64) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hash = std::collections::hash_map::DefaultHasher::new();
-        for call in self.requests(now) {
-            call.id.hash(&mut hash);
+        for call in self.requests() {
+            (&call.id, self.stale(call, now)).hash(&mut hash);
         }
         hash.finish()
     }
@@ -624,13 +622,14 @@ impl LiveLog {
         now: i64,
         subagents_at: Option<i64>,
     ) -> Option<Value> {
+        let child = self.with_background(now, subagents_at);
         let turn = self.turns.back();
-        let observed = self.last_event().into_iter().chain(subagents_at).max()?;
-        let child_working = subagents_at.is_some();
-        let requests = self.requests(now).map(|call| json!({"id":format!("log:{source}:{id}:{}",call.id),"sessionId":id,"kind":call.request,"at":iso(Some(call.at))})).collect::<Vec<_>>();
+        let observed = self.last_event().into_iter().chain(child).max()?;
+        let child_working = child.is_some();
+        let requests = self.requests().map(|call| json!({"id":format!("log:{source}:{id}:{}",call.id),"sessionId":id,"kind":call.request,"at":iso(Some(call.at)),"stale":self.stale(call,now)})).collect::<Vec<_>>();
         let activity = self.activity.as_ref().map(|activity| {
             let open = activity.calls.iter().rev().find(|call| call.work.is_some_and(Work::shown)).or_else(|| activity.calls.last());
-            json!({"work":activity.work,"openCall":open.map(|call| json!({"work":call.work,"at":iso(Some(call.at))})),"toolAt":iso(activity.tool_at),"delegating":subagents_at.is_some() || activity.calls.iter().any(|call|call.work==Some(Work::Agents)),"awaitsModel":activity.awaits_model(),"retrying":activity.retrying,"compactingSince":null})
+            json!({"work":self.background_work(now).or(activity.work),"openCall":open.map(|call| json!({"work":call.work,"at":iso(Some(call.at))})),"toolAt":iso(activity.tool_at),"delegating":subagents_at.is_some() || activity.calls.iter().any(|call|call.work==Some(Work::Agents)),"awaitsModel":activity.awaits_model(),"retrying":activity.retrying,"compactingSince":null})
         });
         let turn_id = turn.and_then(|turn| {
             turn.id.clone().or_else(|| {

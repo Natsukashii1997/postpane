@@ -86,13 +86,12 @@ fn profile_plan(profile: &Value) -> Option<String> {
         })?;
     plan(profile, Some(guess))
 }
-/// Engine failures in Open's words (agent-hud-native-open ClaudeDataError).
+/// Engine failures in Open's words (agent-hud-native-open ClaudeDataError),
+/// with any secret the engine's words carry hidden (`redact::secrets`).
 fn engine_failed(reason: &str) -> String {
-    if l10n::chinese() {
-        format!("Claude Code 引擎查询失败：{reason}")
-    } else {
-        format!("Claude Code engine query failed: {reason}")
-    }
+    let reason = crate::redact::secrets(reason);
+    let zh = format!("Claude Code 引擎查询失败：{reason}");
+    l10n::text(&zh, &format!("Claude Code engine query failed: {reason}"))
 }
 fn malformed() -> String {
     l10n::text(
@@ -794,6 +793,18 @@ mod tests {
         assert_eq!(
             read(&FakeHost::new("/u")).err().unwrap(),
             "Claude Code engine (claude command) not found"
+        );
+    }
+
+    #[test]
+    fn engine_failures_hide_the_secrets_they_carry() {
+        let host = installed(json!({
+            "subtype": "error",
+            "error": "401 via https://proxy.test/v1?api_key=k3y&x=1 with Authorization: Bearer sk-ant-api03-AbCdEf0123456789xyz"
+        }));
+        assert_eq!(
+            read(&host).err().unwrap(),
+            "Claude Code engine query failed: 401 via https://proxy.test/v1?api_key=***&x=1 with Authorization: ***"
         );
     }
 

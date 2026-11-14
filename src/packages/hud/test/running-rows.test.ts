@@ -32,7 +32,7 @@ const providers = [
   { id: "codex", name: "Codex" },
 ] as Snapshot["providers"];
 
-test("a news card lists its own agent's sessions at work, newest first (#307)", () => {
+test("a news card lists its own agent's sessions: waiting with no card first, then at work, newest first (#307, ADR-0001 B3)", () => {
   const sessions = [
     session("old-run", "running", "2026-11-11T03:30:00Z"),
     session("new-run", "running", "2026-11-11T03:40:00Z"),
@@ -48,9 +48,10 @@ test("a news card lists its own agent's sessions at work, newest first (#307)", 
   );
   assert.deepEqual(
     listed.map((entry) => entry.session.id),
-    ["new-run", "old-run"],
+    ["asks", "new-run", "old-run"],
   );
-  assert.ok(listed.every((entry) => entry.status === "running"));
+  assert.equal(listed[0].status, "waiting");
+  assert.ok(listed.slice(1).every((entry) => entry.status === "running"));
 });
 
 test("a running session with a question open is on the card already, not listed again", () => {

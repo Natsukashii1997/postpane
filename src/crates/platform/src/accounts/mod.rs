@@ -1,6 +1,7 @@
 //! Provider account readings on one worker, one at a time, with one result
-//! cache outside the Runtime mutex. A reading holds the collection gate, so it
-//! never overlaps a local pass either.
+//! cache outside the Runtime mutex. A reading's CLI or HTTP wait holds no lock
+//! a local pass takes; only its result is merged under the collection gate, so
+//! it lands between passes, never in the middle of one.
 //! Cadence follows UsageRefresh: 300s quiet, 150s running, >=60s per account.
 //!
 //! Each provider states its own facts (`agents::account::Provider`): how it
@@ -88,9 +89,9 @@ fn backoff(failures: u32) -> Duration {
 /// worker waits as long again, so a local pass is not held behind the queue.
 const STEP_BUDGET: Duration = Duration::from_secs(1);
 
-/// Held for every account reading and every local collection pass, so the two
-/// never read at the same time. A host takes it before any lock that UI
-/// requests also wait on.
+/// Held for every local collection pass, and briefly while an account
+/// reading's result is merged, so a result never lands mid-pass. A host takes
+/// it before any lock that UI requests also wait on.
 pub type CollectionGate = Arc<Mutex<()>>;
 
 struct Entry {
@@ -370,7 +371,7 @@ impl AccountService {
             .filter_map(Weak::upgrade)
             .collect::<Vec<_>>();
         for child in children {
-            let _ = child.lock().unwrap_or_else(PoisonError::into_inner).kill();
+            crate::os::kill_process_tree(&mut child.lock().unwrap_or_else(PoisonError::into_inner));
         }
     }
     pub fn refresh(&self) {
@@ -760,14 +761,12 @@ fn run(context: AccountContext, shared: Arc<Shared>, gate: CollectionGate, reade
             Job::Account(provider, facts, homes) => (provider, facts, homes),
             Job::Page(page) => {
                 let attempted = Instant::now();
-                let summary = {
-                    let _turn = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                    if shared.cancelled.load(Ordering::Acquire) {
-                        return;
-                    }
-                    status::read(&context.http, page.url)
-                };
+                if shared.cancelled.load(Ordering::Acquire) {
+                    return;
+                }
+                let summary = status::read(&context.http, page.url);
                 let waker = {
+                    let _turn = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                     let mut state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
                     // A page that could not be read keeps what it said last.
                     let old = state.pages.remove(page.url);
@@ -797,25 +796,24 @@ fn run(context: AccountContext, shared: Arc<Shared>, gate: CollectionGate, reade
         };
         let attempted = Instant::now();
         let attempted_ms = chrono::Utc::now().timestamp_millis();
-        // The gate, not the shared state or the Runtime, is held across the I/O.
-        let (result, record) = {
-            let _turn = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            if shared.cancelled.load(Ordering::Acquire) {
-                return;
-            }
-            let mut reading_context = context.clone();
-            reading_context.account_homes = selected.2.clone();
-            let result = (selected.1.read)(&reading_context);
-            // What the agent itself last recorded, for a failure with
-            // nothing read before on screen.
-            let record = selected
-                .1
-                .kept
-                .filter(|_| result.is_err())
-                .and_then(|kept| kept(&reading_context));
-            (result, record)
-        };
+        if shared.cancelled.load(Ordering::Acquire) {
+            return;
+        }
+        // No lock is held across the I/O, so a CLI or HTTP wait never holds
+        // a local pass. Only this worker reads, one job at a time, so no
+        // provider is ever read twice at once.
+        let mut reading_context = context.clone();
+        reading_context.account_homes = selected.2.clone();
+        let result = (selected.1.read)(&reading_context);
+        // What the agent itself last recorded, for a failure with
+        // nothing read before on screen.
+        let record = selected
+            .1
+            .kept
+            .filter(|_| result.is_err())
+            .and_then(|kept| kept(&reading_context));
         let (waker, copy) = {
+            let _turn = gate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let mut state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
             if state.stopped {
                 return;
@@ -944,7 +942,8 @@ fn failed_reading(entry: &mut Entry, unread: Unread, attempted: Instant, attempt
         return;
     }
     entry.failure = Some(unread.kind());
-    entry.notice = Some(unread.reason().to_owned());
+    // What a client or proxy said may carry a credential.
+    entry.notice = Some(agents::redact::secrets(unread.reason()));
     entry.failed = true;
 }
 
@@ -1099,16 +1098,10 @@ mod tests {
     static ACTIVE: AtomicUsize = AtomicUsize::new(0);
     static MOST: AtomicUsize = AtomicUsize::new(0);
     static DONE: AtomicUsize = AtomicUsize::new(0);
-    static GATE: Mutex<Option<CollectionGate>> = Mutex::new(None);
 
     fn reading(provider: &'static str) -> Result<AccountReading, Unread> {
         let active = ACTIVE.fetch_add(1, Ordering::SeqCst) + 1;
         MOST.fetch_max(active, Ordering::SeqCst);
-        let gate = GATE.lock().unwrap().clone().unwrap();
-        assert!(
-            gate.try_lock().is_err(),
-            "a reading holds the collection gate"
-        );
         std::thread::sleep(Duration::from_millis(30));
         ACTIVE.fetch_sub(1, Ordering::SeqCst);
         DONE.fetch_add(1, Ordering::SeqCst);
@@ -1561,8 +1554,9 @@ mod tests {
 
     #[test]
     fn restored_accounts_keep_their_home_scope_and_removed_homes_do_not_return() {
+        // The gate the test holds keeps whatever this returns from landing.
         fn unread(_: &dyn agents::Host) -> Result<AccountReading, Unread> {
-            panic!("the collection gate keeps this fixture read-only")
+            Err(Unread::transient("not read in this fixture"))
         }
         static CODEX: Provider = Provider::new("codex", unread);
         static ANTIGRAVITY: Provider = Provider::new("antigravity", unread);
@@ -1637,12 +1631,11 @@ mod tests {
     }
 
     #[test]
-    fn readings_run_one_at_a_time_and_never_beside_a_local_pass() {
+    fn readings_run_one_at_a_time_and_land_between_local_passes() {
         let gate = CollectionGate::default();
-        *GATE.lock().unwrap() = Some(Arc::clone(&gate));
         let enabled = ["first", "second", "third"].map(String::from).into();
         let directory = tempfile::tempdir().unwrap();
-        // A local pass is in progress: no reading may start until it ends.
+        // A local pass is in progress: no result may land until it ends.
         let pass = gate.lock().unwrap();
         let service = AccountService::with_readers(
             directory.path().into(),
@@ -1653,10 +1646,13 @@ mod tests {
         )
         .unwrap();
         std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(
-            DONE.load(Ordering::SeqCst),
-            0,
-            "readings wait for the local pass"
+        assert!(
+            service.shared.state.lock().unwrap().entries.is_empty(),
+            "results wait for the local pass"
+        );
+        assert!(
+            DONE.load(Ordering::SeqCst) <= 1,
+            "the next reading waits for the last result to land"
         );
         drop(pass);
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -1666,6 +1662,110 @@ mod tests {
         service.stop();
         assert_eq!(DONE.load(Ordering::SeqCst), 3);
         assert_eq!(MOST.load(Ordering::SeqCst), 1, "never two readings at once");
+    }
+
+    #[test]
+    fn a_reading_waiting_on_its_agent_never_holds_a_local_pass() {
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        static RELEASE: Mutex<bool> = Mutex::new(false);
+        static RELEASED: Condvar = Condvar::new();
+        fn blocked(_: &dyn agents::Host) -> Result<AccountReading, Unread> {
+            STARTED.store(true, Ordering::SeqCst);
+            // A CLI or HTTP read that takes its time.
+            let mut release = RELEASE.lock().unwrap();
+            while !*release {
+                release = RELEASED.wait(release).unwrap();
+            }
+            Ok(AccountReading::empty("slow"))
+        }
+        static SLOW: Provider = Provider::new("slow", blocked);
+        static READERS: [&Provider; 1] = [&SLOW];
+        let gate = CollectionGate::default();
+        let directory = tempfile::tempdir().unwrap();
+        let data = directory.path().join("data");
+        crate::os::private_directory(&data).unwrap();
+        let service = AccountService::with_readers(
+            data.clone(),
+            data,
+            ["slow".to_owned()].into(),
+            Arc::clone(&gate),
+            &READERS,
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !STARTED.load(Ordering::SeqCst) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(STARTED.load(Ordering::SeqCst), "the reading started");
+        // A local pass on another thread takes the gate while the read waits.
+        let pass_gate = Arc::clone(&gate);
+        let pass = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(1);
+            loop {
+                if let Ok(turn) = pass_gate.try_lock() {
+                    return Some(turn).is_some();
+                }
+                if Instant::now() > deadline {
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let passed = pass.join().unwrap();
+        let release = || {
+            *RELEASE.lock().unwrap() = true;
+            RELEASED.notify_all();
+        };
+        if !passed {
+            release();
+            service.stop();
+            panic!("a local pass waited on the reading");
+        }
+        // While a pass holds the gate, a result that arrives waits for it.
+        let held = gate.lock().unwrap();
+        release();
+        std::thread::sleep(Duration::from_millis(100));
+        let landed_mid_pass = service
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key("slow");
+        drop(held);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !service
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key("slow")
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let landed = service
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .entries
+            .contains_key("slow");
+        service.stop();
+        assert!(!landed_mid_pass, "a result lands between passes");
+        assert!(landed, "and lands once the pass ends");
+    }
+
+    #[test]
+    fn a_failure_shown_keeps_no_secret() {
+        let mut shown = entry(AccountReading::empty("first"), None, false);
+        let unread = Unread::transient("proxy 401: Authorization: Bearer abcdefgh12345678");
+        failed_reading(&mut shown, unread, Instant::now(), 0);
+        assert_eq!(
+            shown.notice.as_deref(),
+            Some("proxy 401: Authorization: ***")
+        );
     }
 
     fn reset_later(provider: &'static str) -> Entry {

@@ -408,3 +408,42 @@
 - 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
 - 2026-11-14 收窄（常浩选甲）：同一天驿窗改成重启后自动往返接着跑，重启不再暂停，上面的根因只剩「回信刚到、正在转回」这一刻（`phase` 为 `replied`）；`live-auto-relays.mjs` 只查这一种，平时开着自动往返也照装。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
+
+## L-45 预览脚手架的 `?still` 用展开复制伪造 `matchMedia`，小人全退成静态图（2026-11-14）
+
+- 现象：#349 搭场景预览台，照抄 #331–#341 脚手架的 `?still`（报告减少动效，防截到半路帧，L-29）。控制台连报 `Bot artwork unavailable TypeError: media.addEventListener is not a function`，侧栏小人不画动态画布、退回静态图。之前几轮带 `?still` 截的预览图里，小人很可能都是静态的。
+- 根因：`{ ...real(q), matches: true }` 只复制自有属性，`MediaQueryList` 的 `addEventListener` 等方法在原型上，展开后就没了；`BotMark.tsx` 订阅减少动效变化时抛错，被兜底成静态图。
+- 正确做法：用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`，方法照原对象绑定（`src/packages/hud/preview/main.tsx`）。以后预览一律用常设的场景预览台（`pnpm --filter @agent-hud/hud run scenes`），不再另抄脚手架；截图前用 `document.querySelectorAll("canvas").length` 确认小人画布在。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`。
+- 升级：未升级。
+
+## L-46 Claude 会话挂着后台命令等通知，侧栏却出 REPLY（2026-11-14）
+
+- 现象：Claude Code 会话用 `run_in_background` 跑全量测试，说完「测试在后台跑，结果出来再补数字」就停下；侧栏立刻出 REPLY 回执，当成回复完成、等常浩回复。实际它还在干活，测试结束会被唤醒接着做（#353）。
+- 根因：`claude/transcript.rs` 看到 `stop_reason: end_turn` 就把回合记为 completed。一轮结束不等于会话停下：Claude Code 会在后台命令结束（完成、失败、被杀、停止）时送一条 `<task-notification>`（空闲时是 `origin.kind = task-notification` 的用户消息，忙时是 `queued_command` 附件）唤醒它。原来只有「子 agent 还在写记录」会压住 completed，后台 Bash 不算。
+- 正确做法：判断 Claude 会话「做完了没有」，除了回合结束，还要看有没有没收到通知的后台命令（`toolUseResult.backgroundTaskId` 记入，通知里的 `<task-id>` 或 `TaskStop` 移除），在 `src/crates/agents/src/claude/background.rs`；兜底同子 agent，启动 30 分钟（`ABANDONED_MS`）仍没通知就照常算完成。
+- 证据：`claude::background::tests` 4 项；去掉修复后其中 2 项变红。
+- 升级：未升级。
+
+## L-47 本机负载高时 MCP 测试偶发约 45 秒超时，每次挂的不是同一条（2026-11-14）
+
+- 现象：#354 变基后把全量测试和 `tauri build` 写在同一条后台命令里，前后脚还有别的会话在打包，负载 15–20。`pnpm test` 的 `test:mcp` 挂了 2 条（`on Windows the launcher names the client…`、`relay_to_chatgpt hands…`，45 秒、100 秒）；补跑时换成另一条（`an Antigravity caller…`，45 秒）。负载降到 6 左右单独跑 `node --test src/apps/mcp/test/*.test.mjs`，9 条全过、20 秒。改动本身不碰 MCP。
+- 根因：MCP 测试要起宿主进程、走 stdio，负载高时等不到回应就超时；不是代码问题。另外 `pnpm test` 是 `&&` 串起来的，MCP 一挂，后面的插件和 Chrome 插件测试根本没跑，不能当成「只挂了 MCP」。
+- 正确做法：全量测试不和打包放在同一条命令里并行，先测完再打。MCP 失败且耗时在 45 秒上下时，等负载降下来单独重跑 `test:mcp` 确认，再补跑 `test:plugins`、`test:extension`；交接里两次结果都写，不改代码去「修」它。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/` 的 `test-rebased.txt`、`test-rebased-rest.txt`、`test-mcp-3.txt`、`test-rebased-plugins.txt`。
+- 升级：未升级。
+
+## L-48 测试里新写出的替身程序，机器忙时启动要好几秒，和要验的截止时间共用一个短超时就偶发失败（2026-11-14）
+
+- 现象：`platform` 的 `a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline` 偶发 `TimedOut`，panic 在 `StdioServer::open(... 3 秒).unwrap()`；全量 `pnpm test` 并行跑、刚打完包时容易碰到，单独跑 3 次 2 过 1 败（#357）。只把 CPU 打满复现不出来；一边批量新建并执行几百个脚本、一边跑这项测试，16 次全败，都停在 3.06 秒。
+- 根因：`StdioServer` 的握手（`initialize` + `initialized`）和之后每个请求共用一个 `timeout`。测试为了让「写入截止」3 秒内触发，把它设成 3 秒，python3 替身冷启动加握手也只剩 3 秒。平时 `#!/usr/bin/env python3` 起一个新写出的脚本就要 0.4–0.6 秒（`/usr/bin/python3` 是 xcrun 垫片），系统同时首次执行大量新程序时会排到几秒。
+- 正确做法：测试里起替身程序的那一步给足时间（几十秒，正常情况立即返回、不拖慢测试），要验的截止时间单独设短。`StdioServer` 有仅测试用的 `set_timeout`，握手完再设。复现这类偶发超时用「批量新建并执行程序」压，不只用 CPU 压；压完 `pkill -f` 清掉压测进程，否则会顶到每用户进程数上限。
+- 证据：修复后同样压测 32 次全过；单独连跑 20 次全过，每次 3.2–3.9 秒（写入截止仍是 3 秒）。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-14-357-flaky-stdio/`。
+- 升级：未升级；「测试里起子进程的超时和要验的时限分开给」换个项目也成立，可提议提升为全局坑。
+## L-49 小人导演有 TS、Rust 两份，实机走 Rust；只改 TS 在预览台里看着对、实机不生效（2026-11-14）
+
+- 现象：#358 让待核对的会话「不让小人来找你」，只改了 `src/packages/hud/src/bots/mark-director.ts`，契约测试和场景预览台都对；合并后才发现应用里的小人指令是 `src/packages/app/src/lib/use-bot-directions.ts` 经 `invoke("hud_bot_directions")` 从 Rust 取的（`src/crates/hud/src/bots.rs`），TS 版只在浏览器预览（非 Tauri）里跑，实机小人照旧摆「问你」。票根 working 计数同理：TS `model.ts` 与 Rust `vendors.rs` 各一份。
+- 根因：小人导演和票根派生是从 TS 移植到 Rust 的，两边并存；`bots.rs` 的对拍测试 `directs_as_the_typescript_director_did` 只回放 `director-cases.json` 里录好的步骤，TS 改了行为不会让它变红。
+- 正确做法：改小人行为、票根 working、vendor 派生时，Rust 那份一起改，两边各补测试：`mark-director.ts` ↔ `src/crates/hud/src/bots.rs`（会话事实在 `bots/facts.rs`），`model.ts` 的 `vendorsFromSnapshot` ↔ `vendors.rs`，`stale.ts` ↔ `stale.rs`。预览台只能证明 TS 那份。
+- 证据：#354 后续补漏 PR 的 `bots.rs` 测试 `a_stale_session_rests_its_bot_unless_a_card_stands`、`stale.rs` 测试。
+- 升级：未升级。

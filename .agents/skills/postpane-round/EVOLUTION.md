@@ -156,3 +156,11 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：`install.sh` 发现短名以 `YYYY-MM-DD-` 开头就报错退出、提示去掉日期；SKILL.md 第 3 步第 3 条写明「短名不带日期，如 `341-relay-toggle`」。
 - 证据：#341 交接一节「与授权不一致之处」；`evidence/2026-11-14-341-relay-toggle/install.log`。
 - 状态：已采纳（本 PR，#346）
+
+## E-18 第 3 步实机验证前：界面预览统一用场景预览台，不再每轮另搭 `preview-xxx`（2026-11-14）
+
+- 步骤：install
+- 发生了什么：#321–#341 每轮都在 `src/apps/desktop/preview-<号>/` 抄一份脚手架、拿真实快照（含私人标题）渲染，用完挪进证据目录；这些脚手架会被包边界检查拦（L-43、E-16），`?still` 的抄法还会让小人退成静态图（L-45）。#349 把它做成常设的场景预览台 `src/packages/hud/preview/`，用合成的固定场景。
+- 建议：第 3 步第 5 条改为「逻辑在场景预览台里用真实组件点：`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480，`?scene=&panel&light&still`；缺场景就在 `src/packages/hud/test/scenes/scenes.ts` 补一个，不另搭脚手架、不用真实快照」；E-16 随之可作废。
+- 证据：#349 交接；L-43、L-45。
+- 状态：待批

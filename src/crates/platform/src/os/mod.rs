@@ -22,6 +22,8 @@ mod unix;
 #[cfg(target_os = "macos")]
 pub use target::registered_applications;
 pub(crate) use target::*;
+#[cfg(unix)]
+pub(crate) use unix::{isolate_process_tree, kill_process_tree};
 
 /// The directory a client's variable moves its files to: the value without
 /// the whitespace around it, used as written, as the clients themselves read

@@ -52,7 +52,7 @@ pub use starts::{
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 pub use targets::{Capability, ReachableTarget};
@@ -211,7 +211,11 @@ pub struct LocalClientPaths {
 pub struct LocalClients {
     paths: LocalClientPaths,
     targets: Mutex<Vec<SessionTarget>>,
-    gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Each session's gate while someone holds it (`sending::gate`).
+    gates: Mutex<HashMap<String, Weak<Mutex<()>>>>,
+    /// Receipts maintenance can no longer change, by file name: when the file
+    /// was last written and when its request was sent (`journal::maintain`).
+    settled: Mutex<HashMap<String, (SystemTime, u64)>>,
     codex: Arc<dyn CodexTransport>,
     antigravity: Arc<dyn AntigravityTransport>,
     /// The folder Agent HUD's DeepSeek Harness plugin shares with the app;

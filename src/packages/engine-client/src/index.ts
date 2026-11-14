@@ -7,7 +7,6 @@ import type { NativeMethod } from "@agent-hud/protocol";
 export class EngineClient {
   private child?: ChildProcessWithoutNullStreams;
   private sequence = 0;
-  private buffer = "";
   private pending = new Map<
     number,
     {
@@ -50,23 +49,28 @@ export class EngineClient {
       { stdio: ["pipe", "pipe", "pipe"] },
     );
     this.child = child;
-    this.buffer = "";
+    // Each engine reads into its own buffer, and an engine already replaced
+    // is not heard: half a frame it writes on its way out would otherwise
+    // land in the new one's buffer and kill it (audit 2026-11-11, #351).
+    let buffer = "";
+    const current = () => this.child === child;
     child.stderr.on("data", () => {
       /* Engine output is never mixed into MCP stdout or UI responses. */
     });
     // Decoded as a stream: a chunk can end inside a character.
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      this.buffer += chunk;
-      if (this.buffer.length > 16 * 1024 * 1024) {
+      if (!current()) return;
+      buffer += chunk;
+      if (buffer.length > 16 * 1024 * 1024) {
         this.fail("Engine response exceeded 16 MiB.");
         this.close();
         return;
       }
       let newline: number;
-      while ((newline = this.buffer.indexOf("\n")) !== -1) {
-        const line = this.buffer.slice(0, newline);
-        this.buffer = this.buffer.slice(newline + 1);
+      while (current() && (newline = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 1);
         try {
           const response = JSON.parse(line);
           const request = this.pending.get(response.id);
@@ -84,9 +88,11 @@ export class EngineClient {
         }
       }
     });
-    child.on("error", (error) => this.fail(error.message));
+    child.on("error", (error) => {
+      if (current()) this.fail(error.message);
+    });
     child.on("close", () => {
-      if (this.child === child) {
+      if (current()) {
         this.child = undefined;
         this.fail("Engine stopped. The last operation was not retried.");
       }
