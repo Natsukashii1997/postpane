@@ -99,3 +99,16 @@ export function boardWaiting(places: readonly BoardPlace[]) {
     }))
     .filter((place) => place.count > 0);
 }
+
+/** The waiting rows, 「待核对」 last, and the running ones. */
+/** On one agent's card (owner, 2026-11-14): 「等待处理」 then 「正在进行」. */
+export function splitWork(entries: readonly LiveSession[]) {
+  const waiting = entries.filter((entry) => entry.status === "waiting");
+  return {
+    waiting: [
+      ...waiting.filter((entry) => !entry.stale),
+      ...waiting.filter((entry) => entry.stale),
+    ],
+    running: entries.filter((entry) => entry.status === "running"),
+  };
+}

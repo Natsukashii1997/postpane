@@ -15,7 +15,6 @@ import {
   requestTitle,
   sessionToOpen,
   tagColor,
-  tagCounts,
   tagTone,
   waitedText,
   type ApprovalEntry,
@@ -148,22 +147,6 @@ test("past five lines the oldest fold away, the open one always shown (#325)", (
   );
   assert.equal(approvalGroups(entries, "q0", Infinity).hidden, 0);
   assert.equal(approvalGroups(entries.slice(0, 5), "q0").hidden, 0);
-});
-
-test("the head counts ASK first, permissions next, REPLY last", () => {
-  assert.deepEqual(
-    tagCounts([
-      reply("r", "2026-11-05T00:00:00Z"),
-      asked("b", "2026-11-05T00:01:00Z", undefined, "BASH"),
-      asked("a1", "2026-11-05T00:02:00Z"),
-      asked("a2", "2026-11-05T00:03:00Z"),
-    ]),
-    [
-      { badge: "ASK", count: 2 },
-      { badge: "BASH", count: 1 },
-      { badge: "REPLY", count: 1 },
-    ],
-  );
 });
 
 test("a request finds its session by id, preferring the same client", () => {

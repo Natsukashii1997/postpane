@@ -2,6 +2,7 @@
 // C1): on the one-agent panel its list; on the whole board, whose rows sit
 // under each place's block (`split`), only the folded line at the foot.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   PanelLayout,
   SessionsResponse,
@@ -11,26 +12,24 @@ import { tokensShort } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { vendorKey } from "../model";
 import { usePanelQuery } from "../PanelContext";
-import {
-  chatgptDesk,
-  isReview,
-  quietRelays,
-  reviewsInDay,
-} from "../chatgpt-desk";
+import { chatgptDesk, isReview, reviewsInDay } from "../chatgpt-desk";
 import { liveSessions, stoppedCount } from "./agent-board";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { useListedSessions } from "./listed-sessions";
 import { sessionScope } from "./place-sessions";
 import { PlaceRows, SessionsHeading } from "./PlaceRows";
 import { shownSessions, useRemovedSessions } from "./removed-sessions";
-import { QuietRelayRow, ReviewRows } from "./ReviewSlip";
+import { ReviewRows } from "./ReviewSlip";
 import { RepliedRow } from "./SessionsSection";
+import { BoardHeading } from "./BoardHeading";
+import { NothingYet, WorkSections } from "./WorkSections";
 import { noButtonChrome, type Logo } from "./theme";
 
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it;
  * the rest of the last day folded into one line, with its tokens, that opens
- * the Statistics window. The Sessions page lists every session as before. */
+ * the Statistics window. On one agent's card they are its 「等待处理」 and
+ * 「正在进行」 (owner, 2026-11-14); its relays are behind the paper plane. */
 export function SourceSessions({
   snapshot,
   focusVendor,
@@ -41,6 +40,9 @@ export function SourceSessions({
   showTokens = true,
   active = true,
   split = false,
+  bare = false,
+  news,
+  Logo,
 }: {
   snapshot: Snapshot;
   focusVendor?: string;
@@ -55,6 +57,10 @@ export function SourceSessions({
   active?: boolean;
   /** The whole board lists the rows under each place's block (C1). */
   split?: boolean;
+  /** The agent has no block above: the card's head goes here. */
+  bare?: boolean;
+  /** The agent's requests or replies: what waits on you on its card. */
+  news?: { count: number; content: ReactNode };
 }) {
   const { language } = useFormat();
   const zh = language === "zh";
@@ -85,13 +91,6 @@ export function SourceSessions({
     focusVendor && vendorKey(focusVendor) === vendorKey("chatgpt")
       ? chatgptDesk(snapshot, now, zh)
       : null;
-  // Its open handoffs ChatGPT is not answering, to end or go on (#288).
-  const quiet = desk
-    ? quietRelays(
-        handoffs,
-        lower.map((entry) => entry.session.id),
-      )
-    : [];
   const replied = desk
     ? desk.day.flatMap((chat) => {
         const session =
@@ -138,9 +137,9 @@ export function SourceSessions({
     focusVendor ? selectedSources : tokenAgents,
     active && showTokens,
   );
-  // One agent's running rows fold past three (C1) in place of the scroll;
-  // ChatGPT's chats and a list of every agent's still scroll past `limit`.
-  const fold = desk ? undefined : focusVendor;
+  // One agent's running rows fold past three (C1) in place of the scroll; a
+  // list of every agent's still scrolls past `limit`.
+  const fold = focusVendor;
   const rows = useRef<HTMLDivElement>(null);
   const [rowsHeight, setRowsHeight] = useState<number>();
   useLayoutEffect(() => {
@@ -165,19 +164,48 @@ export function SourceSessions({
       className="hud-source-sessions"
       style={{ display: "grid", gap: 0, fontSize: 12 }}
     >
-      {!split && (
+      {!split && bare && focusVendor && Logo && (
+        <BoardHeading
+          vendor={focusVendor}
+          place={selectedSources?.[0]}
+          Logo={Logo}
+          light={light}
+          handoffs={snapshot.handoffs}
+        />
+      )}
+      {!split && fold && (
+        <WorkSections
+          snapshot={snapshot}
+          entries={upper}
+          light={light}
+          now={now}
+          onStats={onStats}
+          fold={fold}
+          news={
+            news ??
+            (replied.length
+              ? {
+                  count: replied.length,
+                  content: replied.map(({ chat, session }, index) => (
+                    <RepliedRow
+                      key={chat.id}
+                      chat={chat}
+                      session={session}
+                      now={now}
+                      light={light}
+                      first={index === 0}
+                      onStats={onStats}
+                    />
+                  )),
+                }
+              : undefined)
+          }
+        />
+      )}
+      {!split && !fold && (
         <>
-          <SessionsHeading
-            light={light}
-            count={desk ? desk.today : live.length}
-          >
-            {desk
-              ? zh
-                ? "今天的对话"
-                : "TODAY'S CHATS"
-              : zh
-                ? "正在进行"
-                : "IN PROGRESS"}
+          <SessionsHeading light={light} count={live.length}>
+            {zh ? "正在进行" : "IN PROGRESS"}
           </SessionsHeading>
           <div
             ref={rows}
@@ -193,21 +221,9 @@ export function SourceSessions({
               light={light}
               now={now}
               onStats={onStats}
-              fold={fold}
             />
-            {replied.map(({ chat, session }, index) => (
-              <RepliedRow
-                key={chat.id}
-                chat={chat}
-                session={session}
-                now={now}
-                light={light}
-                first={!upper.length && index === 0}
-                onStats={onStats}
-              />
-            ))}
           </div>
-          {lower.length + quiet.length > 0 && (
+          {lower.length > 0 && (
             <ReviewRows zh={zh}>
               <PlaceRows
                 snapshot={snapshot}
@@ -216,34 +232,12 @@ export function SourceSessions({
                 now={now}
                 onStats={onStats}
               />
-              {quiet.map((handoff) => (
-                <QuietRelayRow
-                  key={handoff.id}
-                  handoff={handoff}
-                  now={now}
-                  zh={zh}
-                />
-              ))}
             </ReviewRows>
           )}
-          {!live.length && !replied.length && (
-            <span
-              style={{
-                padding: "6px 6px 8px",
-                fontSize: 12.5,
-                color: inks.tertiary,
-              }}
-            >
-              {desk
-                ? zh
-                  ? "今天还没有对话"
-                  : "No chats today"
-                : zh
-                  ? "没有会话在跑，也没有在等你的"
-                  : "Nothing running, and nothing waiting on you"}
-            </span>
-          )}
         </>
+      )}
+      {!split && !(fold ? upper : live).length && !replied.length && !news && (
+        <NothingYet light={light} chats={Boolean(desk)} />
       )}
       <button
         type="button"

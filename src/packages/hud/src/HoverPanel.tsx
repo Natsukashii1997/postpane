@@ -33,7 +33,6 @@ import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
 import { blockListed, panelHidesTokens } from "./panel/agent-board";
-import { agentVendorName } from "./agent-artwork";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
@@ -60,6 +59,8 @@ export interface SourceHoverPanelProps {
   maxHeight?: number;
   active?: boolean;
   inlineAlert?: ReactNode;
+  /** The agent's requests or replies, listed as what waits on you. */
+  news?: { count: number; content: ReactNode };
 }
 
 /** Default HoverPanelView arrangement. Missing account plans and per-cycle measures remain unknown. */
@@ -78,6 +79,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   maxHeight,
   active = true,
   inlineAlert,
+  news,
 }: SourceHoverPanelProps) {
   const colors = usePanelPalette(light);
   const paper = usePaper();
@@ -320,6 +322,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             showTokens={config.tokenUsage && !tokensAbove}
             active={active}
             split={split}
+            bare={Boolean(focusVendor) && !blocks.length}
+            news={news}
           />
         ),
       },
@@ -397,11 +401,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             </div>
           )}
           {waiting}
-          {focusVendor && !vendorNames.length && (
-            <strong style={{ fontSize: 13, fontWeight: 600 }}>
-              {agentVendorName(focusVendor)}
-            </strong>
-          )}
           {sections.map((section) =>
             section.content ? (
               <div key={section.key} data-hud-section={section.key}>

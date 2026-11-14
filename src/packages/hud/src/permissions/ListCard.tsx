@@ -301,37 +301,3 @@ export function SectionTitle({
     </div>
   );
 }
-
-/** The fold: "还有 n 条", unfolding the rest. */
-export function FoldButton({
-  hidden,
-  onUnfold,
-  inks,
-  zh,
-}: {
-  hidden: number;
-  onUnfold: () => void;
-  inks: Inks;
-  zh: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onUnfold}
-      style={{
-        display: "block",
-        width: "100%",
-        padding: "12px 0 12px 30px",
-        border: 0,
-        borderTop: `1px dotted ${inks.line}`,
-        background: "transparent",
-        color: inks.dim,
-        fontSize: 12.5,
-        textAlign: "left",
-        cursor: "pointer",
-      }}
-    >
-      {zh ? `还有 ${hidden} 条` : `${hidden} more`}
-    </button>
-  );
-}

@@ -308,6 +308,44 @@ const claudeBusy: Scene = {
   }),
 };
 
+const claudeManyAsks: Scene = {
+  key: "claude-many-asks",
+  title: "Claude 有 8 个提问在等你（看「还有 n 条」展开后能「收起」）",
+  snapshot: snapshot({
+    sessions: [
+      ...[
+        "首页 B′ 优化可以定下来吗",
+        "要不要先合并旧分支",
+        "导出按钮放哪",
+        "测试先补哪块",
+        "要不要升级依赖",
+        "日志放哪个目录",
+        "旧接口删不删",
+        "发布放今晚还是明早",
+      ].map((title, index) =>
+        session({
+          place: "claude",
+          id: `c-ask-${index + 1}`,
+          title,
+          state: "waiting",
+          lastAgo: 2 + index * 7,
+          asks: "question",
+        }),
+      ),
+      running[0],
+    ],
+    approvals: Array.from({ length: 8 }, (_, index) =>
+      approval(
+        "claude",
+        `c-ask-${index + 1}`,
+        "question",
+        2 + index * 7,
+        "选哪个？",
+      ),
+    ),
+  }),
+};
+
 const everything: Scene = {
   key: "mixed",
   title: "混合：等你、在跑、接力、出错、刚回复同时存在",
@@ -340,6 +378,7 @@ export const SCENES: readonly Scene[] = [
   replies,
   everything,
   claudeBusy,
+  claudeManyAsks,
 ];
 
 export function scene(key: string): Scene {

@@ -69,25 +69,16 @@ export function sessionReplies(
     .map((each) => each.id);
 }
 
-/** The card's list: newest first, grouped by sidebar section as the waiting
- * list is, the newest open; the owner's own ChatGPT chats under their own
- * heading (#145). */
-export function replyGroups(
-  entries: readonly ApprovalEntry[],
-  limit?: number,
-  zh = true,
-) {
+/** The card's list: newest first in one list, the newest open (owner,
+ * 2026-11-14: no sections). */
+export function replyGroups(entries: readonly ApprovalEntry[], limit?: number) {
   return approvalGroups(
     entries,
     newestReply(entries)?.id ?? null,
     limit,
     newestFirst,
-    (entry) =>
-      entry.kind === "reply" && entry.event.source === "chatgpt"
-        ? zh
-          ? "ChatGPT 对话"
-          : "ChatGPT chats"
-        : entry.session?.section?.trim() || null,
+    // One list, newest first, no sections (owner, 2026-11-14).
+    () => null,
   );
 }
 

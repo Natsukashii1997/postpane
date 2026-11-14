@@ -4,6 +4,7 @@
 // lists them under each place's block, the one-agent panel under its own.
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { WorkSections } from "./WorkSections";
 import type { Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { handoffFor } from "../alerts/handoff-card";
@@ -189,7 +190,8 @@ export function PlaceRows({
   );
 }
 
-/** A sessions list's head: 「正在进行」 over a rule, with its count. */
+/** A section's head: 「等待处理 · n」 or 「正在进行 · n」 and a rule to the
+ * edge, one form on every agent's card (owner, 2026-11-14). */
 export function SessionsHeading({
   light,
   count,
@@ -212,11 +214,11 @@ export function SessionsHeading({
         color: inks.secondary,
       }}
     >
-      <span>{children}</span>
-      <span
-        style={{ flex: 1, borderTop: `1px solid ${inks.divider}`, order: 1 }}
-      />
-      <span style={{ order: 2, letterSpacing: 0, ...tabular }}>{count}</span>
+      <span style={{ whiteSpace: "nowrap" }}>
+        {children} ·{" "}
+        <span style={{ letterSpacing: 0, ...tabular }}>{count}</span>
+      </span>
+      <span style={{ flex: 1, borderTop: `1px solid ${inks.divider}` }} />
     </div>
   );
 }
@@ -249,10 +251,7 @@ export function BlockSessions({
       className="hud-block-sessions"
       style={{ display: "grid", gap: 0, fontSize: 12 }}
     >
-      <SessionsHeading light={light} count={rows.length}>
-        {zh ? "正在进行" : "IN PROGRESS"}
-      </SessionsHeading>
-      <PlaceRows
+      <WorkSections
         snapshot={snapshot}
         entries={rows.filter((entry) => !review(entry))}
         light={light}

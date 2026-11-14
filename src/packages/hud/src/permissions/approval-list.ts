@@ -277,24 +277,3 @@ export function approvalGroups(
     sectioned: groups.some((group) => group.section !== null),
   };
 }
-
-/** The counts in the card's head: ASK and PLAN first, then each permission
- * as it first appears, REPLY last. */
-export function tagCounts(
-  entries: readonly ApprovalEntry[],
-): { badge: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const entry of orderEntries(entries))
-    counts.set(entry.badge, (counts.get(entry.badge) ?? 0) + 1);
-  const rank = (badge: string) =>
-    badge === "ASK"
-      ? 0
-      : badge === "PLAN" || badge === START_BADGE
-        ? 1
-        : badge === REPLY_BADGE
-          ? 3
-          : 2;
-  return [...counts]
-    .map(([badge, count]) => ({ badge, count }))
-    .sort((a, b) => rank(a.badge) - rank(b.badge));
-}

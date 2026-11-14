@@ -74,18 +74,37 @@ export function useBoardBlocks({
       })),
       ...[...new Set(billing.map((account) => account.vendor))]
         .filter((vendor) => !layout.blocks?.[`api:${vendor}`]?.hidden)
-        .map((vendor) => ({
-          key: `api:${vendor}`,
-          content: (
+        .map((vendor) => {
+          // One agent's card with only a balance: its head goes on top, as
+          // on every agent's card (owner, 2026-11-14).
+          const headed = Boolean(focusVendor) && !vendorNames.length;
+          const balances = (
             <SourceBalances
               billing={billing.filter((account) => account.vendor === vendor)}
               layout={layout.blocks?.[`api:${vendor}`]}
               light={light}
               Logo={Logo}
               onStats={onStats}
+              headed={headed}
             />
-          ),
-        })),
+          );
+          return {
+            key: `api:${vendor}`,
+            content: headed ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <BoardHeading
+                  vendor={vendor}
+                  Logo={Logo}
+                  light={light}
+                  handoffs={snapshot.handoffs}
+                />
+                {balances}
+              </div>
+            ) : (
+              balances
+            ),
+          };
+        }),
     ],
     config.panelOrder ?? [],
   );

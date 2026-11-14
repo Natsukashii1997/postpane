@@ -106,8 +106,6 @@ export const HUD_METRICS = {
   notchRadius: 12,
   fallbackRadius: 10,
   panelRadius: 26,
-  agentPanelMinimum: 440,
-  agentPanelInset: 100,
   defaultPanelHeight: 326,
   cardGap: 6,
   cardRadius: 22,
