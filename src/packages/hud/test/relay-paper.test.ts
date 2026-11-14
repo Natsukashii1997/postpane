@@ -33,11 +33,9 @@ test("airmail stripes are toned down to sit with the receipt ink", () => {
 
 test("the airmail stripes never fall on the hole side, docked to any edge", () => {
   for (const edge of ["left", "right", "top", "bottom"] as const) {
-    for (const open of [true, false]) {
-      const sides = airmailSides(edge, open);
-      assert.equal(sides.length, 1, `${edge} ${open}`);
-      assert.notEqual(sides[0], perforatedSide(edge), `${edge} ${open}`);
-    }
+    const sides = airmailSides(edge, true);
+    assert.equal(sides.length, 1, edge);
+    assert.notEqual(sides[0], perforatedSide(edge), edge);
   }
   // The open card keeps its top band, unless docked to the bottom edge,
   // where the holes take the top.
@@ -45,7 +43,11 @@ test("the airmail stripes never fall on the hole side, docked to any edge", () =
   assert.deepEqual(airmailSides("left", true), ["top"]);
   assert.deepEqual(airmailSides("top", true), ["top"]);
   assert.deepEqual(airmailSides("bottom", true), ["bottom"]);
-  // The closed tag along the side facing away from the holes.
-  assert.deepEqual(airmailSides("right", false), ["right"]);
-  assert.deepEqual(airmailSides("bottom", false), ["bottom"]);
+});
+
+test("a folded handoff tag has no airmail band, like the others (owner, 2026-11-14)", () => {
+  // Folded into its tag or narrow slip, the handoff's paper drops the side
+  // band so it stands as the same slip as every other agent's.
+  for (const edge of ["left", "right", "top", "bottom"] as const)
+    assert.deepEqual(airmailSides(edge, false), [], edge);
 });
