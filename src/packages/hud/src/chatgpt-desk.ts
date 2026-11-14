@@ -5,6 +5,7 @@
 import type { Handoff, Session } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { handoffFor, round } from "./alerts/handoff-card.ts";
+import { liveHandoffs } from "./alerts/handoff-doer.ts";
 
 /** A relay left open with its Claude session gone quiet this long is no
  * longer the owner's business on the sidebar. */
@@ -185,12 +186,5 @@ export function quietRelays(
       return handoff ? [handoff.id] : [];
     }),
   );
-  const at = (handoff: Handoff) => handoff.phaseAt || handoff.updatedAt;
-  return handoffs
-    .filter(
-      (handoff) =>
-        (handoff.status === "open" || handoff.status === "opening") &&
-        !shown.has(handoff.id),
-    )
-    .sort((a, b) => at(b) - at(a));
+  return liveHandoffs(handoffs).filter((handoff) => !shown.has(handoff.id));
 }

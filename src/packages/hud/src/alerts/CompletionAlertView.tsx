@@ -29,12 +29,12 @@ import {
   EntryRow,
   FoldButton,
   SEAL_COLUMN,
-  ListHead,
   ListTear,
   SectionTitle,
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
+import { ListHead } from "../permissions/ListHead";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { useHandoffCard } from "./HandoffCard";

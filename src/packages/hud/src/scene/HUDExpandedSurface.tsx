@@ -15,7 +15,7 @@ import type {
 import { HUDArtwork as HUDLogo } from "../HUDArtwork";
 import { CompactAlertView } from "../IslandNews";
 import type { ReplyChip } from "../alerts/reply-list";
-import { RequestDeliveryNotice } from "../permissions/ApprovalContent";
+import { RequestDeliveryNotice } from "../permissions/RequestDeliveryNotice";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
 import { frontTagSwapped } from "./side-tag-stack";
