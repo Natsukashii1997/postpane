@@ -132,3 +132,11 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：第 2 步加两句：一、新测试先单独跑出红并存输出，再写实现；二、性能或动画时长的测量不在隐藏的内置浏览器面板里做，见 L-29 的补充。
 - 证据：L-32；L-29 补充；`evidence/2026-11-09-264-deferred-measure/measure.md`。
 - 状态：待批
+
+## E-15 第 5 步合并清理：请常浩看实物前的 install.sh check 要在删 worktree 之前跑（2026-11-14）
+
+- 步骤：merge-clean
+- 发生了什么：#321 合并后先 `git worktree remove`，再在主目录跑 `install.sh check`，脚本默认拿当前目录的 `target/release/bundle/macos/PostPane.app` 比（主目录那份是 11-09 的旧产物 `3600980d505d`），报「不一致：已被别的会话覆盖」，其实已装的就是本轮的 `f67b71c33021`。
+- 建议：第 5 步「合并后马上清」前加一句：删 worktree 之前先在这个 worktree 里跑一次 `install.sh check`；已经删了的，用 `install.sh check <证据目录>/…` 不行（证据里只有旧版备份），改为核对 `shasum /Applications/PostPane.app/Contents/MacOS/PostPane` 与装机时打印的「已装」值。
+- 证据：本轮会话；`evidence/2026-11-14-321-running-grid/`；PR #322。
+- 状态：待批
