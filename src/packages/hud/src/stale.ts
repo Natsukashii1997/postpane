@@ -14,3 +14,8 @@ export function isStale(
     requests.every((request) => request.stale === true)
   );
 }
+
+/** Running, or waiting on a request not 「待核对」: work in flight. */
+export const isBusy = (session: Pick<Session, "state" | "liveFacts">) =>
+  session.state === "running" ||
+  (session.state === "waiting" && !isStale(session));

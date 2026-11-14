@@ -17,12 +17,8 @@ import { ApprovalTag } from "../permissions/ApprovalTag";
 import { noButtonChrome, tabular, type Logo } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
-import {
-  liveSessionLine,
-  liveSessions,
-  stoppedCount,
-  type LiveSession,
-} from "./agent-board";
+import { liveSessions, stoppedCount, type LiveSession } from "./agent-board";
+import { liveSessionLine } from "./live-line";
 import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";

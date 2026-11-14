@@ -1,6 +1,6 @@
-import type { Session, SessionLiveFacts, Snapshot } from "@agent-hud/protocol";
+import type { Snapshot } from "@agent-hud/protocol";
 import { vendorKey, vendorsFromSnapshot } from "../model";
-import { isStale } from "../stale.ts";
+import { factsOf, time, type Facts, type Request } from "./session-facts";
 import {
   botState,
   eventRank,
@@ -17,20 +17,6 @@ import {
 export interface Direction {
   state: BotState;
   cue: { event: BotEvent; at: number } | null;
-}
-interface Request {
-  id: string;
-  sessionId: string;
-  kind: "permission" | "question" | "plan";
-  at: number;
-}
-interface Facts {
-  id: string;
-  phase: Session["state"];
-  live: SessionLiveFacts | null;
-  observedAt: number;
-  lastEventAt: number;
-  requests: Request[];
 }
 interface QueueMark {
   key: string;
@@ -58,11 +44,6 @@ interface Mark {
   ended: Map<string, number>;
   cue: Direction["cue"];
 }
-const time = (date: string | null | undefined): number | null => {
-  if (!date) return null;
-  const value = Date.parse(date) / 1000;
-  return Number.isFinite(value) ? value : null;
-};
 const inflight = (session: Facts) =>
   session.phase === "running" || session.phase === "waiting";
 const started = (session: Facts) => time(session.live?.turnStartedAt);
@@ -227,27 +208,7 @@ export function botQueue(
           (time(session.liveFacts?.lastEventAt ?? session.updatedAt) ?? 0) >=
           now - 86400,
       )
-      .map((session) => {
-        const live = session.liveFacts ?? null;
-        const ownRequests = (live?.requests ?? []).map((item) => ({
-          ...item,
-          at: time(item.at) ?? 0,
-        }));
-        for (const request of requests.filter(
-          (item) => item.sessionId === session.id,
-        ))
-          if (!ownRequests.some((item) => item.id === request.id))
-            ownRequests.push(request);
-        return {
-          id: session.id,
-          // 「待核对」 is no call for the bot to come looking (ADR-0001).
-          phase: isStale(session) ? "idle" : session.state,
-          live,
-          observedAt: time(live?.observedAt ?? session.updatedAt) ?? 0,
-          lastEventAt: time(live?.lastEventAt ?? session.updatedAt) ?? 0,
-          requests: ownRequests,
-        };
-      });
+      .map((session) => factsOf(session, requests));
     const merged = [
       ...new Map(
         [...requests, ...sessions.flatMap((session) => session.requests)].map(

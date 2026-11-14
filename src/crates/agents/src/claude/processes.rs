@@ -168,10 +168,8 @@ impl ClaudeProcesses {
             changed |= self.gone.remove(session).is_some();
         }
         self.held = held;
-        // Past an hour the transcript's own half hour has settled a session
-        // whose file went; one a dead file still names stays gone.
-        self.gone
-            .retain(|session, at| now - *at < 3_600_000 || dead.contains(session));
+        // A gone session stays gone until a process holds it again: a request
+        // its log left open never lapses on its own (ADR 0001).
         changed
     }
 
