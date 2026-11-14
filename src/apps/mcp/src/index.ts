@@ -6,6 +6,7 @@ import {
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { EngineClient } from "@agent-hud/engine-client";
+import { relayDescription, relayInput } from "./relay.ts";
 import type { Snapshot } from "@agent-hud/protocol";
 
 const engine = new EngineClient(undefined, "app");
@@ -496,63 +497,18 @@ serveStdio(() => {
   server.registerTool(
     "relay_to_chatgpt",
     {
-      description: [
-        "把这次的工作交给 ChatGPT 审核：驿窗经 Chrome 插件把 brief 送进 chatgpt.com。同一个 Claude Code 或 Codex 会话第一次调用会新开一个 ChatGPT 审核会话（放进驿窗设置里的项目），之后再调用就接着发进同一个会话。调用后立即返回；ChatGPT 的回复出现在驿窗侧栏；回信写「需修改」且审查预算没用完时，驿窗会自动把意见转回这个会话（自动往返），写「通过」时也把回信（含非阻断意见）转回这个会话，写明是终局、不用再送审，然后结束接力；预算用完、没写结论或认不出审查出口时，同样把回信转回这个会话，写明交常浩决定，然后停下。同样的 brief 刚送到、还没回信时不会再送一次。",
-        "工程审查按风险级给预算（risk 参数，首次送审时填）：L1 审 1 轮（「需修改」转回你改完，在 PR 写「补改未复审」收口），L2、L3 最多 2 轮，不填按 2 轮；L0 只做机械检查，不送审。同一个 PR 的审查跨会话累计，另开一单也不清零。预算用完后，只有常浩明确要求再审时才能再送，并在 extra 里写明谁授权、为什么。",
-        "ChatGPT 读不到本机文件，brief 要自己写全：",
-        "1. 第一行写任务名和风险级，然后写任务目标；",
-        "2. 改了什么、为什么这样改；",
-        "3. 分支名和 PR 链接（ChatGPT 装了 GitHub 连接器，能自己打开 PR）；被审的 PR 链接要是 brief 里第一个出现的 PR 链接；",
-        "4. 改动本身：git diff 原文；太长就写摘要 + 关键片段，完整改动让它看 PR；",
-        "5. 希望重点看哪里；",
-        "6. 请 ChatGPT 按严重程度列问题，回信最后两行依次写「审查出口：通过 / 返修 / 证据不足暂停 / 决策升级」和「结论：通过 / 需修改」（通过配通过，其余配需修改）。",
-      ].join("\n"),
-      inputSchema: z
-        .object({
-          title: z
-            .string()
-            .min(1)
-            .describe("任务名，驿窗用它标记这次接力，例如「驿窗｜接力 1c」。"),
-          summary: z
-            .string()
-            .max(120)
-            .optional()
-            .describe(
-              "一句话写这一轮做了什么，显示在驿窗接力卡的时间线上，例如「改了 6 个文件 · 测试全过」。",
-            ),
-          brief: z
-            .string()
-            .min(1)
-            .describe("发给 ChatGPT 的完整交代，按工具说明的六项写。"),
-          risk: z
-            .enum(["L0", "L1", "L2", "L3"])
-            .optional()
-            .describe(
-              "工程审查的风险级（首次送审时填）：L1 小范围低风险代码，审 1 轮；L2 标准研发，最多 2 轮；L3 身份、安全、持久状态、正式系统，最多 2 轮并要常浩授权；L0 不改变代码行为的文档会被拒收。思维评审不填。",
-            ),
-          extra: z
-            .string()
-            .max(200)
-            .optional()
-            .describe(
-              "只在审查预算用完、常浩明确要求再审一次时填：写明谁授权、为什么，例如「常浩要求再审一次：第 2 轮仍有 P1 未确认」。没有授权不要填。",
-            ),
-          launch: z
-            .string()
-            .max(40)
-            .optional()
-            .describe(
-              "驿窗左滑发来的请求里写的编号（「L」开头）；照填，驿窗靠它认出这次左滑已经办了。不是左滑发来的就不填。",
-            ),
-        })
-        .strict(),
+      description: relayDescription,
+      inputSchema: z.object(relayInput).strict(),
       annotations: {
         ...localWrite,
         idempotentHint: false,
         openWorldHint: true,
       },
     },
-    async ({ title, summary, brief, risk, extra, launch }, context) => {
+    async (
+      { title, summary, brief, risk, head, chain, extra, launch },
+      context,
+    ) => {
       const named = caller(
         context.mcpReq._meta as Record<string, unknown> | undefined,
       );
@@ -565,6 +521,8 @@ serveStdio(() => {
               summary,
               brief,
               risk,
+              head,
+              chain,
               extra,
               launch,
               caller: named,

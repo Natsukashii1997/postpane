@@ -12,9 +12,17 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+mod chain;
 mod doer;
+mod gate;
+mod gate_io;
 mod pull_request;
+pub use chain::{chain_id, Earlier};
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
+pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
+pub use gate_io::{
+    archive, head_in, ledger, review_limit, reviewed_commit, same_commit, set_review_limit,
+};
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 
@@ -23,8 +31,6 @@ pub const KEEP: usize = 200;
 /// How long a review conversation may take to open before it counts as
 /// failed: the channel's own wait (90 s) and some slack.
 pub const OPEN_TIMEOUT_MS: i64 = 120_000;
-/// How many reviews a handoff is meant to take; more are allowed.
-pub const ROUNDS: u32 = 2;
 /// How long the auto round trip waits for ChatGPT's answer before it hands
 /// the handoff back to the person (#72).
 pub const REPLY_WAIT_MS: i64 = 30 * 60 * 1000;
@@ -81,8 +87,8 @@ pub enum Verdict {
     Revise,
 }
 
-/// An engineering review's risk level (#217, multi-agent MA-02): it sets
-/// how many reviews the handoff gets. L0 is not sent for review at all.
+/// An engineering review's risk level (#217, multi-agent MA-02): what the
+/// review asks for, not how many it gets (#347). L0 is not sent at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Risk {
     L1,
@@ -98,13 +104,6 @@ impl Risk {
             "L2" => Some(Self::L2),
             "L3" => Some(Self::L3),
             _ => None,
-        }
-    }
-    /// The reviews it gets: L1 one, L2 and L3 `ROUNDS`.
-    pub fn reviews(self) -> u32 {
-        match self {
-            Self::L1 => 1,
-            Self::L2 | Self::L3 => ROUNDS,
         }
     }
 }
@@ -147,6 +146,8 @@ pub enum StepKind {
     /// The Claude session's process had stopped, so PostPane ran Claude Code
     /// for it in the background with the words back (`text` says why, L-14).
     Wake,
+    /// PostPane asked ChatGPT to mend only its answer's last lines (#347).
+    Format,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -299,6 +300,9 @@ pub struct Handoff {
     /// the words back (`Wake`), until it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waking_since: Option<i64>,
+    /// The review gate's own (#347): cap, chain, commit, notice.
+    #[serde(default, flatten)]
+    pub gate: Gate,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -316,7 +320,8 @@ pub enum Next {
     Back,
     /// 「结论：通过」: back to Claude, then the handoff ends.
     Pass,
-    /// 「需修改」 after the last round: back to Claude, then the person decides.
+    /// No pass by the last review the person's leave gives (#347): back to
+    /// Claude, then the person steps in.
     Limit,
     /// No verdict written: back to Claude, then the person decides.
     NoVerdict,
@@ -329,9 +334,12 @@ pub enum Next {
     /// 思维评审 whose last two lines do not hold: back to Claude, then the
     /// person decides.
     Invalid(Flaw),
-    /// L1 「需修改」 with its one review used (#217): back to Claude to fix
-    /// it and close without another review, then the handoff ends.
-    Settle,
+    /// The answer's last lines do not hold, and were not mended yet
+    /// (#347): PostPane asks ChatGPT once to mend them.
+    Format,
+    /// A pass of another commit than the one under review (#347): back to
+    /// Claude, then the auto round trip stops.
+    Stale,
     /// An engineering answer whose 「审查出口」 does not go with its
     /// verdict (#217): back to Claude, then the person decides.
     BadTail(Flaw),
@@ -376,6 +384,8 @@ pub enum Flaw {
     UnknownExit,
     /// The way out and the verdict do not go together.
     Mismatch,
+    /// A pass with no 「受审版本」 line, when a commit is under review (#347).
+    NoVersion,
 }
 
 impl Handoff {
@@ -439,92 +449,10 @@ impl Handoff {
     }
     /// What the newest answer comes to, on or off: what the auto round trip
     /// does with it, and what words back to Claude say of it, by hand too
-    /// (#316: the same words either way, so they go once).
+    /// (#316: the same words either way, so they go once). The review gate
+    /// decides (#347, `gate.rs`).
     pub fn outcome(&self) -> Next {
-        let reply = self
-            .last_reply()
-            .and_then(|step| step.text.as_deref())
-            .unwrap_or_default();
-        // 思维评审 (#209): only its last two lines count.
-        if self.thinking() {
-            return match exit(reply) {
-                Ok(Exit::Mature | Exit::OtherPath) => Next::Close,
-                Ok(Exit::Deepen) if self.rounds_used() < ROUNDS => Next::Back,
-                Ok(Exit::Deepen) => Next::Limit,
-                Ok(Exit::NeedEvidence) => Next::Pause,
-                Ok(Exit::Escalate) => Next::Escalate,
-                Err(flaw) => Next::Invalid(flaw),
-            };
-        }
-        // 「审查出口」 (#217), when the answer wrote one; else the verdict alone.
-        let way = match review_exit(reply) {
-            Ok(way) => way,
-            Err(flaw) => return Next::BadTail(flaw),
-        };
-        let verdict = match way {
-            Some(Review::Pass) => Some(Verdict::Pass),
-            Some(_) => Some(Verdict::Revise),
-            None => self.last_reply().and_then(|step| step.verdict),
-        };
-        match (way, verdict) {
-            (_, Some(Verdict::Pass)) => Next::Pass,
-            (Some(Review::NeedEvidence), _) => Next::Pause,
-            (Some(Review::Escalate), _) => Next::Escalate,
-            (_, Some(Verdict::Revise)) if self.counted() < self.budget() => Next::Back,
-            (_, Some(Verdict::Revise)) if self.risk == Some(Risk::L1) => Next::Settle,
-            (_, Some(Verdict::Revise)) => Next::Limit,
-            _ => Next::NoVerdict,
-        }
-    }
-    /// The reviews an engineering handoff gets (#217): by its risk level,
-    /// `ROUNDS` when it named none, plus those the person allowed past it.
-    /// A 思维评审 gets `ROUNDS`.
-    pub fn budget(&self) -> u32 {
-        if self.thinking() {
-            return ROUNDS;
-        }
-        self.risk.map_or(ROUNDS, Risk::reviews) + self.extra
-    }
-    /// Reviews that count against `budget`: those of the same pull request
-    /// in earlier handoffs, and this one's that were answered (#217) — more
-    /// words sent before an answer are the same review. Not those that
-    /// paused for evidence. A 思维评审 counts as `rounds_used`.
-    pub fn counted(&self) -> u32 {
-        if self.thinking() {
-            return self.rounds_used();
-        }
-        let answered = self
-            .chain()
-            .iter()
-            .filter(|step| step.kind == StepKind::Reply)
-            .count() as u32;
-        let paused = self
-            .chain()
-            .iter()
-            .filter(|step| step.kind == StepKind::Resume && step.auto)
-            .count() as u32;
-        // Rounds that began again (#258) leave the carried ones behind.
-        let carried = if self.rounds_from == 0 {
-            self.carried
-        } else {
-            0
-        };
-        carried + answered.saturating_sub(paused)
-    }
-    /// No review is left for it (#217): another needs the person's leave.
-    pub fn spent(&self) -> bool {
-        self.counted() >= self.budget()
-    }
-    /// Reviews that count toward `ROUNDS`: for a 思维评审, not the ones
-    /// that paused for evidence (#209) — each left an auto 「resume」 when
-    /// Claude came back with it (`Book::evidence_in`).
-    pub fn rounds_used(&self) -> u32 {
-        let paused = self
-            .chain()
-            .iter()
-            .filter(|step| step.kind == StepKind::Resume && step.auto)
-            .count() as u32;
-        self.reviews().saturating_sub(paused)
+        self.decide()
     }
     /// A 思维评审 paused for evidence (#209): its answer, 证据不足暂停, went
     /// back to Claude and the auto round trip stopped itself after it — not
@@ -709,6 +637,7 @@ impl Book {
             extra: 0,
             rounds_from: 0,
             waking_since: None,
+            gate: Gate::default(),
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -908,8 +837,21 @@ impl Book {
         }) {
             return false;
         }
-        for step in &mut handoff.steps {
-            if step.kind == StepKind::Reply {
+        // One being mended (#347) stays whole: it goes back with the mending.
+        let keep = handoff
+            .steps
+            .iter()
+            .rev()
+            .find(|s| matches!(s.kind, StepKind::Ask | StepKind::Format))
+            .filter(|s| s.kind == StepKind::Format)
+            .and_then(|_| {
+                handoff
+                    .steps
+                    .iter()
+                    .rposition(|s| s.kind == StepKind::Reply)
+            });
+        for (at, step) in handoff.steps.iter_mut().enumerate() {
+            if step.kind == StepKind::Reply && Some(at) != keep {
                 if let Some(text) = &mut step.text {
                     *text = excerpt(text, EXCERPT);
                 }
@@ -1179,51 +1121,49 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// Reviews of pull request `pr` that a new handoff carries on (#217):
-    /// the newest earlier handoff of it, unless that one passed.
-    pub fn carried_for(&self, pr: &str) -> Option<(String, u32)> {
-        let last = self
-            .list
-            .iter()
-            .rev()
-            .find(|handoff| handoff.pr.as_deref() == Some(pr) && !handoff.thinking())?;
-        let passed = last.last_reply().and_then(|step| step.verdict) == Some(Verdict::Pass);
-        (!passed).then(|| (last.id.clone(), last.counted()))
-    }
-    /// Reviews counted against handoff `id`'s budget, its pull request's
-    /// newer handoffs included (#217): a session going on with its own
-    /// handoff after another session reviewed the same pull request sees
-    /// those reviews too.
+    /// Reviews counted against handoff `id`'s cap, its chain's newer
+    /// handoffs included (#217): a session going on with its own handoff
+    /// after another session reviewed the same chain sees those too.
     pub fn pr_counted(&self, id: &str) -> u32 {
         let Some(handoff) = self.get(id) else {
             return 0;
         };
-        let newest = handoff
-            .pr
-            .as_deref()
-            .and_then(|pr| self.carried_for(pr))
-            .map_or(0, |(_, count)| count);
-        handoff.counted().max(newest)
+        let newest = self.earlier(id, handoff.pr.as_deref(), handoff.gate.chain.as_deref());
+        handoff.counted().max(newest.map_or(0, |e| e.period))
     }
-    /// Sets a new engineering handoff's risk level and pull request (#217);
-    /// reviews of the pull request in an earlier handoff count on, and its
-    /// first step says so.
-    pub fn rule(&mut self, id: &str, risk: Option<Risk>, pr: Option<&str>) -> bool {
-        let carried = pr.and_then(|pr| self.carried_for(pr).filter(|(earlier, _)| earlier != id));
+    /// Sets a new engineering handoff's risk level, pull request and review
+    /// chain (#217, #347): `chain` named, or the pull request's earlier
+    /// one; their reviews count on, and its first step says so.
+    pub fn rule(
+        &mut self,
+        id: &str,
+        risk: Option<Risk>,
+        pr: Option<&str>,
+        chain: Option<&str>,
+    ) -> bool {
+        let earlier = self.earlier(id, pr, chain);
         let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
             return false;
         };
         handoff.risk = risk;
         handoff.pr = pr.map(str::to_owned);
+        let joined = earlier
+            .as_ref()
+            .map_or_else(|| chain::chain_id(id), |e| e.chain.clone());
+        handoff.gate.chain = Some(joined.clone());
         let mut notes = vec![];
         if let Some(risk) = risk {
             notes.push(format!("{risk:?}"));
         }
-        if let Some((earlier, count)) = carried.filter(|(_, count)| *count > 0) {
-            handoff.carried = count;
+        if let Some(e) = earlier.filter(|e| e.total > 0) {
+            handoff.carried = e.period;
+            handoff.gate.chain_carried = e.total;
             notes.push(l10n::text(
-                &format!("续审 · 原单 {earlier} · 已审 {count} 次"),
-                &format!("Follow-up · first handoff {earlier} · {count} reviewed"),
+                &format!("续审 · 原单 {} · 审查链 {joined} 已审 {} 次", e.id, e.total),
+                &format!(
+                    "Follow-up · first handoff {} · chain {joined}, {} reviewed",
+                    e.id, e.total
+                ),
             ));
         }
         if let Some(first) = handoff.steps.first_mut().filter(|_| !notes.is_empty()) {
@@ -1240,7 +1180,9 @@ impl Book {
         let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
             return false;
         };
+        // A new leave (#347): its reviews count from one again.
         handoff.extra += 1;
+        handoff.rounds_from = handoff.steps.len();
         handoff.auto = true;
         handoff.halt = None;
         handoff.phase_at = now;
@@ -1525,9 +1467,8 @@ pub fn project(data: &Path) -> Option<String> {
 /// Sets (or, with an empty text, clears) the project; the saved address.
 pub fn set_project(data: &Path, text: &str) -> Result<Option<String>, String> {
     let project = project_url(text)?;
-    let bytes = serde_json::to_vec_pretty(&serde_json::json!({ "project": project }))
-        .map_err(|_| "Project unavailable")?;
-    write_private(data, "config", &bytes, &config_path(data))
+    // The other settings, the review cap among them (#347), stay.
+    gate_io::set_config(data, "project", serde_json::json!(project))
         .map_err(|_| l10n::text("项目没能保存", "The project could not be saved"))?;
     Ok(project)
 }
@@ -1752,13 +1693,13 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         assert!(book.stop(&id, "驿窗重启，自动往返先暂停", true, 3));
-        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        book.replied("c1", "都改好了\n审查出口：通过\n结论：通过", Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pass));
         // A revise with it off still waits for the person.
         let mut book = Book::default();
         let id = asked_once(&mut book);
         assert!(book.stop(&id, "停", true, 3));
-        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        book.replied("c1", FIX, Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), None);
     }
 
@@ -1766,10 +1707,11 @@ mod tests {
     fn the_auto_round_trip_sends_back_a_revise_ends_at_a_pass_and_stops_at_the_limit() {
         let mut book = Book::default();
         let id = asked_once(&mut book);
+        assert!(book.set_limit(&id, 2));
         let kept = book.get(&id).unwrap();
         assert!(kept.auto, "a new handoff goes round by itself");
         assert_eq!(kept.next(), None, "nothing to do before an answer");
-        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        book.replied("c1", FIX, Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Back));
         assert!(book.returned(&id, StepKind::Back, "意见", "p", true, 5));
         let back = book.get(&id).unwrap().steps.last().unwrap().clone();
@@ -1777,7 +1719,12 @@ mod tests {
         assert_eq!(book.get(&id).unwrap().next(), None);
         // Round 2 still needs changes: the last round, the person decides.
         book.asked(&id, Some("按意见改完"), "第二轮", 6);
-        book.replied("c1", "1. 还差一点\n结论：需修改", Some("m2"), 7);
+        book.replied(
+            "c1",
+            "1. 还差一点\n审查出口：返修\n结论：需修改",
+            Some("m2"),
+            7,
+        );
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Limit));
         assert!(book.stop(&id, "已审 2 轮仍需修改", true, 8));
         let kept = book.get(&id).unwrap();
@@ -1795,7 +1742,7 @@ mod tests {
         // A pass ends it; no verdict leaves it to the person.
         let mut book = Book::default();
         let id = asked_once(&mut book);
-        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        book.replied("c1", "都改好了\n审查出口：通过\n结论：通过", Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Pass));
         assert!(book.passed(&id, "通过", 5));
         let ended = book.get(&id).unwrap();
@@ -1804,6 +1751,9 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         book.replied("c1", "我看了一下，挺好的", Some("m1"), 4);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Format));
+        assert!(book.format_asked(&id, "请补写末尾几行", 5));
+        book.replied("c1", "还是挺好的", Some("m2"), 6);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::NoVerdict));
     }
 
@@ -2046,33 +1996,36 @@ mod tests {
     fn ruled(book: &mut Book, session: &str, risk: Option<Risk>, pr: Option<&str>) -> String {
         let conversation = format!("c-{session}");
         let handoff = book.begin(session, None, "修登录", None, "请审核", 1);
-        assert!(book.rule(&handoff.id, risk, pr));
+        assert!(book.rule(&handoff.id, risk, pr, None));
         book.opened(&handoff.id, &conversation, 2);
         handoff.id
     }
 
+    /// An engineering answer to revise, with its way out (#217).
+    const FIX: &str = "1. 要超时\n审查出口：返修\n结论：需修改";
+
     #[test]
-    fn the_risk_level_sets_the_budget_and_l1_settles_after_one_review() {
+    fn the_risk_level_no_longer_sets_the_cap_and_l1_reviews_its_fix_again() {
         assert_eq!(Risk::parse(" l1 "), Some(Risk::L1));
         assert_eq!(Risk::parse("L3"), Some(Risk::L3));
         assert_eq!(Risk::parse("L0"), None, "L0 is not sent for review");
         let mut book = Book::default();
         let id = ruled(&mut book, "s1", Some(Risk::L1), None);
         let kept = book.get(&id).unwrap();
-        assert_eq!(kept.budget(), 1);
+        assert_eq!(kept.budget(), LIMIT, "one cap for every level (#347)");
         assert!(kept.steps[0].text.as_deref().unwrap().starts_with("L1"));
-        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
-        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Settle));
-        // L2 and none named get `ROUNDS`; a 思维评审 is not ruled at all.
-        let id = ruled(&mut book, "s2", Some(Risk::L2), None);
-        assert_eq!(book.get(&id).unwrap().budget(), ROUNDS);
-        book.replied("c-s2", "1. 要超时\n结论：需修改", Some("m2"), 3);
-        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Back));
-        let id = ruled(&mut book, "s3", None, None);
-        assert_eq!(book.get(&id).unwrap().budget(), ROUNDS);
+        assert_eq!(kept.gate.chain.as_deref(), Some(chain_id(&id).as_str()));
+        book.replied("c-s1", FIX, Some("m1"), 3);
+        assert_eq!(
+            book.get(&id).unwrap().next(),
+            Some(Next::Back),
+            "fixed, then reviewed"
+        );
+        assert!(book.set_limit(&id, 3));
+        assert_eq!(book.get(&id).unwrap().budget(), 3);
         let thinking = book.begin("s4", None, "思维评审｜驿窗｜预算", None, "b", 1);
-        assert!(!book.rule(&thinking.id, Some(Risk::L1), Some("a/b#1")));
-        assert_eq!(book.get(&thinking.id).unwrap().budget(), ROUNDS);
+        assert!(!book.rule(&thinking.id, Some(Risk::L1), Some("a/b#1"), None));
+        assert_eq!(book.get(&thinking.id).unwrap().budget(), LIMIT);
     }
 
     #[test]
@@ -2137,7 +2090,7 @@ mod tests {
         assert!(book.stop(&id, "证据不足暂停", true, 5));
         assert!(book.get(&id).unwrap().waits_for_evidence());
         assert!(book.evidence_in(&id, 6));
-        assert_eq!(book.get(&id).unwrap().counted(), 0);
+        assert_eq!(book.get(&id).unwrap().counted(), 1, "a pause counts (#347)");
         let id = ruled(&mut book, "s2", Some(Risk::L2), None);
         book.replied(
             "c-s2",
@@ -2148,10 +2101,13 @@ mod tests {
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Escalate));
         let id = ruled(&mut book, "s3", Some(Risk::L2), None);
         book.replied("c-s3", "审查出口：通过\n结论：需修改", Some("m3"), 3);
-        assert_eq!(
-            book.get(&id).unwrap().next(),
-            Some(Next::BadTail(Flaw::Mismatch))
-        );
+        // Asked once to mend its last lines (#347), not counted; still off.
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Format));
+        assert!(book.format_asked(&id, "请补写末尾几行", 4));
+        book.replied("c-s3", "审查出口：通过\n结论：需修改", Some("m3b"), 5);
+        let kept = book.get(&id).unwrap();
+        assert!(kept.mended() && kept.counted() == 1);
+        assert_eq!(kept.next(), Some(Next::BadTail(Flaw::Mismatch)));
         assert!(book.stop(&id, "停", false, 4));
         assert_eq!(book.get(&id).unwrap().next(), None, "the person decides");
         // A way out of 通过 ends it, as a pass does.
@@ -2172,37 +2128,44 @@ mod tests {
         assert_eq!(pull_request("没有链接"), None);
         let mut book = Book::default();
         let first = ruled(&mut book, "s1", Some(Risk::L2), Some("a/b#4"));
-        book.replied("c-s1", "1. 原子写入\n结论：需修改", Some("m1"), 3);
-        // Round 2 from another Claude session (SBX-8): it carries round 1.
+        book.replied("c-s1", FIX, Some("m1"), 3);
+        // Round 2 from another Claude session (SBX-8): it carries round 1,
+        // and goes on the same review chain (#347).
         let second = ruled(&mut book, "s2", Some(Risk::L2), Some("a/b#4"));
         let kept = book.get(&second).unwrap();
-        assert_eq!((kept.carried, kept.counted()), (1, 1));
+        assert_eq!((kept.carried, kept.counted(), kept.total()), (1, 1, 1));
+        assert_eq!(kept.gate.chain, book.get(&first).unwrap().gate.chain);
         assert!(kept.steps[0].text.as_deref().unwrap().contains(&first));
-        book.replied("c-s2", "1. 还差\n结论：需修改", Some("m2"), 3);
-        assert_eq!(book.get(&second).unwrap().next(), Some(Next::Limit));
-        assert!(book.get(&second).unwrap().spent());
-        // A third handoff starts spent; a passed one carries nothing on.
-        assert_eq!(book.carried_for("a/b#4"), Some((second.clone(), 2)));
+        book.replied("c-s2", FIX, Some("m2"), 3);
+        assert_eq!(book.get(&second).unwrap().next(), Some(Next::Back));
+        assert_eq!(
+            book.earlier("", Some("a/b#4"), None)
+                .map(|e| (e.id, e.period)),
+            Some((second.clone(), 2))
+        );
+        // A passed one carries nothing on by its pull request.
         let other = ruled(&mut book, "s3", None, Some("a/b#9"));
-        book.replied("c-s3", "结论：通过", Some("m3"), 3);
+        book.replied("c-s3", "审查出口：通过\n结论：通过", Some("m3"), 3);
         assert_eq!(book.get(&other).unwrap().next(), Some(Next::Pass));
-        assert_eq!(book.carried_for("a/b#9"), None);
-        assert_eq!(book.carried_for("a/b#1"), None);
+        assert!(book.earlier("", Some("a/b#9"), None).is_none());
+        assert!(book.earlier("", Some("a/b#1"), None).is_none());
         // The first session going on with its own handoff sees round 2.
         assert_eq!(book.get(&first).unwrap().counted(), 1);
         assert_eq!(book.pr_counted(&first), 2);
     }
 
     #[test]
-    fn the_person_may_allow_one_review_past_the_budget() {
+    fn the_persons_leave_begins_the_rounds_again() {
         let mut book = Book::default();
         let id = ruled(&mut book, "s1", Some(Risk::L1), None);
-        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
+        assert!(book.set_limit(&id, 1));
+        book.replied("c-s1", FIX, Some("m1"), 3);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Limit));
         assert!(book.stop(&id, "停", true, 4));
         assert!(book.get(&id).unwrap().spent());
         assert!(book.allow_extra(&id, "常浩要求再审一次：P1 未确认", 5));
         let kept = book.get(&id).unwrap();
-        assert_eq!((kept.budget(), kept.extra), (2, 1));
+        assert_eq!((kept.counted(), kept.total(), kept.extra), (0, 1, 1));
         assert!(kept.auto && kept.halt.is_none());
         assert!(!kept.spent());
         let said = kept.steps.last().unwrap().text.clone().unwrap();
@@ -2221,7 +2184,7 @@ mod tests {
         let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1, reasons.2);
         let mut book = Book::default();
         let id = ruled(&mut book, "s1", Some(Risk::L2), None);
-        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
+        book.replied("c-s1", FIX, Some("m1"), 3);
         book.returned(&id, StepKind::Back, "意见", "p", true, 4);
         book.queued(&id, 4);
         assert!(book.stop(&id, "停", true, 5));
@@ -2280,7 +2243,7 @@ mod tests {
     fn words_back_keep_one_id_until_the_plugin_gives_them_up() {
         let mut book = Book::default();
         let id = asked_once(&mut book);
-        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        book.replied("c1", FIX, Some("m1"), 4);
         let handoff = book.get(&id).unwrap();
         let prompt = handoff.prompt_for(StepKind::Back);
         assert!(crate::claude_plugin::valid_name(&prompt), "{prompt}");
@@ -2302,7 +2265,7 @@ mod tests {
         // under a new id.
         let mut book = Book::default();
         let id = asked_once(&mut book);
-        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        book.replied("c1", FIX, Some("m1"), 4);
         let prompt = book.get(&id).unwrap().prompt_for(StepKind::Back);
         book.returned(&id, StepKind::Back, "意见", &prompt, true, 5);
         book.queued(&id, 5);
@@ -2328,7 +2291,8 @@ mod tests {
         use crate::claude_plugin::Opener;
         let mut book = Book::default();
         let id = asked_once(&mut book);
-        book.replied("c1", "1. 要超时\n结论：需修改", Some("m1"), 4);
+        assert!(book.set_limit(&id, 2));
+        book.replied("c1", FIX, Some("m1"), 4);
         let prompt = book.get(&id).unwrap().prompt_for(StepKind::Back);
         book.returned(&id, StepKind::Back, "意见全文", &prompt, true, 5);
         let handoff = book.get(&id).unwrap();
@@ -2343,14 +2307,24 @@ mod tests {
             !book.get(&id).unwrap().spoke_up(Some(&(Opener::Person, 6))),
             "the same turn handing over again"
         );
-        book.replied("c1", "1. 还差一点\n结论：需修改", Some("m2"), 8);
+        book.replied(
+            "c1",
+            "1. 还差一点\n审查出口：返修\n结论：需修改",
+            Some("m2"),
+            8,
+        );
         let kept = book.get(&id).unwrap();
         assert_eq!(kept.counted(), 1);
         assert_eq!(kept.next(), Some(Next::Back), "counted from one");
         let prompt = kept.prompt_for(StepKind::Back);
         book.returned(&id, StepKind::Back, "意见二", &prompt, true, 9);
         book.asked(&id, None, "第三轮", 10);
-        book.replied("c1", "1. 还有\n结论：需修改", Some("m3"), 11);
+        book.replied(
+            "c1",
+            "1. 还有\n审查出口：返修\n结论：需修改",
+            Some("m3"),
+            11,
+        );
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::Limit));
     }
 }

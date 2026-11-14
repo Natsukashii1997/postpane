@@ -174,8 +174,8 @@ export function AiAccessPane({
               [
                 t("Reads", "读"),
                 t(
-                  "What Claude or Codex hands over: its summary and the change. ChatGPT cannot read files on this computer. PostPane also reads the end of the Claude or Codex session's transcript, only to see who began its current turn (rounds count again once you spoke up) and how the words sent back stand (queued, taken, started).",
-                  "Claude 或 Codex 交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读 Claude 或 Codex 会话记录末尾，只看当前这一轮是谁开的头（你插话就重算轮数），并读回信的送达状态（排队中 / 已领取 / 已开始）",
+                  "What Claude or Codex hands over: its summary and the change. ChatGPT cannot read files on this computer. PostPane also reads the end of the Claude or Codex session's transcript, only to see who began its current turn (rounds count again once you spoke up) and how the words sent back stand (queued, taken, started). Before a pass ends a handoff, it reads its pull request's current commit with git ls-remote and your own git credentials (#347).",
+                  "Claude 或 Codex 交来的说明和改动摘要；ChatGPT 读不到本机文件。驿窗另读 Claude 或 Codex 会话记录末尾，只看当前这一轮是谁开的头（你插话就重算轮数），并读回信的送达状态（排队中 / 已领取 / 已开始）。按通过结束前，用本机 git ls-remote（你的 git 凭据）回读 PR 当前提交（#347）",
                 ),
               ],
               [
@@ -183,8 +183,8 @@ export function AiAccessPane({
                 <>
                   {path("app.postpane.mac/chatgpt/handoffs.json")}
                   {t(
-                    "; replies go back to the Claude or Codex session that started it",
-                    "；回信转回发起的那个 Claude 或 Codex 会话",
+                    "; every answer in full under chatgpt/replies/, the review cap in chatgpt/config.json (reviewLimit); replies go back to the Claude or Codex session that started it",
+                    "；每封回信全文另存 chatgpt/replies/，接力审核上限在 chatgpt/config.json（reviewLimit）；回信转回发起的那个 Claude 或 Codex 会话",
                   )}
                 </>,
               ],

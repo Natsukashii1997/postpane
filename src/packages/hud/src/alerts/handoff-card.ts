@@ -7,8 +7,8 @@ export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */
 
-/** How many reviews a handoff is meant to take (handoffs.rs `ROUNDS`). */
-export const ROUNDS = 2;
+/** Reviews one leave of the person's gives, unless set (gate.rs `LIMIT`, #347). */
+export const LIMIT = 5;
 
 /** Who a timeline row is about: the two sides, or PostPane passing words. */
 export type Who = "claude" | "codex" | "chatgpt" | "post";
@@ -33,25 +33,36 @@ export type Action =
 const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
 
-/** How many reviews were asked for, since its rounds last began (#258). */
-export const reviews = (handoff: Handoff) =>
-  (handoff.steps ?? [])
-    .slice(handoff.roundsFrom ?? 0)
-    .filter((step) => step.kind === "ask").length;
+/** Answers since its rounds last began (#258), but those only mending the
+ * last lines of the one before (#347, gate.rs `reviewed`). */
+export function reviews(handoff: Handoff): number {
+  let count = 0;
+  let mending = false;
+  for (const step of (handoff.steps ?? []).slice(handoff.roundsFrom ?? 0)) {
+    if (step.kind === "format") mending = true;
+    else if (step.kind === "ask") mending = false;
+    else if (step.kind === "reply") {
+      if (!mending) count += 1;
+      mending = false;
+    }
+  }
+  return count;
+}
 
-/** The reviews it gets (#217): one at L1, `ROUNDS` otherwise, and those
- * the person allowed past it. */
-export const budget = (handoff: Handoff) =>
-  (handoff.risk === "L1" ? 1 : ROUNDS) + (handoff.extra ?? 0);
+/** The cap its reviews count against (#347): as set when it last asked. */
+export const budget = (handoff: Handoff) => handoff.limit || LIMIT;
 
 /** Reviews counted against its budget: its pull request's earlier ones too,
  * unless its rounds began again once the person spoke up (#258). */
 export const counted = (handoff: Handoff) =>
   (handoff.roundsFrom ? 0 : (handoff.carried ?? 0)) + reviews(handoff);
 
-/** The round it is in, and of how many: 「第 1 / 2 轮」. */
+/** The round it is in (one asked and not answered counts), of how many. */
 export function round(handoff: Handoff): { at: number; of: number } {
-  const at = Math.max(1, counted(handoff));
+  const last = [...(handoff.steps ?? [])]
+    .reverse()
+    .find((step) => ["ask", "reply", "format"].includes(step.kind));
+  const at = Math.max(1, counted(handoff) + (last?.kind === "ask" ? 1 : 0));
   return { at, of: Math.max(budget(handoff), at) };
 }
 
@@ -421,6 +432,16 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
           state: "done",
         });
         break;
+      case "format":
+        rows.push({
+          who: "post",
+          time,
+          title: zh
+            ? "请 ChatGPT 补写末尾几行（不算一轮）"
+            : "Asked ChatGPT to mend its last lines (no review)",
+          state: "done",
+        });
+        break;
       case "wake":
         rows.push({
           who: "post",
@@ -444,7 +465,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       ? `${clock(at)} 起 · ${since(at, now, zh)}`
       : `since ${clock(at)} · ${since(at, now, zh)}`
     : since(at, now, zh);
-  const next = counted(handoff) + 1;
+  const next = round(handoff).at + 1;
   const again: Row = {
     who: "chatgpt",
     time: "",

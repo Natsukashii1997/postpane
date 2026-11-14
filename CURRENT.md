@@ -7,6 +7,26 @@
 
 
 
+## 接力审核门第 2 批：驿窗判定实现（#347）（2026-11-14，Claude，常浩回「按推荐开工」批准第 2 批计划与三项推荐；已提交、未发布，等 L3 审查）
+
+- 时间：开工 `2026-11-14 12:09`。来由：接力审核门 v1.1（决策记录 #343、勘误 #345；规则 multi-agent#7、agent-kit#71、digital-twin#185、my-skills#97 均为草稿）第 2 批，把「按风险级 1/2 轮」换成审核门。
+- 改了哪些文件：
+  - `src/crates/platform/src/clients/chatgpt/handoffs/gate.rs`（新）：上限（`reviewLimit`，默认 5）、计轮（证据不足暂停计、补格式不计）、判定 `decide()`（`Format` / `Stale` / 到顶 `Limit`）、`Gate` 字段（limit、chain、chainCarried、head、notice）。
+  - `handoffs/chain.rs`（新）：审查链继承 `Book::earlier`、未知链校验、`format_asked`、第 2 轮起的「【驿窗附注】」（轮次 + 上一轮问题台账原文）。
+  - `handoffs/gate_io.rs`（新）：台账截取、受审版本 / brief 里 head 的解析、`config.json` 读写（`set_project` 改为保留其他键）、回信全文存档 `replies/`。
+  - `handoffs.rs`：去掉 `ROUNDS`、`Risk::reviews`、`Next::Settle`；新增 `StepKind::Format`、`Next::Format`、`Next::Stale`、`Flaw::NoVersion`；`rule()` 接审查链；`allow_extra` 改为开新授权周期；被补格式的那封回信保留全文。
+  - `src/crates/host/src/handoff/gate.rs`（新）：发补格式请求、通过前 `git ls-remote` 回读 PR 当前提交、相关话术。`handoff.rs`：发送入口读上限 / head / 链并附注、`drive` 走补格式、`auto_back` 通过前核版本并记通知、回信存档、`relay` 返回 `chain`。`back.rs`、`texts.rs`：到顶、第 4 轮预警、版本不符、去掉 L1「补改未复审」。`lines.rs`：`pr_head`。
+  - `src/apps/mcp/src/relay.ts`（新）：工具说明与参数（新增 `head`、`chain`，`extra` 改义），`index.ts` 引用它（基线 661→619）。
+  - `src/packages/protocol/src/handoffs.ts`、`src/packages/hud/src/alerts/handoff-card.ts`：`format` 步、`limit` 等字段，卡上轮数按新口径算，时间线加「请 ChatGPT 补写末尾几行（不算一轮）」一行（沿用现有行样式）。
+  - `docs/chatgpt-channel.md`「审核门」、`AGENTS.md`「AI 接入」、设置 →「AI 接入」页（`AiAccessPane.tsx`）读写说明同步。
+- 会改变的现有行为（开工前已向常浩列出并获批）：上限 1/2 → 设置值（默认 5）；L1 补改不复审 → 复核；证据不足暂停不计 → 计；`extra` 加 1 轮 → 新授权周期；末尾认不出直接交常浩 → 先自动补一次；没写「审查出口」只看结论 → 先补格式。
+- 测试：`pnpm run check` 通过；`pnpm test` 原样结果：cargo 合计 passed 947 failed 0；前端 `ℹ pass 433` / `ℹ fail 0`；MCP `ℹ pass 9` / `ℹ fail 0`；插件 `ℹ pass 14` / `ℹ fail 0`；扩展 `ℹ pass 13` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-347-review-gate/pnpm-test.log`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。新增测试：platform `gate.rs` 4 项（五轮到顶与第五轮通过、证据不足计轮与预警、跨 PR 审查链与新周期、版本锚点与补格式、解析与设置读写），host 2 项（通过前回读 PR：一致 / 已变 / 读不到；未知链拒收、到顶标记、回信存档）。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（界面只多一行时间线文字，外观改动在第 3 批）。
+- 发布与回读：未发布。按生效门，四个规则 PR 与本 PR 装机要一起切换；装机前确认没有开着的自动往返接力。
+- 与授权不一致之处：计划写「`chains.json`」，实际没另建文件：审查链标识和累计数记在每张接力上（`chain`、`chainCarried`），新接力从同链最近一张继承，避免两份记录对不上；接力记录只留最近 200 张，链上最后一张被挤掉后再填这个 `chain` 会被拒收。「未决」行缺失不触发补格式（只展示）。转单 issue 是否存在驿窗不核（常浩选的推荐）。
+- 本轮新坑：无。
+
 ## 装机脚本拒收带日期的短名（E-17），全局坑新增 G-28（2026-11-14，Claude，常浩对 #341 收尾的两条提案回「都加」；已提交、无需发布）
 
 - 时间：开工 `2026-11-14 11:51`（取自分支创建时间 `git reflog`，开工时没跑 `date` 记录）。来由：#341 装机时把带日期的全名当短名传给 `install.sh`，备份落进日期重复的目录；#341 预览页因脚本里的全局变量 `claude` 与 Artifact 宿主重名而空白。两条在 #341 收尾时提案，常浩回「都加」。

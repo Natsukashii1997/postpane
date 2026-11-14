@@ -23,7 +23,7 @@ pub(super) enum Sent {
     /// Tried twice and queued, and it could not go.
     Failed,
 }
-fn sent(how: Sent) -> (&'static str, &'static str) {
+pub(super) fn sent_words(how: Sent) -> (&'static str, &'static str) {
     match how {
         Sent::Back => ("回信已转回 Claude", "the answer went back to Claude"),
         Sent::Queued => (
@@ -38,7 +38,7 @@ fn sent(how: Sent) -> (&'static str, &'static str) {
 }
 /// A pass, its answer sent `how`, then the handoff ended (#316).
 pub(super) fn passed_back(how: Sent) -> String {
-    let (zh, en) = sent(how);
+    let (zh, en) = sent_words(how);
     l10n::text(
         &format!("结论：通过，{zh}，自动结束接力"),
         &format!("Passed; {en}; the handoff ended"),
@@ -80,7 +80,7 @@ pub(super) fn escalated() -> String {
     )
 }
 pub(super) fn invalid_tail(flaw: Flaw, how: Sent) -> String {
-    let (zh, en) = sent(how);
+    let (zh, en) = sent_words(how);
     l10n::text(
         &format!(
             "思维评审回信末两行无效：{}；{zh}，自动往返停下，交还常浩",
@@ -102,6 +102,7 @@ pub(super) fn flaw_text(flaw: Flaw) -> &'static str {
             "评审出口只认 成熟退出 / 继续深化 / 证据不足暂停 / 决策升级 / 转其他路径"
         }
         Flaw::Mismatch => "评审出口与结论对不上",
+        Flaw::NoVersion => "缺「受审版本：…」",
     }
 }
 pub(super) fn flaw_text_en(flaw: Flaw) -> &'static str {
@@ -111,6 +112,7 @@ pub(super) fn flaw_text_en(flaw: Flaw) -> &'static str {
         Flaw::NoExit => "the line before it is not 「评审出口：…」",
         Flaw::UnknownExit => "the way out is none of the five",
         Flaw::Mismatch => "the way out and the verdict do not go together",
+        Flaw::NoVersion => "no 「受审版本：…」 line",
     }
 }
 pub(super) fn back_retry(error: &str) -> String {
@@ -187,10 +189,14 @@ pub(super) fn paused() -> String {
     l10n::text("常浩暂停", "Paused by the person")
 }
 pub(super) fn at_limit(budget: u32, how: Sent) -> String {
-    let (zh, en) = sent(how);
+    let (zh, en) = sent_words(how);
     l10n::text(
-        &format!("已审 {budget} 轮仍需修改，{zh}，自动往返停下，交还常浩"),
-        &format!("Still to fix after {budget} rounds; {en}, left to you"),
+        &format!(
+            "到顶：本次授权周期已审满 {budget} 轮仍未通过，{zh}，自动往返停下，请常浩介入确认"
+        ),
+        &format!(
+            "Cap reached: {budget} reviews of this leave without a pass; {en}, the person steps in"
+        ),
     )
 }
 pub(super) fn no_rounds_left(budget: u32) -> String {
@@ -201,12 +207,6 @@ pub(super) fn no_rounds_left(budget: u32) -> String {
         &format!(
             "All {budget} rounds are used; nothing is left for the auto round trip. Have Claude send it for review afresh (an engineering review needs your leave, given as extra), or end the handoff"
         ),
-    )
-}
-pub(super) fn settled() -> String {
-    l10n::text(
-        "L1 审查预算用完：意见已转回 Claude 改完收口，自动结束接力",
-        "L1's one review is used: the answer went back to Claude to fix and close; the handoff ended",
     )
 }
 pub(super) fn l0_refused() -> String {
@@ -223,16 +223,12 @@ pub(super) fn bad_risk(text: &str) -> String {
 }
 pub(super) fn budget_spent(counted: u32) -> String {
     l10n::text(
-        &format!(
-            "这个 PR 已审 {counted} 轮，审查预算用完了，没有发出：请先问常浩。常浩明确授权再审一次时，调用时 extra 写明谁授权、为什么。"
-        ),
-        &format!(
-            "This pull request had {counted} reviews and its budget is used; nothing was sent. Ask the person first; with their leave for one more, give extra saying who allowed it and why."
-        ),
+        &format!("这条审查链本次授权周期已审满 {counted} 轮（到顶），没有发出：请先问常浩。常浩授权继续时，调用时 extra 写明谁授权、为什么，从第 1 轮重新计。"),
+        &format!("This review chain had {counted} reviews under the person's leave (the cap); nothing was sent. Ask the person first; with their leave, give extra saying who allowed it and why, and reviews count from one again."),
     )
 }
 pub(super) fn bad_review_tail(flaw: Flaw, how: Sent) -> String {
-    let (zh, en) = sent(how);
+    let (zh, en) = sent_words(how);
     l10n::text(
         &format!(
             "审查出口与结论对不上：{}；{zh}，自动往返停下，交还常浩",
@@ -251,10 +247,11 @@ pub(super) fn review_flaw_text(flaw: Flaw) -> &'static str {
         Flaw::UnknownVerdict => "结论只认 通过 / 需修改",
         Flaw::NoExit | Flaw::UnknownExit => "审查出口只认 通过 / 返修 / 证据不足暂停 / 决策升级",
         Flaw::Mismatch => "审查出口与结论对不上（通过配通过，其余配需修改）",
+        Flaw::NoVersion => "写了通过却没写「受审版本：…」，认不出审的是哪个提交",
     }
 }
 pub(super) fn no_verdict(how: Sent) -> String {
-    let (zh, en) = sent(how);
+    let (zh, en) = sent_words(how);
     l10n::text(
         &format!("回信没写结论，{zh}，自动往返停下，交还常浩"),
         &format!("The answer has no verdict; {en}, left to you"),

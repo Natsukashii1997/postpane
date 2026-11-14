@@ -1,5 +1,5 @@
 {
-  "src/apps/mcp/src/index.ts": 661,
+  "src/apps/mcp/src/index.ts": 619,
   "src/crates/agents/src/account.rs": 1075,
   "src/crates/agents/src/antigravity/account.rs": 418,
   "src/crates/agents/src/antigravity/permissions.rs": 306,
