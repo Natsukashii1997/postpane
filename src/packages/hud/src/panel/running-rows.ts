@@ -1,24 +1,23 @@
 import type { Session, Snapshot } from "@agent-hud/protocol";
 import type { Language } from "@agent-hud/ui/format";
 import { waitedText } from "../permissions/approval-list.ts";
-import { sourceID, sourcesForMark } from "../resting-agents.ts";
-import { liveSessions, type LiveSession } from "./agent-board.ts";
+import { workspaceOf } from "../workspace.ts";
+import type { LiveSession } from "./agent-board.ts";
 
-/** The sessions of a mark's agent at work now, for the foot of its news card
- * (#307): while the agent has news, its mark shows the card, not the panel
- * with its 「正在进行」. Only those running; those waiting are on the card. */
+/** The sessions at the foot of a mark's news card (#307): while the agent
+ * has news its mark shows the card, not the panel with its 「正在进行」, so
+ * the card lists them itself. Those whose request card is on it are not
+ * repeated; one waiting with no card of its own (「等你回复」, 「待核对」)
+ * is, ahead of those running (ADR-0001 B3, #354). */
 export function runningForMark(
   snapshot: Pick<Snapshot, "providers" | "sessions" | "approvals">,
   mark: string,
 ): LiveSession[] {
-  const shape = snapshot as Snapshot;
-  const sources = sourcesForMark(snapshot, mark);
-  return liveSessions(
-    snapshot.sessions.filter((session) =>
-      sources.includes(sourceID(shape, session.source)),
-    ),
-    snapshot.approvals,
-  ).filter((entry) => entry.status === "running");
+  const place = workspaceOf({ ...snapshot, handoffs: [] }, mark);
+  return [
+    ...place.waiting.filter((entry) => !entry.approval),
+    ...place.running,
+  ];
 }
 
 /** How long a running session's turn has gone, beside its title (#312,

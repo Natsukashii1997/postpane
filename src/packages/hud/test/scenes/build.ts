@@ -49,6 +49,8 @@ export interface SessionSpec {
   outcome?: SessionLiveFacts["outcome"];
   /** Waiting on a question or permission the transcript holds. */
   asks?: "question" | "permission" | "plan";
+  /** The transcript has gone quiet on the request half an hour (「待核对」). */
+  stale?: boolean;
   client?: string;
   origin?: string;
 }
@@ -64,6 +66,7 @@ export function session(spec: SessionSpec): Session {
             sessionId: spec.id,
             kind: spec.asks,
             at: last,
+            stale: spec.stale ?? false,
           },
         ]
       : [];

@@ -8,7 +8,6 @@ import {
   blockListed,
   panelHidesTokens,
   boardVerdict,
-  liveSessionLine,
   liveSessions,
   quotaNote,
   quotaLevel,
@@ -17,6 +16,7 @@ import {
   showsAccountNames,
   stoppedCount,
 } from "../src/panel/agent-board.ts";
+import { liveSessionLine } from "../src/panel/live-line.ts";
 
 const now = Date.parse("2026-11-05T12:32:00Z");
 const utc = { timeZone: "UTC", firstWeekday: 1 };

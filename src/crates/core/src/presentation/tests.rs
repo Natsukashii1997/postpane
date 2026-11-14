@@ -422,3 +422,74 @@ fn a_session_whose_process_was_killed_is_no_longer_running() {
     assert_eq!(state(&mut core, &killed), "idle");
     assert_eq!(state(&mut core, &running), "running");
 }
+
+/// A Claude log that asked the user a question `ago_min` minutes ago and was
+/// quiet after.
+fn asked_a_question(home: &Path, id: &str, ago_min: i64) {
+    let at = |ago: i64| (Utc::now() - chrono::Duration::minutes(ago)).to_rfc3339();
+    let usage = json!({"input_tokens":10,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0});
+    let lines = [
+        json!({"sessionId":id,"timestamp":at(ago_min + 1),"type":"user","entrypoint":"cli","uuid":"u1",
+            "message":{"role":"user","content":"Pick a plan"}}),
+        json!({"sessionId":id,"timestamp":at(ago_min),"type":"assistant","entrypoint":"cli",
+            "message":{"id":"m1","model":"claude-opus-4-5","role":"assistant","usage":usage,
+                "content":[{"type":"tool_use","id":"q1","name":"AskUserQuestion","input":{}}]}}),
+    ];
+    let path = home
+        .join(".claude/projects/work")
+        .join(format!("{id}.jsonl"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let text = lines.iter().map(Value::to_string).collect::<Vec<_>>();
+    fs::write(path, text.join("\n") + "\n").unwrap();
+}
+fn listed(core: &mut AgentHudCore, id: &str) -> Option<Value> {
+    let snapshot = core.request("snapshot", json!({})).unwrap();
+    snapshot["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == id)
+        .cloned()
+}
+
+/// A question the log left open still waits after half an hour, marked stale;
+/// once Claude Code's registry says its process went, nothing waits (#251).
+#[test]
+fn an_open_question_waits_until_its_process_has_gone() {
+    use agent_hud_agents::claude::processes::ClaudeProcesses;
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let mut core = core(home);
+    core.claude_desktop.processes =
+        ClaudeProcesses::with_host(agent_hud_agents::Os::MacOs, |pid, _| pid != 41_107);
+    let (killed, unknown) = (session_id(), session_id());
+    asked_a_question(home, &killed, 45);
+    asked_a_question(home, &unknown, 45);
+    let session = listed(&mut core, &unknown).expect("the session is listed");
+    assert_eq!(session["state"], "waiting");
+    assert_eq!(session["liveFacts"]["requests"][0]["stale"], true);
+    write(
+        &home.join(".claude/sessions/41107.json"),
+        json!({"pid":41_107,"sessionId":killed,"pidDomain":"darwin","status":"busy"}),
+    );
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    assert!(core.look(), "a process that went is a change");
+    let session = listed(&mut core, &killed).expect("the session is listed");
+    assert_eq!(session["state"], "idle");
+    assert_eq!(session["liveFacts"]["requests"], json!([]));
+    assert_eq!(state(&mut core, &unknown), "waiting");
+}
+
+/// An open question in a log older than a day does not bring its session back
+/// into the snapshot's one-day window.
+#[test]
+fn an_open_question_older_than_a_day_stays_out_of_the_snapshot() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let mut core = core(home);
+    let (old, recent) = (session_id(), session_id());
+    asked_a_question(home, &old, 25 * 60);
+    asked_a_question(home, &recent, 23 * 60);
+    assert!(listed(&mut core, &old).is_none());
+    assert_eq!(state(&mut core, &recent), "waiting");
+}

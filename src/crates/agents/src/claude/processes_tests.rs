@@ -100,3 +100,19 @@ fn without_the_hosts_word_every_process_runs() {
     processes.refresh_with(&roots(&config), 5_000, Some(("linux", runs)));
     assert!(!processes.ended(SESSION, Some(4_000)));
 }
+
+/// A log's open request no longer lapses on its own (ADR 0001), so a session
+/// whose process exited cleanly stays ended past the hour the transcript's
+/// half hour used to settle it in (#251).
+#[test]
+fn a_session_whose_process_exited_cleanly_stays_ended() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join(".claude");
+    let mut processes = ClaudeProcesses::default();
+    let file = register(&config, 500, SESSION);
+    processes.refresh_with(&roots(&config), 1_000, Some(("darwin", runs)));
+    fs::remove_file(file).unwrap();
+    processes.refresh_with(&roots(&config), 5_000, Some(("darwin", runs)));
+    processes.refresh_with(&roots(&config), 5_000 + 86_400_000, Some(("darwin", runs)));
+    assert!(processes.ended(SESSION, Some(4_000)));
+}

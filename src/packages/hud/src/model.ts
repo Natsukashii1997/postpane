@@ -16,6 +16,7 @@ import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
 import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
+import { isBusy } from "./stale.ts";
 import {
   moneyAmount,
   snapshotLanguage,
@@ -209,8 +210,7 @@ export function vendorsFromSnapshot(
       // ChatGPT's mark also counts the relays it is answering, whose
       // conversations may be running sessions themselves.
       working: Math.max(
-        sessions.filter((s) => s.state === "running" || s.state === "waiting")
-          .length,
+        sessions.filter(isBusy).length,
         key === vendorKey("chatgpt") ? relaysAnswering(snapshot) : 0,
       ),
       waiting: snapshot.approvals.filter((a) => vendorKey(a.source) === key)

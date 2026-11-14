@@ -232,6 +232,8 @@ export interface AttentionFact {
   sessionId: string;
   kind: "permission" | "question" | "plan";
   at: string;
+  /** Still open, but nothing heard since for a while: 「待核对」 (ADR-0001). */
+  stale?: boolean;
 }
 export interface SessionLiveFacts {
   /** The person's words that started the latest turn, where the session

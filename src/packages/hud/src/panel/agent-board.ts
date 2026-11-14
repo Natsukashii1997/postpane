@@ -13,6 +13,7 @@ import {
 } from "@agent-hud/ui/format";
 import { quotaCredits } from "../quota-rows.ts";
 import { quotaWindowLabel } from "./window-labels.ts";
+import { isStale } from "../stale.ts";
 
 const finite = (value: number | null | undefined): value is number =>
   value != null && Number.isFinite(value);
@@ -313,6 +314,8 @@ export interface LiveSession {
   status: "waiting" | "running";
   /** The oldest request it waits on, when there is one. */
   approval: Approval | null;
+  /** Waiting on a request heard nothing of for a while: 「待核对」. */
+  stale?: boolean;
 }
 
 /** The sessions the panel lists (owner, 2026-11-05): those waiting on you,
@@ -339,7 +342,12 @@ export function liveSessions(
         )
         .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
       if (asks.length || session.state === "waiting")
-        return { session, status: "waiting", approval: asks[0] ?? null };
+        return {
+          session,
+          status: "waiting",
+          approval: asks[0] ?? null,
+          stale: !asks.length && isStale(session),
+        };
       if (session.state === "running")
         return { session, status: "running", approval: null };
       return null;
@@ -350,44 +358,6 @@ export function liveSessions(
         Number(a.status === "running") - Number(b.status === "running") ||
         time(b.session) - time(a.session),
     );
-}
-
-/** The line under a listed session: what it waits on, or what it does. */
-export function liveSessionLine(
-  entry: LiveSession,
-  language: Language,
-): string {
-  const { approval, session } = entry;
-  if (entry.status === "waiting") {
-    if (!approval) return say(language, "等你回复", "Waiting for you");
-    const question = approval.questions?.[0]?.question?.trim();
-    if (approval.kind === "question" || question)
-      return `${say(language, "问你：", "Asks: ")}${question || approval.summary || approval.title}`;
-    if (approval.kind === "plan")
-      return say(language, "等你批准计划", "Plan waiting for approval");
-    return `${say(language, "等你批准：", "Needs approval: ")}${approval.summary || approval.title}`;
-  }
-  const activity = session.liveFacts?.activity;
-  const work = activity?.openCall?.work ?? activity?.work ?? null;
-  const doing = activity?.compactingSince
-    ? say(language, "正在压缩上下文", "Compacting context")
-    : activity?.retrying
-      ? say(language, "正在重试", "Retrying")
-      : activity?.delegating || work === "agents"
-        ? say(language, "子任务在跑", "Sub-agents at work")
-        : work === "shell" || work === "command"
-          ? say(language, "正在跑命令", "Running a command")
-          : work === "edit"
-            ? say(language, "正在改文件", "Editing files")
-            : work === "read"
-              ? say(language, "正在读文件", "Reading files")
-              : work === "question"
-                ? say(language, "正在提问", "Asking a question")
-                : activity?.awaitsModel
-                  ? say(language, "正在思考", "Thinking")
-                  : say(language, "正在干活", "Working");
-  // How long it has run sits beside the title (runningSince, #312).
-  return doing;
 }
 
 /** How many of the last day's sessions are not listed: those stopped. */
