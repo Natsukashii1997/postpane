@@ -88,6 +88,16 @@ test("install.sh 语法正确，不带参数只打印用法、不动应用", () 
   assert.match(r.stderr, /用法/);
 });
 
+test("install.sh 短名带日期就拒绝、不动应用（E-17）", () => {
+  const sh = join(SKILL_DIR, "scripts/install.sh");
+  const r = spawnSync("bash", [sh, "2026-11-14-341-relay-toggle"], {
+    encoding: "utf8",
+  });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /短名不带日期/);
+  assert.match(r.stderr, /用 341-relay-toggle/);
+});
+
 test("命令拆段：heredoc 与多行引号里的字不算命令，单行引号里的分隔符不拆", () => {
   const cmd = "git commit -m \"$(cat <<'EOF'\n标题\nlsof 不算\nEOF\n)\" && grep -n \"a|b\" x; pgrep -f \"Contents/MacOS/PostPane$\"";
   const segs = segments(stripBodies(cmd)).map((s) => s.trim());
