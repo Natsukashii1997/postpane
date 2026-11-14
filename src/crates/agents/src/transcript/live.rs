@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::{collections::VecDeque, path::Path};
 
 const QUIET_MS: i64 = 120_000;
-const ABANDONED_MS: i64 = 1_800_000;
+pub(crate) const ABANDONED_MS: i64 = 1_800_000;
 
 pub fn timestamp(value: &Value) -> Option<i64> {
     value
@@ -235,6 +235,9 @@ pub struct LiveLog {
     /// by them. Kept only while the app runs, as the turn's message is.
     #[serde(skip)]
     pub prompt: Option<String>,
+    /// Background commands still out, by task id, with their launch (#353).
+    #[serde(default)]
+    pub background: std::collections::BTreeMap<String, i64>,
 }
 
 impl LiveLog {
@@ -269,19 +272,16 @@ impl LiveLog {
         }
         let same_turn =
             |log: &LiveLog| log.turns.back().map(|turn| (turn.id.clone(), turn.started));
-        if self.final_answer.is_none()
-            && earlier.final_answer.is_some()
-            && same_turn(self) == same_turn(earlier)
-        {
-            self.final_answer = earlier.final_answer.clone();
-            kept = true;
-        }
-        if self.prompt.is_none()
-            && earlier.prompt.is_some()
-            && same_turn(self) == same_turn(earlier)
-        {
-            self.prompt = earlier.prompt.clone();
-            kept = true;
+        if same_turn(self) == same_turn(earlier) {
+            for (mine, old) in [
+                (&mut self.final_answer, &earlier.final_answer),
+                (&mut self.prompt, &earlier.prompt),
+            ] {
+                if mine.is_none() && old.is_some() {
+                    *mine = old.clone();
+                    kept = true;
+                }
+            }
         }
         if let (Some(card), Some(old)) = (
             self.activity
@@ -352,15 +352,11 @@ impl LiveLog {
             .components()
             .any(|part| part.as_os_str() == "subagents");
         if source == "claude" {
-            live.is_subagent = in_subagents
-                || path
-                    .file_stem()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with("agent-"));
             let stem = path
                 .file_stem()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
+            live.is_subagent = in_subagents || stem.starts_with("agent-");
             if !live.is_subagent && uuid(stem) {
                 live.owned_claude_id = Some(stem.into());
             }
@@ -395,7 +391,7 @@ impl LiveLog {
     pub fn ingest(&mut self, source: &str, value: &Value) {
         match source {
             "codex" => self.codex(value),
-            "claude" => self.claude(value),
+            "claude" => self.claude_line(value),
             _ => {}
         }
     }
@@ -525,6 +521,7 @@ impl LiveLog {
     }
 
     pub fn session_state(&self, now: i64, source: &str, subagents_at: Option<i64>) -> &'static str {
+        let subagents_at = self.with_background(now, subagents_at);
         let Some(last) = self.last_event().filter(|_| !self.is_internal) else {
             // Claude and Codex record every turn, so a session of theirs with no event is unknown.
             // Sources read from a database (Antigravity) or whose session never prompted (DeepSeek)
@@ -573,6 +570,7 @@ impl LiveLog {
     /// this log shows, can change with no new event: a question or request
     /// lapsing, a turn going quiet or abandoned, a sub-agent going stale.
     pub fn next_change(&self, now: i64, source: &str, subagents_at: Option<i64>) -> Option<i64> {
+        let subagents_at = self.with_background(now, subagents_at);
         let calls = self.activity.iter().flat_map(|activity| {
             activity
                 .calls
@@ -624,6 +622,7 @@ impl LiveLog {
         now: i64,
         subagents_at: Option<i64>,
     ) -> Option<Value> {
+        let subagents_at = self.with_background(now, subagents_at);
         let turn = self.turns.back();
         let observed = self.last_event().into_iter().chain(subagents_at).max()?;
         let child_working = subagents_at.is_some();
