@@ -46,6 +46,15 @@
     return node ? node.textContent.trim() : null;
   }
 
+  /** Whether the newest reply comes after the newest prompt: one sent but not
+   * answered yet leaves the reply before it as the last one (#356). */
+  function answered(doc) {
+    const reply = last(doc, SEL.assistant);
+    const prompt = last(doc, SEL.user);
+    if (!reply) return false;
+    return !prompt || !!(prompt.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+
   // --- Markdown ------------------------------------------------------------
 
   function inline(node) {
@@ -183,5 +192,5 @@
     return started ? { ok: true } : { ok: false, reason: "send-failed" };
   }
 
-  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, markdown, submit };
+  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, answered, markdown, submit };
 })();

@@ -16,6 +16,8 @@ use std::{
     time::Duration,
 };
 
+mod commands;
+pub(crate) use commands::focus;
 pub mod handoffs;
 mod manifest;
 pub use manifest::{
@@ -627,24 +629,6 @@ impl Drop for Channel {
     fn drop(&mut self) {
         self.shared.close();
     }
-}
-
-/// Brings a conversation's tab forward through the extension; false when no
-/// extension is connected, so the caller opens it in the browser instead.
-pub(crate) fn focus(conversation: &str) -> bool {
-    if !agent::conversation_id(conversation) {
-        return false;
-    }
-    let shared = CURRENT
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .as_ref()
-        .and_then(Weak::upgrade);
-    shared.is_some_and(|shared| {
-        shared
-            .post(&json!({"type":"focus","conversation":conversation}))
-            .is_ok()
-    })
 }
 
 #[cfg(test)]

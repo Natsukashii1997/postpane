@@ -63,7 +63,7 @@
   "src/crates/platform/src/accounts/credentials.rs": 446,
   "src/crates/platform/src/accounts/mod.rs": 1092,
   "src/crates/platform/src/clients/antigravity/service.rs": 662,
-  "src/crates/platform/src/clients/chatgpt/mod.rs": 651,
+  "src/crates/platform/src/clients/chatgpt/mod.rs": 635,
   "src/crates/platform/src/clients/codex/desktop.rs": 530,
   "src/crates/platform/src/clients/codex/desktop/pending.rs": 442,
   "src/crates/platform/src/clients/codex/desktop/stream.rs": 396,

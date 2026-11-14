@@ -7,6 +7,24 @@
 
 
 
+## ChatGPT 接力：插件漏报「答完」时驿窗主动重读（#356）（2026-11-14，Claude，常浩回「按计划做」定三条做法、交接会话里回「按计划开工」；已提交、未发布，实机验证待做）
+
+- 时间：开工 `2026-11-14 16:10`（本会话创建时间，取自会话信息，没用 `date` 记）；插件第一部分由上一会话提交 `05ea0cf`。来由：L3 定向复核（接力 `h1a1d872e80203`）15:36 的回信插件漏报「答完」，回信卡在 ChatGPT 里，常浩从 Chrome 读出原文才接上（#356）。
+- 改了哪些文件：
+  - `src/apps/chrome-extension/content.js`、`background.js`（`05ea0cf`）：注入时页面正在写，不把正在写的回复记成已报；新增 `reread` 命令，后台按上报 / 地址找标签页，找不到就后台新开，脚本断了先补注入。
+  - `src/apps/chrome-extension/page.js`、`content.js`（本会话）：新增 `answered()`，最新一条回复排在最新一条提问之后才补报；否则那是上一轮的旧回信（同对话里别的接力的回信按 `messageId` 去重挡不住）。
+  - `src/crates/platform/src/clients/chatgpt/commands.rs`（新）：`Channel::reread`（只发不等回应），`focus` 从 `mod.rs` 挪来；`mod.rs` 651→635 行，基线已收紧（顺带收紧了 main 上已变短的 `agents/src/transcript/live.rs` 677→676）。
+  - `src/crates/host/src/handoff/reread.rs`（新）：`Desk::reread`，活着的接力在 `delivered` / `working` 阶段满 3 分钟、离上次重读满 2 分钟就请插件重读；插件没连上不发、不记。`handoff.rs`：`Lines::reread`、`Desk.reread_at`、app 层 `projection()` 调用；`handoff/lines.rs`：`AppLines::reread`。
+  - `docs/chatgpt-channel.md`：协议表加 `reread`、`turn` 的 `reread: true`，接力一节加「漏报补救」。
+- 测试：`pnpm run check` 第 1 次只因新测试文件没过 Prettier 失败（`check.log`），格式化后退出码 0（`check-2.log`）；`pnpm test` 退出码 0，cargo 合计 passed 970 failed 0，前端 `ℹ pass 442` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 17` / `ℹ fail 0`（格式化后单独重跑扩展仍 17/0，`extension-2.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-356-chatgpt-reread/`。新增测试：宿主 2 项（满 3 分钟重读、2 分钟内不重复、重启后立刻重读、开始答后重新计时、补报回信只记一次、答完不再重读；插件没连上不发且不算一次）、平台 1 处（`reread` 帧、坏 id 拒收、断开后报错）、扩展 1 项（最新提问还没回时不补报）。撤修复验证：3 分钟门槛、2 分钟间隔、连接检查、阶段过滤、插件 `answered`、平台 id 检查，逐项撤掉各自对应测试失败（`revert-checks.log`，`tee` 打开失败，内容事后补存），还原用 `tar xmf`。app 层 `projection()` 里那一行调用没有测试覆盖（要 Tauri 运行时），靠实机验证。
+- 验证：只做了单元与集成测试；**实机未做**（ChatGPT 写到一半时重新加载插件，回信照样进驿窗），要装机并请常浩重新加载插件。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布。实机要从 main（不含 #348）打包装机：#348 合进 main 后再打包会把审核门一起装上，审核门要等生效切换。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 计划写「`chatgpt/reread.rs`」，实际叫 `commands.rs`，并把 `focus` 一起挪过去，免得 `mod.rs` 涨行数。
+  - issue 写「插件重连、驿窗启动时重读」，没单独写：重启后阶段早已过 3 分钟，第一次刷新就重读；重连后最迟 2 分钟内重读。
+  - 范围外发现：#357 会话（worktree `interesting-hugle-7778fb`）负载测试留下约 2600 个 `/usr/bin/env python3` 进程，打满每用户 4000 进程上限，本会话一度 `fork failed`；没动它。
+- 本轮新坑：无
 ## 第 2 批补漏：实机的小人导演（Rust）也认「待核对」（#354 后续）（2026-11-14，Claude，第 2 批「按计划开工」范围内的补漏；已提交、已发布 `c1715a5c603b` 回读通过）
 
 - 时间：开工 `2026-11-14 16:24`（`date '+%F %H:%M'` 在 16:29 记录，开工约早 5 分钟）。来由：#358 合并后核对上一会话转来的子 agent 要点时发现，应用里的小人指令走 Rust（`hud_bot_directions`，`src/crates/hud/src/bots.rs`），TS 的 `mark-director.ts` 只在浏览器预览用；#358 只改了 TS，实机小人仍把待核对会话当等你、摆「问你」，票根 working 也照算。

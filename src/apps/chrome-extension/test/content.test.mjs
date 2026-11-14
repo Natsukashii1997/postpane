@@ -20,9 +20,10 @@ before(async () => {
 });
 after(() => browser?.close());
 
-async function open() {
+async function open(before = () => {}) {
   const page = await browser.newPage();
   await page.setContent(fixture);
+  await page.evaluate(before);
   await page.evaluate(() => {
     window.told = [];
     window.chrome = {
@@ -281,4 +282,81 @@ test("a copy cut off by an extension reload stops instead of throwing on every c
   await streamReply(page, "m10", "也没人收");
   assert.equal(await page.evaluate(() => window.sends), 1);
   assert.deepEqual(errors, []);
+});
+
+// #356: put in while a reply is being written (the extension installed,
+// updated or reloaded), the script reports that reply once it ends.
+test("a script put in mid-reply reports that reply when it ends", async () => {
+  const page = await open(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-chatgpt-search-unit-key="x:5:assistant" data-chatgpt-search-message-ids="m3"><p data-d-component="text">写到一半</p></div>';
+    document.querySelector("main").append(turn);
+  });
+  await page.evaluate(async () => {
+    const text = document.querySelector(
+      '[data-chatgpt-search-message-ids="m3"] p',
+    );
+    text.textContent += "，写完了。结论：通过";
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  });
+  await page.waitForTimeout(1800);
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].messageId, "m3");
+  assert.equal(done[0].reply, "写到一半，写完了。结论：通过");
+});
+
+// #356: PostPane asks for a turn it heard nothing of; the newest reply is
+// told again once written, never while it is being written.
+test("asked to read again, the newest written reply is told again", async () => {
+  const page = await open();
+  const ask = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          window.listener({ op: "reread" }, {}, resolve),
+        ),
+    );
+  const answer = await ask();
+  assert.deepEqual(answer, { ok: true, streaming: false, told: true });
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].messageId, "m2");
+  assert.equal(done[0].reread, true);
+  await page.evaluate(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  assert.deepEqual(await ask(), { ok: true, streaming: true, told: false });
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    1,
+  );
+});
+
+// #356: words sent and not answered yet leave the reply before them as the
+// last one; it is an older turn's, so asking again tells nothing.
+test("asked to read again before the newest prompt is answered, nothing is told", async () => {
+  const page = await open(() => {
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">第三轮：只看 P1-10</div>';
+    document.querySelector("main").append(turn);
+  });
+  const answer = await page.evaluate(
+    () =>
+      new Promise((resolve) => window.listener({ op: "reread" }, {}, resolve)),
+  );
+  assert.deepEqual(answer, { ok: true, streaming: false, told: false });
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
 });

@@ -23,8 +23,9 @@
   let wasStreaming = page.streaming(document);
   // Replies that render without a turn here (the history loading after the
   // page) are not news: a reply counts once this page saw a stop button or
-  // sent something itself.
-  let reported = page.lastReply(document)?.messageId ?? null;
+  // sent something itself. Put in while one is being written (the extension
+  // installed, updated or reloaded), that one is news once it ends (#356).
+  let reported = wasStreaming ? null : (page.lastReply(document)?.messageId ?? null);
   let expecting = wasStreaming;
   let timer = null;
 
@@ -34,6 +35,22 @@
 
   function tellStart() {
     tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), at: Date.now() });
+  }
+
+  function tellComplete(reply, extra = {}) {
+    reported = reply.messageId;
+    expecting = false;
+    tell({
+      type: "turn",
+      phase: "complete",
+      conversation: page.conversationId(location.href),
+      title: page.title(document),
+      prompt: page.lastPrompt(document),
+      reply: reply.markdown,
+      messageId: reply.messageId ?? null,
+      at: Date.now(),
+      ...extra,
+    });
   }
 
   function settle() {
@@ -65,18 +82,7 @@
         // is still being written: the answer fills the same message id, so
         // reporting either now would lose it. A later change samples again.
         if (!reply.markdown.trim() || reply.markdown !== seen) return;
-        reported = reply.messageId;
-        expecting = false;
-        tell({
-          type: "turn",
-          phase: "complete",
-          conversation: page.conversationId(location.href),
-          title: page.title(document),
-          prompt: page.lastPrompt(document),
-          reply: reply?.markdown ?? "",
-          messageId: reply?.messageId ?? null,
-          at: Date.now(),
-        });
+        tellComplete(reply);
       }, 600);
     }
     wasStreaming = streaming;
@@ -101,6 +107,17 @@
         reply(result);
       }, (error) => reply({ ok: false, reason: "send-failed", detail: String(error) }));
       return true;
+    }
+    // PostPane heard nothing of a turn it waits on (#356): the newest reply,
+    // once written, is told again; it counts once by its message id. One
+    // before the newest prompt is an older turn's, never this one's answer.
+    if (command.op === "reread") {
+      const streaming = page.streaming(document);
+      const last = page.lastReply(document);
+      const told = !streaming && page.answered(document) && !!last?.markdown.trim();
+      if (told) tellComplete(last, { reread: true });
+      reply({ ok: true, streaming, told });
+      return false;
     }
     if (command.op === "state") {
       reply({
