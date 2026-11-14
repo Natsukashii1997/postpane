@@ -406,4 +406,5 @@
 - 现象：#336 装机时把「查有没有开着自动往返的接力」和 `install.sh` 写进同一条命令。查出 `h1a1d7a90d8e00`（digital-twin｜PR #175 专项复审，10:39:33 刚把请审核送给 ChatGPT）开着自动往返，脚本照样往下装；10:39:58 重启后这单记「驿窗重启，自动往返先暂停」，ChatGPT 的回信不再自动转回 Claude，要常浩在卡上手动点。
 - 根因：装机必然重启驿窗，重启会暂停所有 `auto` 且 opening / open 的接力（`handoffs.rs` 的 `restarted`）。「装前先查」只是写在交接和习惯里，脚本不管，查的结果要人看了才算数，一串命令里看不到。
 - 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
+- 2026-11-14 收窄（常浩选甲）：同一天驿窗改成重启后自动往返接着跑，重启不再暂停，上面的根因只剩「回信刚到、正在转回」这一刻（`phase` 为 `replied`）；`live-auto-relays.mjs` 只查这一种，平时开着自动往返也照装。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
