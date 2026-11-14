@@ -188,30 +188,78 @@ export interface JobRow {
   next: string;
 }
 
-/** The scheduled tasks as the desk's table rows, in Hermes' order. */
+type Job = NonNullable<HermesBotStatus["jobs"]>[number];
+
+/** The job a task is a step of: 个人项目日报·写稿 is a step of 个人项目日报. */
+const jobOf = (job: Job) => shortJobName(job.name).split("·")[0].trim();
+
+/** Minutes into the day a daily-style cron runs at; -1 when it has no fixed
+ * time, so a step with one counts as later. */
+function dayMinute(schedule: string | null | undefined): number {
+  const [minute, hour] = (schedule ?? "").trim().split(/\s+/);
+  return /^\d+$/.test(minute ?? "") && /^\d+$/.test(hour ?? "")
+    ? Number(hour) * 60 + Number(minute)
+    : -1;
+}
+
+/** Hermes' tasks, steps of one job (名字·写稿, 名字·发送) together where its
+ * first step is listed; a 名字·步骤 alone stays its own. */
+function groupSteps(jobs: readonly Job[]): Job[][] {
+  const groups = new Map<string, Job[]>();
+  for (const job of jobs) {
+    const key = shortJobName(job.name).includes("·")
+      ? `·${jobOf(job)}`
+      : `#${job.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), job]);
+  }
+  return [...groups.values()];
+}
+
+/** The scheduled tasks as the desk's table rows, in Hermes' order. The steps
+ * of one job read as one row (#326): how often and the next run from its last
+ * step in the day, failed if any step failed, off if any step is off. */
 export function jobRows(
   jobs: NonNullable<HermesBotStatus["jobs"]>,
   now: number,
   timeZone: string,
   language: Language,
 ): JobRow[] {
-  return jobs.map((job) => {
-    const lastAt = job.lastRunAt ? Date.parse(job.lastRunAt) : NaN;
-    const nextAt = job.nextRunAt ? Date.parse(job.nextRunAt) : NaN;
-    const when = Number.isFinite(lastAt)
-      ? shortWhen(lastAt, now, timeZone, language)
-      : "";
+  const lastRun = (job: Job): JobRow["last"] => {
+    const at = job.lastRunAt ? Date.parse(job.lastRunAt) : NaN;
+    if (!Number.isFinite(at))
+      return { tone: "none", text: say(language, "没跑过", "Never") };
+    const when = shortWhen(at, now, timeZone, language);
+    return job.failed
+      ? { tone: "fail", text: `✗ ${when}` }
+      : { tone: "ok", text: `✓ ${when}` };
+  };
+  return groupSteps(jobs).map((steps) => {
+    const ordered = steps
+      .map((job, index) => ({ job, index }))
+      .sort(
+        (a, b) =>
+          dayMinute(a.job.schedule) - dayMinute(b.job.schedule) ||
+          a.index - b.index,
+      )
+      .map(({ job }) => job);
+    const final = ordered[ordered.length - 1];
+    const failed = ordered.find((job) => job.failed && job.lastRunAt);
+    const nextAt = final.nextRunAt ? Date.parse(final.nextRunAt) : NaN;
+    const single = steps.length === 1;
     return {
-      id: job.id,
-      name: shortJobName(job.name),
-      title: job.name,
-      cadence: cadence(job.schedule, language),
-      last: !when
-        ? { tone: "none", text: say(language, "没跑过", "Never") }
-        : job.failed
-          ? { tone: "fail", text: `✗ ${when}` }
-          : { tone: "ok", text: `✓ ${when}` },
-      next: !job.enabled
+      id: steps.map((job) => job.id).join("+"),
+      name: single ? shortJobName(final.name) : jobOf(final),
+      title: single
+        ? final.name
+        : ordered
+            .map(
+              (job) =>
+                `${job.name}：${cadence(job.schedule, language)} · ${lastRun(job).text}`,
+            )
+            .join("\n"),
+      cadence: cadence(final.schedule, language),
+      last: lastRun(failed ?? final),
+      next: steps.some((job) => !job.enabled)
         ? say(language, "停用", "Off")
         : Number.isFinite(nextAt)
           ? shortWhen(nextAt, now, timeZone, language)
