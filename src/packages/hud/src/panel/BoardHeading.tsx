@@ -5,6 +5,7 @@ import type { Handoff } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { PAPER_SEAL, usePaper } from "../paper";
 import { ApprovalTag } from "../permissions/ApprovalTag";
+import { PaperSeal, useNewsSeal } from "../permissions/PaperSeal";
 import { agentArtworkKey, agentVendorName } from "../agent-artwork";
 import { EnterRelay } from "../alerts/RelayToggle";
 import { relaysOf } from "../workspace";
@@ -95,8 +96,12 @@ export function BoardHeading({
   plan,
   stamp,
   handoffs,
+  place = vendor,
 }: {
   vendor: string;
+  /** The source whose relays the plane leads into, where the mark's name is
+   * not it (ChatGPT's mark reads as OpenAI's). */
+  place?: string;
   Logo: Logo;
   light: boolean;
   plan?: string | null;
@@ -106,6 +111,8 @@ export function BoardHeading({
   const inks = useBoardInks(light);
   const paper = usePaper();
   const zh = useFormat().language === "zh";
+  // On a news card the news's own seal stands where the quota's would.
+  const seal = useNewsSeal();
   const portraitChip =
     agentArtworkKey(vendor) === "hermes" && !(paper ? paper.light : light);
   return (
@@ -166,8 +173,12 @@ export function BoardHeading({
         />
       )}
       <span style={{ flex: 1 }} />
-      <EnterRelay handoffs={relaysOf(handoffs, vendor)} paper={paper} zh={zh} />
-      {stamp && <Stamp kind={stamp} light={light} />}
+      <EnterRelay handoffs={relaysOf(handoffs, place)} paper={paper} zh={zh} />
+      {seal ? (
+        <PaperSeal seal={seal} zh={zh} />
+      ) : (
+        stamp && <Stamp kind={stamp} light={light} />
+      )}
     </div>
   );
 }

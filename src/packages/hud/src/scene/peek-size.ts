@@ -13,6 +13,10 @@ export const PEEK_BOT_ROW = 36;
 /** The dashed rule between the bots and their tokens, with its room. */
 export const PEEK_RULE = PEEK_TEAR * 2 + 2;
 
+/** The work line's room, px before scale: 「等你 · 在跑 · 接力」 (ADR-0001
+ * C3), one row under the rest on every peek with one. */
+export const PEEK_WORK = 18;
+
 /** ChatGPT's peek (#145), px before scale: the 对话 label, a chat's row,
  * the line for none or for the rest of today's, and on the lower slip its
  * padding, the 审核 label and a review's two lines. */
@@ -49,8 +53,18 @@ export function showsBots(
 
 /** The bubble's height: the name over its tear, then either each bot and
  * the last day's tokens under a rule, or each reading, or one "--" row
- * with none. */
+ * with none; and the work line where the agent has one. */
 export function peekBubbleHeight(
+  vendor: Pick<
+    HUDVendor,
+    "bots" | "quotas" | "balance" | "usage" | "desk" | "work"
+  >,
+  scale: number,
+): number {
+  return rowsHeight(vendor, scale) + (vendor.work ? PEEK_WORK * scale : 0);
+}
+
+function rowsHeight(
   vendor: Pick<HUDVendor, "bots" | "quotas" | "balance" | "usage" | "desk">,
   scale: number,
 ): number {

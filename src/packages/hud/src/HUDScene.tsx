@@ -15,13 +15,7 @@ import type { Snapshot } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "./HUDArtwork";
 export { HUDArtwork as HUDLogo } from "./HUDArtwork";
 import { DockMemory, type Direction } from "./bots/mark-director";
-import {
-  useIslandNews,
-  useSideClocks,
-  NewsContent,
-  PendingEventRows,
-  clientDisplayName,
-} from "./IslandNews";
+import { useIslandNews, useSideClocks, clientDisplayName } from "./IslandNews";
 import { replyChip } from "./alerts/reply-list";
 import { sideClocks } from "./alerts/reply-stays";
 import { useCardHeld } from "./alerts/card-hold";
@@ -30,7 +24,7 @@ import {
   openHandoffCard,
   useOpenedHandoffCard,
 } from "./alerts/HandoffCard";
-import { ApprovalContent } from "./permissions/ApprovalContent";
+import { NewsCard } from "./scene/NewsCard";
 import { RequestDeliveryNotice } from "./permissions/RequestDeliveryNotice";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
@@ -81,7 +75,6 @@ import {
 } from "./panel/listed-sessions";
 import { HUDGroundProvider } from "./ground";
 import { PaperContext, paperOf, relayPaperOf } from "./paper";
-import { CardRunning } from "./panel/CardRunning";
 import { WeeklyMark } from "./scene/WeeklyMark";
 import { useOpenSettings } from "./scene/useOpenSettings";
 import { weeklyFor } from "./card-weekly";
@@ -951,53 +944,25 @@ export function HUDScene({
         }}
       />
     ) : undefined;
-  const newsContent =
-    request || event ? (
-      <PaperContext.Provider value={paper}>
-        {request ? (
-          <ApprovalContent
-            requests={news.requests}
-            selected={request}
-            select={news.select}
-            decide={onRequestDecision}
-            openSettings={openSettings}
-            light={light}
-            language={snapshotLanguage(snapshot)}
-            sessions={snapshot.sessions}
-            replies={news.replies}
-            handoffs={snapshot.handoffs}
-          />
-        ) : event ? (
-          <NewsContent
-            event={event}
-            snapshot={snapshot}
-            dismiss={news.dismiss}
-            replies={news.replies}
-            quotas={news.quotas}
-            drop={news.drop}
-            onStats={showPanelStats}
-            handoff={handoff}
-            light={light}
-            botLogos={config.botLogos}
-          />
-        ) : null}
-        {/* A notice's queue is printed on its receipt; a request's card
-            lists the replies waiting with it. */}
-        {!request && event && (
-          <PendingEventRows
-            queue={news.laneQueue}
-            currentID={event.id}
-            requests={news.requests}
-            select={news.select}
-            includeRequests
-            light={light}
-            zh={snapshotLanguage(snapshot) === "zh"}
-          />
-        )}
-        <CardRunning snapshot={snapshot} mark={frontOf!.source} light={light} />
-        <WeeklyMark weekly={weekly} />
-      </PaperContext.Provider>
-    ) : null;
+  const newsContent = (request || event) && (
+    <NewsCard
+      snapshot={snapshot}
+      config={config}
+      news={news}
+      request={request}
+      event={event}
+      vendor={vendors.find(
+        (vendor) => frontOf && vendor.key === vendorKey(frontOf.source),
+      )}
+      paper={paper}
+      light={light}
+      weekly={weekly}
+      decide={onRequestDecision}
+      openSettings={openSettings}
+      onStats={showPanelStats}
+      handoff={handoff}
+    />
+  );
   const eventContent = cardHandoff ? (
     <PaperContext.Provider value={cardPaper ?? paper}>
       <HandoffCard

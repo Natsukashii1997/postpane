@@ -447,3 +447,11 @@
 - 正确做法：改小人行为、票根 working、vendor 派生时，Rust 那份一起改，两边各补测试：`mark-director.ts` ↔ `src/crates/hud/src/bots.rs`（会话事实在 `bots/facts.rs`），`model.ts` 的 `vendorsFromSnapshot` ↔ `vendors.rs`，`stale.ts` ↔ `stale.rs`。预览台只能证明 TS 那份。
 - 证据：#354 后续补漏 PR 的 `bots.rs` 测试 `a_stale_session_rests_its_bot_unless_a_card_stands`、`stale.rs` 测试。
 - 升级：未升级。
+
+## L-50 ChatGPT 的标记名经 `vendorKey` 换算成 `openai`，按它筛接力会筛空（2026-11-14）
+
+- 现象：#368 给没有额度区块的 ChatGPT 卡加统一卡头，`BoardHeading` 用 `vendorKey("ChatGPT")` 去 `relaysOf` 找接力，预览台 `mixed` 场景里开着 2 单，纸飞机却不出来。
+- 根因：`agentArtworkKey` 把 ChatGPT 的标记名归到 `openai`（和 Codex 共用过 OpenAI 小人），而 `relaysOf` 认的是来源 id `chatgpt`。标记名、图标键、来源 id 是三样东西，名字相近容易混用。
+- 正确做法：按家找数据（接力、会话、审批）用来源 id：单家面板里取 `sessionScope(...).sources` 或 `sourcesForMark(snapshot, 标记)`，不要拿 `vendorKey(标记名)` 当来源；`BoardHeading` 的 `place` 参数就是为此加的。
+- 证据：`src/packages/hud/test/relay-toggle.test.ts`「every agent's card carries one plane in its head」断言 `place={selectedSources?.[0]}`。
+- 升级：未升级。
