@@ -82,6 +82,9 @@
         // is still being written: the answer fills the same message id, so
         // reporting either now would lose it. A later change samples again.
         if (!reply.markdown.trim() || reply.markdown !== seen) return;
+        // A reply before the newest prompt is an older turn's: a stop button
+        // seen by mistake must not make it news (#356 P1-02).
+        if (!page.answered(document)) return;
         tellComplete(reply);
       }, 600);
     }
@@ -111,13 +114,27 @@
     // PostPane heard nothing of a turn it waits on (#356): the newest reply,
     // once written, is told again; it counts once by its message id. One
     // before the newest prompt is an older turn's, never this one's answer.
+    // Written means unchanged over the same 600 ms a finished turn waits;
+    // `loaded` says whether the page shows its history yet, to ask again soon.
     if (command.op === "reread") {
-      const streaming = page.streaming(document);
-      const last = page.lastReply(document);
-      const told = !streaming && page.answered(document) && !!last?.markdown.trim();
-      if (told) tellComplete(last, { reread: true });
-      reply({ ok: true, streaming, told });
-      return false;
+      if (command.conversation && page.conversationId(location.href) !== command.conversation) {
+        reply({ ok: false, reason: "other-conversation" });
+        return false;
+      }
+      const ready = () => !page.streaming(document) && page.answered(document);
+      const seen = page.lastReply(document);
+      const loaded = !!seen || page.lastPrompt(document) !== null;
+      if (!ready() || !seen?.markdown.trim()) {
+        reply({ ok: true, streaming: page.streaming(document), told: false, loaded });
+        return false;
+      }
+      setTimeout(() => {
+        const now = page.lastReply(document);
+        const told = ready() && now?.messageId === seen.messageId && now.markdown === seen.markdown;
+        if (told) tellComplete(now, { reread: true });
+        reply({ ok: true, streaming: page.streaming(document), told, loaded });
+      }, 600);
+      return true;
     }
     if (command.op === "state") {
       reply({
