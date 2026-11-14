@@ -1,5 +1,6 @@
 import type { Session, SessionLiveFacts, Snapshot } from "@agent-hud/protocol";
 import { vendorKey, vendorsFromSnapshot } from "../model";
+import { isStale } from "../stale.ts";
 import {
   botState,
   eventRank,
@@ -239,7 +240,8 @@ export function botQueue(
             ownRequests.push(request);
         return {
           id: session.id,
-          phase: session.state,
+          // 「待核对」 is no call for the bot to come looking (ADR-0001).
+          phase: isStale(session) ? "idle" : session.state,
           live,
           observedAt: time(live?.observedAt ?? session.updatedAt) ?? 0,
           lastEventAt: time(live?.lastEventAt ?? session.updatedAt) ?? 0,

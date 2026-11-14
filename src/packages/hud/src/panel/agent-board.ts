@@ -13,6 +13,7 @@ import {
 } from "@agent-hud/ui/format";
 import { quotaCredits } from "../quota-rows.ts";
 import { quotaWindowLabel } from "./window-labels.ts";
+import { isStale } from "../stale.ts";
 
 const finite = (value: number | null | undefined): value is number =>
   value != null && Number.isFinite(value);
@@ -313,6 +314,8 @@ export interface LiveSession {
   status: "waiting" | "running";
   /** The oldest request it waits on, when there is one. */
   approval: Approval | null;
+  /** Waiting on a request heard nothing of for a while: 「待核对」. */
+  stale?: boolean;
 }
 
 /** The sessions the panel lists (owner, 2026-11-05): those waiting on you,
@@ -339,7 +342,12 @@ export function liveSessions(
         )
         .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
       if (asks.length || session.state === "waiting")
-        return { session, status: "waiting", approval: asks[0] ?? null };
+        return {
+          session,
+          status: "waiting",
+          approval: asks[0] ?? null,
+          stale: !asks.length && isStale(session),
+        };
       if (session.state === "running")
         return { session, status: "running", approval: null };
       return null;
@@ -359,6 +367,12 @@ export function liveSessionLine(
 ): string {
   const { approval, session } = entry;
   if (entry.status === "waiting") {
+    if (entry.stale)
+      return say(
+        language,
+        "待核对：很久没有新动静",
+        "Unconfirmed: quiet for a while",
+      );
     if (!approval) return say(language, "等你回复", "Waiting for you");
     const question = approval.questions?.[0]?.question?.trim();
     if (approval.kind === "question" || question)
