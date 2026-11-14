@@ -408,3 +408,11 @@
 - 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
 - 2026-11-14 收窄（常浩选甲）：同一天驿窗改成重启后自动往返接着跑，重启不再暂停，上面的根因只剩「回信刚到、正在转回」这一刻（`phase` 为 `replied`）；`live-auto-relays.mjs` 只查这一种，平时开着自动往返也照装。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
+
+## L-45 预览脚手架的 `?still` 用展开复制伪造 `matchMedia`，小人全退成静态图（2026-11-14）
+
+- 现象：#349 搭场景预览台，照抄 #331–#341 脚手架的 `?still`（报告减少动效，防截到半路帧，L-29）。控制台连报 `Bot artwork unavailable TypeError: media.addEventListener is not a function`，侧栏小人不画动态画布、退回静态图。之前几轮带 `?still` 截的预览图里，小人很可能都是静态的。
+- 根因：`{ ...real(q), matches: true }` 只复制自有属性，`MediaQueryList` 的 `addEventListener` 等方法在原型上，展开后就没了；`BotMark.tsx` 订阅减少动效变化时抛错，被兜底成静态图。
+- 正确做法：用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`，方法照原对象绑定（`src/packages/hud/preview/main.tsx`）。以后预览一律用常设的场景预览台（`pnpm --filter @agent-hud/hud run scenes`），不再另抄脚手架；截图前用 `document.querySelectorAll("canvas").length` 确认小人画布在。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`。
+- 升级：未升级。

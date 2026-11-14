@@ -13,6 +13,7 @@
 | 加或改 AI 功能、MCP 工具、读取哪家数据 | 下面「AI 接入」一节；改完同步设置 →「AI 接入」页 |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
 | 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
+| 改侧栏结构、给某家加能力（等你、在跑、回执、接力入口、看板） | [docs/adr/0001-工作场所契约.md](docs/adr/0001-工作场所契约.md)、[GLOSSARY.md](GLOSSARY.md)；改完跑 `workplace-contract.test.ts`，在场景预览台（`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480）逐个场景看，不再另搭 `preview-xxx` 脚手架 |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
 | 开需求、拆任务、实现、审查 | 下面「Agent skills」一节 |
 | 改动会碰到常浩定过的内容（含批量授权里的单项） | 下面「已定内容要改，先单独确认」 |
