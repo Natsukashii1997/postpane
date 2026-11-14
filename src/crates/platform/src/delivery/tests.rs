@@ -941,13 +941,16 @@ time.sleep(30)
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         let environment = [("PATH".to_owned(), "/usr/bin:/bin".to_owned())].into();
+        // A busy Mac can take seconds to start a freshly written script, so
+        // the handshake gets room of its own; the write under test keeps 3 s.
         let mut server = process::StdioServer::open(
             &script,
             &fixture.0.join("codex"),
             &environment,
-            Duration::from_secs(3),
+            Duration::from_secs(30),
         )
         .unwrap();
+        server.set_timeout(Duration::from_secs(3));
         let started = std::time::Instant::now();
         let text = "x".repeat(1024 * 1024);
         let result = server.mutation(
@@ -1013,7 +1016,8 @@ for line in sys.stdin:
                 fixture.paths(),
                 vec![target(Provider::Codex)],
                 Arc::new(NativeCodexTransport { queue }),
-                Duration::from_secs(10),
+                // Room for a busy Mac to start the stand-in; it answers at once.
+                Duration::from_secs(30),
             )
             .unwrap()
         };
