@@ -340,3 +340,23 @@ test("asked to read again, the newest written reply is told again", async () => 
     1,
   );
 });
+
+// #356: words sent and not answered yet leave the reply before them as the
+// last one; it is an older turn's, so asking again tells nothing.
+test("asked to read again before the newest prompt is answered, nothing is told", async () => {
+  const page = await open(() => {
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">第三轮：只看 P1-10</div>';
+    document.querySelector("main").append(turn);
+  });
+  const answer = await page.evaluate(
+    () =>
+      new Promise((resolve) => window.listener({ op: "reread" }, {}, resolve)),
+  );
+  assert.deepEqual(answer, { ok: true, streaming: false, told: false });
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+});

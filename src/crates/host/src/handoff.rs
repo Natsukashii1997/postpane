@@ -32,6 +32,7 @@ use tauri::Manager;
 
 mod back;
 mod lines;
+mod reread;
 mod texts;
 use back::back_text;
 use lines::AppLines;
@@ -66,6 +67,9 @@ pub(crate) trait Lines {
     /// Sends `text` into `conversation`, asked as `request`: the extension
     /// may still say it went in after the wait gave up (`Desk::observe`).
     fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String>;
+    /// Asks the extension to tell `conversation`'s newest reply again, once
+    /// written (#356); it comes back, if at all, as a turn (`observe`).
+    fn reread(&self, conversation: &str) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):
@@ -214,6 +218,9 @@ pub(crate) struct Desk {
     /// How many of each handoff's steps the sidebar has flown a letter for
     /// (#171); those kept from before a restart count as flown.
     tossed: Mutex<HashMap<String, usize>>,
+    /// When the extension was last asked to read each quiet handoff's
+    /// conversation again (#356).
+    reread_at: Mutex<HashMap<String, i64>>,
 }
 
 /// How many early turns are kept: those of conversations never bound (the
@@ -275,6 +282,7 @@ impl Desk {
             sending: Mutex::new(HashSet::new()),
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
+            reread_at: Mutex::new(HashMap::new()),
         };
         let now = now_ms();
         // Not `||`: both are to happen.
@@ -1370,8 +1378,9 @@ pub(crate) fn caller_session(caller: &Value) -> Option<String> {
 
 /// The snapshot's `handoffs`, with answers that wait to go on driven (one
 /// from before a restart, owner 2026-11-14), the words back to Claude
-/// followed (#257), and queued ones for a session that went quiet run in
-/// the background (L-14).
+/// followed (#257), queued ones for a session that went quiet run in the
+/// background (L-14), and conversations ChatGPT went quiet in read again
+/// (#356).
 pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
     let now = now_ms();
     let lines = AppLines(app);
@@ -1379,6 +1388,7 @@ pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
         desk.track(&lines, now);
     }
     desk.wake_queued(&lines, now);
+    desk.reread(&lines, now);
     desk.projection(now)
 }
 
@@ -1773,6 +1783,12 @@ mod tests {
             if self.send_fails.get() {
                 return Err("ChatGPT 插件没能完成：timeout".into());
             }
+            Ok(())
+        }
+        fn reread(&self, conversation: &str) -> Result<(), String> {
+            self.sent
+                .borrow_mut()
+                .push(("reread".into(), conversation.into(), String::new()));
             Ok(())
         }
         fn reaches(&self, _doer: &str, _session: &str) -> Result<(), String> {
@@ -4593,5 +4609,69 @@ mod tests {
         assert!(!desk.wake_queued(&lines, later));
         assert!(sent_as(&lines, "withdraw").is_empty());
         assert!(sent_as(&lines, "wake").is_empty());
+    }
+
+    // #356: a finished turn whose word was lost leaves the handoff waiting;
+    // the conversation is read again after three quiet minutes, every two.
+    #[test]
+    fn a_quiet_review_is_read_again_and_its_answer_taken_once() {
+        use super::reread::{AGAIN_MS, QUIET_MS};
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let at = desk.lock().get(&handoff.id).unwrap().phase_at;
+        assert_eq!(desk.reread(&lines, at + QUIET_MS - 1), 0, "not quiet yet");
+        assert_eq!(desk.reread(&lines, at + QUIET_MS), 1);
+        assert_eq!(
+            lines.sent.borrow().last().unwrap(),
+            &("reread".into(), "c-new".into(), String::new())
+        );
+        let first = at + QUIET_MS;
+        assert_eq!(desk.reread(&lines, first + AGAIN_MS - 1), 0, "asked lately");
+        assert_eq!(desk.reread(&lines, first + AGAIN_MS), 1);
+        // The app started again: what the last one asked is not kept, and
+        // the phase began before, so the conversation is read at once.
+        let restarted = Desk::new(Some(temp.path().join("data")));
+        assert_eq!(restarted.reread(&lines, first + AGAIN_MS + 1), 1);
+        // ChatGPT starts: three minutes from now on.
+        let started = first + AGAIN_MS + 2;
+        assert!(desk.observe(&turn("start", ""), started));
+        assert_eq!(desk.reread(&lines, started + QUIET_MS - 1), 0);
+        assert_eq!(desk.reread(&lines, started + QUIET_MS), 1);
+        // The answer told again is taken, once by its message id.
+        let told = json!({"type":"turn","phase":"complete","conversation":"c-new",
+            "reply":"1. 少一项\n结论：需修改","messageId":"m9","reread":true});
+        let answered = started + QUIET_MS + 1;
+        assert!(desk.observe(&told, answered));
+        assert!(!desk.observe(&told, answered + 1), "the same answer twice");
+        let book = desk.lock();
+        let kept = book.get(&handoff.id).unwrap();
+        assert_eq!(kept.phase, Phase::Replied);
+        let replies = kept.steps.iter().filter(|s| s.kind == StepKind::Reply);
+        assert_eq!(replies.count(), 1);
+        drop(book);
+        // Answered: nothing to read again.
+        let quiet = answered + QUIET_MS + AGAIN_MS;
+        let asked = sent_as(&lines, "reread").len();
+        assert_eq!(desk.reread(&lines, quiet), 0);
+        assert_eq!(sent_as(&lines, "reread").len(), asked);
+    }
+
+    // #356: with no extension connected there is no one to ask.
+    #[test]
+    fn a_quiet_review_is_not_read_again_without_the_extension() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let at = desk.lock().get(&handoff.id).unwrap().phase_at;
+        let offline = Fake {
+            offline: true,
+            ..Fake::default()
+        };
+        let late = at + super::reread::QUIET_MS;
+        assert_eq!(desk.reread(&offline, late), 0);
+        assert!(sent_as(&offline, "reread").is_empty());
+        // Once connected it is asked at once: the miss did not count.
+        assert_eq!(desk.reread(&lines, late + 1), 1);
     }
 }

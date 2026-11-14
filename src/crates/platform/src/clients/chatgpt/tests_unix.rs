@@ -196,6 +196,13 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
         next(&mut extension),
         json!({"type":"focus","conversation":"68a1"})
     );
+    // A quiet conversation is read again (#356): told, answered by nothing.
+    channel.reread("68a1").unwrap();
+    assert_eq!(
+        next(&mut extension),
+        json!({"type":"reread","conversation":"68a1"})
+    );
+    assert!(channel.reread("../x").is_err());
 
     // A newer connection wins; the old one is closed.
     let mut newer = connect(&data);
@@ -208,4 +215,5 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     drop(newer);
     wait_for(|| channel.status()["connected"] == false);
     assert!(!focus("68a1"));
+    assert!(channel.reread("68a1").is_err(), "no extension to ask");
 }

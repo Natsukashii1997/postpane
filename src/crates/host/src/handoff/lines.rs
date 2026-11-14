@@ -50,6 +50,13 @@ impl Lines for AppLines<'_> {
             .send_as(conversation, text, Some(request))
             .map(drop)
     }
+    fn reread(&self, conversation: &str) -> Result<(), String> {
+        let state = self
+            .0
+            .try_state::<crate::chatgpt::ChatGpt>()
+            .ok_or("The ChatGPT channel is unavailable")?;
+        state.channel()?.reread(conversation)
+    }
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String> {
         if doer == CODEX {
             // Codex's queue takes words for a thread not open now and

@@ -109,11 +109,12 @@
       return true;
     }
     // PostPane heard nothing of a turn it waits on (#356): the newest reply,
-    // once written, is told again; it counts once by its message id.
+    // once written, is told again; it counts once by its message id. One
+    // before the newest prompt is an older turn's, never this one's answer.
     if (command.op === "reread") {
       const streaming = page.streaming(document);
       const last = page.lastReply(document);
-      const told = !streaming && !!last?.markdown.trim();
+      const told = !streaming && page.answered(document) && !!last?.markdown.trim();
       if (told) tellComplete(last, { reread: true });
       reply({ ok: true, streaming, told });
       return false;
