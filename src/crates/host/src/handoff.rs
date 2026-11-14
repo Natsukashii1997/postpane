@@ -633,14 +633,20 @@ impl Desk {
         if let Some(chain) = chain.filter(|c| self.lock().chain_last(c).is_none()) {
             return Err(gate::chain_unknown(chain));
         }
-        let carried = self
-            .lock()
-            .earlier("", pr.as_deref(), chain)
-            .map_or(0, |earlier| earlier.period);
+        let earlier = self.lock().earlier("", pr.as_deref(), chain);
+        let carried = earlier.as_ref().map_or(0, |earlier| earlier.period);
         let limit = self.review_limit();
         let past = carried >= limit;
         if past && extra.is_none() {
             return Err(budget_spent(carried));
+        }
+        // Leave past the cap goes only with words from outside the agent,
+        // since the chain last went back (#347 P1-06).
+        if let Some(earlier) = earlier.filter(|_| past) {
+            let turn = lines.opener(rule.doer.as_deref().unwrap_or(CLAUDE), session);
+            if !self.lock().leave_spoken(&earlier.id, turn.as_ref()) {
+                return Err(leave_unheard());
+            }
         }
         let head = self.head(rule, brief);
         if engineering {
@@ -719,7 +725,18 @@ impl Desk {
         if spent && extra.is_none() {
             return Err(budget_spent(counted));
         }
-        if let Some(reason) = extra.filter(|_| spent) {
+        // Leave goes only with words from outside the agent (#347 P1-06);
+        // they may have begun the count again already (#258), and the
+        // leave still goes on the card and turns the round trip back on.
+        let heard = extra.is_some() && {
+            let doer = handoff.doer.as_deref().unwrap_or(CLAUDE);
+            let turn = lines.opener(doer, &handoff.claude_session);
+            self.lock().leave_spoken(&handoff.id, turn.as_ref())
+        };
+        if spent && !heard {
+            return Err(leave_unheard());
+        }
+        if let Some(reason) = extra.filter(|_| heard) {
             self.change(|book| book.allow_extra(&handoff.id, reason, now));
         }
         // Which round it is, and the newest problem ledger (#347).
@@ -1830,6 +1847,8 @@ mod tests {
         left_by: RefCell<HashMap<String, (String, Option<String>)>>,
         /// Who began the Claude session's current turn, and when (#258).
         opener: RefCell<Option<(Opener, i64)>>,
+        /// Whose turns were asked about: `doer|session`.
+        opener_asked: RefCell<Vec<String>>,
         /// The words each look at words left was asked with (#283).
         words: RefCell<Vec<String>>,
         /// The session's process stopped (L-14).
@@ -1984,7 +2003,10 @@ mod tests {
             ));
             Ok(())
         }
-        fn opener(&self, _doer: &str, _session: &str) -> Option<(Opener, i64)> {
+        fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)> {
+            self.opener_asked
+                .borrow_mut()
+                .push(format!("{doer}|{session}"));
             self.opener.borrow().clone()
         }
     }
@@ -4335,7 +4357,25 @@ mod tests {
             ruled(&desk, &lines, "s1", "L2", None, 8).err(),
             Some(budget_spent(2))
         );
+        // The agent's own word is no leave (P1-06): not told who began the
+        // turn, the words PostPane sent back, or a turn begun before them.
         let sends = lines.sent.borrow().len();
+        let back = last_reply_to_claude(&lines);
+        for turn in [
+            None,
+            Some((Opener::Plugin(back), 8)),
+            Some((Opener::Person, 6)),
+        ] {
+            *lines.opener.borrow_mut() = turn;
+            assert_eq!(
+                ruled(&desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9).err(),
+                Some(leave_unheard())
+            );
+        }
+        assert_eq!(lines.sent.borrow().len(), sends);
+        // Words from outside after them are: the person's, or another
+        // agent's in their name.
+        *lines.opener.borrow_mut() = Some((Opener::Plugin("常浩：再审一次".into()), 8));
         let Started::Sent { handoff, .. } =
             ruled(&desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9).unwrap()
         else {
@@ -4343,6 +4383,8 @@ mod tests {
         };
         assert_eq!(lines.sent.borrow().len(), sends + 1);
         assert_eq!((handoff.extra, handoff.auto), (1, true));
+        assert_eq!(handoff.counted(), 0, "a new leave counts from one");
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "claude|s1");
     }
 
     #[test]
@@ -4382,7 +4424,39 @@ mod tests {
             ruled(&desk, &lines, "s3", "L2", None, 7).err(),
             Some(budget_spent(2))
         );
-        assert!(ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).is_ok());
+        // Leave for a new handoff is heard since the chain last went back.
+        let back = last_reply_to_claude(&lines);
+        for turn in [
+            None,
+            Some((Opener::Plugin(back), 8)),
+            Some((Opener::Person, 5)),
+        ] {
+            *lines.opener.borrow_mut() = turn;
+            assert_eq!(
+                ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).err(),
+                Some(leave_unheard())
+            );
+        }
+        // A Codex thread's leave is read from its own turn (#283).
+        *lines.opener.borrow_mut() = None;
+        let codex = Rule {
+            risk: Some("L2".into()),
+            extra: Some("常浩授权".into()),
+            doer: Some(CODEX.into()),
+            ..Rule::default()
+        };
+        let brief = format!("{PR}\nhead_sha {HEAD}\n改动");
+        let refused = desk.start_ruled(&lines, "t9", None, "t", None, &brief, false, &codex, 9);
+        assert_eq!(refused.err(), Some(leave_unheard()));
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "codex|t9");
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        let Started::Opening { handoff, .. } =
+            ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).unwrap()
+        else {
+            panic!("a third session opens its own");
+        };
+        assert_eq!((handoff.extra, handoff.counted()), (1, 0));
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "claude|s3");
     }
 
     #[test]

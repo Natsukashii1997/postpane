@@ -16,6 +16,7 @@ mod chain;
 mod doer;
 mod gate;
 mod gate_io;
+mod leave;
 mod pull_request;
 pub use chain::{chain_id, Earlier};
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};

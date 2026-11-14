@@ -227,6 +227,13 @@ pub(super) fn budget_spent(counted: u32) -> String {
         &format!("This review chain had {counted} reviews under the person's leave (the cap); nothing was sent. Ask the person first; with their leave, give extra saying who allowed it and why, and reviews count from one again."),
     )
 }
+/// Leave past the cap the agent alone claimed (#347 P1-06).
+pub(super) fn leave_unheard() -> String {
+    l10n::text(
+        "这次是到顶后续审，要常浩授权，但驿窗核实不到这一轮是常浩开的头（他在会话里打的字、侧栏回复，或以他身份发来的智能体消息都算），没有发出。请常浩在会话里说一句再送。",
+        "This review goes past the cap and needs the person's leave, but PostPane could not tell this turn began with their words (typed in the session, a sidebar reply, or an agent's message in their name); nothing was sent. Ask the person to say so in the session, then send again.",
+    )
+}
 pub(super) fn bad_review_tail(flaw: Flaw, how: Sent) -> String {
     let (zh, en) = sent_words(how);
     l10n::text(
