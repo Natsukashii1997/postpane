@@ -2,9 +2,9 @@
 // one in the sidebar is this button, so they all light up under the pointer,
 // sink when pressed and fade when they cannot go (owner, 2026-11-07, #200:
 // copies with their own styles had none of it). The give is `.hud-go-button`
-// in global.css.
+// in global.css. The same square closes a card with an × (#334).
 import type { CSSProperties, MouseEvent } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
 
 export interface GoInks {
   /** The frame. */
@@ -23,6 +23,7 @@ export function GoButton({
   inks,
   onClick,
   size = 26,
+  icon = "go",
 }: {
   /** What it does, for the tooltip and screen readers. */
   label: string;
@@ -33,6 +34,8 @@ export function GoButton({
   onClick(event: MouseEvent<HTMLButtonElement>): void;
   /** The square's side: 26, or 20 in a compact row. */
   size?: 20 | 26;
+  /** ↗ to go somewhere, × to close what it sits on. */
+  icon?: "go" | "close";
 }) {
   return (
     <button
@@ -60,7 +63,11 @@ export function GoButton({
         } as CSSProperties
       }
     >
-      <ArrowUpRight size={size === 20 ? 12 : 13} strokeWidth={2} />
+      {icon === "close" ? (
+        <X size={size === 20 ? 12 : 13} strokeWidth={2} />
+      ) : (
+        <ArrowUpRight size={size === 20 ? 12 : 13} strokeWidth={2} />
+      )}
     </button>
   );
 }
