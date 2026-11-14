@@ -7,6 +7,23 @@
 
 
 
+## 接力卡 ChatGPT 意见第 10 条起序号不再挤进正文（#336）（2026-11-14，Claude，#334 收尾时报的范围外发现，常浩回「修序号」；已提交、已发布 `aa6459aad6dd` 回读通过）
+
+- 时间：开工 `2026-11-14 10:20`（`date '+%F %H:%M'` 记录）。来由：常浩截图里接力卡第 10 条起「10异常传播…」序号压在正文上。根因：意见列表每行 `gridTemplateColumns: "16px 1fr"`，序号列写死 16px。issue #336，PR #337。
+- 改了哪些文件：
+  - `hud/src/alerts/handoff-card.ts`：新增 `pointMarkColumn(count)`，一位数仍 16px，每多一位数字加 1ch（等宽数字）。
+  - `hud/src/alerts/HandoffPoints.tsx`（新）：意见列表从 `HandoffCard.tsx` 挪来，用上面的列宽。
+  - `hud/src/alerts/HandoffCard.tsx`：改用 `HandoffPoints`，717 → 677 行，基线收紧（`src/tooling/file-size-baseline.json`）。
+  - 测试：`hud/test/handoff-card.test.ts` 新增 2 条（改前 `ℹ pass 0` / `ℹ fail 1`，改后 `ℹ pass 19` / `ℹ fail 0`）。
+- 测试：`pnpm run check` 退出码 0；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。`pnpm test` 第 1 次退出码 101：`agent-hud-platform` 的 `a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline` 打开测试用 python 脚本 3 秒超时（`TimedOut`，当时负载 15–17），单独重跑 `1 passed`。第 2 次退出码 1：Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 429` / `ℹ fail 0`，`ℹ pass 9` / `ℹ fail 0`，`ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 1` / `ℹ fail 12`：`~/Library/Caches/ms-playwright/` 又被清掉（L-16）。常浩回「下载并补跑」后 `pnpm exec playwright install chromium-headless-shell`（连带 ffmpeg，共 209 MB），`pnpm run test:extension` `ℹ pass 13` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/`：`check.log`、`test-1-platform-timeout.log`、`test.log`、`test-extension.log`、`playwright-install.log`、`rules.log`、`build.log`、`install.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1472，沿用 #331 的 2026-11-14 08:46 真实快照）。「digital-twin｜#131 托管状态底座」12 条意见：「10.」本身 19.4px，列宽 16 → 23.9px，10–12 条与正文分开、换行对齐；4 / 6 / 7 条意见的卡列宽仍 16px。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/`：`before-preview-10-overlaps.jpg`（改前，#334 预览）、`after-preview-10-12.jpg`；脚手架 `preview-336/`（未提交）。
+- 发布与回读：`aa6459aad6dd`（从本分支打包，打包前 main 无新合并），`install.sh` 回读产物与已装一致、签名证书照常（`H"b773068e`）；装前 `6910f354edcc`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/PostPane-6910f354edcc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机看序号未做，装完没截屏查「想访问文稿」弹窗（未做）。
+- 与授权不一致之处、遗留问题：
+  - **装机前没停下**：把「查有没有开着的自动往返接力」和 `install.sh` 写进同一条命令，查出 `h1a1d7a90d8e00`（digital-twin｜PR #175 专项复审，10:39:33 刚把请审核送给 ChatGPT）开着自动往返也照装了；10:39:58 重启后这单记「驿窗重启，自动往返先暂停」，`auto` 变 false。ChatGPT 回信不会自动转回 Claude，要常浩在卡上点「转回 Claude」或「继续自动」。已在会话里如实报告。
+  - 范围外发现：无。skill 进化：建议 `install.sh` 发现开着的自动往返接力就拒装、要加 `--force` 才装（未做，待批）。
+- 本轮新坑：无
+
 ## 侧栏接力卡加「×」返回，接力进行中也能回到待审批卡（#334）（2026-11-14，Claude，常浩截图反馈「点进接力看板就再也切不出去」，看根因后在三种做法里选「乙 卡上加返回」；已提交、已发布 `6910f354edcc` 回读通过）
 
 - 时间：开工 `2026-11-14 09:58`（`date '+%F %H:%M'` 记录）。来由：侧栏点开接力卡后，接力没结束时回不到待审批卡。根因：接力卡只在按 Esc（侧栏通常没有键盘焦点）或侧栏完全收起时关，「完全收起」是 `open || event || request` 为假（`HUDScene.tsx`）；待回答的 ASK 一直挂着（#184），`request` 一直有值，卡永远关不掉；卡底接力结束前没有「知道了」。列了甲（鼠标移开就收）/ 乙（卡上加返回）/ 丙（两样都要），常浩选乙。issue #334，PR #335。
