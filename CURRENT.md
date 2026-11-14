@@ -7,6 +7,21 @@
 
 
 
+## 工作场所契约第 2 批：等你三态与统一工作场所视图（#354）（2026-11-14，Claude 两个会话 + 1 个子 agent，常浩回「按计划开工」；已提交、已发布 `7d3823d6853d` 回读通过）
+
+- 时间：开工 `2026-11-14 15:37`（取自分支创建时间 `git reflog`；上一会话做到一半因上下文到 50% 交接，本会话 15:45 接手）。来由：ADR-0001 第 2 批，统一数据与状态。上一会话写了前端（提交 `b02a697`）并派子 agent 改后端；本会话等子 agent 停笔后审它的改动，补完前端，契约测试转正，跑测试、装机、交接。issue #354。
+- 改了哪些文件：
+  - 常浩要求的（B1，后端，子 agent 写、本会话审）：`agents/src/transcript/live.rs`：会话记录里仍开着的提问（`AskUserQuestion`、Codex `request_user_input`、桌面应用「下一步」提问）不再因 30 分钟没新日志就当放弃，一直算 waiting；静默满 30 分钟的请求事实带 `stale: true`（「待核对」），到点不用新事件也会刷新。`agents/src/claude/processes.rs`：已退出的 Claude 进程不再过一小时就忘（请求不再自己过期，忘了会让等你冒回来），#251 进程已死照旧撤。`core/src/database/checkpoints.rs`：等你的会话不再无视一天的列表窗口（不然几天前没答的提问会回来）。新测试 `agents/src/transcript/open_request_tests.rs`（6 条：45 分钟仍等且 stale、10 分钟不 stale、答了不再等、没提问的安静回合照旧变空闲、到 30 分钟那一刻转 stale、桌面「下一步」提问一小时后仍等），`claude/processes_tests.rs` 1 条（干净退出的会话一天后仍算结束），`core/src/presentation/tests.rs` 2 条（进程没了就不等，#251；超过一天的提问不回列表）。
+  - 常浩要求的（前端）：`hud/src/workspace.ts`（每家一份工作场所视图 `workspaceOf`：等你（待核对排后）/ 在跑 / 出错 / 接力；`relaysOf`、`cardRelays`）；`hud/src/stale.ts`（`isStale`、`isBusy`）；协议 `AttentionFact.stale`；卡底「正在进行」改从 `workspaceOf` 取，没审批卡的等你也列（B3）；待审批卡纸飞机只进本家参与的接力（B4，C2）；看板会话行遇待核对显示「待核对：很久没有新动静」；待核对不算 working，小人导演把它当空闲、不带请求（有审批卡时卡就是证据，仍算等你）。契约测试 `hud/test/workplace-contract.test.ts`：B3、B4、B9 转正，新增 B1 一条（12 条全过、0 todo）；场景 `codex-stale`（`test/scenes/scenes.ts`、`build.ts` 加 `stale`）。
+  - 顺手改的：300 行棘轮（上一会话的 WIP 提交让 3 个文件超基线）：小人导演看会话的那段（`Facts`、`time`、请求合并）从 `bots/mark-director.ts` 拆到新 `bots/session-facts.ts`（`factsOf`，加测试 `hud/test/session-facts.test.ts` 3 条）；`liveSessionLine` 从 `panel/agent-board.ts` 拆到新 `panel/live-line.ts`，`SessionsSection.tsx`、`test/agent-board.test.ts` 改导入；`model.ts` 的 working 改用 `isBusy`；基线收紧 3 项（只减）。拆的时候修了上一会话前端的一个漏洞：原来只把待核对会话的 phase 改成 idle，它的请求仍进小人的请求队列，小人照样摆「问你」。
+  - **改变了已有行为的**：只在会话记录里的提问（没有审批卡）超过 30 分钟不再消失，挂成「待核对」，直到答复、Claude 进程确认已死、或离开一天的列表窗口；手动忽略用现有左滑「移除」（C4 不做 24 小时折叠）。卡底「正在进行」现在也列没审批卡的等你。待审批卡上的纸飞机只进本家参与的接力，角标数随之变小（DeepSeek 卡不再出现纸飞机）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `973 passed; 0 failed`，前端 `ℹ pass 449` / `ℹ fail 0` / `ℹ todo 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。第一次 `pnpm run check` 没过：上一会话的 WIP 提交让 `mark-director.ts`（504/502）、`model.ts`（353/350）、`agent-board.ts`（459/445）超基线（`check-1-file-size.txt`），拆文件后重跑三条全过。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/`：`check.txt`、`test.txt`、`node-tests.txt`。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-354`）`codex-stale` 场景开看板：Codex「正在进行 · 2」，「改日志格式 · 等你回复」在前，「清理旧的构建缓存 · 待核对：很久没有新动静」在后；拆文件后复查同一行仍在。L-35：装机前隔 2 秒两张静止侧栏逐字节相同（`897b6d7b5f4a`）；装后约 30 秒、再隔 2 秒的两张逐字节相同（`795a0cea4c69`）。装前装后 Claude、Codex、Hermes、DeepSeek 四张票根一样，ChatGPT 票根从「审」印章变成「在答」：装机前 2 分钟（16:04）接力单 `h1a1d90c43af00` 返回、只剩 `h1a1d872e80203` 在答，是真实状态变了，本轮没碰 `relay-stamps.ts`、`chatgpt-desk.ts`、`HUDMarkStrip.tsx`。**未做**：实机看「待核对」那一行（此刻本机没有静默 30 分钟以上的提问会话）、装完截整屏看「想访问文稿」弹窗（L-06）。
+- 截图：证据目录 `scene-codex-stale-panel.jpg`。`before-hud-1/2.png`、`after-hud-0s.png`、`after-hud-1/2.png`。
+- 发布与回读：`install.sh 354-workplace-state`：装前 `bf91100ccab6`，备份在证据目录；产物 `7d3823d6853d` / 已装 `7d3823d6853d`，签名证书照常（`H"b773068e`）；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/PostPane-bf91100ccab6.app" /Applications/PostPane.app; open /Applications/PostPane.app`。**注意**：装前的 `bf91100ccab6` 不是第 1 批的 `0df35d5631a3`，是并行的 #353（后台回复，分支 `claude/353-bg-reply` 未合并）会话装的测试包；本次装机覆盖了它，实机现在不含 #353 的改动，#353 合并后需从 main 重打重装（L-05）。
+- 与授权不一致之处、遗留问题、范围外发现：常浩的「按计划开工」是经 agent-hud 插件转进本会话的侧栏回复，和上一轮给的按钮一字不差，按常浩本人的回答处理。**撤下一条**：审核报告里「补 Codex 完成、提醒钩子」不做——Claude 的「完成」同样是 `None`、从会话记录判断，Codex 等审批已由 `PermissionRequest` 钩子加桌面观察器覆盖（issue #354 第 3 条）。看板目前仍是全局「正在进行」列表、没从 `workspaceOf` 取，归第 3 批 C1 看板分家。B9 只做了数据层（`workspaceOf().failed`），出错回执归第 3 批 C6。范围外发现（上一批记过）：有待审批卡时点任何一家票根都先弹那张卡，归第 3 批。下一步：第 3 批界面统一，先出三版预览。skill 进化：无。
+- 本轮新坑：无
+
 ## Claude 会话挂着后台命令时侧栏不再误报 REPLY（#353）（2026-11-14，Claude，常浩截图指出「明明是后台在跑，但是显示的反而是回复，这不合理」；已提交、已发布 `bf91100ccab6` 回读通过）
 
 - 时间：开工 `2026-11-14 15:35`（`date '+%F %H:%M'` 记录）。来由：一个 Claude 会话用 `run_in_background` 跑全量测试、说完「等测试结果出来补上数字」就停下，侧栏立刻出 REPLY，当成回复完成。issue #353。
