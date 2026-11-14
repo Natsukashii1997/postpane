@@ -175,10 +175,7 @@ pub fn vendors<'a>(snapshot: &'a Value, mode: &str, now_ms: i64) -> Vec<Vendor<'
                     .or_else(|| deepseek.as_ref().map(|(_, level)| *level))
                     .or_else(|| balance.and_then(|b| b["level"].as_str()))
                     .unwrap_or("stale"),
-                working: sessions
-                    .iter()
-                    .filter(|s| matches!(s["state"].as_str(), Some("running" | "waiting")))
-                    .count()
+                working: sessions.iter().filter(|s| crate::stale::busy(s)).count()
                     + relays_answering(snapshot, &key),
                 balance: deepseek.and_then(|(label, _)| label).or_else(|| {
                     balance.map(|b| {

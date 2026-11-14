@@ -7,6 +7,8 @@ use crate::{presentation::mark, vendors::vendors};
 use serde_json::{json, Map, Value};
 use std::{cmp::Ordering, collections::HashMap};
 
+mod facts;
+
 /// A request an agent waits on: a permission, a question or a plan.
 #[derive(Clone)]
 struct Request {
@@ -511,36 +513,7 @@ fn bot_queue(snapshot: &Value, now: f64) -> Vec<QueueMark> {
                         coalesce(&session["liveFacts"]["lastEventAt"], &session["updatedAt"]);
                     time(last).unwrap_or(0.0) >= now - 86400.0
                 })
-                .map(|session| {
-                    let id = text(&session["id"]);
-                    let live = session["liveFacts"].clone();
-                    let mut own: Vec<Request> = live["requests"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .map(|item| Request {
-                            id: text(&item["id"]),
-                            session_id: text(&item["sessionId"]),
-                            kind: text(&item["kind"]),
-                            at: time(&item["at"]).unwrap_or(0.0),
-                        })
-                        .collect();
-                    for request in requests.iter().filter(|request| request.session_id == id) {
-                        if !own.iter().any(|item| item.id == request.id) {
-                            own.push(request.clone());
-                        }
-                    }
-                    Facts {
-                        phase: text(&session["state"]),
-                        observed_at: time(coalesce(&live["observedAt"], &session["updatedAt"]))
-                            .unwrap_or(0.0),
-                        last_event_at: time(coalesce(&live["lastEventAt"], &session["updatedAt"]))
-                            .unwrap_or(0.0),
-                        requests: own,
-                        id,
-                        live,
-                    }
-                })
+                .map(|session| facts::of(session, &requests))
                 .collect();
             // Each request once, where it first appears, as its last listing has it.
             let mut merged: Vec<Request> = vec![];
@@ -680,6 +653,48 @@ mod tests {
             }
             _ => a == b,
         }
+    }
+
+    /// A session 「待核对」 is no call for the Bot to come looking: idle and
+    /// asking nothing, and its mark not working; a card for it is evidence
+    /// enough that it waits (ADR-0001, #354).
+    #[test]
+    fn a_stale_session_rests_its_bot_unless_a_card_stands() {
+        let snapshot = |stale: bool, card: bool| {
+            let approvals = if card {
+                json!([{"id": "card", "source": "codex", "sessionId": "x", "kind": "question", "createdAt": "2026-11-14T05:15:00Z"}])
+            } else {
+                json!([])
+            };
+            json!({
+                "language": "zh", "billing": [], "approvals": approvals,
+                "quotas": [{"vendor": "codex", "name": "5h", "usedPercent": 4.0, "status": "normal", "resetAt": null}],
+                "sessions": [{"id": "x", "source": "codex", "state": "waiting", "updatedAt": "2026-11-14T05:15:00Z",
+                    "liveFacts": {"observedAt": "2026-11-14T06:00:00Z", "lastEventAt": "2026-11-14T05:15:00Z", "requests": [
+                        {"id": "log:codex:x:q1", "sessionId": "x", "kind": "question", "at": "2026-11-14T05:15:00Z", "stale": stale}
+                    ]}}]
+            })
+        };
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-14T06:00:00Z")
+            .unwrap()
+            .timestamp() as f64;
+        let codex = |stale: bool, card: bool| {
+            bot_queue(&snapshot(stale, card), now)
+                .into_iter()
+                .find(|mark| mark.key == "codex")
+                .unwrap()
+        };
+        let mark = codex(true, false);
+        assert!(!mark.is_working);
+        assert_eq!(mark.sessions[0].phase, "idle");
+        assert!(mark.requests.is_empty());
+        let mark = codex(true, true);
+        assert_eq!(mark.sessions[0].phase, "waiting");
+        assert!(mark.requests.iter().any(|request| request.id == "card"));
+        let mark = codex(false, false);
+        assert!(mark.is_working);
+        assert_eq!(mark.sessions[0].phase, "waiting");
+        assert_eq!(mark.requests.len(), 1);
     }
 
     /// director-cases.json holds steps the TypeScript MarkDirector took, with
