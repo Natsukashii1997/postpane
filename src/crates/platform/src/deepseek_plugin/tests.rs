@@ -3,7 +3,12 @@ use super::*;
 use crate::hud_tools::{Client, Places};
 use agent_hud_core::requests::Requests;
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+    time::Instant,
+};
 
 fn places(root: &Path) -> Places {
     let dsh = root.join("dsh");
@@ -482,4 +487,101 @@ fn the_observer_shows_asks_leaves_answers_and_settles_when_they_go() {
     assert!(!folder.join("q2.json").exists());
     drop(observer);
     assert!(!channel.directory().join("app.json").exists());
+}
+
+/// The DeepSeek sessions the plugin observer says wait.
+fn plugin_waiting(requests: &Requests) -> HashSet<String> {
+    requests
+        .native_waiting_sessions()
+        .remove("deepseek")
+        .unwrap_or_default()
+}
+
+/// A channel with `SESSION` checked in, and an observer on it.
+fn watched(temp: &Path) -> (DeepSeekChannel, PathBuf, Requests, asks::Observer) {
+    let channel = DeepSeekChannel::new(temp.join("channel"));
+    let folder = channel.directory().join("asks");
+    crate::os::private_directory(&folder).unwrap();
+    check_in(&channel, SESSION);
+    let requests = Requests::default();
+    let observer =
+        asks::Observer::start(channel.clone(), requests.clone(), Arc::new(|| {})).unwrap();
+    (channel, folder, requests, observer)
+}
+
+#[test]
+fn an_ask_answered_here_stops_waiting_though_its_file_stays() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_channel, folder, requests, observer) = watched(temp.path()); // plain directory
+    fs::write(folder.join("p1.json"), approval_ask("p1").to_string()).unwrap();
+    fs::write(folder.join("q1.json"), question_ask("q1").to_string()).unwrap();
+    observer.pass();
+    let session = HashSet::from([format!("deepseek:{SESSION}")]);
+    assert_eq!(plugin_waiting(&requests), session);
+
+    // Left to Harness's own card: the session still waits there.
+    let now = crate::hooks::now_ms();
+    requests
+        .answer(&asks::request_id("q1"), &json!({"kind": "leave"}), now)
+        .unwrap();
+    // Answered here; the plugin that would take both files is gone.
+    requests
+        .answer(&asks::request_id("p1"), &json!({"kind": "deny"}), now)
+        .unwrap();
+    until(|| folder.join("p1.answer").exists());
+    observer.pass();
+    assert_eq!(
+        plugin_waiting(&requests),
+        session,
+        "the left one still waits"
+    );
+
+    fs::remove_file(folder.join("q1.json")).unwrap();
+    until(|| {
+        observer.pass();
+        plugin_waiting(&requests).is_empty()
+    });
+    assert!(folder.join("p1.json").exists(), "only the HUD's mark goes");
+}
+
+#[test]
+fn an_ask_whose_file_goes_stops_waiting() {
+    let temp = tempfile::tempdir().unwrap();
+    let (_channel, folder, requests, observer) = watched(temp.path()); // plain directory
+    fs::write(folder.join("q1.json"), question_ask("q1").to_string()).unwrap();
+    observer.pass();
+    assert!(!plugin_waiting(&requests).is_empty());
+    fs::remove_file(folder.join("q1.json")).unwrap();
+    observer.pass();
+    assert!(plugin_waiting(&requests).is_empty());
+    assert!(requests.views(crate::hooks::now_ms()).is_empty());
+}
+
+#[test]
+fn an_ask_of_a_host_that_stopped_after_it_was_shown_is_taken_away() {
+    let temp = tempfile::tempdir().unwrap();
+    let (channel, folder, requests, observer) = watched(temp.path()); // plain directory
+    let file = folder.join("q1.json");
+    fs::write(&file, question_ask("q1").to_string()).unwrap();
+    observer.pass();
+    assert!(!plugin_waiting(&requests).is_empty());
+
+    // The host stops checking in; its ask stays behind.
+    fs::remove_file(
+        channel
+            .directory()
+            .join("sessions")
+            .join(format!("{SESSION}.json")),
+    )
+    .unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(60))
+        .unwrap();
+    observer.pass();
+    assert!(!file.exists());
+    assert!(plugin_waiting(&requests).is_empty());
+    assert!(requests.views(crate::hooks::now_ms()).is_empty());
 }

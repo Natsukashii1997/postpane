@@ -195,6 +195,24 @@ const twoRelays: Scene = {
   }),
 };
 
+const reviews: Scene = {
+  key: "chatgpt-reviews",
+  title: "ChatGPT 有自己的对话和两单审核，没有审批卡（看审核纸条）",
+  snapshot: snapshot({
+    sessions: [
+      ...twoRelays.snapshot.sessions.filter((s) => s.source !== "deepseek"),
+      session({
+        place: "chatgpt",
+        id: "chatgpt:g-own",
+        title: "自己问的：排期怎么写",
+        state: "idle",
+        lastAgo: 30,
+      }),
+    ],
+    handoffs: twoRelays.snapshot.handoffs,
+  }),
+};
+
 const failed: Scene = {
   key: "failed",
   title: "Codex 一轮失败、Claude 被限流",
@@ -260,6 +278,7 @@ export const SCENES: readonly Scene[] = [
   claudeOldAsk,
   waitingNoCard,
   twoRelays,
+  reviews,
   failed,
   replies,
   everything,

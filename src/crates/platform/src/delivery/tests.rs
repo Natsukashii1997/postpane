@@ -1,4 +1,4 @@
-use super::journal::{digest, write_attempt, Attempt};
+use super::journal::{self, digest, write_attempt, Attempt};
 use super::*;
 use serde_json::{json, Value};
 use std::{
@@ -1168,4 +1168,138 @@ for line in sys.stdin:
             worker.join().unwrap();
         }
     }
+}
+
+/// A receipt maintenance can no longer change, written as an earlier send left it.
+fn settled_receipt(service: &LocalClients, request: &str, at: SystemTime) -> PathBuf {
+    let file = service.attempt_path(Provider::Codex, SESSION, request);
+    let attempt = Attempt {
+        fingerprint: "fixture".into(),
+        receipt: Receipt {
+            provider: Provider::Codex,
+            session_id: SESSION.into(),
+            thread_id: Some(THREAD.into()),
+            request_id: request.into(),
+            client_request_id: format!("agent-hud:{request}"),
+            turn_id: None,
+            owner_client_id: None,
+            state: DeliveryState::Started,
+            at_ms: millis(at),
+            reason: None,
+        },
+    };
+    write_attempt(&file, &attempt, true).unwrap();
+    file
+}
+
+#[test]
+fn maintenance_reads_only_unfinished_receipts_and_lets_old_settled_ones_go() {
+    let fixture = Fixture::new();
+    fixture.checkin();
+    let service = fixture.service(Provider::Claude);
+    let now = SystemTime::now();
+    assert_eq!(
+        service.send(request(Provider::Claude)).unwrap().state,
+        DeliveryState::Waiting
+    );
+    let settled: Vec<PathBuf> = (0..300)
+        .map(|n| settled_receipt(&service, &format!("old-{n}"), now))
+        .collect();
+    service.maintain(now).unwrap();
+
+    // Settled receipts are not read again: unreadable ones (their times kept)
+    // do not stop maintenance, which still follows the unfinished one.
+    for file in &settled {
+        let modified = fs::metadata(file).unwrap().modified().unwrap();
+        fs::write(file, b"not a receipt").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(file)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+    }
+    atomic_json(&fixture.prompt(), &json!({"takenAt": 1})).unwrap();
+    service.maintain(now).unwrap();
+    let claude = service.attempt_path(Provider::Claude, SESSION, REQUEST);
+    assert_eq!(
+        journal::read_attempt(&claude)
+            .unwrap()
+            .unwrap()
+            .receipt
+            .state,
+        DeliveryState::Taken
+    );
+
+    // Past the keeping time, settled receipts go; a recent one stays.
+    let later = now + Duration::from_secs(8 * 86_400);
+    let recent = settled_receipt(&service, "recent", later - Duration::from_secs(86_400));
+    service.maintain(later).unwrap();
+    assert!(settled.iter().all(|file| !file.exists()));
+    assert!(recent.exists());
+}
+
+#[test]
+fn a_settled_receipt_keeps_its_request_from_going_again_while_it_is_kept() {
+    let fixture = Fixture::new();
+    fixture.checkin();
+    let service = fixture.service(Provider::Claude);
+    let now = SystemTime::now();
+    service.send(request(Provider::Claude)).unwrap();
+    atomic_json(&fixture.prompt(), &json!({"takenAt": 1, "startedAt": 2})).unwrap();
+    service.maintain(now).unwrap();
+    fs::remove_file(fixture.prompt()).unwrap();
+
+    // Within the keeping time the same request is answered from its receipt.
+    service
+        .maintain(now + Duration::from_secs(6 * 86_400))
+        .unwrap();
+    assert_eq!(
+        service.send(request(Provider::Claude)).unwrap().state,
+        DeliveryState::Started
+    );
+    assert!(!fixture.prompt().exists(), "not left for Claude again");
+
+    // After it, the receipt is gone and the identity is free again.
+    service
+        .maintain(now + Duration::from_secs(8 * 86_400))
+        .unwrap();
+    assert!(!service
+        .attempt_path(Provider::Claude, SESSION, REQUEST)
+        .exists());
+    fixture.checkin(); // the look into the future swept the check-in away
+    assert_eq!(
+        service.send(request(Provider::Claude)).unwrap().state,
+        DeliveryState::Waiting
+    );
+}
+
+#[test]
+fn session_gates_go_once_no_one_holds_them_and_still_keep_one_session_in_order() {
+    let fixture = Fixture::new();
+    let service = fixture.service(Provider::Claude);
+    let held = service.gate(Provider::Claude, SESSION);
+    let guard = held.lock().unwrap();
+    for n in 0..10_000 {
+        drop(service.gate(Provider::Codex, &format!("session-{n}")));
+    }
+    let size = |service: &LocalClients| service.gates.lock().unwrap().len();
+    assert!(size(&service) <= 2, "{} gates kept", size(&service));
+    // The held gate is still the session's: another caller waits for it.
+    let again = service.gate(Provider::Claude, SESSION);
+    assert!(Arc::ptr_eq(&held, &again));
+    assert!(again.try_lock().is_err());
+    std::thread::scope(|scope| {
+        let waiting = scope.spawn(|| {
+            let gate = service.gate(Provider::Claude, SESSION);
+            let _turn = gate.lock().unwrap();
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!waiting.is_finished(), "a second caller went in");
+        drop(guard);
+        waiting.join().unwrap();
+    });
+    drop((held, again));
+    drop(service.gate(Provider::Codex, "one-more"));
+    assert!(size(&service) <= 1, "{} gates kept", size(&service));
 }

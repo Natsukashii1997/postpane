@@ -281,13 +281,10 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         <>
           <BoardSentence rows={rows} now={now} light={light} />
           {sections.map(({ key, rows: sectionRows, account, current }) => {
-            // Earned resets belong to the signed-in Codex account.
-            const resets =
-              account &&
-              current &&
-              sectionRows.some((row) => vendorKey(row.vendor) === "codex")
-                ? account.resetCredits
-                : null;
+            // Earned resets belong to the signed-in account that reports
+            // them (only Codex's does today); not keyed to an agent's name
+            // (ADR-0001 白名单, #351 H2).
+            const resets = current ? (account?.resetCredits ?? null) : null;
             return (
               <div
                 key={key}

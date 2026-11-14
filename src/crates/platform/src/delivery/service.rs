@@ -33,6 +33,7 @@ impl LocalClients {
             paths,
             targets: Mutex::new(targets),
             gates: Mutex::new(HashMap::new()),
+            settled: Mutex::new(HashMap::new()),
             codex,
             antigravity: Arc::new(NativeAntigravityTransport),
             deepseek: None,

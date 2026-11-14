@@ -19,6 +19,7 @@ mod os;
 pub mod plans;
 pub mod process;
 pub mod protobuf;
+pub mod redact;
 pub mod relays;
 pub mod replies;
 pub mod sqlite;

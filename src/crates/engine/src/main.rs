@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let id = request.get("id").cloned().unwrap_or(Value::Null);
                 match request["method"].as_str() {
                     Some(method) => {
-                        // A collection pass waits for an account reading in progress.
+                        // A collection pass waits only while an account reading stores its result.
                         let _turn = collection
                             .as_ref()
                             .filter(|_| {

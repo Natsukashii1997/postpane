@@ -12,7 +12,7 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     sync::mpsc,
     time::{Duration, Instant},
 };
@@ -27,6 +27,36 @@ pub(super) fn executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     fs::metadata(path)
         .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+/// Starts `command` as the leader of a process group of its own, so ending it
+/// (`kill_process_tree`) also ends what it started.
+pub(crate) fn isolate_process_tree(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+}
+/// Ends a child started with `isolate_process_tree`, and every process still
+/// in its group, such as a helper holding the child's output open. Only that
+/// one group, and only while the child is not reaped yet: until then its pid,
+/// which is the group's id, can belong to nothing else.
+pub(crate) fn kill_process_tree(child: &mut Child) {
+    if let Ok(pid) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: a zeroed siginfo_t is valid; WNOWAIT leaves the child as it
+        // is, so `Child::wait` still reaps it.
+        let unreaped = unsafe {
+            let mut info: libc::siginfo_t = std::mem::zeroed();
+            libc::waitid(
+                libc::P_PID,
+                pid as libc::id_t,
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            ) == 0
+        };
+        if unreaped {
+            // SAFETY: signals the child's own group, checked above.
+            unsafe { libc::killpg(pid, libc::SIGKILL) };
+        }
+    }
+    let _ = child.kill();
 }
 fn script_command(script: &str, args: &[&OsStr]) -> Command {
     let mut command = Command::new("/bin/sh");

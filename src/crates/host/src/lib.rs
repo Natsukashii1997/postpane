@@ -233,8 +233,8 @@ struct Service {
     hooks: Arc<Mutex<agent_hud_runtime::hooks::Hooks>>,
     hook_actions: Arc<Mutex<()>>,
     extension: Option<Arc<dyn extension::ProductExtension>>,
-    /// Taken before `backend` for a collection pass, so an account reading in
-    /// progress delays only that pass, never a UI request.
+    /// Taken before `backend` for a collection pass; an account reading takes
+    /// it only to store its result, so a pass waits that long at most (#351).
     collection: agent_hud_runtime::CollectionGate,
 }
 

@@ -399,17 +399,28 @@ impl Shared {
             set.sort();
             set
         };
-        self.requests
-            .set_native_waiting(AGENT.id, &sessions, crate::hooks::now_ms());
+        self.requests.set_native_waiting_by(
+            AGENT.id,
+            "question stream",
+            &sessions,
+            crate::hooks::now_ms(),
+        );
         (self.wake)();
     }
 
+    /// Harness settled the question: forget it, and ignore it if it comes back.
     fn withdraw(&self, id: &str) {
-        {
-            let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
-            state.resolved.insert(id.to_owned(), Instant::now());
-            state.pending.remove(id);
-        }
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.resolved.insert(id.to_owned(), Instant::now());
+        drop(state);
+        self.forget(id);
+    }
+
+    /// Takes the question off the HUD: its card and its waiting mark.
+    fn forget(&self, id: &str) {
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.pending.remove(id);
+        drop(state);
         self.requests.settle_native(id);
         self.publish_waiting();
     }
@@ -467,9 +478,12 @@ impl Drop for Observer {
             state.endpoints.clear();
             state.resolved.clear();
         }
-        self.shared
-            .requests
-            .set_native_waiting(AGENT.id, &[], crate::hooks::now_ms());
+        self.shared.requests.set_native_waiting_by(
+            AGENT.id,
+            "question stream",
+            &[],
+            crate::hooks::now_ms(),
+        );
         if let Some(worker) = self.worker.take() {
             if worker.is_finished() {
                 let _ = worker.join();
@@ -590,43 +604,26 @@ fn answer_loop(shared: Arc<Shared>, pending: Pending, ticket: Ticket) {
         if !shared.active.load(Ordering::Acquire) {
             return;
         }
-        match build_answer(&decision, &pending) {
+        let failure = match build_answer(&decision, &pending) {
             Ok(None) => return,
-            Ok(Some(body)) => match post_answer(&shared.http, pending.port, &body) {
-                Ok(Receipt::Accepted | Receipt::NotPending) => {
-                    shared.requests.note_native_delivery(
-                        &pending.id,
-                        AGENT.id,
-                        &pending.session_id,
-                        "confirmed",
-                        None,
-                        crate::hooks::now_ms(),
-                    );
-                    shared.withdraw(&pending.id);
-                }
-                Err(reason) => {
-                    shared.requests.note_native_delivery(
-                        &pending.id,
-                        AGENT.id,
-                        &pending.session_id,
-                        "failed",
-                        Some(reason),
-                        crate::hooks::now_ms(),
-                    );
-                    shared.requests.settle_native(&pending.id);
-                }
-            },
-            Err(reason) => {
-                shared.requests.note_native_delivery(
-                    &pending.id,
-                    AGENT.id,
-                    &pending.session_id,
-                    "failed",
-                    Some(reason),
-                    crate::hooks::now_ms(),
-                );
-                shared.requests.settle_native(&pending.id);
-            }
+            Ok(Some(body)) => post_answer(&shared.http, pending.port, &body).err(),
+            Err(reason) => Some(reason),
+        };
+        let failed = failure.is_some();
+        shared.requests.note_native_delivery(
+            &pending.id,
+            AGENT.id,
+            &pending.session_id,
+            if failed { "failed" } else { "confirmed" },
+            failure,
+            crate::hooks::now_ms(),
+        );
+        // A failed answer leaves the question to Harness's own card, and it
+        // no longer waits on the HUD; Harness may still ask it again.
+        if failed {
+            shared.forget(&pending.id);
+        } else {
+            shared.withdraw(&pending.id);
         }
         return;
     }
@@ -787,6 +784,149 @@ fn work(shared: Arc<Shared>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn observed(requests: &Requests) -> Arc<Shared> {
+        Arc::new(Shared {
+            active: AtomicBool::new(true),
+            state: Mutex::new(State {
+                endpoints: HashMap::new(),
+                streams: HashSet::new(),
+                pending: HashMap::new(),
+                resolved: HashMap::new(),
+            }),
+            changed: Condvar::new(),
+            requests: requests.clone(),
+            wake: Arc::new(|| {}),
+            http: Client::builder()
+                .timeout(Duration::from_secs(2))
+                .build()
+                .unwrap(),
+        })
+    }
+
+    fn asked(port: u16, rpc_id: &str, session: &str) -> Pending {
+        build_pending(
+            Frame {
+                rpc_id: rpc_id.into(),
+                session_id: session.into(),
+                questions: vec![QuestionItem {
+                    id: "q".into(),
+                    question: "Which?".into(),
+                    header: None,
+                    options: vec![QuestionOption {
+                        label: "A".into(),
+                        description: None,
+                    }],
+                    multi_select: false,
+                }],
+            },
+            port,
+        )
+    }
+
+    fn waiting(requests: &Requests) -> HashSet<String> {
+        requests
+            .native_waiting_sessions()
+            .remove(AGENT.id)
+            .unwrap_or_default()
+    }
+
+    /// The question stream and the plugin observer both say which DeepSeek
+    /// sessions wait; neither may wipe out what the other said.
+    #[test]
+    fn the_question_stream_and_the_plugin_keep_each_others_waiting_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let channel = crate::deepseek_plugin::DeepSeekChannel::new(temp.path().join("channel"));
+        let folder = channel.directory().join("asks");
+        crate::os::private_directory(&folder).unwrap();
+        let sessions = channel.directory().join("sessions");
+        crate::os::private_directory(&sessions).unwrap();
+        std::fs::write(
+            sessions.join("plugin-session.json"),
+            json!({"at": 1, "host": 4242, "channelVersion": 1}).to_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            folder.join("p1.json"),
+            json!({"id": "p1", "kind": "approval", "sessionId": "plugin-session",
+                "toolName": "bash", "arguments": "{\"command\":\"ls\"}"})
+            .to_string(),
+        )
+        .unwrap();
+        let requests = Requests::default();
+        let plugin = crate::deepseek_plugin::asks::Observer::start(
+            channel,
+            requests.clone(),
+            Arc::new(|| {}),
+        )
+        .unwrap();
+        plugin.pass();
+        let stream = observed(&requests);
+        let pending = asked(3080, "rpc_1", "stream-session");
+        stream
+            .state
+            .lock()
+            .unwrap()
+            .pending
+            .insert(pending.id.clone(), pending);
+        let both: HashSet<String> = ["deepseek:plugin-session", "deepseek:stream-session"]
+            .map(String::from)
+            .into();
+        stream.publish_waiting();
+        assert_eq!(waiting(&requests), both, "the stream kept the plugin's");
+        plugin.pass();
+        assert_eq!(waiting(&requests), both, "the plugin kept the stream's");
+        stream.withdraw(&asked(3080, "rpc_1", "stream-session").id);
+        assert_eq!(
+            waiting(&requests),
+            HashSet::from(["deepseek:plugin-session".to_owned()])
+        );
+    }
+
+    /// A question whose answer did not get through no longer counts as
+    /// waiting on the HUD: its card is gone, so its waiting mark goes too.
+    #[test]
+    fn a_failed_delivery_stops_counting_the_question_as_waiting() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = closed.local_addr().unwrap().port();
+        drop(closed);
+        let requests = Requests::default();
+        let shared = observed(&requests);
+        let pending = asked(port, "rpc_9", "sess_9");
+        let ticket = requests
+            .register_native(
+                pending.id.clone(),
+                pending.view.clone(),
+                crate::hooks::now_ms(),
+            )
+            .unwrap();
+        shared
+            .state
+            .lock()
+            .unwrap()
+            .pending
+            .insert(pending.id.clone(), pending.clone());
+        shared.publish_waiting();
+        assert!(waiting(&requests).contains("deepseek:sess_9"));
+        let owned = shared.clone();
+        let id = pending.id.clone();
+        let worker = thread::spawn(move || answer_loop(owned, pending, ticket));
+        requests
+            .answer(
+                &id,
+                &json!({"kind": "answer", "answers": {"q": {"selected": ["A"]}}}),
+                crate::hooks::now_ms(),
+            )
+            .unwrap();
+        worker.join().unwrap();
+        let deliveries = requests.deliveries(crate::hooks::now_ms());
+        assert!(
+            deliveries.iter().any(|d| d["state"] == "failed"),
+            "{deliveries:?}"
+        );
+        assert!(shared.state.lock().unwrap().pending.is_empty());
+        assert!(waiting(&requests).is_empty());
+    }
 
     #[test]
     fn deepseek_harness_discovery_frame_parsing_and_answer_receipt_match_source() {

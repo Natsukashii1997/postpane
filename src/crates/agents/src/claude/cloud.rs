@@ -65,13 +65,14 @@ pub fn read(host: &dyn Host) -> Result<Reading, Unread> {
             HttpFailure::Status(401 | 403) => signed_out(),
             failure => failure.unread(),
         })?;
-    let mut reading = Reading::empty(ID);
-    reading.live_sessions = body["data"]
+    // Only a `data` list says what runs there: a 200 with any other body
+    // (`{}`, an error object, `data: null`) is not an empty list, and taking
+    // it for one would wipe the sessions shown (audit 2026-11-11, #351 B16).
+    let rows = body["data"]
         .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(row)
-        .collect();
+        .ok_or_else(|| HttpFailure::Unreadable.unread())?;
+    let mut reading = Reading::empty(ID);
+    reading.live_sessions = rows.iter().filter_map(row).collect();
     Ok(reading)
 }
 
@@ -170,6 +171,20 @@ mod tests {
         let headers = &host.headers.borrow()[0];
         assert!(headers.contains(&("x-organization-uuid".into(), "org-1".into())));
         assert!(headers.contains(&("anthropic-beta".into(), "ccr-byoc-2025-07-29".into())));
+    }
+
+    #[test]
+    fn an_answer_without_a_session_list_is_a_failed_read_not_an_empty_one() {
+        for body in [
+            json!({}),
+            json!({"error": "temporary"}),
+            json!({"data": null}),
+        ] {
+            let host = signed_in(Ok(body.clone()));
+            assert!(read(&host).is_err(), "{body}");
+        }
+        let host = signed_in(Ok(json!({"data": []})));
+        assert!(read(&host).unwrap().live_sessions.is_empty());
     }
 
     #[test]

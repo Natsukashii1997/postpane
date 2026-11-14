@@ -5,14 +5,17 @@
 //! files. An ask whose file goes is settled: answered in Harness, cancelled,
 //! or answered here. While this runs, `app.json` tells the plugin the app is
 //! there, so a host with no window of its own can still be answered here.
+mod card;
+
+pub use card::{answer, parse};
+
 use super::DeepSeekChannel;
 use crate::claude_plugin::{valid_name, write_private};
-use crate::clients::deepseek::questions::{self, QuestionItem};
+use crate::clients::deepseek::questions::QuestionItem;
 use crate::hooks::Wake;
 use agent_hud_agents::deepseek::AGENT;
 use agent_hud_core::l10n;
 use agent_hud_core::requests::{Requests, Ticket};
-use chrono::Utc;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -32,8 +35,6 @@ const SWEEP: Duration = Duration::from_secs(60);
 /// An ask from a session that has not checked in for this long belongs to a
 /// host that stopped: its file goes.
 const ORPHAN_GRACE: Duration = Duration::from_secs(5);
-/// How much of a call's arguments a card shows.
-const DETAIL_LIMIT: usize = 2_000;
 
 /// What a session waits on.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,101 +60,8 @@ pub fn request_id(ask: &str) -> String {
     format!("{}-plugin:{ask}", AGENT.id)
 }
 
-fn session_id(session: &str) -> String {
+pub(crate) fn session_id(session: &str) -> String {
     format!("{}:{session}", AGENT.id)
-}
-
-/// Reads an ask as the plugin wrote it; None when it is not one the HUD can
-/// show (a plan to review, a question without choices), which Harness's own
-/// card still answers.
-pub fn parse(id: &str, value: &Value) -> Option<Ask> {
-    if !valid_name(id) || value["id"] != id {
-        return None;
-    }
-    let session = value["sessionId"].as_str().filter(|s| valid_name(s))?;
-    let request = request_id(id);
-    let (kind, view) = match value["kind"].as_str()? {
-        "question" => {
-            let items = questions::parse_questions(&value["questions"])?;
-            let view = questions::question_view(&request, &session_id(session), &items);
-            (Kind::Question(items), view)
-        }
-        "approval" => (Kind::Approval, approval_view(&request, session, value)?),
-        _ => return None,
-    };
-    Some(Ask {
-        id: id.to_owned(),
-        session: session.to_owned(),
-        kind,
-        view,
-    })
-}
-
-/// The card for an approval: why Harness asks, in the app's language, and
-/// the command or arguments of the call it asks about.
-fn approval_view(id: &str, session: &str, value: &Value) -> Option<Value> {
-    let tool = value["toolName"].as_str().filter(|s| !s.is_empty())?;
-    let shown = |s: &&str| !s.trim().is_empty();
-    let reason = &value["displayReason"];
-    let localized = match (
-        reason["zh"].as_str().filter(shown),
-        reason["en"].as_str().filter(shown),
-    ) {
-        (Some(zh), Some(en)) => Some(l10n::text(zh, en)),
-        (zh, en) => zh.or(en).map(str::to_owned),
-    };
-    let summary = localized
-        .or_else(|| value["reason"].as_str().filter(shown).map(str::to_owned))
-        .unwrap_or_else(|| tool.to_owned());
-    let detail = value["arguments"].as_str().map(|text| {
-        let arguments = serde_json::from_str::<Value>(text).unwrap_or(Value::Null);
-        let subject = ["command", "file_path", "path", "url"]
-            .into_iter()
-            .find_map(|key| arguments[key].as_str().filter(shown));
-        subject
-            .unwrap_or(text)
-            .chars()
-            .take(DETAIL_LIMIT)
-            .collect::<String>()
-    });
-    Some(json!({
-        "id": id,
-        "source": AGENT.id,
-        "vendor": AGENT.name,
-        "sessionId": session_id(session),
-        "title": summary,
-        "summary": summary,
-        "toolName": tool,
-        "kind": "permission",
-        "input": detail.clone().unwrap_or_default(),
-        "detail": detail,
-        "cwd": null,
-        "createdAt": Utc::now().to_rfc3339(),
-        "allowsAlways": false,
-        "questions": [],
-        "answersQuestion": false,
-        "answersPlan": false,
-        "plan": null,
-        "suggestions": [],
-    }))
-}
-
-/// What the plugin hands Harness for the HUD's decision; None when the user
-/// left it to Harness's own card.
-pub fn answer(kind: &Kind, decision: &Value) -> Result<Option<Value>, String> {
-    match kind {
-        Kind::Question(items) => Ok(questions::answer_entries(decision, items)?
-            .map(|entries| json!({ "answers": entries }))),
-        Kind::Approval => match decision["kind"].as_str() {
-            Some("leave") => Ok(None),
-            Some("allow") => Ok(Some(json!("allowed-once"))),
-            Some("deny") => Ok(Some(json!("rejected"))),
-            _ => Err(l10n::text(
-                "DeepSeek Harness 的批准只能允许一次或拒绝",
-                "DeepSeek Harness's approvals can only be allowed once or rejected.",
-            )),
-        },
-    }
 }
 
 struct Known {
@@ -161,6 +69,9 @@ struct Known {
     session: String,
     /// Registered with the HUD; an ask it cannot show is only remembered.
     shown: bool,
+    /// Answered here, or its answer could not be left: the session no longer
+    /// waits on the user, though the file stays until the plugin takes it.
+    settled: bool,
 }
 
 struct Shared {
@@ -219,7 +130,7 @@ impl Drop for Observer {
         }
         self.shared
             .requests
-            .set_native_waiting(AGENT.id, &[], crate::hooks::now_ms());
+            .set_native_waiting_by(AGENT.id, "plugin", &[], crate::hooks::now_ms());
         let _ = fs::remove_file(self.shared.channel.directory().join("app.json"));
         if let Some(worker) = self.worker.take() {
             if worker.is_finished() {
@@ -285,34 +196,46 @@ fn pass(shared: &Arc<Shared>, now: SystemTime) {
                 continue;
             };
             present.insert(id.to_owned());
-            if known.contains_key(id) {
-                continue;
-            }
-            let Some(value) = fs::read(&path)
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-            else {
-                continue;
+            // A known ask is not read again, but its host is checked each
+            // pass: one that stopped leaves its file behind.
+            let value = match known.get(id) {
+                Some(_) => None,
+                None => match fs::read(&path)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                {
+                    Some(value) => Some(value),
+                    None => continue,
+                },
             };
-            let session = value["sessionId"].as_str().unwrap_or_default();
-            if !loaded.contains(session) {
+            let session = match (&value, known.get(id)) {
+                (Some(value), _) => value["sessionId"].as_str().unwrap_or_default(),
+                (None, Some(entry)) => entry.session.as_str(),
+                (None, None) => continue,
+            }
+            .to_owned();
+            if !loaded.contains(&session) {
                 let old = fs::metadata(&path)
                     .and_then(|m| m.modified())
                     .ok()
                     .and_then(|at| now.duration_since(at).ok())
                     .is_some_and(|age| age > ORPHAN_GRACE);
-                if old {
-                    let _ = fs::remove_file(&path);
+                if old && fs::remove_file(&path).is_ok() {
+                    present.remove(id);
                 }
                 continue;
             }
+            let Some(value) = value else {
+                continue;
+            };
             let Some(ask) = parse(id, &value) else {
                 known.insert(
                     id.to_owned(),
                     Known {
                         request: request_id(id),
-                        session: session.to_owned(),
+                        session,
                         shown: false,
+                        settled: false,
                     },
                 );
                 continue;
@@ -329,6 +252,7 @@ fn pass(shared: &Arc<Shared>, now: SystemTime) {
                     request,
                     session: ask.session.clone(),
                     shown: ticket.is_some(),
+                    settled: false,
                 },
             );
             if let Some(ticket) = ticket {
@@ -363,7 +287,7 @@ fn publish(shared: &Shared) {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .values()
-        .filter(|entry| entry.shown)
+        .filter(|entry| entry.shown && !entry.settled)
         .map(|entry| session_id(&entry.session))
         .collect::<HashSet<_>>()
         .into_iter()
@@ -371,7 +295,7 @@ fn publish(shared: &Shared) {
     sessions.sort();
     shared
         .requests
-        .set_native_waiting(AGENT.id, &sessions, crate::hooks::now_ms());
+        .set_native_waiting_by(AGENT.id, "plugin", &sessions, crate::hooks::now_ms());
     (shared.wake)();
 }
 
@@ -411,7 +335,7 @@ fn deliver(shared: Arc<Shared>, ask: Ask, ticket: Ticket) {
         }
     });
     match left {
-        Ok(false) => {}
+        Ok(false) => return,
         Ok(true) => shared.requests.note_native_delivery(
             &request,
             AGENT.id,
@@ -432,4 +356,10 @@ fn deliver(shared: Arc<Shared>, ask: Ask, ticket: Ticket) {
             shared.requests.settle_native(&request);
         }
     }
+    let mut known = shared.known.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(entry) = known.get_mut(&ask.id) {
+        entry.settled = true;
+    }
+    drop(known);
+    publish(&shared);
 }
