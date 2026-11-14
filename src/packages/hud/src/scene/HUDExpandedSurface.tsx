@@ -335,7 +335,7 @@ export function HUDExpandedSurface({
               <AirmailEdges
                 holes={perforatedSide(edge)}
                 sides={airmailSides(edge, open)}
-                width={open ? 6 : 4}
+                width={6}
                 inset={paperInset}
               />
             )}

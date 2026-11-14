@@ -7,6 +7,23 @@
 
 
 
+## 接力纸折成窄签时去掉侧边航空条，和普通窄签一样（#338）（2026-11-14，Claude，常浩截图要求「侧卡要大小一致，然后接力卡侧边的彩色条去除」，大小问清后选「接力签和普通签一样」；已提交、已发布 `c8eb178c2ecf` 回读通过）
+
+- 时间：开工 `2026-11-14 10:40`（`date '+%F %H:%M'` 记录）。来由：侧栏开着接力卡时收起，前面那一家折成的签用浅蓝航空纸，背对打孔的长边多一道 4px 红蓝航空条（2026-11-06 定的「收起的签沿侧边」），和平时的窄签看着不一样。常浩这轮点名去掉。大小有两种理解（接力签对普通签 / 窄签对票根 51×66），问后常浩选前者。issue #338，PR #339。
+- 改了哪些文件：
+  - `hud/src/paper.ts`：`airmailSides(edge, false)` 返回空，收起不画航空条；展开照旧顶边（停靠屏幕底边时为底边）。
+  - `hud/src/scene/HUDExpandedSurface.tsx`：收起用的 4px 条宽不再用，条宽固定 6px。
+  - `hud/test/relay-paper.test.ts`：展开四种停靠各一道、不在打孔边；新增「收起没有航空条」（改前 `ℹ pass 3` / `ℹ fail 1`，改后 `ℹ pass 4` / `ℹ fail 0`）。
+  - 不动：展开接力卡顶边航空条（#125）；接力签仍用浅蓝航空纸（颜色常浩没提，未改）；窄签尺寸 `narrowTagSize` 不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 430` / `ℹ fail 0`，`ℹ pass 9` / `ℹ fail 0`，`ℹ pass 14` / `ℹ fail 0`，`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-side-slip-size/{check,test,rules,build,install}.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1473，沿用 #331 的 2026-11-14 08:46 真实快照，深色）。改前：普通窄签 28×53；开接力卡再移开，折成的窄签 28×53，内含 x=969–973 一道 4px 航空条。改后：普通窄签 28×53；接力签 28×53、航空条 0 道；展开接力卡顶边航空条仍在。常浩截图里接力签比普通签高约 8%，预览没复现（两种外框同为 `narrowTagSize`），实机未看，留给常浩。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-side-slip-size/`：`before-relay-slip-side-band.png`、`after-normal-slip.png`、`after-relay-slip-no-band.png`、`after-open-card-top-band.jpg`；脚手架 `preview-slip/`（未提交）。
+- 发布与回读：`c8eb178c2ecf`（从本分支打包，打包前 main 无新合并），`install.sh` 回读产物与已装一致、签名证书照常（`H"b773068e`）；装前 `aa6459aad6dd`。装前单独查过：没有开着自动往返的接力（最近一单「Matt 技能指南｜内容深度审核」10:54 已转回 Claude，`auto` 原本就关）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-side-slip-size/PostPane-aa6459aad6dd.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做）。
+- 与授权不一致之处、遗留问题：
+  - 实机接力签与普通签高度是否一致未验证（预览一致）。
+  - 范围外发现：无。skill 进化：同 #336，建议 `install.sh` 有开着的自动往返就拒装（待批）。
+- 本轮新坑：无
+
 ## 接力卡 ChatGPT 意见第 10 条起序号不再挤进正文（#336）（2026-11-14，Claude，#334 收尾时报的范围外发现，常浩回「修序号」；已提交、已发布 `aa6459aad6dd` 回读通过）
 
 - 时间：开工 `2026-11-14 10:20`（`date '+%F %H:%M'` 记录）。来由：常浩截图里接力卡第 10 条起「10异常传播…」序号压在正文上。根因：意见列表每行 `gridTemplateColumns: "16px 1fr"`，序号列写死 16px。issue #336，PR #337。
