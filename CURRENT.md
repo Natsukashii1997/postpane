@@ -7,7 +7,7 @@
 
 
 
-## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 收尾，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交、发布与审查见下）
+## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交、已发布 `c4501330017c`，L2 审查结论未拿到）
 
 - 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。
 - 改了哪些文件：
@@ -21,7 +21,10 @@
 - 验证：单测覆盖打不开（当场失败、2 分钟超时、重试后再失败再通知一次）、重启中断（通知；启动前的旧出错不补发；再重启不重发）、30 分钟没回（通知一次、`halt` 带去向、迟到的「通过」照常收并自动转回结束；思维评审文字不同）、送不进去排队、排队也失败（说明原因、不反复重试）、Codex 会话进它自己的队列且卡上写 Codex。
 - 截图：无（只改了已有那一行的说明文字）。
 - 发布与回读：`a4f1a3f5e3f5`（本分支 `12e04be`，含 main `b0557d3`），`install.sh` 回读一致、签名证书照常；装前没有开着自动往返的接力。启动 20 秒后查 `handoffs.json`：63 张旧接力 `told` 全空，没给旧单补发；应用日志无报错。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice/PostPane-d7a5344be952.app" /Applications/PostPane.app; open /Applications/PostPane.app`。没截屏查「想访问文稿」弹窗（未做）。
-- 送审：L2，接力 `h1a1d99b32c700`。
+- 送审：L2，接力 `h1a1d99b32c700`。ChatGPT 18:39 已答完（5421 字），但被 #356 的匹配规则判成别的提问（原文前 600 字有 12 个反引号），19:00 按「30 分钟没回信」停下——**#318 实机第一次触发**，本会话收到了通知，卡上那行补了「；已告诉 Claude」。另一次实机触发：19:44 digital-twin 一单思维评审（`h1a1d9debdaf01`）打不开，卡上为「ChatGPT 插件没能完成：timeout；已告诉 Claude」。误判由别的会话在 #366（PR #367，main `0dc0ba5`）修了（比对去反引号）。
+- 合并 main：Auto-fix 报 PR 与 main 冲突，按授权 `git merge FETCH_HEAD`（`df4170c`），只冲突 `CURRENT.md`（两节都留）；合并后接力测试 `76 passed; 0 failed`。合并后没重跑全量（未做）。
+- 第二次装机：`c4501330017c`（`df4170c`，含 main 的 #366 和本 PR），装前已装的是 #366 会话装的 `55b028cf8046`，回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice-r2/PostPane-55b028cf8046.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 审查现状（22:30）：`h1a1d99b32c700` 仍是 open / working、自动往返已停；重读要 Chrome 插件在线，19:51 之后一次都没重读（插件没连上），所以 #366 的修复还没机会收下这份回信，审查结论尚未拿到。
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
