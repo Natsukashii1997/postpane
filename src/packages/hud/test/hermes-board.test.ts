@@ -165,6 +165,100 @@ test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
   assert.equal(rows[0].title, "日报（新结构·并跑）");
 });
 
+// The steps of one job, as 猛鬼兽 runs 个人项目日报 (digital-twin #159).
+const step = (
+  id: string,
+  name: string,
+  schedule: string,
+  over: Partial<NonNullable<Parameters<typeof jobRows>[0]>[number]> = {},
+) => ({
+  id,
+  name,
+  enabled: true,
+  failed: false,
+  schedule,
+  lastRunAt: "2026-11-05T10:00:35+08:00",
+  nextRunAt: "2026-11-07T10:00:00+08:00",
+  ...over,
+});
+const table = (jobs: Parameters<typeof jobRows>[0]) =>
+  jobRows(jobs, now, tz, "zh").map((row) => [
+    row.name,
+    row.cadence,
+    row.last.text,
+    row.next,
+  ]);
+
+test("the steps of one job (名字·步骤) read as one row by the job's name (#326)", () => {
+  const send = step(
+    "s",
+    "个人项目日报·发送（每天 10:00 发甲版卡片到私聊；#155、#159）",
+    "0 10 * * *",
+  );
+  const write = step(
+    "w",
+    "个人项目日报·写稿（每天 09:15，10:00 发送；#155、#159）",
+    "15 9 * * *",
+    {
+      lastRunAt: "2026-11-05T09:38:45+08:00",
+      nextRunAt: "2026-11-07T09:15:00+08:00",
+    },
+  );
+  const before = step("t", "Tidings 周报卡片", "*/15 * * * *");
+  const after = step("a", "AI HOT 热点榜", "45 9 * * 1-5");
+  // Listed send first: the last step is the latest in the day, not the last listed.
+  const rows = jobRows([before, send, write, after], now, tz, "zh");
+  assert.deepEqual(
+    rows.map((row) => [row.name, row.cadence, row.last.text, row.next]),
+    [
+      ["Tidings 周报卡片", "*/15 * * * *", "✓ 昨天", "明天"],
+      ["个人项目日报", "每天 10:00", "✓ 昨天", "明天"],
+      ["AI HOT 热点榜", "工作日 09:45", "✓ 昨天", "明天"],
+    ],
+  );
+  assert.equal(rows[1].id, "s+w");
+  assert.equal(
+    rows[1].title,
+    [
+      "个人项目日报·写稿（每天 09:15，10:00 发送；#155、#159）：每天 09:15 · ✓ 昨天",
+      "个人项目日报·发送（每天 10:00 发甲版卡片到私聊；#155、#159）：每天 10:00 · ✓ 昨天",
+    ].join("\n"),
+  );
+});
+
+test("a job's row fails when any step failed, is off when any step is off (#326)", () => {
+  const write = (over = {}) =>
+    step("w", "个人项目日报·写稿", "15 9 * * *", over);
+  const send = (over = {}) =>
+    step("s", "个人项目日报·发送", "0 10 * * *", over);
+  assert.deepEqual(
+    table([
+      write({ failed: true, lastRunAt: "2026-11-04T09:15:00+08:00" }),
+      send(),
+    ]),
+    [["个人项目日报", "每天 10:00", "✗ 11/4", "明天"]],
+  );
+  assert.deepEqual(table([write(), send({ enabled: false })]), [
+    ["个人项目日报", "每天 10:00", "✓ 昨天", "停用"],
+  ]);
+  assert.deepEqual(table([write(), send({ lastRunAt: null })]), [
+    ["个人项目日报", "每天 10:00", "没跑过", "明天"],
+  ]);
+});
+
+test("one task named 名字·步骤 alone keeps its own row (#326)", () => {
+  assert.deepEqual(
+    table([
+      step("w", "个人项目日报·写稿", "15 9 * * *"),
+      step("d", "日报（新结构·并跑）", "30 7 * * *"),
+    ]),
+    [
+      ["个人项目日报·写稿", "每天 09:15", "✓ 昨天", "明天"],
+      ["日报", "每天 07:30", "✓ 昨天", "明天"],
+    ],
+  );
+});
+
 test("asks read 私 or 群; a desk with tasks shows one ask, without three", () => {
   assert.equal(chatLabel("dm", "zh"), "私");
   assert.equal(chatLabel("group", "zh"), "群");
