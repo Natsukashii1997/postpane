@@ -103,4 +103,9 @@ export interface Handoff {
   chainCarried?: number;
   head?: string;
   notice?: "passed" | "top";
+  /** When it reached its cap (L3 P2-07). */
+  topAt?: number;
+  /** A review sent and not yet known to have gone in (L3 P1-10): its
+   * answer counts and cannot pass. */
+  pending?: { request: string; pr?: string; head?: string; limit: number };
 }

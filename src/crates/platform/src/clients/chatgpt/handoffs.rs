@@ -26,6 +26,7 @@ pub use gate_io::{
     archive, archived, head_in, ledger, review_limit, reviewed_commit, same_commit,
     set_review_limit, slim_kept,
 };
+pub use guard::Pending;
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 
@@ -823,11 +824,13 @@ impl Book {
         let Some(handoff) = self.conversation_mut(conversation) else {
             return false;
         };
+        // A review pending (L3 P1-10) may have gone in unheard of: its
+        // answer counts, and cannot pass.
         if reply.trim().is_empty()
-            || !matches!(
+            || !(matches!(
                 handoff.phase,
                 Phase::Sending | Phase::Delivered | Phase::Working
-            )
+            ) || handoff.gate.pending.is_some())
         {
             return false;
         }

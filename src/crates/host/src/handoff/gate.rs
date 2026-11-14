@@ -103,6 +103,11 @@ impl Desk {
     /// its pull request's. None when it may, or when it reviews no pull
     /// request; else why not.
     pub(super) fn pass_blocked(&self, lines: &dyn Lines, handoff: &Handoff) -> Option<String> {
+        // Sent and not known to have gone in: what it reviewed is not
+        // known (L3 P1-10).
+        if handoff.gate.pending.is_some() {
+            return Some(super::guard::unconfirmed());
+        }
         let pr = handoff.pr.as_deref()?;
         // Kept with no commit (from before the gate): it cannot be checked,
         // so it does not pass (P1-01).

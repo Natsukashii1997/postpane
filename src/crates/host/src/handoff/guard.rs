@@ -61,3 +61,26 @@ pub(super) fn back_not_done() -> String {
         "Not sent back: PostPane is sending this answer; check the card shortly, and try again if it has not gone.",
     )
 }
+/// A review sent and not known to have gone in (L3 P1-10).
+pub(super) fn unconfirmed() -> String {
+    l10n::text(
+        "这一轮送审驿窗没确认送到 ChatGPT（送出后没收到确认，或确认前驿窗重启），不知道这封回信审的是哪一版，没有按通过结束：请用当前提交（head 填 40 位 SHA）重新送审",
+        "PostPane never heard this review went in to ChatGPT (no word after it was sent, or a restart first), so what the answer reviewed is not known; not ended as a pass. Send the current commit (head, 40 digits) again",
+    )
+}
+/// Other words while a review waits on ChatGPT (L3 P1-10).
+pub(super) fn still_waiting() -> String {
+    l10n::text(
+        "这张接力上一段送审还在等 ChatGPT 回信，没有发出：等回信到了再送；同一段话重送不受影响。",
+        "This handoff's review still waits on ChatGPT; nothing was sent. Send once the answer is in; the same words again are fine.",
+    )
+}
+/// What a restart says of a review pending (L3 P1-10), in the language
+/// stored (Core does not follow the setting yet then).
+pub(super) fn pending_at_restart(chinese: bool) -> String {
+    if chinese {
+        "驿窗重启时这一轮送审还没确认送到 ChatGPT：回信到了照样计一轮，但不按通过结束".to_owned()
+    } else {
+        "PostPane restarted before this review was known to have gone in: its answer counts, and cannot pass".to_owned()
+    }
+}

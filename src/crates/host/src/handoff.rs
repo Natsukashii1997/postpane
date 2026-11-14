@@ -312,6 +312,8 @@ impl Desk {
         let woke = book.restarted();
         // Open ones from before the review gate move over, counts kept (#347).
         let adopted = book.adopt(now);
+        // Reviews sent and not known to have gone in (L3 P1-10).
+        let unconfirmed = book.pending_at_restart(&guard::pending_at_restart(chinese), now);
         // Reviews that passed while nothing drove them (the auto round trip
         // off) end now, as a pass coming in would (owner, 2026-11-07). Not a
         // 思维评审 one (#209): its answer has to reach Claude first, so it
@@ -322,14 +324,14 @@ impl Desk {
             // One whose commit is to be checked against its pull request
             // waits for the round trip, which checks it first (#347).
             .filter(|h| !h.thinking() && h.next() == Some(Next::Pass))
-            .filter(|h| h.pr.is_none() && h.gate.head.is_none())
+            .filter(|h| h.pr.is_none() && h.gate.head.is_none() && h.gate.pending.is_none())
             .map(|h| h.id.clone())
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
             ended |= book.passed(id, &passed(chinese), now);
         }
-        if interrupted | woke | ended | adopted {
+        if interrupted | woke | ended | adopted | unconfirmed {
             let desk = desk(book);
             desk.change(|_| ());
             return desk;
@@ -762,6 +764,11 @@ impl Desk {
                 repeated: true,
             });
         }
+        // Its review still with ChatGPT: other words would take its answer
+        // (L3 P1-10).
+        if self.lock().get(&handoff.id).is_some_and(Handoff::in_flight) {
+            return Err(guard::still_waiting());
+        }
         // Evidence a 思维评审 paused for (#209): it goes on by itself again.
         let evidence = self
             .lock()
@@ -801,6 +808,19 @@ impl Desk {
         // Kept until they go in: the extension may only say so after the
         // wait gave up (`observe`, #223).
         let request = format!("{}~send{now}", handoff.id);
+        // Kept before it goes, so a restart before word of it cannot let an
+        // answer pass (L3 P1-10).
+        self.change(|book| {
+            book.ask_pending(
+                &handoff.id,
+                handoffs::Pending {
+                    request: request.clone(),
+                    pr: anchor.pr.clone(),
+                    head: anchor.head.clone(),
+                    limit: anchor.limit,
+                },
+            )
+        });
         self.asking().insert(
             handoff.id.clone(),
             Asking {
@@ -838,6 +858,7 @@ impl Desk {
             return false;
         };
         self.change(|book| {
+            book.confirm_pending(id, request);
             asking.anchor.set(book, id);
             book.asked(id, asking.summary.as_deref(), &asking.brief, now)
                 && (!asking.evidence || book.evidence_in(id, now))
@@ -2170,6 +2191,12 @@ mod tests {
                 handoff.id
             )
         );
+        // Answered: the next words may go (while it waits, other words do
+        // not, L3 P1-10).
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            3,
+        );
         let Started::Sent {
             handoff: sent,
             repeated,
@@ -2191,9 +2218,13 @@ mod tests {
         assert!(!repeated);
         assert_eq!(sent.id, handoff.id);
         assert_eq!(sent.reviews(), 2);
-        assert_eq!(
-            lines.sent.borrow().last().unwrap(),
-            &("send".into(), "c-new".into(), "第二轮".into())
+        // Its words, with PostPane's note of the round (#347).
+        let last = lines.sent.borrow().last().unwrap().clone();
+        assert_eq!((last.0.as_str(), last.1.as_str()), ("send", "c-new"));
+        assert!(
+            last.2.starts_with("第二轮\n\n---\n【驿窗附注】"),
+            "{}",
+            last.2
         );
         // The same words again are not sent twice.
         let Started::Sent { repeated, .. } = desk
@@ -2296,7 +2327,9 @@ mod tests {
 
     #[test]
     fn a_swipe_is_done_only_by_the_handoff_that_names_it() {
-        let (_temp, desk) = desk();
+        let (temp, desk) = desk();
+        // Three rounds go in here (the answers between them, L3 P1-10).
+        handoffs::set_review_limit(&temp.path().join("data"), 5).unwrap();
         let lines = Fake::default();
         // The session already has a review open: its next round goes into it.
         opened(&desk, &lines);
@@ -2304,6 +2337,10 @@ mod tests {
         launch(&desk, &lines, CLAUDE, "s1", "review", 10).unwrap();
         let code = code_of(&lines);
         assert!(code.starts_with('L'));
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            10,
+        );
         // A handoff of the same session for something else settles nothing.
         desk.start(
             &lines,
@@ -2319,6 +2356,10 @@ mod tests {
         assert!(!desk.launch_relayed("s1", "L-other", 11));
         assert!(!desk.launch_relayed("s2", &code, 11), "another session's");
         assert_eq!(desk.launch_projection(&lines, 11)[0]["state"], "started");
+        desk.observe(
+            &turn("complete", "2. 还差\n审查出口：返修\n结论：需修改"),
+            11,
+        );
         // The round it asked for, into the review already open, does.
         desk.start(
             &lines,
@@ -4740,6 +4781,68 @@ mod tests {
         drop(busy);
         assert_eq!(desk.act(&lines, &handoff.id, "back", 5), Ok(Acted::Done));
         assert_eq!(status(&desk, 5).0, "closed");
+    }
+
+    /// L3 P1-10: a review sent and not known to have gone in when the app
+    /// restarted counts its answer, which cannot pass.
+    #[test]
+    fn a_review_unconfirmed_at_a_restart_counts_and_cannot_pass() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", "改动（还没开 PR）", 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        // Sent with pull request B, no word of it before the restart.
+        lines.send_fails.set(true);
+        let brief = format!("{PR}\nhead_sha {MOVED}\n改好了");
+        assert!(engineering(&desk, &lines, "s1", "/w", &brief, 5).is_err());
+        let pending = desk.lock().get(&handoff.id).unwrap().gate.pending.clone();
+        assert_eq!(pending.unwrap().head.as_deref(), Some(MOVED));
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(MOVED.into()));
+        let pass = PASS.replace("0123456", "fedcba9");
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":pass,"messageId":"m2"}), 7);
+        desk.drive(&lines, 8);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(kept.counted(), 2, "the answer counts");
+        assert_eq!(status(&desk, 8), ("open".to_owned(), None));
+        assert!(last_reply_to_claude(&lines).contains(&guard::unconfirmed()));
+    }
+
+    /// L3 P1-10: while a review waits on ChatGPT, other words do not go;
+    /// the same words again are fine, and words that went in are no longer
+    /// pending.
+    #[test]
+    fn a_review_waiting_on_chatgpt_takes_no_other_words() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+        assert!(desk.lock().get(&handoff.id).unwrap().gate.pending.is_none());
+        let sends = lines.sent.borrow().len();
+        let Started::Sent { repeated, .. } = ruled(&desk, &lines, "s1", "L2", None, 5).unwrap()
+        else {
+            panic!()
+        };
+        assert!(repeated, "the same words again");
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L2", None, 6).err(),
+            Some(guard::still_waiting())
+        );
+        assert_eq!(lines.sent.borrow().len(), sends);
     }
 
     #[test]

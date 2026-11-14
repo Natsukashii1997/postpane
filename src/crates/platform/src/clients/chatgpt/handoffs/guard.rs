@@ -3,7 +3,24 @@
 //! review still with ChatGPT (P1-04), and a cap reached here and not
 //! settled (P1-08).
 
-use super::{Book, Handoff, Notice, Phase, Status};
+use super::{Book, Handoff, Notice, Phase, Status, Step, StepKind};
+use serde::{Deserialize, Serialize};
+
+/// A review asked and not yet known to have gone in (L3 P1-10): the
+/// request it is sent as, and the pull request, commit and cap it goes
+/// with. An answer that comes while it is kept cannot pass: what it
+/// reviewed is not known.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pending {
+    pub request: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    #[serde(default)]
+    pub limit: u32,
+}
 
 impl Handoff {
     /// Whether words of its are with ChatGPT, unanswered: a review asked,
@@ -19,6 +36,45 @@ impl Handoff {
 }
 
 impl Book {
+    /// A review of handoff `id` is about to be sent (L3 P1-10).
+    pub fn ask_pending(&mut self, id: &str, pending: Pending) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff.gate.pending = Some(pending);
+        true
+    }
+    /// The review sent as `request` went in: it is no longer pending.
+    pub fn confirm_pending(&mut self, id: &str, request: &str) -> bool {
+        let Some(handoff) = self.list.iter_mut().find(|h| h.id == id) else {
+            return false;
+        };
+        if handoff
+            .gate
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.request == request)
+        {
+            handoff.gate.pending = None;
+            return true;
+        }
+        false
+    }
+    /// Reviews pending when the app stopped: nothing will say they went
+    /// in, so their answers count but cannot pass; each card says so.
+    pub fn pending_at_restart(&mut self, text: &str, now: i64) -> bool {
+        let mut any = false;
+        for h in self
+            .list
+            .iter_mut()
+            .filter(|h| h.live() && h.gate.pending.is_some())
+        {
+            h.steps
+                .push(Step::new(now, StepKind::Work, Some(text)).by_auto());
+            any = true;
+        }
+        any
+    }
     /// Binds handoff `id` to the pull request its newest brief names
     /// (P1-02): the one a pass is checked against.
     pub fn set_pr(&mut self, id: &str, pr: &str) -> bool {
