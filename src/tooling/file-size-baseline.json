@@ -130,7 +130,7 @@
   "src/packages/hud/src/panel/QuotaSection.tsx": 570,
   "src/packages/hud/src/panel/SessionsSection.tsx": 768,
   "src/packages/hud/src/panel/TokenChartSection.tsx": 489,
-  "src/packages/hud/src/panel/agent-board.ts": 415,
+  "src/packages/hud/src/panel/agent-board.ts": 407,
   "src/packages/hud/src/permissions/ListCard.tsx": 303,
   "src/packages/hud/src/permissions/PermissionPlanCard.tsx": 335,
   "src/packages/hud/src/permissions/PermissionQuestionCard.tsx": 698,

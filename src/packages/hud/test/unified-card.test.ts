@@ -82,3 +82,24 @@ test("单家面板和消息卡一样宽", () => {
     /standaloneAlert \|\| focusedVendor\s*\? HUD_METRICS\.alertWidth/,
   );
 });
+
+test("有待处理时的卡不画额度区块，卡头照样带套餐（2026-11-15）", () => {
+  const panel = read("HoverPanel.tsx");
+  assert.match(
+    panel,
+    /content: !news && config\.quotaDetails && blocks\.length/,
+  );
+  assert.match(panel, /content: !news && config\.tokenUsage && customTokens/);
+  assert.match(
+    panel,
+    /bare=\{Boolean\(focusVendor\) && \(!blocks\.length \|\| Boolean\(news\)\)\}/,
+  );
+  // The bare head reads the plan itself, as the quota block's head does.
+  const sessions = read("panel/SourceSessions.tsx");
+  assert.match(
+    sessions,
+    /plan=\{\s*soleAccount\(snapshot\.quotas, snapshot\.accounts, focusVendor\)/,
+  );
+  // The week's mark under the card stays (#319).
+  assert.match(read("scene/NewsCard.tsx"), /WeeklyMark/);
+});

@@ -6,7 +6,11 @@ import { dateFormat, localeDateTime, moneyAmount } from "@agent-hud/ui/format";
 import { quotaAccountKey, quotaShortName, vendorKey } from "../model";
 import { FittingName } from "./FittingName";
 import { AccountHeader, BlockNotice } from "./AccountHeader";
-import { missingReadingNotice, serviceNotice } from "./account-labels";
+import {
+  missingReadingNotice,
+  serviceNotice,
+  soleAccount,
+} from "./account-labels";
 import { ResetCreditsRow } from "./ResetCreditsRow";
 import { usePanelServices } from "../PanelContext";
 import { agentVendorName } from "../agent-artwork";
@@ -29,7 +33,6 @@ import {
   BoardSentence,
   useBoardVerdict,
 } from "./AgentBoard";
-import { showsAccountNames } from "./agent-board";
 import { HermesBoard } from "./HermesBoard";
 import { hermesStamp } from "./hermes-board";
 
@@ -212,10 +215,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
     });
   }, [rows, accountInfo]);
   // One account needs no name: its plan goes in the head (owner, 2026-11-05).
-  const named = showsAccountNames(sections);
-  const only = named
-    ? null
-    : (sections.find((s) => s.account)?.account ?? null);
+  const only = soleAccount(rows, accountInfo);
   const missingReading = !snapshot.quotas.some((row) => row.vendor === vendor);
   // Without readings it says why, as a signed-out Claude Code asks to sign in.
   const missingNotice = missingReading
@@ -295,7 +295,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
                   gap: "var(--hud-block-gap, 8px)",
                 }}
               >
-                {account && named && (
+                {account && !only && (
                   <AccountHeader account={account} now={now} light={light} />
                 )}
                 <div
