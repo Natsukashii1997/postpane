@@ -148,3 +148,11 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：第 2 步加一句「浏览器预览的脚手架放在 worktree 里会让 `check:package-boundary` 失败：先跑完三条全量再搭预览，或截完图 `preview_stop`、把脚手架挪到证据目录后再跑；重跑前确认上一次后台测试已结束，日志不共用」。
 - 证据：L-43；`evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`、`test-mixed-two-runs.log`；PR 见 #328。
 - 状态：待批
+
+## E-17 第 3 步装机：`install.sh` 的短名不带日期，带了就拒绝（2026-11-14）
+
+- 步骤：install
+- 发生了什么：#341 把证据目录全名 `2026-11-14-341-relay-toggle` 当短名传给 `install.sh`，脚本又在前面加了日期，备份落进 `2026-11-14-2026-11-14-341-relay-toggle/`，打印的回滚命令也指向那里；事后挪回本轮目录、改了 `install.log` 里的路径。
+- 建议：`install.sh` 发现短名以 `YYYY-MM-DD-` 开头就报错退出、提示去掉日期；SKILL.md 第 3 步第 3 条写明「短名不带日期，如 `341-relay-toggle`」。
+- 证据：#341 交接一节「与授权不一致之处」；`evidence/2026-11-14-341-relay-toggle/install.log`。
+- 状态：待批
