@@ -440,3 +440,10 @@
 - 正确做法：测试里起替身程序的那一步给足时间（几十秒，正常情况立即返回、不拖慢测试），要验的截止时间单独设短。`StdioServer` 有仅测试用的 `set_timeout`，握手完再设。复现这类偶发超时用「批量新建并执行程序」压，不只用 CPU 压；压完 `pkill -f` 清掉压测进程，否则会顶到每用户进程数上限。
 - 证据：修复后同样压测 32 次全过；单独连跑 20 次全过，每次 3.2–3.9 秒（写入截止仍是 3 秒）。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-14-357-flaky-stdio/`。
 - 升级：未升级；「测试里起子进程的超时和要验的时限分开给」换个项目也成立，可提议提升为全局坑。
+## L-49 小人导演有 TS、Rust 两份，实机走 Rust；只改 TS 在预览台里看着对、实机不生效（2026-11-14）
+
+- 现象：#358 让待核对的会话「不让小人来找你」，只改了 `src/packages/hud/src/bots/mark-director.ts`，契约测试和场景预览台都对；合并后才发现应用里的小人指令是 `src/packages/app/src/lib/use-bot-directions.ts` 经 `invoke("hud_bot_directions")` 从 Rust 取的（`src/crates/hud/src/bots.rs`），TS 版只在浏览器预览（非 Tauri）里跑，实机小人照旧摆「问你」。票根 working 计数同理：TS `model.ts` 与 Rust `vendors.rs` 各一份。
+- 根因：小人导演和票根派生是从 TS 移植到 Rust 的，两边并存；`bots.rs` 的对拍测试 `directs_as_the_typescript_director_did` 只回放 `director-cases.json` 里录好的步骤，TS 改了行为不会让它变红。
+- 正确做法：改小人行为、票根 working、vendor 派生时，Rust 那份一起改，两边各补测试：`mark-director.ts` ↔ `src/crates/hud/src/bots.rs`（会话事实在 `bots/facts.rs`），`model.ts` 的 `vendorsFromSnapshot` ↔ `vendors.rs`，`stale.ts` ↔ `stale.rs`。预览台只能证明 TS 那份。
+- 证据：#354 后续补漏 PR 的 `bots.rs` 测试 `a_stale_session_rests_its_bot_unless_a_card_stands`、`stale.rs` 测试。
+- 升级：未升级。
