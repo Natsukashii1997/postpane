@@ -110,7 +110,7 @@
   "src/packages/hud/src/IslandNews.tsx": 373,
   "src/packages/hud/src/alerts/CompactAlertView.tsx": 628,
   "src/packages/hud/src/alerts/CompletionAlertView.tsx": 571,
-  "src/packages/hud/src/alerts/HandoffCard.tsx": 717,
+  "src/packages/hud/src/alerts/HandoffCard.tsx": 677,
   "src/packages/hud/src/alerts/PendingEventRows.tsx": 466,
   "src/packages/hud/src/alerts/QuotaAlertViews.tsx": 432,
   "src/packages/hud/src/alerts/quota-alert-copy.ts": 393,
