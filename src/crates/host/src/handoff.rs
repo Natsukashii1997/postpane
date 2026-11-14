@@ -279,7 +279,7 @@ impl Desk {
         let now = now_ms();
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted(chinese));
-        let paused = book.restarted(now, &restart_paused(chinese));
+        let woke = book.restarted();
         // Reviews that passed while nothing drove them (the auto round trip
         // off) end now, as a pass coming in would (owner, 2026-11-07). Not a
         // 思维评审 one (#209): its answer has to reach Claude first, so it
@@ -294,7 +294,7 @@ impl Desk {
         for id in &passed_ids {
             ended |= book.passed(id, &passed(chinese), now);
         }
-        if interrupted | paused | ended {
+        if interrupted | woke | ended {
             let desk = desk(book);
             desk.change(|_| ());
             return desk;
@@ -989,6 +989,14 @@ impl Desk {
         }
         changed
     }
+    /// Drives the answers that wait to go on (#72) when nothing else did:
+    /// one that came in just before a restart, or while no word from the
+    /// extension followed. Only when there is one, so the sidebar's refresh
+    /// can call it every time. Whether anything changed.
+    pub(crate) fn catch_up(&self, lines: &dyn Lines, now: i64) -> bool {
+        let waiting = self.lock().list.iter().any(|h| h.next().is_some());
+        waiting && self.drive(lines, now)
+    }
     /// Follows the newest words back to Claude in each handoff shown, as its
     /// session's plugin has them (#257): taken and started are kept on their
     /// step; words it gave up — refused, expired, cancelled — leave the
@@ -1360,13 +1368,16 @@ pub(crate) fn caller_session(caller: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The snapshot's `handoffs`, with the words back to Claude followed first
-/// (#257), and queued ones for a session that went quiet run in the
-/// background (L-14).
+/// The snapshot's `handoffs`, with answers that wait to go on driven (one
+/// from before a restart, owner 2026-11-14), the words back to Claude
+/// followed (#257), and queued ones for a session that went quiet run in
+/// the background (L-14).
 pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
     let now = now_ms();
     let lines = AppLines(app);
-    desk.track(&lines, now);
+    if !desk.catch_up(&lines, now) {
+        desk.track(&lines, now);
+    }
     desk.wake_queued(&lines, now);
     desk.projection(now)
 }
@@ -3044,9 +3055,11 @@ mod tests {
         }
     }
 
-    // A 思维评审 that settled while nothing drove it is not ended unsent at start.
+    // A 思维评审 that settled while nothing drove it is not ended unsent at
+    // start: its auto round trip stays on across the restart, and the first
+    // catch-up takes its answer to Claude, then ends it.
     #[test]
-    fn a_thinking_review_that_settled_with_nothing_driving_it_waits_at_start() {
+    fn a_thinking_review_that_settled_with_nothing_driving_it_reaches_claude_after_start() {
         let temp = tempfile::tempdir().unwrap();
         let data = temp.path().join("data");
         let mut book = handoffs::Book::default();
@@ -3058,12 +3071,14 @@ mod tests {
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "open");
         assert_eq!(shown[0]["phase"], "replied");
-        assert_eq!(shown[0]["halt"], restart_paused(false));
-        // Turned back on, it reaches Claude and then ends.
+        assert_eq!(shown[0]["auto"], true);
+        assert!(shown[0]["halt"].is_null());
         let lines = Fake::default();
-        desk.act(&lines, &handoff.id, "resume", 6).unwrap();
+        assert!(desk.catch_up(&lines, 6));
         assert_eq!(replies(&lines), 1);
         assert_eq!(desk.projection(6)[0]["status"], "closed");
+        assert!(!desk.catch_up(&lines, 7), "nothing left to drive");
+        assert_eq!(replies(&lines), 1);
     }
 
     #[test]
@@ -3103,17 +3118,25 @@ mod tests {
     }
 
     #[test]
-    fn a_restart_pauses_the_auto_round_trip_and_a_long_wait_stops_it() {
+    fn a_restart_keeps_the_auto_round_trip_on_and_a_long_wait_stops_it() {
         let temp = tempfile::tempdir().unwrap();
         let data = temp.path().join("data");
         let lines = Fake::default();
         let desk = Desk::new(Some(data.clone()));
         opened(&desk, &lines);
+        // An answer that came in just before the restart, not yet sent back.
+        desk.observe(&turn("complete", "1. 要改\n结论：需修改"), 3);
         drop(desk);
         let desk = Desk::new(Some(data));
-        let shown = desk.projection(3);
-        assert_eq!(shown[0]["auto"], false);
-        assert_eq!(shown[0]["halt"], restart_paused(false));
+        let shown = desk.projection(4);
+        assert_eq!(shown[0]["auto"], true);
+        assert!(shown[0]["halt"].is_null());
+        // It goes back to Claude once, and only once.
+        assert!(desk.catch_up(&lines, 5));
+        assert_eq!(replies(&lines), 1);
+        assert!(!desk.catch_up(&lines, 6));
+        assert_eq!(replies(&lines), 1);
+        assert_eq!(desk.projection(6)[0]["phase"], "returned");
 
         let (_temp, desk) = self::desk();
         opened(&desk, &lines);
@@ -3766,18 +3789,16 @@ mod tests {
         let cases = [
             (
                 "zh-CN",
-                "驿窗重启，自动往返先暂停",
                 "驿窗重启时 ChatGPT 新会话还在打开",
                 "结论：通过，自动结束接力",
             ),
             (
                 "en",
-                "PostPane restarted; the auto round trip is paused",
                 "PostPane restarted while the ChatGPT conversation was opening",
                 "Passed; the handoff ended",
             ),
         ];
-        for (language, paused, cut_off, ended) in cases {
+        for (language, cut_off, ended) in cases {
             let temp = tempfile::tempdir().unwrap();
             let data = temp.path().join("data");
             std::fs::create_dir_all(&data).unwrap();
@@ -3797,7 +3818,7 @@ mod tests {
             handoffs::save(&data, &book).unwrap();
             let desk = Desk::new(Some(data));
             let book = desk.lock();
-            assert_eq!(book.get(&on).unwrap().halt.as_deref(), Some(paused));
+            assert!(book.get(&on).unwrap().auto, "a restart keeps it on");
             assert_eq!(book.get(&opening).unwrap().error.as_deref(), Some(cut_off));
             assert_eq!(
                 book.get(&passed)

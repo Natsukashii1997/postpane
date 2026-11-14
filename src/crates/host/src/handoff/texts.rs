@@ -183,13 +183,6 @@ pub(super) fn no_handover() -> String {
         "Claude has not handed it over again in 2 hours; left to you",
     )
 }
-pub(super) fn restart_paused(chinese: bool) -> String {
-    in_language(
-        chinese,
-        "驿窗重启，自动往返先暂停",
-        "PostPane restarted; the auto round trip is paused",
-    )
-}
 pub(super) fn paused() -> String {
     l10n::text("常浩暂停", "Paused by the person")
 }

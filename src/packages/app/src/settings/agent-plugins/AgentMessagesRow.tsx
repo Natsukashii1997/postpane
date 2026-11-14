@@ -49,8 +49,8 @@ export function AgentMessagesRow({
     <ToolSwitchRow
       title={t("Let agents message each other", "允许智能体互发消息")}
       description={t(
-        "Agents message, start and read other sessions here.",
-        "智能体可给本机其他会话发消息、开新会话、取回回答。",
+        "Agents message, start and read other sessions here. These settings leave ChatGPT handoffs alone.",
+        "智能体可给本机其他会话发消息、开新会话、取回回答。这几项只管互发消息，不管 ChatGPT 接力。",
       )}
       checked={enabled}
       pending={pending}

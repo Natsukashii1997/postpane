@@ -1162,21 +1162,13 @@ impl Book {
         }
         !late.is_empty()
     }
-    /// The app started again: auto round trips that were on pause, so
-    /// nothing is sent twice across the restart.
-    pub fn restarted(&mut self, now: i64, reason: &str) -> bool {
-        let on = self
-            .list
-            .iter()
-            .filter(|h| h.auto && h.live())
-            .map(|h| h.id.clone())
-            .collect::<Vec<_>>();
-        for id in &on {
-            self.stop(id, reason, true, now);
-        }
-        // A background run from before is no longer followed.
-        let woke = self.forget_runs();
-        !on.is_empty() || woke
+    /// The app started again. Auto round trips stay as they were (owner,
+    /// 2026-11-14: they used to pause, and the person turned each back on):
+    /// an answer goes back only from 「回信已到」 and once, as its step
+    /// records it, so a restart does not send it twice. A background run
+    /// from before is no longer followed.
+    pub fn restarted(&mut self) -> bool {
+        self.forget_runs()
     }
     /// Words went across once more.
     pub fn round(&mut self, id: &str, now: i64) -> bool {
@@ -1242,7 +1234,8 @@ impl Book {
         true
     }
     /// The person allowed one review past the budget (#217): `reason` says
-    /// who allowed it and why; the auto round trip is on again for it.
+    /// who allowed it and why; the auto round trip is on again for it, its
+    /// waits starting afresh as on 「继续自动」 (#223).
     pub fn allow_extra(&mut self, id: &str, reason: &str, now: i64) -> bool {
         let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
             return false;
@@ -1250,6 +1243,10 @@ impl Book {
         handoff.extra += 1;
         handoff.auto = true;
         handoff.halt = None;
+        handoff.phase_at = now;
+        if handoff.queued_at.is_some() {
+            handoff.queued_at = Some(now);
+        }
         let text = l10n::text(
             &format!("专项续审：{}", reason.trim()),
             &format!("Extra review: {}", reason.trim()),
@@ -1893,22 +1890,18 @@ mod tests {
             "排队没人领"
         ));
         assert!(!book.get(&id).unwrap().steps.last().unwrap().auto);
-        // A restart pauses those still on, and only those.
+        // A restart leaves the auto round trip as it was (owner, 2026-11-14:
+        // it used to pause every one still on, and the person had to turn
+        // each back on).
         let mut book = Book::default();
         let on = asked_once(&mut book);
         let off = book.begin("s2", None, "别的", None, "请审核", 1).id;
         book.opened(&off, "c2", 2);
         book.stop(&off, "常浩暂停", false, 3);
-        assert!(book.restarted(4, "驿窗重启"));
-        assert!(book
-            .get(&on)
-            .unwrap()
-            .halt
-            .as_deref()
-            .unwrap()
-            .contains("重启"));
+        assert!(!book.restarted());
+        let kept = book.get(&on).unwrap();
+        assert!(kept.auto && kept.halt.is_none());
         assert_eq!(book.get(&off).unwrap().halt.as_deref(), Some("常浩暂停"));
-        assert!(!book.restarted(5, "驿窗重启"));
         // Records from before #72 load with it off.
         let old: Handoff = serde_json::from_value(serde_json::json!({
             "id":"h1","title":"t","claudeSession":"s","status":"open",
@@ -2216,6 +2209,32 @@ mod tests {
         assert!(said.ends_with("常浩要求再审一次：P1 未确认"), "{said}");
         let thinking = book.begin("s2", None, "思维评审｜x｜y", None, "b", 1);
         assert!(!book.allow_extra(&thinking.id, "r", 2));
+    }
+
+    // An extra review allowed long after the round trip stopped starts its
+    // waits afresh, as 「继续自动」 does (#223): on 2026-11-14 two handoffs
+    // stopped with 「Claude 2 小时没交回复审」 the same minute they were
+    // allowed one more review.
+    #[test]
+    fn an_extra_review_long_after_the_stop_counts_its_waits_from_then() {
+        let reasons = ("30 分钟没回信", "2 小时没交回", "排队没人领");
+        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1, reasons.2);
+        let mut book = Book::default();
+        let id = ruled(&mut book, "s1", Some(Risk::L2), None);
+        book.replied("c-s1", "1. 要超时\n结论：需修改", Some("m1"), 3);
+        book.returned(&id, StepKind::Back, "意见", "p", true, 4);
+        book.queued(&id, 4);
+        assert!(book.stop(&id, "停", true, 5));
+        let late = 6 + FIX_WAIT_MS + QUEUE_WAIT_MS;
+        assert!(book.allow_extra(&id, "常浩授权补审一轮", late));
+        assert!(!overdue(&mut book, late + 1));
+        let kept = book.get(&id).unwrap();
+        assert!(kept.auto && kept.halt.is_none());
+        assert_eq!(kept.queued_at, Some(late));
+        assert!(overdue(
+            &mut book,
+            late + 1 + FIX_WAIT_MS.max(QUEUE_WAIT_MS)
+        ));
     }
 
     /// #257: handoffs kept before words back had receipts, and before rounds
