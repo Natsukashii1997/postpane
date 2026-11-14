@@ -21,7 +21,8 @@ pub use chain::{chain_id, Earlier};
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
 pub use gate_io::{
-    archive, head_in, ledger, review_limit, reviewed_commit, same_commit, set_review_limit,
+    archive, archived, head_in, ledger, review_limit, reviewed_commit, same_commit,
+    set_review_limit,
 };
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
@@ -1142,7 +1143,13 @@ impl Book {
         chain: Option<&str>,
     ) -> bool {
         let earlier = self.earlier(id, pr, chain);
-        let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
+        if self.get(id).is_none_or(Handoff::thinking) {
+            return false;
+        }
+        if let Some(e) = &earlier {
+            self.close_others(&e.chain, id);
+        }
+        let Some(handoff) = self.live_mut(id) else {
             return false;
         };
         handoff.risk = risk;
@@ -1199,8 +1206,10 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// Keeps the newest `KEEP`, and the briefs of the newest few.
+    /// Keeps the newest `KEEP`, and the briefs of the newest few; the
+    /// answers of ended handoffs only as excerpts, kept whole in `replies/`.
     fn trim(&mut self) {
+        self.slim();
         if self.list.len() > KEEP {
             let extra = self.list.len() - KEEP;
             self.list.drain(..extra);
@@ -1435,9 +1444,13 @@ fn read_small(path: &Path) -> Option<Vec<u8>> {
 
 /// The handoffs kept; none when there are none or they cannot be read.
 pub fn load(data: &Path) -> Book {
-    let mut list = read_small(&handoffs_path(data))
-        .and_then(|bytes| serde_json::from_slice::<Vec<Handoff>>(&bytes).ok())
-        .unwrap_or_default();
+    let path = handoffs_path(data);
+    let read = read_small(&path).and_then(|b| serde_json::from_slice::<Vec<Handoff>>(&b).ok());
+    // Kept but unreadable (#347): set aside, never written over as empty.
+    if read.is_none() && path.exists() {
+        gate_io::set_aside(&path);
+    }
+    let mut list = read.unwrap_or_default();
     list.retain(|handoff| {
         crate::claude_plugin::valid_name(&handoff.claude_session)
             && handoff
@@ -2143,15 +2156,20 @@ mod tests {
                 .map(|e| (e.id, e.period)),
             Some((second.clone(), 2))
         );
-        // A passed one carries nothing on by its pull request.
+        // A pass PostPane let through carries nothing on by its pull
+        // request; one that wrote 通过 and was held back still does (#347).
         let other = ruled(&mut book, "s3", None, Some("a/b#9"));
         book.replied("c-s3", "审查出口：通过\n结论：通过", Some("m3"), 3);
         assert_eq!(book.get(&other).unwrap().next(), Some(Next::Pass));
+        let held = book.earlier("", Some("a/b#9"), None).map(|e| e.period);
+        assert_eq!(held, Some(1), "not let through yet");
+        assert!(book.note(&other, Notice::Passed) && book.passed(&other, "通过", 4));
         assert!(book.earlier("", Some("a/b#9"), None).is_none());
         assert!(book.earlier("", Some("a/b#1"), None).is_none());
-        // The first session going on with its own handoff sees round 2.
-        assert_eq!(book.get(&first).unwrap().counted(), 1);
-        assert_eq!(book.pr_counted(&first), 2);
+        // One chain, one open handoff: the first closed as handed over.
+        let first = book.get(&first).unwrap();
+        assert!(!first.live() && first.counted() == 1);
+        assert_eq!(book.pr_counted(&first.id.clone()), 2);
     }
 
     #[test]

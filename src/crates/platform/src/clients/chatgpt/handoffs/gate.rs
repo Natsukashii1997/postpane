@@ -154,6 +154,26 @@ impl Handoff {
             Review::Fix => Next::Back,
         }
     }
+    /// The newest answer that reviewed, and which answer it is (1 first),
+    /// as kept in `replies/`: not one only mending the last lines (#347).
+    pub fn substantive(&self) -> Option<(usize, &Step)> {
+        let (mut mending, mut n, mut found) = (false, 0, None);
+        for step in &self.steps {
+            match step.kind {
+                StepKind::Format => mending = true,
+                StepKind::Ask => mending = false,
+                StepKind::Reply => {
+                    n += 1;
+                    if !mending {
+                        found = Some((n, step));
+                    }
+                    mending = false;
+                }
+                _ => {}
+            }
+        }
+        found
+    }
     /// The next review is the last its leave gives.
     pub fn last_round_next(&self) -> bool {
         self.counted() + 1 == self.budget()
@@ -258,7 +278,7 @@ mod tests {
         }
         assert_eq!(book.get(&t.id).unwrap().next(), Some(Next::Limit));
         assert_eq!(
-            book.carry(&t.id).contains("台账"),
+            book.carry(&t.id, &|_, _| None).contains("台账"),
             false,
             "no ledger for a 思维评审"
         );
@@ -283,7 +303,7 @@ mod tests {
         assert_eq!((kept.counted(), kept.total()), (1, 3));
         assert!(book.chain_last("r-none").is_none());
         // The carried note names the round and brings the ledger as written.
-        let note = book.carry(&split);
+        let note = book.carry(&split, &|_, _| None);
         assert!(
             note.contains("第 2 轮") && note.contains(&chain) && note.contains("累计第 4 轮"),
             "{note}"
@@ -352,5 +372,74 @@ mod tests {
         set_project(data, "").unwrap();
         assert_eq!(review_limit(data), 3, "setting the project keeps the cap");
         archive(data, "h1", 1, "全文").unwrap();
+    }
+
+    #[test]
+    fn the_ledger_comes_from_the_answer_that_reviewed_not_its_mending() {
+        let mut book = Book::default();
+        let id = open(&mut book, "s1", None, None);
+        let full = "## 问题台账\n| P1-01 | 待修复 |\n## 其他\n正文";
+        round(&mut book, &id, "s1", full, 1);
+        assert_eq!(book.get(&id).unwrap().next(), Some(Next::Format));
+        assert!(book.format_asked(&id, "请补写", 20));
+        book.replied("c-s1", "审查出口：返修\n结论：需修改", Some("m9"), 21);
+        let note = book.carry(&id, &|_, _| None);
+        assert!(note.contains("P1-01 | 待修复"), "{note}");
+        // Kept in full wins over what the handoff has.
+        let note = book.carry(&id, &|h, n| {
+            (h == id && n == 1).then(|| "## 问题台账\n| P1-09 |".to_owned())
+        });
+        assert!(note.contains("P1-09") && !note.contains("P1-01"), "{note}");
+    }
+
+    #[test]
+    fn a_pass_held_back_keeps_its_rounds_on_the_chain() {
+        let mut book = Book::default();
+        let id = open(&mut book, "s1", Some("a/b#1"), None);
+        round(&mut book, &id, "s1", FIX, 1);
+        round(&mut book, &id, "s1", "审查出口：通过\n结论：通过", 2);
+        let chain = book.get(&id).unwrap().gate.chain.clone().unwrap();
+        assert!(book.stop(&id, "版本待核", true, 30));
+        for named in [None, Some(chain.as_str())] {
+            let e = book.earlier("", Some("a/b#1"), named).unwrap();
+            assert_eq!((e.period, e.total), (2, 2), "{named:?}");
+        }
+    }
+
+    #[test]
+    fn an_unreadable_book_is_set_aside_and_open_ones_move_over_counted() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path();
+        let path = folder(data).join("handoffs.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"{not json").unwrap();
+        assert!(load(data).list.is_empty());
+        assert!(!path.exists(), "moved aside, not left to be written over");
+        let aside = std::fs::read_dir(path.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .find(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("handoffs.unreadable-")
+            })
+            .unwrap();
+        assert_eq!(std::fs::read(aside.path()).unwrap(), b"{not json");
+        // One open from before the gate gets a chain and a step saying its count.
+        let mut book = Book::default();
+        let h = book.begin("s1", None, "旧单", None, "b", 1);
+        book.opened(&h.id, "c-s1", 2);
+        book.replied("c-s1", "1. 要改\n结论：需修改", Some("m1"), 3);
+        assert!(book.adopt(4) && !book.adopt(5), "once");
+        let kept = book.get(&h.id).unwrap();
+        assert_eq!(kept.gate.chain.as_deref(), Some(chain_id(&h.id).as_str()));
+        assert!(kept
+            .steps
+            .last()
+            .unwrap()
+            .text
+            .as_deref()
+            .unwrap()
+            .contains("已审 1 轮"));
     }
 }

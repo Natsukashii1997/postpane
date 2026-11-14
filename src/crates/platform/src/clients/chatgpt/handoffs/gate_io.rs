@@ -104,3 +104,27 @@ pub fn archive(data: &Path, id: &str, n: usize, reply: &str) -> Result<(), Strin
     let name = format!("{id}-{n:02}-{}.md", &key(reply)[..8]);
     write_private(data, "reply", reply.as_bytes(), &directory.join(name))
 }
+/// Answer `n` of handoff `id` as kept in full, when it is.
+pub fn archived(data: &Path, id: &str, n: usize) -> Option<String> {
+    let prefix = format!("{id}-{n:02}-");
+    std::fs::read_dir(folder(data).join("replies"))
+        .ok()?
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+        .and_then(|e| std::fs::read_to_string(e.path()).ok())
+}
+/// Moves an unreadable `handoffs.json` aside, beside it, so it is never
+/// written over: what it held stays for the person to look at.
+pub(super) fn set_aside(path: &Path) {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let aside = path.with_file_name(format!("handoffs.unreadable-{stamp}.json"));
+    match std::fs::rename(path, &aside) {
+        Ok(()) => eprintln!(
+            "handoffs.json could not be read; kept as {}",
+            aside.display()
+        ),
+        Err(error) => eprintln!("handoffs.json could not be read nor set aside: {error}"),
+    }
+}

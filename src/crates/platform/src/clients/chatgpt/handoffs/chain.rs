@@ -34,7 +34,12 @@ impl Book {
                 Some(chain) => h.gate.chain.as_deref() == Some(chain),
                 None => pr.is_some() && h.pr.as_deref() == pr,
             })?;
-        let passed = last.last_reply().and_then(|s| s.verdict) == Some(super::Verdict::Pass);
+        // Passed as PostPane let it pass (#347): an answer that wrote 通过
+        // but was held back by the commit check did not.
+        let passed = last.gate.notice == Some(Notice::Passed)
+            || (last.gate.chain.is_none()
+                && !last.live()
+                && last.last_reply().and_then(|s| s.verdict) == Some(super::Verdict::Pass));
         if passed && chain.is_none() {
             return None;
         }
@@ -48,6 +53,68 @@ impl Book {
             period: if passed { 0 } else { last.counted() },
             total: last.total(),
         })
+    }
+    /// One handoff of a review chain open at a time (#347): the others
+    /// still open close as handed over to `keep`, so no review of the chain
+    /// is counted on two handoffs side by side.
+    pub fn close_others(&mut self, chain: &str, keep: &str) -> bool {
+        let now = self
+            .list
+            .iter()
+            .find(|h| h.id == keep)
+            .map_or(0, |h| h.created_at);
+        let mut closed = false;
+        for h in self.list.iter_mut().filter(|h| h.id != keep && h.live()) {
+            if h.gate.chain.as_deref() == Some(chain) {
+                h.status = super::Status::Closed;
+                h.enter(Phase::Ended, now);
+                h.steps.push(
+                    Step::new(
+                        now,
+                        StepKind::End,
+                        Some(&format!("同一审查链转到新接力 {keep}")),
+                    )
+                    .by_auto(),
+                );
+                closed = true;
+            }
+        }
+        closed
+    }
+    /// Ended handoffs keep their answers as excerpts only (#347): the
+    /// whole answers are in `replies/`, and the file stays small enough
+    /// to read back.
+    pub(super) fn slim(&mut self) {
+        for h in self.list.iter_mut().filter(|h| !h.live()) {
+            for step in h.steps.iter_mut().filter(|s| s.kind == StepKind::Reply) {
+                if let Some(text) = &mut step.text {
+                    *text = super::excerpt(text, super::EXCERPT);
+                }
+            }
+        }
+    }
+    /// Handoffs still open from before the review gate (#347, MA-02 §5.6):
+    /// each gets its own review chain and a step saying what it counted
+    /// when it moved over, so nothing is reset unseen.
+    pub fn adopt(&mut self, now: i64) -> bool {
+        let mut adopted = false;
+        for h in self
+            .list
+            .iter_mut()
+            .filter(|h| h.live() && !h.thinking() && h.gate.chain.is_none())
+        {
+            h.gate.chain = Some(chain_id(&h.id));
+            let text = format!(
+                "按审核门续审：本次授权周期已审 {} 轮，审查链 {} 共 {} 轮",
+                h.counted(),
+                chain_id(&h.id),
+                h.total()
+            );
+            h.steps
+                .push(Step::new(now, StepKind::Work, Some(&text)).by_auto());
+            adopted = true;
+        }
+        adopted
     }
     /// The newest handoff of review chain `chain`.
     pub fn chain_last(&self, chain: &str) -> Option<&Handoff> {
@@ -109,7 +176,7 @@ impl Book {
     /// What PostPane adds to the words of handoff `id`'s next review: which
     /// round of the person's leave and of the chain it is, and the problem
     /// ledger of the chain's newest answer, as ChatGPT wrote it.
-    pub fn carry(&self, id: &str) -> String {
+    pub fn carry(&self, id: &str, kept: &dyn Fn(&str, usize) -> Option<String>) -> String {
         let Some(handoff) = self.list.iter().find(|h| h.id == id) else {
             return String::new();
         };
@@ -140,14 +207,19 @@ impl Book {
                     .find(|h| h.id != id && h.gate.chain.as_deref() == Some(c))
             })
         };
-        let reply = handoff
-            .last_reply()
-            .or_else(|| earlier().and_then(Handoff::last_reply))
-            .and_then(|s| s.text.as_deref());
+        // The newest answer that reviewed, not one only mending its last
+        // lines (#347); in full as kept, else as the handoff has it.
+        let source = Some(handoff)
+            .filter(|h| h.substantive().is_some())
+            .or_else(earlier);
+        let reply = source.and_then(|h| {
+            let (n, step) = h.substantive()?;
+            kept(&h.id, n).or_else(|| step.text.clone())
+        });
         if let Some(reply) = reply.filter(|_| !handoff.thinking()) {
             note.push_str(&format!(
                 "\n上一轮问题台账（驿窗原样带入，未改动；请逐条对账，漏掉的按未关闭处理）：\n{}",
-                ledger(reply)
+                ledger(&reply)
             ));
         }
         note

@@ -29,21 +29,41 @@ impl Desk {
             .map(str::to_owned)
             .or_else(|| handoffs::head_in(brief))
     }
-    /// Keeps the newest answer of handoff `id` in full (#347).
-    pub(super) fn keep_answer(&self, id: &str) {
-        let Some(data) = &self.data else { return };
-        let book = self.lock();
-        let Some(handoff) = book.get(id) else { return };
-        let n = handoff
-            .steps
-            .iter()
-            .filter(|s| s.kind == handoffs::StepKind::Reply)
-            .count();
-        if let Some(reply) = handoff.last_reply().and_then(|s| s.text.as_deref()) {
-            if let Err(error) = handoffs::archive(data, id, n, reply) {
-                eprintln!("{error}");
-            }
+    /// An engineering review of a pull request goes only with the full
+    /// commit under review (MA-02 §4): else no pass could be checked.
+    pub(super) fn head_needed(pr: Option<&str>, head: Option<&str>) -> Result<(), String> {
+        let full = |h: &str| h.len() == 40 && h.chars().all(|c| c.is_ascii_hexdigit());
+        match (pr, head) {
+            (Some(_), Some(head)) if full(head) => Ok(()),
+            (Some(pr), _) => Err(l10n::text(
+                &format!("送审的是 {pr}，但没认出受审的完整提交，没有发出：调用时 head 填 40 位 SHA（或在 brief 里写一行「head_sha <40 位 SHA>」）。"),
+                &format!("{pr} was sent with no full commit under review; nothing was sent. Give head as the 40-digit SHA (or a line 「head_sha <SHA>」 in the brief)."),
+            )),
+            (None, _) => Ok(()),
         }
+    }
+    /// Keeps the newest answer of handoff `id` in full (#347).
+    pub(super) fn keep_answer(&self, id: &str, reply: &str) {
+        let Some(data) = &self.data else { return };
+        let n = self.lock().get(id).map_or(0, |handoff| {
+            handoff
+                .steps
+                .iter()
+                .filter(|s| s.kind == handoffs::StepKind::Reply)
+                .count()
+        });
+        // As it came, before the handoff cuts it to its own length (#347).
+        if let Err(error) = handoffs::archive(data, id, n, reply.trim()) {
+            eprintln!("{error}");
+        }
+    }
+    /// What PostPane adds to the next review of handoff `id` (#347), the
+    /// ledger read from the answers kept in full.
+    pub(super) fn carry(&self, book: &handoffs::Book, id: &str) -> String {
+        let data = self.data.clone();
+        book.carry(id, &move |h, n| {
+            data.as_deref().and_then(|d| handoffs::archived(d, h, n))
+        })
     }
     /// Asks ChatGPT, in the handoff's conversation, to mend only its newest
     /// answer's last lines (no review of its own, not counted). Once per
@@ -63,8 +83,16 @@ impl Desk {
         }
         let text = format_ask(&handoff);
         let request = format!("{id}~format{now}");
+        // Recorded before it goes, so an answer quicker than the send's own
+        // word is taken; and any that came early is caught up after.
+        if !self.change(|book| book.format_asked(id, &text, now)) {
+            return false;
+        }
         match lines.send(&conversation, &text, &request) {
-            Ok(()) => self.change(|book| book.format_asked(id, &text, now)),
+            Ok(()) => {
+                self.caught_up(&conversation);
+                true
+            }
             Err(error) => self.change(|book| {
                 book.trouble(id, &format_failed(&error), now);
                 book.stop(id, &format_failed(&error), true, now)
@@ -89,20 +117,39 @@ impl Desk {
 /// A pull request's current commit, 「owner/repo#n」, as GitHub has it:
 /// `git ls-remote`, with the person's own git credentials.
 pub(super) fn read_pr_head(pr: &str) -> Result<String, String> {
+    use std::process::{Command, Stdio};
     let (repo, number) = pr.split_once('#').ok_or("不是 PR")?;
     let url = format!("https://github.com/{repo}.git");
     let reference = format!("refs/pull/{number}/head");
-    let (tell, hear) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let output = std::process::Command::new("/usr/bin/git")
-            .args(["ls-remote", &url, &reference])
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output();
-        let _ = tell.send(output);
-    });
-    let output = hear
-        .recv_timeout(READ_HEAD_WAIT)
-        .map_err(|_| "读取超时".to_owned())?
+    // Never asks anyone for credentials: what git has, or it fails.
+    let mut child = Command::new("/usr/bin/git")
+        .args([
+            "-c",
+            "credential.interactive=never",
+            "ls-remote",
+            &url,
+            &reference,
+        ])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_ASKPASS", "/usr/bin/false")
+        .env("SSH_ASKPASS", "/usr/bin/false")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let deadline = std::time::Instant::now() + READ_HEAD_WAIT;
+    while child.try_wait().map_err(|e| e.to_string())?.is_none() {
+        if std::time::Instant::now() > deadline {
+            // Ended, not left behind (#347 review P2-03).
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("读取超时".to_owned());
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let output = child
+        .wait_with_output()
         .map_err(|error| error.to_string())?;
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);

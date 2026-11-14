@@ -287,6 +287,8 @@ impl Desk {
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted(chinese));
         let woke = book.restarted();
+        // Open ones from before the review gate move over, counts kept (#347).
+        let adopted = book.adopt(now);
         // Reviews that passed while nothing drove them (the auto round trip
         // off) end now, as a pass coming in would (owner, 2026-11-07). Not a
         // 思维评审 one (#209): its answer has to reach Claude first, so it
@@ -294,14 +296,17 @@ impl Desk {
         let passed_ids = book
             .list
             .iter()
+            // One whose commit is to be checked against its pull request
+            // waits for the round trip, which checks it first (#347).
             .filter(|h| !h.thinking() && h.next() == Some(Next::Pass))
+            .filter(|h| h.pr.is_none() && h.gate.head.is_none())
             .map(|h| h.id.clone())
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
             ended |= book.passed(id, &passed(chinese), now);
         }
-        if interrupted | woke | ended {
+        if interrupted | woke | ended | adopted {
             let desk = desk(book);
             desk.change(|_| ());
             return desk;
@@ -638,6 +643,9 @@ impl Desk {
             return Err(budget_spent(carried));
         }
         let head = self.head(rule, brief);
+        if engineering {
+            Self::head_needed(pr.as_deref(), head.as_deref())?;
+        }
         let handoff = self.change(|book| {
             let handoff = book.begin(session, cwd, &title, summary, brief, now);
             if let Some(doer) = rule.doer.as_deref() {
@@ -652,7 +660,7 @@ impl Desk {
                 book.allow_extra(&handoff.id, reason, now);
             }
             // Which round it is, and the chain's newest problem ledger (#347).
-            let carry = book.carry(&handoff.id);
+            let carry = self.carry(book, &handoff.id);
             book.extend_brief(&handoff.id, &carry);
             book.get(&handoff.id).cloned().unwrap_or(handoff)
         });
@@ -677,13 +685,16 @@ impl Desk {
     ) -> Result<Started, String> {
         // The cap and the commit as set now (#347).
         let head = self.head(rule, brief);
+        if !handoff.thinking() {
+            Self::head_needed(handoff.pr.as_deref(), head.as_deref())?;
+        }
         let limit = self.review_limit();
         self.change(|book| {
             book.set_limit(&handoff.id, limit) && book.set_head(&handoff.id, head.as_deref())
         });
         // The same words again (a retry after a slow answer) are not sent
         // twice; they went with PostPane's note (#347).
-        let noted = format!("{brief}{}", self.lock().carry(&handoff.id));
+        let noted = format!("{brief}{}", self.carry(&self.lock(), &handoff.id));
         if self.lock().asked_already(&handoff.id, &noted) {
             return Ok(Started::Sent {
                 handoff,
@@ -712,7 +723,7 @@ impl Desk {
             self.change(|book| book.allow_extra(&handoff.id, reason, now));
         }
         // Which round it is, and the newest problem ledger (#347).
-        let brief = &format!("{brief}{}", self.lock().carry(&handoff.id));
+        let brief = &format!("{brief}{}", self.carry(&self.lock(), &handoff.id));
         // Kept until they go in: the extension may only say so after the
         // wait gave up (`observe`, #223).
         let request = format!("{}~send{now}", handoff.id);
@@ -827,7 +838,7 @@ impl Desk {
         let took = self.change(|book| book.replied(conversation, reply, message_id, at));
         // Every answer kept in full (#347).
         if let Some(id) = id.filter(|_| took) {
-            self.keep_answer(&id);
+            self.keep_answer(&id, reply);
         }
         took
     }
@@ -4044,6 +4055,8 @@ mod tests {
     }
 
     const PR: &str = "PR：https://github.com/Natsukashii1997/dt-sandbox/pull/4";
+    /// The commit those reviews are of (#347), and their pull request's still.
+    const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
     /// Starts an engineering review of `PR` from `session` at `risk`
     /// (#217); one that opens a conversation is opened.
@@ -4060,13 +4073,17 @@ mod tests {
             extra: extra.map(str::to_owned),
             ..Rule::default()
         };
+        lines
+            .heads
+            .borrow_mut()
+            .insert("natsukashii1997/dt-sandbox#4".into(), Ok(HEAD.into()));
         let started = desk.start_ruled(
             lines,
             session,
             Some("/w"),
             "dt-sandbox｜SBX-8 原子写入",
             None,
-            &format!("{PR}\n改动如下（{session} {now}）"),
+            &format!("{PR}\nhead_sha {HEAD}\n改动如下（{session} {now}）"),
             false,
             &rule,
             now,
@@ -4135,6 +4152,45 @@ mod tests {
         }
     }
 
+    /// #347 review P1-01, P1-02: a pass waiting across a restart is checked
+    /// against its pull request first; a pull request without the commit
+    /// under review is not sent.
+    #[test]
+    fn a_pass_across_a_restart_is_checked_and_a_pr_needs_its_commit() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let refused = desk.start_ruled(&lines, "s1", None, "t", None, PR, false, &rule, 1);
+        assert!(refused.unwrap_err().contains("head"));
+        let id = match ruled(&desk, &lines, "s1", "L2", None, 1).unwrap() {
+            Started::Opening { handoff, .. } | Started::Sent { handoff, .. } => handoff.id,
+        };
+        desk.observe(
+            &turn("complete", "受审版本：0123456\n审查出口：通过\n结论：通过"),
+            3,
+        );
+        // The app stops before the round trip took it up; the pull request moved on.
+        let data = desk.data.clone().unwrap();
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert_eq!(
+            desk.lock().get(&id).unwrap().status,
+            Status::Open,
+            "not ended unchecked"
+        );
+        lines.heads.borrow_mut().insert(
+            "natsukashii1997/dt-sandbox#4".into(),
+            Ok("fedcba9876543210fedcba9876543210fedcba98".into()),
+        );
+        assert!(desk.catch_up(&lines, 5));
+        let kept = desk.lock().get(&id).cloned().unwrap();
+        assert!(kept.live() && !kept.auto && kept.gate.notice.is_none());
+        drop(temp);
+    }
+
     /// #347: a chain named must be known; the cap reached is noted for
     /// the person; every answer is kept in full.
     #[test]
@@ -4156,7 +4212,7 @@ mod tests {
             if n == 2 {
                 ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
             }
-            desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":format!("第 {n} 轮\n审查出口：返修\n结论：需修改"),"messageId":format!("m{n}")}), at);
+            desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":format!("第 {n} 轮\n受审版本：0123456\n审查出口：返修\n结论：需修改"),"messageId":format!("m{n}")}), at);
             desk.drive(&lines, at + 1);
         }
         let kept = desk.lock().get(&id).cloned().unwrap();
@@ -4233,7 +4289,10 @@ mod tests {
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L1", None, 1).unwrap();
         desk.observe(
-            &turn("complete", "1. P1 漏了回滚\n审查出口：返修\n结论：需修改"),
+            &turn(
+                "complete",
+                "1. P1 漏了回滚\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
             3,
         );
         assert!(desk.drive(&lines, 4));
@@ -4256,14 +4315,17 @@ mod tests {
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
         desk.observe(
-            &turn("complete", "1. 原子写入\n审查出口：返修\n结论：需修改"),
+            &turn(
+                "complete",
+                "1. 原子写入\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
             3,
         );
         desk.drive(&lines, 4);
         assert!(last_reply_to_claude(&lines).contains("最后一轮"));
         ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2"}),
             6,
         );
         desk.drive(&lines, 7);
@@ -4289,7 +4351,10 @@ mod tests {
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
         desk.observe(
-            &turn("complete", "1. 原子写入\n审查出口：返修\n结论：需修改"),
+            &turn(
+                "complete",
+                "1. 原子写入\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
             3,
         );
         // Round 2 from another Claude session (SBX-8): a new handoff that
@@ -4300,7 +4365,7 @@ mod tests {
         };
         assert_eq!(handoff.carried, 1);
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2"}),
             5,
         );
         desk.drive(&lines, 6);
@@ -4328,7 +4393,7 @@ mod tests {
         desk.observe(
             &turn(
                 "complete",
-                "缺复现日志\n审查出口：证据不足暂停\n结论：需修改",
+                "缺复现日志\n受审版本：0123456\n审查出口：证据不足暂停\n结论：需修改",
             ),
             3,
         );
@@ -4344,10 +4409,15 @@ mod tests {
         assert_eq!(handoff.counted(), 1, "the paused review counts (#347)");
         // A way out that does not go with its verdict stops it.
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"受审版本：0123456\n审查出口：通过\n结论：需修改","messageId":"m2"}),
             6,
         );
-        mend(&desk, &lines, "审查出口：通过\n结论：需修改", 6);
+        mend(
+            &desk,
+            &lines,
+            "受审版本：0123456\n审查出口：通过\n结论：需修改",
+            6,
+        );
         assert!(desk.drive(&lines, 7));
         assert_eq!(
             desk.projection(7)[0]["halt"],
