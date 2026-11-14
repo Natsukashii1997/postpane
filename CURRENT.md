@@ -7,6 +7,20 @@
 
 
 
+## 第 3 批之一：点哪家的票根出哪家的卡；纸飞机加到新回复卡和单家面板（#359）（2026-11-14，Claude，常浩看三版预览后回「都选甲」，改动确认四处回「都按推荐」；已提交、已发布 `d7a5344be952` 回读通过）
+
+- 时间：开工 `2026-11-14 17:48`（`date '+%F %H:%M'` 记录）。来由：ADR-0001 第 3 批界面统一。三版预览 https://claude.ai/artifact/VpJfiLCmuXyNgZj1tN6Jp7 （第 1 版多开关，常浩说「太复杂了看不懂」，第 2 版改成「只有两处要你挑」），常浩回「都选甲」：① 看板会话分到各家下面、某家在跑超过 3 条收成一行；② 出错单独一张回执。随后改动确认四处，常浩回「都按推荐」：**纸飞机多单仍「进最近一单 + 红数字」，不改成列表（保 #344）；额度细条不加纸飞机（保 #62/#65）；看板在跑超过 3 条收成一行（替代 #63 的「5 条 + 滚动」，只用在分家后的各家区块）；小收据加「等你 · 在跑 · 接力」一行，「看不清」第一版不做（后台还没有「这家看不到了」的数据）**。第 3 批分三个 PR：本 PR（点击 + 纸飞机）→ 看板分家 + 小收据一行 → 出错回执。
+- 改了哪些文件：
+  - 常浩要求的：`hud/src/request-hover.ts` 新 `clickMayPin`：点别家票根照常钉住、长成那家的面板，只有点「前卡那一家」自己的票根或刘海形态才不动（原来只要有任何消息卡就一律不动）；`scene/useHUDInteraction.ts` 的 `pin` 用它；`HUDScene.tsx` 侧栏「替谁说话」在没有指针时（预览台、键盘）也认被点的那家（`pinned && hovered`）。纸飞机：`alerts/CompletionAlertView.tsx` 新回复卡卡头加 `EnterRelay`（`cardRelays` 按回复的来源，只进本家参与的接力）；单家面板卡头拆出新文件 `panel/BoardHeading.tsx`，印章左边加 `EnterRelay`（`relaysOf(本家)`），`QuotaSection.tsx` 传 `handoffs`。样子和多单行为沿用 #344。
+  - 顺手改的：守 300 行棘轮——「知道了 / 全部知道了」按钮拆到新 `alerts/DismissAll.tsx`；`BoardHeading`、`Stamp` 从 `AgentBoard.tsx` 搬到 `panel/BoardHeading.tsx`；`QuotaSection.tsx` 一处两行注释压成一行；基线收紧 2 项（`CompletionAlertView.tsx` 571→567、`AgentBoard.tsx` 672→513）。测试：`request-hover.test.ts` 加 1 条（点击何时钉住），`relay-toggle.test.ts` 加 1 条（两张卡接上纸飞机、在印章左边），`workplace-contract.test.ts` 加 1 条（回复卡、单家面板只进本家接力：Claude→h-claude、Codex→h-codex、DeepSeek/Hermes 无）。
+  - **改变了已有行为的**：有消息卡时点别家票根，现在会长成那家自己的面板（原来点了没反应，场景预览台里还会出前卡）；新回复卡、Claude/Codex 的单家面板卡头出现纸飞机（只在本家有开着的接力时）。ChatGPT 单家面板没有 `BoardHeading`，不加飞机（它的审核纸条本来就列着接力）；DeepSeek、Hermes 没有接力，不出现。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `985 passed; 0 failed`，前端 `ℹ pass 452` / `ℹ fail 0` / `ℹ todo 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。跑了两遍：第一遍基于 `330a5d5`（Rust 981、前端 452、Chrome 插件 17，全过）；main 随后合进 #363，变基后重跑，结果即上。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/`：`check*.txt`、`test*.txt`、`node*.txt`。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-359`）`two-relays`：直接点 ChatGPT 票根，出 ChatGPT 自己的面板（今天的对话 + 审核纸条），第 1 批证据 `finding-chatgpt-click-shows-deepseek-card.jpg` 里改前是 DeepSeek 的审批卡；点 Claude 出 Claude 面板；点 DeepSeek 出它自己的审批卡；悬停 ChatGPT 仍出 ChatGPT 面板（#243 不变）。Claude 面板卡头「未知」印章左边出现白色纸飞机，点它进 Claude 那一单「整理导入流程」，接力卡卡头飞机为按下态。L-35：装前装后静止侧栏逐字节相同（`a3911c05bff7`）。**未做**：实机悬停面板里点纸飞机、实机点别家票根（L-09，电脑控制点不动悬停面板），留给常浩；装完截整屏看「想访问文稿」弹窗（L-06）。
+- 截图：证据目录 `~/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/`：`click-chatgpt-own-panel.jpg`、`click-claude-own-panel.jpg`、`claude-panel-plane.png`、`claude-plane-into-relay.jpg`、`before-hud.png`、`after-hud.png`。
+- 发布与回读：`install.sh 359-click-plane`：装前 `3419f5ba1910`（别的会话装的，本包已变基含 #363），产物 `d7a5344be952` / 已装 `d7a5344be952`，签名证书照常（`H"b773068e`），`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/PostPane-3419f5ba1910.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：常浩的「都选甲」「都按推荐」是侧栏回复转进会话的，和给出的按钮 / 推荐一致，按常浩本人的回答处理。新回复卡的飞机只在场景预览台的代码层验证（预览台里场景回复事件已过期，看不到实物卡），靠 `relay-toggle.test.ts` 钉住；实机下一次有接力回信时再看。下一步：第 3 批之二「看板分家 + 小收据一行」。
+- 本轮新坑：无
+
 ## #356 返修：补报的回信必须是这一轮的、正文写完再报、发送失败 15 秒重试（2026-11-14，Claude，PR #361 合并后补做 L2 审查（接力 `h1a1d954523b00`）返修 P1 ×2、P2 ×3，常浩回「按推荐做 P1」，第 2 轮后回「甲，授权专项续审」，专项续审通过；已提交、未发布）
 
 - 时间：开工 `2026-11-14 17:18`（ChatGPT 回信转回的时间，取自 `turns.jsonl`，没用 `date` 记）。来由：#361 合并后送 ChatGPT 做 L2 工程审查，结论返修；P2 只动 #356 新加的重读代码，直接改；P1 两条会让原有的正常上报变严，先向常浩列出、他回「按推荐做 P1」再改。

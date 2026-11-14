@@ -22,8 +22,8 @@ import {
 import { PAPER_FIGURES, usePaper } from "../paper";
 import { SourceTokenChart } from "./TokenChartSection";
 import { QuotaRingCard } from "./QuotaRingCard";
+import { BoardHeading } from "./BoardHeading";
 import {
-  BoardHeading,
   BoardKey,
   BoardRows,
   BoardSentence,
@@ -217,8 +217,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
     ? null
     : (sections.find((s) => s.account)?.account ?? null);
   const missingReading = !snapshot.quotas.some((row) => row.vendor === vendor);
-  // Without readings the block still says why, as a signed-out Claude Code
-  // asks to be signed in again.
+  // Without readings it says why, as a signed-out Claude Code asks to sign in.
   const missingNotice = missingReading
     ? missingReadingNotice(snapshot.providers, vendor)
     : null;
@@ -244,6 +243,7 @@ export const SourceProviderBlock = memo(function SourceProviderBlock({
         Logo={Logo}
         light={light}
         plan={only?.planLabel}
+        handoffs={snapshot.handoffs}
         stamp={
           hermes
             ? hermesStamp(snapshot.hermesBots ?? [])
