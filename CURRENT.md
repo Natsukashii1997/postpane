@@ -7,6 +7,21 @@
 
 
 
+## 侧栏「在跑」标记换成纯加载：3×3 方点斜扫（#321）（2026-11-14，Claude，常浩要求「在跑的加载标识重新做三版，有点创意，不要带原图标，纯是加载的样式」，看三版预览后回复「乙」；已提交、发布 `f67b71c33021` 回读通过）
+
+- 时间：开工 `2026-11-14 08:28`。来由：#313 定的在跑标记是「这一家的图标 + 外圈转动细弧」，常浩要求去掉图标、只留加载样式。三版预览 https://claude.ai/artifact/8PQ622sNJyNriFFpdwqTM6 （甲驿路绕行 / 乙信号灯阵 / 丙笔尖写信，附现状对照），常浩选乙；常浩本轮点名要改，不另发改动确认。issue #321。
+- 改了哪些文件：
+  - `hud/src/panel/RunningMark.tsx`：去掉 `HUDArtwork` 图标和外圈细弧，改成 3×3 小方点（3 点见方、间距 2.5 点、圆角 0.8），整格仍 18×18、颜色仍是面板绿 `inks.green`；九个点按对角线位置（0–4）各延迟 0.13 秒，光从左上斜扫到右下。组件不再要 `source`、`light` 两个参数。
+  - `hud/src/panel/SessionsSection.tsx`：`LiveRow` 调 `RunningMark` 时去掉这两个参数。各家面板和卡底「正在进行」都走 `LiveRow`，所以所有智能体同一个样子。
+  - `ui/src/global.css`：`.hud-running-ring` 换成 `.hud-running-grid > span`：平时不透明度 0.18，`hud-running-sweep` 1.3 秒一趟（35% 亮到 1、60% 回 0.4）；减少动态效果时不动、九个点停在 0.55。`loading-state-spin` 仍给设置页的 `LoadingState` 用，保留。
+  - 不动：「等你」红章、`tagWide` 对齐、右侧「已 n 分钟」、第二行文字。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 第一次退出码 1：Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 411` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 1` / `ℹ fail 12`，全是 `browserType.launch: Executable doesn't exist at ~/Library/Caches/ms-playwright/chromium_headless_shell-1248/...`，`~/Library/Caches/ms-playwright/` 整个没了，和 L-16 相同；照 L-16 在 `src/apps/chrome-extension` 跑 `pnpm exec playwright install chromium-headless-shell` 补回后 `pnpm run test:extension` `ℹ pass 13` / `ℹ fail 0`。`node --test tests/*.test.mjs` 写交接前 `ℹ pass 18` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-321-running-grid/{check,test,test-extension-2,playwright-install,rules}.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1467，沿用 #319 的 2026-11-12 真实快照，脚手架挪到证据目录 `preview-321/`，没提交）：悬停 Claude 票根，待审批卡底「正在进行 · 1」那一行左格是九个绿方点，计算结果 18×18、`hud-running-sweep` 1.3 秒、延迟 `0s,0.13s,0.26s,0.13s,0.26s,0.39s,0.26s,0.39s,0.52s`，同一时刻九个点不透明度从 0.27 到 0.91 不等，确认在扫；没有图标。浅色纸同样；`?codex` 把请求换成 Codex 的，卡底 Codex 在跑行也是方点阵。标记与标题的间距和 #313 一致（整格仍 18 点宽）。装机后用驿窗 MCP `get_hud_screenshot` 截 Claude 面板，「正在进行 · 8」前 5 行都是「等你」，在跑行要滚动才看得到，截图工具滚不动，**实机面板里的在跑行未看到**；Codex 此刻没有在跑会话。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-321-running-grid/`：`before-claude-panel.png`（改前 Claude 面板）、`preview-claude-card-dark.jpg`、`preview-claude-card-light.png`、`preview-codex-card-dark.jpg`。三版预览页源文件 `docs/design/running-loader-preview.html` 未提交（和之前几轮的预览页一样留在主目录）。
+- 发布与回读：`f67b71c33021`（从本分支打包，开工后 main 没有新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前确认没有开着自动往返的接力（15 单 open 全是 `auto: false`）。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-321-running-grid/PostPane-dac821cde448.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做，电脑控制没申请），以 MCP 截图能正常渲染面板作旁证。
+- 与授权不一致之处、遗留问题：实机悬停看在跑行的方点阵留给常浩。范围外发现：无。skill 进化：无。
+- 本轮新坑：无（Playwright 缓存被清是 L-16 再次出现）
+
 ## 盖住面板的卡片右下角压本周额度暗印（#319）（2026-11-12，Claude，常浩看两轮预览后选第二轮「甲 · 角落大字」，要求「只显示数字就行，旁边的文字小字不需要」，静止票根「不需要改」；已提交、发布见下）
 
 - 时间：开工 `2026-11-12 16:28`。来由：常浩截图说侧栏挂着待审批卡时看不到额度，「尤其 claude 完全看不见」（当时 Claude 本周已用 98%），要求被挡时也能看到周额度，并追问其他会挡住的情况。查实会盖住额度面板的有三种卡：待审批卡、通知卡（新回复回执、Hermes 回复、额度 / 重置 / 登出 / 定时任务细条）、点开的接力卡；另有静止票根盖章后数字让位（#218 定的，常浩说不改）。预览 https://claude.ai/artifact/S9niXLPZPKCgMXpWoukG4P ：第一轮（卡头一行 / 卡底额度联 / 印章旁小环）常浩说「都不行……额度只是我额外看的，可以作为背景虚化嵌在后面」；第二轮全改成纸面暗印（角落大字 / 邮戳暗印 / 纸面水位），选甲并去掉小字。issue #319。
