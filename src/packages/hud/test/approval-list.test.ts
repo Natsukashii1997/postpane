@@ -87,28 +87,31 @@ test("ASK and PLAN are red, permissions ochre, a reply blue (#308)", () => {
   }
 });
 
-test("the longest-waiting request leads; replies follow the requests", () => {
+test("the newest request leads; replies follow the requests, newest first (#325)", () => {
   const { groups, hidden } = approvalGroups(
     [
       reply("r1", "2026-11-05T00:00:00Z"),
       asked("new", "2026-11-05T00:03:00Z"),
       asked("old", "2026-11-05T00:01:00Z"),
+      reply("r2", "2026-11-05T00:04:00Z"),
+      asked("timeless", "not a time"),
     ],
     "old",
   );
   assert.equal(hidden, 0);
   assert.deepEqual(
     groups.flatMap((group) => group.entries.map((entry) => entry.id)),
-    ["old", "new", "r1"],
+    ["new", "old", "timeless", "r2", "r1"],
   );
 });
 
-test("lines group by sidebar section, in the order the groups first appear", () => {
+test("lines group by sidebar section, the group with the newest line first (#325)", () => {
   const { groups, sectioned } = approvalGroups(
     [
       asked("a", "2026-11-05T00:01:00Z", "驿窗 | PostPane"),
       asked("b", "2026-11-05T00:02:00Z"),
       asked("c", "2026-11-05T00:03:00Z", "驿窗 | PostPane"),
+      asked("d", "2026-11-05T00:04:00Z", "数字分身"),
     ],
     "a",
   );
@@ -116,7 +119,8 @@ test("lines group by sidebar section, in the order the groups first appear", () 
   assert.deepEqual(
     groups.map((group) => [group.section, group.entries.map((e) => e.id)]),
     [
-      ["驿窗 | PostPane", ["a", "c"]],
+      ["数字分身", ["d"]],
+      ["驿窗 | PostPane", ["c", "a"]],
       [null, ["b"]],
     ],
   );
@@ -124,20 +128,23 @@ test("lines group by sidebar section, in the order the groups first appear", () 
   assert.equal(none.sectioned, false, "no section anywhere: no group titles");
 });
 
-test("past five lines the rest fold away, the open one always shown", () => {
+test("past five lines the oldest fold away, the open one always shown (#325)", () => {
   const entries = Array.from({ length: 8 }, (_, n) =>
     asked(`q${n}`, `2026-11-05T00:0${n}:00Z`),
   );
-  const folded = approvalGroups(entries, "q0");
-  assert.equal(folded.hidden, 3);
+  const newest = approvalGroups(entries, "q7");
+  assert.equal(newest.hidden, 3);
   assert.deepEqual(
-    folded.groups[0].entries.map((entry) => entry.id),
-    ["q0", "q1", "q2", "q3", "q4"],
+    newest.groups[0].entries.map((entry) => entry.id),
+    ["q7", "q6", "q5", "q4", "q3"],
   );
-  const late = approvalGroups(entries, "q7");
-  assert.equal(late.hidden, 3);
-  assert.ok(late.groups[0].entries.some((entry) => entry.id === "q7"));
-  assert.equal(late.groups[0].entries.length, 5);
+  // The open one is the oldest (the queue's front): the four newest, then it.
+  const oldest = approvalGroups(entries, "q0");
+  assert.equal(oldest.hidden, 3);
+  assert.deepEqual(
+    oldest.groups[0].entries.map((entry) => entry.id),
+    ["q7", "q6", "q5", "q4", "q0"],
+  );
   assert.equal(approvalGroups(entries, "q0", Infinity).hidden, 0);
   assert.equal(approvalGroups(entries.slice(0, 5), "q0").hidden, 0);
 });

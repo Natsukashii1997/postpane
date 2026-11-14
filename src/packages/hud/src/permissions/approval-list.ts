@@ -210,17 +210,18 @@ export function waitedText(seconds: number, zh: boolean): string {
   return `${h}h${String(m).padStart(2, "0")}m`;
 }
 
-/** The lines in the order they are listed: the requests, longest waiting
- * first, then the replies as they came. */
+/** The lines in the order they are listed: the requests, newest first,
+ * then the replies, newest first; a line without a readable time goes last
+ * of its kind (owner, 2026-11-14, #325). */
 export function orderEntries(entries: readonly ApprovalEntry[]) {
   const time = (entry: ApprovalEntry) => {
     const at = Date.parse(entry.at);
-    return Number.isFinite(at) ? at : Number.POSITIVE_INFINITY;
+    return Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY;
   };
   return [...entries].sort(
     (a, b) =>
       Number(a.kind === "reply") - Number(b.kind === "reply") ||
-      time(a) - time(b),
+      time(b) - time(a),
   );
 }
 
@@ -236,7 +237,8 @@ export const SHOWN_ENTRIES = 5;
 /**
  * The list as the card prints it: the first `limit` lines in `order` (the
  * open one always among them), grouped by sidebar section in the order the
- * groups first appear, and how many lines are folded away. `sectioned` says
+ * groups first appear (with the default order, the group with the newest
+ * line first), and how many lines are folded away: the last in `order`. `sectioned` says
  * whether any line has a section, so a list with none prints no group titles.
  */
 export function approvalGroups(
