@@ -5,7 +5,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CheckCheck } from "lucide-react";
 import type { Handoff, IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
@@ -37,6 +36,9 @@ import {
 import { ListHead } from "../permissions/ListHead";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
+import { DismissAll } from "./DismissAll";
+import { EnterRelay } from "./RelayToggle";
+import { cardRelays } from "../workspace";
 import { useHandoffCard } from "./HandoffCard";
 import { handoffFor, relayLegend, relayLegendInks } from "./handoff-card";
 import { OpenNotice, useOpenFailures } from "../OpenNotice";
@@ -263,30 +265,24 @@ export function CompletionAlertView({
         light={light}
         zh={zh}
         action={
-          <button
-            type="button"
-            className="hud-press"
+          <DismissAll
+            count={entries.length}
+            zh={zh}
+            inks={inks}
             onClick={() => drop(entries.map((each) => each.id))}
-            style={{
-              ...buttonFace,
-              height: 24,
-              padding: "0 10px",
-              fontSize: 12,
-              flex: "none",
-              border: `1.5px solid ${inks.faint}`,
-              background: "transparent",
-              color: inks.mid,
-            }}
-          >
-            <CheckCheck size={13} strokeWidth={2.2} />
-            {entries.length > 1
-              ? zh
-                ? "全部知道了"
-                : "Dismiss all"
-              : zh
-                ? "知道了"
-                : "Got it"}
-          </button>
+          />
+        }
+        toggle={
+          <EnterRelay
+            handoffs={cardRelays(
+              handoffs,
+              entries.flatMap((each) =>
+                each.kind === "reply" ? [each.event] : [],
+              ),
+            )}
+            paper={paper}
+            zh={zh}
+          />
         }
       />
       <ListTear paper={paper} inks={inks} />

@@ -432,15 +432,15 @@ export function HUDScene({
     // Only the front news's own card being out counts as a look at it.
     otherMarkRef,
   );
-  // Another agent's mark under the pointer shows that agent's own peek, not
-  // the news in front (owner, 2026-11-08, #243): every mark answers for its
-  // own agent. An agent with news of its own comes to the front instead.
-  // The agent the open sidebar answers for stays until it folds away, so
-  // the pointer leaving while it closes does not hand the card to the news.
+  // Another agent's mark under the pointer, or clicked (#359), shows that
+  // agent's own peek, not the news in front (#243): every mark answers for its
+  // own agent; one with news of its own comes to the front instead. It stays
+  // until the sidebar folds away, so leaving does not hand the card to news.
   const frontOf = news.request ?? news.event;
   const openFor = useRef<string | null>(null);
   if (!open) openFor.current = null;
   else if (pointerInside && tagUnder) openFor.current = tagUnder;
+  else if (pinned && hovered) openFor.current = hovered;
   const peekOf = openFor.current;
   const otherMark = Boolean(
     peekOf &&

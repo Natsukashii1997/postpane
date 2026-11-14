@@ -56,6 +56,24 @@ test("the plane is white, not the cards' blue (owner, 2026-11-14)", () => {
   assert.equal(planeInks(light, false).inks.ink, light.ink);
 });
 
+test("the replies' card and an agent's board block carry the same plane, into their own relays (ADR-0001 C2, #359)", () => {
+  const replies = read("alerts/CompletionAlertView.tsx");
+  assert.match(
+    replies,
+    /toggle=\{\s*<EnterRelay\s+handoffs=\{cardRelays\(\s*handoffs,[\s\S]*?each\.event[\s\S]*?\)\}\s+paper=\{paper\}\s+zh=\{zh\}\s*\/>\s*\}/,
+  );
+  const heading = read("panel/BoardHeading.tsx");
+  // Left of the stamp.
+  assert.match(
+    heading,
+    /<EnterRelay\s+handoffs=\{relaysOf\(handoffs, vendor\)\}[\s\S]*?\/>\s*\{stamp && <Stamp/,
+  );
+  assert.match(
+    read("panel/QuotaSection.tsx"),
+    /<BoardHeading[\s\S]*?handoffs=\{snapshot\.handoffs\}/,
+  );
+});
+
 test("the waiting card's head carries the plane, left of the stamp (#341)", () => {
   const content = read("permissions/ApprovalContent.tsx");
   assert.match(

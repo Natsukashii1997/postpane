@@ -4,6 +4,7 @@
 // between marks leave the strip resting. Where the waiting agent has no mark to point at (the notch, or a
 // hidden agent), any hover still opens it, so the request is never out of
 // reach. Kept free of the UI so the tests can run it.
+import { agentArtworkKey } from "./agent-artwork.ts";
 
 /**
  * Whether a hover may open the HUD now. `pointerKey` is the mark under the
@@ -30,4 +31,18 @@ export function hoverMayOpen({
   // Another agent's mark opens that agent's own peek, never the waiting
   // card (owner, 2026-11-08, #243): every mark answers for its own agent.
   return pointerKey !== null;
+}
+
+/** Whether a click on a mark pins the sidebar open on it (#359): not in the
+ * notch, nor on the mark whose own news is in front (its card is out); any
+ * other agent's mark opens that agent's own, as a hover does (#243). */
+export function clickMayPin(
+  key: string | undefined,
+  frontSource: string | undefined,
+  mode: string,
+): boolean {
+  if (mode === "notch") return false;
+  return (
+    !frontSource || (key !== undefined && key !== agentArtworkKey(frontSource))
+  );
 }
