@@ -374,6 +374,7 @@ impl Desk {
             let mut book = self.lock();
             book.expire(now, &timed_out())
                 | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
+                | book.idle(now, &idle_end())
         };
         if late {
             self.change(|_| ());

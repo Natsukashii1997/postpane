@@ -172,10 +172,10 @@ export function useHUDLayout({
       ? HUD_METRICS.expandedFlare
       : HUD_METRICS.collapsedFlare;
   const flared = !detached && config.mode !== "simple";
-  const fullWidth = standaloneAlert
-    ? 470
-    : focusedVendor
-      ? Math.max(440, config.panelWidth - 100)
+  // Every agent's card is one width, news card or panel (owner, 2026-11-14).
+  const fullWidth =
+    standaloneAlert || focusedVendor
+      ? HUD_METRICS.alertWidth
       : !horizontal(edge) && !detached
         ? Math.min(
             screen.width - 16,

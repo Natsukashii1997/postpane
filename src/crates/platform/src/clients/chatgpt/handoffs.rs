@@ -7,6 +7,7 @@ use super::{folder, write_private};
 use agent_hud_agents::chatgpt as agent;
 use agent_hud_core::l10n;
 use serde::{Deserialize, Serialize};
+mod idle;
 mod wake;
 use std::{
     fs,
@@ -16,6 +17,7 @@ mod doer;
 mod notice;
 mod pull_request;
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
+pub use idle::IDLE_END_MS;
 pub use notice::Trouble;
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
@@ -1811,6 +1813,32 @@ mod tests {
         let id = asked_once(&mut book);
         book.replied("c1", "我看了一下，挺好的", Some("m1"), 4);
         assert_eq!(book.get(&id).unwrap().next(), Some(Next::NoVerdict));
+    }
+
+    // Owner chose 甲 on 2026-11-14: handoffs left with the person end after a
+    // day untouched; one still moving, or touched lately, stays.
+    #[test]
+    fn handoffs_left_a_day_untouched_end_themselves() {
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        book.replied("c1", "结论：需修改", Some("m1"), 4);
+        assert!(
+            !book.idle(4 + IDLE_END_MS, "闲置"),
+            "a day to the minute stays"
+        );
+        assert!(book.idle(5 + IDLE_END_MS, "闲置"));
+        let ended = book.get(&id).unwrap();
+        assert_eq!(ended.status, Status::Closed);
+        assert_eq!(ended.phase, Phase::Ended);
+        let last = ended.steps.last().unwrap();
+        assert_eq!(last.kind, StepKind::End);
+        assert_eq!(last.text.as_deref(), Some("闲置"));
+        assert!(last.auto);
+        // Still with ChatGPT and not stopped: it is not left with the person.
+        let mut book = Book::default();
+        let id = asked_once(&mut book);
+        assert!(!book.idle(10 + IDLE_END_MS, "闲置"));
+        assert!(book.get(&id).unwrap().live());
     }
 
     // #223: 「继续自动」 after a long wait starts the wait afresh, rather

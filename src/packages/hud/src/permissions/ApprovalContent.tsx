@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type {
   Approval,
-  Handoff,
   IslandEvent,
   RequestDecision,
   Session,
@@ -29,16 +28,9 @@ import {
   sessionToOpen,
   type ApprovalEntry,
 } from "./approval-list";
-import {
-  EntryRow,
-  FoldButton,
-  ListTear,
-  SectionTitle,
-  cardInks,
-} from "./ListCard";
-import { ListHead } from "./ListHead";
-import { EnterRelay } from "../alerts/RelayToggle";
-import { cardRelays } from "../workspace";
+import { EntryRow, cardInks } from "./ListCard";
+import { FoldButton } from "./FoldButton";
+import type { NewsSeal } from "./PaperSeal";
 
 export function ApprovalContent({
   requests,
@@ -50,7 +42,6 @@ export function ApprovalContent({
   language,
   sessions = [],
   replies = [],
-  handoffs,
 }: {
   requests: Approval[];
   selected: Approval;
@@ -64,8 +55,6 @@ export function ApprovalContent({
   sessions?: Session[];
   /** Replies waiting in the queue, listed under the requests. */
   replies?: IslandEvent[];
-  /** The snapshot's handoffs: the paper plane opens the open one (#341). */
-  handoffs?: readonly Handoff[] | null;
 }) {
   const zh = language?.startsWith("zh") ?? false;
   // Beside the dock the card is a receipt (HUDExpandedSurface prints it).
@@ -74,9 +63,6 @@ export function ApprovalContent({
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
   const [unfolded, setUnfolded] = useState(false);
-  const asking =
-    selected.kind === "question" || Boolean(selected.questions?.length);
-
   const entries: ApprovalEntry[] = [
     ...requests.map((request): ApprovalEntry => ({
       kind: "request",
@@ -95,10 +81,13 @@ export function ApprovalContent({
       session: findSession(sessions, event.sessionId, event.source),
     })),
   ];
-  const { groups, hidden, sectioned } = approvalGroups(
+  // One list, newest first, no sections (owner, 2026-11-14).
+  const { groups, hidden } = approvalGroups(
     entries,
     selected.id,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
+    undefined,
+    () => null,
   );
 
   const goBack = async (entry: ApprovalEntry) => {
@@ -173,44 +162,8 @@ export function ApprovalContent({
       className="hud-approval-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      {/* The receipt's stamp: waiting to be answered or approved. */}
-      <ListHead
-        label={zh ? "待审批" : "Waiting"}
-        entries={entries}
-        stamp={
-          selected.badge === START_BADGE
-            ? zh
-              ? "切换"
-              : "START"
-            : asking
-              ? zh
-                ? "待答"
-                : "ASK"
-              : zh
-                ? "待批"
-                : "WAIT"
-        }
-        stampInk={selected.badge === START_BADGE ? "green" : "red"}
-        paper={paper}
-        inks={inks}
-        light={light}
-        zh={zh}
-        toggle={
-          <EnterRelay
-            handoffs={cardRelays(handoffs ?? undefined, requests)}
-            paper={paper}
-            zh={zh}
-          />
-        }
-      />
-      <ListTear paper={paper} inks={inks} />
       {groups.map((group) => (
         <div key={group.section ?? ""} style={cardColumn(0)}>
-          {sectioned && (
-            <SectionTitle inks={inks}>
-              {group.section ?? (zh ? "未分区" : "No section")}
-            </SectionTitle>
-          )}
           {group.entries.map((entry, index) => {
             const open = entry.kind === "request" && entry.id === selected.id;
             const target = sessionToOpen(entry);
@@ -260,15 +213,27 @@ export function ApprovalContent({
           })}
         </div>
       ))}
-      {hidden > 0 && (
-        <FoldButton
-          hidden={hidden}
-          onUnfold={() => setUnfolded(true)}
-          inks={inks}
-          zh={zh}
-        />
-      )}
+      <FoldButton
+        hidden={hidden}
+        unfolded={unfolded}
+        onToggle={() => setUnfolded((open) => !open)}
+        inks={inks}
+        zh={zh}
+      />
       <div style={{ height: 6 }} />
     </div>
   );
+}
+
+/** The seal a waiting card presses beside its plane: 切换 for a handoff
+ * card, 待答 for a question, 待批 for the rest. */
+export function waitingSeal(selected: Approval, zh: boolean): NewsSeal {
+  if (selected.badge === START_BADGE)
+    return { words: zh ? "切换" : "START", ink: "green" };
+  const asking =
+    selected.kind === "question" || Boolean(selected.questions?.length);
+  return {
+    words: asking ? (zh ? "待答" : "ASK") : zh ? "待批" : "WAIT",
+    ink: "red",
+  };
 }

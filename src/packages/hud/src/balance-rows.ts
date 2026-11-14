@@ -1,5 +1,5 @@
 import type { BillingAccount, PanelBlockLayout } from "@agent-hud/protocol";
-import { listPrice } from "@agent-hud/ui/format";
+import { listPrice, moneyAmount } from "@agent-hud/ui/format";
 import type { Language } from "@agent-hud/ui/format";
 
 /** A balance ID includes the account and currency, unlike accountId. */
@@ -36,4 +36,26 @@ export function stubBalance(
         )
         .join(" · ")
     : null;
+}
+
+/** An agent's shown balances, exactly, as its peek and panel print them;
+ * null with none. */
+export function balanceText(
+  rows: readonly BillingAccount[],
+  language: Language,
+): string | null {
+  return rows.length
+    ? rows.map((b) => moneyAmount(b.amount, b.currency, language)).join(" · ")
+    : null;
+}
+
+/** The level of an agent billed by balance alone: its worst balance's. */
+export function balanceLevel(
+  rows: readonly BillingAccount[],
+): "normal" | "warning" | "critical" | "stale" | undefined {
+  if (!rows.length) return undefined;
+  if (rows.some((row) => row.level === "critical")) return "critical";
+  if (rows.some((row) => row.level === "warning")) return "warning";
+  if (rows.some((row) => row.level === "normal")) return "normal";
+  return "stale";
 }

@@ -1,5 +1,4 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { DollarSign, Flame, Percent } from "lucide-react";
 import type { PanelBlockLayout, Quota, Snapshot } from "@agent-hud/protocol";
 import { quotaMetric } from "../quota-metrics";
 import { useFormat } from "@agent-hud/ui/format-context";
@@ -23,6 +22,7 @@ import { PAPER_FIGURES, usePaper } from "../paper";
 import { SourceTokenChart } from "./TokenChartSection";
 import { QuotaRingCard } from "./QuotaRingCard";
 import { BoardHeading } from "./BoardHeading";
+import { BalanceMetricToggle } from "./BalanceMetrics";
 import {
   BoardKey,
   BoardRows,
@@ -340,12 +340,15 @@ export function SourceBalances({
   Logo,
   layout = {},
   onStats,
+  headed = false,
 }: {
   billing: Snapshot["billing"];
   light: boolean;
   Logo: Logo;
   layout?: PanelBlockLayout;
   onStats?: () => void;
+  /** The card's head above names the agent: the row keeps its switches. */
+  headed?: boolean;
 }) {
   const colors = usePanelPalette(light);
   const paper = usePaper();
@@ -418,65 +421,26 @@ export function SourceBalances({
             style={{ display: "grid", gap: 8 }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span
-                style={{
-                  width: 20,
-                  display: "inline-flex",
-                  justifyContent: "center",
-                }}
-              >
-                <Logo source={account.vendor} size={14} light={light} />
-              </span>
+              {!headed && (
+                <span
+                  style={{
+                    width: 20,
+                    display: "inline-flex",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Logo source={account.vendor} size={14} light={light} />
+                </span>
+              )}
               <strong style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>
-                {agentVendorName(account.vendor)}
+                {!headed && agentVendorName(account.vendor)}
               </strong>
               {!layout.measures?.length && (
-                <div
-                  role="group"
-                  aria-label={language === "zh" ? "余额指标" : "Balance metric"}
-                  style={{ display: "flex", gap: 2 }}
-                >
-                  {(
-                    [
-                      {
-                        key: "quota",
-                        Icon: Percent,
-                        title: language === "zh" ? "余额" : "Balance",
-                      },
-                      {
-                        key: "burn",
-                        Icon: Flame,
-                        title:
-                          language === "zh"
-                            ? "每日消耗"
-                            : "Consumption per day",
-                      },
-                      {
-                        key: "cost",
-                        Icon: DollarSign,
-                        title:
-                          language === "zh" ? "估算花费" : "Estimated cost",
-                      },
-                    ] as const
-                  ).map(({ key, Icon, title }) => (
-                    <button
-                      key={key}
-                      aria-pressed={selected === key}
-                      title={title}
-                      onClick={() => setMeasure(key)}
-                      style={{
-                        ...noButtonChrome,
-                        color: selected === key ? colors.text : colors.tertiary,
-                        background:
-                          selected === key ? colors.selected : "transparent",
-                        borderRadius: 4,
-                        padding: 3,
-                      }}
-                    >
-                      <Icon size={12} />
-                    </button>
-                  ))}
-                </div>
+                <BalanceMetricToggle
+                  selected={measure}
+                  onSelect={setMeasure}
+                  light={light}
+                />
               )}
             </div>
             {account.notice && (

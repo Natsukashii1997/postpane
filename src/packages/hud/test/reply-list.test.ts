@@ -40,7 +40,7 @@ const reply = (
   ...extra,
 });
 
-test("replies list newest first, grouped by section as they first appear", () => {
+test("replies list newest first in one list, no sections (owner, 2026-11-14)", () => {
   const sessions = [
     session("a", { section: "驿窗 | PostPane" }),
     session("b", { section: "驿窗 | PostPane" }),
@@ -60,13 +60,10 @@ test("replies list newest first, grouped by section as they first appear", () =>
       group.section,
       group.entries.map((entry) => entry.id),
     ]),
-    [
-      ["驿窗 | PostPane", ["a", "b"]],
-      [null, ["c"]],
-    ],
+    [[null, ["a", "b", "c"]]],
   );
   assert.equal(hidden, 0);
-  assert.equal(sectioned, true);
+  assert.equal(sectioned, false);
   assert.equal(newestReply(entries)?.id, "a");
 });
 
