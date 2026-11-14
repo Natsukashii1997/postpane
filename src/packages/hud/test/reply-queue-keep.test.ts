@@ -5,8 +5,9 @@ import { stripTypeScriptTypes } from "node:module";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import {
   blocksNotice,
+  dismissIslandCard,
   newsLanes,
-  promoteOldestWaiting,
+  promoteNewestWaiting,
   roomForNews,
   sideLanes,
   type LaneCard,
@@ -27,16 +28,16 @@ const source = readFileSync(
   "utf8",
 );
 const start = source.indexOf("export function reconcileIslandCards");
-const end = source.indexOf("/** The waiting requests of one agent's lane");
+const end = source.indexOf("export type SideNews");
 const body = stripTypeScriptTypes(
   source.slice(start, end).replaceAll("export function", "function"),
 );
 const { reconcileIslandCards } = new Function(
-  "promoteOldestWaiting",
+  "promoteNewestWaiting",
   "blocksNotice",
   "roomForNews",
   `${body}; return { reconcileIslandCards };`,
-)(promoteOldestWaiting, blocksNotice, roomForNews) as {
+)(promoteNewestWaiting, blocksNotice, roomForNews) as {
   reconcileIslandCards: (
     previous: LaneCard[],
     requests: Approval[],
@@ -194,5 +195,17 @@ test("a Hermes reply counts as seen only once its card has opened", () => {
   assert.equal(
     frontFolds(undefined, { held: false, opened: false, looked }),
     false,
+  );
+});
+
+test("put away, the card in front gives way to the newest request (#328)", () => {
+  const ask = (n: number): LaneCard => ({
+    type: "request",
+    id: `ask-${n}`,
+    at: reply(n).at,
+  });
+  assert.deepEqual(
+    ids(dismissIslandCard([ask(3), told(reply(4)), ask(1), ask(2)])),
+    ["ask-2", "event:4:r", "ask-1"],
   );
 });

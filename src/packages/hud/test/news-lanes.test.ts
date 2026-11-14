@@ -2,10 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import {
+  askedInFront,
   blocksNotice,
   laneEvents,
   liveQueue,
   newsLanes,
+  promoteNewestWaiting,
   sideLanes,
   type LaneCard,
 } from "../src/alerts/news-lanes.ts";
@@ -57,19 +59,53 @@ test("each agent gets a lane of its own, in the order they came", () => {
   );
 });
 
-test("the first lane keeps the queue's front; another lane leads with its oldest request", () => {
+test("the first lane keeps the queue's front; another lane leads with its newest request (#328)", () => {
   const lanes = newsLanes(
     [told(codexReply), asked(claudeAsk), told(claudeReply), asked(codexAsk)],
     requests,
   );
   assert.equal(lanes[0].vendor, "codex");
   assert.equal(lanes[0].front.id, "reply-1");
-  const claude = newsLanes(
-    [asked(claudeAsk), told(codexReply), asked(codexAsk)],
-    requests,
+  const codexAsk2 = request("ask-4", "codex", 6);
+  const codex = newsLanes(
+    [asked(claudeAsk), told(codexReply), asked(codexAsk), asked(codexAsk2)],
+    [...requests, codexAsk2],
   )[1];
-  assert.equal(claude.vendor, "codex");
-  assert.equal(claude.front.id, "ask-3");
+  assert.equal(codex.vendor, "codex");
+  assert.equal(codex.front.id, "ask-4");
+});
+
+test("the newest waiting request comes in front of the notices (#328)", () => {
+  assert.deepEqual(
+    promoteNewestWaiting([
+      told(codexReply),
+      asked(claudeAsk),
+      asked(codexAsk),
+      asked(claudeAsk2),
+    ]).map((card) => card.id),
+    ["ask-3", "reply-1", "ask-1", "ask-2"],
+  );
+});
+
+test("a request that arrives comes in front of the requests, not of a notice (#328)", () => {
+  // Found on the first look: the newest of them opens.
+  assert.deepEqual(
+    askedInFront([], [asked(claudeAsk), asked(claudeAsk2)]).map((c) => c.id),
+    ["ask-2", "ask-1"],
+  );
+  const queue = [asked(claudeAsk), asked(claudeAsk2)];
+  assert.deepEqual(
+    askedInFront(queue, [...queue, asked(codexAsk)]).map((c) => c.id),
+    ["ask-3", "ask-1", "ask-2"],
+  );
+  // Nothing new: an older line the owner opened stays open.
+  assert.equal(askedInFront(queue, queue), queue);
+  // A reply in front stays there; the request waits behind it.
+  const told1 = [told(codexReply), asked(claudeAsk)];
+  assert.deepEqual(
+    askedInFront(told1, [...told1, asked(codexAsk)]).map((c) => c.id),
+    ["reply-1", "ask-1", "ask-3"],
+  );
 });
 
 test("a lane's replies are its own agent's only", () => {
@@ -129,6 +165,15 @@ test("an answered request leaves the front at once, the next waiting one taking 
   assert.deepEqual(
     liveQueue(queue, left).map((card) => card.id),
     ["ask-2", "reply-2"],
+  );
+});
+
+test("an answered request in front gives way to the newest one waiting (#328)", () => {
+  const late = request("ask-9", "claude", 9);
+  const queue = [asked(claudeAsk), asked(claudeAsk2), asked(late)];
+  assert.deepEqual(
+    liveQueue(queue, [claudeAsk2, late]).map((card) => card.id),
+    ["ask-9", "ask-2"],
   );
 });
 

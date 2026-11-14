@@ -7,6 +7,25 @@
 
 
 
+## 侧栏待审批卡展开最新一条，小签跟着显示最新（#328）（2026-11-14，Claude，#325 后发改动确认，常浩回「改成最新」；已提交、已发布 `50363ed03c36` 回读通过）
+
+- 时间：开工 `2026-11-14 09:02`（`date '+%F %H:%M'` 记录）。来由：#325 把列表改成新的在上后，展开的那条仍是队首、默认等得最久的一条（#48 定稿），105 小时前的那条仍展开着。按「已定内容要改」发改动确认（原定思路、要改成什么、代价是小签一起变、请选），常浩回「改成最新」：卡里展开的和侧栏小签都换成最新的。issue #328。
+- 改了哪些文件：
+  - `hud/src/alerts/news-lanes.ts`：`promoteOldestWaiting` 改成 `promoteNewestWaiting`（最新等着的请求排到队首，仍在通知前面）；新增 `newestAskFirst`、`askedInFront`（有新请求到达且队首是请求时，最新的排到前面；没有新到的不动，常浩点开的旧行保持展开；队首是回复通知时不抢）；`liveQueue` 答完后取最新；别家小签 `newsLanes` 的领头请求改取最新。从 `IslandNews.tsx` 挪来 `dismissIslandCard`、`dropIslandCards`、`laneRequests`（纯函数，行为除取最新外不变）。
+  - `hud/src/IslandNews.tsx`：用上面这些；按住（指针在侧栏上、正在打字）时新来的请求不抢前，记下来，松开后再排到前面（和 #221 回复的做法一致）。文件 387 → 376 行。
+  - `src/tooling/file-size-baseline.json`：`--update` 收紧（`IslandNews.tsx` 376；`panel/SessionsSection.tsx` 是 #321 已变短、这次一并收紧）。
+  - 测试：`hud/test/news-lanes.test.ts`（别家小签领头最新、最新请求排到通知前、新到请求排前三种情形、答完让给最新，共改 1 新增 3）、`hud/test/reply-queue-keep.test.ts`（改为注入 `promoteNewestWaiting`、取片段终点改到 `export type SideNews`、新增「知道了后让给最新」）。先跑出缺导出的红，再改实现。
+  - `docs/LESSONS.md`：新增 L-43。
+  - 不动：点卡里别的行就地展开（`select`）；列表排序（#325）；`ApprovalContent`。
+- 测试：变基到含 #329 的 main（`13b1c6c`）后：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 418` / `ℹ fail 0`（#329 新增 3、本轮新增 4）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`；`tests/postpane-round.test.mjs` `ℹ pass 10` / `ℹ fail 0`。变基前：第一次 `pnpm run check` 退出码 1（预览脚手架在工作区里，包边界检查报 4 处越界，见 L-43），挪走后通过；两次 `pnpm test` 同写一个日志，又单独干净跑一次 `ℹ pass 415` / `ℹ fail 0`、Rust `940 passed; 0 failed`。改实现前 `news-lanes`、`reply-queue-keep` 两个测试文件因缺导出 `ℹ fail 2`，改后两文件 `ℹ pass 18` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/{check,test,build}.log`，变基前的带 `-before-rebase`、`check-1-preview-in-tree`、`test-mixed-two-runs` 后缀。
+- 验证：浏览器预览真实 `HUDScene`（端口 1469，沿用 #325 的 2026-11-14 08:46 真实快照，脚手架已挪到证据目录 `preview-328/`、未提交）：侧栏小签显示最新的「Codex 额度｜到期前派单审查」（原来是 105 小时前的「月度用户策略」）；悬停 Claude 票根，卡顶展开的就是这条（带选项、跳过 / 提交），下面依次 32 分钟、42 小时、44 小时、数字分身 14 小时，「还有 2 条」收起 73、105 小时两条；点「2027战略会」那行就地展开，顺序不变。按住时新请求不抢前、松开再到前由单测之外的 `IslandNews` 逻辑实现，预览里没造出「按住时新来一条」的场景，**未在预览里看到**。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/`：`preview-tag-newest.jpg`、`preview-card-newest-open.jpg`、`preview-card-select-older.jpg`。
+- 发布与回读：`50363ed03c36`（从变基到最新 main 的本分支打包），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前 `c4e1930394b2`（#329 那轮装的）。装前确认没有开着且没结束的自动往返接力。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/PostPane-c4e1930394b2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机悬停看展开哪条、小签显示哪条未做（截图工具画不出悬停卡），留给常浩；装完没截屏查「想访问文稿」弹窗（未做）。
+- 与授权不一致之处、遗留问题：
+  - 「进程已停、几天前的 ASK 一直囤着」的四个做法（甲沉底折叠 / 乙超 24 小时收起 / 丙一键清旧 / 丁不改）常浩还没选，未做。
+  - 范围外发现：无。skill 进化：E-16 待批（预览脚手架与全量测试的先后，见 L-43）。
+- 本轮新坑：L-43
+
 ## Hermes 定时任务表：同一件事的几步合成一行（#326）（2026-11-14，Claude，常浩截图问猛鬼兽任务后要求「侧边应该显示是一个任务，叫做个人项目日报，而不是分为写稿和发送，一个任务是一条」，看方案后回复「按方案改」；已提交、已发布 `c4e1930394b2` 回读通过）
 
 - 时间：开工 `2026-11-14 08:57`（`date '+%F %H:%M'` 记录）。来由：digital-twin #159 把个人项目日报拆成 09:15 写稿、10:00 发送两个 Hermes 定时任务，侧栏悬停面板猛鬼兽表随之显示成「个人项目日报·写稿」「个人项目日报·发送」两行；常浩要一件事一行。方案在 digital-twin 会话里列出、常浩确认后开 issue #326。
