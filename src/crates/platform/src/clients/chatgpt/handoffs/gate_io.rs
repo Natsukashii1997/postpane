@@ -104,6 +104,29 @@ pub fn archive(data: &Path, id: &str, n: usize, reply: &str) -> Result<(), Strin
     let name = format!("{id}-{n:02}-{}.md", &key(reply)[..8]);
     write_private(data, "reply", reply.as_bytes(), &directory.join(name))
 }
+/// Ended handoffs keep their answers as excerpts (#347), so the file stays
+/// small enough to read back: each kept whole in `replies/` first, and
+/// one that cannot be kept stays whole (P2-05).
+pub fn slim_kept(data: &Path, book: &mut super::Book) {
+    for h in book.list.iter_mut().filter(|h| !h.live()) {
+        let replies = h
+            .steps
+            .iter_mut()
+            .filter(|s| s.kind == super::StepKind::Reply);
+        for (n, step) in replies.enumerate() {
+            let Some(text) = step
+                .text
+                .as_mut()
+                .filter(|t| t.chars().count() > super::EXCERPT)
+            else {
+                continue;
+            };
+            if archived(data, &h.id, n + 1).is_some() || archive(data, &h.id, n + 1, text).is_ok() {
+                *text = super::excerpt(text, super::EXCERPT);
+            }
+        }
+    }
+}
 /// Answer `n` of handoff `id` as kept in full, when it is.
 pub fn archived(data: &Path, id: &str, n: usize) -> Option<String> {
     let prefix = format!("{id}-{n:02}-");

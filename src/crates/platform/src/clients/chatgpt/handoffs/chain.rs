@@ -81,18 +81,6 @@ impl Book {
         }
         closed
     }
-    /// Ended handoffs keep their answers as excerpts only (#347): the
-    /// whole answers are in `replies/`, and the file stays small enough
-    /// to read back.
-    pub(super) fn slim(&mut self) {
-        for h in self.list.iter_mut().filter(|h| !h.live()) {
-            for step in h.steps.iter_mut().filter(|s| s.kind == StepKind::Reply) {
-                if let Some(text) = &mut step.text {
-                    *text = super::excerpt(text, super::EXCERPT);
-                }
-            }
-        }
-    }
     /// Handoffs still open from before the review gate (#347, MA-02 §5.6):
     /// each gets its own review chain and a step saying what it counted
     /// when it moved over, so nothing is reset unseen.

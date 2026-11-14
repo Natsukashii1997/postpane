@@ -36,6 +36,7 @@ use tauri::Manager;
 
 mod back;
 mod gate;
+mod guard;
 mod lines;
 mod texts;
 use back::back_text;
@@ -332,6 +333,7 @@ impl Desk {
         let mut book = self.lock();
         let result = change(&mut book);
         if let Some(data) = &self.data {
+            handoffs::slim_kept(data, &mut book);
             if let Err(error) = handoffs::save(data, &book) {
                 eprintln!("{error}");
             }
@@ -634,6 +636,13 @@ impl Desk {
             return Err(gate::chain_unknown(chain));
         }
         let earlier = self.lock().earlier("", pr.as_deref(), chain);
+        // Its chain's handoff still with ChatGPT: that answer would come
+        // uncounted once this one took over (P1-04).
+        if let Some(e) = &earlier {
+            if self.lock().get(&e.id).is_some_and(Handoff::in_flight) {
+                return Err(guard::chain_busy(&e.chain, &e.id));
+            }
+        }
         let carried = earlier.as_ref().map_or(0, |earlier| earlier.period);
         let limit = self.review_limit();
         let past = carried >= limit;
@@ -642,10 +651,23 @@ impl Desk {
         }
         // Leave past the cap goes only with words from outside the agent,
         // since the chain last went back (#347 P1-06).
-        if let Some(earlier) = earlier.filter(|_| past) {
-            let turn = lines.opener(rule.doer.as_deref().unwrap_or(CLAUDE), session);
-            if !self.lock().leave_spoken(&earlier.id, turn.as_ref()) {
+        let turn = || lines.opener(rule.doer.as_deref().unwrap_or(CLAUDE), session);
+        if let Some(earlier) = earlier.as_ref().filter(|_| past) {
+            if !self.lock().leave_spoken(&earlier.id, turn().as_ref()) {
                 return Err(leave_unheard());
+            }
+        }
+        // A cap reached here and not settled: no new review here without
+        // the person's word, whatever chain it names (P1-08).
+        if engineering && !past {
+            let top = self.lock().unsettled_top(session, cwd).and_then(|t| {
+                let other = earlier.as_ref().is_none_or(|e| e.id != t.id);
+                other.then(|| (t.id.clone(), t.gate.chain.clone().unwrap_or_default()))
+            });
+            if let Some((top, chain)) = top {
+                if !self.lock().leave_spoken(&top, turn().as_ref()) {
+                    return Err(guard::top_unsettled(&chain));
+                }
             }
         }
         let head = self.head(rule, brief);
@@ -691,12 +713,22 @@ impl Desk {
     ) -> Result<Started, String> {
         // The cap and the commit as set now (#347).
         let head = self.head(rule, brief);
+        // The pull request this brief names, else the one bound before:
+        // one named now binds the handoff to it, and goes with its commit
+        // (P1-02).
+        let pr = (!handoff.thinking())
+            .then(|| handoffs::pull_request(brief).or_else(|| handoff.pr.clone()))
+            .flatten();
         if !handoff.thinking() {
-            Self::head_needed(handoff.pr.as_deref(), head.as_deref())?;
+            Self::head_needed(pr.as_deref(), head.as_deref())?;
         }
         let limit = self.review_limit();
         self.change(|book| {
-            book.set_limit(&handoff.id, limit) && book.set_head(&handoff.id, head.as_deref())
+            book.set_limit(&handoff.id, limit);
+            book.set_head(&handoff.id, head.as_deref());
+            if let Some(pr) = &pr {
+                book.set_pr(&handoff.id, pr);
+            }
         });
         // The same words again (a retry after a slow answer) are not sent
         // twice; they went with PostPane's note (#347).
@@ -720,7 +752,9 @@ impl Desk {
             let spent = book
                 .get(&handoff.id)
                 .is_some_and(|h| !h.thinking() && counted >= h.budget());
-            (!evidence && spent, counted)
+            // Evidence a review paused for goes on by itself, yet never past
+            // the cap as set now (P2-06).
+            (spent, counted)
         };
         if spent && extra.is_none() {
             return Err(budget_spent(counted));
@@ -948,6 +982,13 @@ impl Desk {
                 if !handoff.live() {
                     return Err(l10n::text("这次接力已经结束", "This handoff has ended"));
                 }
+                // A pass goes back as the auto round trip sends it: checked
+                // against the pull request's commit, and ended only when it
+                // holds (P1-09).
+                if action == "back" && handoff.next() == Some(Next::Pass) {
+                    self.auto_back(lines, id, Next::Pass, now);
+                    return Ok(Acted::Done);
+                }
                 let (kind, text) = if action == "back" {
                     let reply = handoff
                         .last_reply()
@@ -955,7 +996,7 @@ impl Desk {
                         .ok_or_else(|| {
                             l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
                         })?;
-                    (StepKind::Back, back_text(&handoff, &reply))
+                    (StepKind::Back, self.back_words(lines, &handoff, &reply).0)
                 } else {
                     let round = handoff.counted() + 1;
                     let text = if handoff.thinking() {
@@ -1167,16 +1208,7 @@ impl Desk {
         };
         // A pass holds only while the commit reviewed is the pull
         // request's still (#347): else it goes back and stops.
-        let blocked = (next == Next::Pass)
-            .then(|| self.pass_blocked(lines, &handoff))
-            .flatten();
-        let text = match &blocked {
-            Some(why) => format!(
-                "{}\n\n驿窗没有按通过结束：{why}。",
-                back_text(&handoff, &reply)
-            ),
-            None => back_text(&handoff, &reply),
-        };
+        let (text, blocked) = self.back_words(lines, &handoff, &reply);
         if self.lock().returned_already(id, &text) {
             return false;
         }
@@ -3366,7 +3398,12 @@ mod tests {
             desk.act(&lines, &handoff.id, "back", 3).is_err(),
             "no answer yet"
         );
-        desk.observe(&turn("complete", "审查出口：通过\n结论：通过"), 4);
+        // A pass goes back as the auto round trip sends it (P1-09); other
+        // answers wait for a way there.
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let unreachable = Fake {
             unreachable: true,
             ..Fake::default()
@@ -4329,6 +4366,214 @@ mod tests {
             (Some("open"), Some(true))
         );
         assert_eq!(replies(&lines), 1);
+    }
+
+    const PR_KEY: &str = "natsukashii1997/dt-sandbox#4";
+    const MOVED: &str = "fedcba9876543210fedcba9876543210fedcba98";
+    const PASS: &str = "全部关闭\n受审版本：0123456\n未决：P0 0，P1 0\n审查出口：通过\n结论：通过";
+    const FIX: &str = "1. 还差\n受审版本：0123456\n审查出口：返修\n结论：需修改";
+    fn engineering(
+        desk: &Desk,
+        lines: &Fake,
+        session: &str,
+        cwd: &str,
+        brief: &str,
+        now: i64,
+    ) -> Result<Started, String> {
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let started = desk.start_ruled(
+            lines,
+            session,
+            Some(cwd),
+            "修登录",
+            None,
+            brief,
+            false,
+            &rule,
+            now,
+        )?;
+        if let Started::Opening { handoff, project } = &started {
+            desk.open(lines, &handoff.id, brief, project.as_deref(), || now)
+                .unwrap();
+        }
+        Ok(started)
+    }
+    fn status(desk: &Desk, now: i64) -> (String, Option<String>) {
+        let shown = desk.projection(now);
+        let last = shown.as_array().unwrap().last().unwrap().clone();
+        (
+            last["status"].as_str().unwrap().to_owned(),
+            last["notice"].as_str().map(str::to_owned),
+        )
+    }
+
+    /// L3 round 2, P1-02: a pull request first named in a later brief binds
+    /// the handoff, needs its commit, and a pass is checked against it.
+    #[test]
+    fn a_pull_request_named_later_binds_the_review_to_its_commit() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        engineering(&desk, &lines, "s1", "/w", "改动（还没开 PR）", 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        let refused = engineering(&desk, &lines, "s1", "/w", &format!("{PR}\n改好了"), 5);
+        assert!(refused.unwrap_err().contains("no full commit under review"));
+        let Started::Sent { handoff, .. } = engineering(
+            &desk,
+            &lines,
+            "s1",
+            "/w",
+            &format!("{PR}\nhead_sha {HEAD}\n改好了"),
+            6,
+        )
+        .unwrap() else {
+            panic!("it goes into the open conversation");
+        };
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            (kept.pr.as_deref(), kept.gate.head.as_deref()),
+            (Some(PR_KEY), Some(HEAD))
+        );
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(MOVED.into()));
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":PASS,"messageId":"m2"}), 7);
+        desk.drive(&lines, 8);
+        assert_eq!(status(&desk, 8), ("open".to_owned(), None));
+        assert!(last_reply_to_claude(&lines).contains("驿窗没有按通过结束"));
+    }
+
+    /// P1-01: a review of a pull request kept with no commit (from before
+    /// the gate) does not pass, after a restart too.
+    #[test]
+    fn a_review_kept_with_no_commit_does_not_pass_after_a_restart() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", "改动", 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.change(|book| book.set_pr(&handoff.id, PR_KEY));
+        desk.observe(&turn("complete", PASS), 3);
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(HEAD.into()));
+        desk.drive(&lines, 4);
+        assert_eq!(status(&desk, 4), ("open".to_owned(), None));
+        assert!(last_reply_to_claude(&lines).contains(&guard::no_anchor(PR_KEY)));
+    }
+
+    /// P1-09: the person's 「转回 Claude」 on a pass is checked as the auto
+    /// round trip's is, and ends it only when the commit holds.
+    #[test]
+    fn a_pass_sent_back_by_hand_is_checked_against_the_commit() {
+        for (head, ended) in [(MOVED, false), (HEAD, true)] {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let Started::Opening { handoff, .. } =
+                ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+            else {
+                panic!()
+            };
+            lines
+                .heads
+                .borrow_mut()
+                .insert(PR_KEY.into(), Ok(head.into()));
+            desk.observe(&turn("complete", PASS), 3);
+            assert_eq!(desk.act(&lines, &handoff.id, "back", 4), Ok(Acted::Done));
+            let said = last_reply_to_claude(&lines);
+            assert_eq!(said.contains("驿窗没有按通过结束"), !ended, "{said}");
+            let (status, notice) = status(&desk, 4);
+            assert_eq!(status == "closed", ended);
+            assert_eq!(notice.as_deref() == Some("passed"), ended);
+        }
+    }
+
+    /// P1-04: a chain is taken over only once its review with ChatGPT is
+    /// answered and counted.
+    #[test]
+    fn a_chain_is_taken_over_only_once_its_review_is_answered() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        let busy = ruled(&desk, &lines, "s2", "L2", None, 2).unwrap_err();
+        assert!(busy.contains("still waits on ChatGPT"), "{busy}");
+        desk.observe(&turn("complete", FIX), 3);
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s2", "L2", None, 4).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(handoff.carried, 1, "the answer that came is counted");
+    }
+
+    /// P1-08: a cap reached in a session or working directory and not
+    /// settled lets no new review begin there without the person's word,
+    /// whatever chain or pull request it names.
+    #[test]
+    fn a_cap_reached_here_lets_no_new_review_begin_without_the_persons_word() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":FIX,"messageId":"m2"}), 6);
+        desk.drive(&lines, 7);
+        assert_eq!(status(&desk, 7).1.as_deref(), Some("top"));
+        // No chain, no pull request: refused in the same directory and session.
+        for (session, cwd) in [("s9", "/w"), ("s1", "/elsewhere")] {
+            let refused = desk.start_ruled(
+                &lines,
+                session,
+                Some(cwd),
+                "修登录",
+                None,
+                "另一件事",
+                true,
+                &Rule::default(),
+                8,
+            );
+            assert!(
+                refused.unwrap_err().contains("reached its cap"),
+                "{session} {cwd}"
+            );
+        }
+        // Elsewhere it goes: a trust boundary, written as one.
+        assert!(engineering(&desk, &lines, "s8", "/other", "另一件事", 8).is_ok());
+        // With the person's word it goes, and the cap is settled here.
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        assert!(engineering(&desk, &lines, "s9", "/w", "另一件事", 9).is_ok());
+        *lines.opener.borrow_mut() = None;
+        assert!(engineering(&desk, &lines, "s10", "/w", "第三件事", 10).is_ok());
+    }
+
+    /// P2-06: evidence a review paused for never goes past the cap as set now.
+    #[test]
+    fn evidence_never_goes_past_a_cap_lowered_meanwhile() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L1", None, 1).unwrap();
+        desk.observe(
+            &turn(
+                "complete",
+                "缺复现日志\n受审版本：0123456\n审查出口：证据不足暂停\n结论：需修改",
+            ),
+            3,
+        );
+        desk.drive(&lines, 4);
+        handoffs::set_review_limit(&temp.path().join("data"), 1).unwrap();
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L1", None, 5).err(),
+            Some(budget_spent(1))
+        );
     }
 
     #[test]

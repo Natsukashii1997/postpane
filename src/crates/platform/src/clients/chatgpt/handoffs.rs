@@ -16,6 +16,7 @@ mod chain;
 mod doer;
 mod gate;
 mod gate_io;
+mod guard;
 mod leave;
 mod pull_request;
 pub use chain::{chain_id, Earlier};
@@ -23,7 +24,7 @@ pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
 pub use gate_io::{
     archive, archived, head_in, ledger, review_limit, reviewed_commit, same_commit,
-    set_review_limit,
+    set_review_limit, slim_kept,
 };
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
@@ -1207,10 +1208,9 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// Keeps the newest `KEEP`, and the briefs of the newest few; the
-    /// answers of ended handoffs only as excerpts, kept whole in `replies/`.
+    /// Keeps the newest `KEEP`, and the briefs of the newest few; ended
+    /// handoffs' answers are cut where they are kept whole (`slim_kept`).
     fn trim(&mut self) {
-        self.slim();
         if self.list.len() > KEEP {
             let extra = self.list.len() - KEEP;
             self.list.drain(..extra);
@@ -1461,6 +1461,7 @@ pub fn load(data: &Path) -> Book {
     });
     let mut book = Book { list };
     book.trim();
+    slim_kept(data, &mut book);
     book
 }
 /// Replaces the kept handoffs, privately and at once.

@@ -100,11 +100,14 @@ impl Desk {
         }
     }
     /// Whether a pass may end handoff `id`: the commit under review is still
-    /// its pull request's. None when it may; else why not. Only when a
-    /// commit and a pull request are known.
+    /// its pull request's. None when it may, or when it reviews no pull
+    /// request; else why not.
     pub(super) fn pass_blocked(&self, lines: &dyn Lines, handoff: &Handoff) -> Option<String> {
-        let (Some(head), Some(pr)) = (handoff.gate.head.as_deref(), handoff.pr.as_deref()) else {
-            return None;
+        let pr = handoff.pr.as_deref()?;
+        // Kept with no commit (from before the gate): it cannot be checked,
+        // so it does not pass (P1-01).
+        let Some(head) = handoff.gate.head.as_deref() else {
+            return Some(super::guard::no_anchor(pr));
         };
         match lines.pr_head(pr) {
             Ok(now) if handoffs::same_commit(&now, head) => None,
