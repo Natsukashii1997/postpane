@@ -280,6 +280,34 @@ const replies: Scene = {
   }),
 };
 
+const claudeBusy: Scene = {
+  key: "claude-busy",
+  title: "Claude 在跑 4 个、等你回复 1 个（看在跑收成一行「在跑 4」）",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-ask",
+        title: "等你回复：要不要先合并旧分支",
+        state: "waiting",
+        lastAgo: 2,
+      }),
+      ...["拆分设置页", "补齐导出测试", "整理依赖清单", "重写启动脚本"].map(
+        (title, index) =>
+          session({
+            place: "claude",
+            id: `c-busy-${index + 1}`,
+            title,
+            state: "running",
+            startedAgo: 3 + index * 4,
+            lastAgo: 1 + index,
+          }),
+      ),
+      running[1],
+    ],
+  }),
+};
+
 const everything: Scene = {
   key: "mixed",
   title: "混合：等你、在跑、接力、出错、刚回复同时存在",
@@ -311,6 +339,7 @@ export const SCENES: readonly Scene[] = [
   failed,
   replies,
   everything,
+  claudeBusy,
 ];
 
 export function scene(key: string): Scene {

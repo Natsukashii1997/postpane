@@ -8,7 +8,12 @@ import type {
 import { agentArtworkKey, agentVendorName } from "./agent-artwork";
 import { layoutMarks, restingAgents } from "./resting-agents.ts";
 import { recentLabel, recentUsage } from "./recent-usage.ts";
-import { stubBalance, visibleBalances } from "./balance-rows.ts";
+import {
+  balanceLevel,
+  balanceText,
+  stubBalance,
+  visibleBalances,
+} from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
 import { START_BADGE } from "./permissions/approval-list.ts";
 import { relaysAnswering } from "./relays-answering.ts";
@@ -17,6 +22,7 @@ import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
 import type { GlowEffect, GlowStyle } from "./HUDGlow";
 import type { UsageStyle } from "./usage-meter/arcs";
 import { isBusy } from "./stale.ts";
+import { peekWork, type PeekWork } from "./workspace.ts";
 import {
   moneyAmount,
   snapshotLanguage,
@@ -139,6 +145,8 @@ export interface HUDVendor {
   desk?: ChatGPTDesk;
   /** The 「审」 or 「回」 stamp relays print on this stub (#171, #218). */
   relay?: RelayStamps;
+  /** Its peek's 「等你 · 在跑 · 接力」 line (ADR-0001 C3); none for Hermes. */
+  work?: PeekWork;
 }
 
 /** Artwork identity is authoritative: ChatGPT is the OpenAI mark, Codex its own. */
@@ -224,11 +232,7 @@ export function vendorsFromSnapshot(
         (a) => vendorKey(a.source) === key && a.badge === START_BADGE,
       ).length,
       balance: deepseekBalances.length
-        ? deepseekBalances
-            .map((b) =>
-              moneyAmount(b.amount, b.currency, snapshotLanguage(snapshot)),
-            )
-            .join(" · ")
+        ? balanceText(deepseekBalances, snapshotLanguage(snapshot))
         : balance
           ? moneyAmount(
               balance.amount,
@@ -246,6 +250,7 @@ export function vendorsFromSnapshot(
       bots: key === "hermes" ? (snapshot.hermesBots ?? []) : [],
       ...(desk ? { desk } : {}),
       ...(relay ? { relay } : {}),
+      work: peekWork(snapshot, key),
     };
   });
   if (!byMode) vendorProjections.set(snapshot, (byMode = new Map()));
@@ -300,13 +305,7 @@ export function configuredVendors(
     const visible = visibleBalances(rows, block);
     return {
       ...vendor,
-      balance: visible.length
-        ? visible
-            .map((b) =>
-              moneyAmount(b.amount, b.currency, snapshotLanguage(snapshot)),
-            )
-            .join(" · ")
-        : null,
+      balance: balanceText(visible, snapshotLanguage(snapshot)),
       level: balanceLevel(visible) ?? "stale",
       usage: stubBalance(visible, snapshotLanguage(snapshot)),
     };
@@ -327,16 +326,6 @@ function withShownRows(vendor: HUDVendor, layout: PanelLayout): HUDVendor {
     heldUsed: heldUsed(quotas, Date.now()),
     level: tightest?.status ?? "stale",
   };
-}
-
-function balanceLevel(
-  rows: Snapshot["billing"],
-): HUDVendor["level"] | undefined {
-  if (!rows.length) return undefined;
-  if (rows.some((row) => row.level === "critical")) return "critical";
-  if (rows.some((row) => row.level === "warning")) return "warning";
-  if (rows.some((row) => row.level === "normal")) return "normal";
-  return "stale";
 }
 
 export {
