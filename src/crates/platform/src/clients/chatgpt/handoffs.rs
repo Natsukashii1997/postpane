@@ -13,8 +13,10 @@ use std::{
     path::{Path, PathBuf},
 };
 mod doer;
+mod notice;
 mod pull_request;
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
+pub use notice::Trouble;
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 
@@ -299,6 +301,9 @@ pub struct Handoff {
     /// the words back (`Wake`), until it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waking_since: Option<i64>,
+    /// The steps whose trouble the session was told of (#318), by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub told: Vec<usize>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -709,6 +714,7 @@ impl Book {
             extra: 0,
             rounds_from: 0,
             waking_since: None,
+            told: vec![],
         };
         self.list.push(handoff.clone());
         self.trim();
