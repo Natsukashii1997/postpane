@@ -2,7 +2,7 @@
 # 驿窗装机回读：备份旧版 → 退出 → ditto 覆盖 → 启动 → shasum 与签名回读。
 # 由 2026-11-04 至 11-06 十来轮手敲的同一串命令收成脚本；每一步对应的坑见 SKILL.md「3. 装机回读」。
 #
-#   bash install.sh <证据目录短名> [产物 .app 路径]   装机，证据放 evidence/<今天>-<短名>/
+#   bash install.sh <证据目录短名> [产物 .app 路径]   装机，证据放 evidence/<今天>-<短名>/（短名不带日期，如 341-relay-toggle）
 #   bash install.sh check [产物 .app 路径]            只比对：/Applications 里的是不是自己打的这份（L-05）
 #   加 --force（放在哪都行）：有回信正在转回的接力也照装（L-44，先问过常浩才加）
 #
@@ -24,6 +24,11 @@ hash12() { shasum "$1/$BIN" | cut -c1-12; }
 
 if [ -z "$MODE" ]; then
   echo "用法：bash install.sh <证据目录短名> [产物路径] | bash install.sh check [产物路径]" >&2
+  exit 2
+fi
+# E-17：脚本自己加日期；短名再带日期，备份会落进日期重复的目录、回滚命令也跟着错。
+if [[ "$MODE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}- ]]; then
+  echo "短名不带日期（脚本自己加）：用 ${MODE:11}，不用 $MODE。没有装。" >&2
   exit 2
 fi
 if [ ! -x "$NEW/$BIN" ]; then
