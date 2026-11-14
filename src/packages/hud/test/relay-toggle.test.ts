@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Handoff } from "@agent-hud/protocol";
 import { liveHandoffs } from "../src/alerts/handoff-doer.ts";
+import { planeInks } from "../src/alerts/plane-inks.ts";
+import { paperOf, relayPaperOf } from "../src/paper.ts";
 
 // One button into a handoff card and back out (#341). #334 gave the card a ×
 // beside its ↗; the owner wanted a single button instead, and chose 丙 on
@@ -34,6 +36,24 @@ test("the open handoffs, the one that moved last first (#341)", () => {
     ["moved", "opening", "old"],
   );
   assert.deepEqual(liveHandoffs([handoff("ended", "closed", 1)]), []);
+});
+
+test("the plane is white, not the cards' blue (owner, 2026-11-14)", () => {
+  const dark = paperOf(false);
+  const waiting = planeInks(dark, false).inks;
+  assert.equal(waiting.ink, "#ffffff");
+  assert.equal(waiting.line, "#ffffff");
+  assert.notEqual(waiting.ink, dark.blue);
+  // The notch has no paper: white on its dark ground too.
+  assert.equal(planeInks(null, false).inks.ink, "#ffffff");
+  // Held down on the airmail paper: the paper's ink, a white plane on it.
+  const relay = relayPaperOf(true);
+  const held = planeInks(relay, true).inks;
+  assert.equal(held.strong, relay.ink);
+  assert.equal(held.onStrong, "#ffffff");
+  // Light paper cannot show white: the unpressed square takes its ink.
+  const light = paperOf(true);
+  assert.equal(planeInks(light, false).inks.ink, light.ink);
 });
 
 test("the waiting card's head carries the plane, left of the stamp (#341)", () => {

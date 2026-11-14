@@ -9,23 +9,7 @@ import { GoButton } from "../GoButton";
 import type { Paper } from "../paper";
 import { useHandoffCard } from "./HandoffCard";
 import { liveHandoffs } from "./handoff-doer";
-
-/** The plane's inks on `paper`, the notch's ground without one. */
-function planeInks(paper: Paper | null) {
-  const blue = paper?.blue ?? "#8fb0ec";
-  const ground = paper?.paper ?? "#1f1f1f";
-  return {
-    inks: {
-      line: blue,
-      ink: blue,
-      faint: blue,
-      strong: blue,
-      onStrong: ground,
-    },
-    red: paper?.red ?? "#ff6a57",
-    ground,
-  };
-}
+import { planeInks } from "./plane-inks";
 
 /** On the handoff card: held down, back out. */
 export function LeaveRelay({
@@ -43,7 +27,7 @@ export function LeaveRelay({
       pressed
       label={zh ? "退出接力" : "Leave the handoff"}
       enabled
-      inks={planeInks(paper).inks}
+      inks={planeInks(paper, true).inks}
       onClick={onLeave}
     />
   );
@@ -63,7 +47,7 @@ export function EnterRelay({
   const card = useHandoffCard();
   const live = liveHandoffs(handoffs ?? []);
   if (!card || live.length === 0) return null;
-  const { inks, red, ground } = planeInks(paper);
+  const { inks, red, ground } = planeInks(paper, false);
   return (
     <GoButton
       icon="relay"
