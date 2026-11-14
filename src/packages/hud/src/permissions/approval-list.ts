@@ -210,19 +210,26 @@ export function waitedText(seconds: number, zh: boolean): string {
   return `${h}h${String(m).padStart(2, "0")}m`;
 }
 
-/** The lines in the order they are listed: the requests, newest first,
- * then the replies, newest first; a line without a readable time goes last
- * of its kind (owner, 2026-11-14, #325). */
+/** Whether only the client's own window takes a request (「请到 Claude 里
+ * 回答」, a stopped session's box); never a handoff card (#331). */
+export const answersElsewhere = (
+  request: Pick<Approval, "answersQuestion" | "badge">,
+) => request.answersQuestion === false && request.badge !== START_BADGE;
+
+/** Whether a line sinks to the bottom and folds away (#331). */
+const tucked = (entry: ApprovalEntry) =>
+  entry.kind === "request" && answersElsewhere(entry.request);
+
+/** The lines as listed, each kind newest first, a line without a time last
+ * of its kind: requests, replies, then those only the client takes (#331). */
 export function orderEntries(entries: readonly ApprovalEntry[]) {
   const time = (entry: ApprovalEntry) => {
     const at = Date.parse(entry.at);
     return Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY;
   };
-  return [...entries].sort(
-    (a, b) =>
-      Number(a.kind === "reply") - Number(b.kind === "reply") ||
-      time(b) - time(a),
-  );
+  const rank = (entry: ApprovalEntry) =>
+    tucked(entry) ? 2 : entry.kind === "reply" ? 1 : 0;
+  return [...entries].sort((a, b) => rank(a) - rank(b) || time(b) - time(a));
 }
 
 export interface ApprovalGroup {
@@ -238,7 +245,8 @@ export const SHOWN_ENTRIES = 5;
  * The list as the card prints it: the first `limit` lines in `order` (the
  * open one always among them), grouped by sidebar section in the order the
  * groups first appear (with the default order, the group with the newest
- * line first), and how many lines are folded away: the last in `order`. `sectioned` says
+ * line first), and how many lines are folded away: the last in `order`;
+ * folded, those only the client takes always are, unless alone (#331). `sectioned` says
  * whether any line has a section, so a list with none prints no group titles.
  */
 export function approvalGroups(
@@ -250,7 +258,9 @@ export function approvalGroups(
     entry.session?.section?.trim() || null,
 ): { groups: ApprovalGroup[]; hidden: number; sectioned: boolean } {
   const ordered = order(entries);
-  let shown = ordered.length > limit ? ordered.slice(0, limit) : ordered;
+  const fresh = ordered.filter((entry) => !tucked(entry));
+  const pool = Number.isFinite(limit) && fresh.length > 0 ? fresh : ordered;
+  let shown = pool.length > limit ? pool.slice(0, limit) : pool;
   const open = ordered.find((entry) => entry.id === openId);
   if (open && !shown.includes(open))
     shown = [...shown.slice(0, Math.max(0, limit - 1)), open];

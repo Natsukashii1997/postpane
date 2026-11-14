@@ -22,6 +22,7 @@ import {
   laneRequests,
   newestAskFirst,
   promoteNewestWaiting,
+  requestCard,
   roomForNews,
   sideLanes,
   type LaneCard,
@@ -64,11 +65,7 @@ export function reconcileIslandCards(
   const next = frontRemoved ? promoteNewestWaiting(kept) : kept;
   for (const request of newRequests) {
     if (!next.some((card) => card.id === request.id)) {
-      next.push({
-        type: "request",
-        id: request.id,
-        at: request.createdAt,
-      });
+      next.push(requestCard(request));
     }
   }
   for (const event of visible) {
