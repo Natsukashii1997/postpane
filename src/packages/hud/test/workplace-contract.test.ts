@@ -6,8 +6,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { liveSessions } from "../src/panel/agent-board.ts";
 import { runningForMark } from "../src/panel/running-rows.ts";
-import { handoffFor, liveHandoffs } from "../src/alerts/handoff-doer.ts";
+import { handoffFor } from "../src/alerts/handoff-doer.ts";
 import { staysUntilSeen } from "../src/alerts/reply-stays.ts";
+import { cardRelays, workspaceOf } from "../src/workspace.ts";
 import { WORKPLACES, type Place } from "./scenes/build.ts";
 import { SCENES, scene } from "./scenes/scenes.ts";
 
@@ -38,18 +39,14 @@ test("在跑：四家各自的卡底都能找到本家在跑的会话", () => {
   }
 });
 
-test(
-  "在跑：没有审批卡的「等你回复」会话也能在本家卡上找到",
-  { todo: "B3：卡底只收在跑（running-rows.ts），第 2 批随状态统一修" },
-  () => {
-    const { snapshot } = scene("waiting-no-card");
-    for (const [place, id] of [
-      ["claude", "c-idlewait"],
-      ["deepseek", "d-idlewait"],
-    ] as const)
-      assert.ok(ids(runningForMark(snapshot, place)).includes(id), place);
-  },
-);
+test("在跑：没有审批卡的「等你回复」会话也能在本家卡上找到（B3）", () => {
+  const { snapshot } = scene("waiting-no-card");
+  for (const [place, id] of [
+    ["claude", "c-idlewait"],
+    ["deepseek", "d-idlewait"],
+  ] as const)
+    assert.ok(ids(runningForMark(snapshot, place)).includes(id), place);
+});
 
 test("等你：旧提问不按天数丢，新旧都在、都算等你", () => {
   const rows = listed("claude-old-ask", "claude");
@@ -61,6 +58,17 @@ test("等你：Codex 等审批 45 分钟仍在本家等你里", () => {
   const rows = listed("codex-approval-long", "codex");
   assert.equal(rows[0]?.status, "waiting");
   assert.equal(rows[0]?.approval?.source, "codex");
+});
+
+test("等你：会话记录半小时没动静的提问仍算等你，标「待核对」、排在后面（B1）", () => {
+  const { snapshot } = scene("codex-stale");
+  const { waiting, running } = workspaceOf(snapshot, "codex");
+  assert.deepEqual(ids(waiting), ["x-fresh", "x-stale"]);
+  assert.deepEqual(
+    waiting.map((row) => row.stale),
+    [false, true],
+  );
+  assert.equal(running.length, 0);
 });
 
 test("接力：Claude、Codex 的会话各自只关联到本家那一单", () => {
@@ -76,15 +84,19 @@ test("接力：ChatGPT 审核会话能找到它审的那一单，不用伪造审
   assert.ok(approvals.every((a) => a.source !== "chatgpt"));
 });
 
-test(
-  "接力：不参与接力的一家，卡上进不了任何接力",
-  { todo: "B4：纸飞机取全局 liveHandoffs（RelayToggle.tsx），第 3 批按 C2 修" },
-  () => {
-    // The way in a DeepSeek card offers today: every live handoff.
-    const offered = liveHandoffs(scene("two-relays").snapshot.handoffs ?? []);
-    assert.equal(offered.length, 0);
-  },
-);
+test("接力：不参与接力的一家，卡上进不了任何接力（B4）", () => {
+  const { handoffs, approvals } = scene("two-relays").snapshot;
+  const own = (place: string) =>
+    cardRelays(
+      handoffs,
+      approvals.filter((a) => a.source === place),
+    ).map((h) => h.id);
+  assert.deepEqual(own("deepseek"), []);
+  assert.deepEqual(
+    cardRelays(handoffs, [{ source: "claude" }]).map((h) => h.id),
+    ["h-claude"],
+  );
+});
 
 test("回执停留：Claude、Codex、DeepSeek 自动收起，ChatGPT 看过才收（D2）", () => {
   const events = scene("replies").snapshot.islandEvents?.items ?? [];
@@ -99,14 +111,14 @@ test("回执停留：Claude、Codex、DeepSeek 自动收起，ChatGPT 看过才�
   });
 });
 
-test(
-  "出错：失败或限流的一轮在本家能看到，不当成空闲",
-  { todo: "B9：失败、限流只变空闲、没有回执，第 2 批按 C6 修" },
-  () => {
-    const rows = [...listed("failed", "codex"), ...listed("failed", "claude")];
-    assert.deepEqual(ids(rows).sort(), ["c-limit", "x-fail"]);
-  },
-);
+test("出错：失败或限流的一轮在本家能看到，不当成空闲（B9）", () => {
+  const { snapshot } = scene("failed");
+  const failed = (place: Place) =>
+    workspaceOf(snapshot, place).failed.map((s) => s.id);
+  assert.deepEqual(failed("codex"), ["x-fail"]);
+  assert.deepEqual(failed("claude"), ["c-limit"]);
+  assert.deepEqual(failed("deepseek"), []);
+});
 
 test("混合场景里四家的在跑、等你互不串家", () => {
   const { snapshot } = scene("mixed");

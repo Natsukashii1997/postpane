@@ -68,6 +68,34 @@ const codexApproval: Scene = {
   }),
 };
 
+const codexStale: Scene = {
+  key: "codex-stale",
+  title: "Codex 45 分钟前提了问、没有审批卡，会话记录一直没动静（待核对）",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "codex",
+        id: "x-stale",
+        title: "清理旧的构建缓存",
+        state: "waiting",
+        startedAgo: 50,
+        lastAgo: 45,
+        asks: "question",
+        stale: true,
+      }),
+      session({
+        place: "codex",
+        id: "x-fresh",
+        title: "改日志格式",
+        state: "waiting",
+        startedAgo: 12,
+        lastAgo: 10,
+        asks: "question",
+      }),
+    ],
+  }),
+};
+
 const claudeOldAsk: Scene = {
   key: "claude-old-ask",
   title: "Claude 有一条 3 天前的提问和一条刚问的提问",
@@ -275,6 +303,7 @@ const everything: Scene = {
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
+  codexStale,
   claudeOldAsk,
   waitingNoCard,
   twoRelays,

@@ -38,6 +38,7 @@ import {
 } from "./ListCard";
 import { ListHead } from "./ListHead";
 import { EnterRelay } from "../alerts/RelayToggle";
+import { cardRelays } from "../workspace";
 
 export function ApprovalContent({
   requests,
@@ -194,7 +195,13 @@ export function ApprovalContent({
         inks={inks}
         light={light}
         zh={zh}
-        toggle={<EnterRelay handoffs={handoffs} paper={paper} zh={zh} />}
+        toggle={
+          <EnterRelay
+            handoffs={cardRelays(handoffs ?? undefined, requests)}
+            paper={paper}
+            zh={zh}
+          />
+        }
       />
       <ListTear paper={paper} inks={inks} />
       {groups.map((group) => (

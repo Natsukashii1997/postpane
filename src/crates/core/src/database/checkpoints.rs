@@ -302,13 +302,13 @@ impl LogHead {
         session
     }
 
+    /// A request its log left open waits however old it is, so only a
+    /// running turn passes the window; a fresh request is recent anyway.
     pub fn listed_recent(&self, now: i64, days: i64, child: Option<i64>) -> bool {
-        matches!(
-            self.live.session_state(now, &self.source, child),
-            "running" | "waiting"
-        ) || self
-            .activity_at(child)
-            .is_some_and(|at| at >= now - days * 86_400_000)
+        self.live.session_state(now, &self.source, child) == "running"
+            || self
+                .activity_at(child)
+                .is_some_and(|at| at >= now - days * 86_400_000)
     }
 }
 

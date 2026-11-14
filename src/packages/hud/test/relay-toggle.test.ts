@@ -60,7 +60,8 @@ test("the waiting card's head carries the plane, left of the stamp (#341)", () =
   const content = read("permissions/ApprovalContent.tsx");
   assert.match(
     content,
-    /toggle=\{<EnterRelay handoffs=\{handoffs\} paper=\{paper\} zh=\{zh\} \/>\}/,
+    // Only the relays this card's agents take part in (ADR-0001 C2, #354).
+    /toggle=\{\s*<EnterRelay\s+handoffs=\{cardRelays\(handoffs \?\? undefined, requests\)\}\s+paper=\{paper\}\s+zh=\{zh\}\s*\/>\s*\}/,
   );
   const head = read("permissions/ListHead.tsx");
   // After the count tags, before the stamp.

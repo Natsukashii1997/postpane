@@ -424,3 +424,11 @@
 - 正确做法：判断 Claude 会话「做完了没有」，除了回合结束，还要看有没有没收到通知的后台命令（`toolUseResult.backgroundTaskId` 记入，通知里的 `<task-id>` 或 `TaskStop` 移除），在 `src/crates/agents/src/claude/background.rs`；兜底同子 agent，启动 30 分钟（`ABANDONED_MS`）仍没通知就照常算完成。
 - 证据：`claude::background::tests` 4 项；去掉修复后其中 2 项变红。
 - 升级：未升级。
+
+## L-47 本机负载高时 MCP 测试偶发约 45 秒超时，每次挂的不是同一条（2026-11-14）
+
+- 现象：#354 变基后把全量测试和 `tauri build` 写在同一条后台命令里，前后脚还有别的会话在打包，负载 15–20。`pnpm test` 的 `test:mcp` 挂了 2 条（`on Windows the launcher names the client…`、`relay_to_chatgpt hands…`，45 秒、100 秒）；补跑时换成另一条（`an Antigravity caller…`，45 秒）。负载降到 6 左右单独跑 `node --test src/apps/mcp/test/*.test.mjs`，9 条全过、20 秒。改动本身不碰 MCP。
+- 根因：MCP 测试要起宿主进程、走 stdio，负载高时等不到回应就超时；不是代码问题。另外 `pnpm test` 是 `&&` 串起来的，MCP 一挂，后面的插件和 Chrome 插件测试根本没跑，不能当成「只挂了 MCP」。
+- 正确做法：全量测试不和打包放在同一条命令里并行，先测完再打。MCP 失败且耗时在 45 秒上下时，等负载降下来单独重跑 `test:mcp` 确认，再补跑 `test:plugins`、`test:extension`；交接里两次结果都写，不改代码去「修」它。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/` 的 `test-rebased.txt`、`test-rebased-rest.txt`、`test-mcp-3.txt`、`test-rebased-plugins.txt`。
+- 升级：未升级。
