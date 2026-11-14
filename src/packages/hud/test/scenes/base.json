@@ -1,0 +1,350 @@
+{
+  "schemaVersion": 1,
+  "mode": "demo",
+  "language": "zh",
+  "connection": {
+    "clientHooks": {
+      "clients": [
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "claude"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "codex"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "cursor"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "workbuddy"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "opencode"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "qoder"
+        },
+        {
+          "active": false,
+          "installed": true,
+          "notice": null,
+          "source": "qoder-cn"
+        }
+      ],
+      "desired": true,
+      "enabled": true,
+      "installable": true,
+      "installed": true,
+      "notice": null,
+      "supported": true
+    },
+    "localTools": {
+      "enabled": true,
+      "listening": true,
+      "notice": null,
+      "supported": true
+    },
+    "message": "本机会话日志与客户端事件；回调连接状态另行显示",
+    "platform": "macos",
+    "platformCapabilities": {
+      "antigravityLocalService": "live-verified",
+      "clientDiscovery": "implemented",
+      "legacyMacHistory": true,
+      "os": "macos",
+      "portableAccountReaders": {
+        "claude": "live-verified",
+        "codex": "live-verified",
+        "cursor": "live-verified",
+        "deepseek": "live-verified"
+      },
+      "scripts": "build-time-embedded",
+      "validation": "macos-live-verified"
+    },
+    "settingsIssue": null,
+    "status": "connected",
+    "system": {
+      "launchAtLogin": {
+        "enabled": false,
+        "notice": null,
+        "status": "unavailable",
+        "supported": true
+      },
+      "platform": "macos"
+    }
+  },
+  "providers": [
+    {
+      "accountStatus": {
+        "checkedAt": "2026-11-14T06:00:00.000Z",
+        "failingSince": null,
+        "failure": null,
+        "notice": null,
+        "service": null,
+        "status": "ready",
+        "unreviewedHooks": []
+      },
+      "dataStatus": "supported",
+      "detected": true,
+      "discovery": {
+        "configured": true,
+        "evidence": [
+          "client-storage",
+          "configuration-file",
+          "executable",
+          "parsed-local-sessions"
+        ],
+        "installed": true,
+        "usage": true
+      },
+      "enabled": true,
+      "id": "claude",
+      "name": "Claude Code",
+      "notice": null,
+      "recent": {
+        "costs": {},
+        "tokens": 0,
+        "unpricedTokens": 0
+      },
+      "sessions": 0
+    },
+    {
+      "accountStatus": {
+        "checkedAt": "2026-11-14T06:00:00.000Z",
+        "failingSince": null,
+        "failure": null,
+        "notice": null,
+        "service": null,
+        "status": "ready",
+        "unreviewedHooks": []
+      },
+      "dataStatus": "supported",
+      "detected": true,
+      "discovery": {
+        "configured": true,
+        "evidence": [
+          "client-storage",
+          "configuration-file",
+          "executable",
+          "parsed-local-sessions"
+        ],
+        "installed": true,
+        "usage": true
+      },
+      "enabled": true,
+      "id": "codex",
+      "name": "Codex",
+      "notice": null,
+      "recent": {
+        "costs": {},
+        "tokens": 0,
+        "unpricedTokens": 0
+      },
+      "sessions": 0
+    },
+    {
+      "accountStatus": {
+        "checkedAt": "2026-11-14T06:00:00.000Z",
+        "configurableFields": [
+          "apiKey",
+          "baseUrl"
+        ],
+        "configured": false,
+        "failingSince": null,
+        "failure": null,
+        "notice": null,
+        "service": null,
+        "status": "ready",
+        "unreviewedHooks": []
+      },
+      "dataStatus": "supported",
+      "detected": true,
+      "discovery": {
+        "configured": false,
+        "evidence": [
+          "client-storage",
+          "parsed-local-sessions"
+        ],
+        "installed": true,
+        "usage": true
+      },
+      "enabled": true,
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "notice": null,
+      "recent": {
+        "costs": {},
+        "tokens": 0,
+        "unpricedTokens": 0
+      },
+      "sessions": 0
+    },
+    {
+      "dataStatus": "supported",
+      "detected": true,
+      "discovery": {
+        "configured": true,
+        "evidence": [
+          "client-storage",
+          "configuration-file",
+          "local-session-files",
+          "executable",
+          "parsed-local-sessions"
+        ],
+        "installed": true,
+        "usage": true
+      },
+      "enabled": true,
+      "id": "hermes",
+      "name": "Hermes",
+      "notice": null,
+      "recent": {
+        "costs": {},
+        "tokens": 0,
+        "unpricedTokens": 0
+      },
+      "sessions": 0,
+      "accountStatus": {
+        "checkedAt": "2026-11-14T06:00:00.000Z"
+      }
+    },
+    {
+      "dataStatus": "supported",
+      "detected": true,
+      "discovery": {
+        "configured": false,
+        "evidence": [],
+        "installed": false,
+        "usage": false
+      },
+      "enabled": true,
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "notice": null,
+      "recent": {
+        "costs": {},
+        "tokens": 0,
+        "unpricedTokens": 0
+      },
+      "sessions": 0,
+      "accountStatus": {
+        "checkedAt": "2026-11-14T06:00:00.000Z"
+      }
+    }
+  ],
+  "capabilities": [],
+  "settings": {
+    "agentMessages": true,
+    "agentMessagesAsUser": true,
+    "agentMessagesLimit": 10,
+    "animations": true,
+    "antigravityCliSettings": [],
+    "appearance": "system",
+    "appearanceFollowsScreen": false,
+    "approvalWaitMinutes": 0,
+    "claudeAnswers": true,
+    "claudeMessages": true,
+    "clientHooks": true,
+    "codexHomes": [],
+    "customPrices": {},
+    "deepseekMessages": true,
+    "deepseekQuestions": true,
+    "hudTools": true,
+    "hudVisible": true,
+    "language": "zh-CN",
+    "launchAtLogin": false,
+    "localKinds": {},
+    "quotaDisplay": "consumed",
+    "readCopilotQuota": false,
+    "relayMultipliers": {},
+    "relayReading": [],
+    "showMenuBarIcon": false
+  },
+  "sourcePreferences": {
+    "antigravity": {
+      "live": false
+    },
+    "chatgpt": {
+      "live": true
+    },
+    "claude": {
+      "live": true
+    },
+    "codebuddy": {
+      "live": false
+    },
+    "codex": {
+      "live": true
+    },
+    "copilot": {
+      "live": false
+    },
+    "cursor": {
+      "live": true
+    },
+    "deepseek": {
+      "live": true
+    },
+    "devin": {
+      "live": false
+    },
+    "glm": {
+      "live": false
+    },
+    "grok-bot": {
+      "live": false
+    },
+    "grok-cli": {
+      "live": true
+    },
+    "hermes": {
+      "live": true
+    },
+    "kimi": {
+      "live": false
+    },
+    "openclaw": {
+      "live": false
+    },
+    "opencode": {
+      "live": true
+    },
+    "pi": {
+      "live": false
+    },
+    "qoder": {
+      "live": true
+    },
+    "qoder-cn": {
+      "live": true
+    },
+    "qoder-work": {
+      "live": false
+    },
+    "qwen": {
+      "live": false
+    },
+    "workbuddy": {
+      "live": true
+    },
+    "zcode": {
+      "live": false
+    }
+  }
+}

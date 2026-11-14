@@ -1,0 +1,4 @@
+/* The scene preview's styles: the shared theme, with Tailwind reading the
+   sidebar's sources for its class names (as the app's styles.css does). */
+@import "@agent-hud/ui/global.css";
+@source "../src";

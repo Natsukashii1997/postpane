@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "scenes": "vite --config preview/vite.config.ts"
   },
   "exports": {
     "./BotMark": "./src/BotMark.tsx",
@@ -40,6 +41,7 @@
     "motion": "catalog:"
   },
   "devDependencies": {
+    "@agent-hud/vite-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

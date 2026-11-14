@@ -7,6 +7,19 @@
 
 
 
+## 工作场所契约 Lite 第 0 批：契约规范、四家固定场景、场景预览台（#349）（2026-11-14，Claude，常浩要求全面审核侧栏结构，看审核报告后要求「先送 GPT 评审」，评审成熟退出后在侧栏回「按修订推荐开工」；已提交、无需发布）
+
+- 时间：开工 `2026-11-14 14:49`（`date '+%F %H:%M'` 记录）。来由：常浩说 Claude、Codex、ChatGPT、DeepSeek「本质上是一种性质，都是我的工作场所，而 hermes 单独是一个」，要求深度审核、把 bug 和底层设计问题都改好。审核报告 https://claude.ai/artifact/93PYbCRqfK2rsgvAnpaWwd （第 2 版顶部是评审后修订）；ChatGPT 思维评审接力单 `h1a1d8c8a62905` 成熟退出，决策记录 `docs/design/2026-11-14-工作场所契约.md`；C1–C7 常浩按修订推荐定（C7 暂缓）。本批只打地基，界面和行为不变。issue #349。
+- 改了哪些文件：
+  - 常浩要求的：`docs/adr/0001-工作场所契约.md`（契约：结构、身份分层、等你三态、能力四态、界面约定、白名单、C1–C7、分批）；`GLOSSARY.md`（领域术语）；`src/packages/hud/test/scenes/`（`base.json` 脱敏骨架 + `build.ts` 构造函数 + `scenes.ts` 8 个合成场景）；`src/packages/hud/test/workplace-contract.test.ts`（11 条契约，3 条 `todo` 注 B3、B4、B9）；`src/packages/hud/preview/`（场景预览台：`main.tsx`、`vite.config.ts`、`preview.css`、`index.html`，`pnpm --filter @agent-hud/hud run scenes` → 127.0.0.1:1480）；`src/packages/hud/package.json`（`scenes` 脚本、devDependencies 加 workspace 的 `@agent-hud/vite-config`）、`tsconfig.json`（纳入 `preview`）、`pnpm-lock.yaml`（随之 3 行）。
+  - 顺手改的：`docs/design/驿窗结构审核-2026-11-14.html`、`docs/design/2026-11-14-工作场所契约.md` 从主目录未跟踪文件移进本分支入库；`AGENTS.md` 导航表加一行（改侧栏结构先读 ADR-0001、跑契约测试、用预览台）；`docs/LESSONS.md` 新增 L-45。本机 `.claude/launch.json` 加 `scenes-349`（不进仓库）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `941 passed; 0 failed`，前端 `ℹ pass 441` / `ℹ fail 0` / `ℹ todo 3`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。第一次 `pnpm run check` 预览台放在 `src/apps/desktop/preview-scenes/`，包边界检查报 8 处越界（L-43），日志 `check-1-desktop-layout.log`；挪进 hud 包后重跑通过。日志在 `~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`：`check.log`、`test.log`、`rules.log`。
+- 验证：内置浏览器打开预览台 8 个场景（`?panel&still`），每个都渲染出真实 `HUDScene` 和看板、页面脚本无报错、小人画布 5–7 个（脚本逐个场景开 iframe 读的）。挪位后在 `two-relays` 场景复查：样式一致、`matchMedia` 代理带 `addEventListener`、按钮字色正常。场景里能直接看到审核时说的现状：Claude、Codex 区块没有会话，全局「正在进行」排在最后。
+- 截图：证据目录 `preview-mixed-panel.png`、`preview-two-relays-panel.png`；应用本身无界面改动。
+- 发布与回读：无需发布（应用代码未改，只加了测试、预览台和文档）。
+- 与授权不一致之处、遗留问题、范围外发现：常浩的「按修订推荐开工」是经 agent-hud 插件转进本会话的侧栏回复，内容和上一轮给的选项一字不差，按常浩本人的回答处理。审核发现 6 个 Claude 桌面版会话挂着「等你回复」最长 5 天，来源是桌面版「下一步」提问框（`mcp__ccd_turn__wrap_up` 被认作提问），第 2 批做 C4 时一并处理。下一步：第 1 批修与契约无关的 bug（B5–B7、B12–B19、B22、H2）；接力文件里的 B10、B11、B20、B21 等 #347 合并后。skill 进化：E-18 待批（预览统一用场景预览台，见 EVOLUTION）。
+- 本轮新坑：L-45
+
 ## 装机脚本拒收带日期的短名（E-17），全局坑新增 G-28（2026-11-14，Claude，常浩对 #341 收尾的两条提案回「都加」；已提交、无需发布）
 
 - 时间：开工 `2026-11-14 11:51`（取自分支创建时间 `git reflog`，开工时没跑 `date` 记录）。来由：#341 装机时把带日期的全名当短名传给 `install.sh`，备份落进日期重复的目录；#341 预览页因脚本里的全局变量 `claude` 与 Artifact 宿主重名而空白。两条在 #341 收尾时提案，常浩回「都加」。

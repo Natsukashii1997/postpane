@@ -1,0 +1,300 @@
+<title>驿窗结构审核</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 版式：一栏细线报告，左侧编号只用于真有顺序的分批；颜色取驿窗侧栏自己的黛色、赭金、朱印 */
+:root{
+  --paper:#f6f5f1; --ink:#22262b; --mute:#6b7076; --rule:#d9d6cd; --soft:#ecebe5;
+  --dai:#3d5468; --ochre:#9a7428; --cinnabar:#b2392c; --ok:#3f7a52;
+  --f-display:"Noto Serif SC","Songti SC",serif;
+  --f-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#16181b; --ink:#e4e2dc; --mute:#9a9ea3; --rule:#34373c; --soft:#1e2125;
+  --dai:#8fb0c9; --ochre:#d6ad5c; --cinnabar:#e2715f; --ok:#7cbf8f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#16181b; --ink:#e4e2dc; --mute:#9a9ea3; --rule:#34373c; --soft:#1e2125;
+  --dai:#8fb0c9; --ochre:#d6ad5c; --cinnabar:#e2715f; --ok:#7cbf8f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.75;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.35}
+h1{font-size:34px}
+h2{font-size:22px;padding-bottom:10px;border-bottom:1px solid var(--ink)}
+h3{font-size:16px;font-family:var(--f-body);font-weight:700}
+p{margin:0}
+.eyebrow{font-size:12px;letter-spacing:.12em;color:var(--mute)}
+.lead{font-size:17px;max-width:40em}
+section{display:flex;flex-direction:column;gap:18px}
+code,.mono{font-family:var(--f-mono);font-size:12.5px;color:var(--dai);word-break:break-all}
+.note{color:var(--mute);font-size:13px}
+.verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;border-top:1px solid var(--rule)}
+.verdict>div{padding:14px 16px 14px 0;border-bottom:1px solid var(--rule);display:flex;flex-direction:column;gap:4px;min-width:0}
+.verdict b{font-size:15px}
+.scroll{overflow-x:auto;border-top:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--rule)}
+th{font-weight:500;color:var(--mute);font-size:12.5px;white-space:nowrap}
+td:first-child{font-weight:500;white-space:nowrap}
+.y{color:var(--ok)} .p{color:var(--ochre)} .n{color:var(--cinnabar)}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--mute)}
+.list{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.item{display:grid;grid-template-columns:64px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--rule)}
+.item>div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.tag{font-family:var(--f-mono);font-size:12px;font-weight:500;align-self:start;padding:2px 0;border-top:2px solid currentColor;width:max-content}
+.tag.hi{color:var(--cinnabar)} .tag.md{color:var(--ochre)} .tag.lo{color:var(--dai)}
+.meta{font-size:12.5px;color:var(--mute)}
+.chip{display:inline-block;font-size:11.5px;padding:0 6px;border:1px solid currentColor;border-radius:2px;margin-right:6px;line-height:1.6}
+/* 目标结构示意 */
+.model{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:700px){.model{grid-template-columns:1fr}}
+.panel{border:1px solid var(--ink);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:700}
+.plane{font-family:var(--f-mono);font-size:12px;border:1px solid var(--ink);padding:1px 8px;white-space:nowrap}
+.band{border-top:1px dashed var(--rule);padding-top:8px;display:flex;flex-direction:column;gap:2px}
+.band span{font-size:12px;color:var(--mute)}
+.band.inner{border:1px solid var(--dai);border-left-width:4px;padding:10px;color:var(--ink)}
+.layers{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.layer{display:grid;grid-template-columns:140px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--rule)}
+.layer>div{min-width:0}
+@media (max-width:560px){.layer,.item{grid-template-columns:1fr;gap:4px}}
+.decide{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--rule)}
+.dc{padding:16px 0;border-bottom:1px solid var(--rule);display:grid;grid-template-columns:44px 1fr;gap:14px}
+.dc>div{min-width:0;display:flex;flex-direction:column;gap:6px}
+.dc .no{font-family:var(--f-mono);font-weight:500;color:var(--ochre)}
+.kv{display:grid;grid-template-columns:5.5em 1fr;gap:2px 10px;font-size:14px}
+.kv dt{color:var(--mute)} .kv dd{margin:0;min-width:0}
+.rec{font-weight:700}
+.batch{display:grid;grid-template-columns:56px 1fr;gap:14px;padding:16px 0;border-bottom:1px solid var(--rule)}
+.batch>div{min-width:0;display:flex;flex-direction:column;gap:6px}
+.batch .no{font-family:var(--f-display);font-size:26px;line-height:1;color:var(--dai)}
+.from{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--rule)}
+.from>div{padding:12px 14px 12px 0;border-bottom:1px solid var(--rule);min-width:0}
+@media (max-width:560px){.from{grid-template-columns:1fr}}
+ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px}
+a{color:var(--dai)}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">驿窗 PostPane · 全面审核 · 2026-11-14 · main@bfd1bd7</span>
+  <h1>驿窗结构审核</h1>
+  <p class="lead">四家「工作场所」现在共用了大部分组件，但没有共用同一个<b>结构</b>：每家的数据各算一套，「等你 / 在跑 / 刚回复 / 接力」四样东西在各层里有的有、有的缺。下面是证据、29 条问题、统一方案、需要你拍板的 7 项和分批计划。</p>
+</header>
+
+<section>
+  <h2>GPT 评审后的修订（以本节为准）</h2>
+  <p>ChatGPT 第一阶段思维评审：成熟退出。方向认可；方案从「四家同构的展示规范」收缩为<b>「工作场所契约 Lite」</b>：统一的是使用方式和状态含义，不是每家的全部能力。下方原有的「拍板项」「分批计划」被本节取代。</p>
+  <div class="layers">
+    <div class="layer"><b>结构</b><div>来源适配器（每家按自己的协议读，可以分支）→ 统一的前端视图（不存盘：身份、能力与观察健康、读数、工作项、接力关联）→ 现有共用组件。不建事件总线、状态机框架、插件框架。</div></div>
+    <div class="layer"><b>身份分层</b><div>工作场所（Claude / Codex / ChatGPT / DeepSeek）→ 工作实例（会话，带观察通道：例如 Codex App 和 Claude 拉起的 <code>codex exec</code> 审查分开）→ 状态。接力是独立的一条记录，各家只显示自己参与的那部分，不复制。</div></div>
+    <div class="layer"><b>能力四态</b><div>不支持 / 未启用 / 观察失联 / 正常无事。失联不显示成 0，也不显示成空闲；不支持的（如 ChatGPT 审批）不提示。</div></div>
+    <div class="layer"><b>等你三态</b><div>等你：有明确请求、证据仍有效。待核对：观察器失联或日志静默，看不清。已处理：作答、撤回、确认终止（Claude 钩子进程已死仍算终止，保留 #251）。时间只影响排序，不决定去留。未读回复、刚完成、审核意见转回中都不算「等你」。</div></div>
+    <div class="layer"><b>界面</b><div>操作路径：票根 → 展出卡 → 接力卡；概览通道：小收据、看板，和操作路径并行。各入口读同一份工作项、用同一优先级。</div></div>
+    <div class="layer"><b>验收</b><div>状态契约测试（语义一致、观察器不互相覆盖、等你不静默消失、接力不串线、失联不当空闲）+ 固定场景数据离屏渲染各卡，提前到第一步做，减少要你截图的轮数。</div></div>
+  </div>
+
+  <h3 style="margin-top:8px">修订后的拍板项</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>项</th><th>原来</th><th>修订后的推荐</th><th>风险</th></tr></thead>
+    <tbody>
+      <tr><td>C1 看板会话</td><td>全局一段排最后（#53、#63）</td><td class="rec">改：每家区块下接本家等你和在跑；顶部保留全局「等你 N」汇总；跨家接力不重复计数</td><td>看板变长</td></tr>
+      <tr><td>C2 纸飞机</td><td>只在待审批卡，进全局最近一单（#341、#344 定样子）</td><td class="rec">改：样子不变；所有外层卡共用卡头，但只在这张卡对应的会话或这一家确有关联接力时出现；多条给列表，绝不回落到别家的接力</td><td>DeepSeek 卡上不再有纸飞机</td></tr>
+      <tr><td>C3 小收据</td><td>Claude、Codex、DeepSeek 只有额度或余额（#33、#141）</td><td class="rec">改：加一行「等你 N · 在跑 N · 接力 N」，全 0 不显示；失联时写「看不清」，不装 0</td><td>多一行</td></tr>
+      <tr><td>C4 等你去留</td><td>记录里的提问 30 分钟消失；Claude 桌面提问永不过期（#331 沉底折叠）</td><td class="rec">改：按上面三态；不做 24 小时折叠和一键清；可以手动忽略单条，忽略只是收起提示，不改真实状态，有新动静再提示</td><td>挂着不答的会一直在（可忽略）</td></tr>
+      <tr><td>C5 回执停留</td><td>你定的 4 秒 / 看过才收</td><td class="rec">不改行为，只改成每家一个配置</td><td>无可见变化</td></tr>
+      <tr><td>C6 出错回执</td><td>没有</td><td class="rec">做：偶发失败出一张回执；持续阻断（如持续限流）挂着直到恢复；按来源、会话和错误类型合并</td><td>多一种通知</td></tr>
+      <tr><td>C7 今天已回复</td><td>只有 ChatGPT 有</td><td class="rec">暂缓：先保证 4 秒收起后能在看板查到近期完成；要不要单独一段，等三版预览时再看</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 style="margin-top:8px">修订后的分批</h3>
+  <div style="border-top:1px solid var(--rule)">
+    <div class="batch"><span class="no">0</span><div><b>契约与验收地基</b><span>写一页契约规范（身份、状态三态、能力四态、界面约定、白名单）；做四家典型状态的固定场景数据；能用它离屏渲染票根、展出卡、接力卡、小收据、看板。界面无变化。</span></div></div>
+    <div class="batch"><span class="no">1</span><div><b>修 bug</b><span>与契约无关的先修：审计项 B12–B19、DeepSeek 观察器 B5–B7、B22、H2。与状态语义有关的（B1–B4、B8、B9）随数据统一一起修，不先写一遍再重写。接力文件里的 B10、B11、B20、B21 等 #347 合并后再做。</span></div></div>
+    <div class="batch"><span class="no">2</span><div><b>统一数据与状态</b><span>前端统一视图、等你三态、能力四态、接力按参与关系关联、补 Codex「完成」「提醒」钩子；加状态契约测试。</span></div></div>
+    <div class="batch"><span class="no">3</span><div><b>三版预览 → 统一界面</b><span>三版用同一组场景数据，只比布局和信息密度；你选完再落地 C1、C2、C3、C6。</span></div></div>
+    <div class="batch"><span class="no">4</span><div><b>Hermes 边界与整体验收</b><span>Hermes 界面不动，只共用「健康 / 异常」的表达；跨来源场景整体走一遍。</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>一句话结论</h2>
+  <div class="verdict">
+    <div><b>你的判断成立</b><span class="note">问题出在结构上，不是某个组件。同一类问题已经在不同智能体上各修过一次，LESSONS 里能数出 7 类。</span></div>
+    <div><b>Codex 看不到不全是用得少</b><span class="note">提问或等审批超过 30 分钟就被当成「已放弃」，从侧栏掉出；Codex 钩子也没接「完成」和「提醒」。</span></div>
+    <div><b>接力入口只挂在一种卡上</b><span class="note">纸飞机只在待审批卡上；而且不分家，DeepSeek 的卡点进去是 Claude 的接力。</span></div>
+    <div><b>Hermes 本来就该单列</b><span class="note">它不进「等你」和接力，现状基本合理，只需从工作场所的规则里明确划出去。</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>现状对照：四家在每一层有什么</h2>
+  <div class="legend"><span><b class="y">●</b> 有，和别家同一套</span><span><b class="p">◐</b> 有，但做法不同或不完整</span><span><b class="n">○</b> 没有</span></div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>界面层</th><th>Claude</th><th>Codex</th><th>ChatGPT</th><th>DeepSeek</th><th>Hermes（另一类）</th></tr></thead>
+    <tbody>
+      <tr><td>票根 + 小人</td><td class="y">● 额度、回章</td><td class="y">● 额度、回章</td><td class="p">◐ 对话数、审章</td><td class="p">◐ 余额，无章</td><td class="y">● 24h Token</td></tr>
+      <tr><td>外层：等你（审批/提问）</td><td class="y">●</td><td class="p">◐ 30 分钟后掉出；CLI 靠钩子，桌面版靠观察器</td><td class="n">○ 本来没有</td><td class="p">◐ 依赖默认关的开关；两套观察器互相覆盖</td><td class="n">○ 本来没有</td></tr>
+      <tr><td>外层：卡底在跑</td><td class="y">●</td><td class="p">◐ 发起接力的排队状态不显示</td><td class="p">◐ 审核对话也混进来</td><td class="y">●</td><td class="y">●</td></tr>
+      <tr><td>外层：「等你回复」但没有卡</td><td class="n" colspan="4">○ 卡底只收「在跑」，这类会话在卡上消失（running-rows.ts:20）</td><td>—</td></tr>
+      <tr><td>外层：刚回复</td><td class="p">◐ 4 秒收起</td><td class="p">◐ 4 秒收起</td><td class="y">● 看过才收</td><td class="p">◐ 4 秒收起</td><td class="y">● 看过才收</td></tr>
+      <tr><td>外层 → 内层接力</td><td class="p">◐ 只在待审批卡</td><td class="p">◐ 只在待审批卡</td><td class="p">◐ 回复行、审核纸条</td><td class="n">○ 有按钮，但进的是别家接力</td><td>— 不参与</td></tr>
+      <tr><td>出错（失败/限流）</td><td class="n" colspan="4">○ 只是变成空闲，没有任何提示</td><td class="y">● 断线细条</td></tr>
+      <tr><td>悬停小收据</td><td class="p">◐ 只有额度</td><td class="p">◐ 只有额度</td><td class="y">● 对话 + 审核</td><td class="p">◐ 只有余额</td><td class="y">● 机器人状态</td></tr>
+      <tr><td>整张看板</td><td class="p">◐ 区块里没会话</td><td class="p">◐ 区块里没会话</td><td class="n">○ 无额度，整块不出现</td><td class="p">◐ 只有余额</td><td class="y">● 各管一摊</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">看板截图里底部那串「Session 18 / 16 / 21 · 等你回复」：标题是截图脱敏改的编号；这一段是全局「正在进行」，不归任何一家，只是排在最后一个区块（DeepSeek）下面，看起来像 DeepSeek 的。实际是 6 个 Claude 桌面版会话挂着「等你回复」，最早一条是 11-09 的，驿窗 03:45 重启后全部重盖了时间。</p>
+</section>
+
+<section>
+  <h2>结构问题（7 条）</h2>
+  <div class="list">
+    <div class="item"><span class="tag hi">S1</span><div><b>没有「工作场所」这个概念</b><span>每家的数据在 <code>model.ts:177-196, 246, 294</code> 各走一个分支（对话、接力、余额、机器人），各层界面各取所需。每加一种能力都要逐家补，漏一家就是一个新 bug。</span></div></div>
+    <div class="item"><span class="tag hi">S2</span><div><b>外层 / 内层只在一种卡上成立</b><span>进接力的纸飞机只挂在待审批卡（<code>ApprovalContent.tsx:197</code>），回复卡、额度卡、单家面板都没有；它取的是全局接力（<code>RelayToggle.tsx:48</code>），不分家。</span></div></div>
+    <div class="item"><span class="tag hi">S3</span><div><b>「等你 / 在跑 / 刚回复」三段不齐</b><span>卡底只有「在跑」；看板只列在跑和等你（<code>agent-board.ts:341</code>），只有 ChatGPT 有「今天的对话」；小收据只有 ChatGPT、Hermes 看得出在干什么。</span></div></div>
+    <div class="item"><span class="tag md">S4</span><div><b>看板的会话不属于任何一家</b><span>全局一段排在所有区块后面（<code>HoverPanel.tsx:341</code>），ChatGPT 因为没有额度整块被去掉（<code>agent-board.ts:424-434</code>）。</span></div></div>
+    <div class="item"><span class="tag md">S5</span><div><b>状态判定每家各有超时和通道</b><span>ChatGPT 15 分钟、其他 30 分钟、Claude 无回合 2 分钟（<code>live.rs:10-11</code>、<code>hook_events.rs:17</code>）；Codex 钩子没有「完成」「提醒」（<code>codex/hooks.rs:21-23</code>）；DeepSeek 等你要靠默认关的 <code>deepseekQuestions</code>；Codex 桌面版审批要靠钩子开关。缺了也不提示。</span></div></div>
+    <div class="item"><span class="tag md">S6</span><div><b>同一类问题逐家各修一遍</b><span>进程没了撤卡（#251 / #286 / #331 三套）、接力转回（Claude 队列 / Codex 投递表）、跳回会话（桌面标签 / feishu:// / 补装脚本）、在跑标记、小人动效（#264 一次改坏全部，L-35）、纸张墨色（L-42 还漏一处）。</span></div></div>
+    <div class="item"><span class="tag lo">S7</span><div><b>验收全靠你截图</b><span>悬停面板自动化点不动，CURRENT 里「L-09 留给常浩」出现 25 次；一个问题来回几轮才收住（#325→#328→#331、#334→#341）。没有一条测试守「每个工作场所都要有这几层」。</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>问题清单（22 条 bug + 2 条代码整理）</h2>
+  <p class="note">「已核实」是我对着代码或实时数据确认过；「待实测」是代码路径成立、还没在实机复现。审计项来自 Codex 11-11 的两份报告（证据目录 <code>2026-11-11-codex-audit/</code>），修复分支 <code>codex/audit-fix-1112</code> 只修了第一项且没合并。</p>
+  <div class="list">
+    <div class="item"><span class="tag hi">B1</span><div><b>「等你」30 分钟后自动消失</b><span>会话里的提问、以及在跑但 30 分钟没写日志的回合，都按「已放弃」算空闲（<code>live.rs:11, 532-560</code>）。Codex App 等审批时不写日志，于是掉出侧栏。</span><span class="meta"><span class="chip">已核实</span>Codex、Claude</span></div></div>
+    <div class="item"><span class="tag hi">B2</span><div><b>Codex 桌面版审批观察器只跟踪已报过的线程，保留 600 秒</b><span>驿窗重启时已经等了很久的审批，永远等不到「等你」（<code>codex/desktop.rs:97-116, 165-171</code>）。</span><span class="meta"><span class="chip">待实测</span>Codex</span></div></div>
+    <div class="item"><span class="tag hi">B3</span><div><b>没有审批卡的「等你回复」会话在卡上消失</b><span>卡底只收在跑（<code>running-rows.ts:20</code>），注释说「等待的在卡上」，但这类没有卡。</span><span class="meta"><span class="chip">已核实</span>四家</span></div></div>
+    <div class="item"><span class="tag hi">B4</span><div><b>纸飞机不分家</b><span>DeepSeek 的待审批卡也出纸飞机，点进去是 Claude 的接力（<code>RelayToggle.tsx:48</code>）。</span><span class="meta"><span class="chip">已核实</span>DeepSeek、Codex</span></div></div>
+    <div class="item"><span class="tag hi">B5</span><div><b>DeepSeek 两个观察器写同一个等待标记，互相覆盖</b><span>提问流每 2 秒、插件每 300 毫秒各发一份（<code>questions.rs:389</code>、<code>asks.rs:360</code>），「等你」会闪。开关打开才触发。</span><span class="meta"><span class="chip">已核实代码</span>DeepSeek</span></div></div>
+    <div class="item"><span class="tag md">B6</span><div><b>DeepSeek 插件等待标记比请求活得久</b><span>宿主崩溃或已回答后问题文件还在，会话挂着没卡的「等你」最长 24 小时（<code>asks.rs:287-371</code>）。</span><span class="meta"><span class="chip">待实测</span>DeepSeek</span></div></div>
+    <div class="item"><span class="tag md">B7</span><div><b>DeepSeek 提问投递失败不清理</b><span>失败分支只撤请求、不删 pending（<code>questions.rs:603-628</code>）。</span><span class="meta"><span class="chip">待实测</span>DeepSeek</span></div></div>
+    <div class="item"><span class="tag md">B8</span><div><b>Claude 桌面版提问的「等你」永不过期</b><span>和 B1 正好相反：快照里 6 个会话挂着，最早 11-09。两种提问的去留规则各是一套。怎么改见拍板项 C4。</span><span class="meta"><span class="chip">已核实数据</span>Claude</span></div></div>
+    <div class="item"><span class="tag md">B9</span><div><b>出错不可见</b><span>失败、限流只变空闲，回执只发给完成（<code>island_events.rs:94-112</code>）；DeepSeek 结束原因为空时也没有回执。</span><span class="meta"><span class="chip">已核实</span>四家</span></div></div>
+    <div class="item"><span class="tag hi">B10</span><div><b>接力记录超过 4 MiB，重启读成空，再存就覆盖</b><span><code>handoffs.rs:1488</code>。修复在未合并分支上。和 #347 正在改的是同一个文件。</span><span class="meta"><span class="chip">已核实</span>审计高危 · 接力</span></div></div>
+    <div class="item"><span class="tag md">B11</span><div><b>接力状态存盘失败仍报成功</b><span><code>host/handoff.rs:319-323</code>，同 #347 文件。</span><span class="meta"><span class="chip">已核实</span>审计 · 接力</span></div></div>
+    <div class="item"><span class="tag md">B12</span><div><b>读额度一直占着本地采集的共用锁，最长卡 40 秒</b><span><code>accounts/mod.rs:764, 802</code>。</span><span class="meta"><span class="chip">已核实</span>审计 · 全部</span></div></div>
+    <div class="item"><span class="tag md">B13</span><div><b>额度引擎只杀直接子进程，后代句柄泄漏</b><span><code>accounts/engine.rs</code>。</span><span class="meta"><span class="chip">已核实</span>审计</span></div></div>
+    <div class="item"><span class="tag md">B14</span><div><b>旧引擎迟到的输出会把新引擎杀掉</b><span><code>engine-client/src/index.ts:59</code>，只有 close 回调认了当前进程。</span><span class="meta"><span class="chip">已核实</span>审计</span></div></div>
+    <div class="item"><span class="tag md">B15</span><div><b>分块响应先有损解码再按字节切，中文可能让钩子服务崩</b><span><code>hooks/endpoint.rs:105, 133</code>。</span><span class="meta"><span class="chip">已核实</span>审计 · Claude 钩子</span></div></div>
+    <div class="item"><span class="tag md">B16</span><div><b>Claude 云端返回结构不对时当成没有会话</b><span><code>claude/cloud.rs:69</code>。</span><span class="meta"><span class="chip">已核实</span>审计 · Claude</span></div></div>
+    <div class="item"><span class="tag md">B17</span><div><b>账户报错原文没脱敏就进了通知</b><span><code>claude/account.rs:213, 285</code>。</span><span class="meta"><span class="chip">已核实</span>审计 · Claude</span></div></div>
+    <div class="item"><span class="tag lo">B18</span><div><b>送话回执只增不删，每 5 秒全量读，且在检查开关之前</b><span><code>delivery/journal.rs</code>。</span><span class="meta"><span class="chip">待核实</span>审计</span></div></div>
+    <div class="item"><span class="tag lo">B19</span><div><b>会话锁表不回收</b><span><code>delivery/sending.rs:171</code>。</span><span class="meta"><span class="chip">已核实</span>审计</span></div></div>
+    <div class="item"><span class="tag md">B20</span><div><b>接力还没回信就出错，不通知发起会话（#318）</b><span>另一个 worktree 里有未提交的半成品 <code>notice.rs</code>。</span><span class="meta"><span class="chip">已核实</span>接力</span></div></div>
+    <div class="item"><span class="tag lo">B21</span><div><b>重启时「已通过还没处理」的接力只结束不转回</b><span>CURRENT #316 一节遗留。</span><span class="meta"><span class="chip">待核实</span>接力</span></div></div>
+    <div class="item"><span class="tag lo">B22</span><div><b>审核纸条上的会话行用面板墨色，换纸后可能看不清</b><span><code>SessionsSection.tsx:513</code>（L-42 漏的一处）。</span><span class="meta"><span class="chip">待实测</span>ChatGPT</span></div></div>
+    <div class="item"><span class="tag lo">H1</span><div><b>重复实现与死代码</b><span>伪造 ChatGPT 会话写两遍（<code>HUDMarkStrip.tsx:436</code>、<code>HandoffCard.tsx:116</code>）；<code>"chatgpt:"</code> 前缀散三处；会话行组装两处（<code>CardRunning.tsx:44</code>、<code>SessionsSection.tsx:197</code>）；<code>IslandNews.tsx:310</code> 死分支；来源名有的比原串、有的先归一（大小写一变就悄悄失效）。</span></div></div>
+    <div class="item"><span class="tag lo">H2</span><div><b>重置额度写死成 Codex 专属</b><span><code>QuotaSection.tsx:288</code>，应按这家有没有该读数判断。</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>统一方案：工作场所契约</h2>
+  <p>把四家当成同一种东西：每家产出<b>同一个数据对象</b>，侧栏按<b>同一套四层</b>画；只在白名单里的地方允许个性化。Hermes 走另一套「飞书工作台」。</p>
+
+  <div class="model">
+    <div class="panel">
+      <div class="hd"><span>外层 · 展出面板</span><span class="plane">纸飞机 → 接力 2</span></div>
+      <div class="band"><span>等你</span>审批、提问、等你回复；不因时间消失</div>
+      <div class="band"><span>在跑</span>卡底一段，含「接力排队中」</div>
+      <div class="band"><span>刚回复 / 出错</span>回执；停留规则按家配置</div>
+      <div class="band"><span>没接上</span>例：「Codex 的审批没接上 · 去设置打开钩子」</div>
+    </div>
+    <div class="panel">
+      <div class="hd"><span>内层 · 接力面板</span><span class="plane">纸飞机 ← 返回</span></div>
+      <div class="band inner">只列本家参与的接力（发起方或执行方），时间线、意见、自动往返照现在的接力卡</div>
+      <div class="band"><span>谁有</span>Claude、Codex（发起和执行）、ChatGPT（审核方）；DeepSeek 暂无接力时不出纸飞机</div>
+    </div>
+  </div>
+
+  <div class="layers">
+    <div class="layer"><b>数据对象</b><div>每家一份：读数（额度 / 余额 / 今日对话）、等你、在跑、刚回复、出错、接力、能力表（能不能侧栏回复、能不能发起接力、通道接没接上）。前端只从它取，不再按智能体名分支。</div></div>
+    <div class="layer"><b>第 1 层 票根</b><div>读数 + 状态章。个性化：小人、脚印内容。</div></div>
+    <div class="layer"><b>第 2 层 外层</b><div>小签点开：卡头（本家印 + 纸飞机）→ 等你 → 在跑 → 刚回复。所有外层卡（待审批、回复、额度、单家面板）卡头都是同一个，纸飞机只进本家接力。</div></div>
+    <div class="layer"><b>第 3 层 内层</b><div>接力面板，同一个纸飞机进出。</div></div>
+    <div class="layer"><b>第 4 层 悬停</b><div>小收据每家加一行「等你 N · 在跑 N · 接力 N」；整张看板每家区块 = 读数 + 本家等你和在跑，ChatGPT 也有区块。</div></div>
+    <div class="layer"><b>状态规则</b><div>「等你」只在回答、撤回、确认进程已死时消失；「在跑」超时每家显式写在一处；出错单独成态并出回执；补 Codex 的「完成」「提醒」钩子。</div></div>
+    <div class="layer"><b>个性化白名单</b><div>小人与动效、印章颜色、脚印读数、ChatGPT 对话 / 审核两栏的内容、DeepSeek 余额、Hermes 整块。白名单外的分叉由一条契约测试拦住。</div></div>
+    <div class="layer"><b>Hermes</b><div>飞书工作台：机器人在岗、定时任务、最近被问、断线细条；不进「等你」，不进接力。现状保留。</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>需要你单独拍板的 7 项（初版，已被顶部修订取代）</h2>
+  <p class="note">前 5 项会改到你定过的内容，按规则逐项问；后 2 项是新功能。界面长什么样，等批 3 出三版预览再选，这里只定做不做。</p>
+  <div class="decide">
+    <div class="dc"><span class="no">C1</span><div><b>看板里的会话并进各家区块</b>
+      <dl class="kv"><dt>原来</dt><dd>悬停面板改成额度看板（#53），「正在进行」全局一段排最后、超过 5 条滚动（#63）</dd>
+      <dt>改成</dt><dd>每家区块下接本家的等你和在跑；ChatGPT 也有区块</dd>
+      <dt>风险</dt><dd>看板变长；全局一眼看全部的视角没了。可保留每家超过 3 条折叠</dd></dl>
+      <span class="rec">推荐：改</span></div></div>
+    <div class="dc"><span class="no">C2</span><div><b>纸飞机扩到所有外层卡，只进本家接力</b>
+      <dl class="kv"><dt>原来</dt><dd>11-14 #341 / #344 定：卡头同一个白色纸飞机方块进出接力、印章左边；现在只在待审批卡上</dd>
+      <dt>改成</dt><dd>样子不变；回复卡、额度卡、单家面板也有；只进这一家参与的接力，DeepSeek 卡上不再出现</dd>
+      <dt>风险</dt><dd>按钮出现的地方变多；跨家看全部接力要去 ChatGPT 的审核纸条</dd></dl>
+      <span class="rec">推荐：改</span></div></div>
+    <div class="dc"><span class="no">C3</span><div><b>小收据加一行活动</b>
+      <dl class="kv"><dt>原来</dt><dd>小收据（#33）、停久看全（#141）；Claude、Codex、DeepSeek 只显示额度或余额</dd>
+      <dt>改成</dt><dd>底部加「等你 N · 在跑 N · 接力 N」，全是 0 时不出现</dd>
+      <dt>风险</dt><dd>小收据多一行</dd></dl>
+      <span class="rec">推荐：改</span></div></div>
+    <div class="dc"><span class="no">C4</span><div><b>「等你」的去留统一</b>
+      <dl class="kv"><dt>原来</dt><dd>Claude 桌面版提问永不过期，只能去 Claude 里答的沉底折叠（#331）；会话记录里的提问 30 分钟后消失</dd>
+      <dt>改成</dt><dd>都不因时间消失；超过 24 小时的归到「旧的」一组默认折叠，可一键清掉</dd>
+      <dt>风险</dt><dd>挂着不答的会话会一直占一行（折叠后只占一行计数）</dd></dl>
+      <span class="rec">推荐：改</span></div></div>
+    <div class="dc"><span class="no">C5</span><div><b>回执停留</b>
+      <dl class="kv"><dt>原来</dt><dd>你定过：Claude、Codex、DeepSeek 的回复 4 秒收起；Hermes、ChatGPT 看过才收</dd>
+      <dt>改成</dt><dd>行为不变，只是从写死两家名字改成每家一个配置项</dd>
+      <dt>风险</dt><dd>无可见变化</dd></dl>
+      <span class="rec">推荐：不改行为，只改写法</span></div></div>
+    <div class="dc"><span class="no">C6</span><div><b>新增「出错」回执</b>
+      <dl class="kv"><dt>内容</dt><dd>回合失败、限流、中断时出一张回执，写原因和「去看」</dd>
+      <dt>风险</dt><dd>多一种通知；限流可能连着出，需合并成一张</dd></dl>
+      <span class="rec">推荐：做</span></div></div>
+    <div class="dc"><span class="no">C7</span><div><b>四家都有「今天已回复」</b>
+      <dl class="kv"><dt>内容</dt><dd>照 ChatGPT「今天的对话」，单家面板加一段今天回复过的会话，默认折叠</dd>
+      <dt>风险</dt><dd>面板变长</dd></dl>
+      <span class="rec">推荐：做</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>分批计划（初版，已被顶部修订取代）</h2>
+  <div style="border-top:1px solid var(--rule)">
+    <div class="batch"><span class="no">1</span><div><b>只修 bug，不改行为</b>
+      <span>B2–B7、B9 的后端判定部分、B12–B19、B22、H1、H2。B10、B11、B20、B21 在接力文件里，和正在跑的 #347 撞文件：等 #347 合并后接着做，或交给那个会话。</span>
+      <span class="note">验收：全量测试；装机回读；用实时快照对照（例：Codex 审批挂 31 分钟仍在「等你」，DeepSeek 等你不闪）。</span></div></div>
+    <div class="batch"><span class="no">2</span><div><b>数据层统一</b>
+      <span>前端「工作场所」数据对象和能力表；后端补 Codex「完成」「提醒」钩子、出错态、「等你」去留（按 C4）；加契约测试：四家每层都要有，白名单外不许按名字分支。界面基本不变。</span></div></div>
+    <div class="batch"><span class="no">3</span><div><b>界面统一（出三版预览再定）</b>
+      <span>外层卡头与纸飞机（C2）、小收据活动行（C3）、看板各家区块（C1）、出错回执（C6）、今天已回复（C7）、「没接上」提示。三版放在一个页面里切换，你选完再做。</span></div></div>
+    <div class="batch"><span class="no">4</span><div><b>Hermes 工作台和验收工具</b>
+      <span>Hermes 从工作场所规则里正式划出；给侧栏各张卡做离屏截图自检，减少要你截图来回的轮数。</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>你原话 → 我补了什么</h2>
+  <div class="from">
+    <div><b>「四家本质是一种性质」</b></div><div>落成一个数据对象 + 四层界面 + 个性化白名单，并加测试防止以后再散。</div>
+    <div><b>「待审核是展出面板，含在跑；按钮切到接力，接力是内层」</b></div><div>发现入口只在待审批卡、且不分家（S2、B4）；补上回复卡、额度卡、单家面板都要有同一个卡头。</div>
+    <div><b>「Codex 侧栏不常看到，看不出待审核和在跑」</b></div><div>一半是这几天确实只有 Claude 拉起的审查会话；另一半是 30 分钟放弃、观察器 600 秒、缺钩子（B1、B2、S5）。</div>
+    <div><b>「Hermes 单独一个」</b></div><div>现状基本合理，只在规则上划出去，不动它的界面。</div>
+    <div><b>「不论 bug 还是底层设计都改好」</b></div><div>另外查出 Codex 11-11 审计的 10 项至今没合进 main（B10–B19）、出错不可见（B9）、验收靠截图（S7）。推断的部分已标「待实测」。</div>
+  </div>
+</section>
+
+</div>
