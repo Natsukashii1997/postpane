@@ -432,3 +432,11 @@
 - 正确做法：全量测试不和打包放在同一条命令里并行，先测完再打。MCP 失败且耗时在 45 秒上下时，等负载降下来单独重跑 `test:mcp` 确认，再补跑 `test:plugins`、`test:extension`；交接里两次结果都写，不改代码去「修」它。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/` 的 `test-rebased.txt`、`test-rebased-rest.txt`、`test-mcp-3.txt`、`test-rebased-plugins.txt`。
 - 升级：未升级。
+
+## L-48 测试里新写出的替身程序，机器忙时启动要好几秒，和要验的截止时间共用一个短超时就偶发失败（2026-11-14）
+
+- 现象：`platform` 的 `a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline` 偶发 `TimedOut`，panic 在 `StdioServer::open(... 3 秒).unwrap()`；全量 `pnpm test` 并行跑、刚打完包时容易碰到，单独跑 3 次 2 过 1 败（#357）。只把 CPU 打满复现不出来；一边批量新建并执行几百个脚本、一边跑这项测试，16 次全败，都停在 3.06 秒。
+- 根因：`StdioServer` 的握手（`initialize` + `initialized`）和之后每个请求共用一个 `timeout`。测试为了让「写入截止」3 秒内触发，把它设成 3 秒，python3 替身冷启动加握手也只剩 3 秒。平时 `#!/usr/bin/env python3` 起一个新写出的脚本就要 0.4–0.6 秒（`/usr/bin/python3` 是 xcrun 垫片），系统同时首次执行大量新程序时会排到几秒。
+- 正确做法：测试里起替身程序的那一步给足时间（几十秒，正常情况立即返回、不拖慢测试），要验的截止时间单独设短。`StdioServer` 有仅测试用的 `set_timeout`，握手完再设。复现这类偶发超时用「批量新建并执行程序」压，不只用 CPU 压；压完 `pkill -f` 清掉压测进程，否则会顶到每用户进程数上限。
+- 证据：修复后同样压测 32 次全过；单独连跑 20 次全过，每次 3.2–3.9 秒（写入截止仍是 3 秒）。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-14-357-flaky-stdio/`。
+- 升级：未升级；「测试里起子进程的超时和要验的时限分开给」换个项目也成立，可提议提升为全局坑。

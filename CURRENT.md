@@ -7,6 +7,20 @@
 
 
 
+## 修偶发失败的投递测试：握手和要验的写入截止分开计时（#357）（2026-11-14，Claude，由 #353 的会话开卡交办；已提交、无需发布）
+
+- 时间：开工 `2026-11-14 16:05`（`date '+%F %H:%M'` 记录）。来由：#353 第一遍全量测试里 `platform` 的 `delivery::tests::native::a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline` 报 `TimedOut`，单独重跑 3 次 2 过 1 败；当轮按范围外未修，单开这张。issue #357。
+- 改了哪些文件：
+  - 交办的：`src/crates/platform/src/delivery/process/stdio.rs`（加仅测试编译的 `set_timeout`，握手完再改请求超时）；`src/crates/platform/src/delivery/tests.rs`（这项测试 `StdioServer::open` 的握手超时 3 秒 → 30 秒，握手完 `set_timeout(3 秒)`，要验的「写给不再读的 app server 3 秒截止、返回 AcceptanceUncertain、10 秒内结束」不变；同文件另一项起 python 替身的 `enqueue_without_a_daemon_goes_through_a_short_lived_app_server`，service 超时 10 秒 → 30 秒，它验的是正常入队，超时只在失败时才用到）。
+  - 顺手改的：`docs/LESSONS.md` 新增 L-48（#358 同时占了 L-47，变基后改号）。
+  - 改变了已有行为：无（生产代码只多一个 `#[cfg(test)]` 方法）。
+- 测试：复现：只把 CPU 打满跑 8 次、32 个并发都全过，复现不出；一边批量新建并执行几百个 python 脚本、一边并发跑 16 次，修复前 16 次全败（都在 3.06 秒报 `TimedOut`），入队那项在更重的压测下也 16 次全败（10.12 秒）。修复后同样压测两项各 16 次全过。验收：这项测试单独连跑 20 次 `pass=20 fail=0`，每次 `finished in` 3.23–3.88 秒（写入截止仍是 3 秒在起作用）。三条全量：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `968 passed; 0 failed`，前端 `ℹ pass 442` / `ℹ fail 0` / `ℹ todo 3`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。开 PR 后 main 合进 #358，变基（CURRENT、LESSONS 冲突，L-47 被 #358 占用，本轮改用 L-48）后重跑：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `977 passed; 0 failed`，前端 `ℹ pass 449` / `ℹ fail 0` / `ℹ todo 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 第一次 `ℹ pass 21` / `ℹ fail 1`（冲突合并时两节交接的末行错位，顶部一节缺「本轮新坑」），理顺后 `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-14-357-flaky-stdio/`（`run-1..20.txt`、`loop-summary.txt`、`check.txt`、`test.txt`、`node-test.txt`、`exits.txt`；变基后 `*-2-rebased.txt`、`exits2.txt`、`node-test-3-fixed.txt`）。
+- 验证：纯测试改动，靠上面的压测与连跑验证；Compiling 行确认是本 worktree 路径。
+- 截图：无（无界面改动）。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：生产里 `StdioServer` 的握手与请求仍共用一个超时（Codex 入队、新开线程走 10 / 20 秒），真实 codex 冷启动慢时同样会占掉请求的时间，本轮没动。压测时 8×400 个脚本留下 2800 多个卡在系统扫描上的进程、顶到每用户进程数上限，已 `pkill -f` 清干净（写进 L-48）。skill 进化：无。
+- 本轮新坑：L-48
+
 ## 工作场所契约第 2 批：等你三态与统一工作场所视图（#354）（2026-11-14，Claude 两个会话 + 1 个子 agent，常浩回「按计划开工」；已提交、已发布 `3b6524467f30` 回读通过）
 
 - 时间：开工 `2026-11-14 15:37`（取自分支创建时间 `git reflog`；上一会话做到一半因上下文到 50% 交接，本会话 15:45 接手）。来由：ADR-0001 第 2 批，统一数据与状态。上一会话写了前端（提交 `b02a697`）并派子 agent 改后端；本会话等子 agent 停笔后审它的改动，补完前端，契约测试转正，跑测试、装机、交接。issue #354。
