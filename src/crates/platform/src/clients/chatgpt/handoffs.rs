@@ -44,7 +44,7 @@ pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
 /// (the plugin's own lifetime for words left).
 pub const QUEUE_WAIT_MS: i64 = 60 * 60 * 1000;
 /// The longest excerpt a step keeps of what was said.
-const EXCERPT: usize = 600;
+pub const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.
 const REPLY_KEPT: usize = 64 * 1024;
 /// How many handoffs keep their brief for a retry.

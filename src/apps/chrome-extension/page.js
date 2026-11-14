@@ -47,12 +47,13 @@
   }
 
   /** Whether the newest reply comes after the newest prompt: one sent but not
-   * answered yet leaves the reply before it as the last one (#356). */
+   * answered yet leaves the reply before it as the last one (#356). A reply
+   * with no prompt drawn yet (the history loading) answers nothing known. */
   function answered(doc) {
     const reply = last(doc, SEL.assistant);
     const prompt = last(doc, SEL.user);
-    if (!reply) return false;
-    return !prompt || !!(prompt.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (!reply || !prompt) return false;
+    return !!(prompt.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING);
   }
 
   // --- Markdown ------------------------------------------------------------

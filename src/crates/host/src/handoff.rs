@@ -35,6 +35,7 @@ use std::{
 use tauri::Manager;
 
 mod back;
+mod belongs;
 mod gate;
 mod guard;
 mod lines;
@@ -826,6 +827,7 @@ impl Desk {
                     pr: anchor.pr.clone(),
                     head: anchor.head.clone(),
                     limit: anchor.limit,
+                    words: Some(brief.to_owned()),
                 },
             )
         });
@@ -888,12 +890,16 @@ impl Desk {
         let opened = {
             // Held while it opens, so 结束接力 waits for it (#223).
             let _opening = self.claim(id)?;
-            let (title, request) = self
+            let (title, request, kept) = self
                 .lock()
                 .get(id)
                 .filter(|h| h.status == Status::Opening)
-                .map(|h| (h.title.clone(), h.request()))
+                .map(|h| (h.title.clone(), h.request(), h.brief.clone()))
                 .ok_or_else(|| l10n::text("这次接力已经结束", "This handoff has ended"))?;
+            // The words as kept: with PostPane's note on a chain's round
+            // (#347), the same words its 「ask」 step records and an answer
+            // is held to (#356).
+            let brief = kept.as_deref().unwrap_or(brief);
             let opened = lines.open(brief, project, &title, &request);
             self.change(|book| match &opened {
                 Ok(conversation) => book.opened(id, conversation, now()),
@@ -919,11 +925,11 @@ impl Desk {
         let mut changed = false;
         for turn in mine {
             let took = self.take(&turn.message, conversation, turn.at);
-            self.note_turn(
-                &turn.message,
-                turn.at,
-                if took { "caught-up" } else { "unused" },
-            );
+            let outcome = match self.outcome(took, &turn.message, conversation) {
+                "taken" => "caught-up",
+                other => other,
+            };
+            self.note_turn(&turn.message, turn.at, outcome);
             changed |= took;
         }
         changed
@@ -936,13 +942,20 @@ impl Desk {
         }
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();
+        let prompt = message["prompt"].as_str();
         let id = self
             .lock()
             .for_conversation(conversation)
             .map(|h| h.id.clone());
-        // Every answer kept in full (#347), in the same change as it is
-        // booked: nothing cuts it between (L3 P2-10).
+        // Another turn's answer is not this review's (#356 P1-01): checked
+        // under the same hold as it is taken, so no words sent in between
+        // make an answer to the earlier ones count for them. Every answer
+        // kept in full (#347), in the same change as it is booked: nothing
+        // cuts it between (L3 P2-10).
         self.change(|book| {
+            if !belongs::fits(book, conversation, prompt) {
+                return false;
+            }
             let took = book.replied(conversation, reply, message_id, at);
             if let Some(id) = id.filter(|_| took) {
                 self.keep_answer(book, &id, reply);
@@ -992,7 +1005,7 @@ impl Desk {
                     return false;
                 }
                 let took = self.take(message, conversation, now);
-                self.note_turn(message, now, if took { "taken" } else { "unused" });
+                self.note_turn(message, now, self.outcome(took, message, conversation));
                 took
             }
             // Words in: those whose wait gave up count now (#223).
@@ -1956,6 +1969,8 @@ mod tests {
         wake_fails: RefCell<Option<String>>,
         /// Pull requests' current commits, as GitHub would say (#347).
         heads: RefCell<HashMap<String, Result<String, String>>>,
+        /// Passing a read-again on to the extension fails (#356).
+        reread_fails: std::cell::Cell<bool>,
     }
     impl Fake {
         /// Leaves words under `id` as `ClaudeChannel::put` does.
@@ -1987,6 +2002,7 @@ mod tests {
                 format!("{}|{title}|{request}", project.unwrap_or("")),
                 text.into(),
             ));
+            shown(text);
             if let Some(during) = &self.on_open {
                 during();
             }
@@ -2001,6 +2017,7 @@ mod tests {
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
             self.requests.borrow_mut().push(request.into());
+            shown(text);
             if let Some(during) = &self.on_send {
                 during();
             }
@@ -2013,6 +2030,9 @@ mod tests {
             self.sent
                 .borrow_mut()
                 .push(("reread".into(), conversation.into(), String::new()));
+            if self.reread_fails.get() {
+                return Err("The ChatGPT extension is not connected".into());
+            }
             Ok(())
         }
         fn reaches(&self, _doer: &str, _session: &str) -> Result<(), String> {
@@ -2152,7 +2172,18 @@ mod tests {
         handoff
     }
     fn turn(phase: &str, reply: &str) -> Value {
-        json!({"type":"turn","phase":phase,"conversation":"c-new","reply":reply})
+        json!({"type":"turn","phase":phase,"conversation":"c-new","reply":reply,"prompt":asked()})
+    }
+    thread_local! {
+        /// The words last sent to ChatGPT in this test, as its page shows
+        /// them above the answer: each turn's prompt (#356 P1-01).
+        static ASKED: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+    fn asked() -> Option<String> {
+        ASKED.with(|asked| asked.borrow().clone())
+    }
+    fn shown(text: &str) {
+        ASKED.with(|asked| *asked.borrow_mut() = Some(text.to_owned()));
     }
     /// An answer whose last lines do not hold: PostPane asks ChatGPT once
     /// to mend them (#347, not counted), and it answers `again`.
@@ -2500,7 +2531,7 @@ mod tests {
         )
         .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"P2：日志少一行\nP3：命名\n审查出口：通过\n结论：通过","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"P2：日志少一行\nP3：命名\n审查出口：通过\n结论：通过","messageId":"m2","prompt":asked()}),
             8,
         );
         assert!(desk.drive(&lines, 9));
@@ -2545,7 +2576,7 @@ mod tests {
         )
         .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         assert!(desk.drive(&lines, 8));
@@ -2695,7 +2726,7 @@ mod tests {
         desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 6)
             .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         lines.reply_fails.set(2);
@@ -3243,7 +3274,7 @@ mod tests {
         );
         let reply = "证据够了\n评审出口：成熟退出\n结论：通过";
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":reply,"messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":reply,"messageId":"m2","prompt":asked()}),
             7,
         );
         assert!(desk.drive(&lines, 8));
@@ -3264,7 +3295,7 @@ mod tests {
         desk.drive(&lines, 5);
         evidence(&desk, &lines, 6);
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"评审出口：继续深化\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"评审出口：继续深化\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         assert!(desk.drive(&lines, 8));
@@ -3329,7 +3360,7 @@ mod tests {
         )
         .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"评审出口：继续深化\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"评审出口：继续深化\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         assert!(desk.drive(&lines, 8));
@@ -3818,7 +3849,9 @@ mod tests {
         else {
             panic!()
         };
-        // ChatGPT answers in full before `opened` does.
+        // ChatGPT answers in full before `opened` does: the page shows
+        // the brief it was opened with.
+        shown("brief");
         assert!(!desk.observe(&turn("start", ""), 2));
         assert!(!desk.observe(
             &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
@@ -3912,7 +3945,7 @@ mod tests {
         lines.on_send = Some(Box::new(|| {
             assert!(!desk.observe(&turn("start", ""), 5));
             assert!(!desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2"}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2","prompt":asked()}),
                 6
             ));
         }));
@@ -4073,7 +4106,7 @@ mod tests {
         assert!(repeated);
         // The answer that follows is the review's.
         assert!(desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2","prompt":asked()}),
             7
         ));
         assert_eq!(desk.projection(7)[0]["phase"], "replied");
@@ -4227,19 +4260,20 @@ mod tests {
             .heads
             .borrow_mut()
             .insert("natsukashii1997/dt-sandbox#4".into(), Ok(HEAD.into()));
+        let brief = format!("{PR}\nhead_sha {HEAD}\n改动如下（{session} {now}）");
         let started = desk.start_ruled(
             lines,
             session,
             Some("/w"),
             "dt-sandbox｜SBX-8 原子写入",
             None,
-            &format!("{PR}\nhead_sha {HEAD}\n改动如下（{session} {now}）"),
+            &brief,
             false,
             &rule,
             now,
         )?;
         if let Started::Opening { handoff, project } = &started {
-            desk.open(lines, &handoff.id, "改动如下", project.as_deref(), || now)
+            desk.open(lines, &handoff.id, &brief, project.as_deref(), || now)
                 .unwrap();
         }
         Ok(started)
@@ -4366,7 +4400,7 @@ mod tests {
             if n == 2 {
                 ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
             }
-            desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":format!("第 {n} 轮\n受审版本：0123456\n审查出口：返修\n结论：需修改"),"messageId":format!("m{n}")}), at);
+            desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":format!("第 {n} 轮\n受审版本：0123456\n审查出口：返修\n结论：需修改"),"messageId":format!("m{n}")}), at);
             desk.drive(&lines, at + 1);
         }
         let kept = desk.lock().get(&id).cloned().unwrap();
@@ -4536,7 +4570,7 @@ mod tests {
             .heads
             .borrow_mut()
             .insert(PR_KEY.into(), Ok(MOVED.into()));
-        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":PASS,"messageId":"m2"}), 7);
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":PASS,"messageId":"m2"}), 7);
         desk.drive(&lines, 8);
         assert_eq!(status(&desk, 8), ("open".to_owned(), None));
         let said = last_reply_to_claude(&lines);
@@ -4625,7 +4659,7 @@ mod tests {
         desk.observe(&turn("complete", FIX), 3);
         desk.drive(&lines, 4);
         ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
-        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":FIX,"messageId":"m2"}), 6);
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":FIX,"messageId":"m2"}), 6);
         desk.drive(&lines, 7);
         assert_eq!(status(&desk, 7).1.as_deref(), Some("top"));
         // No chain, no pull request: refused in the same directory and session.
@@ -4761,7 +4795,7 @@ mod tests {
         assert_eq!(kept(), before, "words that did not go");
         lines.send_fails.set(false);
         ruled(&desk, &lines, "s1", "L2", None, 6).unwrap();
-        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":FIX,"messageId":"m2"}), 7);
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":FIX,"messageId":"m2"}), 7);
         desk.drive(&lines, 8);
         let refused = desk.start_ruled(
             &lines,
@@ -4825,7 +4859,7 @@ mod tests {
             .borrow_mut()
             .insert(PR_KEY.into(), Ok(MOVED.into()));
         let pass = PASS.replace("0123456", "fedcba9");
-        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","reply":pass,"messageId":"m2"}), 7);
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":pass,"messageId":"m2"}), 7);
         desk.drive(&lines, 8);
         let kept = desk.lock().get(&handoff.id).cloned().unwrap();
         assert_eq!(kept.counted(), 2, "the answer counts");
@@ -4877,7 +4911,7 @@ mod tests {
         assert!(last_reply_to_claude(&lines).contains("最后一轮"));
         ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             6,
         );
         desk.drive(&lines, 7);
@@ -4936,8 +4970,12 @@ mod tests {
             panic!("another session opens its own");
         };
         assert_eq!(handoff.carried, 1);
+        // The new conversation opens with PostPane's note on it, as kept:
+        // it went with the words, not only into the record (#356 merge).
+        let opening = asked().unwrap();
+        assert!(opening.contains("【驿窗附注】"), "{opening}");
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             5,
         );
         desk.drive(&lines, 6);
@@ -5013,7 +5051,7 @@ mod tests {
         assert_eq!(handoff.counted(), 1, "the paused review counts (#347)");
         // A way out that does not go with its verdict stops it.
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"受审版本：0123456\n审查出口：通过\n结论：需修改","messageId":"m2"}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"受审版本：0123456\n审查出口：通过\n结论：需修改","messageId":"m2","prompt":asked()}),
             6,
         );
         mend(
@@ -5273,7 +5311,7 @@ mod tests {
             )
             .unwrap();
             desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"1. 还差一点\n审查出口：返修\n结论：需修改","messageId":"m2"}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"1. 还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
                 8,
             );
             desk.drive(&lines, 9);
@@ -5307,7 +5345,7 @@ mod tests {
             desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 7)
                 .unwrap();
             desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：返修\n结论：需修改","messageId":"m2"}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
                 8,
             );
             desk.drive(&lines, 9);
@@ -5615,8 +5653,8 @@ mod tests {
         assert_eq!(desk.reread(&lines, started + QUIET_MS - 1), 0);
         assert_eq!(desk.reread(&lines, started + QUIET_MS), 1);
         // The answer told again is taken, once by its message id.
-        let told = json!({"type":"turn","phase":"complete","conversation":"c-new",
-            "reply":"1. 少一项\n结论：需修改","messageId":"m9","reread":true});
+        let told = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
+            "reply":"1. 少一项\n结论：需修改","messageId":"m9","reread":true,"prompt":asked()});
         let answered = started + QUIET_MS + 1;
         assert!(desk.observe(&told, answered));
         assert!(!desk.observe(&told, answered + 1), "the same answer twice");
@@ -5649,5 +5687,124 @@ mod tests {
         assert!(sent_as(&offline, "reread").is_empty());
         // Once connected it is asked at once: the miss did not count.
         assert_eq!(desk.reread(&lines, late + 1), 1);
+    }
+
+    // #356 P1-01: the review's answer went unreported and the person chatted
+    // on in the same conversation; their own turn's answer is not the
+    // review's, nor one whose prompt could not be read. The review's answer,
+    // read again, still counts.
+    #[test]
+    fn another_prompts_answer_is_not_taken_as_the_review() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let review = asked();
+        let theirs = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
+            "prompt":"顺便问一下，周末天气怎么样？","reply":"晴。","messageId":"a4"});
+        assert!(!desk.observe(&theirs, 3));
+        let unread = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
+            "prompt":null,"reply":"1. 少一项\n结论：需修改","messageId":"a5"});
+        assert!(!desk.observe(&unread, 4));
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().phase,
+            Phase::Delivered
+        );
+        let log = std::fs::read_to_string(turns_path(&temp.path().join("data"))).unwrap();
+        assert_eq!(log.matches("\"outcome\":\"unmatched\"").count(), 2);
+        let ours = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
+            "prompt":review,"reply":"1. 少一项\n结论：需修改","messageId":"a3","reread":true});
+        assert!(desk.observe(&ours, 5));
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
+    }
+
+    // #356 P1-01 (round 2): the words are held to as far as they are kept,
+    // not their first hundred characters: a prompt of the person's own that
+    // starts like them is not the review's, a long brief still is.
+    #[test]
+    fn a_prompt_counts_only_as_the_whole_words_kept() {
+        let complete = |prompt: &str, id: &str| {
+            json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
+                "prompt":prompt,"reply":"1. 少一项\n结论：需修改","messageId":id})
+        };
+        let open = |desk: &Desk, lines: &Fake, brief: &str| {
+            let Started::Opening { handoff, .. } = desk
+                .start(lines, "s1", Some("/w"), "t", None, brief, false, 1)
+                .unwrap()
+            else {
+                panic!("a first brief opens a conversation")
+            };
+            desk.open(lines, &handoff.id, brief, None, || 2).unwrap();
+            handoff
+        };
+        let phase = |desk: &Desk, id: &str| desk.lock().get(id).unwrap().phase;
+        // Short words: the same start and more after is another prompt.
+        let (_one, first) = desk();
+        let lines = Fake::default();
+        let short = open(&first, &lines, "检查这个 PR");
+        assert!(!first.observe(&complete("检查这个 PR，顺便看看命名", "a4"), 3));
+        assert!(
+            first.observe(&complete("检查 这个PR", "a3"), 4),
+            "spaces aside"
+        );
+        assert_eq!(phase(&first, &short.id), Phase::Replied);
+        // Long words sharing their first hundred characters and more.
+        let common = "共同的开头".repeat(30);
+        let (_two, second) = desk();
+        let lines = Fake::default();
+        let shared = open(&second, &lines, &format!("{common}\n只看 A"));
+        assert!(!second.observe(&complete(&format!("{common}\n只看 B"), "b4"), 3));
+        assert_eq!(phase(&second, &shared.id), Phase::Delivered);
+        // Words past what a step keeps: held to the kept start.
+        let long = format!("{}\n末尾这段不在摘录里", "长".repeat(700));
+        let (_three, third) = desk();
+        let lines = Fake::default();
+        let cut = open(&third, &lines, &long);
+        assert!(!third.observe(&complete(&"长".repeat(500), "c4"), 3));
+        assert!(third.observe(&complete(&long, "c3"), 4));
+        assert_eq!(phase(&third, &cut.id), Phase::Replied);
+    }
+
+    // #356 P2-04: a handoff with no words kept cannot be held to them; its
+    // conversation's turns are not taken.
+    #[test]
+    fn a_handoff_with_no_words_kept_takes_no_answer() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.lock()
+            .list
+            .iter_mut()
+            .for_each(|h| h.steps.retain(|step| step.kind != StepKind::Ask));
+        assert!(!desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().phase,
+            Phase::Delivered
+        );
+    }
+
+    // #356 P2-03: connected when checked, the read did not get through; it
+    // is tried again in seconds, not after the two minutes of one that did.
+    #[test]
+    fn a_read_again_that_did_not_get_through_is_tried_again_soon() {
+        use super::reread::{AGAIN_MS, QUIET_MS, RETRY_MS};
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = desk.lock().get(&handoff.id).unwrap().phase_at + QUIET_MS;
+        lines.reread_fails.set(true);
+        assert_eq!(desk.reread(&lines, late), 0);
+        assert_eq!(
+            desk.reread(&lines, late + RETRY_MS - 1),
+            0,
+            "not every refresh"
+        );
+        lines.reread_fails.set(false);
+        assert_eq!(desk.reread(&lines, late + RETRY_MS), 1);
+        assert_eq!(desk.reread(&lines, late + RETRY_MS + AGAIN_MS - 1), 0);
+        assert_eq!(
+            sent_as(&lines, "reread").len(),
+            2,
+            "one failed try, one passed on"
+        );
     }
 }

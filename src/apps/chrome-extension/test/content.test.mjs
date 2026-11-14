@@ -324,7 +324,12 @@ test("asked to read again, the newest written reply is told again", async () => 
         ),
     );
   const answer = await ask();
-  assert.deepEqual(answer, { ok: true, streaming: false, told: true });
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: true,
+    loaded: true,
+  });
   const done = (await turns(page)).filter((m) => m.phase === "complete");
   assert.equal(done.length, 1);
   assert.equal(done[0].messageId, "m2");
@@ -334,7 +339,12 @@ test("asked to read again, the newest written reply is told again", async () => 
     slot.type = "button";
     slot.setAttribute("aria-label", "停止");
   });
-  assert.deepEqual(await ask(), { ok: true, streaming: true, told: false });
+  assert.deepEqual(await ask(), {
+    ok: true,
+    streaming: true,
+    told: false,
+    loaded: true,
+  });
   assert.equal(
     (await turns(page)).filter((m) => m.phase === "complete").length,
     1,
@@ -354,9 +364,141 @@ test("asked to read again before the newest prompt is answered, nothing is told"
     () =>
       new Promise((resolve) => window.listener({ op: "reread" }, {}, resolve)),
   );
-  assert.deepEqual(answer, { ok: true, streaming: false, told: false });
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: false,
+  });
   assert.equal(
     (await turns(page)).filter((m) => m.phase === "complete").length,
     0,
   );
+});
+
+const reread = (page, command = {}) =>
+  page.evaluate(
+    (command) =>
+      new Promise((resolve) =>
+        window.listener({ op: "reread", ...command }, {}, resolve),
+      ),
+    command,
+  );
+
+// #356 P2-01: the stop button gone, the last words may still be drawn; asked
+// then, the reply is told only once it stays the same for 600 ms, in full.
+test("asked to read again while the reply still changes, only the finished reply is told", async () => {
+  const page = await open();
+  const asking = reread(page);
+  await page.evaluate(() => {
+    document.querySelector(
+      '[data-chatgpt-search-message-ids="m2 m2"] [data-d-component="text"]',
+    ).textContent += "（补一句）";
+  });
+  assert.equal((await asking).told, false);
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+  assert.equal((await reread(page)).told, true);
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done.length, 1);
+  assert.ok(done[0].reply.includes("修好边界（补一句）"));
+});
+
+// #356 P2-02: the command names its conversation and a tab showing another
+// tells nothing; a page that has not drawn its history says so.
+test("asked to read again, a tab checks its conversation and says whether its history is there", async () => {
+  const page = await open();
+  assert.deepEqual(await reread(page, { conversation: "6af7-other" }), {
+    ok: false,
+    reason: "other-conversation",
+  });
+  await page.evaluate(() => {
+    for (const node of document.querySelectorAll(
+      '[data-user-message-bubble], [data-chatgpt-search-unit-key$=":assistant"]',
+    ))
+      node.remove();
+  });
+  assert.deepEqual(await reread(page), {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: false,
+  });
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+});
+
+// #356 P1-02: put in while a stop button shows that is not this turn's (or
+// is seen by mistake), with the newest prompt still unanswered: when it goes,
+// the older reply is not news.
+test("a stop button going away does not make a reply before the newest prompt news", async () => {
+  const page = await open(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">第三轮：只看 P1-10</div>';
+    document.querySelector("main").append(turn);
+  });
+  await page.evaluate(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  });
+  await page.waitForTimeout(1800);
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+});
+
+// #356 P1-02: replies drawn before their prompts (the history loading)
+// answer nothing known yet.
+test("a reply with no prompt drawn yet is not taken as answered", async () => {
+  const page = await open(() => {
+    for (const node of document.querySelectorAll("[data-user-message-bubble]"))
+      node.remove();
+  });
+  const answer = await reread(page);
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: false,
+  });
+});
+
+// #356 P2-02 (round 2): the prompt drawn before its answer is not the history
+// loaded; asked again once the answer shows, the answer is told.
+test("a page showing the newest prompt without its answer yet is not loaded", async () => {
+  const page = await open(() => {
+    const turn = document.createElement("div");
+    turn.id = "late";
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">第三轮：只看 P1-10</div>';
+    document.querySelector("main").append(turn);
+  });
+  assert.equal((await reread(page)).loaded, false);
+  await page.evaluate(() => {
+    document
+      .getElementById("late")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:7:assistant" data-chatgpt-search-message-ids="m7"><p data-d-component="text">P1-10 已关闭。结论：通过</p></div>',
+      );
+  });
+  const answer = await reread(page);
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: true,
+    loaded: true,
+  });
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done.at(-1).messageId, "m7");
 });

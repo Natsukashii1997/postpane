@@ -3,7 +3,7 @@
 //! review still with ChatGPT (P1-04), and a cap reached here and not
 //! settled (P1-08).
 
-use super::{Book, Handoff, Notice, Phase, Status, Step, StepKind};
+use super::{excerpt, Book, Handoff, Notice, Phase, Status, Step, StepKind, EXCERPT};
 use serde::{Deserialize, Serialize};
 
 /// A review asked and not yet known to have gone in (L3 P1-10): the
@@ -20,6 +20,10 @@ pub struct Pending {
     pub head: Option<String>,
     #[serde(default)]
     pub limit: u32,
+    /// The words, as a step keeps them: an answer to them, confirmed or
+    /// not, is known as this review's (#356).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<String>,
 }
 
 impl Handoff {
@@ -41,7 +45,8 @@ impl Book {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
-        handoff.gate.pending = Some(pending);
+        let words = pending.words.as_deref().map(|w| excerpt(w, EXCERPT));
+        handoff.gate.pending = Some(Pending { words, ..pending });
         true
     }
     /// The review sent as `request` went in: it is no longer pending.
