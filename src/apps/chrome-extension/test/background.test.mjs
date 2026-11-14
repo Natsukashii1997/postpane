@@ -9,7 +9,16 @@ const source = readFileSync(
   "utf8",
 );
 
-function load(tabs, { asked = [], dead = new Set(), watched = [] } = {}) {
+function load(
+  tabs,
+  {
+    asked = [],
+    dead = new Set(),
+    watched = [],
+    answers = [],
+    now = false,
+  } = {},
+) {
   const listeners = {};
   const injected = [];
   const event = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
@@ -34,7 +43,7 @@ function load(tabs, { asked = [], dead = new Set(), watched = [] } = {}) {
         if (message.op === "state") return null;
         asked.push([tabId, message.op]);
         if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
-        return { ok: true };
+        return answers.shift() ?? { ok: true };
       },
       onRemoved: event("removed"),
       onUpdated: event("updated"),
@@ -50,7 +59,8 @@ function load(tabs, { asked = [], dead = new Set(), watched = [] } = {}) {
   };
   vm.runInNewContext(source, {
     chrome,
-    setTimeout: () => 0,
+    // `now`: a pause ends at once, so waits that are counted run through.
+    setTimeout: now ? (fn) => (Promise.resolve().then(fn), 0) : () => 0,
     clearTimeout() {},
   });
   return { listeners, injected };
@@ -89,4 +99,32 @@ test("reading again asks the conversation's tab, putting a script in first if it
   // One not on the watch list is not read.
   await listeners.port({ type: "reread", conversation: "other" });
   assert.equal(asked.length, 2);
+});
+
+// #356 P2-02: a tab that has not drawn its history yet (just opened) is asked
+// again shortly, a few times, until it has or gives up; not every two minutes.
+test("reading again asks a tab without its history again, a few times", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const asked = [];
+  const tabs = [{ id: 2, url: `https://chatgpt.com/c/${conversation}` }];
+  const unloaded = { ok: true, streaming: false, told: false, loaded: false };
+  const { listeners } = load(tabs, {
+    asked,
+    watched: [conversation],
+    answers: [unloaded, unloaded, { ok: true, told: true, loaded: true }],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(asked.length, 3, "asked until the history was there");
+  const never = [];
+  const again = load(tabs, {
+    asked: never,
+    watched: [conversation],
+    answers: Array(10).fill(unloaded),
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await again.listeners.port({ type: "reread", conversation });
+  assert.equal(never.length, 6, "once and five more, then left to PostPane");
 });

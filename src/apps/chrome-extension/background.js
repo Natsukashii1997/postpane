@@ -201,16 +201,26 @@ async function reread(conversation) {
     if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
       return;
   }
-  const ask = () => chrome.tabs.sendMessage(tabId, { op: "reread" });
+  // The tab checks it shows this conversation. One that has not drawn its
+  // history yet (just opened) is asked again shortly, a few times.
+  const ask = () =>
+    chrome.tabs.sendMessage(tabId, { op: "reread", conversation });
+  let answer;
   try {
-    await ask();
+    answer = await ask();
   } catch {
     await chrome.scripting
       .executeScript({ target: { tabId }, files: ["page.js", "content.js"] })
       .catch(() => {});
-    await ask().catch(() => {});
+    answer = await ask().catch(() => null);
+  }
+  for (let tries = 0; answer?.loaded === false && tries < REREAD_TRIES; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
+    answer = await ask().catch(() => null);
   }
 }
+const REREAD_TRIES = 5;
+const REREAD_PAUSE = 2000;
 
 async function focus(conversation) {
   const tabId = tabFor(conversation);

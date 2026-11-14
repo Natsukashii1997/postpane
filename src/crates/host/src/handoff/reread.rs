@@ -12,6 +12,9 @@ use super::{Desk, Lines, Phase};
 pub(super) const QUIET_MS: i64 = 3 * 60 * 1000;
 /// How long between two reads of the same handoff's conversation.
 pub(super) const AGAIN_MS: i64 = 2 * 60 * 1000;
+/// How soon a read the channel could not pass on is tried again: the
+/// extension may be back at once, and the refresh comes every second.
+pub(super) const RETRY_MS: i64 = 15 * 1000;
 
 impl Desk {
     /// Asks the extension to read again each live handoff that has waited on
@@ -37,11 +40,14 @@ impl Desk {
             if asked.get(&id).is_some_and(|at| now - at < AGAIN_MS) {
                 continue;
             }
-            asked.insert(id, now);
+            // Passed on, it waits its two minutes; not, it is tried again
+            // after `RETRY_MS` (counted as if asked that much earlier).
             if let Err(error) = lines.reread(&conversation) {
                 eprintln!("{error}");
+                asked.insert(id, now - AGAIN_MS + RETRY_MS);
                 continue;
             }
+            asked.insert(id, now);
             count += 1;
         }
         count
