@@ -7,6 +7,23 @@
 
 
 
+## 侧栏接力卡加「×」返回，接力进行中也能回到待审批卡（#334）（2026-11-14，Claude，常浩截图反馈「点进接力看板就再也切不出去」，看根因后在三种做法里选「乙 卡上加返回」；已提交、已发布 `6910f354edcc` 回读通过）
+
+- 时间：开工 `2026-11-14 09:58`（`date '+%F %H:%M'` 记录）。来由：侧栏点开接力卡后，接力没结束时回不到待审批卡。根因：接力卡只在按 Esc（侧栏通常没有键盘焦点）或侧栏完全收起时关，「完全收起」是 `open || event || request` 为假（`HUDScene.tsx`）；待回答的 ASK 一直挂着（#184），`request` 一直有值，卡永远关不掉；卡底接力结束前没有「知道了」。列了甲（鼠标移开就收）/ 乙（卡上加返回）/ 丙（两样都要），常浩选乙。issue #334，PR #335。
+- 改了哪些文件：
+  - `hud/src/alerts/HandoffTitleRow.tsx`（新）：接力卡标题行（标题、↗ 回到发起方会话、×「返回」），连同 `splitTitle` 从 `HandoffCard.tsx` 挪来；× 调 `onClose`，回到侧栏原来显示的内容。
+  - `hud/src/alerts/HandoffCard.tsx`：改用 `HandoffTitleRow`，757 → 717 行，基线收紧（`src/tooling/file-size-baseline.json`）。
+  - `hud/src/GoButton.tsx`：加 `icon: "go" | "close"`，× 与 ↗ 同一套悬停 / 按下效果；原有 ↗ 不变。
+  - 测试：`hud/test/handoff-card-close.test.ts` 新增 4 条（改前 `ℹ pass 1` / `ℹ fail 3`，改后 `ℹ pass 4` / `ℹ fail 0`）。
+  - 不动：鼠标移开不关卡（乙）；Esc 照旧；侧栏收起时关卡照旧；卡底按钮不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 427` / `ℹ fail 0`（原 423 + 新增 4）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。先跑完三条全量再搭预览（L-43）。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-334-handoff-close/{check,test,rules,build,install}.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1471，沿用 #331 的 2026-11-14 08:46 真实快照：7 条 Claude ASK、15 单进行中接力）。悬停 Claude 票根，从「正在进行」点「接力 2/2」打开接力卡，卡头 ↗ 右边出现 ×；真实鼠标点 × 回到「待审批 ASK 7」卡；脚本打开另一单（#131 托管状态底座）再点 × 同样回到待审批卡。实机点 × 未做（悬停面板里电脑控制点不动，L-09），留给常浩。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-334-handoff-close/`：`preview-card-with-close.jpg`、`preview-after-close-approvals.jpg`、`preview-card-from-running-tag.jpg`、`preview-after-close-2.jpg`；脚手架 `preview-334/`（未提交）。
+- 发布与回读：`6910f354edcc`（从本分支打包，打包前 main 无新合并），`install.sh` 回读产物与已装一致、签名证书照常（`H"b773068e`）；装前 `1866647830f4`。装前确认没有开着的自动往返接力。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-334-handoff-close/PostPane-1866647830f4.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做）。
+- 与授权不一致之处、遗留问题：
+  - 范围外发现：接力卡里 ChatGPT 意见第 10 条起序号挤进正文（常浩截图里「10异常传播…」、预览里「1021:00 飞书手动开启」），两位数编号没留宽度，未修。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏待审批卡：只能去 Claude 里回答的提问沉底并默认收起（#331）（2026-11-14，Claude，常浩在四种做法里选「甲 沉底折叠」；已提交、已发布 `1866647830f4` 回读通过）
 
 - 时间：开工 `2026-11-14 09:30`（`date '+%F %H:%M'` 记录）。来由：常浩截图里进程已停、几天前的 ASK 一直囤着。查明这些是 Claude 桌面应用的「下一步」框，「等待回答」设成一直等（#184，本机 `approvalWaitMinutes = 0`），框在 Claude 里没回答就一直挂着，进程停了只会变成「请到 Claude 里回答」。列了甲（沉底折叠）/ 乙（超 24 小时收起）/ 丙（一键清旧）/ 丁（不改），常浩选甲。issue #331。

@@ -1,6 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight } from "lucide-react";
-import { GoButton } from "../GoButton";
 import type { Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { usePanelServices } from "../PanelContext";
@@ -8,6 +7,7 @@ import { failureOf } from "../open-result";
 import { usePaper, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
 import { Avatar } from "./HandoffAvatar";
+import { HandoffTitleRow } from "./HandoffTitleRow";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
@@ -152,7 +152,6 @@ export function HandoffCard({
     }
   };
 
-  const [task, rest] = splitTitle(handoff.title);
   const started = handoff.steps?.[0]?.at ?? handoff.createdAt;
   return (
     <div
@@ -243,49 +242,16 @@ export function HandoffCard({
         </span>
       </div>
       <ListTear paper={paper} inks={inks} />
-      {/* The task, and a way back to Claude's session */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 26px",
-          columnGap: 12,
-          alignItems: "center",
-          paddingTop: 14,
-        }}
-      >
-        <b
-          title={handoff.title}
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: inks.ink,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {task}
-          {rest !== null && (
-            <>
-              <span style={{ color: inks.dim, fontWeight: 400 }}>｜</span>
-              {rest}
-            </>
-          )}
-        </b>
-        <GoButton
-          label={zh ? `回到 ${D} 会话` : `Return to the ${D} session`}
-          enabled={Boolean(claude)}
-          inks={{
-            line: inks.line,
-            ink: inks.dim,
-            faint: inks.faint,
-            strong: inks.ink,
-          }}
-          onClick={() => {
-            if (claude) void go(claude);
-          }}
-        />
-      </div>
+      {/* The task, ↗ back to the doer's session, × back out (#334) */}
+      <HandoffTitleRow
+        title={handoff.title}
+        doer={D}
+        zh={zh}
+        inks={inks}
+        canGo={Boolean(claude)}
+        onGo={() => void go(claude)}
+        onClose={onClose}
+      />
       <div
         style={{
           marginTop: 5,
@@ -393,12 +359,6 @@ export function HandoffCard({
       <div style={{ height: 16 }} />
     </div>
   );
-}
-
-/** "驿窗｜接力" → ["驿窗", "接力"]; a title without the bar stays whole. */
-function splitTitle(title: string): [string, string | null] {
-  const at = title.indexOf("｜");
-  return at > 0 ? [title.slice(0, at), title.slice(at + 1)] : [title, null];
 }
 
 type Tones = Record<"red" | "green" | "blue" | "amber" | "dim", string>;
