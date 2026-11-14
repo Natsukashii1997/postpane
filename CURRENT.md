@@ -19,7 +19,7 @@
 - 验证：浏览器预览真实 `HUDScene`（端口 1467，沿用 #319 的 2026-11-12 真实快照，脚手架挪到证据目录 `preview-321/`，没提交）：悬停 Claude 票根，待审批卡底「正在进行 · 1」那一行左格是九个绿方点，计算结果 18×18、`hud-running-sweep` 1.3 秒、延迟 `0s,0.13s,0.26s,0.13s,0.26s,0.39s,0.26s,0.39s,0.52s`，同一时刻九个点不透明度从 0.27 到 0.91 不等，确认在扫；没有图标。浅色纸同样；`?codex` 把请求换成 Codex 的，卡底 Codex 在跑行也是方点阵。标记与标题的间距和 #313 一致（整格仍 18 点宽）。装机后用驿窗 MCP `get_hud_screenshot` 截 Claude 面板，「正在进行 · 8」前 5 行都是「等你」，在跑行要滚动才看得到，截图工具滚不动，**实机面板里的在跑行未看到**；Codex 此刻没有在跑会话。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-321-running-grid/`：`before-claude-panel.png`（改前 Claude 面板）、`preview-claude-card-dark.jpg`、`preview-claude-card-light.png`、`preview-codex-card-dark.jpg`。三版预览页源文件 `docs/design/running-loader-preview.html` 未提交（和之前几轮的预览页一样留在主目录）。
 - 发布与回读：`f67b71c33021`（从本分支打包，开工后 main 没有新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前确认没有开着自动往返的接力（15 单 open 全是 `auto: false`）。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-321-running-grid/PostPane-dac821cde448.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装完没截屏查「想访问文稿」弹窗（未做，电脑控制没申请），以 MCP 截图能正常渲染面板作旁证。
-- 与授权不一致之处、遗留问题：实机悬停看在跑行的方点阵留给常浩。范围外发现：无。skill 进化：无。
+- 与授权不一致之处、遗留问题：实机悬停看在跑行的方点阵留给常浩。范围外发现：无。skill 进化：E-15 待批（合并后先删 worktree 再跑 install.sh check 会拿主目录旧产物比，报假的不一致；已装的仍是 `f67b71c33021`）。已合并 PR #322（main `896e78f`），worktree 已删。
 - 本轮新坑：无（Playwright 缓存被清是 L-16 再次出现）
 
 ## 盖住面板的卡片右下角压本周额度暗印（#319）（2026-11-12，Claude，常浩看两轮预览后选第二轮「甲 · 角落大字」，要求「只显示数字就行，旁边的文字小字不需要」，静止票根「不需要改」；已提交、发布见下）
