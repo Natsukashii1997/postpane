@@ -2,7 +2,7 @@
 //! session waits on them after its turn ends, and Claude Code wakes it with a
 //! `<task-notification>` when one finishes, fails, is killed or stopped. A
 //! session with one still out is at work, not done talking (#353).
-use crate::transcript::live::{timestamp, LiveLog, ABANDONED_MS};
+use crate::transcript::live::{timestamp, LiveLog, Work, ABANDONED_MS};
 use serde_json::Value;
 
 impl LiveLog {
@@ -43,6 +43,13 @@ impl LiveLog {
             .filter(|at| now - at < ABANDONED_MS)
             .max();
         subagents_at.into_iter().chain(launched).max()
+    }
+
+    /// What a session whose turn has ended does while a background command
+    /// is still out: runs a command, as the board says, not sub-agents.
+    pub fn background_work(&self, now: i64) -> Option<Work> {
+        let ended = self.turns.back().is_some_and(|turn| !turn.running);
+        (ended && self.with_background(now, None).is_some()).then_some(Work::Shell)
     }
 }
 
@@ -114,6 +121,10 @@ mod tests {
         waiting_on(&mut log, "b1", now - 60_000);
         assert_eq!(log.live.session_state(now, "claude", None), "running");
         assert_eq!(outcome(&log, now), Value::Null);
+        // The board reads a command at work, not sub-agents.
+        let activity = &log.live.facts("s", "claude", now, None).unwrap()["activity"];
+        assert_eq!(activity["work"], json!("shell"));
+        assert_eq!(activity["delegating"], json!(false));
         // The notice wakes it; the turn it starts ends with nothing left out.
         log.parse(&json!({"type":"user","sessionId":"s","timestamp":iso(now - 30_000),"origin":{"kind":"task-notification"},"message":{"role":"user","content":notice("b1")}}));
         assert_eq!(log.live.session_state(now, "claude", None), "running");

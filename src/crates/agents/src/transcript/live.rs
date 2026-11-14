@@ -622,14 +622,14 @@ impl LiveLog {
         now: i64,
         subagents_at: Option<i64>,
     ) -> Option<Value> {
-        let subagents_at = self.with_background(now, subagents_at);
+        let child = self.with_background(now, subagents_at);
         let turn = self.turns.back();
-        let observed = self.last_event().into_iter().chain(subagents_at).max()?;
-        let child_working = subagents_at.is_some();
+        let observed = self.last_event().into_iter().chain(child).max()?;
+        let child_working = child.is_some();
         let requests = self.requests(now).map(|call| json!({"id":format!("log:{source}:{id}:{}",call.id),"sessionId":id,"kind":call.request,"at":iso(Some(call.at))})).collect::<Vec<_>>();
         let activity = self.activity.as_ref().map(|activity| {
             let open = activity.calls.iter().rev().find(|call| call.work.is_some_and(Work::shown)).or_else(|| activity.calls.last());
-            json!({"work":activity.work,"openCall":open.map(|call| json!({"work":call.work,"at":iso(Some(call.at))})),"toolAt":iso(activity.tool_at),"delegating":subagents_at.is_some() || activity.calls.iter().any(|call|call.work==Some(Work::Agents)),"awaitsModel":activity.awaits_model(),"retrying":activity.retrying,"compactingSince":null})
+            json!({"work":self.background_work(now).or(activity.work),"openCall":open.map(|call| json!({"work":call.work,"at":iso(Some(call.at))})),"toolAt":iso(activity.tool_at),"delegating":subagents_at.is_some() || activity.calls.iter().any(|call|call.work==Some(Work::Agents)),"awaitsModel":activity.awaits_model(),"retrying":activity.retrying,"compactingSince":null})
         });
         let turn_id = turn.and_then(|turn| {
             turn.id.clone().or_else(|| {
