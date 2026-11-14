@@ -7,6 +7,24 @@
 
 
 
+## 侧栏待审批卡改成最新的在上面（#325）（2026-11-14，Claude，常浩截图要求「最新的通知在上面」，由 #321 那个会话派单；已提交、已发布 `95d5c1bd61c4` 回读通过）
+
+- 时间：开工 `2026-11-14 08:47`（`date '+%F %H:%M'` 记录）。来由：常浩截图里待审批卡旧的在上：牛马之家「月度用户策略」105 小时排第一，未分区 73 / 44 / 41 小时，数字分身 14 小时排最后，「还有 7 条」截掉的反而是新的。issue #325。
+- 查到的现状：`hud/src/permissions/approval-list.ts` 的 `orderEntries` 把请求按「等得最久」在前、回复排在请求后也是旧到新；`approvalGroups` 按组首次出现的顺序排组（等于按组里最旧一条，#49 交接里写的「实现时自定」），截前 5 条，所以「还有 n 条」截掉的是最新的。新回复卡（`reply-list.ts` 的 `newestFirst`）、额度细条（`quota-list.ts`）、「正在进行」（`agent-board.ts`）本来就是最新在上，不用改。
+- 改了哪些文件：
+  - `hud/src/permissions/approval-list.ts`：`orderEntries` 改成请求最新在上、回复仍排在请求后面也最新在上，读不出时间的排在同类最后；组的先后因此变成按组里最新一条；「还有 n 条」截掉最旧的。注释同步。
+  - `hud/test/approval-list.test.ts`：改写三条（排序、分组顺序、折叠），先跑出 `ℹ fail 3` 再改实现。
+  - 不动（已定内容）：展开的那条仍是队首、默认等得最久的一条（#48 定稿「展开的那条（默认等得最久的一条）」），所以它现在排在已显示各行的最后；侧栏小签、队列、`tagCounts` 不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 411` / `ℹ fail 0`（改写 3 条、条数不变）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 写交接前 `ℹ pass 18` / `ℹ fail 0`。改实现前 `node --test test/approval-list.test.ts` 为 `ℹ pass 14` / `ℹ fail 3`，改后 `ℹ pass 17` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-325-newest-first/{check,test,build}.log`。
+- 验证：浏览器预览真实 `HUDScene`（端口 1468，2026-11-14 08:46 驿窗 MCP 取的真实快照，7 条 Claude ASK，保留真实提问时间；脚手架 `src/apps/desktop/preview-325/` 未提交，快照含私人数据也不提交）：悬停 Claude 票根，卡里依次是 未分区（12 分钟、16 分钟、42 小时）→ 数字分身（14 小时）→ 牛马之家（105 小时，展开的那条），「还有 2 条」；点开后未分区补上 44 小时、73 小时，仍是新到旧。浅色纸同样。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-325-newest-first/`：`before-owner-screenshot.webp`（常浩改前截图）、`preview-claude-card-dark.jpg`、`preview-claude-card-light.jpg`。
+- 发布与回读：`95d5c1bd61c4`（从本分支打包，开工后 main 没有新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前 `f67b71c33021`。装后补查 `handoffs.json`：开着自动往返的 24 单都已结束，重启没打断接力（装前那次检查脚本写错了状态字段，事后补查）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-325-newest-first/PostPane-f67b71c33021.app" /Applications/PostPane.app; open /Applications/PostPane.app`。驿窗 MCP 截图画不出悬停待审批卡，实机悬停看排序未做，留给常浩；装完没截屏查「想访问文稿」弹窗（未做）。
+- 与授权不一致之处、遗留问题：
+  - 待常浩定（已发改动确认）：展开的那条要不要也改成最新一条（动 #48 定稿，连带侧栏小签显示哪条）。
+  - 待常浩定：几天前、进程已停的 ASK 为什么一直囤着——这些是 Claude 桌面应用「下一步」框（`claude-desktop-ask:`），常浩 11-07 选了「等待回答：一直等」（#184，本机 `approvalWaitMinutes = 0`），框在 Claude 里没回答、会话没归档就一直算等着；进程停了只是变成「请到 Claude 里回答」，不会撤。可选做法列在给常浩的答复里，未做。
+  - 范围外发现：无。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏「在跑」标记换成纯加载：3×3 方点斜扫（#321）（2026-11-14，Claude，常浩要求「在跑的加载标识重新做三版，有点创意，不要带原图标，纯是加载的样式」，看三版预览后回复「乙」；已提交、发布 `f67b71c33021` 回读通过）
 
 - 时间：开工 `2026-11-14 08:28`。来由：#313 定的在跑标记是「这一家的图标 + 外圈转动细弧」，常浩要求去掉图标、只留加载样式。三版预览 https://claude.ai/artifact/8PQ622sNJyNriFFpdwqTM6 （甲驿路绕行 / 乙信号灯阵 / 丙笔尖写信，附现状对照），常浩选乙；常浩本轮点名要改，不另发改动确认。issue #321。
