@@ -7,16 +7,20 @@
 //! The words are held to as far as they are kept: in full when short, the
 //! kept start (`EXCERPT` characters) when cut. Spaces are left out: the page
 //! shows the prompt as sent but lays it out its own way (2026-11-14, a
-//! 6887-character brief matched the 600 kept to the last character). Two
+//! 6887-character brief matched the 600 kept to the last character). So are
+//! backticks: the page draws inline code as code and drops its marks
+//! (2026-11-14, a brief naming `Desk::open` went unmatched 35 times). Two
 //! sendings of the very same words, or a prompt of the person's own that
 //! starts with all the kept words, still cannot be told apart.
 use super::Desk;
 use agent_hud_runtime::chatgpt::handoffs::{Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
 
-/// The words without their spaces.
+/// The words without their spaces and inline-code marks.
 fn bare(text: &str) -> String {
-    text.chars().filter(|c| !c.is_whitespace()).collect()
+    text.chars()
+        .filter(|c| !c.is_whitespace() && *c != '`')
+        .collect()
 }
 
 /// Whether `prompt` (the turn's user message, as the page shows it) is the
