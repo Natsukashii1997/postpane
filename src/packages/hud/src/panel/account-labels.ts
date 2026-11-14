@@ -1,12 +1,19 @@
 // What an account's section says in words: whether it is current or when it
 // was last read, and when its earned resets expire. Kept apart from the
 // components so the tests can run them.
-import type { Account, Provider, ResetCredits } from "@agent-hud/protocol";
+import type {
+  Account,
+  Provider,
+  Quota,
+  ResetCredits,
+  Snapshot,
+} from "@agent-hud/protocol";
 import {
   countdownRough,
   dateFormat,
   type Language,
 } from "@agent-hud/ui/format";
+import { agentArtworkKey as vendorKey } from "../agent-artwork.ts";
 
 export const say = (language: Language, zh: string, en: string) =>
   language === "zh" ? zh : en;
@@ -104,4 +111,21 @@ export function expiryLabel(
     minute: "2-digit",
     hourCycle: "h23",
   }).format(date);
+}
+
+/** The one account whose quota windows the agent's card shows, whose plan
+ * its head carries (owner, 2026-11-05); none for several accounts or none
+ * known. A news card, with no quota on it, still reads it (2026-11-15). */
+export function soleAccount(
+  rows: readonly Pick<Quota, "vendor" | "accountId">[],
+  accounts: Snapshot["accounts"],
+  vendor?: string,
+): Account | null {
+  const ids = new Set(
+    rows
+      .filter((row) => !vendor || vendorKey(row.vendor) === vendorKey(vendor))
+      .map((row) => row.accountId),
+  );
+  const found = (accounts ?? []).filter((account) => ids.has(account.id));
+  return found.length === 1 ? found[0] : null;
 }

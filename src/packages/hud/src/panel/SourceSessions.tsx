@@ -22,6 +22,7 @@ import { shownSessions, useRemovedSessions } from "./removed-sessions";
 import { ReviewRows } from "./ReviewSlip";
 import { RepliedRow } from "./SessionsSection";
 import { BoardHeading } from "./BoardHeading";
+import { soleAccount } from "./account-labels";
 import { NothingYet, WorkSections } from "./WorkSections";
 import { noButtonChrome, type Logo } from "./theme";
 
@@ -170,6 +171,10 @@ export function SourceSessions({
           place={selectedSources?.[0]}
           Logo={Logo}
           light={light}
+          plan={
+            soleAccount(snapshot.quotas, snapshot.accounts, focusVendor)
+              ?.planLabel
+          }
           handoffs={snapshot.handoffs}
         />
       )}

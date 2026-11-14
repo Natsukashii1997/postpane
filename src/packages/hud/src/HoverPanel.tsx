@@ -59,7 +59,7 @@ export interface SourceHoverPanelProps {
   maxHeight?: number;
   active?: boolean;
   inlineAlert?: ReactNode;
-  /** The agent's requests or replies, listed as what waits on you. */
+  /** The agent's requests or replies, as what waits on you; no quota (2026-11-15). */
   news?: { count: number; content: ReactNode };
 }
 
@@ -242,7 +242,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     [
       {
         key: "blocks",
-        content: config.quotaDetails && blocks.length > 0 && (
+        content: !news && config.quotaDetails && blocks.length > 0 && (
           <div
             className="hud-source-blocks"
             style={{
@@ -297,7 +297,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
         // The day's tokens now sit in the sessions' folded line, or under an
         // agent with no quota (owner, 2026-11-05); the chart with its periods
         // stays for a layout that sets the chart up itself.
-        content: config.tokenUsage && customTokens && (
+        content: !news && config.tokenUsage && customTokens && (
           <SourceTokenChart
             snapshot={snapshot}
             focusVendor={focusVendor}
@@ -322,7 +322,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             showTokens={config.tokenUsage && !tokensAbove}
             active={active}
             split={split}
-            bare={Boolean(focusVendor) && !blocks.length}
+            bare={Boolean(focusVendor) && (!blocks.length || Boolean(news))}
             news={news}
           />
         ),
