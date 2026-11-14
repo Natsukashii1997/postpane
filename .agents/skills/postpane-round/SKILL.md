@@ -38,7 +38,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 
 1. 打包：`pnpm --filter @agent-hud/desktop exec tauri build --bundles app`（不用 `--bundle`，生成 DMG 会自动启动应用）。
 2. 打包前看一眼 main 有没有在你开工后合进别的界面改动、别的会话装过没有：有就先变基到最新 main 再打，否则你装上去的包不含它们（L-05）。
-3. 装：`bash .agents/skills/postpane-round/scripts/install.sh <证据目录短名>`。脚本按顺序做：备份旧版到 `evidence/<今天>-<短名>/`（G-01）→ 退出旧应用，只认主程序本体 → `ditto` 覆盖、不先删（L-03）→ 启动 → 比对产物与已装的 `shasum`、读签名证书（L-06）→ 打印回滚命令。把它的输出原样写进交接的「发布与回读」。
+3. 装：`bash .agents/skills/postpane-round/scripts/install.sh <证据目录短名>`。脚本按顺序做：先查开着自动往返的接力，有就列出来、`exit 3`、什么都不动，问过常浩才加 `--force`（L-44）→ 备份旧版到 `evidence/<今天>-<短名>/`（G-01）→ 退出旧应用，只认主程序本体 → `ditto` 覆盖、不先删（L-03）→ 启动 → 比对产物与已装的 `shasum`、读签名证书（L-06）→ 打印回滚命令。把它的输出原样写进交接的「发布与回读」。
 4. 装完截屏看有没有「想访问文稿」的权限弹窗，有就请常浩点允许，不要误判成改坏了、也不要反复重装（L-06）。
 5. 实机点击验证：每组真实点击前查锁屏和显示器没变（L-11）；侧栏悬停面板里的按钮电脑控制点不动，逻辑在浏览器预览里用真实组件点，实机那一下留给常浩（L-09）。往别人的页面注入脚本，浏览器里测过不算，要在驿窗的 WebKit 窗口里实测（L-10）。
 6. 请常浩看实物前再跑一次 `bash .agents/skills/postpane-round/scripts/install.sh check`：不一致说明被并行会话覆盖了，先重装（L-05）。
