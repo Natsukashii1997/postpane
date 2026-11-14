@@ -895,10 +895,8 @@ export function LiveRow({
               )}
               <span style={{ gridArea: "1 / 1", alignSelf: "center" }}>
                 <RunningMark
-                  source={session.source}
                   label={zh ? "在跑" : "Running"}
                   color={inks.green}
-                  light={light}
                 />
               </span>
             </span>
