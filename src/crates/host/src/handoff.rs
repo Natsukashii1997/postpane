@@ -4795,6 +4795,41 @@ mod tests {
         assert_eq!(phase(&third, &cut.id), Phase::Replied);
     }
 
+    // A brief naming code: the page draws `Desk::open` as code, so the prompt
+    // it reports has no backticks. Still the review's; another prompt is not.
+    #[test]
+    fn a_prompt_drawn_without_its_inline_code_marks_is_still_the_review() {
+        let complete = |prompt: &str, id: &str| {
+            json!({"type":"turn","phase":"complete","conversation":"c-new",
+                "prompt":prompt,"reply":"1. 少一项\n结论：需修改","messageId":id})
+        };
+        let open = |desk: &Desk, lines: &Fake, brief: &str| {
+            let Started::Opening { handoff, .. } = desk
+                .start(lines, "s1", Some("/w"), "t", None, brief, false, 1)
+                .unwrap()
+            else {
+                panic!("a first brief opens a conversation")
+            };
+            desk.open(lines, &handoff.id, brief, None, || 2).unwrap();
+            handoff
+        };
+        let phase = |desk: &Desk, id: &str| desk.lock().get(id).unwrap().phase;
+        // Short words, kept in full.
+        let (_one, first) = desk();
+        let lines = Fake::default();
+        let short = open(&first, &lines, "看 `Desk::open` 当场失败那条");
+        assert!(!first.observe(&complete("看 Desk::open 当场失败那条，顺便看命名", "a4"), 3));
+        assert!(first.observe(&complete("看 Desk::open 当场失败那条", "a3"), 4));
+        assert_eq!(phase(&first, &short.id), Phase::Replied);
+        // Long words, held to the kept start.
+        let long = format!("{}\n末尾这段不在摘录里", "改了 `Book::expire`。".repeat(60));
+        let (_two, second) = desk();
+        let lines = Fake::default();
+        let cut = open(&second, &lines, &long);
+        assert!(second.observe(&complete(&long.replace('`', ""), "b3"), 3));
+        assert_eq!(phase(&second, &cut.id), Phase::Replied);
+    }
+
     // #356 P2-04: a handoff with no words kept cannot be held to them; its
     // conversation's turns are not taken.
     #[test]
