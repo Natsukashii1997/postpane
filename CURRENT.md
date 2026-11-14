@@ -20,7 +20,8 @@
 - 测试：11-12 第一次全量跑到一半，会话中断时进程被杀（日志停在 platform 测试中途，已跑完的 Rust 683 条全过），不算数。11-14 变基到 main `b0557d3`（中间合进 #356 接力重读、重启后自动往返接着跑等 27 个提交；`handoff.rs`、`CURRENT.md` 冲突两边都保留，核对 main 原有 71 条接力测试一条不少）后重跑：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `989 passed; 0 failed`，前端 `ℹ pass 452` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-318-{check,test}.log`。变基后顺手改：Codex 会话收到的「没回信」通知里按钮名写成「转回 Codex」（卡上就叫这个）。
 - 验证：单测覆盖打不开（当场失败、2 分钟超时、重试后再失败再通知一次）、重启中断（通知；启动前的旧出错不补发；再重启不重发）、30 分钟没回（通知一次、`halt` 带去向、迟到的「通过」照常收并自动转回结束；思维评审文字不同）、送不进去排队、排队也失败（说明原因、不反复重试）、Codex 会话进它自己的队列且卡上写 Codex。
 - 截图：无（只改了已有那一行的说明文字）。
-- 发布与回读：见本节末追记。
+- 发布与回读：`a4f1a3f5e3f5`（本分支 `12e04be`，含 main `b0557d3`），`install.sh` 回读一致、签名证书照常；装前没有开着自动往返的接力。启动 20 秒后查 `handoffs.json`：63 张旧接力 `told` 全空，没给旧单补发；应用日志无报错。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice/PostPane-d7a5344be952.app" /Applications/PostPane.app; open /Applications/PostPane.app`。没截屏查「想访问文稿」弹窗（未做）。
+- 送审：L2，接力 `h1a1d99b32c700`。
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
