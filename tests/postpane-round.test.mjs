@@ -3,7 +3,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { analyze, commandKeys, loadSteps, segments, stripBodies } from "../.agents/skills/postpane-round/scripts/round-stats.mjs";
@@ -111,4 +112,44 @@ test("统计脚本在夹具上：按工作目录筛会话、跳过子代理、�
   );
   const since = await analyze({ claudeDir: join(FIX, "claude"), codexDir: join(FIX, "codex"), match: "postpane", since: "2026-11-06" });
   assert.equal(since.steps.find((s) => s.id === "merge-clean").sessions, 1, "--since 只数当天起的调用");
+});
+
+// L-44：装机会重启驿窗，重启把开着的自动往返全部暂停。装前先查，有就拒装、要 --force 才装。
+// 只测查的那一步和它在脚本里的位置，不在测试里真跑 install.sh（会退出正在用的驿窗）。
+const AUTO = join(SKILL_DIR, "scripts/live-auto-relays.mjs");
+function relays(list) {
+  const dir = mkdtempSync(join(tmpdir(), "postpane-auto-"));
+  const file = join(dir, "handoffs.json");
+  if (list !== undefined) writeFileSync(file, typeof list === "string" ? list : JSON.stringify(list));
+  return spawnSync(process.execPath, [AUTO, file], { encoding: "utf8" });
+}
+
+test("live-auto-relays 只列开着自动往返、还没结束的接力（和重启暂停的条件一致）", () => {
+  const r = relays([
+    { id: "a", title: "开着自动 · 进行中", auto: true, status: "open" },
+    { id: "b", title: "开着自动 · 正在打开", auto: true, status: "opening" },
+    { id: "c", title: "没开自动", auto: false, status: "open" },
+    { id: "d", title: "已结束", auto: true, status: "closed" },
+  ]);
+  assert.equal(r.status, 0);
+  assert.deepEqual(r.stdout.trim().split("\n"), ["a\t开着自动 · 进行中", "b\t开着自动 · 正在打开"]);
+});
+
+test("live-auto-relays：没有接力文件算没有；文件坏了报错退出", () => {
+  const none = relays(undefined);
+  assert.equal(none.status, 0);
+  assert.equal(none.stdout, "");
+  const broken = relays("{坏");
+  assert.equal(broken.status, 1);
+  assert.match(broken.stderr, /读不了/);
+});
+
+test("install.sh 在备份和退出旧应用之前查自动往返，有就拒装，--force 才装", () => {
+  const sh = read(".agents/skills/postpane-round/scripts/install.sh");
+  const guard = sh.indexOf("live-auto-relays.mjs");
+  assert.ok(guard > 0, "调用了 live-auto-relays.mjs");
+  assert.ok(guard < sh.indexOf("ditto \"$APP\" \"$BACKUP\""), "在备份之前");
+  assert.ok(guard < sh.indexOf("osascript -e 'quit app"), "在退出旧应用之前");
+  assert.match(sh, /--force/);
+  assert.match(sh, /exit 3/);
 });

@@ -4,6 +4,7 @@
 #
 #   bash install.sh <证据目录短名> [产物 .app 路径]   装机，证据放 evidence/<今天>-<短名>/
 #   bash install.sh check [产物 .app 路径]            只比对：/Applications 里的是不是自己打的这份（L-05）
+#   加 --force（放在哪都行）：有开着的自动往返接力也照装（L-44，先问过常浩才加）
 #
 # 产物默认取当前 worktree 根目录下的固定路径（L-03：不从构建输出里截路径）。
 set -euo pipefail
@@ -11,8 +12,13 @@ set -euo pipefail
 APP=/Applications/PostPane.app
 BIN=Contents/MacOS/PostPane
 ROOT=$(git rev-parse --show-toplevel)
-MODE=${1:-}
-NEW=${2:-$ROOT/target/release/bundle/macos/PostPane.app}
+FORCE=0
+ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = --force ]; then FORCE=1; else ARGS+=("$arg"); fi
+done
+MODE=${ARGS[0]:-}
+NEW=${ARGS[1]:-$ROOT/target/release/bundle/macos/PostPane.app}
 
 hash12() { shasum "$1/$BIN" | cut -c1-12; }
 
@@ -31,6 +37,22 @@ if [ "$MODE" = check ]; then
   if [ "$built" = "$installed" ]; then echo "一致"; exit 0; fi
   echo "不一致：已被别的会话覆盖，或还没装（L-05）。先重装再请常浩看。" >&2
   exit 1
+fi
+
+# L-44：装机会重启驿窗，重启把开着的自动往返全部暂停（回信不再自动转回）。装前查，有就拒装。
+LIVE=$(node "$(dirname "$0")/live-auto-relays.mjs") || {
+  echo "读不了接力记录，停在这里，没有装。看清楚再决定要不要加 --force。" >&2
+  exit 3
+}
+if [ -n "$LIVE" ] && [ "$FORCE" != 1 ]; then
+  echo "这些接力开着自动往返，装机重启会把它们暂停，停在这里，没有装（L-44）：" >&2
+  echo "$LIVE" | sed 's/^/  /' >&2
+  echo "先问常浩：等它们结束再装，或者他同意后加 --force 照装。" >&2
+  exit 3
+fi
+if [ -n "$LIVE" ]; then
+  echo "照装（--force）：这些接力的自动往返会被暂停："
+  echo "$LIVE" | sed 's/^/  /'
 fi
 
 E="$HOME/Library/Application Support/postpane/evidence/$(date +%F)-$MODE"   # G-01：证据不放 /tmp

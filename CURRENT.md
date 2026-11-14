@@ -7,6 +7,21 @@
 
 
 
+## 装机脚本：有开着的自动往返接力就拒装（L-44）（2026-11-14，Claude，#336 装机时没停下暂停了一单自动往返，常浩回「加上」；已提交、无需发布）
+
+- 时间：开工 `2026-11-14 10:58`（`date '+%F %H:%M'` 记录）。来由：#336 把查接力和 `install.sh` 写进同一条命令，查出 `h1a1d7a90d8e00` 开着自动往返也照装，重启把它暂停了（见 #336 一节）。常浩回「加上」。
+- 改了哪些文件：
+  - `.agents/skills/postpane-round/scripts/live-auto-relays.mjs`（新）：读 `<数据目录>/chatgpt/handoffs.json`，每行列出 `auto` 且状态 opening / open 的接力（和 `handoffs.rs` 的 `restarted` 暂停条件一致）；文件不存在算没有，读坏了 `exit 1`。
+  - `.agents/skills/postpane-round/scripts/install.sh`：在备份、退出旧应用之前调它，有就列出来、`exit 3`、什么都不动；读不了也 `exit 3`；加 `--force`（放哪都行）才照装，照装时列出会被暂停的单。`check` 模式不受影响。
+  - `.agents/skills/postpane-round/SKILL.md` 第 3 步写上这一步；`docs/LESSONS.md` 新增 L-44。
+  - `tests/postpane-round.test.mjs` 新增 3 条：只列该列的、没文件 / 坏文件、保护在备份和退出之前（改前 `ℹ pass 10` / `ℹ fail 3`，改后 `ℹ pass 13` / `ℹ fail 0`）。测试不真跑 `install.sh`，免得退出正在用的驿窗。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 430` / `ℹ fail 0`，`ℹ pass 9` / `ℹ fail 0`，`ℹ pass 14` / `ℹ fail 0`，`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 21` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-install-auto-guard/{check,test,rules}.log`。
+- 验证：临时 HOME 放一份含 1 单自动往返的假接力记录、假产物，跑 `install.sh guard-demo <假产物>`：`exit 3`，列出「假接力｜自动往返中」，没建证据目录，驿窗一直在跑、已装仍 `c8eb178c2ecf`（`guard-run.log`）。真实记录跑 `live-auto-relays.mjs` 为空。
+- 截图：无（脚本改动）。
+- 发布与回读：无需发布（只改 skill 脚本与文档，应用不变）。
+- 与授权不一致之处、遗留问题：无。范围外发现：无。skill 进化：本轮即 #336 一节提的那条，已落地。
+- 本轮新坑：L-44
+
 ## 接力纸折成窄签时去掉侧边航空条，和普通窄签一样（#338）（2026-11-14，Claude，常浩截图要求「侧卡要大小一致，然后接力卡侧边的彩色条去除」，大小问清后选「接力签和普通签一样」；已提交、已发布 `c8eb178c2ecf` 回读通过）
 
 - 时间：开工 `2026-11-14 10:40`（`date '+%F %H:%M'` 记录）。来由：侧栏开着接力卡时收起，前面那一家折成的签用浅蓝航空纸，背对打孔的长边多一道 4px 红蓝航空条（2026-11-06 定的「收起的签沿侧边」），和平时的窄签看着不一样。常浩这轮点名去掉。大小有两种理解（接力签对普通签 / 窄签对票根 51×66），问后常浩选前者。issue #338，PR #339。

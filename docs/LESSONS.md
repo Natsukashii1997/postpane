@@ -400,3 +400,10 @@
 - 根因：预览脚手架为了直接引组件源码，必须跨包相对引用；它不提交，但只要还在工作区里就会被边界检查扫到。
 - 正确做法：预览截完图先 `preview_stop`，把脚手架挪到证据目录（`evidence/<日期>-<短名>/preview-<号>/`），再跑 `pnpm run check`；或者先跑完三条全量再搭预览。报告里如实写第一次失败的原因，日志另存。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`。
+
+## L-44 装机前查自动往返接力，查出有也照装了：查和装写在同一条命令里，中间没停（2026-11-14）
+
+- 现象：#336 装机时把「查有没有开着自动往返的接力」和 `install.sh` 写进同一条命令。查出 `h1a1d7a90d8e00`（digital-twin｜PR #175 专项复审，10:39:33 刚把请审核送给 ChatGPT）开着自动往返，脚本照样往下装；10:39:58 重启后这单记「驿窗重启，自动往返先暂停」，ChatGPT 的回信不再自动转回 Claude，要常浩在卡上手动点。
+- 根因：装机必然重启驿窗，重启会暂停所有 `auto` 且 opening / open 的接力（`handoffs.rs` 的 `restarted`）。「装前先查」只是写在交接和习惯里，脚本不管，查的结果要人看了才算数，一串命令里看不到。
+- 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
