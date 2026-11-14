@@ -3,26 +3,25 @@
 //! report followed by the person chatting on in the same conversation would
 //! otherwise make their own turn's answer the review's; the message id only
 //! keeps one answer from counting twice, not the wrong one from counting.
+//!
+//! The words are held to as far as they are kept: in full when short, the
+//! kept start (`EXCERPT` characters) when cut. Spaces are left out: the page
+//! shows the prompt as sent but lays it out its own way (2026-11-14, a
+//! 6887-character brief matched the 600 kept to the last character). Two
+//! sendings of the very same words, or a prompt of the person's own that
+//! starts with all the kept words, still cannot be told apart.
 use super::Desk;
-use agent_hud_runtime::chatgpt::handoffs::{Handoff, StepKind};
+use agent_hud_runtime::chatgpt::handoffs::{Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
 
-/// How much of the words' start, spaces left out, has to agree: the page
-/// shows the prompt as sent (2026-11-14, a 6887-character brief matched to
-/// the end of the 600 kept), and an excerpt keeps far more than this.
-const HEAD: usize = 100;
-
-/// The words without their spaces, at most `HEAD` characters.
-fn head(text: &str) -> String {
-    text.chars()
-        .filter(|c| !c.is_whitespace())
-        .take(HEAD)
-        .collect()
+/// The words without their spaces.
+fn bare(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
 /// Whether `prompt` (the turn's user message, as the page shows it) is the
-/// words `handoff` last sent. One that never sent any has nothing to hold
-/// it to; a turn whose prompt could not be read is not taken as its answer.
+/// words `handoff` last sent. One with no words kept, or a turn whose prompt
+/// could not be read, cannot be held to them and is not taken (P2-04).
 pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
     let Some(asked) = handoff
         .steps
@@ -30,24 +29,39 @@ pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
         .rev()
         .find(|step| step.kind == StepKind::Ask)
         .and_then(|step| step.text.as_deref())
+        .filter(|text| !text.trim().is_empty())
     else {
-        return true;
+        return false;
     };
-    prompt.is_some_and(|prompt| head(prompt).starts_with(&head(asked)))
+    let Some(prompt) = prompt else {
+        return false;
+    };
+    let prompt = bare(prompt);
+    // A step keeps `EXCERPT` characters and marks the cut with 「…」.
+    let cut = asked.chars().count() == EXCERPT + 1;
+    match asked.strip_suffix('…').filter(|_| cut) {
+        Some(kept) => prompt.starts_with(&bare(kept)),
+        None => prompt == bare(asked),
+    }
+}
+
+/// Whether a finished turn in `conversation` may count for its live
+/// handoff: its prompt is the handoff's words. A conversation no live
+/// handoff holds is left to `Book::replied`, which takes nothing there.
+pub(super) fn fits(book: &Book, conversation: &str, prompt: Option<&str>) -> bool {
+    book.list
+        .iter()
+        .rev()
+        .find(|h| h.live() && h.chatgpt_conversation.as_deref() == Some(conversation))
+        .is_none_or(|h| answers(h, prompt))
 }
 
 impl Desk {
     /// Whether a finished turn in `conversation` answers other words than
-    /// those its live handoff last sent: kept out, and logged as `unmatched`.
+    /// those its live handoff last sent: logged as `unmatched`.
     pub(super) fn unmatched(&self, message: &Value, conversation: &str) -> bool {
         message["phase"] == "complete"
-            && self
-                .lock()
-                .list
-                .iter()
-                .rev()
-                .find(|h| h.live() && h.chatgpt_conversation.as_deref() == Some(conversation))
-                .is_some_and(|h| !answers(h, message["prompt"].as_str()))
+            && !fits(&self.lock(), conversation, message["prompt"].as_str())
     }
     /// How the turn log names what became of a turn: `taken`, `unmatched`
     /// (another prompt's answer) or `unused`.

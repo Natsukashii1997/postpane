@@ -784,13 +784,16 @@ impl Desk {
         if message["phase"] == "start" {
             return self.change(|book| book.working(conversation, at));
         }
-        // Another turn's answer is not this review's (#356 P1-01).
-        if self.unmatched(message, conversation) {
-            return false;
-        }
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();
-        self.change(|book| book.replied(conversation, reply, message_id, at))
+        let prompt = message["prompt"].as_str();
+        // Another turn's answer is not this review's (#356 P1-01): checked
+        // under the same hold as it is taken, so no words sent in between
+        // make an answer to the earlier ones count for them.
+        self.change(|book| {
+            belongs::fits(book, conversation, prompt)
+                && book.replied(conversation, reply, message_id, at)
+        })
     }
 
     /// Whether a turn in `conversation` must wait: it is bound to no handoff
@@ -4727,6 +4730,71 @@ mod tests {
             "prompt":review,"reply":"1. 少一项\n结论：需修改","messageId":"a3","reread":true});
         assert!(desk.observe(&ours, 5));
         assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
+    }
+
+    // #356 P1-01 (round 2): the words are held to as far as they are kept,
+    // not their first hundred characters: a prompt of the person's own that
+    // starts like them is not the review's, a long brief still is.
+    #[test]
+    fn a_prompt_counts_only_as_the_whole_words_kept() {
+        let complete = |prompt: &str, id: &str| {
+            json!({"type":"turn","phase":"complete","conversation":"c-new",
+                "prompt":prompt,"reply":"1. 少一项\n结论：需修改","messageId":id})
+        };
+        let open = |desk: &Desk, lines: &Fake, brief: &str| {
+            let Started::Opening { handoff, .. } = desk
+                .start(lines, "s1", Some("/w"), "t", None, brief, false, 1)
+                .unwrap()
+            else {
+                panic!("a first brief opens a conversation")
+            };
+            desk.open(lines, &handoff.id, brief, None, || 2).unwrap();
+            handoff
+        };
+        let phase = |desk: &Desk, id: &str| desk.lock().get(id).unwrap().phase;
+        // Short words: the same start and more after is another prompt.
+        let (_one, first) = desk();
+        let lines = Fake::default();
+        let short = open(&first, &lines, "检查这个 PR");
+        assert!(!first.observe(&complete("检查这个 PR，顺便看看命名", "a4"), 3));
+        assert!(
+            first.observe(&complete("检查 这个PR", "a3"), 4),
+            "spaces aside"
+        );
+        assert_eq!(phase(&first, &short.id), Phase::Replied);
+        // Long words sharing their first hundred characters and more.
+        let common = "共同的开头".repeat(30);
+        let (_two, second) = desk();
+        let lines = Fake::default();
+        let shared = open(&second, &lines, &format!("{common}\n只看 A"));
+        assert!(!second.observe(&complete(&format!("{common}\n只看 B"), "b4"), 3));
+        assert_eq!(phase(&second, &shared.id), Phase::Delivered);
+        // Words past what a step keeps: held to the kept start.
+        let long = format!("{}\n末尾这段不在摘录里", "长".repeat(700));
+        let (_three, third) = desk();
+        let lines = Fake::default();
+        let cut = open(&third, &lines, &long);
+        assert!(!third.observe(&complete(&"长".repeat(500), "c4"), 3));
+        assert!(third.observe(&complete(&long, "c3"), 4));
+        assert_eq!(phase(&third, &cut.id), Phase::Replied);
+    }
+
+    // #356 P2-04: a handoff with no words kept cannot be held to them; its
+    // conversation's turns are not taken.
+    #[test]
+    fn a_handoff_with_no_words_kept_takes_no_answer() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        desk.lock()
+            .list
+            .iter_mut()
+            .for_each(|h| h.steps.retain(|step| step.kind != StepKind::Ask));
+        assert!(!desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().phase,
+            Phase::Delivered
+        );
     }
 
     // #356 P2-03: connected when checked, the read did not get through; it

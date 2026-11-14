@@ -114,8 +114,10 @@
     // PostPane heard nothing of a turn it waits on (#356): the newest reply,
     // once written, is told again; it counts once by its message id. One
     // before the newest prompt is an older turn's, never this one's answer.
-    // Written means unchanged over the same 600 ms a finished turn waits;
-    // `loaded` says whether the page shows its history yet, to ask again soon.
+    // Written means unchanged over the same 600 ms a finished turn waits.
+    // `loaded`: the newest prompt shows with its answer after it, or one is
+    // being written; a page that shows only a prompt yet (its history still
+    // drawing) or nothing is asked again soon.
     if (command.op === "reread") {
       if (command.conversation && page.conversationId(location.href) !== command.conversation) {
         reply({ ok: false, reason: "other-conversation" });
@@ -123,7 +125,7 @@
       }
       const ready = () => !page.streaming(document) && page.answered(document);
       const seen = page.lastReply(document);
-      const loaded = !!seen || page.lastPrompt(document) !== null;
+      const loaded = page.answered(document) || page.streaming(document);
       if (!ready() || !seen?.markdown.trim()) {
         reply({ ok: true, streaming: page.streaming(document), told: false, loaded });
         return false;

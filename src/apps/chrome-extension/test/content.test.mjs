@@ -368,7 +368,7 @@ test("asked to read again before the newest prompt is answered, nothing is told"
     ok: true,
     streaming: false,
     told: false,
-    loaded: true,
+    loaded: false,
   });
   assert.equal(
     (await turns(page)).filter((m) => m.phase === "complete").length,
@@ -469,6 +469,36 @@ test("a reply with no prompt drawn yet is not taken as answered", async () => {
     ok: true,
     streaming: false,
     told: false,
+    loaded: false,
+  });
+});
+
+// #356 P2-02 (round 2): the prompt drawn before its answer is not the history
+// loaded; asked again once the answer shows, the answer is told.
+test("a page showing the newest prompt without its answer yet is not loaded", async () => {
+  const page = await open(() => {
+    const turn = document.createElement("div");
+    turn.id = "late";
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">第三轮：只看 P1-10</div>';
+    document.querySelector("main").append(turn);
+  });
+  assert.equal((await reread(page)).loaded, false);
+  await page.evaluate(() => {
+    document
+      .getElementById("late")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:7:assistant" data-chatgpt-search-message-ids="m7"><p data-d-component="text">P1-10 已关闭。结论：通过</p></div>',
+      );
+  });
+  const answer = await reread(page);
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: true,
     loaded: true,
   });
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done.at(-1).messageId, "m7");
 });
