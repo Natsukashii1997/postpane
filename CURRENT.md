@@ -28,6 +28,20 @@
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
+## 有待处理时的展开卡去掉额度区块，卡头补回套餐标签（#371）（2026-11-15，Claude，常浩原话「去掉图一的额度展现形式，只保留图2底层的水印数字，以及侧边票根下方的数字，都是周度额度」，后选「顺带补回套餐标签」；PR 已 squash 合并、已发布 `dc8d9adcf909` 回读通过）
+
+- 时间：开工 `2026-11-15 07:15`（`date '+%F %H:%M'` 记录；WIP 提交 `b23aaed` 时间，本会话 07:23 接手）。来由：#368 把待审批卡并进单家面板后，有待处理时卡上多了一大块额度区块，常浩要去掉，只留卡底周额度暗印（#319）和票根脚上的数字（本来就是周额度，#174，不用改）。上一节「待常浩定」的暗印问题就此定了：保留。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/HoverPanel.tsx` 有 `news` 时不画额度区块（`blocks`）和 Token 图表两段，`bare` 改为 `Boolean(focusVendor) && (!blocks.length || Boolean(news))`，让会话区画统一卡头（`panel/SourceSessions.tsx` 的 `BoardHeading`，带纸飞机和印章）。卡头补回套餐标签：`panel/account-labels.ts` 新增 `soleAccount(rows, accounts, vendor?)`（这家额度行只属于一个已知账户时返回它），`SourceSessions.tsx` 用它给卡头传 `plan`。
+  - 顺手改的：`panel/QuotaSection.tsx` 原来的「只有一个账户」判断也改用 `soleAccount`（两处卡头读同一个判断），账户小标题显示条件 `named` 改为 `!only`（等价）；删掉不再用的 `agent-board.ts` 的 `showsAccountNames`，它的测试改写成 `soleAccount` 的测试（`test/agent-board.test.ts`）。场景预览台数据 `test/scenes/build.ts` 给 Claude、Codex 各加一个账户（套餐 Max / Pro），场景里才看得到套餐标签。`test/unified-card.test.ts` 加一条读源码断言。`file-size-baseline.json` 收紧 `agent-board.ts` 415 → 407。
+  - **改变了已有行为的**：有待答 / 待批 / 新回复时点票根出的卡，不再有额度条、「照现在的速度……」说明、图例和 Token 图表；只剩余额的家（DeepSeek）有待处理时也不再显示余额区块。没有待处理时的单家面板不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 461` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`check.log`、`test.log`、`rules.log`）。这一轮跑到一半时又改了场景数据和测试，提交 `2951fda` 后补跑：`pnpm run check` 退出码 0（`check-2.log`），`test:ts` `ℹ pass 461` / `ℹ fail 0`（`test-ts-2.log`），交接写好后 `node --test tests/*.test.mjs` 见 `rules-2.log`；没改 Rust，cargo 没重跑。`late-output` 这次没挂。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-371`）：`mixed` 点 Codex：卡头「Codex PRO + 纸飞机 + 待批」，等待处理 · 1、正在进行 · 1，没有额度区块，卡底 40% 暗印在；点 DeepSeek：卡头 + 待批，没有余额区块。`claude-many-asks` 点 Claude：卡头「Claude MAX + 待答」，等待处理 · 8，没有额度区块，35% 暗印在。`all-running` 点 Codex（没有待处理）：单家面板照旧带「5 小时 / Current week」两条额度，卡头 PRO（走 `QuotaSection` 的 `soleAccount`）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-371-news-card-no-quota/`：`01-mixed-codex.jpg`（补套餐前）、`02-mixed-codex-plan.jpg`、`03-mixed-deepseek.jpg`、`04-many-asks-claude.jpg`、`05-all-running-codex-quota.jpg`。
+- 发布与回读：分支和 main（`0010f2e`）之间没有别的提交，打包用的树即合并后的树。`tauri build --bundles app` 退出码 0（`build.log`）；`install.sh 371-news-card-no-quota`：装前 `67da9fd79eba`，产物 `dc8d9adcf909` / 已装 `dc8d9adcf909`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `06-installed-screen.png`：无文稿权限弹窗，侧栏在跑（Claude 票根「答」）。实机点票根看卡未做：常浩当时正在 ChatGPT 里打字，悬停面板电脑控制点不动（L-09），留给常浩点一下 Claude 票根看。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-371-news-card-no-quota/PostPane-67da9fd79eba.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：DeepSeek 有待处理时余额区块一并去掉（父会话验收就是这么写的，常浩原话说的是额度）。范围外：单家面板底部「另有 0 个会话已停」在 0 个时也显示，没动。
+- 本轮新坑：无
+
 ## 各家展开卡统一：卡头带纸飞机和印章、额度、等待处理 / 正在进行，一律 470 宽；接力闲置 24 小时自动结束（#368）（2026-11-14，Claude，常浩看三版预览后回「甲，纸飞机方块放在卡顶一行的名称；2 说的是展开面板没有额度；3 甲」；PR #369 已 squash 合并 `2603d44`、已发布 `67da9fd79eba` 回读通过）
 
 - 时间：开工 `2026-11-14 22:20`（`date '+%F %H:%M'` 记录）。来由：常浩 7 条意见（额度数字不在、Claude 卡和 Codex/GPT 不一样宽、待审批不要按项目分区、「还有 n 条」收不回去、待审批改「等待处理 · n」加横线、卡顶重排纸飞机单独放、其他家同理）。三版预览 https://claude.ai/artifact/HFgt5oHxTULFSoizf8bSaN 。本分支从 `claude/359-board-peek` 的 `0f40a3b`（第 3 批之二，另一会话已提交、未开 PR）往下接，改的是同一批文件。

@@ -365,14 +365,6 @@ export function stoppedCount(dayTotal: number, listed: number): number {
   return Math.max(0, dayTotal - listed);
 }
 
-/** An account's header, with its address, shows only where the agent has
- * more than one account's windows; one account needs no name. */
-export function showsAccountNames(
-  sections: readonly { account: unknown | null }[],
-): boolean {
-  return sections.filter((section) => section.account).length > 1;
-}
-
 /** Whether a panel on this agent leaves tokens out: it has no quota window
  * (Hermes, DeepSeek without a balance), and its layout does not ask for the
  * chart with its periods. */
