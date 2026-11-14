@@ -57,6 +57,7 @@ impl Engine {
             command.env(key, value);
         }
         crate::os::configure_command(&mut command);
+        crate::os::isolate_process_tree(&mut command);
         let mut child = command
             .spawn()
             .map_err(|_| l10n::text("账户读取引擎无法启动", "Account engine could not start"))?;
@@ -84,7 +85,7 @@ impl Engine {
         }
         if context.cancelled.load(Ordering::Acquire) {
             let mut child = child.lock().unwrap_or_else(PoisonError::into_inner);
-            let _ = child.kill();
+            crate::os::kill_process_tree(&mut child);
             let _ = child.wait();
             return Err(l10n::text("账户读取已停止", "Account reading was stopped"));
         }
@@ -152,7 +153,7 @@ impl Engine {
         }
         if reader.is_err() {
             let mut child = child.lock().unwrap_or_else(PoisonError::into_inner);
-            let _ = child.kill();
+            crate::os::kill_process_tree(&mut child);
             let _ = child.wait();
             return Err(l10n::text(
                 "账户读取器无法启动",
@@ -216,7 +217,8 @@ impl Engine {
         serde_json::from_slice(&text).ok()
     }
     /// The start of what the engine wrote to stderr, at most `limit`
-    /// characters; None when it wrote nothing.
+    /// characters, with any secret in it hidden before it is cut, so a cut
+    /// never leaves part of one; None when it wrote nothing.
     pub fn stderr_preview(&self, limit: usize) -> Option<String> {
         let bytes = self
             .stderr
@@ -224,7 +226,7 @@ impl Engine {
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         let text = String::from_utf8_lossy(&bytes);
-        let text = text.trim();
+        let text = agent_hud_agents::redact::secrets(text.trim());
         (!text.is_empty()).then(|| text.chars().take(limit).collect())
     }
 }
@@ -248,7 +250,9 @@ impl agent_hud_agents::account::Engine for Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         let mut child = self.child.lock().unwrap_or_else(PoisonError::into_inner);
-        let _ = child.kill();
+        // The whole group: a helper left holding the engine's stdout or stderr
+        // would keep both reader threads, and their pipes, alive.
+        crate::os::kill_process_tree(&mut child);
         let _ = child.wait();
     }
 }
@@ -258,3 +262,7 @@ pub(super) fn find(context: &AccountContext, name: &str) -> Option<PathBuf> {
         .into_iter()
         .find(|path| crate::os::engine_executable(path))
 }
+
+#[cfg(all(test, unix))]
+#[path = "engine_tests_unix.rs"]
+mod tests_unix;

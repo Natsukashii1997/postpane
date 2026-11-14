@@ -191,9 +191,9 @@ impl Runtime {
             demo: None,
         })
     }
-    /// Account readings hold this gate. A host holds it for every collection
-    /// pass ("snapshot", "refresh", "request_snapshot"), taken before any lock
-    /// its UI requests also wait on, so local and account reads stay serial.
+    /// A host holds this gate for every collection pass ("snapshot", "refresh",
+    /// "request_snapshot"), before any lock its UI requests wait on; account
+    /// readings take it only to store a result, never while reading (#351).
     pub fn collection_gate(&self) -> CollectionGate {
         Arc::clone(&self.gate)
     }

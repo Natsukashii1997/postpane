@@ -102,8 +102,12 @@ fn get_json(host: &str, path: &str, until: Instant) -> Option<Value> {
     stream.write_all(request.as_bytes()).ok()?;
     let mut response = Vec::new();
     stream.take(256 * 1024).read_to_end(&mut response).ok()?;
-    let text = String::from_utf8_lossy(&response);
-    let (head, body) = text.split_once("\r\n\r\n")?;
+    // Framed on bytes, decoded last: a chunk can end inside a character, and
+    // a lossily decoded `str` cut at a chunk's byte length could split one
+    // and panic (audit 2026-11-11, #351 B15).
+    let split = response.windows(4).position(|w| w == b"\r\n\r\n")?;
+    let head = String::from_utf8_lossy(&response[..split]);
+    let body = &response[split + 4..];
     let status = head.lines().next()?;
     if status.split_whitespace().nth(1) != Some("200") {
         return None;
@@ -112,28 +116,28 @@ fn get_json(host: &str, path: &str, until: Instant) -> Option<Value> {
         .lines()
         .any(|line| line.to_ascii_lowercase().replace(' ', "") == "transfer-encoding:chunked");
     let body = if chunked {
-        unchunk(body)
+        unchunk(body)?
     } else {
-        body.to_owned()
+        body.to_vec()
     };
-    serde_json::from_str(body.trim()).ok()
+    serde_json::from_slice(body.trim_ascii()).ok()
 }
 
-/// A chunked body joined back together.
-fn unchunk(body: &str) -> String {
-    let mut out = String::new();
+/// A chunked body joined back together, or `None` when its framing is broken.
+fn unchunk(body: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
     let mut rest = body;
-    while let Some((size, after)) = rest.split_once("\r\n") {
-        let Ok(size) = usize::from_str_radix(size.trim(), 16) else {
-            break;
-        };
-        if size == 0 || after.len() < size {
-            break;
+    loop {
+        let line = rest.windows(2).position(|w| w == b"\r\n")?;
+        let size = std::str::from_utf8(&rest[..line]).ok()?;
+        let size = usize::from_str_radix(size.split(';').next()?.trim(), 16).ok()?;
+        let after = &rest[line + 2..];
+        if size == 0 {
+            return Some(out);
         }
-        out.push_str(&after[..size]);
-        rest = after[size..].trim_start_matches("\r\n");
+        out.extend_from_slice(after.get(..size)?);
+        rest = after[size..].strip_prefix(b"\r\n")?;
     }
-    out
 }
 
 #[cfg(test)]
@@ -163,6 +167,27 @@ mod tests {
             }
         });
         host
+    }
+
+    #[test]
+    fn a_character_cut_between_chunks_is_joined_whole() {
+        // 「中」 is three bytes; the first chunk ends after its first one.
+        let json = "{\"t\":\"中\"}".as_bytes();
+        let mut framed = Vec::new();
+        framed.extend_from_slice(format!("{:x}\r\n", 7).as_bytes());
+        framed.extend_from_slice(&json[..7]);
+        framed.extend_from_slice(b"\r\n");
+        framed.extend_from_slice(format!("{:x}\r\n", json.len() - 7).as_bytes());
+        framed.extend_from_slice(&json[7..]);
+        framed.extend_from_slice(b"\r\n0\r\n\r\n");
+        assert_eq!(unchunk(&framed).as_deref(), Some(json));
+    }
+
+    #[test]
+    fn a_broken_chunked_body_reads_as_nothing() {
+        assert_eq!(unchunk(b"zz\r\nabc\r\n0\r\n\r\n"), None);
+        assert_eq!(unchunk(b"9\r\nabc\r\n0\r\n\r\n"), None);
+        assert_eq!(unchunk(b"3\r\nabc"), None);
     }
 
     #[test]
