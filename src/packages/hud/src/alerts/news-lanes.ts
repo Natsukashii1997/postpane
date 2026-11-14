@@ -18,26 +18,72 @@ export interface NewsLane {
   /** The agent's mark on the strip (vendorKey). */
   vendor: string;
   /** What its tag shows: the queue's front for the first lane, else the
-   * agent's oldest waiting request, else its first card. */
+   * agent's newest waiting request (#328), else its first card. */
   front: LaneCard;
   cards: LaneCard[];
 }
 
-/** The queue with the request waiting longest in front (IslandAlertQueue.
- * dismiss(): requests wait since they were asked and come before notices,
- * which keep their order). */
-export function promoteOldestWaiting(pending: LaneCard[]): LaneCard[] {
+/** The queue with the newest waiting request in front (owner, 2026-11-14,
+ * #328; it was the one waiting longest, after IslandAlertQueue.dismiss()):
+ * requests come before notices, which keep their order. */
+export function promoteNewestWaiting(pending: LaneCard[]): LaneCard[] {
   if (pending.length < 2) return pending;
   const best = pending.reduce((at, card, index) => {
     const waiting = card.type === "request";
     const prior = pending[at],
       priorWaiting = prior.type === "request";
     return waiting &&
-      (!priorWaiting || Date.parse(card.at) < Date.parse(prior.at))
+      (!priorWaiting || Date.parse(card.at) > Date.parse(prior.at))
       ? index
       : at;
   }, 0);
   return [pending[best], ...pending.filter((_, index) => index !== best)];
+}
+
+/** The queue with the newest request in front, unless a notice is (#328). */
+export const newestAskFirst = (queue: LaneCard[]) =>
+  queue[0]?.type === "request" ? promoteNewestWaiting(queue) : queue;
+
+/** `next` with the newest request in front when a request arrived since
+ * `previous`: a new question opens at once. A notice in front keeps its
+ * place; nothing new keeps a line the owner opened (#328). */
+export function askedInFront(
+  previous: readonly LaneCard[],
+  next: LaneCard[],
+): LaneCard[] {
+  const arrived = next.some(
+    (card) =>
+      card.type === "request" && !previous.some((each) => each.id === card.id),
+  );
+  return arrived ? newestAskFirst(next) : next;
+}
+
+/** The queue once its front card is put away: the newest request next (#328). */
+export function dismissIslandCard(previous: LaneCard[]): LaneCard[] {
+  return promoteNewestWaiting(previous.slice(1));
+}
+
+/** The queue without the cards `ids` (replies put away from the reply
+ * card, quota notices from the quota card); a request left in front is the
+ * newest (#328). */
+export function dropIslandCards(
+  previous: LaneCard[],
+  ids: readonly string[],
+): LaneCard[] {
+  const next = previous.filter((card) => !ids.includes(card.id));
+  return next[0]?.id === previous[0]?.id ? next : promoteNewestWaiting(next);
+}
+
+/** The waiting requests of one agent's lane, in the order given. */
+export function laneRequests(
+  lane: NewsLane | undefined,
+  requests: readonly Approval[],
+): Approval[] {
+  return lane
+    ? requests.filter(
+        (request) => agentArtworkKey(request.source) === lane.vendor,
+      )
+    : [];
 }
 
 /** The queue without the requests no longer waiting, settled as the queue
@@ -52,7 +98,7 @@ export function liveQueue(
     card.type !== "request" || requests.some((each) => each.id === card.id);
   if (queue.every(waiting)) return queue;
   const kept = queue.filter(waiting);
-  return waiting(queue[0]) ? kept : promoteOldestWaiting(kept);
+  return waiting(queue[0]) ? kept : promoteNewestWaiting(kept);
 }
 
 /** The agent a card is about; a request no longer waiting has none. */
@@ -83,7 +129,7 @@ export function newsLanes(
       return { vendor, front: cards[0], cards };
     const waiting = cards
       .filter((card) => card.type === "request")
-      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))[0];
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
     return { vendor, front: waiting ?? cards[0], cards };
   });
 }

@@ -393,3 +393,10 @@
 - 根因：`useBoardInks` 有纸张时取纸张的墨（深色纸配浅墨），不看传进去的 `light`；审核纸条本身永远是浅色纸（`relayPaperOf(true)`），两者对不上。
 - 正确做法：画在审核纸条上的字一律用 `relayPaperOf(true)` 自己的 `ink`、`dim`、`blue`，和悬停小收据（`DeskLines`）一样，不用面板墨。验收界面时至少换一种外观再看一次，不能只看 `get_hud_screenshot` 的一张。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-288-open-relays/preview-paper-ink-before-fix.png`；修正在 `src/packages/hud/src/panel/ReviewSlip.tsx`。同一纸条上 `LiveRow` 的审核会话行仍用面板墨，是否也有这个问题未核实，记为范围外发现。
+
+## L-43 预览脚手架放在 worktree 的 `src/apps/desktop/` 下时跑 `pnpm run check`，包边界检查报「leaves the package」失败（2026-11-14）
+
+- 现象：#328 一边后台跑 `pnpm run check`，一边在 `src/apps/desktop/preview-328/` 搭真实 `HUDScene` 预览；`check:package-boundary` 扫到 `main.tsx`、`vite.config.ts` 里的 `../../../packages/hud/src/...` 相对引用，报 4 处越界，`check exit 1`。代码本身没问题。
+- 根因：预览脚手架为了直接引组件源码，必须跨包相对引用；它不提交，但只要还在工作区里就会被边界检查扫到。
+- 正确做法：预览截完图先 `preview_stop`，把脚手架挪到证据目录（`evidence/<日期>-<短名>/preview-<号>/`），再跑 `pnpm run check`；或者先跑完三条全量再搭预览。报告里如实写第一次失败的原因，日志另存。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`。

@@ -140,3 +140,11 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 建议：第 5 步「合并后马上清」前加一句：删 worktree 之前先在这个 worktree 里跑一次 `install.sh check`；已经删了的，用 `install.sh check <证据目录>/…` 不行（证据里只有旧版备份），改为核对 `shasum /Applications/PostPane.app/Contents/MacOS/PostPane` 与装机时打印的「已装」值。
 - 证据：本轮会话；`evidence/2026-11-14-321-running-grid/`；PR #322。
 - 状态：待批
+
+## E-16 第 2、3 步之间：预览脚手架先截完图挪走，再跑全量测试（2026-11-14）
+
+- 步骤：test
+- 发生了什么：#328 后台跑 `pnpm run check` 时在 worktree 里搭 `src/apps/desktop/preview-328/`，包边界检查报 4 处越界、`check exit 1`；挪走后重跑通过。两次 `pnpm test` 又同时写进同一个日志，只好再干净跑一次。
+- 建议：第 2 步加一句「浏览器预览的脚手架放在 worktree 里会让 `check:package-boundary` 失败：先跑完三条全量再搭预览，或截完图 `preview_stop`、把脚手架挪到证据目录后再跑；重跑前确认上一次后台测试已结束，日志不共用」。
+- 证据：L-43；`evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`、`test-mixed-two-runs.log`；PR 见 #328。
+- 状态：待批

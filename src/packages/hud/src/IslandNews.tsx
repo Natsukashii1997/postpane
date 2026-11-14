@@ -16,11 +16,15 @@ import {
   laneEvents,
   liveQueue,
   newsLanes,
-  promoteOldestWaiting,
+  askedInFront,
+  dismissIslandCard,
+  dropIslandCards,
+  laneRequests,
+  newestAskFirst,
+  promoteNewestWaiting,
   roomForNews,
   sideLanes,
   type LaneCard,
-  type NewsLane,
 } from "./alerts/news-lanes";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
@@ -57,7 +61,7 @@ export function reconcileIslandCards(
       card.type !== "request" ||
       requests.some((request) => request.id === card.id),
   );
-  const next = frontRemoved ? promoteOldestWaiting(kept) : kept;
+  const next = frontRemoved ? promoteNewestWaiting(kept) : kept;
   for (const request of newRequests) {
     if (!next.some((card) => card.id === request.id)) {
       next.push({
@@ -82,31 +86,6 @@ export function reconcileIslandCards(
   return roomForNews(next);
 }
 
-export function dismissIslandCard(previous: IslandCard[]): IslandCard[] {
-  return promoteOldestWaiting(previous.slice(1));
-}
-
-/** The queue without the cards `ids` (replies put away from the reply
- * card, quota notices from the quota card); a request left in front waits
- * longest. */
-export function dropIslandCards(
-  previous: IslandCard[],
-  ids: readonly string[],
-): IslandCard[] {
-  const next = previous.filter((card) => !ids.includes(card.id));
-  return next[0]?.id === previous[0]?.id ? next : promoteOldestWaiting(next);
-}
-
-/** The waiting requests of one agent's lane, oldest first. */
-function laneRequests(
-  lane: NewsLane | undefined,
-  requests: Approval[],
-): Approval[] {
-  return lane
-    ? requests.filter((request) => vendorKey(request.source) === lane.vendor)
-    : [];
-}
-
 export type SideNews = ReturnType<typeof useIslandNews>["sides"][number];
 
 export function useIslandNews(
@@ -128,7 +107,8 @@ export function useIslandNews(
   const services = usePanelServices(),
     seen = useRef<Set<string> | null>(null),
     seenRequests = useRef<Set<string> | null>(null),
-    heldArrivals = useRef<IslandEvent[]>([]);
+    heldArrivals = useRef<IslandEvent[]>([]),
+    heldAsk = useRef(false); // asked while held: in front once let go (#328)
   const [queue, setQueue] = useState<IslandCard[]>([]);
   const items = snapshot.islandEvents?.items ?? [];
   const requestIDs = requests.map((request) => request.id).join("\0");
@@ -166,8 +146,8 @@ export function useIslandNews(
           );
     // Held, a reply that waits to be seen comes in front once let go (#221).
     if (held) heldArrivals.current.push(...visible.filter(staysUntilSeen));
-    setQueue((previous) =>
-      seenFirst(
+    setQueue((previous) => {
+      const next = seenFirst(
         reconcileIslandCards(
           silenced
             ? previous.filter((card) => card.type === "request")
@@ -179,14 +159,23 @@ export function useIslandNews(
         ),
         visible,
         held,
-      ),
-    );
+      );
+      const front = askedInFront(previous, next);
+      heldAsk.current ||= held && front !== next;
+      return held ? next : front;
+    });
   }, [snapshot.islandEvents?.revision, requestIDs, silenced, underPointer]);
   useEffect(() => {
-    if (held || heldArrivals.current.length === 0) return;
-    const arrived = heldArrivals.current;
+    if (held || (heldArrivals.current.length === 0 && !heldAsk.current)) return;
+    const arrived = heldArrivals.current,
+      asked = heldAsk.current;
     heldArrivals.current = [];
-    setQueue((previous) => seenFirst(previous, arrived));
+    heldAsk.current = false;
+    setQueue((previous) =>
+      (asked ? newestAskFirst : (q: IslandCard[]) => q)(
+        seenFirst(previous, arrived),
+      ),
+    );
   }, [held]);
   // Requests answered since the queue last caught up are already gone.
   const live = liveQueue(queue, requests);
