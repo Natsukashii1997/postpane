@@ -416,3 +416,11 @@
 - 正确做法：用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`，方法照原对象绑定（`src/packages/hud/preview/main.tsx`）。以后预览一律用常设的场景预览台（`pnpm --filter @agent-hud/hud run scenes`），不再另抄脚手架；截图前用 `document.querySelectorAll("canvas").length` 确认小人画布在。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`。
 - 升级：未升级。
+
+## L-46 Claude 会话挂着后台命令等通知，侧栏却出 REPLY（2026-11-14）
+
+- 现象：Claude Code 会话用 `run_in_background` 跑全量测试，说完「测试在后台跑，结果出来再补数字」就停下；侧栏立刻出 REPLY 回执，当成回复完成、等常浩回复。实际它还在干活，测试结束会被唤醒接着做（#353）。
+- 根因：`claude/transcript.rs` 看到 `stop_reason: end_turn` 就把回合记为 completed。一轮结束不等于会话停下：Claude Code 会在后台命令结束（完成、失败、被杀、停止）时送一条 `<task-notification>`（空闲时是 `origin.kind = task-notification` 的用户消息，忙时是 `queued_command` 附件）唤醒它。原来只有「子 agent 还在写记录」会压住 completed，后台 Bash 不算。
+- 正确做法：判断 Claude 会话「做完了没有」，除了回合结束，还要看有没有没收到通知的后台命令（`toolUseResult.backgroundTaskId` 记入，通知里的 `<task-id>` 或 `TaskStop` 移除），在 `src/crates/agents/src/claude/background.rs`；兜底同子 agent，启动 30 分钟（`ABANDONED_MS`）仍没通知就照常算完成。
+- 证据：`claude::background::tests` 4 项；去掉修复后其中 2 项变红。
+- 升级：未升级。

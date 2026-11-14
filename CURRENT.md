@@ -7,6 +7,20 @@
 
 
 
+## Claude 会话挂着后台命令时侧栏不再误报 REPLY（#353）（2026-11-14，Claude，常浩截图指出「明明是后台在跑，但是显示的反而是回复，这不合理」；已提交、已发布 `bf91100ccab6` 回读通过）
+
+- 时间：开工 `2026-11-14 15:35`（`date '+%F %H:%M'` 记录）。来由：一个 Claude 会话用 `run_in_background` 跑全量测试、说完「等测试结果出来补上数字」就停下，侧栏立刻出 REPLY，当成回复完成。issue #353。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/agents/src/claude/background.rs`（新文件：记下没收到通知的后台命令——`toolUseResult.backgroundTaskId` 记入，`<task-notification>` 的 `<task-id>` 或 `TaskStop` 移除；把它并进「子活动」时间；回合已结束时看板读到 `work: shell`；4 项测试）；`src/crates/agents/src/transcript/live.rs`（`LiveLog` 加 `background` 字段，`session_state`、`next_change`、`facts` 三处并入后台命令，`delegating` 仍只看子 agent，Claude 行入口改走 `claude_line`）；`src/crates/agents/src/claude/mod.rs`（声明模块）。
+  - 顺手改的：`live.rs` 里 `keep_words` 两段同条件的复制合成一个循环、`new` 里文件名取两次合成一次（行为不变，为守 300 行棘轮腾出行数）；`ABANDONED_MS` 改为 `pub(crate)` 供新模块用；`docs/LESSONS.md` 新增 L-46。
+  - 改变了已有行为：Claude 会话一轮结束时还有没收到通知的后台命令，侧栏判为「在跑」（看板写「正在跑命令」），不出 REPLY；通知回来、Claude 最后真正停下才出 REPLY。兜底：后台命令启动 30 分钟（与子 agent 同一时限 `ABANDONED_MS`）仍没通知，照原样算完成、出 REPLY。代价：用后台命令起的常驻服务（如开发服务器）在启动后 30 分钟内，那几轮的回复会被压住。
+- 测试：第一遍 `pnpm run check` 退出码 0；`pnpm test` Rust `962 passed; 1 failed`，失败项是 `platform` 的 `a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline`（启动 python 替身用 3 秒握手超时，机器忙时 `TimedOut`；单独重跑 3 次 2 过 1 败，与本改动无关）。补看板文字后第二遍全量：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `968 passed; 0 failed`，前端 `ℹ pass 442` / `ℹ fail 0` / `ℹ todo 3`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。去掉修复后新测试 4 项里 2 项变红，确认能抓到原问题。日志在 `~/Library/Application Support/postpane/evidence/2026-11-14-353-bg-reply/`（`check*.txt`、`test*.txt`、`node*.txt`、`build*.txt`）。
+- 验证：装机后在 `~/.claude/projects/` 写一份临时探针记录（挂后台命令后 `end_turn`），用 MCP `hud_sessions` 读驿窗实机：`state: running`、`outcome: null`、`activity.work: shell`、`delegating: false`；验完删除探针。收到通知后再结束出 REPLY、30 分钟兜底由单测覆盖，实机未等。
+- 截图：无（侧栏外观未改，判定变化用实机读数验证）。
+- 发布与回读：先装 `05d6f7df85f9`，补看板文字后重装 `bf91100ccab6`，产物与已装一致、签名证书 `H"b773068e`。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-353-bg-reply/PostPane-0df35d5631a3.app" /Applications/PostPane.app; open /Applications/PostPane.app`（回到本轮之前的 `0df35d5631a3`）。
+- 与授权不一致之处、遗留问题、范围外发现：上面那项 `platform` 投递测试偶发超时，属范围外，未修（项目规定范围外不顺手修，全局 CLAUDE.md 第 3 节则允许顺手修相关问题，两边冲突，已报告常浩）。改动前的旧解析检查点没有 `background` 字段，按默认空读入，装机那一刻已挂着的后台命令识别不到，之后新挂的都认。skill 进化：无。
+- 本轮新坑：L-46
+
 ## 工作场所契约第 1 批：修与契约无关的 13 个缺陷（#351）（2026-11-14，Claude 主会话 + 2 个子 agent，常浩回「开工第 1 批」；已提交、已发布 `0df35d5631a3` 回读通过）
 
 - 时间：开工 `2026-11-14 15:05`（`date '+%F %H:%M'` 记录）。来由：ADR-0001 第 1 批，修审核报告与 Codex 11-11 两份审计里和契约无关的缺陷，不改已定行为。分三组：子 agent 甲修额度引擎（B12、B13、B17），子 agent 乙修送话与 DeepSeek 观察器（B5–B7、B18、B19），主会话修 B14、B15、B16、B22、H2 并审两组改动。每项先写失败测试再修。接力文件里的 B10、B11、B20、B21 等 #347 合并后再做。issue #351。
