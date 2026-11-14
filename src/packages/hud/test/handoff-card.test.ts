@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import {
   actions,
   autoLabel,
   handoffFor,
+  pointMarkColumn,
   progressLine,
   relayLegend,
   relayLegendInks,
@@ -561,4 +563,24 @@ test("a review Codex handed over is found by its thread and speaks of Codex (#28
     timeline(handoff(), T + 2 * minute, true)[0].title,
     "Claude 做完本轮改动",
   );
+});
+
+test("the review points' numbers get room for every digit (#336)", () => {
+  // One digit keeps the 16px it always had; 「10.」 used to press into the
+  // point's text.
+  assert.equal(pointMarkColumn(1), "16px");
+  assert.equal(pointMarkColumn(9), "16px");
+  assert.equal(pointMarkColumn(10), "calc(16px + 1ch)");
+  assert.equal(pointMarkColumn(12), "calc(16px + 1ch)");
+  assert.equal(pointMarkColumn(100), "calc(16px + 2ch)");
+});
+
+test("the points list sizes its number column by its count (#336)", () => {
+  const list = readFileSync(
+    new URL("../src/alerts/HandoffPoints.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(list, /const marks = pointMarkColumn\(points\.length\);/);
+  assert.match(list, /gridTemplateColumns: `\$\{marks\} 1fr`/);
+  assert.doesNotMatch(list, /"16px 1fr"/);
 });

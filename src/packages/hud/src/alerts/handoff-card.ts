@@ -581,3 +581,11 @@ export function actions(handoff: Handoff): Action[] {
       return ["end", ...open];
   }
 }
+
+/** The width of the review points' number column: 16px holds 「9.」, and
+ * each further digit takes one tabular figure more, so 「10.」 no longer
+ * presses into its point (#336). */
+export function pointMarkColumn(count: number): string {
+  const more = String(Math.max(1, count)).length - 1;
+  return more > 0 ? `calc(16px + ${more}ch)` : "16px";
+}

@@ -7,6 +7,7 @@ import { failureOf } from "../open-result";
 import { usePaper, PAPER_SEAL } from "../paper";
 import { cardColumn } from "../card-column";
 import { Avatar } from "./HandoffAvatar";
+import { HandoffPoints } from "./HandoffPoints";
 import { HandoffTitleRow } from "./HandoffTitleRow";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
@@ -546,48 +547,7 @@ function TimelineRow({
             }}
           >
             {row.points.length > 0 && (
-              <ol
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  listStyle: "none",
-                  ...cardColumn(4),
-                }}
-              >
-                {row.points.map((point, index) => (
-                  <li
-                    key={index}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "16px 1fr",
-                      fontSize: 12.5,
-                      lineHeight: 1.55,
-                      color: inks.mid,
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: inks.dim,
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {index + 1}.
-                    </span>
-                    <span
-                      title={point}
-                      style={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {point}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+              <HandoffPoints points={row.points} inks={inks} />
             )}
             <div
               style={{
