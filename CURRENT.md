@@ -28,7 +28,7 @@
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
-## 各家展开卡统一：卡头带纸飞机和印章、额度、等待处理 / 正在进行，一律 470 宽；接力闲置 24 小时自动结束（#368）（2026-11-14，Claude，常浩看三版预览后回「甲，纸飞机方块放在卡顶一行的名称；2 说的是展开面板没有额度；3 甲」；已提交、未发布）
+## 各家展开卡统一：卡头带纸飞机和印章、额度、等待处理 / 正在进行，一律 470 宽；接力闲置 24 小时自动结束（#368）（2026-11-14，Claude，常浩看三版预览后回「甲，纸飞机方块放在卡顶一行的名称；2 说的是展开面板没有额度；3 甲」；PR #369 已 squash 合并 `2603d44`、已发布 `67da9fd79eba` 回读通过）
 
 - 时间：开工 `2026-11-14 22:20`（`date '+%F %H:%M'` 记录）。来由：常浩 7 条意见（额度数字不在、Claude 卡和 Codex/GPT 不一样宽、待审批不要按项目分区、「还有 n 条」收不回去、待审批改「等待处理 · n」加横线、卡顶重排纸飞机单独放、其他家同理）。三版预览 https://claude.ai/artifact/HFgt5oHxTULFSoizf8bSaN 。本分支从 `claude/359-board-peek` 的 `0f40a3b`（第 3 批之二，另一会话已提交、未开 PR）往下接，改的是同一批文件。
 - 改了哪些文件：
@@ -38,8 +38,9 @@
 - 测试：`pnpm test` 退出码 0：Rust 合计 `986 passed; 0 failed`，前端 `ℹ pass 460` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`pnpm run check` 第 1 次只因新测试一行没过 `cargo fmt` 失败（`check.log`），格式化后重跑见 `check-2.log`；`node --test tests/*.test.mjs` 第 1 次在交接写好前跑、交接格式那条失败（`rules.log`），写好后重跑见 `rules-2.log`。第 2 次 `check-2.log` 卡在行数棘轮（`handoffs.rs`、`ListCard.tsx`、`useHUDLayout.ts` 变长），拆分后 `check-file-size.mjs --update` 收紧基线 6 项，第 3 次全量重跑：`pnpm run check` 退出码 0（`check-3.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules-3.log`）；`pnpm test`（`test-2.log`）Rust 合计 `986 passed; 0 failed`，前端 `ℹ pass 459` / `ℹ fail 1`，挂的是 `engine-client/test/late-output.test.ts`（46.5 秒等引擎超时），`&&` 串联使后面三组没跑；负载 6.6 时补跑 `test:ts` 同一条又挂（`test-ts-3.log` `ℹ pass 459` / `ℹ fail 1`），`test:mcp` `ℹ pass 9` / `ℹ fail 0`、`test:plugins` `ℹ pass 14` / `ℹ fail 0`、`test:extension` `ℹ pass 23` / `ℹ fail 0`。这条单独跑在本分支、main（`0dc0ba5`）、`359-board-peek` 都是 `ℹ pass 1` / `ℹ fail 0`，第 1 次全量里也过了；本轮没碰 `engine-client`，按 L-48 那类机器忙时替身程序起得慢的偶发失败处理，没改代码。**变基到 main `0dc0ba5`（含 #367）后最终一轮**：`pnpm run check` 退出码 0；`cargo test --workspace` 合计 `987 passed; 0 failed`；`test:ts` `ℹ pass 460` / `ℹ fail 0`，`test:mcp` `ℹ pass 9` / `ℹ fail 0`，`test:plugins` `ℹ pass 14` / `ℹ fail 0`，`test:extension` `ℹ pass 23` / `ℹ fail 0`（`*-rebased*.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/`。
 - 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-369`）：`mixed` 点 Codex 出 Codex 卡（卡头 Codex + 纸飞机 + 待批、额度两条、等待处理 · 1 展开审批、正在进行 · 1）；点 DeepSeek 只有一行卡头（之前两行，已修）、余额、等待处理 · 1、正在进行 · 1；点 ChatGPT 卡头纸飞机带 2（之前筛空，已修，L-50）。`claude-many-asks` 点 Claude：等待处理 · 8 一条列表，真实点击「还有 3 条」展开后变「收起」，再点折回。改前对照：切到 `scenes-359b`（`0f40a3b`）看 ChatGPT 卡（今天的对话 + 审核纸条，440 宽）。回复卡在预览台看不到实物（场景回复事件已过期），靠测试。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/`：`before-chatgpt-panel.jpg`、`before-codex-panel-440.jpg`、`after-codex-news-card.jpg`、`after-deepseek-card.jpg`、`after-chatgpt-card-plane.png`、`after-claude-waiting-8.jpg`、`after-claude-unfolded-fold-back.jpg`。
-- 发布与回读：未发布（本分支含另一会话未合并的 `0f40a3b`，合并顺序待常浩定）。
+- 发布与回读：常浩回「合并并装机」（PR 连带第 3 批之二 `695fd5b` 一起进 main）。`gh pr merge 369 --squash` → `2603d44`，与打包用的树一致；`tauri build --bundles app` 退出码 0；`install.sh 369-unified-card`：装前 `c4501330017c`，产物 `67da9fd79eba` / 已装 `67da9fd79eba`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `after-installed-claude-card.png`：无文稿权限弹窗；Claude 卡卡头「Claude ULTRA + 纸飞机 10 + 待答」、额度三条、等待处理 · 7、正在进行 · 2。接力闲置自动结束当场生效：`handoffs.json` 里 12 单带「没动静」的自动结束步（Claude 11、Codex 1），Claude 开着的从 21 降到 10。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/PostPane-c4501330017c.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：预览甲版里印章画的是「待答」，实现照做（消息卡盖待答 / 待批 / 已回，平时盖额度的够用 / 吃紧 / 未知）。**待常浩定**：消息卡上的周额度暗印（#319，11-12 选甲）原是因为卡片盖住了面板看不到额度，现在卡上直接有额度条，暗印和「本周」那行重复，本轮没动。实机未验。
+- skill 进化：E-19 待批（开工时要改的文件正被别的未合并分支改着怎么办）。
 - 本轮新坑：L-50
 
 ## ChatGPT 接力：送审原文带行内代码时回信不再被判成别的提问（#366）（2026-11-14，Claude，常浩说「继续推进」，巡检时查出 #356 返修引入的误判，属修 bug 回到原定行为；已提交、发布见下）
