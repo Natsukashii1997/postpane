@@ -25,6 +25,20 @@
   - issue 写「插件重连、驿窗启动时重读」，没单独写：重启后阶段早已过 3 分钟，第一次刷新就重读；重连后最迟 2 分钟内重读。
   - 范围外发现：#357 会话（worktree `interesting-hugle-7778fb`）负载测试留下约 2600 个 `/usr/bin/env python3` 进程，打满每用户 4000 进程上限，本会话一度 `fork failed`；没动它。
 - 本轮新坑：无
+## 第 2 批补漏：实机的小人导演（Rust）也认「待核对」（#354 后续）（2026-11-14，Claude，第 2 批「按计划开工」范围内的补漏；已提交、已发布 `c1715a5c603b` 回读通过）
+
+- 时间：开工 `2026-11-14 16:24`（`date '+%F %H:%M'` 在 16:29 记录，开工约早 5 分钟）。来由：#358 合并后核对上一会话转来的子 agent 要点时发现，应用里的小人指令走 Rust（`hud_bot_directions`，`src/crates/hud/src/bots.rs`），TS 的 `mark-director.ts` 只在浏览器预览用；#358 只改了 TS，实机小人仍把待核对会话当等你、摆「问你」，票根 working 也照算。
+- 改了哪些文件：
+  - 补漏（第 2 批本该包含的）：新 `src/crates/hud/src/stale.rs`（`is_stale`、`busy`，移植 `stale.ts`，含测试）；新 `src/crates/hud/src/bots/facts.rs`（`facts::of`：会话交给导演时，待核对且没有审批卡的当空闲、不带请求，移植 `session-facts.ts`）；`bots.rs` 改用它、加测试 `a_stale_session_rests_its_bot_unless_a_card_stands`；`vendors.rs` 的 working 改用 `busy`；`lib.rs` 登记 `stale`。
+  - 顺手改的：行数基线收紧 3 项（`live.rs` 677→676、`bots.rs` 662→635、`vendors.rs` 420→417）。
+  - 改变了已有行为的：实机上，待核对的会话不再让小人摆「问你」、不再算这家在干活（与 #358 里 TS 的行为一致，是 #358 原定行为在实机补齐）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `979 passed; 0 failed`，前端 `ℹ pass 449` / `ℹ fail 0` / `ℹ todo 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。跑了两遍：第一遍基于 `b0dd2b3`，结果同上；main 随后合进 #360（`stdio.rs`），变基后重跑仍同上（L-47 照做，测试和打包不并行）。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-354-bot-stale/`：`check*.txt`、`test*.txt`、`node*.txt`。
+- 验证：新测试覆盖三种：待核对无卡 → 空闲、无请求、不在干活；待核对有卡 → 等你、带卡；没过半小时 → 等你、在干活。`directs_as_the_typescript_director_did`（TS/Rust 对拍）照常通过。L-35：装前装后静止侧栏逐字节相同（`795a0cea4c69`）。**未做**：实机看到小人对待核对会话不再摆「问你」（此刻本机没有静默 30 分钟以上的提问会话）；装完截整屏看「想访问文稿」弹窗（L-06）。
+- 截图：证据目录 `before-hud.png`、`after-hud.png`。
+- 发布与回读：`install.sh 354-bot-stale`：装前 `4b34a5507b3f`（#360 会话装的，本包已变基含 #360），产物 `c1715a5c603b` / 已装 `c1715a5c603b`，签名证书照常（`H"b773068e`），`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-354-bot-stale/PostPane-4b34a5507b3f.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：上一会话转来 B1 子 agent 没把握的四点，结论：① 待核对口径用「请求后日志静默满 30 分钟」，已按此实现（#358）；② **B1 修不到「Codex App 等审批掉出侧栏」**：Codex 等审批时那次调用在会话记录里不带 request，靠原生等待与 `PermissionRequest` 钩子那条路，不归 B1；③ **驿窗重启后，重启前就正常退出的 Claude 会话认不出已结束**（`gone` 只记本次运行看到的退出），若它留着没答的提问，1 天内会显示「等你 · 待核对」，可左滑「移除」；Windows 上一直如此；④ 桌面「下一步」常驻提问在 `facts.requests` 里会出现两条同 id，#358 之前就这样；前端 `isStale` 用「全部 stale」不受影响，导演合并请求按 id 去重，`presentation.rs` 只替换不计数，暂不改。clippy 两条旧警告（`hermes/transcript.rs:364`、`claude_desktop.rs:29`）仍在，非本批。
+- 本轮新坑：L-49
+
 ## 修偶发失败的投递测试：握手和要验的写入截止分开计时（#357）（2026-11-14，Claude，由 #353 的会话开卡交办；已提交、无需发布）
 
 - 时间：开工 `2026-11-14 16:05`（`date '+%F %H:%M'` 记录）。来由：#353 第一遍全量测试里 `platform` 的 `delivery::tests::native::a_write_to_an_app_server_that_stopped_reading_ends_at_the_deadline` 报 `TimedOut`，单独重跑 3 次 2 过 1 败；当轮按范围外未修，单开这张。issue #357。
