@@ -4,22 +4,21 @@ import type { Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { usePanelServices } from "../PanelContext";
 import { failureOf } from "../open-result";
-import { usePaper, PAPER_SEAL } from "../paper";
+import { usePaper } from "../paper";
 import { cardColumn } from "../card-column";
 import { Avatar } from "./HandoffAvatar";
 import { HandoffPoints } from "./HandoffPoints";
+import { HandoffHead } from "./HandoffHead";
 import { HandoffTitleRow } from "./HandoffTitleRow";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
 import {
   actions,
-  autoLabel,
   chatgptSession,
   doerSession,
   clock,
   round,
-  stamp,
   timeline,
   type Action,
   type Row,
@@ -111,9 +110,6 @@ export function HandoffCard({
   }, [onClose]);
 
   const rows = timeline(handoff, now, zh);
-  const { at, of } = round(handoff);
-  const mark = stamp(handoff, zh);
-  const autoMark = autoLabel(handoff, zh);
   const claude = doerSession(handoff, snapshot.sessions);
   const D = doerName(handoff);
   const chatgpt: Session | undefined =
@@ -159,91 +155,16 @@ export function HandoffCard({
       className="hud-handoff-card"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      {/* 接力 · 第 1 / 2 轮 · stamp */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          minHeight: 44,
-          // Clear of the airmail stripe along the top.
-          padding: `${paper?.airmail ? 6 : 0}px 2px 8px 0`,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12.5,
-            letterSpacing: zh ? "0.32em" : "0.12em",
-            color: inks.dim,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {zh ? "接力" : "HANDOFF"}
-        </span>
-        {autoMark && (
-          <span
-            title={handoff.halt ?? undefined}
-            style={{
-              fontSize: 11.5,
-              color: handoff.auto ? inks.ink : tones.amber,
-              border: `1.2px solid ${handoff.auto ? inks.faint : tones.amber}`,
-              borderRadius: 3,
-              padding: "1px 6px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {autoMark}
-          </span>
-        )}
-        <span
-          style={{
-            marginLeft: "auto",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            fontSize: 12,
-            color: inks.dim,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {zh ? `第 ${at} / ${of} 轮` : `Round ${at} / ${of}`}
-          <span style={{ display: "inline-flex", gap: 3 }} aria-hidden="true">
-            {Array.from({ length: of }, (_, index) => (
-              <i
-                key={index}
-                style={{
-                  width: 6,
-                  height: 6,
-                  boxSizing: "border-box",
-                  border: `1.2px solid ${index < at ? inks.ink : inks.dim}`,
-                  background: index < at ? inks.ink : "transparent",
-                }}
-              />
-            ))}
-          </span>
-        </span>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 42,
-            height: 42,
-            boxSizing: "border-box",
-            display: "grid",
-            placeItems: "center",
-            flex: "none",
-            border: `2px solid ${tones[mark.tone]}`,
-            borderRadius: "50%",
-            color: tones[mark.tone],
-            font: `900 ${zh ? (mark.text.length > 2 ? 10.5 : 12) : 8.5}px/1 ${PAPER_SEAL}`,
-            opacity: 0.88,
-            pointerEvents: "none",
-          }}
-        >
-          {mark.text}
-        </span>
-      </div>
+      <HandoffHead
+        handoff={handoff}
+        paper={paper}
+        inks={inks}
+        tones={tones}
+        zh={zh}
+        onLeave={onClose}
+      />
       <ListTear paper={paper} inks={inks} />
-      {/* The task, ↗ back to the doer's session, × back out (#334) */}
+      {/* The task and ↗ back to the doer's session */}
       <HandoffTitleRow
         title={handoff.title}
         doer={D}
@@ -251,7 +172,6 @@ export function HandoffCard({
         inks={inks}
         canGo={Boolean(claude)}
         onGo={() => void go(claude)}
-        onClose={onClose}
       />
       <div
         style={{
@@ -362,7 +282,7 @@ export function HandoffCard({
   );
 }
 
-type Tones = Record<"red" | "green" | "blue" | "amber" | "dim", string>;
+export type Tones = Record<"red" | "green" | "blue" | "amber" | "dim", string>;
 
 function TimelineRow({
   row,

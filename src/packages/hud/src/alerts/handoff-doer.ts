@@ -17,6 +17,13 @@ export const doerName = (handoff: Pick<Handoff, "doer">) =>
 const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
 
+/** The open handoffs, the one that moved last first: the sidebar's way in
+ * opens the first (#341), the review slip lists them in this order (#288). */
+export function liveHandoffs(handoffs: readonly Handoff[]): Handoff[] {
+  const at = (handoff: Handoff) => handoff.phaseAt || handoff.updatedAt;
+  return handoffs.filter(live).sort((a, b) => at(b) - at(a));
+}
+
 /** The live handoff a session belongs to: the doer's session (Claude
  * Code's, or a Codex thread) by its id, a ChatGPT conversation by
  * `chatgpt:<id>`. */

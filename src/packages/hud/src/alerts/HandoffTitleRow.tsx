@@ -1,9 +1,7 @@
-// The handoff card's task line: the title, ↗ back to the doer's session and
-// × back to what the sidebar showed. The × is the card's way out while the
-// handoff runs: a request waiting for its answer keeps the sidebar from
-// folding, and the foot has no 「知道了」 until the handoff ends (#334, the
-// owner chose 乙 on 2026-11-14). Moved out of HandoffCard.tsx for the
-// 300-line ratchet.
+// The handoff card's task line: the title and ↗ back to the doer's session.
+// #334's × beside the ↗ gave way to the paper plane in the card's head, the
+// same square that opened the card (#341). Moved out of HandoffCard.tsx for
+// the 300-line ratchet.
 import { GoButton } from "../GoButton";
 import type { Inks } from "../permissions/ListCard";
 
@@ -20,7 +18,6 @@ export function HandoffTitleRow({
   inks,
   canGo,
   onGo,
-  onClose,
 }: {
   title: string;
   /** Who does the work: Claude, Codex. */
@@ -30,8 +27,6 @@ export function HandoffTitleRow({
   /** The doer's session is there to go back to. */
   canGo: boolean;
   onGo(): void;
-  /** Back to what the sidebar showed before. */
-  onClose(): void;
 }) {
   const [task, rest] = splitTitle(title);
   const goInks = {
@@ -44,7 +39,7 @@ export function HandoffTitleRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) 26px 26px",
+        gridTemplateColumns: "minmax(0, 1fr) 26px",
         columnGap: 6,
         alignItems: "center",
         paddingTop: 14,
@@ -77,13 +72,6 @@ export function HandoffTitleRow({
         onClick={() => {
           if (canGo) onGo();
         }}
-      />
-      <GoButton
-        icon="close"
-        label={zh ? "返回" : "Back"}
-        enabled
-        inks={goInks}
-        onClick={onClose}
       />
     </div>
   );

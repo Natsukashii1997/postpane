@@ -562,6 +562,11 @@ a:focus-visible {
   color: var(--go-strong);
   background: color-mix(in srgb, var(--go-strong) 14%, transparent);
 }
+/* Held down (the handoff card's paper plane, #341), its fill stays and
+ * brightens under the pointer instead. */
+.hud-go-button[aria-pressed="true"]:not([aria-disabled="true"]):hover {
+  filter: brightness(1.12);
+}
 .hud-go-button:not([aria-disabled="true"]):active {
   transform: translateY(1px) scale(0.92);
   background: color-mix(in srgb, var(--go-strong) 26%, transparent);

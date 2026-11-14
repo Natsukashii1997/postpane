@@ -30,10 +30,8 @@ import {
   openHandoffCard,
   useOpenedHandoffCard,
 } from "./alerts/HandoffCard";
-import {
-  ApprovalContent,
-  RequestDeliveryNotice,
-} from "./permissions/ApprovalContent";
+import { ApprovalContent } from "./permissions/ApprovalContent";
+import { RequestDeliveryNotice } from "./permissions/RequestDeliveryNotice";
 import { HUDExpandedSurface } from "./scene/HUDExpandedSurface";
 import { SideTags, sideTagRects } from "./scene/SideTags";
 import { clearOf } from "./scene/side-tag-stack";
@@ -967,6 +965,7 @@ export function HUDScene({
             language={snapshotLanguage(snapshot)}
             sessions={snapshot.sessions}
             replies={news.replies}
+            handoffs={snapshot.handoffs}
           />
         ) : event ? (
           <NewsContent
