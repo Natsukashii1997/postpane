@@ -7,7 +7,7 @@
 
 
 
-## 侧栏待审批卡：只能去 Claude 里回答的提问沉底并默认收起（#331）（2026-11-14，Claude，常浩在四种做法里选「甲 沉底折叠」；已提交、未发布（有一单自动往返接力在进行，装机暂缓））
+## 侧栏待审批卡：只能去 Claude 里回答的提问沉底并默认收起（#331）（2026-11-14，Claude，常浩在四种做法里选「甲 沉底折叠」；已提交、已发布 `1866647830f4` 回读通过）
 
 - 时间：开工 `2026-11-14 09:30`（`date '+%F %H:%M'` 记录）。来由：常浩截图里进程已停、几天前的 ASK 一直囤着。查明这些是 Claude 桌面应用的「下一步」框，「等待回答」设成一直等（#184，本机 `approvalWaitMinutes = 0`），框在 Claude 里没回答就一直挂着，进程停了只会变成「请到 Claude 里回答」。列了甲（沉底折叠）/ 乙（超 24 小时收起）/ 丙（一键清旧）/ 丁（不改），常浩选甲。issue #331。
 - 改了哪些文件：
@@ -19,7 +19,7 @@
 - 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `940 passed; 0 failed`，前端 `ℹ pass 423` / `ℹ fail 0`（原 418 + 新增 5）、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 18` / `ℹ fail 0`。改实现前三个测试文件 `ℹ pass 11` / `ℹ fail 3`（缺导出），改后 `ℹ pass 40` / `ℹ fail 0`。开工后 main 没有新合并。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-331-sink-elsewhere/{check,test,build}.log`。
 - 验证：浏览器预览真实 `HUDScene`（端口 1470，沿用 #325 的 2026-11-14 08:46 真实快照，7 条 Claude ASK 里 4 条 `answersQuestion: false`；这次先跑完三条全量再搭预览，照 L-43）：小签仍是最新的「Codex 额度｜到期前派单审查」；悬停 Claude 票根，卡里只列能在侧栏回答的 3 条（1 小时 1 分、1 小时 5 分、45 小时），「还有 4 条」；点开后进程已停的 4 条排在后面（2027战略会 42 小时、Mac 合盖 74 小时、数字分身 15 小时、月度用户策略 105 小时）。两种状态导出成网页文字，和改前截图一起放进对照页 https://claude.ai/artifact/8v49shS28VcbBqMbH669hK （第 2 版）。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-331-sink-elsewhere/`：`preview-card-folded.jpg`、`preview-card-unfolded.jpg`；导出的卡片 `html/card-folded.html`、`html/card-unfolded.html`；脚手架 `preview-331/`（未提交）。
-- 发布与回读：未装。打包已成功（本分支，`target/release/bundle/macos/PostPane.app`，`build.log` 退出码 0），但装前查到接力 `h1a1d7a90d8e00`（digital-twin｜PR #175 身份闸第 2 轮）开着自动往返，09:31 刚把「需修改」自动转回发起会话、正在返修；重启驿窗会让自动往返暂停，打断那个会话，所以没装，等常浩定什么时候装。当前已装的仍是 #328 的 `50363ed03c36`。装的时候从最新 main 重新打包（L-05），再跑 `install.sh`。
+- 发布与回读：`1866647830f4`（从本分支打包，合并后 main `b95434f` 与之内容相同，期间 main 没有新合并），`install.sh` 回读一致、签名证书照常（`H"b773068e`）；装前 `50363ed03c36`。打包后一度没装：接力 `h1a1d7a90d8e00`（digital-twin｜PR #175 身份闸第 2 轮）开着自动往返、刚把「需修改」转回发起会话；常浩看过说明后回「现在就装」，09:51 装好。重启后这单记了「驿窗重启，自动往返先暂停」，`auto` 变 false；发起会话重启前已收到回信（delivery started），下一次回信要常浩手动转回或重开自动往返。装后 1 分钟日志无 error；没截屏查「想访问文稿」弹窗（未做）；实机悬停看收起未做，留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-331-sink-elsewhere/PostPane-50363ed03c36.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题：
   - 侧栏小签 / 卡头的 ASK 计数仍算上收起的这几条（issue 里写明不动）；要不要只数能答的，没问常浩，留作可选。
   - 范围外发现：「正在进行」里进程已停会话仍显示「等你」。skill 进化：无（E-16 待批照旧）。
