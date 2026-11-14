@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Approval, IslandEvent, Session } from "@agent-hud/protocol";
 import {
+  answersElsewhere,
   approvalGroups,
   entryTitle,
   findSession,
@@ -374,4 +375,65 @@ test("one ochre and one word ink on every paper (#308)", () => {
   assert.equal(paperOf(false).word, "#b2bdcf");
   assert.equal(relayPaperOf(true).word, "#3b4a61");
   assert.equal(relayPaperOf(false).ochre, "#8a4f14");
+});
+
+const elsewhere = (id: string, at: string): ApprovalEntry => ({
+  kind: "request",
+  id,
+  at,
+  badge: "ASK",
+  request: request(id, at, { kind: "question", answersQuestion: false }),
+});
+
+test("a question only its client can take is answered elsewhere; a handoff card is not (#331)", () => {
+  assert.equal(
+    answersElsewhere(request("a", "x", { answersQuestion: false })),
+    true,
+  );
+  assert.equal(answersElsewhere(request("a", "x")), false);
+  assert.equal(
+    answersElsewhere(request("a", "x", { answersQuestion: true })),
+    false,
+  );
+  assert.equal(
+    answersElsewhere(
+      request("a", "x", { answersQuestion: false, badge: "START" }),
+    ),
+    false,
+  );
+});
+
+test("questions only Claude can take sink below the replies and fold away (#331)", () => {
+  const entries = [
+    elsewhere("gone-new", "2026-11-05T00:09:00Z"),
+    asked("old", "2026-11-05T00:01:00Z"),
+    reply("r", "2026-11-05T00:05:00Z"),
+    elsewhere("gone-old", "2026-11-05T00:00:00Z"),
+    asked("new", "2026-11-05T00:03:00Z"),
+  ];
+  const folded = approvalGroups(entries, "new");
+  assert.deepEqual(
+    folded.groups.flatMap((group) => group.entries.map((entry) => entry.id)),
+    ["new", "old", "r"],
+  );
+  assert.equal(folded.hidden, 2, "folded even with five lines or fewer");
+  const open = approvalGroups(entries, "new", Infinity);
+  assert.equal(open.hidden, 0);
+  assert.deepEqual(
+    open.groups.flatMap((group) => group.entries.map((entry) => entry.id)),
+    ["new", "old", "r", "gone-new", "gone-old"],
+  );
+});
+
+test("when every line can be answered only in Claude, they show as usual (#331)", () => {
+  const entries = [
+    elsewhere("a", "2026-11-05T00:01:00Z"),
+    elsewhere("b", "2026-11-05T00:02:00Z"),
+  ];
+  const { groups, hidden } = approvalGroups(entries, "b");
+  assert.equal(hidden, 0);
+  assert.deepEqual(
+    groups.flatMap((group) => group.entries.map((entry) => entry.id)),
+    ["b", "a"],
+  );
 });

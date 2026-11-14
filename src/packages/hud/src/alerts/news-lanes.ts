@@ -1,10 +1,17 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
 import { staysUntilSeen } from "./reply-stays.ts";
+import { answersElsewhere } from "../permissions/approval-list.ts";
 
 /** One card of the sidebar's news queue (IslandNews keeps the queue). */
 export type LaneCard =
-  | { type: "request"; id: string; at: string }
+  | {
+      type: "request";
+      id: string;
+      at: string;
+      /** Only the client can take it: it leads last (#331). */
+      elsewhere?: boolean;
+    }
   | {
       type: "news";
       id: string;
@@ -23,22 +30,35 @@ export interface NewsLane {
   cards: LaneCard[];
 }
 
+/** How strongly a card leads the queue: a request answerable here, then one
+ * only its client can take (#331), then a notice. */
+const leads = (card: LaneCard) =>
+  card.type !== "request" ? 0 : card.elsewhere ? 1 : 2;
+
 /** The queue with the newest waiting request in front (owner, 2026-11-14,
- * #328; it was the one waiting longest, after IslandAlertQueue.dismiss()):
- * requests come before notices, which keep their order. */
+ * #328; it was the one waiting longest, after IslandAlertQueue.dismiss()),
+ * one answerable here before one only its client can take (#331): requests
+ * come before notices, which keep their order. */
 export function promoteNewestWaiting(pending: LaneCard[]): LaneCard[] {
   if (pending.length < 2) return pending;
   const best = pending.reduce((at, card, index) => {
-    const waiting = card.type === "request";
-    const prior = pending[at],
-      priorWaiting = prior.type === "request";
-    return waiting &&
-      (!priorWaiting || Date.parse(card.at) > Date.parse(prior.at))
+    const prior = pending[at];
+    const ahead = leads(card) - leads(prior);
+    return card.type === "request" &&
+      (ahead > 0 || (ahead === 0 && Date.parse(card.at) > Date.parse(prior.at)))
       ? index
       : at;
   }, 0);
   return [pending[best], ...pending.filter((_, index) => index !== best)];
 }
+
+/** A waiting request as the queue holds it. */
+export const requestCard = (request: Approval): LaneCard => ({
+  type: "request",
+  id: request.id,
+  at: request.createdAt,
+  elsewhere: answersElsewhere(request),
+});
 
 /** The queue with the newest request in front, unless a notice is (#328). */
 export const newestAskFirst = (queue: LaneCard[]) =>
@@ -127,9 +147,9 @@ export function newsLanes(
   return [...lanes].map(([vendor, cards], index) => {
     if (index === 0 && cards[0] === queue[0])
       return { vendor, front: cards[0], cards };
-    const waiting = cards
-      .filter((card) => card.type === "request")
-      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+    const waiting = promoteNewestWaiting(
+      cards.filter((card) => card.type === "request"),
+    )[0];
     return { vendor, front: waiting ?? cards[0], cards };
   });
 }

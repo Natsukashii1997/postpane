@@ -181,3 +181,34 @@ test("a queue whose requests all still wait is passed on as it is", () => {
   const queue = [asked(claudeAsk), told(claudeReply)];
   assert.equal(liveQueue(queue, requests), queue);
 });
+
+test("the front prefers the newest request answerable here (#331)", () => {
+  const gone = request("gone", "claude", 8);
+  gone.answersQuestion = false;
+  const goneCard: LaneCard = {
+    type: "request",
+    id: gone.id,
+    at: gone.createdAt,
+    elsewhere: true,
+  };
+  assert.deepEqual(
+    promoteNewestWaiting([
+      told(codexReply),
+      asked(claudeAsk),
+      goneCard,
+      asked(claudeAsk2),
+    ]).map((card) => card.id),
+    ["ask-2", "reply-1", "ask-1", "gone"],
+  );
+  // Nothing else waits: the one only Claude can take leads.
+  assert.equal(
+    promoteNewestWaiting([told(codexReply), goneCard])[0].id,
+    "gone",
+  );
+  // Another agent's tag leads with its newest request answerable here.
+  const lane = newsLanes(
+    [told(codexReply), asked(claudeAsk), goneCard],
+    [claudeAsk, gone],
+  )[1];
+  assert.equal(lane.front.id, "ask-1");
+});

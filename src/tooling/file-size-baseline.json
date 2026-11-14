@@ -107,7 +107,7 @@
   "src/packages/hud/src/HUDGlow.tsx": 830,
   "src/packages/hud/src/HUDScene.tsx": 1496,
   "src/packages/hud/src/HoverPanel.tsx": 657,
-  "src/packages/hud/src/IslandNews.tsx": 376,
+  "src/packages/hud/src/IslandNews.tsx": 373,
   "src/packages/hud/src/alerts/CompactAlertView.tsx": 628,
   "src/packages/hud/src/alerts/CompletionAlertView.tsx": 571,
   "src/packages/hud/src/alerts/HandoffCard.tsx": 757,

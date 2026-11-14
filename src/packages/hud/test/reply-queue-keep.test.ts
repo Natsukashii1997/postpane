@@ -8,6 +8,7 @@ import {
   dismissIslandCard,
   newsLanes,
   promoteNewestWaiting,
+  requestCard,
   roomForNews,
   sideLanes,
   type LaneCard,
@@ -36,8 +37,9 @@ const { reconcileIslandCards } = new Function(
   "promoteNewestWaiting",
   "blocksNotice",
   "roomForNews",
+  "requestCard",
   `${body}; return { reconcileIslandCards };`,
-)(promoteNewestWaiting, blocksNotice, roomForNews) as {
+)(promoteNewestWaiting, blocksNotice, roomForNews, requestCard) as {
   reconcileIslandCards: (
     previous: LaneCard[],
     requests: Approval[],
@@ -207,5 +209,24 @@ test("put away, the card in front gives way to the newest request (#328)", () =>
   assert.deepEqual(
     ids(dismissIslandCard([ask(3), told(reply(4)), ask(1), ask(2)])),
     ["ask-2", "event:4:r", "ask-1"],
+  );
+});
+
+test("a question only its client can take is queued as such (#331)", () => {
+  const gone = {
+    id: "gone",
+    source: "claude",
+    createdAt: reply(1).at,
+    kind: "question",
+    answersQuestion: false,
+  } as Approval;
+  const here = { ...gone, id: "here", answersQuestion: true } as Approval;
+  const queue = reconcileIslandCards([], [gone, here], []);
+  assert.deepEqual(
+    queue.map((card) => [card.id, card.type === "request" && card.elsewhere]),
+    [
+      ["gone", true],
+      ["here", false],
+    ],
   );
 });
