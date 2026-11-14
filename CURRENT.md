@@ -11,7 +11,7 @@
 
 - 时间：开工 `2026-11-14 11:51`（取自分支创建时间 `git reflog`，开工时没跑 `date` 记录）。来由：#341 装机时把带日期的全名当短名传给 `install.sh`，备份落进日期重复的目录；#341 预览页因脚本里的全局变量 `claude` 与 Artifact 宿主重名而空白。两条在 #341 收尾时提案，常浩回「都加」。
 - 改了哪些文件：`.agents/skills/postpane-round/scripts/install.sh`（短名以 `YYYY-MM-DD-` 开头就报错退出 2，提示去掉日期后的写法，在查接力、备份、退出应用之前）；`SKILL.md` 第 3 步第 3 条写明短名不带日期；`EVOLUTION.md` E-17 改为「已采纳」；`tests/postpane-round.test.mjs` 加一条（传 `2026-11-14-341-relay-toggle` 得退出码 2、提示「用 341-relay-toggle」）。全局坑在 agent-kit：`LESSONS.md` 新增 G-28（agent-kit PR #72，`76aa37e`），触发词 `/\b(const|let|var|function|class)\s+claude\b/`，已在 agent-kit main 上重跑 `node tools/install.mjs --only claude --apply`，运行时副本 `~/Library/Application Support/agent-kit/runtime/LESSONS.md` 含 G-28。
-- 测试：@@TESTS@@。`node --test tests/postpane-round.test.mjs` `ℹ pass 14` / `ℹ fail 0`。agent-kit `node --test tests/*.test.mjs` `ℹ pass 78` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-e17-install-name/`：`check.log`、`test.log`、`rules.log`。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `941 passed; 0 failed`，前端 `ℹ pass 433` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` 第 1 次 `ℹ pass 21` / `ℹ fail 1`（E-17 状态写成「已采纳（本 PR，常浩回「都加」）」，测试要求「已采纳（本 PR，#编号）」，日志 `rules-1-status-format.log`），先开 PR 拿到 #346 回填后 `ℹ pass 22` / `ℹ fail 0`。`node --test tests/postpane-round.test.mjs` `ℹ pass 14` / `ℹ fail 0`。agent-kit `node --test tests/*.test.mjs` `ℹ pass 78` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-e17-install-name/`：`check.log`、`test.log`、`rules.log`。
 - 验证：新测试真跑脚本、不动应用（拒绝发生在查接力与备份之前）。没有真装机。
 - 截图：无
 - 发布与回读：无需发布（只改装机脚本、skill 文字与测试）。
