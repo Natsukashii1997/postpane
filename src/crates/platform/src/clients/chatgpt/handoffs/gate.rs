@@ -33,6 +33,14 @@ pub struct Gate {
     /// What the person is to be told of: a pass, or the cap reached.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notice: Option<Notice>,
+    /// When it reached its cap (L3 P2-07): what a later review here is
+    /// measured against, as later steps move `updated_at` on.
+    #[serde(default, skip_serializing_if = "is_zero_at")]
+    pub top_at: i64,
+}
+
+fn is_zero_at(at: &i64) -> bool {
+    *at == 0
 }
 
 fn is_zero(n: &u32) -> bool {

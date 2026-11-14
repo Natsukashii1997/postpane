@@ -43,9 +43,9 @@ impl Desk {
         }
     }
     /// Keeps the newest answer of handoff `id` in full (#347).
-    pub(super) fn keep_answer(&self, id: &str, reply: &str) {
+    pub(super) fn keep_answer(&self, book: &handoffs::Book, id: &str, reply: &str) {
         let Some(data) = &self.data else { return };
-        let n = self.lock().get(id).map_or(0, |handoff| {
+        let n = book.get(id).map_or(0, |handoff| {
             handoff
                 .steps
                 .iter()

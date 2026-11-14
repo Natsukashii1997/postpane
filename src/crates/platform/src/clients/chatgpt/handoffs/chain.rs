@@ -64,10 +64,20 @@ impl Book {
             .find(|h| h.id == keep)
             .map_or(0, |h| h.created_at);
         let mut closed = false;
-        for h in self.list.iter_mut().filter(|h| h.id != keep && h.live()) {
+        // A failed one whose opening may still come late is let go too
+        // (L3 P1-04): it can bind no conversation once taken over.
+        let revivable = |h: &Handoff| h.status == super::Status::Failed && h.brief.is_some();
+        for h in self
+            .list
+            .iter_mut()
+            .filter(|h| h.id != keep && (h.live() || revivable(h)))
+        {
             if h.gate.chain.as_deref() == Some(chain) {
-                h.status = super::Status::Closed;
-                h.enter(Phase::Ended, now);
+                if h.live() {
+                    h.status = super::Status::Closed;
+                    h.enter(Phase::Ended, now);
+                }
+                h.brief = None;
                 h.steps.push(
                     Step::new(
                         now,
@@ -127,12 +137,16 @@ impl Book {
         handoff.gate.head = head.map(str::to_ascii_lowercase);
         true
     }
-    /// The person is to hear of handoff `id`: it passed, or reached its cap.
-    pub fn note(&mut self, id: &str, notice: Notice) -> bool {
+    /// The person is to hear of handoff `id`: it passed, or reached its cap
+    /// (when, kept: L3 P2-07).
+    pub fn note(&mut self, id: &str, notice: Notice, now: i64) -> bool {
         let Some(handoff) = self.list.iter_mut().find(|h| h.id == id) else {
             return false;
         };
         handoff.gate.notice = Some(notice);
+        if notice == Notice::Top {
+            handoff.gate.top_at = now;
+        }
         true
     }
     /// PostPane asked ChatGPT to mend only the last lines of its answer

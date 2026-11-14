@@ -3,6 +3,7 @@
 //! commit however it goes (P1-01, P1-09), and the words when a review is
 //! refused for a review still with ChatGPT (P1-04) or a cap reached here
 //! and not settled (P1-08).
+use super::back::held_back_text;
 use super::{back_text, Desk, Lines};
 use agent_hud_runtime::chatgpt::handoffs::{Handoff, Next};
 use agent_hud_runtime::l10n;
@@ -20,11 +21,10 @@ impl Desk {
         let blocked = (handoff.outcome() == Next::Pass && !handoff.thinking())
             .then(|| self.pass_blocked(lines, handoff))
             .flatten();
+        // Not the pass's words with a word against them: words that say it
+        // did not pass (L3 P1-09).
         let text = match &blocked {
-            Some(why) => format!(
-                "{}\n\n驿窗没有按通过结束：{why}。",
-                back_text(handoff, reply)
-            ),
+            Some(why) => held_back_text(handoff, why),
             None => back_text(handoff, reply),
         };
         (text, blocked)
@@ -51,5 +51,13 @@ pub(super) fn top_unsettled(chain: &str) -> String {
     l10n::text(
         &format!("这个会话或工作目录里的审查链 {chain} 已审到顶、还没了结，没有发出：接着审同一个目标，请常浩在会话里说一句，再填 chain 和 extra 送；确实是新的验收目标，也请常浩在会话里说一句再送（或由常浩在侧栏结束那张接力）。"),
         &format!("Review chain {chain} reached its cap in this session or working directory and is not settled; nothing was sent. To go on with it, have the person say so, then give chain and extra; for a new acceptance goal too, have the person say so in the session (or end that handoff), then send again."),
+    )
+}
+/// The person's 「转回 Claude」 on a pass did not go: another send held
+/// it (L3 P2-09).
+pub(super) fn back_not_done() -> String {
+    l10n::text(
+        "这次没有转回：驿窗正在转这封回信，稍后看接力卡；还没转出去再点一次。",
+        "Not sent back: PostPane is sending this answer; check the card shortly, and try again if it has not gone.",
     )
 }

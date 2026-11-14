@@ -16,8 +16,14 @@ pub(super) fn back_text(handoff: &Handoff, _reply: &str) -> String {
     if handoff.thinking() {
         thinking_back_text(handoff, &reply)
     } else {
-        review_back_text(handoff, &reply)
+        review_back_text(handoff, &reply, None)
     }
+}
+
+/// 转回 Claude for a pass PostPane did not let through (`why`, L3 P1-09):
+/// ChatGPT's answer in full, and words that say it did not pass.
+pub(super) fn held_back_text(handoff: &Handoff, why: &str) -> String {
+    review_back_text(handoff, &handoff.answer(), Some(why))
 }
 
 /// What the next review is, by the person's leave (#347).
@@ -37,7 +43,7 @@ fn left_to_person(why: &str, meanwhile: &str, not_yet: &str) -> String {
 
 const NOT_YET: &str = "动手改代码、再调用 relay_to_chatgpt 送审、合并 PR";
 
-fn review_back_text(handoff: &Handoff, reply: &str) -> String {
+fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&str>) -> String {
     let round = handoff.counted().max(1);
     let budget = handoff.budget();
     let verdict = match handoff.last_reply().and_then(|step| step.verdict) {
@@ -47,6 +53,7 @@ fn review_back_text(handoff: &Handoff, reply: &str) -> String {
     };
     // What the answer's 「审查出口」 and the cap left ask of Claude (#217, #347).
     let ask = match handoff.outcome() {
+        Next::Pass if held.is_some() => left_to_person(&format!("回信写了通过，但驿窗没有放行：{}。这次接力没有通过、没有结束，不要当成审查已通过汇报。", held.unwrap_or_default()), "核对 PR 当前的提交和这次的受审版本", &format!("{NOT_YET}。版本对上后，用 PR 当前的提交重新调用 relay_to_chatgpt（head 填当前提交），这一轮照样计数")),
         Next::Pass => "这是终局：审查已通过，驿窗已结束这次接力并通知常浩，不需要再调用 relay_to_chatgpt 送审。请收口：回信里的非阻断意见（P2、P3 等）合并前能顺手改的就改掉，不改的写明理由；改到功能的，改完重跑相关测试，不能因为审查已通过就省掉验证。然后向常浩汇报审查结论和这些意见的处理情况。".to_owned(),
         Next::NoVerdict | Next::Format => left_to_person("回信末尾几行驿窗认不出，判断不了是否通过。", "读意见、按严重程度整理要点", NOT_YET),
         Next::BadTail(flaw) => left_to_person(&format!("回信末尾几行补过一次格式仍认不出（{}），驿窗判断不了这次是否通过。", review_flaw_text(flaw)), "读意见、整理要点和返修方案", NOT_YET),

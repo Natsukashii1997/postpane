@@ -42,10 +42,15 @@ impl Book {
             .iter()
             .rev()
             .find(|h| here(h) && h.live() && h.gate.notice == Some(Notice::Top))?;
+        // When it reached the cap; kept from before that, its last change.
+        let at = match top.gate.top_at {
+            0 => top.updated_at,
+            at => at,
+        };
         let since = self
             .list
             .iter()
-            .any(|h| h.id != top.id && here(h) && h.created_at > top.updated_at);
+            .any(|h| h.id != top.id && here(h) && h.created_at > at);
         (!since).then_some(top)
     }
 }
@@ -62,7 +67,7 @@ mod tests {
         assert!(book.get(&top.id).unwrap().in_flight(), "asked, unanswered");
         book.replied("c1", "还差\n审查出口：返修\n结论：需修改", Some("m1"), 2);
         assert!(!book.get(&top.id).unwrap().in_flight());
-        book.note(&top.id, Notice::Top);
+        book.note(&top.id, Notice::Top, 2);
         let at = book.get(&top.id).unwrap().updated_at;
         for (session, cwd, found) in [
             ("s1", None, true),
@@ -127,5 +132,39 @@ mod tests {
         let loaded = load(&fresh);
         assert!(reply(&loaded, &id).chars().count() <= EXCERPT + 1);
         assert_eq!(archived(&fresh, &id, 1).as_deref(), Some(long.trim()));
+    }
+
+    /// P2-07: a cap reached is measured from when it was reached, whatever
+    /// moves the handoff on after.
+    #[test]
+    fn a_cap_settled_stays_settled_as_its_words_are_taken() {
+        let mut book = Book::default();
+        let top = book.begin("s1", Some("/w"), "修登录", None, "改动", 1);
+        book.opened(&top.id, "c1", 1);
+        book.replied("c1", "还差\n审查出口：返修\n结论：需修改", Some("m1"), 2);
+        book.returned(&top.id, StepKind::Back, "意见", "p1", true, 3);
+        book.note(&top.id, Notice::Top, 3);
+        book.begin("s2", Some("/w"), "修登录二", None, "改动", 9);
+        assert!(book.delivery(&top.id, "p1", Delivery::Taken, 10));
+        assert!(book.unsettled_top("s3", Some("/w")).is_none());
+    }
+
+    /// P2-10: an answer kept twice is read back whole.
+    #[test]
+    fn an_answer_kept_twice_is_read_back_whole() {
+        let temp = tempfile::tempdir().unwrap();
+        // Several, so the order a folder is read in cannot hide the pick.
+        for n in 1..=12 {
+            let id = format!("h{n}");
+            archive(temp.path(), &id, 1, &format!("截过的 {n}")).unwrap();
+            archive(temp.path(), &id, 1, &format!("完整的原文，比截过的长 {n}")).unwrap();
+            archive(temp.path(), &id, 2, "下一封").unwrap();
+        }
+        for n in 1..=12 {
+            assert_eq!(
+                archived(temp.path(), &format!("h{n}"), 1),
+                Some(format!("完整的原文，比截过的长 {n}"))
+            );
+        }
     }
 }

@@ -130,11 +130,14 @@ pub fn slim_kept(data: &Path, book: &mut super::Book) {
 /// Answer `n` of handoff `id` as kept in full, when it is.
 pub fn archived(data: &Path, id: &str, n: usize) -> Option<String> {
     let prefix = format!("{id}-{n:02}-");
+    // Kept twice (an answer cut before it was kept, L3 P2-10): the whole
+    // one is the longest.
     std::fs::read_dir(folder(data).join("replies"))
         .ok()?
         .flatten()
-        .find(|e| e.file_name().to_string_lossy().starts_with(&prefix))
-        .and_then(|e| std::fs::read_to_string(e.path()).ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+        .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+        .max_by_key(String::len)
 }
 /// Moves an unreadable `handoffs.json` aside, beside it, so it is never
 /// written over: what it held stays for the person to look at.

@@ -2165,7 +2165,7 @@ mod tests {
         assert_eq!(book.get(&other).unwrap().next(), Some(Next::Pass));
         let held = book.earlier("", Some("a/b#9"), None).map(|e| e.period);
         assert_eq!(held, Some(1), "not let through yet");
-        assert!(book.note(&other, Notice::Passed) && book.passed(&other, "通过", 4));
+        assert!(book.note(&other, Notice::Passed, 4) && book.passed(&other, "通过", 4));
         assert!(book.earlier("", Some("a/b#9"), None).is_none());
         assert!(book.earlier("", Some("a/b#1"), None).is_none());
         // One chain, one open handoff: the first closed as handed over.
