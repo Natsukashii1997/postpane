@@ -13,7 +13,8 @@ import { useBoardInks } from "./AgentBoard";
 import { BoardHeading, OnCard } from "./BoardHeading";
 import { boardPlaces, boardWaiting, sessionScope } from "./place-sessions";
 import { BlockSessions } from "./PlaceRows";
-import { SourceBalances, SourceProviderBlock } from "./QuotaSection";
+import { SourceProviderBlock } from "./QuotaSection";
+import { SourceBalances } from "./SourceBalances";
 import { shownSessions, useRemovedSessions } from "./removed-sessions";
 import { inPanelOrder, tabular, type Logo } from "./theme";
 

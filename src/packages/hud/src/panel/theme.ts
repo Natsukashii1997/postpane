@@ -152,6 +152,13 @@ export function receiptMeterFill(color: string): CSSProperties {
   };
 }
 
+/** The one left grid every card and panel shares, a design rule (owner,
+ * 2026-11-15, #380): marks flush with the content's edge in an 18px column,
+ * the words 12px after it, 30px in. What has no mark of its own (section
+ * titles, quota lines, a balance on one agent's card) starts at the edge. A stamp in the mark column (「等你」, 「已回」) is wider and
+ * pushes its own row's words on (owner chose so). */
+export const GRID = { mark: 18, gap: 12, text: 30 } as const;
+
 /** A tear line across the receipt, from one side of the paper to the
  * other: a dashed rule bled past the content's margins. */
 export function receiptTear(paper: Paper): CSSProperties {

@@ -10,7 +10,6 @@ import { useFormat } from "@agent-hud/ui/format-context";
 import { handoffFor } from "../alerts/handoff-card";
 import { agentArtworkKey } from "../agent-artwork";
 import { isReview } from "../chatgpt-desk";
-import { ApprovalTag } from "../permissions/ApprovalTag";
 import type { LiveSession } from "./agent-board";
 import { useBoardInks } from "./AgentBoard";
 import { placeRows } from "./place-sessions";
@@ -18,7 +17,7 @@ import { removedKey, useRemovedSessions } from "./removed-sessions";
 import { ReviewRows } from "./ReviewSlip";
 import { RunningMark } from "./RunningMark";
 import { LiveRow } from "./SessionsSection";
-import { noButtonChrome, tabular } from "./theme";
+import { GRID, noButtonChrome, tabular } from "./theme";
 
 /** The places whose running rows are open: shared, so the panel's hidden
  * measuring copy (HUDScene) opens with the one in view and the panel grows
@@ -67,14 +66,12 @@ export function PlaceRows({
   const rows = fold
     ? placeRows(entries, open)
     : { waiting: entries, running: [], folded: 0 };
-  const tagWide = entries.some((entry) => entry.status === "waiting");
   const count =
     rows.waiting.length + rows.running.length + (rows.folded ? 1 : 0);
   const row = (entry: LiveSession, index: number) => (
     <LiveRow
       key={removedKey(entry)}
       entry={entry}
-      tagWide={tagWide}
       handoff={handoffFor(
         snapshot.handoffs,
         entry.session.source,
@@ -119,10 +116,10 @@ export function PlaceRows({
             display: "grid",
             width: "100%",
             boxSizing: "border-box",
-            gridTemplateColumns: "auto minmax(0, 1fr) 26px",
-            columnGap: 10,
+            gridTemplateColumns: `${GRID.mark}px minmax(0, 1fr) 26px`,
+            columnGap: GRID.gap,
             alignItems: "center",
-            padding: "8px 6px",
+            padding: "8px 6px 8px 0",
             textAlign: "left",
             cursor: "pointer",
             borderTop: rows.waiting.length
@@ -130,23 +127,7 @@ export function PlaceRows({
               : undefined,
           }}
         >
-          <span style={{ display: "grid", justifyItems: "start" }}>
-            {tagWide && (
-              <span
-                aria-hidden
-                style={{ gridArea: "1 / 1", visibility: "hidden" }}
-              >
-                <ApprovalTag
-                  label={zh ? "等你" : "WAITING"}
-                  tone="ask"
-                  light={light}
-                />
-              </span>
-            )}
-            <span style={{ gridArea: "1 / 1", alignSelf: "center" }}>
-              <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
-            </span>
-          </span>
+          <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
           <span
             style={{
               display: "flex",
@@ -208,7 +189,7 @@ export function SessionsHeading({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "6px 6px 4px",
+        padding: "6px 6px 4px 0",
         fontSize: 11.5,
         letterSpacing: "0.06em",
         color: inks.secondary,

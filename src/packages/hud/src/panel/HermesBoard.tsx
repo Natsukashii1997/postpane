@@ -367,7 +367,7 @@ export function HermesBoard({
   const now = Date.parse(snapshot.generatedAt);
   if (!bots.length) return null;
   return (
-    <div style={{ display: "grid", gap: 12, padding: "4px 6px 2px" }}>
+    <div style={{ display: "grid", gap: 12, padding: "4px 6px 2px 0" }}>
       {bots.map((bot, index) => (
         <Desk
           key={bot.id}
