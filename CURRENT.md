@@ -28,6 +28,20 @@
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
+## 卡片「还有 n 条」改成贴着列表的一行小字「展开其余 n 条 ⌄」（#382）（2026-11-15，Claude，常浩说「还有 n 条」那一行（上面点线 + 下面大块留白）突兀，看三版预览 https://claude.ai/artifact/8eBxUJbGCj3zfajbRLKKQw 后回「按乙开工」；PR 已 squash 合并、已发布 `7eec140627cc` 回读通过）
+
+- 时间：开工 `2026-11-15 10:15`（`date '+%F %H:%M'` 记录）。来由：折叠入口自成一块（上边 1px 点线、上下各 12px 留白），夹在「等待处理」和「正在进行」两段中间显得突兀。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/permissions/FoldButton.tsx` 去掉上边点线和上下大留白，改成贴着最后一条（上移 4px）、从文字线（`GRID.text`）起的一行小字（12px、淡一档）「展开其余 n 条 ⌄」，展开后「收起 ⌃」；按钮宽度只包住文字。它是唯一的折叠入口，等待处理（待答 / 待批 / 新回复列表、单家卡等待处理会话行）和正在进行三处一起变。
+  - 顺手改的：`unified-card.test.ts` 那条加断言（新文案、`GRID.text` 内边距、没有点线和旧留白）；`test/scenes/scenes.ts` 两个场景标题里的「还有 n 条」改成新文案。
+  - **改变了已有行为的**：入口文案「还有 n 条」→「展开其余 n 条 ⌄」、「收起」→「收起 ⌃」，字号 12.5 → 12，可点范围从整行变成只有文字那一段；入口和列表、下一段之间的空白变小。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`node-test.log`）。中途一次：新断言的 `dotted` 撞上 FoldButton 注释里的字，收紧成样式写法；Chrome 插件测试 20 条因 Playwright 浏览器缓存被清掉挂了，照 L-16 补装 `chromium-headless-shell` 后全过。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-382`，用完已撤）真实点击：`claude-many-asks` 点 Claude 出有待处理的卡，列 4 条下面「展开其余 4 条 ⌄」，点开 8 条全列、末尾「收起 ⌃」，点收起回到 4 条；`claude-busy` 单家卡正在进行列 6 个加「展开其余 2 条 ⌄」，展开 8 个、收起回 6 个。页面脚本量左边：入口文字和同卡标题都在同一条文字线（两份渲染各自相等：48 / 48、801 / 801）；入口文字离上一条副标题 6px。浅色纸也看过。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-382-fold-entry/`：`many-asks-1-folded.jpg`、`many-asks-2-unfolded.jpg`、`many-asks-3-refolded.jpg`、`busy-1-folded.jpg`、`busy-2-unfolded.jpg`、`busy-3-refolded.jpg`、`many-asks-light-folded.jpg`。
+- 发布与回读：分支和 main（`b66f58d`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 382-fold-entry`：装前 `ae8f61c7bda2`，产物 `7eec140627cc` / 已装 `7eec140627cc`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在顶边运行；截屏里有常浩的私人聊天，看完已删。实机点卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-382-fold-entry/PostPane-ae8f61c7bda2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：预览里乙版悬停时字变亮，驿窗卡片按钮都是行内样式、没有悬停样式，这次没加。看板各家区块的「在跑 n」整行折叠不在本次范围，没动。
+- 本轮新坑：无
+
 ## 卡片整体一套左对齐线（应用级设计规范）（#380）（2026-11-15，Claude，常浩原话「你刚才只是把首行和下面的待处理对齐了，再下面的正在跑就没对齐。那这个对齐是整体的应用级别的要求，这是设计规范」；「等你」行选「章留在图标列」；PR 已 squash 合并、已发布 `ae8f61c7bda2` 回读通过）
 
 - 时间：开工 `2026-11-15 09:49`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#376 只让卡头对齐了待处理列表，正在进行的行、分段标题、额度、余额、空状态各用各的缩进（图标 +6、标题 +4 左右）。
