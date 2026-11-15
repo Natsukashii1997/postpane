@@ -65,6 +65,11 @@ test("「还有 n 条」展开后变成「收起」，能折回去", () => {
   const fold = read("permissions/FoldButton.tsx");
   assert.match(fold, /onClick=\{onToggle\}/);
   assert.match(fold, /unfolded\s*\? zh\s*\? "收起"/);
+  // 乙 (#382): a small line on the text line, no dotted rule and no block
+  // of space round it.
+  assert.match(fold, /`展开其余 \$\{hidden\} 条`/);
+  assert.match(fold, /padding: `2px 0 10px \$\{GRID\.text\}px`/);
+  assert.doesNotMatch(fold, /borderTop:|1px dotted|"12px 0 12px/);
   for (const card of [
     "permissions/ApprovalContent.tsx",
     "alerts/CompletionAlertView.tsx",

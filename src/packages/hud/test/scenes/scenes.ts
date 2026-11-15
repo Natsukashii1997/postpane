@@ -283,7 +283,7 @@ const replies: Scene = {
 const claudeBusy: Scene = {
   key: "claude-busy",
   title:
-    "Claude 在跑 8 个、等你回复 1 个（单家卡列 6 个加「还有 2 条」，看板收成「在跑 8」）",
+    "Claude 在跑 8 个、等你回复 1 个（单家卡列 6 个加「展开其余 2 条」，看板收成「在跑 8」）",
   snapshot: snapshot({
     sessions: [
       session({
@@ -319,7 +319,7 @@ const claudeBusy: Scene = {
 
 const claudeManyAsks: Scene = {
   key: "claude-many-asks",
-  title: "Claude 有 8 个提问在等你（看「还有 n 条」展开后能「收起」）",
+  title: "Claude 有 8 个提问在等你（看「展开其余 n 条」展开后能「收起」）",
   snapshot: snapshot({
     sessions: [
       ...[
