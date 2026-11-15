@@ -9,6 +9,10 @@ import type { LiveSession } from "./agent-board.ts";
 /** Past this many running sessions, a place's fold into one line. */
 export const RUNNING_FOLD = 3;
 
+/** On one agent's card, how many running sessions show before 「还有 n
+ * 条」 (owner, 2026-11-15); those waiting show `SHOWN_ENTRIES`. */
+export const RUNNING_SHOWN = 6;
+
 /** The sessions a panel lists: one agent's, or those the layout picks, by
  * agent and by project. `sources` is the agents picked, none for every. */
 export function sessionScope(

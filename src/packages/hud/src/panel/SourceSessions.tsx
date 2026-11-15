@@ -167,6 +167,7 @@ export function SourceSessions({
     >
       {!split && bare && focusVendor && Logo && (
         <BoardHeading
+          card
           vendor={focusVendor}
           place={selectedSources?.[0]}
           Logo={Logo}
@@ -185,7 +186,7 @@ export function SourceSessions({
           light={light}
           now={now}
           onStats={onStats}
-          fold={fold}
+          card
           news={
             news ??
             (replied.length
@@ -241,9 +242,7 @@ export function SourceSessions({
           )}
         </>
       )}
-      {!split && !(fold ? upper : live).length && !replied.length && !news && (
-        <NothingYet light={light} chats={Boolean(desk)} />
-      )}
+      {!split && !fold && !live.length && <NothingYet light={light} />}
       <button
         type="button"
         className="hud-sessions-more"

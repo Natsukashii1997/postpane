@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { liveSessions } from "../src/panel/agent-board.ts";
-import { splitWork } from "../src/panel/place-sessions.ts";
+import { RUNNING_SHOWN, splitWork } from "../src/panel/place-sessions.ts";
 import { approvalGroups } from "../src/permissions/approval-list.ts";
 import { scene } from "./scenes/scenes.ts";
 
@@ -22,7 +22,7 @@ test("等待处理在前、正在进行在后，待核对排在等待处理最�
     waiting.map((entry) => entry.session.id),
     ["c-ask"],
   );
-  assert.equal(running.length, 4);
+  assert.equal(running.length, 8);
   const stale = { ...waiting[0], stale: true };
   const fresh = { ...waiting[0], session: { ...waiting[0].session, id: "x" } };
   assert.deepEqual(
@@ -102,4 +102,28 @@ test("有待处理时的卡不画额度区块，卡头照样带套餐（2026-11-
   );
   // The week's mark under the card stays (#319).
   assert.match(read("scene/NewsCard.tsx"), /WeeklyMark/);
+});
+
+test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、正在进行 6 条后折叠；两段常驻（2026-11-15）", () => {
+  assert.equal(RUNNING_SHOWN, 6);
+  const head = read("panel/BoardHeading.tsx");
+  assert.match(head, /onCard \?\s*\(\s*<BotMark source=\{vendor\}/);
+  assert.match(
+    head,
+    /\.\.\.\(onCard\s*\? \{ paddingLeft: 6, paddingRight: 6 \}/,
+  );
+  // The board keeps its marks and tears: only one agent's card is OnCard.
+  assert.match(
+    read("panel/board-blocks.tsx"),
+    /<OnCard\.Provider value=\{Boolean\(focusVendor\)\}>/,
+  );
+  const work = read("panel/WorkSections.tsx");
+  assert.match(work, /\(card \|\| waitingCount > 0\) &&/);
+  assert.match(work, /\(card \|\| running\.length > 0\) &&/);
+  assert.match(work, /暂无等待处理的事/);
+  assert.match(work, /暂无在跑的会话/);
+  assert.match(work, /shown=\{SHOWN_ENTRIES\}/);
+  assert.match(work, /shown=\{RUNNING_SHOWN\}/);
+  // The card no longer folds its running rows into 「在跑 n」.
+  assert.doesNotMatch(read("panel/SourceSessions.tsx"), /fold=\{fold\}/);
 });

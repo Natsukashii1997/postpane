@@ -75,15 +75,13 @@ test("某家在跑超过 3 条时收成一行，展开后都在；等你不收",
   const folded = placeRows(claude.rows, false);
   assert.deepEqual(ids(folded.waiting), ["c-ask"]);
   assert.deepEqual(folded.running, []);
-  assert.equal(folded.folded, 4);
+  assert.equal(folded.folded, 8);
   const open = placeRows(claude.rows, true);
-  assert.deepEqual(ids(open.running).sort(), [
-    "c-busy-1",
-    "c-busy-2",
-    "c-busy-3",
-    "c-busy-4",
-  ]);
-  assert.equal(open.folded, 4);
+  assert.deepEqual(
+    ids(open.running).sort(),
+    Array.from({ length: 8 }, (_, n) => `c-busy-${n + 1}`),
+  );
+  assert.equal(open.folded, 8);
   // Three or fewer stay listed, with no fold line.
   const few = placeRows(claude.rows.slice(0, 4), false);
   assert.equal(few.running.length, 3);

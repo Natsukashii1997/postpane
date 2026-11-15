@@ -72,7 +72,7 @@ test("every agent's card carries one plane in its head, left of the seal (owner 
   // source, not its mark's name.
   assert.match(
     read("panel/SourceSessions.tsx"),
-    /<BoardHeading\s+vendor=\{focusVendor\}\s+place=\{selectedSources\?\.\[0\]\}/,
+    /<BoardHeading\s+card\s+vendor=\{focusVendor\}\s+place=\{selectedSources\?\.\[0\]\}/,
   );
   // The waiting and reply lists no longer print a plane of their own.
   for (const list of [
