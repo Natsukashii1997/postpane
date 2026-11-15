@@ -28,6 +28,20 @@
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
+## 单家卡卡头和下面内容左对齐（#376）（2026-11-15，Claude，常浩看 #374 实机后说「这行和下面的内容左对齐，现在有点不对齐看着」；PR 已 squash 合并、已发布 `ba843c778e05` 回读通过）
+
+- 时间：开工 `2026-11-15 09:23`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#374 后卡头小人框从卡片内容左边 6px 起、家名在 42px，而有待处理那张卡的列表行图标在 0、标题在 30（以下都按卡片内容左边算），整行看着往右偏。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/BoardHeading.tsx` 单家卡上卡头左内边距按下面的内容定：有待处理的卡（有 `NewsSeal`）为 0，小人占一列 `MARK_COLUMN`（20px，内缩 2px），小人墨迹从 -1px 起、家名在 30px，对齐列表行的图标（0）和标题（30）；其他单家卡为 7，小人墨迹从 6px 起，对齐额度文字、「等你」标签、在跑行图标（都在 6px）。卡头小人 26 → 24 号，放得进那一列。
+  - 顺手改的：`test/unified-card.test.ts` 卡头断言跟着改。
+  - **改变了已有行为的**：单家卡卡头整行左移（有待处理的卡移约 6～12px，其他单家卡小人移约 1px、家名左移 5px），小人略小一号。看板不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-376`）用页面脚本量小人画布的墨迹左边和各元素左边（相对页面）：`claude-many-asks` 点 Claude，改前小人墨迹 ≈ 14、家名 50，列表行图标 8、标题 38；改后小人 6.8、家名 38。`claude-busy` 点 Claude（带额度的单家面板）：改后小人 13.8、家名 45，额度文字、「等你」标签都在 14。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-376-card-head-align/`：`01-before.png`、`02-after-many-asks.png`、`03-after-panel-quota.png`。
+- 发布与回读：分支和 main（`abcedd7`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 376-card-head-align`：装前 `300533126324`，产物 `ba843c778e05` / 已装 `ba843c778e05`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `04-installed-screen.png`：无文稿权限弹窗，侧栏在跑（当时常浩开着设置「显示」页、侧栏在左边，是他自己的操作）。实机点票根看卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-376-card-head-align/PostPane-300533126324.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：卡片里有两套左对齐线：待答 / 待批 / 新回复列表（图标 0、标题 30）和会话行、额度、分段标题（6 / 34），本轮卡头跟着各自卡片下面那套走，没有把两套并成一套（并成一套要改待处理列表的版式，那是 #368 定过的，要先问）。
+- 本轮新坑：无
+
 ## 外层展出卡：卡头换小签小人、去卡头虚线、等待处理 4 条 / 正在进行 6 条后折叠、两段常驻带「暂无」（#374）（2026-11-15，Claude，常浩原话「最上面这个图标用小票签上的图标，和下面的图标区别开。然后删除那条虚线，直接进入到等待处理。然后等待处理默认展示4个，正在进行默认展示6个，其他都折叠。正在进行如果没有正在跑的，那正在进行的那条线也需要在」，范围、折法、空状态三问选「外层展出卡都改」「先列 6 个＋还有 n 条」「两段都常驻」；PR 已 squash 合并、已发布 `300533126324` 回读通过）
 
 - 时间：开工 `2026-11-15 08:57`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：卡头的品牌标记（Claude 橙色星芒）和下面每行会话的标记一样，分不清；卡头下的撕线多余；等待处理、正在进行条数太多。
