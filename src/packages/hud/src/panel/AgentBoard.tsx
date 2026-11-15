@@ -61,7 +61,7 @@ function Sentence({ words, light }: { words: Words; light: boolean }) {
     <div
       className="hud-board-verdict"
       style={{
-        padding: "2px 6px 0",
+        padding: "2px 6px 0 0",
         fontSize: 13.5,
         lineHeight: 1.5,
         color: inks.secondary,
@@ -158,7 +158,7 @@ function QuotaLine({
         gridTemplateColumns: "minmax(0, 1fr) 64px 150px",
         columnGap: 12,
         alignItems: "baseline",
-        padding: "6px 6px",
+        padding: "6px 6px 6px 0",
         borderRadius: 4,
         cursor: clickable ? "pointer" : undefined,
         background: hovered && clickable ? inks.selected : "transparent",
@@ -358,7 +358,7 @@ export function BoardKey({
         display: "flex",
         flexWrap: "wrap",
         gap: "4px 14px",
-        padding: "2px 6px 0",
+        padding: "2px 6px 0 0",
         fontSize: 11,
         color: inks.tertiary,
       }}

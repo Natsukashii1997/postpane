@@ -28,6 +28,20 @@
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
+## 卡片整体一套左对齐线（应用级设计规范）（#380）（2026-11-15，Claude，常浩原话「你刚才只是把首行和下面的待处理对齐了，再下面的正在跑就没对齐。那这个对齐是整体的应用级别的要求，这是设计规范」；「等你」行选「章留在图标列」；PR 已 squash 合并、已发布 `ae8f61c7bda2` 回读通过）
+
+- 时间：开工 `2026-11-15 09:49`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#376 只让卡头对齐了待处理列表，正在进行的行、分段标题、额度、余额、空状态各用各的缩进（图标 +6、标题 +4 左右）。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/theme.ts` 新增 `GRID`（图标列 18、间隔 12、文字线 30），规范写进 `docs/design/卡片版式规范.md`。各块改用它：`SessionsSection.tsx` 会话行（`LiveRow`、`RepliedRow`）图标列固定 18、去左内边距；`PlaceRows.tsx` 在跑折叠行同样处理，分段标题去左内边距；`WorkSections.tsx`「暂无…」放文字线；`AgentBoard.tsx` 额度说明、额度行、图例去左内边距；`HermesBoard.tsx` 去左内边距；`BoardHeading.tsx` 卡头（单家卡和看板）标记占 `GRID.text - 10` 一列、去左内边距，家名落在文字线；余额区块在单家卡上从图标线起，看板上自带小标题时对齐小标题（`paddingLeft: headed ? 0 : GRID.text`）。
+  - 顺手改的：余额区块 `SourceBalances` 从 `QuotaSection.tsx`（570 行，到棘轮上限）拆到 `panel/SourceBalances.tsx`，`QuotaSection.tsx` 降到 324 行，`board-blocks.tsx` 改导入；删掉 `tagWide`（#312 让在跑行标题对齐「等你」行标题的占位，规范下不再需要）；`AGENTS.md` 导航表加「改卡片 / 面板版式」一行；`unified-card.test.ts` 加一条、改一条；行数基线收紧。
+  - **改变了已有行为的**：所有卡片和看板里，正在进行的行、在跑折叠行、分段标题、额度、余额整体左移约 6px，在跑行标题左移约 4px；卡头标记左移 6px、家名跟着落在文字线；看板各家卡头标记从 +6 移到 0；「暂无…」右移到文字线；「等你」「已回」行的标题不再和在跑行对齐（章留在图标列，常浩选的）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-380`）用页面脚本量左边（页面坐标）。改前（main `cf73f8e`）`claude-busy` 单家面板：卡头小人 13.8、家名 45，分段标题 / 在跑点阵 / 额度 / 「等你」章都在 14，在跑标题 42，「还有 n 条」文字 38。改后：`claude-busy` 单家面板 图标线 8（小人 6.8、分段标题、点阵、额度、「等你」章）、文字线 38（家名、在跑标题和副标题、「还有 n 条」），「等你」行标题 57.9；`claude-many-asks` 有待处理的卡 图标线 18（列表图标、分段标题、点阵，小人 16.8）、文字线 48（家名、列表标题、在跑标题）；`all-running` DeepSeek 图标线 18（余额、分段标题、点阵）、文字线 48（家名、在跑标题、「暂无…」）；`chatgpt-reviews` ChatGPT 卡「已回」章在图标线、「暂无在跑的会话」在文字线；Hermes 机器人印章在图标线、名字被印章推到 +34（同「等你」规则），任务表和说明行从图标线起；`claude-busy` 看板 图标线 412（标记、额度、分段标题、点阵）、文字线 442（家名、「在跑 8」）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-380-one-grid/`：`01-busy-panel.jpg`、`02-many-asks-card.jpg`、`03-chatgpt-card.jpg`、`04-deepseek-card.jpg`、`05-hermes-card.jpg`、`06-board.jpg`。
+- 发布与回读：分支和 main（`cf73f8e`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 380-one-grid`：装前 `29af8701ab1a`，产物 `ae8f61c7bda2` / 已装 `ae8f61c7bda2`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在跑（当时常浩把侧栏放在顶边、开着设置「显示」页）；截屏里有常浩的飞书文档列表，看完已删。实机点票根看卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-380-one-grid/PostPane-29af8701ab1a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：额度行有悬停底色时，底色左边和文字贴齐（原来留 6px），行数棘轮不允许多加一行负外边距，先这样。待处理列表（`ListCard`、`ApprovalContent`、`CompletionAlertView`）本来就在这套线上，数值没改成引用 `GRID`（文件到行数上限），测试锁住它们和 `GRID` 一致。设置窗口、统计窗口不在本轮范围。
+- 本轮新坑：无
+
 ## 所有面板去掉底部「近 24 小时 Token / 另有 n 个会话已停」，只留设置和统计；有待处理的卡「设置」能点了（#378）（2026-11-15，Claude，常浩原话「对齐了这块没问题，所有面板如图1这里删除，不要在面板上展示；最下面只保留如图2的设置和统计，但是我发现设置目前无法点击」；PR 已 squash 合并、已发布 `29af8701ab1a` 回读通过）
 
 - 时间：开工 `2026-11-15 09:37`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：常浩不要面板底部那块日 Token、已停会话和小柱图；有待处理的卡上「设置」点不动。

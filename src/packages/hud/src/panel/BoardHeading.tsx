@@ -10,7 +10,7 @@ import { PaperSeal, useNewsSeal } from "../permissions/PaperSeal";
 import { agentArtworkKey, agentVendorName } from "../agent-artwork";
 import { EnterRelay } from "../alerts/RelayToggle";
 import { relaysOf } from "../workspace";
-import type { Logo } from "./theme";
+import { GRID, type Logo } from "./theme";
 import type { BoardStamp } from "./agent-board";
 import { useBoardInks } from "./AgentBoard";
 import { BotMark } from "../BotMark";
@@ -21,8 +21,8 @@ import { botState } from "../bots/bot-state";
  * no tear under it (owner, 2026-11-15). */
 export const OnCard = createContext(false);
 const RESTING = botState();
-/** The rows' mark column: their titles start 30px in, past a 10px gap. */
-const MARK_COLUMN = 20;
+/** The mark's column: the name starts on the grid's words (#380). */
+const MARK_COLUMN = GRID.text - 10;
 
 /** The resting strip's stub paper on a dark screen (HUDMarkStrip). */
 const STUB_PAPER = "#e9e6de";
@@ -145,22 +145,19 @@ export function BoardHeading({
         minHeight: 48,
         paddingBottom: 6,
         // A tear under the head, from one side of the paper to the other; on
-        // one agent's card none, its bot lined up with what is below (owner,
-        // 2026-11-15): the news list's marks at the card's edge, its name
-        // over their titles; the quota and the sessions 6px in.
+        // one agent's card none. Its mark and name on the card's one grid.
         ...(onCard
-          ? { paddingRight: 6, paddingLeft: seal ? 0 : 7 }
+          ? { paddingRight: 6 }
           : paper
             ? {
                 borderBottom: `1.2px dashed ${paper.line}`,
                 marginLeft: -paper.bleed.left,
                 marginRight: -paper.bleed.right,
-                paddingLeft: paper.bleed.left + 6,
+                paddingLeft: paper.bleed.left,
                 paddingRight: paper.bleed.right + 6,
               }
             : {
                 boxShadow: `inset 0 -1px 0 ${inks.divider}`,
-                paddingLeft: 6,
                 paddingRight: 6,
               }),
       }}
@@ -173,7 +170,7 @@ export function BoardHeading({
             display: "inline-grid",
             placeItems: "center",
             flex: "none",
-            width: onCard ? MARK_COLUMN : 24,
+            width: MARK_COLUMN,
             height: 24,
             borderRadius: 5,
             background: STUB_PAPER,
@@ -187,7 +184,7 @@ export function BoardHeading({
             display: "inline-flex",
             justifyContent: "center",
             flex: "none",
-            width: onCard ? MARK_COLUMN : undefined,
+            width: MARK_COLUMN,
             // The bot's ink starts where the rows' marks do.
             boxSizing: "border-box",
             paddingLeft: onCard ? 2 : undefined,
