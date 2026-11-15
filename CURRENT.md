@@ -7,6 +7,20 @@
 
 
 
+## 所有面板去掉底部「近 24 小时 Token / 另有 n 个会话已停」，只留设置和统计；有待处理的卡「设置」能点了（#378）（2026-11-15，Claude，常浩原话「对齐了这块没问题，所有面板如图1这里删除，不要在面板上展示；最下面只保留如图2的设置和统计，但是我发现设置目前无法点击」；PR 已 squash 合并、已发布 `29af8701ab1a` 回读通过）
+
+- 时间：开工 `2026-11-15 09:37`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：常浩不要面板底部那块日 Token、已停会话和小柱图；有待处理的卡上「设置」点不动。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/SourceSessions.tsx` 删掉底部那块（「近 24 小时 n Token / 另有 n 个会话已停 · 去统计看全部」、ChatGPT 的「今天 n 个对话 · 近 24 小时 n 个审核」和右侧小柱图），连同它的取数（会话总数查询、日 Token 查询）。修「设置」：`scene/NewsCard.tsx` 原来只给面板传了统计回调，改为 `links`（统计和设置一起），`HUDScene.tsx` 传 `{ onStats: showPanelStats, onConfigure: configurePanel }`。
+  - 顺手改的：看板时会话区只剩那块，现在整块不画（`HoverPanel.tsx` 会话块加 `!split`，`SourceSessions` 去掉 `split`、`showTokens`、`tokenAgents`、`active` 参数）；删掉只为那块服务的死代码：`HoverPanel` 的 `tokensAbove`，`agent-board.ts` 的 `stoppedCount`、`panelHidesTokens`，`AgentBoard.tsx` 的 `useDayTokens`、`DayBars`，`chatgpt-desk.ts` 的 `reviewsInDay`，以及测它们的 4 条测试；场景预览台 `preview/main.tsx` 给 `HUDScene` 接上设置 / 统计回调（只打日志），预览台里底部两个按钮能点；`file-size-baseline.json` 收紧（`AgentBoard.tsx` 等变短）；`unified-card.test.ts` 加一条。
+  - **改变了已有行为的**：所有面板（单家卡、单家面板、整张看板、ChatGPT 卡）底部不再显示日 Token、已停会话数、今天对话 / 审核数和小柱图，点那块进统计的入口没了（底部「统计」还在）。有待处理的卡上「设置」从禁用变成可点（修 bug）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 461` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-378`）：`claude-many-asks` 点 Claude，底部只剩「设置」「统计」，两个按钮都可点（`disabled: false`），真实点击「设置」控制台打出「[预览台] 打开设置」；接上回调前同一处两个按钮都是禁用（预览台原来没传回调）。`all-running` 切看板：页面里没有「近 24 小时」「个会话已停」字样，底部「设置」「统计」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-378-panel-foot/`：`01-card-foot-no-token.jpg`、`02-card-foot-settings-enabled.jpg`、`03-board.jpg`。
+- 发布与回读：分支和 main（`4de9a64`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 378-panel-foot`：装前 `ba843c778e05`，产物 `29af8701ab1a` / 已装 `29af8701ab1a`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在跑；截屏里有常浩的私人聊天，看完已删，不留档。实机点「设置」未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-378-panel-foot/PostPane-ba843c778e05.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：悬停小收据（AgentPeek）里的「24 小时 Token」不是面板，没动。设置里「Token 用量」开关（`tokenUsage`）现在只管自定义布局的 Token 图表。
+- 本轮新坑：无
+
 ## 单家卡卡头和下面内容左对齐（#376）（2026-11-15，Claude，常浩看 #374 实机后说「这行和下面的内容左对齐，现在有点不对齐看着」；PR 已 squash 合并、已发布 `ba843c778e05` 回读通过）
 
 - 时间：开工 `2026-11-15 09:23`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#374 后卡头小人框从卡片内容左边 6px 起、家名在 42px，而有待处理那张卡的列表行图标在 0、标题在 30（以下都按卡片内容左边算），整行看着往右偏。
