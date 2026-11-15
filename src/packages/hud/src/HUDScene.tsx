@@ -959,7 +959,7 @@ export function HUDScene({
       weekly={weekly}
       decide={onRequestDecision}
       openSettings={openSettings}
-      onStats={showPanelStats}
+      links={{ onStats: showPanelStats, onConfigure: configurePanel }}
       handoff={handoff}
     />
   );

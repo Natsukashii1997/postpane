@@ -155,24 +155,6 @@ export function chatgptDesk(
   };
 }
 
-/** The reviews PostPane opened that had a word in the last day: ChatGPT's
- * panel counts them on its folded line apart from the chats (#219). */
-export function reviewsInDay(
-  snapshot: {
-    sessions: readonly Session[];
-    handoffs?: readonly Handoff[] | null;
-  },
-  now: number,
-): number {
-  const handoffs = snapshot.handoffs ?? [];
-  return snapshot.sessions.filter(
-    (s) =>
-      s.source === "chatgpt" &&
-      isReview(s, handoffs) &&
-      at(s) >= now - 86_400_000,
-  ).length;
-}
-
 /** The open handoffs ChatGPT is not answering now (#288): none of the
  * listed review rows is theirs, so the slip lists them too, newest first,
  * however long they have been quiet and wherever their doer is. */

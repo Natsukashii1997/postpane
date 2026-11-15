@@ -32,7 +32,7 @@ export function NewsCard({
   weekly,
   decide,
   openSettings,
-  onStats,
+  links,
   handoff,
 }: {
   snapshot: Snapshot;
@@ -47,7 +47,8 @@ export function NewsCard({
   weekly: CardWeekly | undefined;
   decide?: (id: string, decision: HUDDecision) => void | Promise<void>;
   openSettings?: (page: string) => void;
-  onStats?: () => void;
+  /** The panel foot's Statistics and Settings (#378: Settings was left out). */
+  links: { onStats?: () => void; onConfigure?: () => void };
   handoff: (callback?: () => void) => void;
 }) {
   const language = snapshotLanguage(snapshot);
@@ -75,7 +76,7 @@ export function NewsCard({
       replies={news.replies}
       quotas={news.quotas}
       drop={news.drop}
-      onStats={onStats}
+      onStats={links.onStats}
       handoff={handoff}
       light={light}
       botLogos={config.botLogos}
@@ -117,7 +118,7 @@ export function NewsCard({
             focusVendor={vendor.name}
             light={light}
             Logo={HUDLogo}
-            onStats={onStats}
+            {...links}
             news={{ count: list.count, content: waiting || notice }}
           />
         </NewsSealContext.Provider>
