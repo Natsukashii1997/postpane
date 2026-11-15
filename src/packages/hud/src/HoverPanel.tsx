@@ -32,7 +32,7 @@ import { OpenNotice } from "./OpenNotice";
 import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
-import { blockListed, panelHidesTokens } from "./panel/agent-board";
+import { blockListed } from "./panel/agent-board";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
@@ -220,24 +220,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     } else blockLines.push([block]);
   }
   const customTokens = Object.keys(config.panelLayout.tokens ?? {}).length > 0;
-  // A panel on an agent with no quota shows no day's tokens (owner, 2026-11-06).
-  const tokensAbove =
-    Boolean(focusVendor) &&
-    ((config.quotaDetails &&
-      vendorNames.length > 0 &&
-      vendorNames.every((vendor) =>
-        panelHidesTokens(
-          snapshot.quotas,
-          vendor,
-          config.panelLayout.blocks?.[vendor]?.widget,
-        ),
-      )) ||
-      // An agent with no block at all (ChatGPT's web channel) has no tokens
-      // to show either (#145).
-      (!vendorNames.length &&
-        !snapshot.quotas.some(
-          (row) => vendorKey(row.vendor) === vendorKey(focusVendor ?? ""),
-        )));
   const sections = inPanelOrder<{ key: string; content: ReactNode }>(
     [
       {
@@ -310,7 +292,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       },
       {
         key: "sessions",
-        content: config.sessionList && (
+        content: config.sessionList && !split && (
           <SourceSessions
             snapshot={snapshot}
             focusVendor={focusVendor}
@@ -318,10 +300,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             Logo={Logo}
             onStats={onStats}
             layout={config.panelLayout.sessions}
-            tokenAgents={config.panelLayout.tokens?.agents}
-            showTokens={config.tokenUsage && !tokensAbove}
-            active={active}
-            split={split}
             bare={Boolean(focusVendor) && (!blocks.length || Boolean(news))}
             news={news}
           />

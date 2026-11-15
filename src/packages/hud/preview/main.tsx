@@ -171,6 +171,9 @@ function Preview() {
             config={config}
             height={height}
             onRequestDecision={() => {}}
+            // The foot's links do nothing here but say so (#378).
+            onConfigure={() => console.info("[预览台] 打开设置")}
+            onStats={() => console.info("[预览台] 打开统计")}
           />
         </div>
       </PanelServicesProvider>

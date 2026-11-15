@@ -6,14 +6,12 @@ import { agentVendorName } from "../src/agent-artwork.ts";
 import { runningSince } from "../src/panel/running-rows.ts";
 import {
   blockListed,
-  panelHidesTokens,
   boardVerdict,
   liveSessions,
   quotaNote,
   quotaLevel,
   quotaOutlook,
   resetText,
-  stoppedCount,
 } from "../src/panel/agent-board.ts";
 import { liveSessionLine } from "../src/panel/live-line.ts";
 import { soleAccount } from "../src/panel/account-labels.ts";
@@ -266,8 +264,6 @@ test("the panel lists sessions waiting on you first, then those at work, and no 
     ],
   );
   assert.equal(listed[1].approval?.id, "req-held");
-  assert.equal(stoppedCount(9, listed.length), 5);
-  assert.equal(stoppedCount(2, listed.length), 0, "never below none");
 });
 
 test("a listed session says what it waits on or what it does", () => {
@@ -357,13 +353,6 @@ test("one account's plan goes in the head; several accounts have none", () => {
   assert.equal(soleAccount(all, accounts), null);
 });
 
-test("a panel on an agent with no quota window leaves its tokens out", () => {
-  const quotas = [{ vendor: "claude" }];
-  assert.equal(panelHidesTokens(quotas, "hermes"), true);
-  assert.equal(panelHidesTokens(quotas, "claude"), false);
-  assert.equal(panelHidesTokens(quotas, "hermes", "chart"), false);
-});
-
 test("an agent with no quota window and nothing to say has no block", () => {
   const quotas = [{ vendor: "claude" }];
   const listed = (vendor: string, widget?: string, notice?: string | null) =>
@@ -439,7 +428,6 @@ test("cloud credits show their dollars and expiry, outside the pace count", () =
   );
 });
 
-test("a panel on ChatGPT, with no quota and no block, names it and leaves tokens out (#145)", () => {
+test("a panel on ChatGPT, with no quota and no block, names it (#145)", () => {
   assert.equal(agentVendorName("openai"), "ChatGPT");
-  assert.equal(panelHidesTokens([], "openai"), true);
 });
