@@ -1,8 +1,12 @@
 // The list cards' fold, moved out of ListCard.tsx for the 300-line ratchet.
+import { GRID } from "../panel/theme";
 import type { Inks } from "./ListCard";
 
-/** The fold: "还有 n 条" unfolds the rest; unfolded, "收起" folds them back
- * (owner, 2026-11-14: once open the list could not be folded again). */
+/** The fold: a small line hung under the list's last row, on the text line,
+ * 「展开其余 n 条 ⌄」; unfolded, 「收起 ⌃」 folds them back (owner, 2026-11-14:
+ * once open the list could not be folded again). No rule above and no block
+ * of space round it: owner, 2026-11-15, the dotted line and the gap stood
+ * out between the two sections (#382, 乙). */
 export function FoldButton({
   hidden,
   unfolded,
@@ -24,15 +28,16 @@ export function FoldButton({
       aria-expanded={unfolded}
       onClick={onToggle}
       style={{
-        display: "block",
-        width: "100%",
-        padding: "12px 0 12px 30px",
+        display: "flex",
+        width: "fit-content",
+        alignItems: "center",
+        gap: 6,
+        margin: "-4px 0 0",
+        padding: `2px 0 10px ${GRID.text}px`,
         border: 0,
-        borderTop: `1px dotted ${inks.line}`,
         background: "transparent",
         color: inks.dim,
-        fontSize: 12.5,
-        textAlign: "left",
+        fontSize: 12,
         cursor: "pointer",
       }}
     >
@@ -41,8 +46,11 @@ export function FoldButton({
           ? "收起"
           : "Fold"
         : zh
-          ? `还有 ${hidden} 条`
-          : `${hidden} more`}
+          ? `展开其余 ${hidden} 条`
+          : `Show ${hidden} more`}
+      <span aria-hidden style={{ fontSize: 10 }}>
+        {unfolded ? "⌃" : "⌄"}
+      </span>
     </button>
   );
 }
