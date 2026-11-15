@@ -108,10 +108,13 @@ test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、�
   assert.equal(RUNNING_SHOWN, 6);
   const head = read("panel/BoardHeading.tsx");
   assert.match(head, /onCard \?\s*\(\s*<BotMark source=\{vendor\}/);
+  // No tear; the bot over the rows' marks, the name over their titles: the
+  // news list's at the card's edge, the quota and sessions' 6px in (#376).
   assert.match(
     head,
-    /\.\.\.\(onCard\s*\? \{ paddingLeft: 6, paddingRight: 6 \}/,
+    /\.\.\.\(onCard\s*\? \{ paddingRight: 6, paddingLeft: seal \? 0 : 7 \}/,
   );
+  assert.match(head, /const MARK_COLUMN = 20;/);
   // The board keeps its marks and tears: only one agent's card is OnCard.
   assert.match(
     read("panel/board-blocks.tsx"),
