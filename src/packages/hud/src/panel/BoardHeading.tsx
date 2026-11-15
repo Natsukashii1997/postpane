@@ -21,6 +21,8 @@ import { botState } from "../bots/bot-state";
  * no tear under it (owner, 2026-11-15). */
 export const OnCard = createContext(false);
 const RESTING = botState();
+/** The rows' mark column: their titles start 30px in, past a 10px gap. */
+const MARK_COLUMN = 20;
 
 /** The resting strip's stub paper on a dark screen (HUDMarkStrip). */
 const STUB_PAPER = "#e9e6de";
@@ -129,7 +131,7 @@ export function BoardHeading({
     agentArtworkKey(vendor) === "hermes" && !(paper ? paper.light : light);
   const mark = (on: boolean) =>
     onCard ? (
-      <BotMark source={vendor} size={26} light={on} state={RESTING} staysBot />
+      <BotMark source={vendor} size={24} light={on} state={RESTING} staysBot />
     ) : (
       <Logo source={vendor} size={20} light={on} />
     );
@@ -142,9 +144,12 @@ export function BoardHeading({
         gap: 10,
         minHeight: 48,
         paddingBottom: 6,
-        // A tear under the head, from one side of the paper to the other.
+        // A tear under the head, from one side of the paper to the other; on
+        // one agent's card none, its bot lined up with what is below (owner,
+        // 2026-11-15): the news list's marks at the card's edge, its name
+        // over their titles; the quota and the sessions 6px in.
         ...(onCard
-          ? { paddingLeft: 6, paddingRight: 6 }
+          ? { paddingRight: 6, paddingLeft: seal ? 0 : 7 }
           : paper
             ? {
                 borderBottom: `1.2px dashed ${paper.line}`,
@@ -168,7 +173,7 @@ export function BoardHeading({
             display: "inline-grid",
             placeItems: "center",
             flex: "none",
-            width: 24,
+            width: onCard ? MARK_COLUMN : 24,
             height: 24,
             borderRadius: 5,
             background: STUB_PAPER,
@@ -177,7 +182,17 @@ export function BoardHeading({
           {mark(true)}
         </span>
       ) : (
-        <span style={{ display: "inline-flex", flex: "none" }}>
+        <span
+          style={{
+            display: "inline-flex",
+            justifyContent: "center",
+            flex: "none",
+            width: onCard ? MARK_COLUMN : undefined,
+            // The bot's ink starts where the rows' marks do.
+            boxSizing: "border-box",
+            paddingLeft: onCard ? 2 : undefined,
+          }}
+        >
           {mark(light)}
         </span>
       )}
