@@ -282,7 +282,8 @@ const replies: Scene = {
 
 const claudeBusy: Scene = {
   key: "claude-busy",
-  title: "Claude 在跑 4 个、等你回复 1 个（看在跑收成一行「在跑 4」）",
+  title:
+    "Claude 在跑 8 个、等你回复 1 个（单家卡列 6 个加「还有 2 条」，看板收成「在跑 8」）",
   snapshot: snapshot({
     sessions: [
       session({
@@ -292,16 +293,24 @@ const claudeBusy: Scene = {
         state: "waiting",
         lastAgo: 2,
       }),
-      ...["拆分设置页", "补齐导出测试", "整理依赖清单", "重写启动脚本"].map(
-        (title, index) =>
-          session({
-            place: "claude",
-            id: `c-busy-${index + 1}`,
-            title,
-            state: "running",
-            startedAgo: 3 + index * 4,
-            lastAgo: 1 + index,
-          }),
+      ...[
+        "拆分设置页",
+        "补齐导出测试",
+        "整理依赖清单",
+        "重写启动脚本",
+        "清理旧日志",
+        "对齐图标尺寸",
+        "补交接文档",
+        "核对快捷键",
+      ].map((title, index) =>
+        session({
+          place: "claude",
+          id: `c-busy-${index + 1}`,
+          title,
+          state: "running",
+          startedAgo: 3 + index * 4,
+          lastAgo: 1 + index,
+        }),
       ),
       running[1],
     ],

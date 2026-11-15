@@ -238,8 +238,9 @@ export interface ApprovalGroup {
   entries: ApprovalEntry[];
 }
 
-/** At most this many lines show before the rest fold into one. */
-export const SHOWN_ENTRIES = 5;
+/** At most this many lines show before the rest fold into one; 4 on every
+ * card (owner, 2026-11-15). */
+export const SHOWN_ENTRIES = 4;
 
 /**
  * The list as the card prints it: the first `limit` lines in `order` (the

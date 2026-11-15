@@ -1,6 +1,7 @@
 // The head of an agent's board block (issue #52): its mark and name, its
 // plan, the stamp saying whether its quotas last, and the white paper plane
 // into the relays it takes part in, left of the stamp (#344, ADR-0001 C2).
+import { createContext, useContext } from "react";
 import type { Handoff } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { PAPER_SEAL, usePaper } from "../paper";
@@ -12,6 +13,14 @@ import { relaysOf } from "../workspace";
 import type { Logo } from "./theme";
 import type { BoardStamp } from "./agent-board";
 import { useBoardInks } from "./AgentBoard";
+import { BotMark } from "../BotMark";
+import { botState } from "../bots/bot-state";
+
+/** The head is on one agent's card, not on the whole board: it wears the
+ * agent's bot, as its tag does, apart from the marks on the rows below, and
+ * no tear under it (owner, 2026-11-15). */
+export const OnCard = createContext(false);
+const RESTING = botState();
 
 /** The resting strip's stub paper on a dark screen (HUDMarkStrip). */
 const STUB_PAPER = "#e9e6de";
@@ -97,6 +106,7 @@ export function BoardHeading({
   stamp,
   handoffs,
   place = vendor,
+  card = false,
 }: {
   vendor: string;
   /** The source whose relays the plane leads into, where the mark's name is
@@ -107,7 +117,9 @@ export function BoardHeading({
   plan?: string | null;
   stamp?: BoardStamp | null;
   handoffs?: readonly Handoff[];
+  card?: boolean;
 }) {
+  const onCard = useContext(OnCard) || card;
   const inks = useBoardInks(light);
   const paper = usePaper();
   const zh = useFormat().language === "zh";
@@ -115,6 +127,12 @@ export function BoardHeading({
   const seal = useNewsSeal();
   const portraitChip =
     agentArtworkKey(vendor) === "hermes" && !(paper ? paper.light : light);
+  const mark = (on: boolean) =>
+    onCard ? (
+      <BotMark source={vendor} size={26} light={on} state={RESTING} staysBot />
+    ) : (
+      <Logo source={vendor} size={20} light={on} />
+    );
   return (
     <div
       className="hud-source-provider-heading"
@@ -125,19 +143,21 @@ export function BoardHeading({
         minHeight: 48,
         paddingBottom: 6,
         // A tear under the head, from one side of the paper to the other.
-        ...(paper
-          ? {
-              borderBottom: `1.2px dashed ${paper.line}`,
-              marginLeft: -paper.bleed.left,
-              marginRight: -paper.bleed.right,
-              paddingLeft: paper.bleed.left + 6,
-              paddingRight: paper.bleed.right + 6,
-            }
-          : {
-              boxShadow: `inset 0 -1px 0 ${inks.divider}`,
-              paddingLeft: 6,
-              paddingRight: 6,
-            }),
+        ...(onCard
+          ? { paddingLeft: 6, paddingRight: 6 }
+          : paper
+            ? {
+                borderBottom: `1.2px dashed ${paper.line}`,
+                marginLeft: -paper.bleed.left,
+                marginRight: -paper.bleed.right,
+                paddingLeft: paper.bleed.left + 6,
+                paddingRight: paper.bleed.right + 6,
+              }
+            : {
+                boxShadow: `inset 0 -1px 0 ${inks.divider}`,
+                paddingLeft: 6,
+                paddingRight: 6,
+              }),
       }}
     >
       {portraitChip ? (
@@ -154,11 +174,11 @@ export function BoardHeading({
             background: STUB_PAPER,
           }}
         >
-          <Logo source={vendor} size={20} light />
+          {mark(true)}
         </span>
       ) : (
         <span style={{ display: "inline-flex", flex: "none" }}>
-          <Logo source={vendor} size={20} light={light} />
+          {mark(light)}
         </span>
       )}
       <strong style={{ fontSize: 15, fontWeight: 600, color: inks.text }}>
