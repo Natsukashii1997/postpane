@@ -10,7 +10,7 @@ import { ApprovalTag } from "../permissions/ApprovalTag";
 import { agentVendorName } from "../agent-artwork";
 import { liveSessions } from "./agent-board";
 import { useBoardInks } from "./AgentBoard";
-import { BoardHeading } from "./BoardHeading";
+import { BoardHeading, OnCard } from "./BoardHeading";
 import { boardPlaces, boardWaiting, sessionScope } from "./place-sessions";
 import { BlockSessions } from "./PlaceRows";
 import { SourceBalances, SourceProviderBlock } from "./QuotaSection";
@@ -54,22 +54,24 @@ export function useBoardBlocks({
       ...vendorNames.map((vendor) => ({
         key: vendor,
         content: (
-          <SourceProviderBlock
-            vendor={vendor}
-            rows={blockRows(
-              rowsByVendor.get(vendor) ?? [],
-              layout.blocks?.[vendor],
-            ).map((row) => ({ ...row, key: quotaRowKey(row) }))}
-            layout={layout.blocks?.[vendor]}
-            snapshot={snapshot}
-            active={active}
-            now={Date.parse(snapshot.generatedAt)}
-            light={light}
-            Logo={Logo}
-            showReset={config.resetCountdown}
-            accountInfo={snapshot.accounts}
-            onStats={onStats}
-          />
+          <OnCard.Provider value={Boolean(focusVendor)}>
+            <SourceProviderBlock
+              vendor={vendor}
+              rows={blockRows(
+                rowsByVendor.get(vendor) ?? [],
+                layout.blocks?.[vendor],
+              ).map((row) => ({ ...row, key: quotaRowKey(row) }))}
+              layout={layout.blocks?.[vendor]}
+              snapshot={snapshot}
+              active={active}
+              now={Date.parse(snapshot.generatedAt)}
+              light={light}
+              Logo={Logo}
+              showReset={config.resetCountdown}
+              accountInfo={snapshot.accounts}
+              onStats={onStats}
+            />
+          </OnCard.Provider>
         ),
       })),
       ...[...new Set(billing.map((account) => account.vendor))]
@@ -93,6 +95,7 @@ export function useBoardBlocks({
             content: headed ? (
               <div style={{ display: "grid", gap: 8 }}>
                 <BoardHeading
+                  card
                   vendor={vendor}
                   Logo={Logo}
                   light={light}

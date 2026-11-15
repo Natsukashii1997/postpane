@@ -7,6 +7,20 @@
 
 
 
+## 外层展出卡：卡头换小签小人、去卡头虚线、等待处理 4 条 / 正在进行 6 条后折叠、两段常驻带「暂无」（#374）（2026-11-15，Claude，常浩原话「最上面这个图标用小票签上的图标，和下面的图标区别开。然后删除那条虚线，直接进入到等待处理。然后等待处理默认展示4个，正在进行默认展示6个，其他都折叠。正在进行如果没有正在跑的，那正在进行的那条线也需要在」，范围、折法、空状态三问选「外层展出卡都改」「先列 6 个＋还有 n 条」「两段都常驻」；PR 已 squash 合并、已发布 `300533126324` 回读通过）
+
+- 时间：开工 `2026-11-15 08:57`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：卡头的品牌标记（Claude 橙色星芒）和下面每行会话的标记一样，分不清；卡头下的撕线多余；等待处理、正在进行条数太多。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/BoardHeading.tsx` 新增 `OnCard`（上下文）和 `card` 参数，在单家卡上卡头标记换成小签同款 `BotMark`（26 号，静止姿态），不画卡头下的撕线；`panel/board-blocks.tsx` 有 `focusVendor` 时给额度区块包 `OnCard`，只剩余额的家卡头传 `card`；`panel/SourceSessions.tsx` 卡头传 `card`，会话区改传 `card`（不再传 `fold`）。`panel/WorkSections.tsx` 加 `card` 模式：两段标题常驻，空时分别写「暂无等待处理的事」「暂无在跑的会话」；等待处理列 `SHOWN_ENTRIES` 条、正在进行列 `RUNNING_SHOWN` 条，其余收进「还有 n 条」，展开后「收起」（新组件 `Folded`，沿用 `permissions/FoldButton.tsx`）。`permissions/approval-list.ts` `SHOWN_ENTRIES` 5 → 4（待答 / 待批 / 新回复列表跟着变）；`panel/place-sessions.ts` 新增 `RUNNING_SHOWN = 6`。
+  - 顺手改的：`NothingYet` 只剩全家列表用，去掉不再走得到的 ChatGPT「今天还没有对话」分支；场景 `claude-busy` 在跑从 4 个加到 8 个（单家卡看得到「还有 2 条」），`board-sessions.test.ts`、`unified-card.test.ts` 跟着改；`approval-list.test.ts` 按 4 条改写，排序那条显式传 `Infinity`，和默认条数脱钩；`relay-toggle.test.ts` 卡头断言加 `card`；`unified-card.test.ts` 新增一条。
+  - **改变了已有行为的**：① 单家卡（有待处理的卡和单家面板）卡头图标从品牌标记换成小人；② 单家卡卡头下没有撕线；③ 待答 / 待批 / 新回复列表默认 4 条（原 5 条）；④ 单家卡正在进行超过 6 个时列 6 个加「还有 n 条」（原超过 3 个整段收成「在跑 n」）；⑤ 单家卡两段常驻，空时写「暂无」，全空时不再写「没有会话在跑，也没有在等你的」。整张看板不变（品牌标记、撕线、「在跑 n」照旧）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-374`）：`claude-many-asks` 点 Claude：卡头小螃蟹 + MAX + 待答，没有撕线，等待处理 · 8 列 4 条 +「还有 4 条」，正在进行 · 1。`claude-busy` 点 Claude（单家面板带额度）：卡头小螃蟹、没有撕线，正在进行 · 8 列 6 个 +「还有 2 条」，真实点击展开后 8 个都在、变「收起」。`all-running` 点 Codex：等待处理 · 0 下写「暂无等待处理的事」。`claude-busy` 切看板：Claude、Codex 区块仍是品牌标记、卡头下有撕线、正在进行收成「在跑 8」。卡头小人先试 22 号偏小，改 26 号。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-374-card-head-tidy/`：`01-many-asks-head-waiting4.jpg`、`02-many-asks-running.jpg`、`03-busy-panel-head-bot26.jpg`、`04-busy-running6-more2.jpg`、`05-busy-unfolded-fold-back.jpg`、`06-all-running-codex-empty-waiting.jpg`、`07-board-unchanged.jpg`。
+- 发布与回读：分支和 main（`25a55f3`）之间没有别的提交，打包用的树即合并后的树。`tauri build --bundles app` 退出码 0（`build.log`）；`install.sh 374-card-head-tidy`：装前 `dc8d9adcf909`，产物 `300533126324` / 已装 `300533126324`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `08-installed-screen.png`：无文稿权限弹窗，侧栏在跑。实机点票根看卡未做：常浩当时在用飞书，悬停面板电脑控制点不动（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-374-card-head-tidy/PostPane-dc8d9adcf909.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：卡头小人不跟设置里「小人 / 品牌标记」开关（`botLogos`）走，一律画小人（卡头组件拿不到设置）；常浩开着小人，没影响。ChatGPT 卡的「等待处理」（今天已回的对话）也按 4 条折叠。范围外：「另有 0 个会话已停」0 个时也显示，没动。
+- 本轮新坑：无
+
 ## 有待处理时的展开卡去掉额度区块，卡头补回套餐标签（#371）（2026-11-15，Claude，常浩原话「去掉图一的额度展现形式，只保留图2底层的水印数字，以及侧边票根下方的数字，都是周度额度」，后选「顺带补回套餐标签」；PR 已 squash 合并、已发布 `dc8d9adcf909` 回读通过）
 
 - 时间：开工 `2026-11-15 07:15`（`date '+%F %H:%M'` 记录；WIP 提交 `b23aaed` 时间，本会话 07:23 接手）。来由：#368 把待审批卡并进单家面板后，有待处理时卡上多了一大块额度区块，常浩要去掉，只留卡底周额度暗印（#319）和票根脚上的数字（本来就是周额度，#174，不用改）。上一节「待常浩定」的暗印问题就此定了：保留。
