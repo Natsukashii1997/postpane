@@ -130,3 +130,14 @@ test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、�
   // The card no longer folds its running rows into 「在跑 n」.
   assert.doesNotMatch(read("panel/SourceSessions.tsx"), /fold=\{fold\}/);
 });
+
+test("面板底部只留设置和统计；有待处理的卡的「设置」也能点（#378）", () => {
+  const sessions = read("panel/SourceSessions.tsx");
+  assert.doesNotMatch(sessions, /hud-sessions-more|近 24 小时|已停/);
+  // The card's panel gets Settings as well as Statistics.
+  assert.match(read("scene/NewsCard.tsx"), /\{\.\.\.links\}/);
+  assert.match(
+    read("HUDScene.tsx"),
+    /links=\{\{ onStats: showPanelStats, onConfigure: configurePanel \}\}/,
+  );
+});

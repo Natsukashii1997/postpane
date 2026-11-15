@@ -4,14 +4,10 @@
 // resets, a bold bar marking where the pace takes it by the reset (hatched)
 // and where a steady pace would have it now (amber).
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import type { Quota, Snapshot, StatisticsResponse } from "@agent-hud/protocol";
+import type { Quota } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
-import {
-  dateFormat,
-  quotaPercentLabel,
-  systemTimeZone,
-} from "@agent-hud/ui/format";
-import { usePanelQuery, usePanelServices } from "../PanelContext";
+import { quotaPercentLabel } from "@agent-hud/ui/format";
+import { usePanelServices } from "../PanelContext";
 import { PAPER_FIGURES, paperLevel, usePaper } from "../paper";
 import { tabular, usePanelPalette } from "./theme";
 import {
@@ -394,120 +390,5 @@ function Key({
       <i style={{ display: "inline-block", width: 12, height: 6, ...swatch }} />
       {children}
     </span>
-  );
-}
-
-/** The last 24 hours of tokens, an hour a bar, for the agents `providers`
- * names (every agent without). */
-export function useDayTokens(
-  snapshot: Snapshot,
-  providers: string[] | undefined,
-  active: boolean,
-) {
-  const now = Date.parse(snapshot.generatedAt);
-  const to = Math.ceil(now / 3_600_000) * 3_600_000;
-  const from = to - 86_400_000;
-  const query = usePanelQuery<StatisticsResponse>(
-    "statistics",
-    {
-      from: new Date(from).toISOString(),
-      to: new Date(to).toISOString(),
-      bucketMinutes: 60,
-      timeZone: systemTimeZone(),
-      tokenKinds: ["input", "output", "cacheRead", "cacheWrite", "reasoning"],
-      ...(providers ? { providers } : {}),
-    },
-    snapshot.statisticsRevision,
-    active,
-  );
-  const points = query.data
-    ? query.data.buckets.map((bucket) => bucket.selectedTokens)
-    : providers
-      ? []
-      : snapshot.timeline
-          .filter((point) => {
-            const at = Date.parse(point.timestamp);
-            return at >= from && at < to;
-          })
-          .map((point) => point.tokens);
-  // Until the answer comes, the providers' own last 24 hours.
-  const recent = snapshot.providers
-    .filter((provider) => !providers || providers.includes(provider.id))
-    .reduce((sum, provider) => sum + (provider.recent?.tokens ?? 0), 0);
-  const total = query.data?.totals.selectedTokens ?? recent;
-  return { from, to, points, total };
-}
-
-/** The day's tokens as bars, the current hour's in red; with `axis`, the
- * hours under them. */
-export function DayBars({
-  points,
-  from,
-  height,
-  light,
-  axis = false,
-}: {
-  points: number[];
-  from: number;
-  height: number;
-  light: boolean;
-  axis?: boolean;
-}) {
-  const inks = useBoardInks(light);
-  const { language, calendar } = useFormat();
-  const peak = Math.max(1, ...points);
-  const time = dateFormat(language === "zh" ? "zh-CN" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: calendar.timeZone,
-  });
-  const ticks = [0, 6, 12, 18].map((hours, index) => {
-    const label = time.format(from + hours * 3_600_000);
-    return index === 0 ? (language === "zh" ? `昨天 ${label}` : label) : label;
-  });
-  return (
-    <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-      <div
-        aria-hidden
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          gap: 2,
-          height,
-        }}
-      >
-        {(points.length ? points : Array(24).fill(0)).map((tokens, index) => (
-          <span
-            key={index}
-            style={{
-              flex: 1,
-              minHeight: 1,
-              height: `${(tokens / peak) * 100}%`,
-              borderRadius: "1px 1px 0 0",
-              background:
-                index === points.length - 1 && tokens > 0 ? inks.red : inks.bar,
-              opacity: tokens > 0 ? 0.9 : 0.35,
-            }}
-          />
-        ))}
-      </div>
-      {axis && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 10.5,
-            color: inks.tertiary,
-            ...tabular,
-          }}
-        >
-          {ticks.map((tick) => (
-            <span key={tick}>{tick}</span>
-          ))}
-          <span>{language === "zh" ? "现在" : "Now"}</span>
-        </div>
-      )}
-    </div>
   );
 }
