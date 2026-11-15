@@ -8,7 +8,7 @@ import { failureOf } from "../open-result";
 import type { Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { noButtonChrome, tabular } from "./theme";
+import { GRID, noButtonChrome, tabular } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
 import type { LiveSession } from "./agent-board";
@@ -113,9 +113,9 @@ export function RepliedRow({
       style={{
         display: "grid",
         gridTemplateColumns: "auto minmax(0, 1fr) 26px",
-        columnGap: 10,
+        columnGap: GRID.gap,
         alignItems: "center",
-        padding: "8px 6px",
+        padding: "8px 6px 8px 0",
         cursor: "pointer",
         opacity: hover ? 0.78 : 1,
         borderTop: first ? undefined : `1px dotted ${inks.divider}`,
@@ -199,7 +199,6 @@ export function LiveRow({
   open,
   onOpen,
   onRemove,
-  tagWide = false,
 }: {
   entry: LiveSession;
   /** The handoff it is in: its second line says how that goes. */
@@ -215,9 +214,6 @@ export function LiveRow({
   open: boolean;
   onOpen(open: boolean): void;
   onRemove(): void;
-  /** Its list has 「等你」 rows: a running row's mark takes their tag's
-   * width, so the titles line up (#312). */
-  tagWide?: boolean;
 }) {
   const { language } = useFormat();
   const zh = language === "zh";
@@ -537,12 +533,10 @@ export function LiveRow({
           style={{
             position: "relative",
             display: "grid",
-            gridTemplateColumns: bot
-              ? "auto minmax(0, 1fr) auto 26px"
-              : "auto minmax(0, 1fr) 26px",
-            columnGap: 10,
+            gridTemplateColumns: `${waiting ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
+            columnGap: GRID.gap,
             alignItems: "center",
-            padding: "8px 6px",
+            padding: "8px 6px 8px 0",
             cursor: "pointer",
             opacity: hover && !x ? 0.78 : 1,
             transform: x ? `translateX(${x}px)` : undefined,
@@ -557,26 +551,7 @@ export function LiveRow({
               color={inks.red}
             />
           ) : (
-            <span style={{ display: "grid", justifyItems: "start" }}>
-              {tagWide && (
-                <span
-                  aria-hidden
-                  style={{ gridArea: "1 / 1", visibility: "hidden" }}
-                >
-                  <ApprovalTag
-                    label={zh ? "等你" : "WAITING"}
-                    tone="ask"
-                    light={light}
-                  />
-                </span>
-              )}
-              <span style={{ gridArea: "1 / 1", alignSelf: "center" }}>
-                <RunningMark
-                  label={zh ? "在跑" : "Running"}
-                  color={inks.green}
-                />
-              </span>
-            </span>
+            <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
           )}
           <span
             style={{

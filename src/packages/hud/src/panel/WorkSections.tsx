@@ -15,6 +15,7 @@ import type { LiveSession } from "./agent-board";
 import { useBoardInks } from "./AgentBoard";
 import { PlaceRows, SessionsHeading } from "./PlaceRows";
 import { RUNNING_SHOWN, splitWork } from "./place-sessions";
+import { GRID } from "./theme";
 
 export function WorkSections({
   snapshot,
@@ -145,7 +146,11 @@ function Empty({ light, children }: { light: boolean; children: ReactNode }) {
   const inks = useBoardInks(light);
   return (
     <span
-      style={{ padding: "6px 6px 8px", fontSize: 12.5, color: inks.tertiary }}
+      style={{
+        padding: `6px 6px 8px ${GRID.text}px`,
+        fontSize: 12.5,
+        color: inks.tertiary,
+      }}
     >
       {children}
     </span>

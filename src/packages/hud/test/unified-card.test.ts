@@ -108,13 +108,8 @@ test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、�
   assert.equal(RUNNING_SHOWN, 6);
   const head = read("panel/BoardHeading.tsx");
   assert.match(head, /onCard \?\s*\(\s*<BotMark source=\{vendor\}/);
-  // No tear; the bot over the rows' marks, the name over their titles: the
-  // news list's at the card's edge, the quota and sessions' 6px in (#376).
-  assert.match(
-    head,
-    /\.\.\.\(onCard\s*\? \{ paddingRight: 6, paddingLeft: seal \? 0 : 7 \}/,
-  );
-  assert.match(head, /const MARK_COLUMN = 20;/);
+  // No tear; the bot on the grid's marks, the name on its words (#380).
+  assert.match(head, /\.\.\.\(onCard\s*\? \{ paddingRight: 6 \}/);
   // The board keeps its marks and tears: only one agent's card is OnCard.
   assert.match(
     read("panel/board-blocks.tsx"),
@@ -139,5 +134,39 @@ test("面板底部只留设置和统计；有待处理的卡的「设置」也�
   assert.match(
     read("HUDScene.tsx"),
     /links=\{\{ onStats: showPanelStats, onConfigure: configurePanel \}\}/,
+  );
+});
+
+test("卡片整体一套左对齐线：图标线 0、文字线 30，各块都引用 GRID（#380）", () => {
+  assert.match(
+    read("panel/theme.ts"),
+    /export const GRID = \{ mark: 18, gap: 12, text: 30 \} as const;/,
+  );
+  // The news list already sits on it: an 18px mark column, a 12px gap.
+  assert.match(
+    read("permissions/ListCard.tsx"),
+    /`\$\{seal \? SEAL_COLUMN : 18\}px minmax\(0, 1fr\) auto 26px`,\s*columnGap: 12,/,
+  );
+  // Session rows and the fold line: the mark column, then the words.
+  const live = read("panel/SessionsSection.tsx");
+  assert.match(live, /\$\{waiting \? "auto" : `\$\{GRID\.mark\}px`\}/);
+  assert.equal(live.match(/padding: "8px 6px 8px 0"/g)?.length, 2);
+  const place = read("panel/PlaceRows.tsx");
+  assert.match(place, /`\$\{GRID\.mark\}px minmax\(0, 1fr\) 26px`/);
+  assert.match(place, /padding: "6px 6px 4px 0"/);
+  assert.doesNotMatch(place + live, /tagWide/);
+  // Words on the words' line; heads, quota and balances on the marks'.
+  assert.match(
+    read("panel/WorkSections.tsx"),
+    /`6px 6px 8px \$\{GRID\.text\}px`/,
+  );
+  assert.match(
+    read("panel/BoardHeading.tsx"),
+    /const MARK_COLUMN = GRID\.text - 10;/,
+  );
+  assert.match(read("panel/AgentBoard.tsx"), /padding: "6px 6px 6px 0"/);
+  assert.match(
+    read("panel/SourceBalances.tsx"),
+    /paddingLeft: headed \? 0 : GRID\.text/,
   );
 });
