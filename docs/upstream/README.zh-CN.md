@@ -263,7 +263,7 @@ pnpm run build:macos -- --bundle
 
 **修改过的 Tao。** HUD 在 macOS 上必须是一个不抢焦点的面板，不会把你正在用的应用切到后台；上游 Tao 目前还创建不了这种窗口（[tao#414](https://github.com/tauri-apps/tao/issues/414)）。在上游支持之前，工作区从[一个公开的分支](https://github.com/jazzenchen/tao/tree/agent-hud/nonactivating-panel)取 `tao`：在 0.37.1 之上只多一个小提交，在 `Cargo.toml` 里按提交固定，首次构建时由 Cargo 从 GitHub 拉取。改了什么、以后怎样换到新的 Tao 版本，见 [Tao 补丁](../tao-panel-patch.md)。
 
-**预览版。** 这个构建正逐项对照原生 Swift 版 [agent-hud-native-open](https://github.com/jazzenchen/agent-hud-native-open)（原 agent-hud-open）的行为，见[对齐清单](../parity/README.md)。它暂不安装客户端回调，因此批准、提问与大部分回复仍留在各 agent 自己的提示里。
+**预览版。** 这个构建正逐项对照原生 Swift 版 [agent-hud-native-open](https://github.com/jazzenchen/agent-hud-native-open)（原 agent-hud-open）的行为，见对齐清单（驿窗已在 #389 删除）。它暂不安装客户端回调，因此批准、提问与大部分回复仍留在各 agent 自己的提示里。
 
 <details>
 <summary><strong>开发</strong></summary>
@@ -282,7 +282,7 @@ pnpm run build:macos -- --bundle
 
 ## 文档
 
-[开发](../development.md) · [平台架构](../platform-architecture.md) · [平台构建](../platform-builds.md) · [账户](../accounts.md) · [客户端回调](../client-hooks.md) · [会话数据](../session-data.md) · [性能](../performance.md) · [对齐清单](../parity/README.md) · [Tao 补丁](../tao-panel-patch.md) · [第三方来源](../third-party.md) · [贡献指南](CONTRIBUTING.md)
+[开发](../development.md) · [平台架构](../platform-architecture.md) · [平台构建](../platform-builds.md) · [账户](../accounts.md) · [客户端回调](../client-hooks.md) · [会话数据](../session-data.md) · [性能](../performance.md) · [Tao 补丁](../tao-panel-patch.md) · [第三方来源](../third-party.md) · [贡献指南](CONTRIBUTING.md)
 
 ## 许可证
 

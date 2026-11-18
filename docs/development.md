@@ -98,7 +98,7 @@ Settings, Statistics and the floating HUD run as separate windows of the single 
 
 ## Still to migrate
 
-See [the parity ledger](parity/README.md) for a behavior-by-behavior comparison with agent-hud-native-open, the native Swift app. Remaining gaps include full visual/interaction comparison, rich conversation rendering, some native-client observers, API model-row controls, native Windows/Linux qualification and signed release configuration. A compiled adapter or passing synthetic fixture does not prove live endpoint or OS parity.
+The behavior-by-behavior comparison with agent-hud-native-open, the native Swift app, was the parity ledger in `docs/parity/`; PostPane no longer tracks that app and removed the ledger (#389, it stays in git history). The gaps it listed include full visual/interaction comparison, rich conversation rendering, some native-client observers, API model-row controls, native Windows/Linux qualification and signed release configuration. A compiled adapter or passing synthetic fixture does not prove live endpoint or OS parity.
 
 Transcript state follows the events a client actually wrote; without usable evidence it stays **unverified**, rather than being guessed from file modification times. Unknown costs and quotas are unavailable. Initial indexing reports partial totals until the pending files are read. Usage entries are not a promise of full conversation turns or fork-aware accounting parity. Windows and Linux source paths are implemented but still need verification on those operating systems; WSL sources are not automatically discovered.
 
@@ -106,4 +106,4 @@ Transcript state follows the events a client actually wrote; without usable evid
 
 The front end is four packages: `@agent-hud/ui` (components and theme), `@agent-hud/hud` (the HUD), `@agent-hud/app` (the windows) and `@agent-hud/protocol` (types); `src/apps/desktop` only mounts the app. shadcn/ui components are generated from the current registry into `src/packages/ui` (run the shadcn CLI there). The HUD rim is one WGSL shader drawn with WebGPU directly (`glow-gpu.ts`), with no shader library: it draws only when its size or uniforms change, the soft breathe is a compositor opacity animation over that frame, and moving effects draw at the original GlowAnimator rate. It uses a still neutral rim without quota readings or with reduced motion, and a CPU still without WebGPU. See [third-party notices](third-party.md).
 
-See [platform ownership](platform-architecture.md) for shared processing versus operating-system adapters, and [the parity ledger](parity/README.md) for remaining migration differences.
+See [platform ownership](platform-architecture.md) for shared processing versus operating-system adapters.

@@ -35,7 +35,7 @@
   - 1-1 删 iPhone/局域网 `lan`、`share`（已合并，PR #6）。
   - 1-2 助手页四个置顶、其余折叠；设置导航藏起中转站、价格、更新。
   - 1-3 统计、会话页、侧栏去掉成本数字和套餐价值，只看 token。
-  - 1-4 文档收尾：README 换成驿窗说明，上游原版说明移到 `docs/upstream/`；开发与平台文档去掉局域网；`docs/parity/` 留在原处（`parity-ledger` 检查依赖它）。
+  - 1-4 文档收尾：README 换成驿窗说明，上游原版说明移到 `docs/upstream/`；开发与平台文档去掉局域网；`docs/parity/` 留在原处（`parity-ledger` 检查依赖它）；2026-11-18 常浩改定：台账、检查和 Swift 对照工具一起删，只留 `src/fixtures/parity/` 的格式用例（#389）。
 - 验收：构建和全套测试通过；实际打开设置、统计页核对；Claude/Codex 额度、会话状态、审批卡、Hermes 用量不受影响。
 - 注意：隐藏的设置页靠 `src/packages/app/src/App.tsx` 的 `hiddenPages`；置顶名单在 `src/packages/app/src/settings/agents/AgentList.tsx` 的 `PINNED`。
 - 说明：Hermes 读会话和用量（`~/.hermes/state.db` 与各 profile 的 `state.db`），没有钩子、审批和额度读取。2026-11-05 起（#82）侧栏仍是一个 Hermes 栏，后台接常浩的两个飞书机器人：猛鬼兽（默认目录）、亚古兽（`profiles/agumon`），会话盖各自的方印；回合租约（`session_turn_leases`）判断正在回复与回复完成（出新回复回执），`gateway_state.json` 判断飞书断线或网关停了（出细条）。
