@@ -131,6 +131,9 @@ export interface HermesCronJob {
   id: string;
   name: string;
   enabled: boolean;
+  /** Why it was paused, when whoever paused it said; a task off without a
+   * reason is not shown. */
+  pausedReason?: string | null;
   /** Its last run failed. */
   failed: boolean;
   /** Its cron expression (`45 7 * * 1`), or the schedule as Hermes prints it. */

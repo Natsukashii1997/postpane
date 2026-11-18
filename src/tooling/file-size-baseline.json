@@ -126,7 +126,7 @@
   "src/packages/hud/src/geometry.ts": 339,
   "src/packages/hud/src/model.ts": 337,
   "src/packages/hud/src/panel/AgentBoard.tsx": 394,
-  "src/packages/hud/src/panel/HermesBoard.tsx": 386,
+  "src/packages/hud/src/panel/HermesBoard.tsx": 382,
   "src/packages/hud/src/panel/QuotaSection.tsx": 324,
   "src/packages/hud/src/panel/SessionsSection.tsx": 743,
   "src/packages/hud/src/panel/TokenChartSection.tsx": 489,
