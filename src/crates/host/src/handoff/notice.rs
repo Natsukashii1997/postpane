@@ -3,7 +3,6 @@
 //! sidebar, and the session that handed its work over waited on, unaware;
 //! now it is told once, through the way words go back to it, and the
 //! card's line for the trouble says whether it was.
-use super::texts::no_answer;
 use super::{Desk, Lines, Unsent, CLAUDE};
 use agent_hud_runtime::chatgpt::handoffs::{self, by_doer, Handoff, Trouble};
 use agent_hud_runtime::l10n;
@@ -15,7 +14,7 @@ impl Desk {
     /// that cannot take it now finds it in its queue. Whether anything changed.
     pub(crate) fn tell(&self, lines: &dyn Lines, now: i64) -> bool {
         let mut changed = self.late(now);
-        let untold = self.lock().untold(self.since, &no_answer());
+        let untold = self.lock().untold(self.since);
         for (id, at, trouble) in untold {
             // Words on their way meanwhile: told at the next look.
             let Ok(_sending) = self.claim(&id) else {
