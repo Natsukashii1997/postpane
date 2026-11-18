@@ -128,8 +128,9 @@ async function group(tabId) {
 async function submit(tabId, text) {
   try {
     let result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
-    if (!result.ok && result.reason === "send-failed") {
-      // Some pages only accept input while the tab is in front.
+    if (!result.ok && ["send-failed", "composer-mismatch"].includes(result.reason)) {
+      // Some pages only accept input while the tab is in front; a draft that
+      // came back in the box (#410) is emptied again on the second try.
       await chrome.tabs.update(tabId, { active: true });
       result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
     }

@@ -456,3 +456,14 @@
 - 正确做法：按家找数据（接力、会话、审批）用来源 id：单家面板里取 `sessionScope(...).sources` 或 `sourcesForMark(snapshot, 标记)`，不要拿 `vendorKey(标记名)` 当来源；`BoardHeading` 的 `place` 参数就是为此加的。
 - 证据：`src/packages/hud/test/relay-toggle.test.ts`「every agent's card carries one plane in its head」断言 `place={selectedSources?.[0]}`。
 - 升级：未升级。
+
+## L-51 「ChatGPT 30 分钟没回信」多半是回信到了、没认出来：页面存两份对话、提问显示会变、输入框会留旧稿（2026-11-19）
+
+- 现象：11-14 到 11-18 接力反复「ChatGPT 30 分钟没回信，自动往返停下」。`turns.jsonl` 里同一会话每 2 分钟一行 `complete unmatched`：ChatGPT 一两分钟就回了，驿窗判成「不是这次送审的回信」，没转回，等满 30 分钟（#410）。
+- 根因（三处，Chrome 里只读打开当时的 ChatGPT 会话逐一核对）：
+  1. chatgpt.com 把对话放两份：前面一份隐藏（高 0），各轮按顺序都在、回信不画；后面一份显示，只画屏幕附近几轮。插件取页面里最后一个节点，拿到的是显示那份里较早一轮的提问和回信（`complete unmatched` 的字数正好等于上一轮回信）。
+  2. 提问的显示有两种：有的会话把代码块画成代码框，```` ```python ```` 那一行整行没了；有的原样显示、换行全丢。比对只去了反引号，语言名还在，开头 600 字里带代码块的送审全对不上。
+  3. 输入框里留着上一轮整段送审（ChatGPT 恢复的草稿），粘贴后发出去的是「旧送审 + 新送审」一条，开头是旧的。
+- 正确做法：查接力「超时」先看 `turns.jsonl` 的 outcome，`unmatched` 就是认领问题，不是 ChatGPT 慢。插件按单元键（`data-chatgpt-search-unit-key`）第一次出现的顺序定最新一轮，读它最后一份（显示的那份）；只在隐藏那份里时不报、重读时滚到底让它画出来。比对两种归一都试（去代码块标记行 / 只去反引号）。发送前输入框有字先清空、等发送键灭了再粘贴，点发送前核对没多出旧字。
+- 证据：`src/apps/chrome-extension/test/page.test.mjs` 三条 #410 测试、`content.test.mjs`「an answer held only in the hidden copy…」、`src/crates/host/src/handoff.rs`「a_prompt_drawn_without_its_code_fences_is_still_the_review」，均先在旧代码上失败；真实页面核对记录在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。
+- 升级：未升级。
