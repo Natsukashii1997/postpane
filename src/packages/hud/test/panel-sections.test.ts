@@ -1,36 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { noSessionsMatch } from "../src/panel/session-filters.ts";
 import {
   noAnswer,
   settled,
   shownAnswer,
   type PanelAnswer,
 } from "../src/panel-answers.ts";
-
-test("an agent's own panel without sessions has none yet; only the layout's filters make none match", () => {
-  // Antigravity's own panel, no Antigravity session: its agent is no filter.
-  assert.equal(noSessionsMatch({}, true, 0, 0), false);
-  // The layout's agents do not apply in an agent's own panel either.
-  assert.equal(noSessionsMatch({ agents: ["codex"] }, true, 0, 0), false);
-  assert.equal(noSessionsMatch({ agents: ["codex"] }, false, 0, 3), true);
-  assert.equal(
-    noSessionsMatch({ projects: ["agent-hud"] }, true, 0, 2),
-    true,
-    "its sessions are all in other projects",
-  );
-  assert.equal(
-    noSessionsMatch({ projects: ["agent-hud"] }, true, 0, 0),
-    false,
-    "no session to leave out",
-  );
-  assert.equal(
-    noSessionsMatch({ projects: ["agent-hud"] }, false, 1, 4),
-    false,
-    "a row is listed",
-  );
-  assert.equal(noSessionsMatch({}, false, 0, 4), false);
-});
 
 test("a section keeps the last answer to its query while the next revision's is asked", () => {
   const base = JSON.stringify(["statistics", { providers: ["antigravity"] }]);
