@@ -38,30 +38,12 @@ The runner checks the Rust compiler's host OS before compiling and rejects a dif
 | Platform | Native build requirements | Current qualification boundary |
 | --- | --- | --- |
 | macOS | Xcode command-line tools/Apple SDK and the native Rust toolchain. Tauri uses the system WebView. | macOS implementation is being checked on real hardware; building alone does not certify window, animation, signing, or updater parity. |
-| Windows | Visual Studio C++ Build Tools with the Windows SDK, a supported Rust toolchain, and WebView2 runtime for execution. | Native compilation and tests run in GitHub Actions; interactive Windows machine acceptance remains separate. A generated command plan is not evidence of a working build or installer. |
+| Windows | Visual Studio C++ Build Tools with the Windows SDK, a supported Rust toolchain, and WebView2 runtime for execution. | GitHub Actions is turned off in this repository and its workflows are removed, so nothing compiles or tests the Windows build; interactive Windows machine acceptance remains separate. A generated command plan is not evidence of a working build or installer. |
 | Linux | The distribution's C/C++/linker tooling and Tauri 2 desktop dependencies, including WebKitGTK 4.1/GTK and required tray/SVG/packaging libraries, plus gtk-layer-shell (`libgtk-layer-shell-dev` on Debian and Ubuntu, `gtk-layer-shell-devel` on Fedora, `gtk-layer-shell` on Arch). The app links gtk-layer-shell directly, so it does not start on a system without that library, even under X11. Package names vary by distribution. | Tested by hand only on niri (Wayland, one output, scale 1). On a Wayland compositor with wlr-layer-shell the edge HUD is an overlay layer surface and drags natively; without it (GNOME) the edge HUD is refused. On X11 placement depends on the window manager and native drag is unsupported. Client hooks are not installed until a Linux package supplies a fixed executable path ([#11](https://github.com/jazzenchen/agent-hud-open/issues/11)). |
 
 The installed Tauri CLI reports missing native dependencies. Current prerequisites are maintained in [Tauri's official platform instructions](https://v2.tauri.app/start/prerequisites/); use the instructions for the actual host rather than attempting to satisfy a Windows/Linux build from macOS.
 
-## Windows builds on GitHub
-
-The `Windows desktop` workflow (`.github/workflows/windows.yml`) uses an actual
-`windows-latest` runner and the MSVC toolchain. It runs the package checks,
-TypeScript and MCP relay tests, Rust clippy and native Rust tests, then builds
-an NSIS installer.
-It runs on pull requests, pushes to `main` and `codex/windows-*`, and manually
-through Actions. No Windows cross-compilation on a Mac is required.
-
-Download `agent-hud-open-windows-x86_64-unsigned` from the successful run's
-**Artifacts** section. It also contains `provenance.json` identifying the source
-commit and run, plus `SHA256SUMS` for the installer. The installer includes the
-engine and MCP relay and installs for the current user; its WebView2 bootstrapper
-downloads the runtime if needed.
-These are unsigned test artifacts, not a published release. Actions keeps them
-for 14 days. A green build is followed by Windows machine testing; it does not
-qualify desktop focus, display, client, or network behavior.
-
-### Windows machine acceptance
+## Windows machine acceptance
 
 - With only Codex Desktop installed (including Microsoft Store), confirm the enabled
   Codex source appears in the HUD and its expanded panel before quota data is available.
