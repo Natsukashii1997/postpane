@@ -78,7 +78,7 @@
   "src/crates/platform/src/json_text.rs": 507,
   "src/crates/platform/src/os/macos/app_cookies.rs": 321,
   "src/crates/platform/src/os/macos/legacy_preferences.rs": 634,
-  "src/crates/platform/src/os/macos/mod.rs": 338,
+  "src/crates/platform/src/os/macos/mod.rs": 337,
   "src/crates/platform/src/os/windows/pipe.rs": 511,
   "src/packages/app/src/App.tsx": 1022,
   "src/packages/app/src/HUDSurface.tsx": 713,
