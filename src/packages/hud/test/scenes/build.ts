@@ -165,34 +165,77 @@ export interface RelaySpec {
   chatgpt: string;
   phase: NonNullable<Handoff["phase"]>;
   minutesAgo: number;
+  /** The review gate's (#347, #409): how many reviews it went through (one
+   * unless set), its cap, and what the last answer said. */
+  reviews?: number;
+  limit?: number;
+  verdict?: "revise" | "pass";
+  /** The auto round trip: on unless set; `halt` says why it stopped. */
+  auto?: boolean;
+  halt?: string;
+  notice?: Handoff["notice"];
+  status?: Handoff["status"];
 }
 
 export function relay(spec: RelaySpec): Handoff {
   const t = NOW - spec.minutesAgo * 60_000;
+  const answered =
+    spec.phase === "replied" ||
+    spec.phase === "returned" ||
+    spec.phase === "ended";
+  const reviews = spec.reviews ?? 1;
+  // Each review a few minutes apart, the last answered at `t`.
+  const rounds = Array.from({ length: reviews }, (_, n) => {
+    const ago = (reviews - 1 - n) * 600_000;
+    const last = n === reviews - 1;
+    return [
+      {
+        at: t - ago - 300_000,
+        kind: "ask" as const,
+        text: n ? `第 ${n + 1} 轮复审` : "送审：改动摘要",
+      },
+      ...(answered || !last
+        ? [
+            {
+              at: t - ago,
+              kind: "reply" as const,
+              verdict: last ? (spec.verdict ?? "revise") : ("revise" as const),
+              points: ["补一条测试"],
+            },
+          ]
+        : []),
+      ...(!last
+        ? [{ at: t - ago + 60_000, kind: "back" as const, auto: true }]
+        : []),
+    ];
+  }).flat();
   return {
     id: spec.id,
     title: spec.title,
     claudeSession: spec.session,
     doer: spec.doer === "codex" ? "codex" : null,
     chatgptConversation: spec.chatgpt,
-    status: "open",
-    createdAt: t - 600_000,
+    status: spec.status ?? "open",
+    createdAt: t - reviews * 600_000,
     updatedAt: t,
-    rounds: 1,
+    rounds: reviews,
     phase: spec.phase,
     phaseAt: t,
-    auto: true,
+    auto: spec.auto ?? true,
+    ...(spec.halt ? { halt: spec.halt } : {}),
+    ...(spec.limit ? { limit: spec.limit } : {}),
+    ...(spec.notice ? { notice: spec.notice } : {}),
+    ...(spec.notice === "top" ? { topAt: t } : {}),
     steps: [
-      { at: t - 600_000, kind: "ask", text: "送审：改动摘要" },
-      ...(spec.phase === "replied" || spec.phase === "returned"
-        ? [
-            {
-              at: t,
-              kind: "reply" as const,
-              verdict: "revise" as const,
-              points: ["补一条测试"],
-            },
-          ]
+      ...rounds,
+      ...(spec.phase === "returned" && answered
+        ? [{ at: t, kind: "back" as const, auto: true }]
+        : []),
+      ...(spec.halt
+        ? [{ at: t, kind: "stop" as const, text: spec.halt, auto: true }]
+        : []),
+      ...(spec.phase === "ended"
+        ? [{ at: t, kind: "end" as const, auto: true }]
         : []),
     ],
   };

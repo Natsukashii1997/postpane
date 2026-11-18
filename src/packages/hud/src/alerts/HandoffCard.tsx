@@ -13,8 +13,8 @@ import { HandoffTitleRow } from "./HandoffTitleRow";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
+import { actionLabels, actions, jumps } from "./handoff-actions";
 import {
-  actions,
   chatgptSession,
   doerSession,
   clock,
@@ -138,6 +138,7 @@ export function HandoffCard({
     setError(null);
     if (action === "close") return onClose();
     if (action === "open") return void go(chatgpt);
+    if (action === "session") return void go(claude);
     if (!services?.handoffAct) return;
     setBusy(action);
     try {
@@ -528,16 +529,7 @@ function Foot({
 }) {
   const list = actions(handoff);
   const D = doerName(handoff);
-  const label: Record<Action, string> = {
-    end: zh ? "结束接力" : "End handoff",
-    open: zh ? "查看 ChatGPT 对话" : "Open ChatGPT",
-    back: zh ? `转回 ${D}` : `Send back to ${D}`,
-    again: zh ? "再审一轮" : "Review again",
-    retry: zh ? "重试" : "Retry",
-    close: zh ? "知道了" : "Got it",
-    pause: zh ? "暂停自动" : "Pause auto",
-    resume: zh ? "继续自动" : "Resume auto",
-  };
+  const label = actionLabels(zh, D);
   const main = list.length > 1 ? list[list.length - 1] : null;
   const { at, of } = round(handoff);
   return (
@@ -560,7 +552,7 @@ function Foot({
               type="button"
               // The jump to ChatGPT gives under the pointer as every ↗ does
               // (#200); global.css.
-              className={action === "open" ? "hud-press" : undefined}
+              className={jumps(action) ? "hud-press" : undefined}
               disabled={busy !== null}
               aria-disabled={busy !== null}
               title={
@@ -585,9 +577,7 @@ function Foot({
               }}
             >
               {busy === action ? (zh ? "处理中…" : "Working…") : label[action]}
-              {action === "open" && (
-                <ArrowUpRight size={12} strokeWidth={2.4} />
-              )}
+              {jumps(action) && <ArrowUpRight size={12} strokeWidth={2.4} />}
             </button>
           </span>
         );

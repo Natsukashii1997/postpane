@@ -1,23 +1,10 @@
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import type { Handoff, IslandEvent, Snapshot } from "@agent-hud/protocol";
+import { useState, type ReactNode } from "react";
+import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import { cardColumn } from "../card-column";
-import {
-  AIRMAIL_BLUE,
-  AIRMAIL_RED,
-  airmailStripes,
-  relayPaperOf,
-  usePaper,
-  type Paper,
-} from "../paper";
+import { airmailStripes, relayPaperOf, usePaper, type Paper } from "../paper";
 import {
   SHOWN_ENTRIES,
   entryTitle,
@@ -35,7 +22,10 @@ import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { DismissAll } from "./DismissAll";
 import { useHandoffCard } from "./HandoffCard";
-import { handoffFor, relayLegend, relayLegendInks } from "./handoff-card";
+import { handoffFor } from "./handoff-card";
+import { RelayFrame } from "./RelayFrame";
+import { passedReply } from "./relay-pass";
+import { PassStamp } from "../scene/RelayStamps";
 import { OpenNotice, useOpenFailures } from "../OpenNotice";
 import { failureOf } from "../open-result";
 import {
@@ -154,6 +144,7 @@ export function CompletionAlertView({
                 background: `color-mix(in srgb, ${paper?.blue ?? inks.dim} 5%, transparent)`,
               }
             : {
+                position: "relative",
                 borderTop:
                   index > 0 && !framed(previous)
                     ? `1px dotted ${inks.line}`
@@ -170,6 +161,7 @@ export function CompletionAlertView({
             zh={zh}
           />
         )}
+        {passedReply(entry, handoffs) && <PassStamp zh={zh} />}
         <EntryRow
           entry={entry}
           open={open}
@@ -292,129 +284,6 @@ export function CompletionAlertView({
       {/* A review slip runs to the foot. */}
       {!reviews.length && <div style={{ height: 6 }} />}
     </div>
-  );
-}
-
-/** Where the frame's legend starts along its top edge. */
-const LEGEND_LEFT = 14;
-
-/** The airmail frame round a relay's reply on the receipt (owner,
- * 2026-11-07, 甲 · 航空虚线框): red and blue dashes in turn, as an airmail
- * envelope's edge, with 「接力」, the round and ChatGPT's verdict set into its
- * top edge. */
-function RelayFrame({
-  handoff,
-  paper,
-  inks,
-  light,
-  zh,
-}: {
-  handoff: Handoff;
-  paper: Paper | null;
-  inks: Inks;
-  light: boolean;
-  zh: boolean;
-}) {
-  const { trip, verdict, missing } = relayLegend(handoff, zh);
-  const tone = relayLegendInks(paper, light, missing);
-  // The legend breaks the top edge instead of covering it: in the notch there
-  // is no paper to cover it with, and on paper a flat patch shows against the
-  // grain (#190).
-  const legend = useRef<HTMLSpanElement>(null);
-  const [gap, setGap] = useState(0);
-  useLayoutEffect(() => {
-    const element = legend.current;
-    if (!element) return;
-    const measure = () => setGap(element.offsetWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const mask = `relay-gap-${useId().replace(/[^\w-]/g, "")}`;
-  const dash = {
-    x: 0.75,
-    y: 0.75,
-    width: "calc(100% - 1.5px)",
-    height: "calc(100% - 1.5px)",
-    rx: 6,
-    fill: "none",
-    strokeWidth: 1.5,
-    strokeDasharray: "7 7",
-  } as const;
-  return (
-    <>
-      <svg
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          overflow: "visible",
-          pointerEvents: "none",
-          opacity: 0.9,
-        }}
-      >
-        <mask
-          id={mask}
-          maskUnits="userSpaceOnUse"
-          x="-5%"
-          y="-5%"
-          width="110%"
-          height="110%"
-        >
-          <rect x="-5%" y="-5%" width="110%" height="110%" fill="white" />
-          <rect x={LEGEND_LEFT} y={-4} width={gap} height={8} fill="black" />
-        </mask>
-        <g mask={`url(#${mask})`}>
-          <rect style={{ ...dash, stroke: AIRMAIL_RED }} />
-          <rect
-            style={{ ...dash, stroke: AIRMAIL_BLUE, strokeDashoffset: 7 }}
-          />
-        </g>
-      </svg>
-      <span
-        ref={legend}
-        style={{
-          position: "absolute",
-          top: -8,
-          left: LEGEND_LEFT,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "0 6px",
-          maxWidth: "calc(100% - 28px)",
-          fontSize: 11,
-          lineHeight: "16px",
-          fontWeight: 500,
-          color: inks.dim,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-        }}
-      >
-        <span
-          style={{
-            fontWeight: 700,
-            letterSpacing: "0.2em",
-            color: tone.relay,
-          }}
-        >
-          {zh ? "接力" : "RELAY"}
-        </span>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {trip}
-          {verdict && (
-            <>
-              {" · "}
-              <span style={{ color: tone.verdict, fontWeight: 600 }}>
-                {verdict}
-              </span>
-            </>
-          )}
-        </span>
-      </span>
-    </>
   );
 }
 

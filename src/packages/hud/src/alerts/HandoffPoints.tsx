@@ -3,7 +3,7 @@
 // second digit (#336).
 import { cardColumn } from "../card-column";
 import type { Inks } from "../permissions/ListCard";
-import { pointMarkColumn } from "./handoff-card";
+import { pointMarkColumn } from "./handoff-actions";
 
 export function HandoffPoints({
   points,

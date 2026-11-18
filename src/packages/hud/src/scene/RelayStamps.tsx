@@ -4,7 +4,7 @@
 // two ends in one style), in ochre so the two read apart (`stampInk`). Each
 // lands with its letter (`stampWait`) and simply shows when motion is reduced.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { stampInk, stampWait } from "../relay-stamps";
+import { STAMP_INK, stampInk, stampWait } from "../relay-stamps";
 
 /** Lands once, `wait` ms after it first shows: pressed down from above. */
 function useLanding(
@@ -148,6 +148,38 @@ export function ReviewStamp({
               ? "审"
               : "R"}
       </span>
+    </span>
+  );
+}
+
+/** A relay's ChatGPT answer PostPane let pass, on the receipt (owner
+ * 2026-11-19, #409): 「过」 in the relay paper's blue, the 「审」 stamp's
+ * square, pressed over the row's end beside its time. The row's place and
+ * how long the receipt stays do not change. */
+export function PassStamp({ zh }: { zh: boolean }) {
+  return (
+    <span
+      aria-label={zh ? "审核通过" : "Passed"}
+      data-relay-stamp="pass"
+      style={{
+        position: "absolute",
+        // Left of the time (about 34px) and the ↗ column (26px + 12px gap).
+        right: 80,
+        top: 11,
+        width: 22,
+        height: 22,
+        boxSizing: "border-box",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 4,
+        rotate: "-10deg",
+        border: `2px solid ${STAMP_INK.review}`,
+        color: STAMP_INK.review,
+        font: `900 14px/1 "Songti SC", "STSong", serif`,
+        pointerEvents: "none",
+      }}
+    >
+      {zh ? "过" : "OK"}
     </span>
   );
 }

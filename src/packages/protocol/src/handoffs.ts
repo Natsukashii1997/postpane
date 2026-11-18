@@ -107,5 +107,20 @@ export interface Handoff {
   topAt?: number;
   /** A review sent and not yet known to have gone in (L3 P1-10): its
    * answer counts and cannot pass. */
-  pending?: { request: string; pr?: string; head?: string; limit: number };
+  pending?: HandoffPending;
+  /** PostPane's ask to mend an answer's last lines, sent and not yet known
+   * to have gone in (round 4 P1-10). The snapshot carries neither its words
+   * nor theirs (#409). */
+  mending?: HandoffPending;
+}
+
+/** A review, or an ask to mend, on its way to ChatGPT. */
+export interface HandoffPending {
+  request: string;
+  pr?: string;
+  head?: string;
+  limit: number;
+  booked?: boolean;
+  answered?: boolean;
+  noted?: boolean;
 }

@@ -432,10 +432,17 @@ impl Handoff {
             .rev()
             .find(|step| step.kind == StepKind::Reply)
     }
-    /// As the snapshot shows it: no brief, excerpts only.
+    /// As the snapshot shows it: no brief, excerpts only, and not the words
+    /// of a review or an ask to mend on their way (#409).
     pub fn shown(&self) -> Self {
         let mut shown = self.clone();
         shown.brief = None;
+        for pending in [&mut shown.gate.pending, &mut shown.gate.mending]
+            .into_iter()
+            .flatten()
+        {
+            (pending.words, pending.key) = (None, String::new());
+        }
         for step in &mut shown.steps {
             step.key = None;
             if let Some(text) = &mut step.text {
@@ -1722,6 +1729,26 @@ mod tests {
         );
         // The snapshot carries neither the brief nor what was sent hashed.
         assert!(kept.shown().steps.iter().all(|step| step.key.is_none()));
+        // Nor the words of a review on its way, or of an ask to mend (#409).
+        let mut sending = kept.clone();
+        let words = || unsure::Pending {
+            request: "r1".into(),
+            words: Some("送审原文".into()),
+            key: "k1".into(),
+            ..unsure::Pending::default()
+        };
+        (sending.gate.pending, sending.gate.mending) = (Some(words()), Some(words()));
+        let shown = sending.shown().gate;
+        for pending in [shown.pending.unwrap(), shown.mending.unwrap()] {
+            assert_eq!(
+                (
+                    pending.request.as_str(),
+                    pending.words,
+                    pending.key.as_str()
+                ),
+                ("r1", None, "")
+            );
+        }
         assert!(book.end(&handoff.id, 7));
         let ended = book.get(&handoff.id).unwrap();
         assert_eq!((ended.status, ended.phase), (Status::Closed, Phase::Ended));

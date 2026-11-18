@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 /// Reviews one leave of the person's gives, unless set otherwise.
 pub const LIMIT: u32 = 5;
-/// The most the setting takes.
-pub const LIMIT_MAX: u32 = 5;
+/// The most the setting takes (owner 2026-11-19, #409: 1 to 9, five unless set).
+pub const LIMIT_MAX: u32 = 9;
 
 /// What the gate keeps on a handoff, beside the rest.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -392,9 +392,11 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let data = temp.path();
         assert_eq!(review_limit(data), LIMIT);
-        // Never above five, only lower (owner 2026-11-14 「最高走审核 5 轮」, confirmed 11-18).
-        assert_eq!(set_review_limit(data, 5), Ok(5));
-        assert!(set_review_limit(data, 0).is_err() && set_review_limit(data, 6).is_err());
+        // 1 to 9, five unless set (owner 2026-11-19, #409: 「后台可以调 1 到 9 轮，默认 5」).
+        assert_eq!(LIMIT, 5);
+        assert_eq!(set_review_limit(data, 9), Ok(9));
+        assert_eq!(review_limit(data), 9);
+        assert!(set_review_limit(data, 0).is_err() && set_review_limit(data, 10).is_err());
         assert_eq!(set_review_limit(data, 3), Ok(3));
         set_project(data, "").unwrap();
         assert_eq!(review_limit(data), 3, "setting the project keeps the cap");

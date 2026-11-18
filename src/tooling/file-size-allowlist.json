@@ -1,6 +1,6 @@
 {
   "src/crates/host/src/handoff.rs": {
-    "max": 2001,
+    "max": 1986,
     "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单"
   },
   "src/crates/host/src/lib.rs": {
@@ -24,7 +24,7 @@
     "reason": "#175 后台续接：转出 claude_desktop_session 一行"
   },
   "src/packages/hud/src/alerts/handoff-card.ts": {
-    "max": 612,
+    "max": 602,
     "reason": "#175 后台续接：接力卡显示「驿窗在后台续接」进度与时间线一行"
   },
   "src/packages/protocol/src/index.ts": {

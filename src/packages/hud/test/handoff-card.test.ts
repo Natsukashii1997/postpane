@@ -2,11 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
+import { actions, pointMarkColumn } from "../src/alerts/handoff-actions.ts";
 import {
-  actions,
   autoLabel,
   handoffFor,
-  pointMarkColumn,
   progressLine,
   relayLegend,
   relayLegendInks,
@@ -236,10 +235,12 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
   );
   // Every round used: nothing left for it to do, so no 「继续自动」 (#194).
   assert.deepEqual(actions(stopped), ["end", "open", "back"]);
-  assert.equal(autoLabel(stopped, true), "自动已停");
+  // Stopped short of a pass for another reason: 「未完暂停」 (owner 2026-11-19, #409).
+  assert.equal(autoLabel(stopped, true), "未完暂停");
+  assert.equal(autoLabel(stopped, false), "PAUSED");
   assert.equal(
     progressLine(stopped, T, true),
-    "回信到了 · 需修改 · 3 条意见 · 自动已停",
+    "回信到了 · 需修改 · 3 条意见 · 未完暂停",
   );
   // Paused by the person, then turned back on.
   const paused = timeline(
@@ -607,4 +608,62 @@ test("the points list sizes its number column by its count (#336)", () => {
   assert.match(list, /const marks = pointMarkColumn\(points\.length\);/);
   assert.match(list, /gridTemplateColumns: `\$\{marks\} 1fr`/);
   assert.doesNotMatch(list, /"16px 1fr"/);
+});
+
+test("stopped at its cap: a red 「停」, the person's call, and the way on is the session (#409)", () => {
+  const steps = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("stop", T + 12 * minute, {
+      text: "已审满 2 轮仍需修改，自动往返停下，交常浩决定",
+      auto: true,
+    }),
+  ];
+  const stopped = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: T + 12 * minute,
+    steps,
+  });
+  assert.deepEqual(stamp(stopped, true), { text: "停", tone: "red" });
+  assert.deepEqual(stamp(stopped, false), { text: "STOP", tone: "red" });
+  // The stamp says it: nothing more beside 「接力」.
+  assert.equal(autoLabel(stopped, true), null);
+  assert.equal(
+    progressLine(stopped, T + 13 * minute, true),
+    "已停 · 审满 2 轮 · 等你决定",
+  );
+  const rows = timeline(stopped, T + 13 * minute, true);
+  const last = rows.at(-1)!;
+  assert.deepEqual(
+    [last.who, last.title, last.sub, last.state],
+    [
+      "post",
+      "已停：审满 2 轮",
+      "等你决定：在会话里说一句再续审，或结束接力",
+      "await",
+    ],
+  );
+  assert.ok(
+    !rows.some((row) => row.state === "todo"),
+    "no next review offered",
+  );
+  // No 「再审一轮」 or 「继续自动」: the session is where it goes on.
+  assert.deepEqual(actions(stopped), ["end", "open", "session"]);
+  assert.deepEqual(actions({ ...stopped, chatgptConversation: null }), [
+    "end",
+    "session",
+  ]);
+  // Ended, it is only ended.
+  const ended = {
+    ...stopped,
+    status: "closed" as const,
+    phase: "ended" as const,
+  };
+  assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });
+  assert.deepEqual(actions(ended), ["close"]);
 });

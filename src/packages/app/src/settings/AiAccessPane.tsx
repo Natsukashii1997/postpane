@@ -137,8 +137,8 @@ export function AiAccessPane({
             title={t("ChatGPT review relay", "ChatGPT 接力审核")}
             tag={t("ChatGPT web only", "仅支持 ChatGPT 网页")}
             subtitle={t(
-              "Claude hands a finished round to ChatGPT; the reply goes back to Claude by its verdict, two rounds at most.",
-              "Claude 做完一轮交给 ChatGPT 审，回信按结论自动转回 Claude，最多 2 轮。",
+              "Claude hands a finished round to ChatGPT; the reply goes back to Claude by its verdict, five rounds unless set (1 to 9 in Agent plugins).",
+              "Claude 做完一轮交给 ChatGPT 审，回信按结论自动转回 Claude，默认最多 5 轮，可在「智能体插件」里调 1–9 轮。",
             )}
           />
           <Facts
@@ -183,8 +183,8 @@ export function AiAccessPane({
                 <>
                   {path("app.postpane.mac/chatgpt/handoffs.json")}
                   {t(
-                    "; every answer in full under chatgpt/replies/, the review cap in chatgpt/config.json (reviewLimit); replies go back to the Claude or Codex session that started it",
-                    "；每封回信全文另存 chatgpt/replies/，接力审核上限在 chatgpt/config.json（reviewLimit）；回信转回发起的那个 Claude 或 Codex 会话",
+                    "; every answer in full under chatgpt/replies/, the review cap set in Agent plugins (kept in chatgpt/config.json as reviewLimit); replies go back to the Claude or Codex session that started it",
+                    "；每封回信全文另存 chatgpt/replies/，审核轮数上限在「智能体插件」里设（存 chatgpt/config.json 的 reviewLimit）；回信转回发起的那个 Claude 或 Codex 会话",
                   )}
                 </>,
               ],
