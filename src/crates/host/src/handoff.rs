@@ -26,13 +26,14 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{Mutex, MutexGuard},
+    sync::{Condvar, Mutex, MutexGuard},
 };
 use tauri::Manager;
 
 mod back;
 mod belongs;
 mod lines;
+mod notice;
 mod reread;
 mod texts;
 use back::back_text;
@@ -222,6 +223,14 @@ pub(crate) struct Desk {
     /// When the extension was last asked to read each quiet handoff's
     /// conversation again (#356).
     reread_at: Mutex<HashMap<String, i64>>,
+    /// When the notices began (`notices_since`): trouble from before is not
+    /// told of (#318), so an upgrade tells no session of an old one.
+    since: i64,
+    /// How many sessions are being told of trouble now (#318): the book's
+    /// other changes wait till they are (`quiet`), so what a notice checked
+    /// still holds when it arrives (review P2-03).
+    telling: Mutex<usize>,
+    told_out: Condvar,
 }
 
 /// How many early turns are kept: those of conversations never bound (the
@@ -270,8 +279,13 @@ impl Desk {
             .and_then(|data| std::fs::read(launches_path(data)).ok())
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
+        let now = now_ms();
+        let since = data
+            .as_deref()
+            .map_or(now, |data| handoffs::notices_since(data, now));
         let desk = |book: Book| Self {
             data,
+            since,
             tossed: Mutex::new(
                 book.list
                     .iter()
@@ -284,8 +298,9 @@ impl Desk {
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
             reread_at: Mutex::new(HashMap::new()),
+            telling: Mutex::new(0),
+            told_out: Condvar::new(),
         };
-        let now = now_ms();
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted(chinese));
         let woke = book.restarted();
@@ -326,6 +341,7 @@ impl Desk {
     }
     /// Changes the book and keeps it.
     fn change<R>(&self, change: impl FnOnce(&mut Book) -> R) -> R {
+        let _quiet = self.quiet();
         let mut book = self.lock();
         let result = change(&mut book);
         if let Some(data) = &self.data {
@@ -334,6 +350,14 @@ impl Desk {
             }
         }
         result
+    }
+    /// Waits till no session is being told of trouble (#318); held while
+    /// the book changes.
+    fn quiet(&self) -> MutexGuard<'_, usize> {
+        let telling = self.telling.lock().unwrap_or_else(|p| p.into_inner());
+        self.told_out
+            .wait_while(telling, |telling| *telling > 0)
+            .unwrap_or_else(|p| p.into_inner())
     }
     /// The ChatGPT project new review conversations open in.
     pub(crate) fn project(&self) -> Option<String> {
@@ -346,15 +370,7 @@ impl Desk {
     /// The snapshot's `handoffs`: the live ones and those that failed or
     /// ended lately, without their briefs.
     pub(crate) fn projection(&self, now: i64) -> Value {
-        let late = {
-            let mut book = self.lock();
-            book.expire(now, &timed_out())
-                | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
-                | book.idle(now, &idle_end())
-        };
-        if late {
-            self.change(|_| ());
-        }
+        self.late(now);
         let book = self.lock();
         let shown = book
             .list
@@ -368,6 +384,22 @@ impl Desk {
             .map(Handoff::shown)
             .collect::<Vec<_>>();
         json!(shown)
+    }
+
+    /// Openings that took too long fail, and auto round trips waited on too
+    /// long stop. Whether any did.
+    fn late(&self, now: i64) -> bool {
+        let late = {
+            let _quiet = self.quiet();
+            let mut book = self.lock();
+            book.expire(now, &timed_out())
+                | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
+                | book.idle(now, &idle_end())
+        };
+        if late {
+            self.change(|_| ());
+        }
+        late
     }
 
     /// The letters to fly on the sidebar for steps taken since the last
@@ -569,7 +601,11 @@ impl Desk {
         // One start per session at a time, so two calls side by side cannot
         // each begin a handoff.
         let _starting = self.claim(&format!("session:{session}"))?;
-        if self.lock().expire(now, &timed_out()) {
+        let expired = {
+            let _quiet = self.quiet();
+            self.lock().expire(now, &timed_out())
+        };
+        if expired {
             self.change(|_| ());
         }
         let current = (!fresh)
@@ -1388,8 +1424,8 @@ pub(crate) fn caller_session(caller: &Value) -> Option<String> {
 /// The snapshot's `handoffs`, with answers that wait to go on driven (one
 /// from before a restart, owner 2026-11-14), the words back to Claude
 /// followed (#257), queued ones for a session that went quiet run in the
-/// background (L-14), and conversations ChatGPT went quiet in read again
-/// (#356).
+/// background (L-14), conversations ChatGPT went quiet in read again
+/// (#356), and sessions told of trouble before any answer (#318).
 pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
     let now = now_ms();
     let lines = AppLines(app);
@@ -1398,6 +1434,7 @@ pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
     }
     desk.wake_queued(&lines, now);
     desk.reread(&lines, now);
+    desk.tell(&lines, now);
     desk.projection(now)
 }
 
@@ -1699,6 +1736,7 @@ pub fn chatgpt_project(
 
 #[cfg(test)]
 mod tests {
+    use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
     use super::*;
     use agent_hud_runtime::chatgpt::handoffs::Flaw;
@@ -1907,7 +1945,9 @@ mod tests {
     }
     fn desk() -> (tempfile::TempDir, Desk) {
         let temp = tempfile::tempdir().unwrap();
-        let desk = Desk::new(Some(temp.path().join("data")));
+        let mut desk = Desk::new(Some(temp.path().join("data")));
+        // The tests' clocks start near 0: trouble from then is not old (#318).
+        desk.since = 0;
         (temp, desk)
     }
     fn opened(desk: &Desk, lines: &Fake) -> Handoff {
@@ -4856,6 +4896,439 @@ mod tests {
             sent_as(&lines, "reread").len(),
             2,
             "one failed try, one passed on"
+        );
+    }
+
+    /// The newest step's words as the card has them.
+    fn last_step_text(desk: &Desk, now: i64) -> String {
+        desk.projection(now)[0]["steps"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()["text"]
+            .as_str()
+            .unwrap_or("")
+            .to_owned()
+    }
+
+    /// #318: a conversation that could not open — at once, or not within
+    /// two minutes — is told to the session once, under its own id, and the
+    /// card's line for it says so.
+    #[test]
+    fn a_session_is_told_once_when_its_review_could_not_open() {
+        let (_temp, desk) = desk();
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        let Started::Opening { handoff, .. } = desk
+            .start(&failing, "s1", None, "修登录", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || 2)
+            .is_err());
+        assert!(desk.tell(&failing, 3));
+        let told = sent_as(&failing, "reply");
+        assert_eq!(told.len(), 1);
+        assert_eq!(told[0].0, "s1");
+        assert!(told[0]
+            .1
+            .contains("驿窗接力「修登录」出错：驿窗没能确认 ChatGPT 审核会话已打开（timeout）"));
+        assert!(told[0].1.contains("重试") && told[0].1.contains("先不要再调用 relay_to_chatgpt"));
+        assert!(last_step_text(&desk, 3).ends_with(&format!("；{}", told_back())));
+        assert!(!desk.tell(&failing, 4), "told once");
+        assert_eq!(sent_as(&failing, "reply").len(), 1);
+        // The person retries; it fails again: that is told too, once.
+        desk.act(&failing, &handoff.id, "retry", 5).unwrap();
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || 6)
+            .is_err());
+        assert!(desk.tell(&failing, 7));
+        assert_eq!(sent_as(&failing, "reply").len(), 2);
+
+        // Not open within two minutes.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        desk.start(&lines, "s2", None, "修登录", None, "brief", false, 1)
+            .unwrap();
+        assert!(!desk.tell(&lines, 2), "still opening");
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        assert!(desk.tell(&lines, late));
+        let told = sent_as(&lines, "reply");
+        assert_eq!(told.len(), 1);
+        assert!(told[0].1.contains(&timed_out()));
+        assert_eq!(desk.projection(late)[0]["status"], "failed");
+    }
+
+    /// #318: an opening cut off by a restart is told once the app runs;
+    /// trouble from before it started is not, so an upgrade tells no one of
+    /// old trouble, and a second restart tells nothing again.
+    #[test]
+    fn a_restart_tells_of_an_opening_it_cut_off_but_not_of_old_trouble() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let mut book = handoffs::Book::default();
+        let old = book.begin("s-old", None, "旧单", None, "b", 1);
+        book.failed(&old.id, "timeout", 2);
+        book.begin("s1", None, "修登录", None, "b", 3);
+        handoffs::save(&data, &book).unwrap();
+        let lines = Fake::default();
+        let desk = Desk::new(Some(data.clone()));
+        let now = now_ms();
+        assert!(desk.tell(&lines, now));
+        let told = sent_as(&lines, "reply");
+        assert_eq!(told.len(), 1, "the old trouble is not told");
+        assert_eq!(told[0].0, "s1");
+        assert!(told[0].1.contains(&interrupted(true)) || told[0].1.contains(&interrupted(false)));
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert!(!desk.tell(&lines, now_ms()), "not told again");
+        assert_eq!(sent_as(&lines, "reply").len(), 1);
+    }
+
+    /// #318 review P2-02: trouble that came after the notices began but the
+    /// app stopped before telling is told once it runs again, once.
+    #[test]
+    fn trouble_a_stop_left_untold_is_told_after_the_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        let desk = Desk::new(Some(data.clone()));
+        let at = now_ms();
+        let Started::Opening { handoff, .. } = desk
+            .start(&failing, "s1", None, "修登录", None, "brief", false, at)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || at)
+            .is_err());
+        // The app stops before the next look.
+        drop(desk);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let lines = Fake::default();
+        let desk = Desk::new(Some(data.clone()));
+        assert!(desk.tell(&lines, now_ms()));
+        assert_eq!(sent_as(&lines, "reply").len(), 1);
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert!(!desk.tell(&lines, now_ms()), "told once");
+        assert_eq!(sent_as(&lines, "reply").len(), 1);
+    }
+
+    /// #318 review P2-03: trouble found, then the person retries or turns
+    /// the auto round trip back on before it is told: it is not told, the
+    /// words being out of date.
+    #[test]
+    fn trouble_moved_on_from_before_it_is_told_is_not_told() {
+        let (_temp, desk) = desk();
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        let Started::Opening { handoff, .. } = desk
+            .start(&failing, "s1", None, "修登录", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || 2)
+            .is_err());
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        desk.act(&failing, &id, "retry", 3).unwrap();
+        assert!(!desk.tell_one(&failing, &id, at, &trouble, 4));
+        assert!(sent_as(&failing, "reply").is_empty());
+
+        // ChatGPT did not answer; the person turns it back on meanwhile.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        desk.late(late);
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        desk.act(&lines, &id, "resume", late + 1).unwrap();
+        assert!(!desk.tell_one(&lines, &id, at, &trouble, late + 2));
+        assert!(sent_as(&lines, "reply").is_empty());
+        let _ = handoff;
+    }
+
+    /// #318 review P2-01: an opening PostPane gave up waiting for may still
+    /// come: the session is not told there will be no answer, and when it
+    /// does come, the handoff carries on and its answer goes back.
+    #[test]
+    fn an_opening_told_of_that_comes_late_still_carries_on() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        assert!(desk.tell(&lines, late));
+        let told = last_sent(&lines).2;
+        assert!(!told.contains("不会有回信"), "{told}");
+        assert!(told.contains("驿窗会接回这次接力"), "{told}");
+        assert!(told.contains("先不要再调用 relay_to_chatgpt"), "{told}");
+        // The extension says it opened after all.
+        assert!(desk.observe(
+            &json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-new"}),
+            late + 1
+        ));
+        assert_eq!(desk.projection(late + 1)[0]["status"], "open");
+        assert!(!desk.tell(&lines, late + 2), "nothing more to tell");
+        // ChatGPT answers the brief the opening carried.
+        shown("改动如下");
+        assert!(desk.observe(&turn("complete", "结论：通过"), late + 3));
+        assert!(desk.drive(&lines, late + 4));
+        assert_eq!(sent_as(&lines, "reply").len(), 2, "the answer went back");
+        assert_eq!(desk.projection(late + 4)[0]["status"], "closed");
+    }
+
+    /// Lines whose words back hold until let go: what else happens while a
+    /// session is being told of trouble (review of #318, P2-03).
+    struct Held {
+        entered: std::sync::mpsc::Sender<()>,
+        go: std::sync::mpsc::Receiver<()>,
+    }
+    impl Lines for Held {
+        fn connected(&self) -> bool {
+            true
+        }
+        fn open(&self, _: &str, _: Option<&str>, _: &str, _: &str) -> Result<String, String> {
+            Err("not here".into())
+        }
+        fn send(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Err("not here".into())
+        }
+        fn reread(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn reaches(&self, _: &str, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn reply(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), Unsent> {
+            self.entered.send(()).unwrap();
+            self.go.recv().unwrap();
+            Ok(())
+        }
+        fn leave(&self, _: &str, _: &str) -> Result<String, String> {
+            Err("not here".into())
+        }
+        fn queue(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), Unsent> {
+            Err(Unsent::Failed("not here".into()))
+        }
+        fn left(&self, _: &str, _: &str, _: &str, _: &str) -> Option<(String, Option<String>)> {
+            None
+        }
+        fn opener(&self, _: &str, _: &str) -> Option<(Opener, i64)> {
+            None
+        }
+        fn stopped(&self, _: &str) -> bool {
+            false
+        }
+        fn withdraw(&self, _: &str, _: &str) -> bool {
+            false
+        }
+        fn wake(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Err("not here".into())
+        }
+    }
+
+    /// Tells `id`'s trouble with words back held; while they are, `meanwhile`
+    /// runs on its own thread, and `during` reads the desk: what it read,
+    /// and whether `meanwhile` changed anything once all is done.
+    fn while_told<T: Send>(
+        desk: &Desk,
+        now: i64,
+        meanwhile: impl FnOnce() -> bool + Send,
+        during: impl FnOnce() -> T,
+    ) -> (T, bool) {
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        let (entered, held) = std::sync::mpsc::channel();
+        let (go, wait) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let telling = scope.spawn(move || {
+                let lines = Held { entered, go: wait };
+                desk.tell_one(&lines, &id, at, &trouble, now)
+            });
+            held.recv().unwrap();
+            let other = scope.spawn(meanwhile);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let read = during();
+            // Let go before asserting: a failed assert must not leave it held.
+            go.send(()).unwrap();
+            assert!(telling.join().unwrap(), "told");
+            (read, other.join().unwrap())
+        })
+    }
+
+    /// Review of #318, P2-03: while a session is told its opening failed,
+    /// the extension says it opened after all: that waits till the words
+    /// are out, so they were true when sent, and it is not lost.
+    #[test]
+    fn an_opening_reported_while_its_failure_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        desk.late(late);
+        let opened = json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-new"});
+        let (during, bound) = while_told(
+            &desk,
+            late + 1,
+            || desk.observe(&opened, late + 2),
+            || desk.lock().get(&handoff.id).unwrap().status,
+        );
+        assert_eq!(during, Status::Failed, "it waited while the words went");
+        assert!(bound, "and was not lost");
+        assert_eq!(desk.projection(late + 3)[0]["status"], "open");
+    }
+
+    /// Review of #318, P2-03: while a session is told ChatGPT has not
+    /// answered, the answer comes: it waits till the words are out, and is
+    /// taken then.
+    #[test]
+    fn an_answer_that_comes_while_no_answer_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        desk.late(late);
+        let answer = turn("complete", "结论：需修改");
+        let (during, took) = while_told(
+            &desk,
+            late + 1,
+            || desk.observe(&answer, late + 2),
+            || desk.lock().get(&handoff.id).unwrap().last_reply().is_some(),
+        );
+        assert!(!during, "it waited while the words went");
+        // Held back while words were on their way (`turn_waits`), it is
+        // taken once they are out: not lost.
+        let _ = took;
+        assert_eq!(desk.projection(late + 3)[0]["phase"], "replied");
+    }
+
+    /// Review of #318, P2-03: the person retries while the session is told
+    /// the opening failed: the retry waits till the words are out (no error
+    /// for the person), then opens again.
+    #[test]
+    fn a_retry_while_its_failure_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        desk.late(late);
+        let (during, retried) = while_told(
+            &desk,
+            late + 1,
+            || {
+                let lines = Fake::default();
+                desk.act(&lines, &handoff.id, "retry", late + 2).is_ok()
+            },
+            || desk.lock().get(&handoff.id).unwrap().status,
+        );
+        assert_eq!(during, Status::Failed, "it waited while the words went");
+        assert!(retried);
+        assert_eq!(desk.projection(late + 3)[0]["status"], "opening");
+    }
+
+    /// #318: ChatGPT not answering in time stops the auto round trip and is
+    /// told once; an answer that comes later is still taken, and a pass
+    /// still goes back by itself.
+    #[test]
+    fn a_session_is_told_when_chatgpt_does_not_answer_and_a_late_answer_still_counts() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        assert!(desk.tell(&lines, late));
+        let told = sent_as(&lines, "reply");
+        assert_eq!(told.len(), 1);
+        assert!(
+            told[0].1.contains("ChatGPT 30 分钟没回信")
+                && told[0].1.contains("写「通过」会自动转回这里")
+        );
+        let shown = desk.projection(late);
+        assert_eq!(shown[0]["auto"], false);
+        let halt = format!("{}；{}", no_answer(), told_back());
+        assert_eq!(shown[0]["halt"], halt);
+        assert_eq!(last_step_text(&desk, late), halt);
+        assert!(!desk.tell(&lines, late + 1), "told once");
+        // ChatGPT answers after all: taken, and a pass goes back and ends it.
+        desk.observe(&turn("complete", "结论：通过"), late + 2);
+        assert_eq!(desk.projection(late + 2)[0]["phase"], "replied");
+        assert!(desk.drive(&lines, late + 3));
+        assert_eq!(sent_as(&lines, "reply").len(), 2);
+        assert_eq!(desk.projection(late + 3)[0]["status"], "closed");
+        let _ = handoff;
+
+        // A 思维评审's pass waits for the person, so it says so.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        thinking(&desk, &lines);
+        assert!(desk.tell(&lines, late));
+        let text = last_sent(&lines).2;
+        assert!(!text.contains("写「通过」会自动转回"), "{text}");
+        assert!(text.contains("要常浩在接力卡上点「转回 Claude」"));
+    }
+
+    /// #318: a session that cannot take it now finds it in its queue; one
+    /// whose queue cannot be written to is not told, and the card says why.
+    /// A Codex thread is told in its own queue, the card naming Codex.
+    #[test]
+    fn trouble_that_cannot_reach_the_session_says_how_it_went() {
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        let (_temp, desk) = desk();
+        let quiet = Fake {
+            unreachable: true,
+            ..Fake::default()
+        };
+        opened(&desk, &quiet);
+        assert!(desk.tell(&quiet, late));
+        assert_eq!(sent_as(&quiet, "queue").len(), 1);
+        assert!(last_step_text(&desk, late).ends_with(&told_queued()));
+
+        let (_temp, desk) = self::desk();
+        let shut = Fake {
+            unreachable: true,
+            leave_fails: std::cell::Cell::new(true),
+            ..Fake::default()
+        };
+        opened(&desk, &shut);
+        assert!(desk.tell(&shut, late));
+        assert!(last_step_text(&desk, late).ends_with(&not_told("plugin folder not writable")));
+        assert!(!desk.tell(&shut, late + 1), "not tried at every look");
+
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        codex_opened(&desk, &lines, None);
+        assert!(desk.tell(&lines, late));
+        let told = sent_as(&lines, "codex");
+        assert_eq!(told.len(), 1);
+        assert!(told[0].1.contains("点「转回 Codex」"), "{}", told[0].1);
+        assert!(
+            last_step_text(&desk, late).ends_with("已发到 Codex 会话")
+                || last_step_text(&desk, late).ends_with("sent to the Codex session")
         );
     }
 }

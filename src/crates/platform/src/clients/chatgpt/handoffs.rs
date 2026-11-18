@@ -14,9 +14,11 @@ use std::{
     path::{Path, PathBuf},
 };
 mod doer;
+mod notice;
 mod pull_request;
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use idle::IDLE_END_MS;
+pub use notice::{notices_since, Cause, Trouble};
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 
@@ -176,6 +178,9 @@ pub struct Step {
     /// How those words stand with the plugin (#257).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<Delivery>,
+    /// Trouble before any answer, for the session to be told of (#318).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<Cause>,
 }
 
 /// How words back to Claude stand with its session's plugin (#257).
@@ -215,6 +220,7 @@ impl Step {
             auto: false,
             prompt: None,
             delivery: None,
+            cause: None,
         }
     }
     fn by_auto(mut self) -> Self {
@@ -301,6 +307,9 @@ pub struct Handoff {
     /// the words back (`Wake`), until it ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waking_since: Option<i64>,
+    /// The steps whose trouble the session was told of (#318), by index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub told: Vec<usize>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -711,6 +720,7 @@ impl Book {
             extra: 0,
             rounds_from: 0,
             waking_since: None,
+            told: vec![],
         };
         self.list.push(handoff.clone());
         self.trim();
@@ -778,9 +788,8 @@ impl Book {
         };
         handoff.status = Status::Failed;
         handoff.error = Some(error.to_owned());
-        handoff
-            .steps
-            .push(Step::new(now, StepKind::Fail, Some(error)));
+        let step = Step::new(now, StepKind::Fail, Some(error));
+        handoff.steps.push(step.caused(Cause::NotOpened));
         handoff.enter(Phase::Failed, now);
         true
     }
@@ -929,9 +938,7 @@ impl Book {
             points,
             verdict,
             key: message.map(str::to_owned),
-            auto: false,
-            prompt: None,
-            delivery: None,
+            ..Step::new(now, StepKind::Reply, None)
         });
         handoff.enter(Phase::Replied, now);
         true
@@ -1160,7 +1167,9 @@ impl Book {
             })
             .collect::<Vec<_>>();
         for (id, reason) in &late {
-            self.stop(id, reason, true, now);
+            if self.stop(id, reason, true, now) && reason == no_answer {
+                self.caused_last(id, Cause::NoAnswer);
+            }
         }
         !late.is_empty()
     }

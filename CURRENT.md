@@ -7,6 +7,41 @@
 
 
 
+## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾；第 2 轮判「决策升级」，常浩选「甲：两条都修再专项复核」；专项复核「通过」，已 squash 合并）
+
+- 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。
+- 改了哪些文件：
+  - `platform/src/clients/chatgpt/handoffs.rs`：`Handoff` 加 `told`（已通知过的出错步序号，空时不写）；挂上新模块。
+  - `platform/src/clients/chatgpt/handoffs/notice.rs`（新）：`Trouble`（打不开 / 没回信）、`Book::untold(since, no_answer)`（最新一步是出错、发生在驿窗启动之后、还没通知过）、`Book::told`（记下已通知，在那一步的说明和 `halt` 末尾补去向）。
+  - `host/src/handoff/notice.rs`（新）：`Desk::tell` 先跑超时检查，再逐个通知：走转回同一条通道，id `<接力>-n<步序>`，送不进去排队，不后台续接；通知文字写出了什么错、接力状态、会话该做什么（不要自己重送、向常浩说明；打不开的等常浩点重试；没回信的，之后回信照常收，工程审查的「通过」照常自动转回，思维评审要常浩点）。
+  - `host/src/handoff.rs`：`Desk` 记启动时间 `since`（之前的出错不补发）；超时检查抽成 `late`；快照（`projection(app, desk)`）里调 `tell`。新增 4 条测试，测试用 `desk()` 把 `since` 设 0。
+  - `apps/mcp/src/index.ts`（工具说明）、`docs/chatgpt-channel.md`、`docs/安装与使用.md`：同步。
+  - 侧栏不加新行、不加动画：本想加一种新步骤，发现失败类步骤会触发纸飞机下落动画（已定内容），改为只在原来那一行说明末尾补「已告诉 Claude / 已排进 Claude 会话的待发送队列 / 没能告诉 Claude：原因」。
+- 测试：11-12 第一次全量跑到一半，会话中断时进程被杀（日志停在 platform 测试中途，已跑完的 Rust 683 条全过），不算数。11-14 变基到 main `b0557d3`（中间合进 #356 接力重读、重启后自动往返接着跑等 27 个提交；`handoff.rs`、`CURRENT.md` 冲突两边都保留，核对 main 原有 71 条接力测试一条不少）后重跑：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，Rust 合计 `989 passed; 0 failed`，前端 `ℹ pass 452` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`、`ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-318-{check,test}.log`。变基后顺手改：Codex 会话收到的「没回信」通知里按钮名写成「转回 Codex」（卡上就叫这个）。
+- 验证：单测覆盖打不开（当场失败、2 分钟超时、重试后再失败再通知一次）、重启中断（通知；启动前的旧出错不补发；再重启不重发）、30 分钟没回（通知一次、`halt` 带去向、迟到的「通过」照常收并自动转回结束；思维评审文字不同）、送不进去排队、排队也失败（说明原因、不反复重试）、Codex 会话进它自己的队列且卡上写 Codex。
+- 截图：无（只改了已有那一行的说明文字）。
+- 发布与回读：`a4f1a3f5e3f5`（本分支 `12e04be`，含 main `b0557d3`），`install.sh` 回读一致、签名证书照常；装前没有开着自动往返的接力。启动 20 秒后查 `handoffs.json`：63 张旧接力 `told` 全空，没给旧单补发；应用日志无报错。回滚到本轮之前：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice/PostPane-d7a5344be952.app" /Applications/PostPane.app; open /Applications/PostPane.app`。没截屏查「想访问文稿」弹窗（未做）。
+- 送审：L2，接力 `h1a1d99b32c700`。ChatGPT 18:39 已答完（5421 字），但被 #356 的匹配规则判成别的提问（原文前 600 字有 12 个反引号），19:00 按「30 分钟没回信」停下——**#318 实机第一次触发**，本会话收到了通知，卡上那行补了「；已告诉 Claude」。另一次实机触发：19:44 digital-twin 一单思维评审（`h1a1d9debdaf01`）打不开，卡上为「ChatGPT 插件没能完成：timeout；已告诉 Claude」。误判由别的会话在 #366（PR #367，main `0dc0ba5`）修了（比对去反引号）。
+- 合并 main：Auto-fix 报 PR 与 main 冲突，按授权 `git merge FETCH_HEAD`（`df4170c`），只冲突 `CURRENT.md`（两节都留）；合并后接力测试 `76 passed; 0 failed`。合并后没重跑全量（未做）。
+- 第二次装机：`c4501330017c`（`df4170c`，含 main 的 #366 和本 PR），装前已装的是 #366 会话装的 `55b028cf8046`，回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice-r2/PostPane-55b028cf8046.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 审查现状（22:30）：`h1a1d99b32c700` 仍是 open / working、自动往返已停；重读要 Chrome 插件在线，19:51 之后一次都没重读（插件没连上），所以 #366 的修复还没机会收下这份回信，审查结论尚未拿到。注意：main 合进的 #368「接力闲置 24 小时自动结束」会在约 11-15 19:00 结束这单，结束后不再重读，要在那之前拿到结论。更新（11-15 07:42）：03:30 Chrome 插件连上后驿窗重读、按 #366 收下回信（`taken`，#366 实机生效），第 1 轮「审查出口：返修 / 结论：需修改」，无 P0/P1；自动往返已停，按设计没有自动转回，本会话从 `handoffs.json` 直接读的。要本轮修的 P2：P2-01「打不开」通知断言「不会有回信」过度（迟到的 opened 仍可恢复）；P2-02 `since` 每次启动重置，上一进程里新出错、还没通知就重启的会永久丢；P2-03 发送前没二次核对状态，常浩同时重试或继续自动时会收到过期指示。可顺手修的 P3：P3-01 只看最新一步会漏（超时 Stop 后又追加无关 Fail）；P3-02 用本地化文字认 NoAnswer 脆弱；P3-03「已告诉 Claude」措辞强于送达保证。L2 还剩 1 轮。返修未做（上下文过半，待新会话）。
+- 返修（11-18 开工 `2026-11-18 11:12`，新会话接手；提交 `3862617`、`c838da2`、`7bcf7d5`、`71e76e8`）：
+  - P3-01、P3-02（`3862617`）：`Step` 加结构化标记 `cause`（`notOpened` 由 `failed` 写、`noAnswer` 由 `overdue` 写），新增 `Handoff::untold`：认最近一条带标记、之后只追加过 `fail`、状态还停在那里的步；不再拿说明文字比对。红测 `a_failure_after_the_stop_does_not_hide_it`、`a_stop_is_known_whatever_the_language` 先红后绿；`trouble_moved_on_from_is_not_told` 守住回信、继续自动之后不补发。顺手：`replied` 里的 `Step` 字面量改用 `..Step::new`，省掉 platform `handoffs.rs` 行数（上限 1583，现 1574）。
+  - P2-02（`c838da2`）：通知起点 `notices_since` 存进 `<数据目录>/chatgpt/notices.json`，新版第一次启动时写下、之后沿用；`Desk.since` 取它。红测 `trouble_a_stop_left_untold_is_told_after_the_restart`（出错存盘、没通知就重启 → 补发一次，再重启不重发）先红后绿。AGENTS.md「AI 接入」的写到哪里补上这个文件；设置页那一栏原本就只列 `handoffs.json`，没改。
+  - P2-03（`7bcf7d5`）：`tell` 拆出 `tell_one`，占住 `claim` 后按当前状态再算一遍，和候选不一致就不发；「重试」「继续自动」也先占 `claim`（继续自动在 `drive` 之前放掉）。红测 `trouble_moved_on_from_before_it_is_told_is_not_told` 先红后绿。**行为变化**：通知正在发的那一瞬间点这两个，会提示「上一段还在送，等它送完再试。」，和「结束接力」原来一样。
+  - P2-01、P3-03（`71e76e8`）：打不开的通知改为「驿窗没能确认 ChatGPT 审核会话已打开……目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里」；侧栏后缀「已告诉 Claude」改「已发到 Claude 会话」，「没能告诉 Claude」改「没能通知 Claude」（常浩确认计划时同意）。红测 `an_opening_told_of_that_comes_late_still_carries_on`（超时 → 通知 → 迟到 opened → open → 「通过」转回并结束）先红后绿。接回后不另发通知（审查说不需要）。
+  - 文档：`docs/chatgpt-channel.md` 那一段改写；`docs/安装与使用.md`、MCP 工具说明原文仍准确，没改。
+- 返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `998 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；最后一组 Chrome 插件 `ℹ pass 3` / `ℹ fail 20`，报 Playwright 浏览器不存在，`~/Library/Caches/ms-playwright/` 整个没了，照 L-16 补装 `chromium-headless-shell` 后重跑 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r1-{check,test,playwright-install,test-extension,node}.log`。
+- 第 2 轮复审（11-18，接力 `h1a1ecb8e84700`，HEAD `53ca8c8`）：P2-01、P2-02、P3-01、P3-02、P3-03 关闭；P2-03 只关了一部分（插件报来的迟到打开、回信经 `observe` 改账本，不受 claim 管）；新增 P2-04（同一会话已开新接力，旧接力的打不开通知照发）。审查出口「决策升级」。我核实两条都属实：`listen` 线程调 `observe`；失败的接力不算 live，`begin` 不关它。常浩选「甲：两条都修再专项复核」。
+- 第 2 轮返修（提交 `38b3bca`、`210eab2`）：
+  - P2-04（`38b3bca`）：`Book::untold_of(id, since)` 先查 `superseded`，`untold` 和 `tell_one` 的复核都走它。红测 `trouble_of_a_handoff_handed_over_again_is_not_told` 先红后绿。
+  - P2-03（`210eab2`）：`Desk` 加 `telling` 计数和 `told_out` 条件变量；`change()`、`late()`、`start` 里的 `expire` 改账本前先 `quiet()`，有通知正在发就等它发完；`tell_one` 占住 claim 后 `Telling::begin`，复核到发完都挡着别的改动，发完放开再记 `told`，然后 `caught_up(对话)`，把这期间被 `turn_waits` 压进暂放区的回合补收。这一步修掉了第 1 轮给通知加 claim 时带进来的问题：通知发送期间到的回信会卡在暂放区，要等下一次往这个对话发话才被收下。第 1 轮给「重试」「继续自动」加的 claim 拿掉，改为等通知发完再生效（不再提示「上一段还在送」，回到原来的体验）。新测 `Held` 替身（`reply` 卡住直到放行）加 `while_told`：`an_opening_reported_while_its_failure_is_told_waits_for_it`、`an_answer_that_comes_while_no_answer_is_told_waits_for_it`、`a_retry_while_its_failure_is_told_waits_for_it`，修前前两条红（状态被改成 Open、回信卡在暂放区）；修后临时拿掉补收或加闸，对应测试都会变红；三条连跑 20 遍 20 过。
+  - 没做：审查的 P3 建议（`overdue` 的 late 集合直接带结构化原因），审查说不卡合并，留着。
+- 第 2 轮返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `1002 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；Chrome 插件组 `ℹ pass 3` / `ℹ fail 20`，Playwright 缓存一小时内又被清掉（L-16），补装后 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r2-*.log`。
+- 装机：`e8cd0d31fe20`（`745966b`），`install.sh` 回读一致；`notices.json` 沿用 `1794972821711`，74 张接力没有补发；截屏无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-18-318-error-notice-r4/PostPane-673afe926468.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 专项复核（常浩授权，`extra` 写明「只复核 P2-03、P2-04」，同一接力 `h1a1ecb8e84700`）：ChatGPT 12:46 答完「审查出口：通过 / 结论：通过」，两条都关闭，唯一非阻断观察是 `telling` 为全局计数，单条通知慢时别的接力也要等（出现延迟再考虑按会话隔离）。驿窗没收下这条回信：对话里每次重读都记 `unmatched`（`turns.jsonl`，messageId `b7742406…`，4152 字），12:53 按「30 分钟没回信」停下，并经本 PR 的通知告诉了本会话（#318 实机第三次触发，后缀「已发到 Claude 会话」）。我经 Chrome 打开该对话读到原文，存 `evidence/2026-11-18-318-special-review.md`。接力卡停在「30 分钟没回信」，可由常浩点「结束接力」，或等 24 小时闲置自动结束。
+- 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：① 专项复核的回信被 #356 匹配规则判 `unmatched`，原因没查清（同一对话第 2 轮能对上；页面上提问原样显示、行内代码去掉了反引号，和前 600 字比对的规则看不出差别），值得另开一单查；② `~/Library/Caches/ms-playwright/` 一天内被清两次，第一次装机后截屏看到 DiskSlim（磁盘瘦身）在要「下载」文件夹权限，怀疑是它在清缓存（推断，未核实）。
+- 本轮新坑：无
 
 ## 清理历史包袱第一档：零引用文件、过期文档、CURRENT 旧节归档（#387）（2026-11-18，Claude，常浩看过三档清单后回「清第一档」；已提交、无需发布）
 
