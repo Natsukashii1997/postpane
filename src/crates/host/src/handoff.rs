@@ -4923,7 +4923,7 @@ mod tests {
         assert_eq!(told[0].0, "s1");
         assert!(told[0]
             .1
-            .contains("驿窗接力「修登录」出错：没能打开 ChatGPT 审核会话（timeout）"));
+            .contains("驿窗接力「修登录」出错：驿窗没能确认 ChatGPT 审核会话已打开（timeout）"));
         assert!(told[0].1.contains("重试") && told[0].1.contains("先不要再调用 relay_to_chatgpt"));
         assert!(last_step_text(&desk, 3).ends_with(&format!("；{}", told_back())));
         assert!(!desk.tell(&failing, 4), "told once");
@@ -5058,6 +5058,40 @@ mod tests {
         let _ = handoff;
     }
 
+    /// #318 review P2-01: an opening PostPane gave up waiting for may still
+    /// come: the session is not told there will be no answer, and when it
+    /// does come, the handoff carries on and its answer goes back.
+    #[test]
+    fn an_opening_told_of_that_comes_late_still_carries_on() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        assert!(desk.tell(&lines, late));
+        let told = last_sent(&lines).2;
+        assert!(!told.contains("不会有回信"), "{told}");
+        assert!(told.contains("驿窗会接回这次接力"), "{told}");
+        assert!(told.contains("先不要再调用 relay_to_chatgpt"), "{told}");
+        // The extension says it opened after all.
+        assert!(desk.observe(
+            &json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-new"}),
+            late + 1
+        ));
+        assert_eq!(desk.projection(late + 1)[0]["status"], "open");
+        assert!(!desk.tell(&lines, late + 2), "nothing more to tell");
+        // ChatGPT answers the brief the opening carried.
+        shown("改动如下");
+        assert!(desk.observe(&turn("complete", "结论：通过"), late + 3));
+        assert!(desk.drive(&lines, late + 4));
+        assert_eq!(sent_as(&lines, "reply").len(), 2, "the answer went back");
+        assert_eq!(desk.projection(late + 4)[0]["status"], "closed");
+    }
+
     /// #318: ChatGPT not answering in time stops the auto round trip and is
     /// told once; an answer that comes later is still taken, and a pass
     /// still goes back by itself.
@@ -5133,8 +5167,8 @@ mod tests {
         assert_eq!(told.len(), 1);
         assert!(told[0].1.contains("点「转回 Codex」"), "{}", told[0].1);
         assert!(
-            last_step_text(&desk, late).ends_with("已告诉 Codex")
-                || last_step_text(&desk, late).ends_with("Codex was told")
+            last_step_text(&desk, late).ends_with("已发到 Codex 会话")
+                || last_step_text(&desk, late).ends_with("sent to the Codex session")
         );
     }
 }

@@ -70,7 +70,9 @@ impl Desk {
 /// what to do — not to hand it over again by itself.
 fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
     let what = match trouble {
-        Trouble::NotOpened(error) => format!("没能打开 ChatGPT 审核会话（{error}），这次送审没有送到 ChatGPT，不会有回信。先不要再调用 relay_to_chatgpt：常浩可以在驿窗接力卡上点「重试」，重试成功后回信照常转回这里；常浩让你重送时再调用。请向常浩说明送审没发出去。"),
+        // The extension may still report it opened (`opened_late`), and the
+        // handoff carries on: not told there will be no answer (P2-01).
+        Trouble::NotOpened(error) => format!("驿窗没能确认 ChatGPT 审核会话已打开（{error}），这次送审目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里。先不要再调用 relay_to_chatgpt：常浩可以在驿窗接力卡上点「重试」，重试成功后回信也照常转回这里；常浩让你重送时再调用。请向常浩说明送审目前没发出去。"),
         Trouble::NoAnswer => {
             // A 思维评审's pass waits for the person too (#209).
             let later = if handoff.thinking() {
@@ -89,9 +91,10 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
     format!("驿窗接力「{}」出错：{what}", handoff.title)
 }
 
-/// What the card's line for the trouble ends with.
+/// What the card's line for the trouble ends with: sent, not yet taken up
+/// (review of #318, P3-03).
 pub(super) fn told() -> String {
-    l10n::text("已告诉 Claude", "Claude was told")
+    l10n::text("已发到 Claude 会话", "sent to the Claude session")
 }
 pub(super) fn told_queued() -> String {
     l10n::text(
@@ -101,7 +104,7 @@ pub(super) fn told_queued() -> String {
 }
 pub(super) fn not_told(error: &str) -> String {
     l10n::text(
-        &format!("没能告诉 Claude：{error}"),
-        &format!("Claude could not be told: {error}"),
+        &format!("没能通知 Claude：{error}"),
+        &format!("Claude could not be notified: {error}"),
     )
 }
