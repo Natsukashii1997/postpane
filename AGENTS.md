@@ -64,7 +64,6 @@ src/
 docs/
   ROADMAP.md         需求与分阶段路线
   agents/            Matt Pocock 技能读的约定：issue 看板、分流标签、领域文档
-  upstream/          上游原版 README
   LESSONS.md         本项目的坑（排障、改脚本前先搜）
   OPERATIONS.md      操作手册：交接写法、报告与验收
   templates/handoff.md  交接一节的骨架

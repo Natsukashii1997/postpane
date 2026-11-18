@@ -12,6 +12,20 @@
 
 
 
+## 删上游原版说明与宣传素材：`docs/upstream/` 与 videos、screenshots、badges、buttons（#399）（2026-11-18，Claude，常浩看过改动确认后选「乙：连目录一起删」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 21:46`（`date '+%F %H:%M'` 记录）。来由：历史包袱清理（#387）第二档最后一项。2026-11-04 阶段 1-4（`2ecdc51`）把上游原版 README 移到 `docs/upstream/` 留作对照；查过上游宣传素材只被这两份 README 引用，内容多是驿窗已删的功能（iPhone、手表、Remote、简约形态），Apache 2.0 只要求留 `LICENSE`、`NOTICE`。
+- 改了哪些文件：
+  - 常浩要求的：删 `docs/upstream/`（`README.md`、`README.zh-CN.md`）和 `docs/videos/`（7 张动图，11 MB）、`docs/screenshots/`（11 张）、`docs/badges/`（4 个）、`docs/buttons/`（5 个），共 29 个文件约 11.5 MB。`README.md` 第 12 行改为「上游原版说明见上游仓库提交 `917df21`」并链到上游；`AGENTS.md` 结构一节去掉 `upstream/` 一行；`docs/ROADMAP.md` 1-4 补记 2026-11-18 常浩改定（#399）。
+  - 顺手改的：无。
+  - 改变了已有行为的：无（纯文档）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` 交接写好后重跑 `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-399-drop-upstream/`（`check.log`、`test.log`、`node-test.log`、`node-test-2.log`）。
+- 验证：`git grep` 查 `docs/upstream`、`upstream/README`、`docs/(videos|screenshots|badges|buttons)`，除 ROADMAP 1-4 的历史记述外没有引用（`docs/history/` 和 CURRENT 旧节是历史记录，不改）。
+- 截图：无（没有界面改动）。
+- 发布与回读：无需发布（纯文档）。
+- 与授权不一致之处、遗留问题、范围外发现：主线第 9 项「磁盘清单」同轮只读做完，没删任何东西，清单见下一条。worktree（`worktree-sweep list --fetch` 加人工核对）：`353-bg-reply`、`356-chatgpt-reread` 脚本判可安全删除（838 MB）；`nostalgic-bartik-8bdeee`（#365）、`interesting-hugle-7778fb`（#360）只多一份过时的 `.claude/launch.json`，主目录那份更全；`359-board-peek` 没推送的「第 3 批之二」`0f40a3b` 已随 PR #369（`695fd5b`）进 main；`relay-inline-code`（`build/366-with-318`）的 3 个提交是 #318（PR #365）加合并提交，#366 已由 PR #367 合入。这四个人工核对后可删（约 1.7 GB）。保留：`347-review-gate`（PR #348 开着，10.8 GB）、`codex-audit-fix-1112`（PR #315 开着）。证据目录 21 GB，其中 187 个装机备份 `.app` 共 19.7 GB；只留最近 5 个（397、395、391、384、318-r4），其余 182 个共 19.2 GB 可移到废纸篓；次大的是 `2026-11-05-panel-inventory` 974 MB（帧截图）。删不删、删哪些等常浩逐项定。skill 进化：无。
+- 本轮新坑：无
+
 ## 侧栏工具不再能切到简约形态：只堵入口，渲染代码不动（#397）（2026-11-18，Claude，常浩看过改动确认后回「乙 只堵入口」，中途交接卡没能远程启动，常浩回「继续在这里做完 #397」；已提交、已发布 `32a5ebaa4109` 回读通过）
 
 - 时间：开工 `2026-11-18 21:10`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。设置页 2026-11-05（#66 / PR #67）已去掉「简约」形态，但侧栏工具（MCP「agent-hud」的 `draft_hud`）仍接受 `mode: "simple"`，智能体被要求改侧栏时可能把它切回来。

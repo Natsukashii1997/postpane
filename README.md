@@ -9,4 +9,4 @@
 
 ## 来源
 
-本项目源自 [Agent HUD](https://github.com/jazzenchen/agent-hud-open)（提交 `917df21`），依据 Apache License 2.0 使用和修改，不再与上游同步，见 [NOTICE](NOTICE) 与 [LICENSE](LICENSE)。上游原版说明保留在 [docs/upstream/](docs/upstream/README.md)。Clawd 小人素材版权归 Anthropic，不在本项目许可范围内，不可对外发布。
+本项目源自 [Agent HUD](https://github.com/jazzenchen/agent-hud-open)（提交 `917df21`），依据 Apache License 2.0 使用和修改，不再与上游同步，见 [NOTICE](NOTICE) 与 [LICENSE](LICENSE)。上游原版说明见上游仓库提交 [`917df21`](https://github.com/jazzenchen/agent-hud-open/tree/917df21)。Clawd 小人素材版权归 Anthropic，不在本项目许可范围内，不可对外发布。
