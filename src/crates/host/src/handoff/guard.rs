@@ -125,6 +125,14 @@ pub(super) fn sent_unknown(error: &str) -> String {
         &format!("PostPane never heard these words went in to ChatGPT ({error}); the auto round trip stopped, left to the person. Do not send other words: the same words again are not sent twice, and an answer to them cannot pass."),
     )
 }
+/// The handoff ended or moved on while the review was made ready (round 5
+/// P1-18): nothing was sent.
+pub(super) fn moved_meanwhile() -> String {
+    l10n::text(
+        "接力状态已变化（这张接力刚被结束或被同一审查链的新接力接管），这一轮没有发出：请先看驿窗接力卡，确实要送再重新调用。",
+        "The handoff changed meanwhile (ended, or taken over by a newer one of its chain); nothing was sent. Check the handoff card, then call again if it is still to go.",
+    )
+}
 /// Word that a review went in, come after its answer (L3 P1-12).
 pub(super) fn confirmed_late() -> String {
     l10n::text(

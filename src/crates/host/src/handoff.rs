@@ -873,8 +873,9 @@ impl Desk {
         // these (round 4 P1-11).
         let sent = &handoffs::tagged(&request, brief);
         // Kept, on disk, before it goes, so a restart before word of it
-        // cannot let an answer pass (L3 P1-10): not kept, not sent.
-        self.change_kept(|book| {
+        // cannot let an answer pass (L3 P1-10): not kept, not sent; nor
+        // when the handoff ended meanwhile (round 5 P1-18).
+        let kept = self.change_kept(|book| {
             book.ask_pending(
                 &handoff.id,
                 handoffs::Pending {
@@ -887,6 +888,9 @@ impl Desk {
                 },
             )
         })?;
+        if !kept {
+            return Err(guard::moved_meanwhile());
+        }
         self.asking().insert(
             handoff.id.clone(),
             Asking {
@@ -2012,6 +2016,8 @@ mod tests {
         on_send: Option<Box<dyn Fn()>>,
         /// What happens while a conversation is being opened.
         on_open: Option<Box<dyn Fn()>>,
+        /// What happens while who began the session's turn is read.
+        on_opener: Option<Box<dyn Fn()>>,
         /// Sending gives up waiting for the extension.
         send_fails: std::cell::Cell<bool>,
         /// The request each sending was asked as.
@@ -2200,6 +2206,9 @@ mod tests {
             Ok(())
         }
         fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)> {
+            if let Some(during) = &self.on_opener {
+                during();
+            }
             self.opener_asked
                 .borrow_mut()
                 .push(format!("{doer}|{session}"));
@@ -5249,6 +5258,14 @@ mod tests {
             after.steps.last().unwrap().text.as_deref(),
             Some(guard::confirmed_late().as_str())
         );
+        // The same word again, here or after another restart: noted once
+        // (round 5 P2-16).
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 10);
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 11);
+        let again = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(again.steps.len(), after.steps.len());
     }
 
     /// Review round 4 P1-14: an answer come before the notice went makes it
@@ -5271,6 +5288,68 @@ mod tests {
         let told = sent_as(&lines, "reply").len();
         desk.tell(&lines, 7);
         assert_eq!(sent_as(&lines, "reply").len(), told);
+    }
+
+    /// Review round 5 P1-17: an answer to the ask to mend, come while its
+    /// send gave up waiting, is taken all the same: counted as a mending,
+    /// and still held back.
+    #[test]
+    fn an_answer_come_while_a_mending_send_gives_up_is_taken() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", "1. 都好"), 3);
+        lines.send_fails.set(true);
+        lines.on_send = Some(Box::new(|| {
+            assert!(
+                !desk.observe(&reply_as(asked(), PASS, "m2"), 4),
+                "held till the send is done"
+            );
+        }));
+        desk.drive(&lines, 4);
+        lines.on_send = None;
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(kept.last_reply().and_then(|s| s.key.as_deref()), Some("m2"));
+        assert_eq!(kept.counted(), 1, "a mending is no round");
+        assert!(kept.gate.mending.as_ref().is_some_and(|m| m.answered));
+        desk.drive(&lines, 5);
+        assert_eq!(status(desk, 5).0, "open");
+    }
+
+    /// Review round 5 P1-18: a review whose handoff ended while it was made
+    /// ready keeps nothing and sends nothing.
+    #[test]
+    fn a_review_whose_handoff_ended_meanwhile_does_not_go() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(desk, &lines, "s1", "L2", None, 5).unwrap();
+        desk.observe(&reply_as(asked(), FIX, "m2"), 6);
+        desk.drive(&lines, 7);
+        // Past the cap, while who began the turn is read, another hand ends it.
+        let id: &'static str = Box::leak(handoff.id.clone().into_boxed_str());
+        lines.on_opener = Some(Box::new(move || {
+            let mut book = desk.lock();
+            if let Some(h) = book.list.iter_mut().find(|h| h.id == id) {
+                h.status = Status::Closed;
+            }
+        }));
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        let sends = lines.sent.borrow().len();
+        let refused = ruled(desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9);
+        assert_eq!(refused.err(), Some(guard::moved_meanwhile()));
+        assert_eq!(lines.sent.borrow().len(), sends);
+        assert!(desk.lock().get(id).unwrap().gate.pending.is_none());
     }
 
     /// Review round 4 P1-15: the ask to mend that cannot be kept first

@@ -94,10 +94,9 @@ impl Desk {
             Ok(false) => return false,
             Err(error) => return self.change(|book| book.stop(id, &error, true, now)),
         }
-        match lines.send(&conversation, &text, &request) {
+        let done = match lines.send(&conversation, &text, &request) {
             Ok(()) => {
                 self.change(|book| book.confirm_pending(id, &request));
-                self.caught_up(&conversation);
                 true
             }
             // Never known to have gone in: the session is told (P1-14).
@@ -105,7 +104,11 @@ impl Desk {
                 book.trouble(id, &format_failed(&error), now);
                 book.unconfirmed(id, &super::guard::send_unconfirmed(), true, now)
             }),
-        }
+        };
+        // Gone in or not known to have, ChatGPT may have answered before the
+        // send gave its word: those turns are taken now (round 5 P1-17).
+        self.caught_up(&conversation);
+        done
     }
     /// Whether a pass may end handoff `id`: the commit under review is still
     /// its pull request's. None when it may, or when it reviews no pull

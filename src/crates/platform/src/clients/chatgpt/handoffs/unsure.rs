@@ -60,6 +60,10 @@ pub struct Pending {
     /// Their answer came: booked once, and kept so it cannot pass (P1-12).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub answered: bool,
+    /// Word they went in came after the answer, and is on the card: once,
+    /// however often it comes again (round 5 P2-16).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub noted: bool,
 }
 
 impl Pending {
@@ -73,6 +77,7 @@ impl Pending {
             key: words.map(|w| key(untagged(w))).unwrap_or_default(),
             words: words.map(|w| excerpt(w, EXCERPT)),
             answered: false,
+            noted: false,
             ..self
         }
     }
@@ -159,17 +164,21 @@ impl Book {
         let Some(handoff) = self.list.iter_mut().find(|h| h.id == id) else {
             return false;
         };
-        let late = [&handoff.gate.pending, &handoff.gate.mending]
+        let Some(late) = [&mut handoff.gate.pending, &mut handoff.gate.mending]
             .into_iter()
             .flatten()
-            .any(|p| p.request == request && p.answered);
-        if late {
+            .find(|p| p.request == request && p.answered)
+        else {
+            return false;
+        };
+        // Told again (a resend of the word, a restart): on the card once.
+        if !std::mem::replace(&mut late.noted, true) {
             handoff
                 .steps
                 .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
             handoff.updated_at = now;
         }
-        late
+        true
     }
     /// Words sent as `request` went in: a review's clears all that was
     /// unsure before it; a mending's clears only itself.
