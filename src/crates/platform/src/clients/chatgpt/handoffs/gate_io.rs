@@ -9,15 +9,24 @@ use std::path::Path;
 const LEDGER_KEPT: usize = 32 * 1024;
 
 /// An answer's problem ledger: the part headed 「问题台账」 up to the next
-/// heading or its last lines; the whole answer when it has none.
+/// heading as high as its own, or its last lines; the whole answer when it
+/// has none. Smaller headings within it (grouping by severity) stay in.
 pub fn ledger(reply: &str) -> String {
     let lines = reply.lines().collect::<Vec<_>>();
-    let heading = |line: &str| line.trim_start().starts_with('#');
+    let level = |line: &str| line.trim_start().chars().take_while(|c| *c == '#').count();
     let text = match lines.iter().position(|l| l.contains("问题台账")) {
         Some(start) => {
+            // A ledger not under a heading of its own ends at any heading.
+            let own = match level(lines[start]) {
+                0 => usize::MAX,
+                n => n,
+            };
             let end = lines[start + 1..]
                 .iter()
-                .position(|l| heading(l) || l.trim().starts_with("受审版本"))
+                .position(|l| {
+                    let at = level(l);
+                    (at > 0 && at <= own) || l.trim().starts_with("受审版本")
+                })
                 .map_or(lines.len(), |at| start + 1 + at);
             lines[start..end].join("\n")
         }

@@ -375,6 +375,14 @@ mod tests {
         assert!(same_commit("abcdef1", "ABCDEF1234") && !same_commit("abc", "abcdef1"));
         let reply = "# 审查\n## 问题台账\n| P1-01 | 待修复 |\n## 其他\n受审版本：abcdef1";
         assert_eq!(ledger(reply), "## 问题台账\n| P1-01 | 待修复 |");
+        // Grouped under smaller headings, it stays whole (Fable review #12).
+        let grouped = "## 四、问题台账\n### P1\n| P1-10 | 待修复 |\n### P2\n| P2-01 | 已验证关闭 |\n## 五、其他\n受审版本：abcdef1";
+        assert_eq!(
+            ledger(grouped),
+            "## 四、问题台账\n### P1\n| P1-10 | 待修复 |\n### P2\n| P2-01 | 已验证关闭 |"
+        );
+        let bold = "**问题台账**\n| P1-01 | 待修复 |\n# 附录\n正文";
+        assert_eq!(ledger(bold), "**问题台账**\n| P1-01 | 待修复 |");
         assert_eq!(ledger("没有台账"), "没有台账");
         let temp = tempfile::tempdir().unwrap();
         let data = temp.path();

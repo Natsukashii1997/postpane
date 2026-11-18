@@ -8,6 +8,15 @@ use super::{back_text, Desk, Lines};
 use agent_hud_runtime::chatgpt::handoffs::{Handoff, Next};
 use agent_hud_runtime::l10n;
 
+/// Why a pass or a close was held back, and whether Claude sending the
+/// pull request's current commit again sets it right: then the round trip
+/// goes on, not left to the person (Fable review #8, MA-02 §4).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Held {
+    pub why: String,
+    pub resend: bool,
+}
+
 impl Desk {
     /// The words back for `handoff`'s newest answer `reply`, and, for a
     /// pass that does not hold for the commit under review, why: every
@@ -17,7 +26,7 @@ impl Desk {
         lines: &dyn Lines,
         handoff: &Handoff,
         reply: &str,
-    ) -> (String, Option<String>) {
+    ) -> (String, Option<Held>) {
         // A 思维评审's close ends it as a pass does: words never known to
         // have gone in hold it back too (L3 P1-10).
         let blocked = matches!(handoff.outcome(), Next::Pass | Next::Close)
@@ -26,7 +35,7 @@ impl Desk {
         // Not the pass's words with a word against them: words that say it
         // did not pass (L3 P1-09).
         let text = match &blocked {
-            Some(why) => held_back_text(handoff, why),
+            Some(held) => held_back_text(handoff, held),
             None => back_text(handoff, reply),
         };
         (text, blocked)

@@ -2,6 +2,7 @@
 //! v0.3): asking ChatGPT once to mend an answer's last lines, reading a
 //! pull request's current commit before a pass ends the handoff, and the
 //! words for both. What the answers mean, PostPane does not judge.
+use super::guard::Held;
 use super::texts::Sent;
 use super::{Desk, Lines};
 use agent_hud_runtime::chatgpt::handoffs::{self, Handoff};
@@ -114,22 +115,25 @@ impl Desk {
     /// Whether a pass may end handoff `id`: the commit under review is still
     /// its pull request's. None when it may, or when it reviews no pull
     /// request; else why not.
-    pub(super) fn pass_blocked(&self, lines: &dyn Lines, handoff: &Handoff) -> Option<String> {
+    pub(super) fn pass_blocked(&self, lines: &dyn Lines, handoff: &Handoff) -> Option<Held> {
+        let held = |why: String, resend: bool| Some(Held { why, resend });
         // Sent and not known to have gone in: what it reviewed is not
         // known (L3 P1-10).
         if handoff.gate.pending.is_some() {
-            return Some(super::guard::unconfirmed());
+            return held(super::guard::unconfirmed(), false);
         }
         let pr = handoff.pr.as_deref()?;
         // Kept with no commit (from before the gate): it cannot be checked,
-        // so it does not pass (P1-01).
+        // so it does not pass (P1-01); the current commit sent sets it right.
         let Some(head) = handoff.gate.head.as_deref() else {
-            return Some(super::guard::no_anchor(pr));
+            return held(super::guard::no_anchor(pr), true);
         };
         match lines.pr_head(pr) {
             Ok(now) if handoffs::same_commit(&now, head) => None,
-            Ok(now) => Some(moved_on(pr, head, &now)),
-            Err(error) => Some(unread_head(pr, &error)),
+            // Commits after the one reviewed: common, as every round
+            // touches CURRENT.md; the current one sent again goes on.
+            Ok(now) => held(moved_on(pr, head, &now), true),
+            Err(error) => held(unread_head(pr, &error), false),
         }
     }
 }
@@ -224,13 +228,6 @@ pub(super) fn stale(why: &str, how: Sent) -> String {
     l10n::text(
         &format!("{why}，{zh}，自动往返停下"),
         &format!("{why}; {en}; the auto round trip stopped"),
-    )
-}
-/// A pass of another commit than the one sent for review (#347).
-pub(super) fn stale_words() -> String {
-    l10n::text(
-        "回信写了通过，但受审版本和送审的提交对不上，这次通过不能用于当前提交",
-        "The answer passed another commit than the one sent for review",
     )
 }
 /// A review chain named that PostPane does not know (#347).

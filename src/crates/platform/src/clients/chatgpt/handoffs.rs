@@ -519,12 +519,13 @@ impl Handoff {
             Some(_) => format!("{base}-{}", tries.len()),
         }
     }
-    /// Whether `text` went back to Claude in this handoff (#258).
+    /// Whether `text` went back to Claude in this handoff (#258), a label
+    /// the delivery may put before it left out (as `codex_began` does).
     fn sent_back(&self, text: &str) -> bool {
-        let key = key(text);
+        let keys = [key(text), key(unlabelled(text))];
         self.steps.iter().any(|step| {
             matches!(step.kind, StepKind::Back | StepKind::Again)
-                && step.key.as_deref() == Some(key.as_str())
+                && step.key.as_ref().is_some_and(|k| keys.contains(k))
         })
     }
     /// Whether the person spoke up since words last went back to Claude
@@ -1192,7 +1193,7 @@ impl Book {
     /// who allowed it and why; the auto round trip is on again for it, its
     /// waits starting afresh as on 「继续自动」 (#223).
     pub fn allow_extra(&mut self, id: &str, reason: &str, now: i64) -> bool {
-        let Some(handoff) = self.live_mut(id).filter(|h| !h.thinking()) else {
+        let Some(handoff) = self.live_mut(id) else {
             return false;
         };
         // A new leave (#347): its reviews count from one again.
@@ -1244,6 +1245,22 @@ fn excerpt(text: &str, limit: usize) -> String {
 }
 
 /// Words' fingerprint, so the same words are not sent twice in a row.
+/// `text` without a delivery label before it (「[Agent HUD · …]」 and a
+/// blank line). Not the phone's: words under it are the person's own.
+fn unlabelled(text: &str) -> &str {
+    let text = text.trim_start();
+    match text.split_once("]\n\n") {
+        Some((label, rest))
+            if label.starts_with("[Agent HUD · ")
+                && !label.contains('\n')
+                && !text.starts_with("[Agent HUD · iPhone]") =>
+        {
+            rest
+        }
+        _ => text,
+    }
+}
+
 fn key(text: &str) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -2222,8 +2239,10 @@ mod tests {
         assert!(!kept.spent());
         let said = kept.steps.last().unwrap().text.clone().unwrap();
         assert!(said.ends_with("常浩要求再审一次：P1 未确认"), "{said}");
+        // A 思维评审 keeps the same cap, and the person's leave goes past it
+        // the same way (Fable review #9).
         let thinking = book.begin("s2", None, "思维评审｜x｜y", None, "b", 1);
-        assert!(!book.allow_extra(&thinking.id, "r", 2));
+        assert!(book.allow_extra(&thinking.id, "r", 2));
     }
 
     // An extra review allowed long after the round trip stopped starts its
@@ -2351,6 +2370,12 @@ mod tests {
         assert!(!handoff.spoke_up(None), "not told: no restart");
         assert!(!handoff.spoke_up(Some(&(Opener::Person, 4))), "before");
         assert!(!handoff.spoke_up(Some(&(Opener::Plugin("意见全文".into()), 6))));
+        // A delivery's label before PostPane's words leaves them PostPane's;
+        // the phone's is the person's own.
+        let labelled = "[Agent HUD · 来自驿窗]\n\n意见全文";
+        assert!(!handoff.spoke_up(Some(&(Opener::Plugin(labelled.into()), 6))));
+        let phone = "[Agent HUD · iPhone]\n\n意见全文";
+        assert!(handoff.spoke_up(Some(&(Opener::Plugin(phone.into()), 6))));
         assert!(handoff.spoke_up(Some(&(Opener::Person, 6))));
         assert!(handoff.spoke_up(Some(&(Opener::Plugin("先改第 2 条".into()), 6))));
         assert!(book.restart_rounds(&id));

@@ -817,9 +817,8 @@ impl Desk {
         let (spent, counted) = {
             let book = ahead();
             let counted = book.pr_counted(&handoff.id);
-            let spent = book
-                .get(&handoff.id)
-                .is_some_and(|h| !h.thinking() && counted >= h.budget());
+            // A 思维评审 too (Fable review #9): one cap, kept by PostPane.
+            let spent = book.get(&handoff.id).is_some_and(|h| counted >= h.budget());
             // Evidence a review paused for goes on by itself, yet never past
             // the cap as set now (P2-06).
             (spent, counted)
@@ -1334,46 +1333,41 @@ impl Desk {
         let named = |text: String| by_doer(&text, Some(doer));
         // An end's reason keeps what the review came to, and says how its
         // answer went (#316): reached, queued, or not at all.
-        let then = |book: &mut Book, how: Sent| match next {
-            _ if blocked.is_some() => book.stop(
-                id,
-                &named(gate::stale(blocked.as_deref().unwrap_or(""), how)),
-                true,
-                now,
-            ),
-            Next::Pass => {
+        let then = |book: &mut Book, how: Sent| match (next, &blocked) {
+            // Set right by the current commit sent again: it goes on.
+            (_, Some(held)) if held.resend => true,
+            (_, Some(held)) => book.stop(id, &named(gate::stale(&held.why, how)), true, now),
+            (Next::Pass, _) => {
                 book.note(id, Notice::Passed, now);
                 book.passed(id, &named(passed_back(how)), now)
             }
-            Next::Close => book.passed(id, &named(thinking_closed()), now),
-            Next::Stale => book.stop(
-                id,
-                &named(gate::stale(&gate::stale_words(), how)),
-                true,
-                now,
-            ),
-            Next::Pause => book.stop(id, &named(evidence_paused()), true, now),
-            Next::Escalate => book.stop(id, &named(escalated()), true, now),
-            Next::Limit => {
+            (Next::Close, _) => book.passed(id, &named(thinking_closed()), now),
+            // Another commit than the one sent: the current one sent again
+            // goes on (Fable review #8).
+            (Next::Stale, _) => true,
+            (Next::Pause, _) => book.stop(id, &named(evidence_paused()), true, now),
+            (Next::Escalate, _) => book.stop(id, &named(escalated()), true, now),
+            (Next::Limit, _) => {
                 book.note(id, Notice::Top, now);
                 book.stop(id, &named(at_limit(handoff.budget(), how)), true, now)
             }
-            Next::NoVerdict => book.stop(id, &named(no_verdict(how)), true, now),
-            Next::BadTail(flaw) => book.stop(id, &named(bad_review_tail(flaw, how)), true, now),
-            Next::Invalid(flaw) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
-            Next::Back | Next::Format => true,
+            (Next::NoVerdict, _) => book.stop(id, &named(no_verdict(how)), true, now),
+            (Next::BadTail(flaw), _) => {
+                book.stop(id, &named(bad_review_tail(flaw, how)), true, now)
+            }
+            (Next::Invalid(flaw), _) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
+            (Next::Back | Next::Format, _) => true,
         };
         // Could not reach Claude: the ends this round trip added end or
         // stop all the same, saying so — a pass ends with the auto round
         // trip off too, so stopping it would leave it tried at every turn;
         // the rest stop for the person as before.
+        let goes_on = blocked.as_ref().is_some_and(|held| held.resend);
         let give_up = |book: &mut Book| match next {
-            Next::Pass
-            | Next::Limit
-            | Next::Stale
-            | Next::NoVerdict
-            | Next::BadTail(_)
-            | Next::Invalid(_) => then(book, Sent::Failed),
+            _ if goes_on => book.stop(id, &named(back_failed()), true, now),
+            Next::Pass | Next::Limit | Next::NoVerdict | Next::BadTail(_) | Next::Invalid(_) => {
+                then(book, Sent::Failed)
+            }
             _ => book.stop(id, &named(back_failed()), true, now),
         };
         // The step's own id (#257): tried again, or triggered again, it
@@ -1442,9 +1436,12 @@ pub(crate) enum Acted {
 /// 再审一轮: Claude hands its changes over again.
 fn again_text(round: u32) -> String {
     format!(
-        "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，最后请 ChatGPT 写「结论：通过」或「结论：需修改」；summary 写一句这轮改了什么。"
+        "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，head 填改完的提交，{REVIEW_TAIL}；summary 写一句这轮改了什么。"
     )
 }
+/// What an engineering review's answer is asked to end with, as the
+/// relay tool says (#347): its ledger and four last lines.
+const REVIEW_TAIL: &str = "请 ChatGPT 按严重程度列问题、给出「## 问题台账」，回信最后四行依次写「受审版本：<SHA>」「未决：P0 n，P1 n」「审查出口：通过 / 返修 / 证据不足暂停 / 决策升级」「结论：通过 / 需修改」";
 /// 再审一轮 for a 思维评审 (#209): only what is to deepen goes, and the
 /// answer ends with its way out and verdict.
 fn thinking_again_text(round: u32) -> String {
@@ -1456,7 +1453,7 @@ fn thinking_again_text(round: u32) -> String {
 /// hands its own work to ChatGPT; None for a kind that cannot start yet.
 fn launch_text(kind: &str, code: &str) -> Option<String> {
     let ask = match kind {
-        "review" => "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出，请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」；summary 写一句这轮做了什么。",
+        "review" => "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出（有 PR 时 head 填受审提交），按工具说明请 ChatGPT 按严重程度列问题、给出「## 问题台账」，回信最后四行依次写「受审版本」「未决」「审查出口」「结论」；summary 写一句这轮做了什么。",
         "discuss" => "请把眼下的方案交给 ChatGPT 讨论，只聊方案、不改代码：先自己整理背景——要解决的问题、已有的做法和限制、你考虑过的几种做法——然后调用 relay_to_chatgpt 送出，请 ChatGPT 比较可选做法，给出推荐和理由；summary 写一句要讨论什么。",
         _ => return None,
     };
@@ -1864,8 +1861,8 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         .and_then(|id| app.try_state::<Desk>()?.lock().get(id)?.gate.chain.clone());
     answer["chain"] = json!(chain);
     let gate = l10n::text(
-        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期最多 5 轮，见驿窗设置「接力审核上限」）；通过也转回并通知常浩；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
-        "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, the person told; the cap, an escalation or last lines PostPane cannot read, left to the person.",
+        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在 chatgpt/config.json 的 reviewLimit 改）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
+        "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, sent back and ended; the cap, an escalation or last lines PostPane cannot read, left to the person.",
     );
     answer["message"] = json!(if answer["status"] == "repeated" {
         l10n::text(
@@ -2589,7 +2586,7 @@ mod tests {
         assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
         assert!(text.contains("审查出口：通过，结论：通过"), "{text}");
         assert!(text.contains("P2：日志少一行") && text.contains("P3：命名"));
-        assert!(text.contains("这是终局") && text.contains("通知常浩"));
+        assert!(text.contains("这是终局") && text.contains("驿窗已结束这次接力"));
         assert!(text.contains("不需要再调用 relay_to_chatgpt"));
         assert!(!desk.drive(&lines, 10), "sent back once");
         assert_eq!(replies(&lines), 2);
@@ -3685,7 +3682,7 @@ mod tests {
         let sent = lines.sent.borrow().clone();
         assert_eq!(sent.len(), 2);
         assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("leave", "s1"));
-        assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("结论：通过"));
+        assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("审查出口"));
         assert!(sent[1].2.contains("relay_to_chatgpt") && sent[1].2.contains("不改代码"));
         // Kinds not open yet, a bad id, no way out: nothing is sent.
         assert!(launch(&desk, &lines, CLAUDE, "s3", "test", 1).is_err());
@@ -4368,15 +4365,43 @@ mod tests {
                     said.contains("驿窗没有放行") && !said.contains("驿窗已结束这次接力"),
                     "{said}"
                 );
-                let halt = kept.halt.unwrap();
-                let (zh, en) = if head.is_ok() {
-                    ("现在是", "is at")
+                if head.is_ok() {
+                    // Moved on: the current commit sent again goes on
+                    // (Fable review #8), the round trip not stopped.
+                    let moved = said.contains("现在是") || said.contains("is at");
+                    assert!(moved && said.contains("自动往返没有停"), "{said}");
+                    assert!(kept.auto && kept.halt.is_none());
                 } else {
-                    ("版本待核", "unverified")
-                };
-                assert!(halt.contains(zh) || halt.contains(en), "{halt}");
+                    let halt = kept.halt.unwrap();
+                    assert!(
+                        halt.contains("版本待核") || halt.contains("unverified"),
+                        "{halt}"
+                    );
+                }
             }
         }
+    }
+
+    /// Fable review #8: a pass of another commit than the one sent goes back
+    /// for the current one to be sent again; the round trip goes on.
+    #[test]
+    fn a_pass_of_another_commit_goes_back_to_be_sent_again() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", &PASS.replace("0123456", "fedcba9")), 3);
+        assert!(desk.drive(&lines, 4));
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!((kept.phase, kept.auto), (Phase::Returned, true));
+        assert!(kept.halt.is_none() && kept.gate.notice.is_none());
+        let said = last_reply_to_claude(&lines);
+        assert!(
+            said.contains("对不上") && said.contains("自动往返没有停"),
+            "{said}"
+        );
     }
 
     /// #347 review P1-01, P1-02: a pass waiting across a restart is checked
@@ -4414,7 +4439,12 @@ mod tests {
         );
         assert!(desk.catch_up(&lines, 5));
         let kept = desk.lock().get(&id).cloned().unwrap();
-        assert!(kept.live() && !kept.auto && kept.gate.notice.is_none());
+        assert!(kept.live() && kept.gate.notice.is_none());
+        assert_eq!(
+            (kept.phase, kept.auto),
+            (Phase::Returned, true),
+            "sent back to resend"
+        );
         drop(temp);
     }
 
@@ -5048,6 +5078,25 @@ mod tests {
             "{back}"
         );
         assert!(desk.lock().get(&handoff.id).unwrap().live());
+    }
+
+    /// Fable review #9: a 思维评审 at its cap takes no more words without
+    /// the person's leave, as an engineering one.
+    #[test]
+    fn a_thinking_review_at_its_cap_takes_no_more_words() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        thinking(&desk, &lines);
+        let deepen = "1. 还要深化\n评审出口：继续深化\n结论：需修改";
+        let title = "思维评审｜方案 A";
+        desk.observe(&turn("complete", deepen), 3);
+        desk.drive(&lines, 4);
+        desk.start(&lines, "s1", Some("/w"), title, None, "第二版", false, 5)
+            .unwrap();
+        desk.observe(&turn("complete", deepen), 6);
+        desk.drive(&lines, 7);
+        let more = desk.start(&lines, "s1", Some("/w"), title, None, "第三版", false, 8);
+        assert_eq!(more.err(), Some(budget_spent(2)));
     }
 
     /// L3 P1-10 C: PostPane's ask to mend the last lines, never known to

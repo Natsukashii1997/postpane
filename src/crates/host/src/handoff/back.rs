@@ -6,6 +6,7 @@
 //! comes to (`Handoff::outcome`), so the auto round trip and the person's
 //! button send the same words, and they go once.
 
+use super::guard::Held;
 use super::texts::{flaw_text, review_flaw_text};
 use agent_hud_runtime::chatgpt::handoffs::{self, Exit, Handoff, Next, Review, Verdict};
 
@@ -22,9 +23,10 @@ pub(super) fn back_text(handoff: &Handoff, _reply: &str) -> String {
 
 /// 转回 Claude for a pass PostPane did not let through (`why`, L3 P1-09):
 /// ChatGPT's answer in full, and words that say it did not pass.
-pub(super) fn held_back_text(handoff: &Handoff, why: &str) -> String {
+pub(super) fn held_back_text(handoff: &Handoff, held: &Held) -> String {
+    let why = held.why.as_str();
     if !handoff.thinking() {
-        return review_back_text(handoff, &handoff.answer(), Some(why));
+        return review_back_text(handoff, &handoff.answer(), Some(held));
     }
     // A 思维评审's close held back (L3 P1-10): it did not settle.
     let ask = left_to_person(&format!("评审回信写了收口，但驿窗没有放行：{why}。这次评审没有收口、没有结束，不要当成已收口汇报。"), "读意见、整理要点；可起草决策记录，待定的不记成已定", "再调用 relay_to_chatgpt 送审、按评审结论动手实施");
@@ -53,7 +55,7 @@ fn left_to_person(why: &str, meanwhile: &str, not_yet: &str) -> String {
 
 const NOT_YET: &str = "动手改代码、再调用 relay_to_chatgpt 送审、合并 PR";
 
-fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&str>) -> String {
+fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&Held>) -> String {
     let round = handoff.counted().max(1);
     let budget = handoff.budget();
     let verdict = match handoff.last_reply().and_then(|step| step.verdict) {
@@ -63,11 +65,12 @@ fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&str>) -> Strin
     };
     // What the answer's 「审查出口」 and the cap left ask of Claude (#217, #347).
     let ask = match handoff.outcome() {
-        Next::Pass if held.is_some() => left_to_person(&format!("回信写了通过，但驿窗没有放行：{}。这次接力没有通过、没有结束，不要当成审查已通过汇报。", held.unwrap_or_default()), "核对 PR 当前的提交和这次的受审版本", &format!("{NOT_YET}。版本对上后，用 PR 当前的提交重新调用 relay_to_chatgpt（head 填当前提交），这一轮照样计数")),
-        Next::Pass => "这是终局：审查已通过，驿窗已结束这次接力并通知常浩，不需要再调用 relay_to_chatgpt 送审。请收口：回信里的非阻断意见（P2、P3 等）合并前能顺手改的就改掉，不改的写明理由；改到功能的，改完重跑相关测试，不能因为审查已通过就省掉验证。然后向常浩汇报审查结论和这些意见的处理情况。".to_owned(),
+        Next::Pass if held.is_some_and(|h| h.resend) => format!("回信写了通过，但驿窗没有放行：{}。这次接力没有通过、没有结束，不要当成审查已通过汇报。请用 PR 当前的提交重新调用 relay_to_chatgpt 送审（head 填当前提交，summary 写一句这一版和受审版本差在哪），这一轮照样计数；自动往返没有停，{}。", held.map(|h| h.why.as_str()).unwrap_or_default(), next_round(handoff)),
+        Next::Pass if held.is_some() => left_to_person(&format!("回信写了通过，但驿窗没有放行：{}。这次接力没有通过、没有结束，不要当成审查已通过汇报。", held.map(|h| h.why.as_str()).unwrap_or_default()), "核对 PR 当前的提交和这次的受审版本", &format!("{NOT_YET}。版本对上后，用 PR 当前的提交重新调用 relay_to_chatgpt（head 填当前提交），这一轮照样计数")),
+        Next::Pass => "这是终局：审查已通过，驿窗已结束这次接力，不需要再调用 relay_to_chatgpt 送审。请收口：回信里的非阻断意见（P2、P3 等）合并前能顺手改的就改掉，不改的写明理由；改到功能的，改完重跑相关测试，不能因为审查已通过就省掉验证。然后向常浩汇报审查结论和这些意见的处理情况。".to_owned(),
         Next::NoVerdict | Next::Format => left_to_person("回信末尾几行驿窗认不出，判断不了是否通过。", "读意见、按严重程度整理要点", NOT_YET),
         Next::BadTail(flaw) => left_to_person(&format!("回信末尾几行补过一次格式仍认不出（{}），驿窗判断不了这次是否通过。", review_flaw_text(flaw)), "读意见、整理要点和返修方案", NOT_YET),
-        Next::Stale => left_to_person("回信写了通过，但受审版本和送审的提交对不上，这次通过不能用于当前提交。", "核对送审的提交和 PR 当前的提交", &format!("{NOT_YET}。版本对得上之后，用当前提交重新调用 relay_to_chatgpt（head 填当前提交），这一轮照样计数")),
+        Next::Stale => format!("回信写了通过，但受审版本和送审的提交对不上，这次通过不能用于当前提交，不要当成审查已通过汇报。请核对送审的提交和 PR 当前的提交，用当前提交重新调用 relay_to_chatgpt 送审（head 填当前提交），这一轮照样计数；自动往返没有停，{}。", next_round(handoff)),
         Next::Limit => left_to_person(&format!("到顶：本次授权周期已审满 {budget} 轮（审查链累计 {total} 轮）仍未通过，驿窗已停下并请常浩介入确认。", total = handoff.total()), "读意见、分类、整理返修方案和风险，写清这几轮每轮解决了什么、还卡在哪", &format!("{NOT_YET}。常浩可能定收缩范围、重新设计、补证据，或授权继续（授权后调用时 extra 写明谁授权、为什么，轮数从 1 重新计）")),
         Next::Pause => format!("审查认为证据不足，先暂停：补齐证据（测试、复现、日志）后再调用 relay_to_chatgpt 送审，summary 写一句补了什么证据；补到证据前不要按意见动手改。这一轮照样计数，{}。", next_round(handoff)),
         Next::Escalate => "审查要求决策升级：请整理可选做法、各自的依据和你的推荐交给常浩，等常浩决定；不要再调用 relay_to_chatgpt，也不要先动手改。".to_owned(),
