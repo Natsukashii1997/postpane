@@ -50,18 +50,6 @@ pub struct Flight {
     /// It falls halfway and the sender is left puzzled.
     pub falls: bool,
 }
-/// A newer version of the app that the product found. The host shows it as
-/// Open's updater did: a New Version… item in the menu bar's menu and an
-/// arrow in every HUD panel's footer. Either opens Settings on
-/// `settings_page`, a page id the product's own page may replace.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateNotice {
-    pub version: String,
-    pub settings_page: String,
-}
-/// Shows the product's update notice, or takes it away (None).
-pub type ShowUpdate = Arc<dyn Fn(Option<UpdateNotice>) + Send + Sync>;
 #[derive(Clone)]
 pub struct HostContext {
     pub snapshot: ReadSnapshot,
@@ -69,7 +57,6 @@ pub struct HostContext {
     pub answer: Answer,
     pub publish: Publish,
     pub fly: Fly,
-    pub update: ShowUpdate,
 }
 pub trait ProductExtension: Send + Sync + 'static {
     /// Register product-owned native plugins during the host's sole setup.

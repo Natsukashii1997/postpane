@@ -9,11 +9,7 @@ import type {
   HUDFlightCommand,
   HUDNativePointer,
 } from "@agent-hud/hud/HUDScene";
-import type {
-  HUDConfig,
-  HUDDecision,
-  HUDUpdateNotice,
-} from "@agent-hud/hud/model";
+import type { HUDConfig, HUDDecision } from "@agent-hud/hud/model";
 import type { Direction } from "@agent-hud/hud/bots/mark-director";
 import type { Snapshot, NativeMethod } from "./lib/types";
 import { watchFloatNotes } from "./lib/float-notes";
@@ -471,29 +467,6 @@ export default function NativeHUDSurface({
     );
     return () => void subscription.then((unlisten) => unlisten());
   }, []);
-  // The product's newer version (the panel footer's arrow): read when the
-  // page starts, as a hidden page misses the event, then kept up to date.
-  const [update, setUpdate] = useState<HUDUpdateNotice | null>(null);
-  useEffect(() => {
-    if (!isTauri()) return;
-    let heard = false;
-    const subscription = listen<HUDUpdateNotice | null>(
-      "hud:update",
-      ({ payload }) => {
-        heard = true;
-        setUpdate(payload);
-      },
-    );
-    void invoke<HUDUpdateNotice | null>("hud_update_notice")
-      .then((notice) => {
-        if (!heard) setUpdate(notice);
-      })
-      .catch(() => {});
-    return () => void subscription.then((unlisten) => unlisten());
-  }, []);
-  const openUpdate = useCallback(() => {
-    void invoke("open_update");
-  }, []);
   // A product's flights between two agents' marks; every screen's HUD plays them.
   const [flights, setFlights] = useState<readonly HUDFlightCommand[]>([]);
   useEffect(() => {
@@ -702,8 +675,6 @@ export default function NativeHUDSurface({
       diskSlim={diskSlim}
       onDiskSlim={toggleDiskSlim}
       onStats={stats}
-      update={update}
-      onUpdate={openUpdate}
       onDragStart={beginDrag}
       onRequestDecision={decide}
       panelCommand={primary ? panelCommand : undefined}
