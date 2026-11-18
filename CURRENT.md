@@ -59,6 +59,21 @@
 
 
 
+
+## 删数据目录迁移：数据目录固定为 `app.postpane.mac`，启动时不再看旧目录（#391）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删目录迁移」；已提交、已发布 `2fd869f9082b` 回读通过）
+
+- 时间：开工 `2026-11-18 13:31`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。迁移是阶段 2 的交付物，11-04 已搬完；之后它每次启动仍把旧目录 `app.agenthud.mac` 里驿窗没有的文件并进来，新目录没锁时还会直接改用旧目录。排查发现 11-08 深夜另一个会话用演示模式跑过下载的上游 0.6.0 应用，往旧目录写了演示数据（这次没并进来，只因为同名文件驿窗都有）。旧目录已于当天 13:19 移到 `evidence/2026-11-18-agenthud-old-data-folder/`。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/platform/src/data_folder.rs` 去掉 `resolve`、`earlier`、`adopt`、`merge` 和三个系统的旧目录名，只留目录名和锁文件名；`src/crates/platform/src/lib.rs` 的 `data_dir` 直接取自己的目录，去掉 `earlier_data_dir`、`adopt_earlier_data`；`os/{macos,linux,windows}/mod.rs` 去掉 `EARLIER_FOLDER`；`src/crates/runtime/src/lib.rs` 的 `claim_collector` 不再调迁移；`docs/ROADMAP.md` 阶段 2 补记。
+  - 顺手改的：`data_folder.rs` 新增测试 `another_apps_folder_beside_it_is_neither_used_nor_touched`（旁边有 `app.agenthud.*` 且自己还没锁时，仍用自己的目录、不动对方文件）；原来 4 条迁移测试随代码删掉；`file-size-baseline.json` 跑了一次 `--update`（没有变化）。
+  - **改变了已有行为的**：启动时不再把 `~/Library/Application Support/app.agenthud.mac` 里的文件并进数据目录；新目录没有锁文件时也不再改用旧目录。原来两样都会做。从上游 Agent HUD 换到驿窗不再自动搬数据。旧版 Swift 应用的偏好与额度库导入没动。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 第一次退出码 1：cargo 合计 `999 passed; 0 failed`（比上一轮 1002 少 4 条迁移测试、多 1 条新测试），前端 `ℹ pass 461` / `ℹ fail 1`，失败的仍是 `engine-client/test/late-output.test.ts`，46 秒后 `Engine request timed out`。完整重跑退出码 0：cargo `999 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-391-data-folder/`（`check-1.log`、`test-1.log`、`test-2.log`、`node-test-1.log`）。
+- 验证：实机（装机后）。数据目录 `app.postpane.mac` 的 `instance.lock` 14:01:00、`ingestion.sqlite` 14:01:06 更新；`app.agenthud.mac` 没有被重新建出来；经 MCP `hud_sessions` 读运行中的应用，14:01:28 出数：93 个会话、本会话显示在跑、11-12 以来每天的用量都在；应用日志近 2 分钟没有报错。没有截屏看文稿权限弹窗：L-06 的表现是数据线程卡住出不了数，这次在出数。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 是 `1c16f4b`，没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 391-data-folder`：装前 `e8cd0d31fe20`（已备份），退出于 14:00:59、启动于 14:01:00，产物 `2fd869f9082b` / 已装 `2fd869f9082b`，签名照常（`H"b773068e`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-391-data-folder/PostPane-e8cd0d31fe20.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：`late-output.test.ts` 这次查了原因并复现（`late-output-slow-start-repro.test.ts`，在证据目录）：测试靠一个标记文件区分「第一个引擎」和「第二个引擎」，第一个替身引擎启动慢于 1.5 秒时还没写标记就被超时杀掉，第二个被当成第一个、不回话，45 秒后超时。新 worktree 首轮全量测试两次都碰到，重跑都过。这是 L-48 在另一条测试上再次出现，没在本轮修，建议另开一张按 L-48 的做法改（起替身给足时间，要验的截止单独设短）。`~/Sandbox/2026-11-08-agent-hud-open/release/Agent HUD.app` 还在，别直接双击（会和驿窗抢钩子锁）。第二档还剩三项各自要单独确认：更新链路与扩展口、简约形态代码、`docs/upstream/` 与宣传素材。skill 进化：无。
+- 本轮新坑：无（`late-output.test.ts` 超时是 L-48 再次出现）
+
 ## 删上游对照台账与 Swift 对照工具，留格式用例（#389）（2026-11-18，Claude，常浩看过改动确认后回「甲 删台账留用例」；已提交、无需发布）
 
 - 时间：开工 `2026-11-18 12:58`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档第一项（#387 的后续）。台账是上游把 Swift 原生版移植到 Tauri 时的工作底稿，目标是追平 Swift 版 `014524c`；驿窗 11-04 已定不再同步，14 天里未追平数一直是 494，检查只验总表算术。

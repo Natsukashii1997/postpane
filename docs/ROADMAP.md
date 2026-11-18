@@ -46,7 +46,7 @@
 - 交付物：
   - 应用名、标识 `app.postpane.mac`、窗口标题、托盘与菜单文字。
   - 图标出 3 版供挑选。
-  - 数据目录迁移：复用 `src/crates/platform/src/data_folder.rs` 的一次性迁移，把 `app.agenthud.mac` 迁到新目录。
+  - 数据目录迁移：复用 `src/crates/platform/src/data_folder.rs` 的一次性迁移，把 `app.agenthud.mac` 迁到新目录。（2026-11-04 已迁完；2026-11-18 常浩改定删掉迁移代码，数据目录固定为 `app.postpane.mac`，不再看旧目录，#391。）
   - 环境变量 `AGENTHUD_DATA_DIR`、MCP 服务名 `agent-hud`、Claude 插件名、中转程序 `agent-hud-mcp` / `agent-hud-engine` 改名。
 - 切换顺序：备份配置 → 退出旧应用 → 装新应用 → 设置里关掉再打开“客户端回调” → 重新添加 HUD 工具 → 卸旧插件装新插件 → 经常浩同意后移走旧应用。
 - 验收：`~/.claude/settings.json`、`~/.codex/hooks.json`、MCP 与插件配置里搜不到 `Agent HUD.app` 和 `app.agenthud.mac`；额度能读到；历史统计还在；一次真实会话的状态能在侧栏看到。

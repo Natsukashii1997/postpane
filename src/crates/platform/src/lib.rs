@@ -79,24 +79,7 @@ impl NativePlatform {
         if let Some(path) = directory(DATA_DIR_VARIABLE) {
             return path;
         }
-        data_folder::resolve(&os::data_parent(&self.home), os::DATA_FOLDER)
-    }
-    /// An earlier build's data folder that has not been moved yet. None when
-    /// `AGENTHUD_DATA_DIR` names the folder: then nothing is moved.
-    pub fn earlier_data_dir(&self) -> Option<PathBuf> {
-        if directory(DATA_DIR_VARIABLE).is_some() {
-            return None;
-        }
-        data_folder::earlier(&os::data_parent(&self.home))
-    }
-    /// Moves an earlier build's data folder to the app's own. Only a copy
-    /// holding `shared_instance_lock` may call it, before it claims its data.
-    pub fn adopt_earlier_data(&self) -> Result<(), String> {
-        if directory(DATA_DIR_VARIABLE).is_some() {
-            return Ok(());
-        }
-        data_folder::adopt(&os::data_parent(&self.home), os::DATA_FOLDER)
-            .map_err(|error| error.to_string())
+        os::data_parent(&self.home).join(os::DATA_FOLDER)
     }
     /// The lock every Agent HUD that owns client hooks claims, whatever its
     /// data directory: agent-hud-native-open's `~/Library/Caches/app.agenthud/instance.lock`
