@@ -179,11 +179,19 @@ impl Book {
             !h.thinking()
                 && (h.claude_session == session || (cwd.is_some() && h.cwd.as_deref() == cwd))
         };
+        // Ended by PostPane after a day untouched (#368) settles nothing:
+        // only the person's end, or a review begun since, does.
+        let unsettled = |h: &Handoff| {
+            h.live()
+                || h.steps
+                    .last()
+                    .is_some_and(|s| s.kind == StepKind::End && s.auto)
+        };
         let top = self
             .list
             .iter()
             .rev()
-            .find(|h| here(h) && h.live() && h.gate.notice == Some(Notice::Top))?;
+            .find(|h| here(h) && h.gate.notice == Some(Notice::Top) && unsettled(h))?;
         // When it reached the cap; kept from before that, its last change.
         let at = match top.gate.top_at {
             0 => top.updated_at,
@@ -222,6 +230,10 @@ mod tests {
                 "{session} {cwd:?}"
             );
         }
+        // Ended after a day untouched, it is still not settled (#368).
+        let mut idle = book.clone();
+        assert!(idle.idle(at + super::super::IDLE_END_MS + 1, "闲置结束"));
+        assert!(idle.unsettled_top("s1", None).is_some());
         // A thinking review begun since settles nothing; an engineering one does.
         book.begin("s2", Some("/w"), "思维评审｜方向", None, "想法", at + 1);
         assert!(book.unsettled_top("s3", Some("/w")).is_some());
