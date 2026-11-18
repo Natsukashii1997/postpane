@@ -7,6 +7,27 @@
 
 
 
+## 接力审核门 #348 返修：送达未确认收成一条规则、按 Fable 评审修五处、合入 main（2026-11-18，Claude，常浩回「按推荐返修」；已提交、未发布，等 L3 复审）
+
+- 时间：开工 `2026-11-18 12:25`（`date '+%F %H:%M'` 记录）。来由：常浩问上限 5 为什么没生效，查明 #348 没合并、11-14 18:11 的 L3 P1-10 定向复核（接力 `h1a1d98406d000`，受审 `e9cfca3`）判返修却没记下；常浩请 Fable 5.2（High）独立评审，结论是还不能合并与切换，常浩选「按推荐返修」。
+- 改了哪些文件：
+  - 补记：PR #348 评论 `issuecomment-6969031048`（P1-10 未关、新增 P1-11、P1-12）；worktree 里未提交的半截修复（`guard.rs` +61 行）备份为证据目录 `wip-guard-before-simplify.diff` 后撤掉。
+  - 合入 main（`6e89124`，#364–#386）：`CURRENT.md` 两边交接都留；`docs/chatgpt-channel.md` 回信核对同时写去反引号（#366）和只认未确认的话；`handoffs.rs` 导出合并（`idle`）。
+  - `platform/.../handoffs/guard.rs`：`Pending` 加 `key`、`booked`、`answered`；`in_flight` 算上未答的 pending；`answer_pending`（回信入账前补「送审」一步、计一轮）、`confirmed_late`、`unconfirmed`（停下）；`pending_at_restart` 改为停下；`unsettled_top` 把闲置自动结束（#368）的到顶接力仍算未了结。`handoffs.rs`：`replied` 只收未答的 pending、调 `answer_pending`；`sent_back` 去掉投递标签（`unlabelled`，手机标签除外）；`allow_extra` 不再排除思维评审。`gate_io.rs`：台账按标题级别截取。
+  - `host/handoff.rs`：送审时同一段未确认的话返回 `repeated`、别的话拒收；`change_kept` 先落盘再发；发送失败停下并报 `sent_unknown`；`went_in` 先认迟到确认；思维评审到顶同样拒收；`auto_back` 对可重送的拦下（PR 新提交、没记受审提交）和 `Stale` 不停；再审 / 左滑话术改成「问题台账 + 末四行」；去掉「通知常浩」。`handoff/belongs.rs`：有未答 pending 时只认它。`handoff/gate.rs`：`pass_blocked` 返回 `Held { why, resend }`、补格式记 pending。`handoff/guard.rs`：`Held`、收口也拦、新话术。`handoff/back.rs`：拦下时按可否重送分两种话术，思维评审另写。
+  - `src/apps/mcp/src/relay.ts`：上限说成默认 5、可在 config.json 改，去掉「通知常浩」，写明 PR 有新提交时转回请重送。`docs/chatgpt-channel.md`：审核门一节、自动往返终局一段同步。`docs/LESSONS.md`：L-51。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1020 failed 0（platform 285、host 137 等），前端 `ℹ pass 463` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（写本节前跑的，写完重跑见 PR）。日志 `~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/`。新增测试：host 6 项（未确认的话一整套、思维评审收口被拦、补格式未确认不放行、落不了盘不发、受审版本不符转回重送、思维评审到顶拒收），platform 断言 3 处（带标签 / 手机标签插话、闲置结束不算了结、分组台账）。撤修复验证 8 处各自对应测试失败（`revert-checks.log`）。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布。按生效门要和第 3 批、四份规则 PR 一起切换；切换步骤（查开着的接力、先备份 `<数据目录>/chatgpt/`、回滚先还原备份再装旧版）写在 PR #348 描述。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - Fable 第 4 条（Codex 转回带标签导致每轮重算）实查 11-09 的 Codex 会话记录，转回的话没带标签，这条按防守做了。
+  - 「送达未确认」照 Fable #14 收成一条，但没删 `Pending` 字段：「迟到确认只补记」和「补格式不计轮」需要 `answered`、`booked` 两个标记。
+  - 还没做：第 3 批界面（到顶 / 通过通知、上限设置入口、到顶卡出口，Fable #2、#3）；四份规则草稿对齐实现（Fable #11）；第 4 批模拟台账与实机走一次（Fable #13）。挂起：链总轮数兜底（#10）、授权改卡上按钮（#15，涉及常浩 11-14 定的 P1-06 口径，要先单独确认）、有 PR 时只认 `head`（#16）。
+  - 本机现开着 5 张接力（3 张在答），切换前要处理。
+  - skill 进化：无。
+- 本轮新坑：L-51
+
 ## Hermes 卡定时任务表：隐藏没写原因就关掉的任务、去掉「下次」、「多久一次」改口语、任务表装框（#384）（2026-11-18，Claude，常浩提三条，看三版预览 https://claude.ai/artifact/8reLtXF5coyTEWjxxyRVVG 后回「甲，丙（只给任务表装框就行了，不需要加额外注脚，还是之前的私和群的标识）」；PR 已 squash 合并、已发布 `9fa6402761e2` 回读通过）
 
 - 时间：开工 `2026-11-18 10:37`（`date '+%F %H:%M'` 记录）。来由：常浩说停用的任务不要出现（除非明确暂停）、删「下次」、「多久一次」要清晰（举例「5d / 次」）、对话和定时任务混在一起分不清。

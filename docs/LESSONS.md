@@ -455,3 +455,11 @@
 - 正确做法：按家找数据（接力、会话、审批）用来源 id：单家面板里取 `sessionScope(...).sources` 或 `sourcesForMark(snapshot, 标记)`，不要拿 `vendorKey(标记名)` 当来源；`BoardHeading` 的 `place` 参数就是为此加的。
 - 证据：`src/packages/hud/test/relay-toggle.test.ts`「every agent's card carries one plane in its head」断言 `place={selectedSources?.[0]}`。
 - 升级：未升级。
+
+## L-51 撤修复验证用 `cp` 备份、`mv` 还原，文件修改时间退回去，cargo 不重编、跑的还是撤改版（2026-11-18）
+
+- 现象：#348 返修逐项「撤一处修复 → 跑对应测试 → 还原」，几项都如预期失败；全部还原后再跑全量，那条落盘失败的新测试一直失败，代码却已是对的。
+- 根因：`cp f f.bak` 给备份打上当时的修改时间，改完再 `mv f.bak f` 还原，文件修改时间回到撤改之前，早于刚编出的撤改版产物；cargo 只比修改时间，认为不用重编，跑的还是撤改版（同 G-23 一类：cargo 只看修改时间）。
+- 正确做法：还原后马上 `touch` 还原的文件（或改用 `git checkout -- <文件>` / `git stash` 一类会写新修改时间的方式），再跑全量；撤修复验证的结论照常有效，因为每一次撤改都写了新修改时间、触发了重编。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/revert-checks.log`；`touch` 后全量 `cargo test -p agent-hud-host` 135/0。
+- 升级：未升级。可提议并进全局 G-23（同一根因）。
