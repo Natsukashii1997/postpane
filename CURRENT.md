@@ -7,6 +7,21 @@
 
 
 
+
+## 删上游对照台账与 Swift 对照工具，留格式用例（#389）（2026-11-18，Claude，常浩看过改动确认后回「甲 删台账留用例」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 12:58`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档第一项（#387 的后续）。台账是上游把 Swift 原生版移植到 Tauri 时的工作底稿，目标是追平 Swift 版 `014524c`；驿窗 11-04 已定不再同步，14 天里未追平数一直是 494，检查只验总表算术。
+- 改了哪些文件：
+  - 常浩要求的：删 `docs/parity/`（15 个文件、1,220 条）、`src/tooling/parity-ledger.mjs`、`src/tooling/parity-oracle/`；`package.json` 的 `check` 去掉台账一步，去掉 `parity:ledger`、`parity:oracle` 两个脚本；`src/fixtures/parity/README.md` 重写成「格式回归用例」的说明，358 条用例、`decisions.json` 和两份测试没动；`AGENTS.md`「改小人」改指 `src/packages/hud/src/bots/`、`src/crates/hud/src/bots/` 和各小人的测试，结构一节去掉 `parity/` 一行；`docs/ROADMAP.md` 第 38 行补记这次改定；`docs/accounts.md` 把台账里那段 Antigravity 账户调查（31 行）原样接到文末、链接改指文内；`docs/development.md` 两处台账链接改成说明。
+  - 顺手改的：`docs/upstream/` 两份上游说明里指向台账的 4 个链接改成纯文字或去掉（不然是断链）；`src/packages/hud/src/HUDScene.tsx` 去掉一行指向不存在的 `docs/parity-audit.md` 的注释，`file-size-baseline.json` 跟着从 1460 收到 1459。
+  - **改变了已有行为的**：应用行为无。开发流程上 `pnpm run check` 少了台账计数这一步（原来 0.18 秒，只核对总表数字）。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 第一次退出码 1：cargo 合计 `1002 passed; 0 failed`，前端 `ℹ pass 461` / `ℹ fail 1`，失败的是 `src/packages/engine-client/test/late-output.test.ts`「an old engine's late output leaves the new engine alone」，46 秒后报 `Engine request timed out`，后面三组因此没跑。紧接着单独重跑前端四组，退出码 0：前端 `ℹ pass 462` / `ℹ fail 0`（那一条 1.8 秒通过），MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-389-parity-ledger/`（`check-1.log`、`test-1.log`、`test-2-frontend.log`、`node-test-1.log`）。
+- 验证：删前逐行看了驿窗自己写进台账的 8 行（c04 第 88 行、c05 第 20 / 22 / 23 行、c06 第 92 / 94 行、c08 第 50 / 51 行），内容在归档交接的 #43、#45、#47、#52、#57 各节都有，没有要挪的；删后全仓搜 `docs/parity`、`parity-ledger`、`parity-oracle`，只剩 ROADMAP、`development.md` 的说明文字和历史交接里的记载。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：`late-output.test.ts` 第一次超时、重跑通过，这次没改引擎和它的客户端，第一次是紧跟着整仓从头编译跑的，原因没查，只出现这一次所以没记成坑，再出现要查。第二档还剩四项，每项要单独发改动确认：② 更新链路与扩展口 ③ 简约形态代码 ④ `docs/upstream/` 与宣传素材 ⑤ 旧数据迁移与旧版 Swift 应用导入（动之前先查清旧数据目录 `app.agenthud.mac` 为什么 11-08～09 又出现）。skill 进化：无。
+- 本轮新坑：无
+
 ## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾；第 2 轮判「决策升级」，常浩选「甲：两条都修再专项复核」；专项复核「通过」，已 squash 合并）
 
 - 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。

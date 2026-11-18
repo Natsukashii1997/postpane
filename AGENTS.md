@@ -12,7 +12,7 @@
 | 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
 | 加或改 AI 功能、MCP 工具、读取哪家数据 | 下面「AI 接入」一节；改完同步设置 →「AI 接入」页 |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
-| 改小人 | [docs/parity/c08-bots.md](docs/parity/c08-bots.md)、`src/packages/hud/src/bots/` |
+| 改小人 | `src/packages/hud/src/bots/`（画法与动作）、`src/crates/hud/src/bots/`（什么状态演什么）；各小人的测试在 `src/packages/hud/test/`（`codex-cloud`、`deepseek-whale`、`hermes-avatar` 等） |
 | 改卡片 / 面板版式（对齐、缩进、区块顺序） | [docs/design/卡片版式规范.md](docs/design/卡片版式规范.md)（一套左对齐线，数值只在 `panel/theme.ts` 的 `GRID`） |
 | 改侧栏结构、给某家加能力（等你、在跑、回执、接力入口、看板） | [docs/adr/0001-工作场所契约.md](docs/adr/0001-工作场所契约.md)、[GLOSSARY.md](GLOSSARY.md)；改完跑 `workplace-contract.test.ts`，在场景预览台（`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480）逐个场景看，不再另搭 `preview-xxx` 脚手架 |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
@@ -64,7 +64,6 @@ src/
 docs/
   ROADMAP.md         需求与分阶段路线
   agents/            Matt Pocock 技能读的约定：issue 看板、分流标签、领域文档
-  parity/            上游原版行为对照表，仅供参考（`parity-ledger` 会校验）
   upstream/          上游原版 README
   LESSONS.md         本项目的坑（排障、改脚本前先搜）
   OPERATIONS.md      操作手册：交接写法、报告与验收

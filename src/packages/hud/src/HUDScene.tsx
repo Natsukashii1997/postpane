@@ -186,7 +186,6 @@ const Redraw = memo(
 /**
  * A DOM renderer of one screen's HUD. The host owns native windows and their screen coordinates.
  * Geometry, hover timing, logo identity, three modes and the approval surface follow the Swift source.
- * See docs/parity-audit.md for the remaining native and data-model differences.
  */
 export function HUDScene({
   snapshot,
