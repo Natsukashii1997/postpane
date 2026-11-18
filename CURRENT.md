@@ -9,6 +9,21 @@
 
 
 
+
+## 修偶发失败的引擎客户端测试：替身引擎启动慢时第二个被当成第一个（#393）（2026-11-18，Claude，常浩回「修偶发测试」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 14:05`（`date '+%F %H:%M'` 记录）。来由：#389、#391 两个新 worktree 的首轮 `pnpm test` 都在 `src/packages/engine-client/test/late-output.test.ts` 失败，46 秒后 `Engine request timed out`，重跑都过。#391 那一轮查出原因并复现，常浩让修。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/engine-client/test/late-output.test.ts`。原来靠标记文件分「第一个 / 第二个」替身引擎，替身的启动算在要验的 1.5 秒超时里；启动一慢，第一个还没写标记就被杀，第二个被当成第一个、不回话。现在第一个替身先回一次话表示已启动（这一步给 60 秒），之后才开始计 1.5 秒；第二个的回话也给 60 秒。要验的东西没变：超时后旧引擎晚到的半行不能混进新引擎的缓冲。
+  - 顺手改的：`docs/LESSONS.md` 的 L-48 下补记这次再现和「用标记文件分角色的替身，要先确认第一个真的跑起来了」。
+  - **改变了已有行为的**：无（只改测试）。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 第一次退出码 101：cargo `496 passed; 1 failed`，失败的是 `core` 的 `tests::ingestion::the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry`（`ingestion.rs:710`，断言下一次扫目录在 290–300 秒后，实测 `273.253120375s`），前端几组因此没跑；当时 `uptime` 负载 62–70，另一个会话在 `347-review-gate` 跑测试。完整重跑退出码 0：cargo `999 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；重跑开始时负载 62、结束时 24。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-393-late-output/`（`check-1.log`、`test-1.log`、`test-2.log`、`node-test-1.log`）。
+- 验证：四项，都在本 worktree。① 正常连跑 3 次全过（2.0、2.5、6.1 秒，当时后台在编译）。② 临时撤掉 #351 B14 的修复（`git show 110f321 -- src/packages/engine-client/src/index.ts | git apply -R`），测试失败并报 `Engine returned an invalid protocol frame`，说明没有变成空过；随后 `git checkout` 恢复。③ 两个替身启动前都忙等 2 秒（旧写法必败），通过，6.6 秒（`slow-start-fixed.test.ts`）。④ 边批量新建并执行程序边连跑 20 次（`load-393.sh`），20 过 0 败，耗时 1.9–5.6 秒，其中多次启动超过 1.5 秒；压测进程已确认没有残留。
+- 截图：无。
+- 发布与回读：无需发布（只改测试和文档）。
+- 与授权不一致之处、遗留问题、范围外发现：`core` 那条 `the_next_pass_is_due_...` 是另一种对时间敏感的断言（留 10 秒余量，机器负载 60 以上时一次快照就能超过），这次只碰到一次、重跑通过，没改，再出现建议把窗口放宽或改成注入时钟。同目录的 `utf8-chunks.test.ts` 也用替身脚本，但没有短超时，不受影响。历史包袱清理的第二档还剩三项要单独确认：更新链路与扩展口、简约形态代码、`docs/upstream/` 与宣传素材。skill 进化：无。
+- 本轮新坑：无（L-48 再次出现，已在该条下补记）
+
 ## 删数据目录迁移：数据目录固定为 `app.postpane.mac`，启动时不再看旧目录（#391）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删目录迁移」；已提交、已发布 `2fd869f9082b` 回读通过）
 
 - 时间：开工 `2026-11-18 13:31`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。迁移是阶段 2 的交付物，11-04 已搬完；之后它每次启动仍把旧目录 `app.agenthud.mac` 里驿窗没有的文件并进来，新目录没锁时还会直接改用旧目录。排查发现 11-08 深夜另一个会话用演示模式跑过下载的上游 0.6.0 应用，往旧目录写了演示数据（这次没并进来，只因为同名文件驿窗都有）。旧目录已于当天 13:19 移到 `evidence/2026-11-18-agenthud-old-data-folder/`。
