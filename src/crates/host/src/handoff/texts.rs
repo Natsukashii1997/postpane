@@ -167,6 +167,15 @@ pub(super) fn no_wake() -> String {
         "The queued answer was not taken up within an hour; left to you",
     )
 }
+pub(super) fn idle_end() -> String {
+    l10n::text(
+        &format!(
+            "等常浩处理 {} 小时没动静，驿窗自动结束接力",
+            handoffs::IDLE_END_MS / 3_600_000
+        ),
+        "Untouched for a day after it was left to you; PostPane ended it",
+    )
+}
 pub(super) fn no_answer() -> String {
     l10n::text(
         &format!(

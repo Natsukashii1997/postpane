@@ -4,20 +4,13 @@
 // resets, a bold bar marking where the pace takes it by the reset (hatched)
 // and where a steady pace would have it now (amber).
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import type { Quota, Snapshot, StatisticsResponse } from "@agent-hud/protocol";
+import type { Quota } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
+import { quotaPercentLabel } from "@agent-hud/ui/format";
+import { usePanelServices } from "../PanelContext";
+import { PAPER_FIGURES, paperLevel, usePaper } from "../paper";
+import { tabular, usePanelPalette } from "./theme";
 import {
-  dateFormat,
-  quotaPercentLabel,
-  systemTimeZone,
-} from "@agent-hud/ui/format";
-import { usePanelQuery, usePanelServices } from "../PanelContext";
-import { PAPER_FIGURES, PAPER_SEAL, paperLevel, usePaper } from "../paper";
-import { ApprovalTag } from "../permissions/ApprovalTag";
-import { agentArtworkKey, agentVendorName } from "../agent-artwork";
-import { tabular, usePanelPalette, type Logo } from "./theme";
-import {
-  type BoardStamp,
   boardVerdict,
   quotaLevel,
   quotaNote,
@@ -62,169 +55,13 @@ export function useBoardInks(light: boolean) {
   );
 }
 
-/** The resting strip's stub paper on a dark screen (HUDMarkStrip). */
-const STUB_PAPER = "#e9e6de";
-
-const STAMP_WORDS = {
-  enough: {
-    zh: "够用",
-    en: "OK",
-    zhAria: "额度够用",
-    enAria: "Quota is enough",
-  },
-  tight: {
-    zh: "吃紧",
-    en: "TIGHT",
-    zhAria: "额度吃紧",
-    enAria: "Quota is tight",
-  },
-  unknown: {
-    zh: "未知",
-    en: "N/A",
-    zhAria: "额度情况未知",
-    enAria: "Quota outlook unknown",
-  },
-  duty: {
-    zh: "在岗",
-    en: "ON",
-    zhAria: "机器人都在线",
-    enAria: "Every bot is online",
-  },
-  down: {
-    zh: "断线",
-    en: "DOWN",
-    zhAria: "有机器人断线",
-    enAria: "A bot is down",
-  },
-} as const;
-
-/** The 够用 / 吃紧 / 未知 (or 在岗 / 断线) stamp: a ring tilted like a rubber
- * stamp. */
-function Stamp({ kind, light }: { kind: BoardStamp; light: boolean }) {
-  const inks = useBoardInks(light);
-  const zh = useFormat().language === "zh";
-  const color =
-    kind === "tight" || kind === "down"
-      ? inks.red
-      : kind === "enough" || kind === "duty"
-        ? inks.green
-        : inks.hatch;
-  const words = STAMP_WORDS[kind];
-  const label = zh ? words.zh : words.en;
-  return (
-    <span
-      role="img"
-      aria-label={zh ? words.zhAria : words.enAria}
-      style={{
-        width: 44,
-        height: 44,
-        flex: "none",
-        boxSizing: "border-box",
-        border: `2px solid ${color}`,
-        borderRadius: "50%",
-        display: "grid",
-        placeItems: "center",
-        color,
-        fontFamily: zh ? PAPER_SEAL : undefined,
-        fontSize: zh ? 13 : 10.5,
-        fontWeight: 700,
-        letterSpacing: zh ? 0 : "0.06em",
-        transform: "rotate(-14deg)",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-/** The board's head: the agent's mark and name, its plan, and the stamp. */
-export function BoardHeading({
-  vendor,
-  Logo,
-  light,
-  plan,
-  stamp,
-}: {
-  vendor: string;
-  Logo: Logo;
-  light: boolean;
-  plan?: string | null;
-  stamp?: BoardStamp | null;
-}) {
-  const inks = useBoardInks(light);
-  const paper = usePaper();
-  const portraitChip =
-    agentArtworkKey(vendor) === "hermes" && !(paper ? paper.light : light);
-  return (
-    <div
-      className="hud-source-provider-heading"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        minHeight: 48,
-        paddingBottom: 6,
-        // A tear under the head, from one side of the paper to the other.
-        ...(paper
-          ? {
-              borderBottom: `1.2px dashed ${paper.line}`,
-              marginLeft: -paper.bleed.left,
-              marginRight: -paper.bleed.right,
-              paddingLeft: paper.bleed.left + 6,
-              paddingRight: paper.bleed.right + 6,
-            }
-          : {
-              boxShadow: `inset 0 -1px 0 ${inks.divider}`,
-              paddingLeft: 6,
-              paddingRight: 6,
-            }),
-      }}
-    >
-      {portraitChip ? (
-        // Hermes is a black-haired girl drawn in ink: on dark paper she sits
-        // on a slip of the strip's light stub paper (owner, 2026-11-06).
-        <span
-          style={{
-            display: "inline-grid",
-            placeItems: "center",
-            flex: "none",
-            width: 24,
-            height: 24,
-            borderRadius: 5,
-            background: STUB_PAPER,
-          }}
-        >
-          <Logo source={vendor} size={20} light />
-        </span>
-      ) : (
-        <span style={{ display: "inline-flex", flex: "none" }}>
-          <Logo source={vendor} size={20} light={light} />
-        </span>
-      )}
-      <strong style={{ fontSize: 15, fontWeight: 600, color: inks.text }}>
-        {agentVendorName(vendor)}
-      </strong>
-      {plan && (
-        <ApprovalTag
-          label={plan.toUpperCase()}
-          tone="permission"
-          light={light}
-          color={inks.secondary}
-        />
-      )}
-      <span style={{ flex: 1 }} />
-      {stamp && <Stamp kind={stamp} light={light} />}
-    </div>
-  );
-}
-
 function Sentence({ words, light }: { words: Words; light: boolean }) {
   const inks = useBoardInks(light);
   return (
     <div
       className="hud-board-verdict"
       style={{
-        padding: "2px 6px 0",
+        padding: "2px 6px 0 0",
         fontSize: 13.5,
         lineHeight: 1.5,
         color: inks.secondary,
@@ -321,7 +158,7 @@ function QuotaLine({
         gridTemplateColumns: "minmax(0, 1fr) 64px 150px",
         columnGap: 12,
         alignItems: "baseline",
-        padding: "6px 6px",
+        padding: "6px 6px 6px 0",
         borderRadius: 4,
         cursor: clickable ? "pointer" : undefined,
         background: hovered && clickable ? inks.selected : "transparent",
@@ -521,7 +358,7 @@ export function BoardKey({
         display: "flex",
         flexWrap: "wrap",
         gap: "4px 14px",
-        padding: "2px 6px 0",
+        padding: "2px 6px 0 0",
         fontSize: 11,
         color: inks.tertiary,
       }}
@@ -553,120 +390,5 @@ function Key({
       <i style={{ display: "inline-block", width: 12, height: 6, ...swatch }} />
       {children}
     </span>
-  );
-}
-
-/** The last 24 hours of tokens, an hour a bar, for the agents `providers`
- * names (every agent without). */
-export function useDayTokens(
-  snapshot: Snapshot,
-  providers: string[] | undefined,
-  active: boolean,
-) {
-  const now = Date.parse(snapshot.generatedAt);
-  const to = Math.ceil(now / 3_600_000) * 3_600_000;
-  const from = to - 86_400_000;
-  const query = usePanelQuery<StatisticsResponse>(
-    "statistics",
-    {
-      from: new Date(from).toISOString(),
-      to: new Date(to).toISOString(),
-      bucketMinutes: 60,
-      timeZone: systemTimeZone(),
-      tokenKinds: ["input", "output", "cacheRead", "cacheWrite", "reasoning"],
-      ...(providers ? { providers } : {}),
-    },
-    snapshot.statisticsRevision,
-    active,
-  );
-  const points = query.data
-    ? query.data.buckets.map((bucket) => bucket.selectedTokens)
-    : providers
-      ? []
-      : snapshot.timeline
-          .filter((point) => {
-            const at = Date.parse(point.timestamp);
-            return at >= from && at < to;
-          })
-          .map((point) => point.tokens);
-  // Until the answer comes, the providers' own last 24 hours.
-  const recent = snapshot.providers
-    .filter((provider) => !providers || providers.includes(provider.id))
-    .reduce((sum, provider) => sum + (provider.recent?.tokens ?? 0), 0);
-  const total = query.data?.totals.selectedTokens ?? recent;
-  return { from, to, points, total };
-}
-
-/** The day's tokens as bars, the current hour's in red; with `axis`, the
- * hours under them. */
-export function DayBars({
-  points,
-  from,
-  height,
-  light,
-  axis = false,
-}: {
-  points: number[];
-  from: number;
-  height: number;
-  light: boolean;
-  axis?: boolean;
-}) {
-  const inks = useBoardInks(light);
-  const { language, calendar } = useFormat();
-  const peak = Math.max(1, ...points);
-  const time = dateFormat(language === "zh" ? "zh-CN" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: calendar.timeZone,
-  });
-  const ticks = [0, 6, 12, 18].map((hours, index) => {
-    const label = time.format(from + hours * 3_600_000);
-    return index === 0 ? (language === "zh" ? `昨天 ${label}` : label) : label;
-  });
-  return (
-    <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-      <div
-        aria-hidden
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          gap: 2,
-          height,
-        }}
-      >
-        {(points.length ? points : Array(24).fill(0)).map((tokens, index) => (
-          <span
-            key={index}
-            style={{
-              flex: 1,
-              minHeight: 1,
-              height: `${(tokens / peak) * 100}%`,
-              borderRadius: "1px 1px 0 0",
-              background:
-                index === points.length - 1 && tokens > 0 ? inks.red : inks.bar,
-              opacity: tokens > 0 ? 0.9 : 0.35,
-            }}
-          />
-        ))}
-      </div>
-      {axis && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 10.5,
-            color: inks.tertiary,
-            ...tabular,
-          }}
-        >
-          {ticks.map((tick) => (
-            <span key={tick}>{tick}</span>
-          ))}
-          <span>{language === "zh" ? "现在" : "Now"}</span>
-        </div>
-      )}
-    </div>
   );
 }

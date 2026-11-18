@@ -1,12 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Handoff, Session } from "@agent-hud/protocol";
-import {
-  chatgptDesk,
-  isReview,
-  quietRelays,
-  reviewsInDay,
-} from "../src/chatgpt-desk.ts";
+import { chatgptDesk, isReview, quietRelays } from "../src/chatgpt-desk.ts";
 
 const now = Date.parse("2026-11-06T04:00:00Z"); // 12:00 in Beijing
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -184,17 +179,6 @@ test("the panel lists every chat of today, as many as the stub counts", () => {
     true,
   );
   assert.equal(quiet.stub.text, `${quiet.day.length} 对话`);
-});
-
-test("the panel counts the last day's reviews apart from the chats", () => {
-  const sessions = [
-    chat("a", now - 20 * min),
-    chat("r1", now - 30 * min, "idle", true),
-    chat("r2", now - 23 * 60 * min, "idle", true),
-    chat("r3", now - 25 * 60 * min, "idle", true),
-    claude("s1", "idle"),
-  ];
-  assert.equal(reviewsInDay({ sessions, handoffs: [] }, now), 2);
 });
 
 test("open handoffs ChatGPT is not answering are listed, however old (#288)", () => {

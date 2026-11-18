@@ -7,6 +7,147 @@
 
 
 
+## Hermes 卡定时任务表：隐藏没写原因就关掉的任务、去掉「下次」、「多久一次」改口语、任务表装框（#384）（2026-11-18，Claude，常浩提三条，看三版预览 https://claude.ai/artifact/8reLtXF5coyTEWjxxyRVVG 后回「甲，丙（只给任务表装框就行了，不需要加额外注脚，还是之前的私和群的标识）」；PR 已 squash 合并、已发布 `9fa6402761e2` 回读通过）
+
+- 时间：开工 `2026-11-18 10:37`（`date '+%F %H:%M'` 记录）。来由：常浩说停用的任务不要出现（除非明确暂停）、删「下次」、「多久一次」要清晰（举例「5d / 次」）、对话和定时任务混在一起分不清。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/agents/src/hermes/mod.rs` 读任务的 `paused_reason`；`src/crates/core/src/snapshot.rs` 快照带 `pausedReason`；`src/packages/protocol/src/index.ts` 加字段。`src/packages/hud/src/panel/hermes-board.ts` 关掉且没写暂停原因的任务不进表，写了原因的「执行情况」显示「已暂停」（悬停看原因）；去掉 `next`；`hermes-cadence.ts`（新）把排期写成口语：每天 09:50、工作日 09:45、每周一 07:45、每月 1 日 10:30、每 5 天 08:00、每 15 分钟、每 30 分钟（9–23 点）、每 2 小时、每小时、Hermes 的 `every 5m` → 每 5 分钟，读不出的照原样。`HermesBoard.tsx` 表只剩「定时任务 / 多久一次 / 执行情况」三列，装进细线框（圆角 7、`inks.divider` 边），对话行（私 / 群）不变。
+  - 顺手改的：任务表改成固定列宽（134 / 58），两个机器人的表竖着对齐，多久一次过长时省略并带悬停全文；`shortWhen` 只剩过去时间（「下次」去掉后将来时间那半没人用）；场景预览台加 `hermes-desks` 场景（合成数据：3 个没写原因的暂停任务、1 个写了原因的、1 个失败的、两步合一行的）；`hermes-board.test.ts` 改写 4 条、加 1 条，Rust 加 1 条；行数基线收紧（`HermesBoard.tsx` 386 → 382）。
+  - **改变了已有行为的**：关掉（`enabled: false`）但没写暂停原因的任务不再显示（原来显示「停用」）；「下次」列没了；「上次」改叫「执行情况」；「多久一次」原来只认每天 / 工作日 / 单个星期几，其余照抄 cron（如 `*/15 * * * *`），现在都写成口语，单个星期几从「周一 07:45」变「每周一 07:45」；任务表有了外框，表下对话行离表略远（上移从 -4 改 -2）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `988 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check-3.log`、`test-3.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`node-test-3.log`）。中途一次 Chrome 插件 20 条挂，照 L-16 补装 `chromium-headless-shell` 后全过（`test.log`、`test-extension-2.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-384`）真实点击 `hermes-desks` 的 Hermes 票根：机器人甲 3 个没写原因的暂停任务不出现、「学习报告」显示灰「已暂停」、「周会纪要」红「✗ 11/9」、项目日报两步合一行；两张表三列竖线对齐（页面脚本量列左边两表相同），最长「每 30 分钟（9–23 点）」不截断；对话行「私 / 群」样式没变；浅色纸、整张看板都看过。真实数据：用本机两份 `jobs.json` 跑 `jobRows`，猛鬼兽 5 行（Tidings 周报卡片 每 15 分钟、skill 月度体检 每月 1 日 10:30、个人项目日报 每天 10:00、AI HOT 热点榜 工作日 09:45、AI 前沿群学习报告 每天 10:45），亚古兽 1 行（记忆日报 每天 07:30），工程自检、影子合并官、multica 夜跑主控三个暂停任务（都没写原因）不出现。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-384-hermes-jobs/`：`00-card-before-fixed-columns.jpg`（改固定列宽前，两表没对齐）、`01-card-dark.jpg`、`02-card-light.jpg`、`03-board-light.jpg`。
+- 发布与回读：打包前 main 仍是 `11de767`，没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 384-hermes-jobs`：装前 `7eec140627cc`，产物 `9fa6402761e2` / 已装 `9fa6402761e2`，签名照常（`H"b773068e`）。实机截屏看过：无文稿权限弹窗，侧栏在右边运行；截屏里有常浩的私人内容，看完已删。实机点开 Hermes 卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-18-384-hermes-jobs/PostPane-7eec140627cc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「暂停时写了原因才算明确暂停」是我的推断（Hermes 只有暂停一种关闭状态），预览页上写明了，常浩没提异议；以后想留着显示某个暂停任务，让 Hermes 暂停时带原因。悬停小收据（AgentPeek）不显示任务，没动。定时任务失败的细条（`island_events`）仍按所有任务判断，暂停的任务不会再跑，不影响。
+- 本轮新坑：无
+
+## 卡片「还有 n 条」改成贴着列表的一行小字「展开其余 n 条 ⌄」（#382）（2026-11-15，Claude，常浩说「还有 n 条」那一行（上面点线 + 下面大块留白）突兀，看三版预览 https://claude.ai/artifact/8eBxUJbGCj3zfajbRLKKQw 后回「按乙开工」；PR 已 squash 合并、已发布 `7eec140627cc` 回读通过）
+
+- 时间：开工 `2026-11-15 10:15`（`date '+%F %H:%M'` 记录）。来由：折叠入口自成一块（上边 1px 点线、上下各 12px 留白），夹在「等待处理」和「正在进行」两段中间显得突兀。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/permissions/FoldButton.tsx` 去掉上边点线和上下大留白，改成贴着最后一条（上移 4px）、从文字线（`GRID.text`）起的一行小字（12px、淡一档）「展开其余 n 条 ⌄」，展开后「收起 ⌃」；按钮宽度只包住文字。它是唯一的折叠入口，等待处理（待答 / 待批 / 新回复列表、单家卡等待处理会话行）和正在进行三处一起变。
+  - 顺手改的：`unified-card.test.ts` 那条加断言（新文案、`GRID.text` 内边距、没有点线和旧留白）；`test/scenes/scenes.ts` 两个场景标题里的「还有 n 条」改成新文案。
+  - **改变了已有行为的**：入口文案「还有 n 条」→「展开其余 n 条 ⌄」、「收起」→「收起 ⌃」，字号 12.5 → 12，可点范围从整行变成只有文字那一段；入口和列表、下一段之间的空白变小。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`node-test.log`）。中途一次：新断言的 `dotted` 撞上 FoldButton 注释里的字，收紧成样式写法；Chrome 插件测试 20 条因 Playwright 浏览器缓存被清掉挂了，照 L-16 补装 `chromium-headless-shell` 后全过。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-382`，用完已撤）真实点击：`claude-many-asks` 点 Claude 出有待处理的卡，列 4 条下面「展开其余 4 条 ⌄」，点开 8 条全列、末尾「收起 ⌃」，点收起回到 4 条；`claude-busy` 单家卡正在进行列 6 个加「展开其余 2 条 ⌄」，展开 8 个、收起回 6 个。页面脚本量左边：入口文字和同卡标题都在同一条文字线（两份渲染各自相等：48 / 48、801 / 801）；入口文字离上一条副标题 6px。浅色纸也看过。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-382-fold-entry/`：`many-asks-1-folded.jpg`、`many-asks-2-unfolded.jpg`、`many-asks-3-refolded.jpg`、`busy-1-folded.jpg`、`busy-2-unfolded.jpg`、`busy-3-refolded.jpg`、`many-asks-light-folded.jpg`。
+- 发布与回读：分支和 main（`b66f58d`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 382-fold-entry`：装前 `ae8f61c7bda2`，产物 `7eec140627cc` / 已装 `7eec140627cc`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在顶边运行；截屏里有常浩的私人聊天，看完已删。实机点卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-382-fold-entry/PostPane-ae8f61c7bda2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：预览里乙版悬停时字变亮，驿窗卡片按钮都是行内样式、没有悬停样式，这次没加。看板各家区块的「在跑 n」整行折叠不在本次范围，没动。
+- 本轮新坑：无
+
+## 卡片整体一套左对齐线（应用级设计规范）（#380）（2026-11-15，Claude，常浩原话「你刚才只是把首行和下面的待处理对齐了，再下面的正在跑就没对齐。那这个对齐是整体的应用级别的要求，这是设计规范」；「等你」行选「章留在图标列」；PR 已 squash 合并、已发布 `ae8f61c7bda2` 回读通过）
+
+- 时间：开工 `2026-11-15 09:49`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#376 只让卡头对齐了待处理列表，正在进行的行、分段标题、额度、余额、空状态各用各的缩进（图标 +6、标题 +4 左右）。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/theme.ts` 新增 `GRID`（图标列 18、间隔 12、文字线 30），规范写进 `docs/design/卡片版式规范.md`。各块改用它：`SessionsSection.tsx` 会话行（`LiveRow`、`RepliedRow`）图标列固定 18、去左内边距；`PlaceRows.tsx` 在跑折叠行同样处理，分段标题去左内边距；`WorkSections.tsx`「暂无…」放文字线；`AgentBoard.tsx` 额度说明、额度行、图例去左内边距；`HermesBoard.tsx` 去左内边距；`BoardHeading.tsx` 卡头（单家卡和看板）标记占 `GRID.text - 10` 一列、去左内边距，家名落在文字线；余额区块在单家卡上从图标线起，看板上自带小标题时对齐小标题（`paddingLeft: headed ? 0 : GRID.text`）。
+  - 顺手改的：余额区块 `SourceBalances` 从 `QuotaSection.tsx`（570 行，到棘轮上限）拆到 `panel/SourceBalances.tsx`，`QuotaSection.tsx` 降到 324 行，`board-blocks.tsx` 改导入；删掉 `tagWide`（#312 让在跑行标题对齐「等你」行标题的占位，规范下不再需要）；`AGENTS.md` 导航表加「改卡片 / 面板版式」一行；`unified-card.test.ts` 加一条、改一条；行数基线收紧。
+  - **改变了已有行为的**：所有卡片和看板里，正在进行的行、在跑折叠行、分段标题、额度、余额整体左移约 6px，在跑行标题左移约 4px；卡头标记左移 6px、家名跟着落在文字线；看板各家卡头标记从 +6 移到 0；「暂无…」右移到文字线；「等你」「已回」行的标题不再和在跑行对齐（章留在图标列，常浩选的）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-380`）用页面脚本量左边（页面坐标）。改前（main `cf73f8e`）`claude-busy` 单家面板：卡头小人 13.8、家名 45，分段标题 / 在跑点阵 / 额度 / 「等你」章都在 14，在跑标题 42，「还有 n 条」文字 38。改后：`claude-busy` 单家面板 图标线 8（小人 6.8、分段标题、点阵、额度、「等你」章）、文字线 38（家名、在跑标题和副标题、「还有 n 条」），「等你」行标题 57.9；`claude-many-asks` 有待处理的卡 图标线 18（列表图标、分段标题、点阵，小人 16.8）、文字线 48（家名、列表标题、在跑标题）；`all-running` DeepSeek 图标线 18（余额、分段标题、点阵）、文字线 48（家名、在跑标题、「暂无…」）；`chatgpt-reviews` ChatGPT 卡「已回」章在图标线、「暂无在跑的会话」在文字线；Hermes 机器人印章在图标线、名字被印章推到 +34（同「等你」规则），任务表和说明行从图标线起；`claude-busy` 看板 图标线 412（标记、额度、分段标题、点阵）、文字线 442（家名、「在跑 8」）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-380-one-grid/`：`01-busy-panel.jpg`、`02-many-asks-card.jpg`、`03-chatgpt-card.jpg`、`04-deepseek-card.jpg`、`05-hermes-card.jpg`、`06-board.jpg`。
+- 发布与回读：分支和 main（`cf73f8e`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 380-one-grid`：装前 `29af8701ab1a`，产物 `ae8f61c7bda2` / 已装 `ae8f61c7bda2`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在跑（当时常浩把侧栏放在顶边、开着设置「显示」页）；截屏里有常浩的飞书文档列表，看完已删。实机点票根看卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-380-one-grid/PostPane-29af8701ab1a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：额度行有悬停底色时，底色左边和文字贴齐（原来留 6px），行数棘轮不允许多加一行负外边距，先这样。待处理列表（`ListCard`、`ApprovalContent`、`CompletionAlertView`）本来就在这套线上，数值没改成引用 `GRID`（文件到行数上限），测试锁住它们和 `GRID` 一致。设置窗口、统计窗口不在本轮范围。
+- 本轮新坑：无
+
+## 所有面板去掉底部「近 24 小时 Token / 另有 n 个会话已停」，只留设置和统计；有待处理的卡「设置」能点了（#378）（2026-11-15，Claude，常浩原话「对齐了这块没问题，所有面板如图1这里删除，不要在面板上展示；最下面只保留如图2的设置和统计，但是我发现设置目前无法点击」；PR 已 squash 合并、已发布 `29af8701ab1a` 回读通过）
+
+- 时间：开工 `2026-11-15 09:37`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：常浩不要面板底部那块日 Token、已停会话和小柱图；有待处理的卡上「设置」点不动。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/SourceSessions.tsx` 删掉底部那块（「近 24 小时 n Token / 另有 n 个会话已停 · 去统计看全部」、ChatGPT 的「今天 n 个对话 · 近 24 小时 n 个审核」和右侧小柱图），连同它的取数（会话总数查询、日 Token 查询）。修「设置」：`scene/NewsCard.tsx` 原来只给面板传了统计回调，改为 `links`（统计和设置一起），`HUDScene.tsx` 传 `{ onStats: showPanelStats, onConfigure: configurePanel }`。
+  - 顺手改的：看板时会话区只剩那块，现在整块不画（`HoverPanel.tsx` 会话块加 `!split`，`SourceSessions` 去掉 `split`、`showTokens`、`tokenAgents`、`active` 参数）；删掉只为那块服务的死代码：`HoverPanel` 的 `tokensAbove`，`agent-board.ts` 的 `stoppedCount`、`panelHidesTokens`，`AgentBoard.tsx` 的 `useDayTokens`、`DayBars`，`chatgpt-desk.ts` 的 `reviewsInDay`，以及测它们的 4 条测试；场景预览台 `preview/main.tsx` 给 `HUDScene` 接上设置 / 统计回调（只打日志），预览台里底部两个按钮能点；`file-size-baseline.json` 收紧（`AgentBoard.tsx` 等变短）；`unified-card.test.ts` 加一条。
+  - **改变了已有行为的**：所有面板（单家卡、单家面板、整张看板、ChatGPT 卡）底部不再显示日 Token、已停会话数、今天对话 / 审核数和小柱图，点那块进统计的入口没了（底部「统计」还在）。有待处理的卡上「设置」从禁用变成可点（修 bug）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 461` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-378`）：`claude-many-asks` 点 Claude，底部只剩「设置」「统计」，两个按钮都可点（`disabled: false`），真实点击「设置」控制台打出「[预览台] 打开设置」；接上回调前同一处两个按钮都是禁用（预览台原来没传回调）。`all-running` 切看板：页面里没有「近 24 小时」「个会话已停」字样，底部「设置」「统计」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-378-panel-foot/`：`01-card-foot-no-token.jpg`、`02-card-foot-settings-enabled.jpg`、`03-board.jpg`。
+- 发布与回读：分支和 main（`4de9a64`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 378-panel-foot`：装前 `ba843c778e05`，产物 `29af8701ab1a` / 已装 `29af8701ab1a`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏看过：无文稿权限弹窗，侧栏在跑；截屏里有常浩的私人聊天，看完已删，不留档。实机点「设置」未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-378-panel-foot/PostPane-ba843c778e05.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：悬停小收据（AgentPeek）里的「24 小时 Token」不是面板，没动。设置里「Token 用量」开关（`tokenUsage`）现在只管自定义布局的 Token 图表。
+- 本轮新坑：无
+
+## 单家卡卡头和下面内容左对齐（#376）（2026-11-15，Claude，常浩看 #374 实机后说「这行和下面的内容左对齐，现在有点不对齐看着」；PR 已 squash 合并、已发布 `ba843c778e05` 回读通过）
+
+- 时间：开工 `2026-11-15 09:23`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：#374 后卡头小人框从卡片内容左边 6px 起、家名在 42px，而有待处理那张卡的列表行图标在 0、标题在 30（以下都按卡片内容左边算），整行看着往右偏。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/BoardHeading.tsx` 单家卡上卡头左内边距按下面的内容定：有待处理的卡（有 `NewsSeal`）为 0，小人占一列 `MARK_COLUMN`（20px，内缩 2px），小人墨迹从 -1px 起、家名在 30px，对齐列表行的图标（0）和标题（30）；其他单家卡为 7，小人墨迹从 6px 起，对齐额度文字、「等你」标签、在跑行图标（都在 6px）。卡头小人 26 → 24 号，放得进那一列。
+  - 顺手改的：`test/unified-card.test.ts` 卡头断言跟着改。
+  - **改变了已有行为的**：单家卡卡头整行左移（有待处理的卡移约 6～12px，其他单家卡小人移约 1px、家名左移 5px），小人略小一号。看板不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-376`）用页面脚本量小人画布的墨迹左边和各元素左边（相对页面）：`claude-many-asks` 点 Claude，改前小人墨迹 ≈ 14、家名 50，列表行图标 8、标题 38；改后小人 6.8、家名 38。`claude-busy` 点 Claude（带额度的单家面板）：改后小人 13.8、家名 45，额度文字、「等你」标签都在 14。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-376-card-head-align/`：`01-before.png`、`02-after-many-asks.png`、`03-after-panel-quota.png`。
+- 发布与回读：分支和 main（`abcedd7`）之间没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 376-card-head-align`：装前 `300533126324`，产物 `ba843c778e05` / 已装 `ba843c778e05`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `04-installed-screen.png`：无文稿权限弹窗，侧栏在跑（当时常浩开着设置「显示」页、侧栏在左边，是他自己的操作）。实机点票根看卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-376-card-head-align/PostPane-300533126324.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：卡片里有两套左对齐线：待答 / 待批 / 新回复列表（图标 0、标题 30）和会话行、额度、分段标题（6 / 34），本轮卡头跟着各自卡片下面那套走，没有把两套并成一套（并成一套要改待处理列表的版式，那是 #368 定过的，要先问）。
+- 本轮新坑：无
+
+## 外层展出卡：卡头换小签小人、去卡头虚线、等待处理 4 条 / 正在进行 6 条后折叠、两段常驻带「暂无」（#374）（2026-11-15，Claude，常浩原话「最上面这个图标用小票签上的图标，和下面的图标区别开。然后删除那条虚线，直接进入到等待处理。然后等待处理默认展示4个，正在进行默认展示6个，其他都折叠。正在进行如果没有正在跑的，那正在进行的那条线也需要在」，范围、折法、空状态三问选「外层展出卡都改」「先列 6 个＋还有 n 条」「两段都常驻」；PR 已 squash 合并、已发布 `300533126324` 回读通过）
+
+- 时间：开工 `2026-11-15 08:57`（`date '+%F %H:%M'` 记录，取 issue 创建时间）。来由：卡头的品牌标记（Claude 橙色星芒）和下面每行会话的标记一样，分不清；卡头下的撕线多余；等待处理、正在进行条数太多。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/panel/BoardHeading.tsx` 新增 `OnCard`（上下文）和 `card` 参数，在单家卡上卡头标记换成小签同款 `BotMark`（26 号，静止姿态），不画卡头下的撕线；`panel/board-blocks.tsx` 有 `focusVendor` 时给额度区块包 `OnCard`，只剩余额的家卡头传 `card`；`panel/SourceSessions.tsx` 卡头传 `card`，会话区改传 `card`（不再传 `fold`）。`panel/WorkSections.tsx` 加 `card` 模式：两段标题常驻，空时分别写「暂无等待处理的事」「暂无在跑的会话」；等待处理列 `SHOWN_ENTRIES` 条、正在进行列 `RUNNING_SHOWN` 条，其余收进「还有 n 条」，展开后「收起」（新组件 `Folded`，沿用 `permissions/FoldButton.tsx`）。`permissions/approval-list.ts` `SHOWN_ENTRIES` 5 → 4（待答 / 待批 / 新回复列表跟着变）；`panel/place-sessions.ts` 新增 `RUNNING_SHOWN = 6`。
+  - 顺手改的：`NothingYet` 只剩全家列表用，去掉不再走得到的 ChatGPT「今天还没有对话」分支；场景 `claude-busy` 在跑从 4 个加到 8 个（单家卡看得到「还有 2 条」），`board-sessions.test.ts`、`unified-card.test.ts` 跟着改；`approval-list.test.ts` 按 4 条改写，排序那条显式传 `Infinity`，和默认条数脱钩；`relay-toggle.test.ts` 卡头断言加 `card`；`unified-card.test.ts` 新增一条。
+  - **改变了已有行为的**：① 单家卡（有待处理的卡和单家面板）卡头图标从品牌标记换成小人；② 单家卡卡头下没有撕线；③ 待答 / 待批 / 新回复列表默认 4 条（原 5 条）；④ 单家卡正在进行超过 6 个时列 6 个加「还有 n 条」（原超过 3 个整段收成「在跑 n」）；⑤ 单家卡两段常驻，空时写「暂无」，全空时不再写「没有会话在跑，也没有在等你的」。整张看板不变（品牌标记、撕线、「在跑 n」照旧）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check.log`、`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-374`）：`claude-many-asks` 点 Claude：卡头小螃蟹 + MAX + 待答，没有撕线，等待处理 · 8 列 4 条 +「还有 4 条」，正在进行 · 1。`claude-busy` 点 Claude（单家面板带额度）：卡头小螃蟹、没有撕线，正在进行 · 8 列 6 个 +「还有 2 条」，真实点击展开后 8 个都在、变「收起」。`all-running` 点 Codex：等待处理 · 0 下写「暂无等待处理的事」。`claude-busy` 切看板：Claude、Codex 区块仍是品牌标记、卡头下有撕线、正在进行收成「在跑 8」。卡头小人先试 22 号偏小，改 26 号。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-374-card-head-tidy/`：`01-many-asks-head-waiting4.jpg`、`02-many-asks-running.jpg`、`03-busy-panel-head-bot26.jpg`、`04-busy-running6-more2.jpg`、`05-busy-unfolded-fold-back.jpg`、`06-all-running-codex-empty-waiting.jpg`、`07-board-unchanged.jpg`。
+- 发布与回读：分支和 main（`25a55f3`）之间没有别的提交，打包用的树即合并后的树。`tauri build --bundles app` 退出码 0（`build.log`）；`install.sh 374-card-head-tidy`：装前 `dc8d9adcf909`，产物 `300533126324` / 已装 `300533126324`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `08-installed-screen.png`：无文稿权限弹窗，侧栏在跑。实机点票根看卡未做：常浩当时在用飞书，悬停面板电脑控制点不动（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-374-card-head-tidy/PostPane-dc8d9adcf909.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：卡头小人不跟设置里「小人 / 品牌标记」开关（`botLogos`）走，一律画小人（卡头组件拿不到设置）；常浩开着小人，没影响。ChatGPT 卡的「等待处理」（今天已回的对话）也按 4 条折叠。范围外：「另有 0 个会话已停」0 个时也显示，没动。
+- 本轮新坑：无
+
+## 有待处理时的展开卡去掉额度区块，卡头补回套餐标签（#371）（2026-11-15，Claude，常浩原话「去掉图一的额度展现形式，只保留图2底层的水印数字，以及侧边票根下方的数字，都是周度额度」，后选「顺带补回套餐标签」；PR 已 squash 合并、已发布 `dc8d9adcf909` 回读通过）
+
+- 时间：开工 `2026-11-15 07:15`（`date '+%F %H:%M'` 记录；WIP 提交 `b23aaed` 时间，本会话 07:23 接手）。来由：#368 把待审批卡并进单家面板后，有待处理时卡上多了一大块额度区块，常浩要去掉，只留卡底周额度暗印（#319）和票根脚上的数字（本来就是周额度，#174，不用改）。上一节「待常浩定」的暗印问题就此定了：保留。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/hud/src/HoverPanel.tsx` 有 `news` 时不画额度区块（`blocks`）和 Token 图表两段，`bare` 改为 `Boolean(focusVendor) && (!blocks.length || Boolean(news))`，让会话区画统一卡头（`panel/SourceSessions.tsx` 的 `BoardHeading`，带纸飞机和印章）。卡头补回套餐标签：`panel/account-labels.ts` 新增 `soleAccount(rows, accounts, vendor?)`（这家额度行只属于一个已知账户时返回它），`SourceSessions.tsx` 用它给卡头传 `plan`。
+  - 顺手改的：`panel/QuotaSection.tsx` 原来的「只有一个账户」判断也改用 `soleAccount`（两处卡头读同一个判断），账户小标题显示条件 `named` 改为 `!only`（等价）；删掉不再用的 `agent-board.ts` 的 `showsAccountNames`，它的测试改写成 `soleAccount` 的测试（`test/agent-board.test.ts`）。场景预览台数据 `test/scenes/build.ts` 给 Claude、Codex 各加一个账户（套餐 Max / Pro），场景里才看得到套餐标签。`test/unified-card.test.ts` 加一条读源码断言。`file-size-baseline.json` 收紧 `agent-board.ts` 415 → 407。
+  - **改变了已有行为的**：有待答 / 待批 / 新回复时点票根出的卡，不再有额度条、「照现在的速度……」说明、图例和 Token 图表；只剩余额的家（DeepSeek）有待处理时也不再显示余额区块。没有待处理时的单家面板不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `987 passed; 0 failed`，前端 `ℹ pass 461` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`check.log`、`test.log`、`rules.log`）。这一轮跑到一半时又改了场景数据和测试，提交 `2951fda` 后补跑：`pnpm run check` 退出码 0（`check-2.log`），`test:ts` `ℹ pass 461` / `ℹ fail 0`（`test-ts-2.log`），交接写好后 `node --test tests/*.test.mjs` 见 `rules-2.log`；没改 Rust，cargo 没重跑。`late-output` 这次没挂。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-371`）：`mixed` 点 Codex：卡头「Codex PRO + 纸飞机 + 待批」，等待处理 · 1、正在进行 · 1，没有额度区块，卡底 40% 暗印在；点 DeepSeek：卡头 + 待批，没有余额区块。`claude-many-asks` 点 Claude：卡头「Claude MAX + 待答」，等待处理 · 8，没有额度区块，35% 暗印在。`all-running` 点 Codex（没有待处理）：单家面板照旧带「5 小时 / Current week」两条额度，卡头 PRO（走 `QuotaSection` 的 `soleAccount`）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-15-371-news-card-no-quota/`：`01-mixed-codex.jpg`（补套餐前）、`02-mixed-codex-plan.jpg`、`03-mixed-deepseek.jpg`、`04-many-asks-claude.jpg`、`05-all-running-codex-quota.jpg`。
+- 发布与回读：分支和 main（`0010f2e`）之间没有别的提交，打包用的树即合并后的树。`tauri build --bundles app` 退出码 0（`build.log`）；`install.sh 371-news-card-no-quota`：装前 `67da9fd79eba`，产物 `dc8d9adcf909` / 已装 `dc8d9adcf909`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `06-installed-screen.png`：无文稿权限弹窗，侧栏在跑（Claude 票根「答」）。实机点票根看卡：常浩当时正在 ChatGPT 里打字，悬停面板电脑控制点不动（L-09），留给常浩；合并装机后常浩点了 Claude 票根，回「看过没问题」（2026-11-15）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-15-371-news-card-no-quota/PostPane-67da9fd79eba.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：DeepSeek 有待处理时余额区块一并去掉（父会话验收就是这么写的，常浩原话说的是额度）。范围外：单家面板底部「另有 0 个会话已停」在 0 个时也显示，没动。
+- 本轮新坑：无
+
+## 各家展开卡统一：卡头带纸飞机和印章、额度、等待处理 / 正在进行，一律 470 宽；接力闲置 24 小时自动结束（#368）（2026-11-14，Claude，常浩看三版预览后回「甲，纸飞机方块放在卡顶一行的名称；2 说的是展开面板没有额度；3 甲」；PR #369 已 squash 合并 `2603d44`、已发布 `67da9fd79eba` 回读通过）
+
+- 时间：开工 `2026-11-14 22:20`（`date '+%F %H:%M'` 记录）。来由：常浩 7 条意见（额度数字不在、Claude 卡和 Codex/GPT 不一样宽、待审批不要按项目分区、「还有 n 条」收不回去、待审批改「等待处理 · n」加横线、卡顶重排纸飞机单独放、其他家同理）。三版预览 https://claude.ai/artifact/HFgt5oHxTULFSoizf8bSaN 。本分支从 `claude/359-board-peek` 的 `0f40a3b`（第 3 批之二，另一会话已提交、未开 PR）往下接，改的是同一批文件。
+- 改了哪些文件：
+  - 常浩要求的：`scene/NewsCard.tsx`（新）有待答 / 待批 / 新回复时，卡片就是这家的单家面板（`SourceHoverPanel` 带 `news`），卡头印章由 `permissions/PaperSeal.tsx`（新）的 `NewsSealContext` 换成「待答 / 待批 / 切换 / 已回」，额度区块照常在；其他通知（额度细条等）照旧。`HUDScene.tsx` 改用它。`permissions/ApprovalContent.tsx`、`alerts/CompletionAlertView.tsx` 去掉「待审批 / 新回复」那行卡头（含 ASK n、REPLY n 计数和纸飞机）和项目分区，「全部知道了」挪到列表底部右侧；`alerts/reply-list.ts` 不再分「ChatGPT 对话」等区。`permissions/ListCard.tsx` 的 `FoldButton` 展开后变「收起」可折回。`panel/WorkSections.tsx`（新）把一家的会话分成「等待处理 · n」「正在进行 · n」两段，有待答时等待处理段就是那张列表；`panel/SourceSessions.tsx`（单家）和 `panel/PlaceRows.tsx` 的 `BlockSessions`（整张看板各家区块）都用它；`SessionsHeading` 改成「名称 · 数量」接横线。没有额度区块的家（ChatGPT）在会话区顶上画同一个 `BoardHeading`（带纸飞机），只有余额的家（DeepSeek）在余额区块上方画它，余额区块自己的小名字在单家卡里隐藏（`QuotaSection.tsx` 的 `headed`）。ChatGPT 单家卡：「今天的对话」改成「等待处理」（今天已回的对话）+「正在进行」，审核纸条和闲着的接力行不再列，接力只从纸飞机进。`scene/useHUDLayout.ts` 单家面板宽度从 `max(440, 面板宽 - 100)` 改为和消息卡同一个 `HUD_METRICS.alertWidth`（470），`model.ts` 删掉两个不再用的常量。接力：`crates/platform/src/clients/chatgpt/handoffs/idle.rs`（新）`IDLE_END_MS`（24 小时）与 `Book::idle`（`handoffs.rs` 挂上模块、加测试），`crates/host/src/handoff.rs` 生成快照时调用，`handoff/texts.rs` 加结束原因；`docs/chatgpt-channel.md` 同步。
+  - 顺手改的：`panel/BoardHeading.tsx` 加 `place` 参数（ChatGPT 的标记名换算成 `openai`，按来源 id 筛接力，L-50）；守 300 行棘轮，余额三个指标按钮拆到 `panel/BalanceMetrics.tsx`（新）、折叠按钮拆到 `permissions/FoldButton.tsx`（新）、空状态拆到 `WorkSections.tsx` 的 `NothingYet`、`splitWork` 放 `place-sessions.ts`；删掉不再用的 `permissions/ListHead.tsx` 和 `approval-list.ts` 的 `tagCounts`（及其测试）；场景预览台加 `claude-many-asks`（8 条待答）。测试：`reply-list.test.ts`、`relay-toggle.test.ts` 按新行为改写，新增 `unified-card.test.ts`（4 条）、`handoffs.rs` 新测试 `handoffs_left_a_day_untouched_end_themselves`。
+  - **改变了已有行为的**：① 有待答 / 待批 / 新回复时点票根，卡片多了家名卡头、额度和「正在进行」下的 Token 与设置 / 统计脚；② 等待处理不分项目区、没有 ASK n / REPLY n 计数；③ 整张看板各家区块里「等你」的会话单列「等待处理 · n」，所有分段标题的数量从横线右端挪到名称后面；④ ChatGPT 单家卡不再列今天全部对话和审核纸条；⑤ 单家面板 440 → 470 宽；⑥ 交给常浩的接力放 24 小时自动结束。
+- 测试：`pnpm test` 退出码 0：Rust 合计 `986 passed; 0 failed`，前端 `ℹ pass 460` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`pnpm run check` 第 1 次只因新测试一行没过 `cargo fmt` 失败（`check.log`），格式化后重跑见 `check-2.log`；`node --test tests/*.test.mjs` 第 1 次在交接写好前跑、交接格式那条失败（`rules.log`），写好后重跑见 `rules-2.log`。第 2 次 `check-2.log` 卡在行数棘轮（`handoffs.rs`、`ListCard.tsx`、`useHUDLayout.ts` 变长），拆分后 `check-file-size.mjs --update` 收紧基线 6 项，第 3 次全量重跑：`pnpm run check` 退出码 0（`check-3.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`rules-3.log`）；`pnpm test`（`test-2.log`）Rust 合计 `986 passed; 0 failed`，前端 `ℹ pass 459` / `ℹ fail 1`，挂的是 `engine-client/test/late-output.test.ts`（46.5 秒等引擎超时），`&&` 串联使后面三组没跑；负载 6.6 时补跑 `test:ts` 同一条又挂（`test-ts-3.log` `ℹ pass 459` / `ℹ fail 1`），`test:mcp` `ℹ pass 9` / `ℹ fail 0`、`test:plugins` `ℹ pass 14` / `ℹ fail 0`、`test:extension` `ℹ pass 23` / `ℹ fail 0`。这条单独跑在本分支、main（`0dc0ba5`）、`359-board-peek` 都是 `ℹ pass 1` / `ℹ fail 0`，第 1 次全量里也过了；本轮没碰 `engine-client`，按 L-48 那类机器忙时替身程序起得慢的偶发失败处理，没改代码。**变基到 main `0dc0ba5`（含 #367）后最终一轮**：`pnpm run check` 退出码 0；`cargo test --workspace` 合计 `987 passed; 0 failed`；`test:ts` `ℹ pass 460` / `ℹ fail 0`，`test:mcp` `ℹ pass 9` / `ℹ fail 0`，`test:plugins` `ℹ pass 14` / `ℹ fail 0`，`test:extension` `ℹ pass 23` / `ℹ fail 0`（`*-rebased*.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/`。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-369`）：`mixed` 点 Codex 出 Codex 卡（卡头 Codex + 纸飞机 + 待批、额度两条、等待处理 · 1 展开审批、正在进行 · 1）；点 DeepSeek 只有一行卡头（之前两行，已修）、余额、等待处理 · 1、正在进行 · 1；点 ChatGPT 卡头纸飞机带 2（之前筛空，已修，L-50）。`claude-many-asks` 点 Claude：等待处理 · 8 一条列表，真实点击「还有 3 条」展开后变「收起」，再点折回。改前对照：切到 `scenes-359b`（`0f40a3b`）看 ChatGPT 卡（今天的对话 + 审核纸条，440 宽）。回复卡在预览台看不到实物（场景回复事件已过期），靠测试。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/`：`before-chatgpt-panel.jpg`、`before-codex-panel-440.jpg`、`after-codex-news-card.jpg`、`after-deepseek-card.jpg`、`after-chatgpt-card-plane.png`、`after-claude-waiting-8.jpg`、`after-claude-unfolded-fold-back.jpg`。
+- 发布与回读：常浩回「合并并装机」（PR 连带第 3 批之二 `695fd5b` 一起进 main）。`gh pr merge 369 --squash` → `2603d44`，与打包用的树一致；`tauri build --bundles app` 退出码 0；`install.sh 369-unified-card`：装前 `c4501330017c`，产物 `67da9fd79eba` / 已装 `67da9fd79eba`，签名照常（`H"b773068e`），`install.sh check` 一致。实机截屏 `after-installed-claude-card.png`：无文稿权限弹窗；Claude 卡卡头「Claude ULTRA + 纸飞机 10 + 待答」、额度三条、等待处理 · 7、正在进行 · 2。接力闲置自动结束当场生效：`handoffs.json` 里 12 单带「没动静」的自动结束步（Claude 11、Codex 1），Claude 开着的从 21 降到 10。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-369-unified-card/PostPane-c4501330017c.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：预览甲版里印章画的是「待答」，实现照做（消息卡盖待答 / 待批 / 已回，平时盖额度的够用 / 吃紧 / 未知）。**待常浩定**：消息卡上的周额度暗印（#319，11-12 选甲）原是因为卡片盖住了面板看不到额度，现在卡上直接有额度条，暗印和「本周」那行重复，本轮没动。实机未验。
+- skill 进化：E-19 待批（开工时要改的文件正被别的未合并分支改着怎么办）。
+- 本轮新坑：L-50
+
+## ChatGPT 接力：送审原文带行内代码时回信不再被判成别的提问（#366）（2026-11-14，Claude，常浩说「继续推进」，巡检时查出 #356 返修引入的误判，属修 bug 回到原定行为；已提交、发布见下）
+
+- 时间：开工 `2026-11-14 21:30`（`date '+%F %H:%M'` 记录）。来由：PR #365（#318）的 L2 审查 18:39 已答完，驿窗每 2 分钟重读、连续 35 次记 `unmatched`，19:00 按 30 分钟没回信停下自动往返。对比今天 17 点后新规则下收下的几单：原文带 `##` 标题、`-` / `1.` 列表、`**加粗**`、表格竖线的都对上了，唯一对不上的 `h1a1d99b32c700` 前 600 字有 12 个反引号。页面把行内代码画成代码样式，插件取的 `textContent` 没有反引号。没有打开那次 ChatGPT 对话核对页面（#318 会话问过常浩要不要用他的 Chrome 读，他还没回），靠下面装机后重读是否收下来验证。
+- 改了哪些文件：
+  - 常浩要求的（修 bug）：`src/crates/host/src/handoff/belongs.rs` 的 `bare` 比对时两边都去掉反引号（原来只去空白），模块说明补来由；`docs/chatgpt-channel.md` 核对规则一句同步。
+  - 测试：`src/crates/host/src/handoff.rs` 新增 `a_prompt_drawn_without_its_inline_code_marks_is_still_the_review`（短原文带行内代码：页面去掉反引号的同一段收下，后面多一句的不收；超长原文按摘录前缀收下）。
+  - 顺手改的：无。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 986 failed 0，前端 `ℹ pass 452` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。撤修复验证：去掉反引号过滤，新测试失败（`revert-check.log`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-relay-inline-code/`。
+- 验证：单元测试；实机见「发布与回读」。
+- 截图：无（无界面改动）。
+- 发布与回读：见本节末追记。
+- 与授权不一致之处、遗留问题、范围外发现：只去反引号，没有一并去 `*`、`_` 等记号：本机数据显示页面保留加粗记号和表格竖线，没有证据就不放宽。代码块（三个反引号围起来的）在页面上可能带语言名、「复制」按钮文字，仍会对不上，暂未见实例。
+- 本轮新坑：无
+
+## 第 3 批之一：点哪家的票根出哪家的卡；纸飞机加到新回复卡和单家面板（#359）（2026-11-14，Claude，常浩看三版预览后回「都选甲」，改动确认四处回「都按推荐」；已提交、已发布 `d7a5344be952` 回读通过）
+
+- 时间：开工 `2026-11-14 17:48`（`date '+%F %H:%M'` 记录）。来由：ADR-0001 第 3 批界面统一。三版预览 https://claude.ai/artifact/VpJfiLCmuXyNgZj1tN6Jp7 （第 1 版多开关，常浩说「太复杂了看不懂」，第 2 版改成「只有两处要你挑」），常浩回「都选甲」：① 看板会话分到各家下面、某家在跑超过 3 条收成一行；② 出错单独一张回执。随后改动确认四处，常浩回「都按推荐」：**纸飞机多单仍「进最近一单 + 红数字」，不改成列表（保 #344）；额度细条不加纸飞机（保 #62/#65）；看板在跑超过 3 条收成一行（替代 #63 的「5 条 + 滚动」，只用在分家后的各家区块）；小收据加「等你 · 在跑 · 接力」一行，「看不清」第一版不做（后台还没有「这家看不到了」的数据）**。第 3 批分三个 PR：本 PR（点击 + 纸飞机）→ 看板分家 + 小收据一行 → 出错回执。
+- 改了哪些文件：
+  - 常浩要求的：`hud/src/request-hover.ts` 新 `clickMayPin`：点别家票根照常钉住、长成那家的面板，只有点「前卡那一家」自己的票根或刘海形态才不动（原来只要有任何消息卡就一律不动）；`scene/useHUDInteraction.ts` 的 `pin` 用它；`HUDScene.tsx` 侧栏「替谁说话」在没有指针时（预览台、键盘）也认被点的那家（`pinned && hovered`）。纸飞机：`alerts/CompletionAlertView.tsx` 新回复卡卡头加 `EnterRelay`（`cardRelays` 按回复的来源，只进本家参与的接力）；单家面板卡头拆出新文件 `panel/BoardHeading.tsx`，印章左边加 `EnterRelay`（`relaysOf(本家)`），`QuotaSection.tsx` 传 `handoffs`。样子和多单行为沿用 #344。
+  - 顺手改的：守 300 行棘轮——「知道了 / 全部知道了」按钮拆到新 `alerts/DismissAll.tsx`；`BoardHeading`、`Stamp` 从 `AgentBoard.tsx` 搬到 `panel/BoardHeading.tsx`；`QuotaSection.tsx` 一处两行注释压成一行；基线收紧 2 项（`CompletionAlertView.tsx` 571→567、`AgentBoard.tsx` 672→513）。测试：`request-hover.test.ts` 加 1 条（点击何时钉住），`relay-toggle.test.ts` 加 1 条（两张卡接上纸飞机、在印章左边），`workplace-contract.test.ts` 加 1 条（回复卡、单家面板只进本家接力：Claude→h-claude、Codex→h-codex、DeepSeek/Hermes 无）。
+  - **改变了已有行为的**：有消息卡时点别家票根，现在会长成那家自己的面板（原来点了没反应，场景预览台里还会出前卡）；新回复卡、Claude/Codex 的单家面板卡头出现纸飞机（只在本家有开着的接力时）。ChatGPT 单家面板没有 `BoardHeading`，不加飞机（它的审核纸条本来就列着接力）；DeepSeek、Hermes 没有接力，不出现。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：Rust 合计 `985 passed; 0 failed`，前端 `ℹ pass 452` / `ℹ fail 0` / `ℹ todo 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。跑了两遍：第一遍基于 `330a5d5`（Rust 981、前端 452、Chrome 插件 17，全过）；main 随后合进 #363，变基后重跑，结果即上。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/`：`check*.txt`、`test*.txt`、`node*.txt`。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，本机 `.claude/launch.json` 加了 `scenes-359`）`two-relays`：直接点 ChatGPT 票根，出 ChatGPT 自己的面板（今天的对话 + 审核纸条），第 1 批证据 `finding-chatgpt-click-shows-deepseek-card.jpg` 里改前是 DeepSeek 的审批卡；点 Claude 出 Claude 面板；点 DeepSeek 出它自己的审批卡；悬停 ChatGPT 仍出 ChatGPT 面板（#243 不变）。Claude 面板卡头「未知」印章左边出现白色纸飞机，点它进 Claude 那一单「整理导入流程」，接力卡卡头飞机为按下态。L-35：装前装后静止侧栏逐字节相同（`a3911c05bff7`）。**未做**：实机悬停面板里点纸飞机、实机点别家票根（L-09，电脑控制点不动悬停面板），留给常浩；装完截整屏看「想访问文稿」弹窗（L-06）。
+- 截图：证据目录 `~/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/`：`click-chatgpt-own-panel.jpg`、`click-claude-own-panel.jpg`、`claude-panel-plane.png`、`claude-plane-into-relay.jpg`、`before-hud.png`、`after-hud.png`。
+- 发布与回读：`install.sh 359-click-plane`：装前 `3419f5ba1910`（别的会话装的，本包已变基含 #363），产物 `d7a5344be952` / 已装 `d7a5344be952`，签名证书照常（`H"b773068e`），`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-359-click-plane/PostPane-3419f5ba1910.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：常浩的「都选甲」「都按推荐」是侧栏回复转进会话的，和给出的按钮 / 推荐一致，按常浩本人的回答处理。新回复卡的飞机只在场景预览台的代码层验证（预览台里场景回复事件已过期，看不到实物卡），靠 `relay-toggle.test.ts` 钉住；实机下一次有接力回信时再看。下一步：第 3 批之二「看板分家 + 小收据一行」。
+- 本轮新坑：无
+
 ## 接力审核门第 2 批：驿窗判定实现（#347）（2026-11-14，Claude，常浩回「按推荐开工」批准第 2 批计划与三项推荐；已提交、未发布，等 L3 审查）
 
 - 时间：开工 `2026-11-14 12:09`。来由：接力审核门 v1.1（决策记录 #343、勘误 #345；规则 multi-agent#7、agent-kit#71、digital-twin#185、my-skills#97 均为草稿）第 2 批，把「按风险级 1/2 轮」换成审核门。

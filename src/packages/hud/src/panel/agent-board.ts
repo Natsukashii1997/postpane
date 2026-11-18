@@ -360,30 +360,6 @@ export function liveSessions(
     );
 }
 
-/** How many of the last day's sessions are not listed: those stopped. */
-export function stoppedCount(dayTotal: number, listed: number): number {
-  return Math.max(0, dayTotal - listed);
-}
-
-/** An account's header, with its address, shows only where the agent has
- * more than one account's windows; one account needs no name. */
-export function showsAccountNames(
-  sections: readonly { account: unknown | null }[],
-): boolean {
-  return sections.filter((section) => section.account).length > 1;
-}
-
-/** Whether a panel on this agent leaves tokens out: it has no quota window
- * (Hermes, DeepSeek without a balance), and its layout does not ask for the
- * chart with its periods. */
-export function panelHidesTokens(
-  quotas: readonly Pick<Quota, "vendor">[],
-  vendor: string,
-  widget?: string,
-): boolean {
-  return widget !== "chart" && !quotas.some((row) => row.vendor === vendor);
-}
-
 /** Whether an agent gets a block on the board: one with quota windows, a
  * chart layout or a notice to show, and Hermes with its bots. An agent with
  * none of these (ChatGPT's web channel, which shares OpenAI's mark) has

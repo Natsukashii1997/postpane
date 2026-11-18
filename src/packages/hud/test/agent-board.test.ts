@@ -1,22 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Approval, Quota, Session } from "@agent-hud/protocol";
+import type { Account, Approval, Quota, Session } from "@agent-hud/protocol";
 import { quotaWindowLabel } from "../src/panel/window-labels.ts";
 import { agentVendorName } from "../src/agent-artwork.ts";
 import { runningSince } from "../src/panel/running-rows.ts";
 import {
   blockListed,
-  panelHidesTokens,
   boardVerdict,
   liveSessions,
   quotaNote,
   quotaLevel,
   quotaOutlook,
   resetText,
-  showsAccountNames,
-  stoppedCount,
 } from "../src/panel/agent-board.ts";
 import { liveSessionLine } from "../src/panel/live-line.ts";
+import { soleAccount } from "../src/panel/account-labels.ts";
 
 const now = Date.parse("2026-11-05T12:32:00Z");
 const utc = { timeZone: "UTC", firstWeekday: 1 };
@@ -266,8 +264,6 @@ test("the panel lists sessions waiting on you first, then those at work, and no 
     ],
   );
   assert.equal(listed[1].approval?.id, "req-held");
-  assert.equal(stoppedCount(9, listed.length), 5);
-  assert.equal(stoppedCount(2, listed.length), 0, "never below none");
 });
 
 test("a listed session says what it waits on or what it does", () => {
@@ -341,23 +337,20 @@ test("a listed session says what it waits on or what it does", () => {
   );
 });
 
-test("one account's header names no account; several do", () => {
-  assert.equal(showsAccountNames([{ account: { id: "a" } }]), false);
-  assert.equal(
-    showsAccountNames([{ account: { id: "a" } }, { account: null }]),
-    false,
-  );
-  assert.equal(
-    showsAccountNames([{ account: { id: "a" } }, { account: { id: "b" } }]),
-    true,
-  );
-});
-
-test("a panel on an agent with no quota window leaves its tokens out", () => {
-  const quotas = [{ vendor: "claude" }];
-  assert.equal(panelHidesTokens(quotas, "hermes"), true);
-  assert.equal(panelHidesTokens(quotas, "claude"), false);
-  assert.equal(panelHidesTokens(quotas, "hermes", "chart"), false);
+test("one account's plan goes in the head; several accounts have none", () => {
+  const account = (id: string) =>
+    ({ id, planLabel: id.toUpperCase() }) as unknown as Account;
+  const row = (accountId: string | null, vendor = "codex") =>
+    ({ vendor, accountId }) as Quota;
+  const accounts = [account("a"), account("b")];
+  assert.equal(soleAccount([row("a"), row("a")], accounts)?.planLabel, "A");
+  assert.equal(soleAccount([row("a"), row(null)], accounts)?.id, "a");
+  assert.equal(soleAccount([row("a"), row("b")], accounts), null);
+  assert.equal(soleAccount([row(null)], accounts), null);
+  // A card on one agent picks its rows out of every agent's (2026-11-15).
+  const all = [row("a"), row("b", "claude")];
+  assert.equal(soleAccount(all, accounts, "claude")?.id, "b");
+  assert.equal(soleAccount(all, accounts), null);
 });
 
 test("an agent with no quota window and nothing to say has no block", () => {
@@ -435,7 +428,6 @@ test("cloud credits show their dollars and expiry, outside the pace count", () =
   );
 });
 
-test("a panel on ChatGPT, with no quota and no block, names it and leaves tokens out (#145)", () => {
+test("a panel on ChatGPT, with no quota and no block, names it (#145)", () => {
   assert.equal(agentVendorName("openai"), "ChatGPT");
-  assert.equal(panelHidesTokens([], "openai"), true);
 });

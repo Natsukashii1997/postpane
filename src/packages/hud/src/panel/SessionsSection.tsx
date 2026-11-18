@@ -1,45 +1,27 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GoButton } from "../GoButton";
 import { RunningMark } from "./RunningMark";
 import { runningSince } from "./running-rows";
 import { TRAY, TrayHint } from "./TrayHint";
 import { OpenNotice, useOpenFailures } from "../OpenNotice";
 import { failureOf } from "../open-result";
-import type {
-  PanelLayout,
-  SessionsResponse,
-  Snapshot,
-} from "@agent-hud/protocol";
-import { tokensShort } from "@agent-hud/ui/format";
-import { sourceID, sourcesForMark, vendorKey } from "../model";
-import { usePanelQuery, usePanelServices } from "../PanelContext";
+import type { Snapshot } from "@agent-hud/protocol";
+import { usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { noButtonChrome, tabular, type Logo } from "./theme";
+import { GRID, noButtonChrome, tabular } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
-import { liveSessions, stoppedCount, type LiveSession } from "./agent-board";
+import type { LiveSession } from "./agent-board";
 import { liveSessionLine } from "./live-line";
-import { DayBars, useBoardInks, useDayTokens } from "./AgentBoard";
+import { useBoardInks } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
 import { usePaper } from "../paper";
-import { QuietRelayRow, ReviewRows } from "./ReviewSlip";
-import {
-  chatgptDesk,
-  isReview,
-  quietRelays,
-  reviewsInDay,
-  type DeskChat,
-} from "../chatgpt-desk";
+import type { DeskChat } from "../chatgpt-desk";
 import { replyTime } from "../scene/hermes-peek";
 import { dateFormat } from "@agent-hud/ui/format";
-import { handoffFor, progressLine, round } from "../alerts/handoff-card";
+import { progressLine, round } from "../alerts/handoff-card";
 import type { Handoff, RelayLaunch } from "@agent-hud/protocol";
-import {
-  removedKey,
-  shownSessions,
-  useRemovedSessions,
-} from "./removed-sessions";
 import {
   alreadyQueuedText,
   launchKind,
@@ -52,325 +34,16 @@ import {
   type TrayKind,
 } from "./relay-tray";
 
-/** The panel's sessions (owner, 2026-11-05): those waiting on you, then
- * those at work, each with what it waits on or does and a way back to it;
- * the rest of the last day folded into one line, with its tokens, that opens
- * the Statistics window. The Sessions page lists every session as before. */
-export function SourceSessions({
-  snapshot,
-  focusVendor,
-  light,
-  onStats,
-  layout = {},
-  tokenAgents,
-  showTokens = true,
-  active = true,
-}: {
-  snapshot: Snapshot;
-  focusVendor?: string;
-  light: boolean;
-  Logo?: Logo;
-  onStats?: () => void;
-  layout?: PanelLayout["sessions"];
-  /** The agents whose tokens the folded line counts; every agent without. */
-  tokenAgents?: string[];
-  /** The folded line's tokens and chart; off where the board above shows them. */
-  showTokens?: boolean;
-  active?: boolean;
-}) {
-  const { language } = useFormat();
-  const zh = language === "zh";
-  const listed = useListedSessions();
-  const inks = useBoardInks(light);
-  const openList = () =>
-    listed ? listed.openStats({ tab: "sessions" }) : onStats?.();
-  const limit = layout.limit ?? 5;
-  const selectedSources = focusVendor
-    ? sourcesForMark(snapshot, focusVendor)
-    : layout.agents?.length
-      ? layout.agents.map((source) => sourceID(snapshot, source))
-      : undefined;
-  const inScope = (session: Snapshot["sessions"][number]) =>
-    (!selectedSources ||
-      selectedSources.includes(sourceID(snapshot, session.source))) &&
-    (!layout.projects?.length ||
-      layout.projects.includes(session.project ?? session.cwd ?? "unassigned"));
-  const now = Date.parse(snapshot.generatedAt);
-  const listedLive = liveSessions(
-    snapshot.sessions.filter(inScope),
-    snapshot.approvals,
-  );
-  const { removed, remove, prune } = useRemovedSessions();
-  const live = shownSessions(listedLive, removed);
-  // The owner's own sessions above; ChatGPT reviews on a lower slip of the
-  // reviews' paper, always in full (#145).
-  const handoffs = snapshot.handoffs ?? [];
-  const isReviewRow = (entry: (typeof live)[number]) =>
-    entry.session.source === "chatgpt" && isReview(entry.session, handoffs);
-  const upper = live.filter((entry) => !isReviewRow(entry));
-  const lower = live.filter(isReviewRow);
-  // ChatGPT's own panel lists every chat of today, the replied ones under
-  // those answering, as many as its stub counts (#219).
-  const desk =
-    focusVendor && vendorKey(focusVendor) === vendorKey("chatgpt")
-      ? chatgptDesk(snapshot, now, zh)
-      : null;
-  // Its open handoffs ChatGPT is not answering, to end or go on (#288).
-  const quiet = desk
-    ? quietRelays(
-        handoffs,
-        lower.map((entry) => entry.session.id),
-      )
-    : [];
-  const replied = desk
-    ? desk.day.flatMap((chat) => {
-        const session =
-          chat.state === "replied" &&
-          !live.some((entry) => entry.session.id === chat.id)
-            ? snapshot.sessions.find((s) => s.id === chat.id)
-            : undefined;
-        return session ? [{ chat, session }] : [];
-      })
-    : [];
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  // Removals end once their session has something new, or has stopped.
-  useEffect(() => {
-    prune(
-      liveSessions(snapshot.sessions, snapshot.approvals),
-      new Set(
-        snapshot.sessions.map((session) => `${session.source}:${session.id}`),
-      ),
-    );
-  }, [snapshot.sessions, snapshot.approvals, prune]);
-  // The last day's sessions, only to count those stopped.
-  const query = usePanelQuery<SessionsResponse>(
-    "sessions",
-    {
-      scope: "active",
-      limit: 1,
-      ...(selectedSources ? { sources: selectedSources } : {}),
-      ...(layout.projects?.length ? { projects: layout.projects } : {}),
-    },
-    snapshot.sessionsRevision,
-    active,
-  );
-  const dayTotal =
-    query.data?.total ??
-    snapshot.sessions.filter(
-      (session) =>
-        inScope(session) &&
-        !session.parentId &&
-        Date.parse(session.lastMessageAt ?? session.updatedAt) >=
-          now - 86_400_000,
-    ).length;
-  const stopped = stoppedCount(dayTotal, listedLive.length);
-  const day = useDayTokens(
-    snapshot,
-    focusVendor ? selectedSources : tokenAgents,
-    active && showTokens,
-  );
-  // Every session is listed; past `limit` rows the list scrolls in place.
-  const rows = useRef<HTMLDivElement>(null);
-  const [rowsHeight, setRowsHeight] = useState<number>();
-  useLayoutEffect(() => {
-    const last = rows.current?.children[limit - 1] as HTMLElement | undefined;
-    setRowsHeight(
-      upper.length + replied.length > limit && last
-        ? last.offsetTop + last.offsetHeight
-        : undefined,
-    );
-  }, [upper.length, replied.length, limit]);
-  const row = (
-    entry: (typeof live)[number],
-    index: number,
-    list: readonly (typeof live)[number][],
-    onPaper = light,
-  ) => (
-    <LiveRow
-      key={removedKey(entry)}
-      entry={entry}
-      tagWide={list.some((other) => other.status === "waiting")}
-      handoff={handoffFor(
-        snapshot.handoffs,
-        entry.session.source,
-        entry.session.id,
-      )}
-      waits={
-        entry.session.source === "claude"
-          ? snapshot.relayLaunches?.find(
-              (launch) => launch.session === entry.session.id,
-            )
-          : undefined
-      }
-      now={now}
-      light={onPaper}
-      first={index === 0}
-      last={index === list.length - 1}
-      onStats={onStats}
-      open={openKey === removedKey(entry)}
-      onOpen={(open) =>
-        setOpenKey((key) =>
-          open ? removedKey(entry) : key === removedKey(entry) ? null : key,
-        )
-      }
-      onRemove={() => {
-        setOpenKey(null);
-        remove(entry);
-      }}
-    />
-  );
-  return (
-    <section
-      className="hud-source-sessions"
-      style={{ display: "grid", gap: 0, fontSize: 12 }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "6px 6px 4px",
-          fontSize: 11.5,
-          letterSpacing: "0.06em",
-          color: inks.secondary,
-        }}
-      >
-        <span>
-          {desk
-            ? zh
-              ? "今天的对话"
-              : "TODAY'S CHATS"
-            : zh
-              ? "正在进行"
-              : "IN PROGRESS"}
-        </span>
-        <span
-          style={{ flex: 1, borderTop: `1px solid ${inks.divider}`, order: 1 }}
-        />
-        <span style={{ order: 2, letterSpacing: 0, ...tabular }}>
-          {desk ? desk.today : live.length}
-        </span>
-      </div>
-      <div
-        ref={rows}
-        style={{
-          position: "relative",
-          maxHeight: rowsHeight,
-          overflowY: rowsHeight ? "auto" : undefined,
-        }}
-      >
-        {upper.map((entry, index) => row(entry, index, upper))}
-        {replied.map(({ chat, session }, index) => (
-          <RepliedRow
-            key={chat.id}
-            chat={chat}
-            session={session}
-            now={now}
-            light={light}
-            first={!upper.length && index === 0}
-            onStats={onStats}
-          />
-        ))}
-      </div>
-      {lower.length + quiet.length > 0 && (
-        <ReviewRows zh={zh}>
-          {lower.map((entry, index) => row(entry, index, lower, true))}
-          {quiet.map((handoff) => (
-            <QuietRelayRow
-              key={handoff.id}
-              handoff={handoff}
-              now={now}
-              zh={zh}
-            />
-          ))}
-        </ReviewRows>
-      )}
-      {!live.length && !replied.length && (
-        <span
-          style={{
-            padding: "6px 6px 8px",
-            fontSize: 12.5,
-            color: inks.tertiary,
-          }}
-        >
-          {desk
-            ? zh
-              ? "今天还没有对话"
-              : "No chats today"
-            : zh
-              ? "没有会话在跑，也没有在等你的"
-              : "Nothing running, and nothing waiting on you"}
-        </span>
-      )}
-      <button
-        type="button"
-        className="hud-sessions-more"
-        title={zh ? "在统计里看全部会话" : "Show every session in Statistics"}
-        disabled={!onStats && !listed}
-        onClick={openList}
-        style={{
-          ...noButtonChrome,
-          display: "grid",
-          gridTemplateColumns: showTokens ? "minmax(0, 1fr) 150px" : "1fr",
-          columnGap: 16,
-          alignItems: "end",
-          padding: "10px 6px 4px",
-          borderTop: `1px dotted ${inks.divider}`,
-          cursor: !onStats && !listed ? undefined : "pointer",
-        }}
-      >
-        <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 12.5, color: inks.text, opacity: 0.84 }}>
-            {desk
-              ? zh
-                ? `今天 ${desk.today} 个对话 · 近 24 小时 ${reviewsInDay(snapshot, now)} 个审核`
-                : `${desk.today} chats today · ${reviewsInDay(snapshot, now)} reviews in the last 24 hours`
-              : showTokens
-                ? zh
-                  ? `近 24 小时 ${tokensShort(day.total)} Token`
-                  : `${tokensShort(day.total)} tokens in the last 24 hours`
-                : zh
-                  ? `近 24 小时 ${dayTotal} 个会话`
-                  : `${dayTotal} sessions in the last 24 hours`}
-          </span>
-          <span style={{ fontSize: 12, color: inks.secondary }}>
-            {desk
-              ? zh
-                ? "去统计看全部"
-                : "See all in Statistics"
-              : zh
-                ? `另有 ${stopped} 个会话已停 · 去统计看全部`
-                : `${stopped} more stopped · see all in Statistics`}
-          </span>
-        </span>
-        {showTokens && (
-          <DayBars
-            points={day.points}
-            from={day.from}
-            height={28}
-            light={light}
-          />
-        )}
-      </button>
-    </section>
-  );
-}
+// A listed session's row (`LiveRow`) and a replied chat's (`RepliedRow`);
+// the sessions section that lists them is SourceSessions.tsx (ADR-0001 C1).
 
 /** How far a row slides to show its Remove button alone. */
 const removeWidth = 72;
 
-/** A listed session: its status tag, title and a way back to it, and under
- * the title what it waits on or does. The row and the arrow both go back;
- * where the way back is missing or fails, the arrow greys and says so, and
- * the row opens the session's page in Statistics instead. Dragged left (or
- * swiped left with two fingers, or ← on the keyboard) it shows a Remove
- * button (owner, 2026-11-05); a Claude Code session on this machine shows
- * a tray of handoffs before it (#124). A click elsewhere, a drag right, →
- * or Esc puts it back. */
 /** A chat of today ChatGPT has answered (#219): its tag, title and a way
  * back to it, and under the title when it replied. Nothing to swipe: there
  * is nothing waiting on it to put away. */
-function RepliedRow({
+export function RepliedRow({
   chat,
   session,
   now,
@@ -440,9 +113,9 @@ function RepliedRow({
       style={{
         display: "grid",
         gridTemplateColumns: "auto minmax(0, 1fr) 26px",
-        columnGap: 10,
+        columnGap: GRID.gap,
         alignItems: "center",
-        padding: "8px 6px",
+        padding: "8px 6px 8px 0",
         cursor: "pointer",
         opacity: hover ? 0.78 : 1,
         borderTop: first ? undefined : `1px dotted ${inks.divider}`,
@@ -506,6 +179,14 @@ function RepliedRow({
   );
 }
 
+/** A listed session: its status tag, title and a way back to it, and under
+ * the title what it waits on or does. The row and the arrow both go back;
+ * where the way back is missing or fails, the arrow greys and says so, and
+ * the row opens the session's page in Statistics instead. Dragged left (or
+ * swiped left with two fingers, or ← on the keyboard) it shows a Remove
+ * button (owner, 2026-11-05); a Claude Code session on this machine shows
+ * a tray of handoffs before it (#124). A click elsewhere, a drag right, →
+ * or Esc puts it back. */
 export function LiveRow({
   entry,
   handoff,
@@ -518,7 +199,6 @@ export function LiveRow({
   open,
   onOpen,
   onRemove,
-  tagWide = false,
 }: {
   entry: LiveSession;
   /** The handoff it is in: its second line says how that goes. */
@@ -534,9 +214,6 @@ export function LiveRow({
   open: boolean;
   onOpen(open: boolean): void;
   onRemove(): void;
-  /** Its list has 「等你」 rows: a running row's mark takes their tag's
-   * width, so the titles line up (#312). */
-  tagWide?: boolean;
 }) {
   const { language } = useFormat();
   const zh = language === "zh";
@@ -856,12 +533,10 @@ export function LiveRow({
           style={{
             position: "relative",
             display: "grid",
-            gridTemplateColumns: bot
-              ? "auto minmax(0, 1fr) auto 26px"
-              : "auto minmax(0, 1fr) 26px",
-            columnGap: 10,
+            gridTemplateColumns: `${waiting ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
+            columnGap: GRID.gap,
             alignItems: "center",
-            padding: "8px 6px",
+            padding: "8px 6px 8px 0",
             cursor: "pointer",
             opacity: hover && !x ? 0.78 : 1,
             transform: x ? `translateX(${x}px)` : undefined,
@@ -876,26 +551,7 @@ export function LiveRow({
               color={inks.red}
             />
           ) : (
-            <span style={{ display: "grid", justifyItems: "start" }}>
-              {tagWide && (
-                <span
-                  aria-hidden
-                  style={{ gridArea: "1 / 1", visibility: "hidden" }}
-                >
-                  <ApprovalTag
-                    label={zh ? "等你" : "WAITING"}
-                    tone="ask"
-                    light={light}
-                  />
-                </span>
-              )}
-              <span style={{ gridArea: "1 / 1", alignSelf: "center" }}>
-                <RunningMark
-                  label={zh ? "在跑" : "Running"}
-                  color={inks.green}
-                />
-              </span>
-            </span>
+            <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
           )}
           <span
             style={{

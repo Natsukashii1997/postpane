@@ -56,20 +56,34 @@ test("the plane is white, not the cards' blue (owner, 2026-11-14)", () => {
   assert.equal(planeInks(light, false).inks.ink, light.ink);
 });
 
-test("the waiting card's head carries the plane, left of the stamp (#341)", () => {
-  const content = read("permissions/ApprovalContent.tsx");
+test("every agent's card carries one plane in its head, left of the seal (owner chose 甲, 2026-11-14)", () => {
+  const heading = read("panel/BoardHeading.tsx");
+  // Into the relays its own place takes part in (ADR-0001 C2), left of the
+  // news's seal on a news card, else the quota's stamp.
   assert.match(
-    content,
-    // Only the relays this card's agents take part in (ADR-0001 C2, #354).
-    /toggle=\{\s*<EnterRelay\s+handoffs=\{cardRelays\(handoffs \?\? undefined, requests\)\}\s+paper=\{paper\}\s+zh=\{zh\}\s*\/>\s*\}/,
+    heading,
+    /<EnterRelay handoffs=\{relaysOf\(handoffs, place\)\}[\s\S]*?\/>\s*\{seal \? \(\s*<PaperSeal[\s\S]*?<Stamp/,
   );
-  const head = read("permissions/ListHead.tsx");
-  // After the count tags, before the stamp.
-  assert.match(head, /<\/span>\s*\{toggle\}\s*\{\/\* The receipt's stamp/);
-  const scene = read("HUDScene.tsx");
   assert.match(
-    scene,
-    /<ApprovalContent[\s\S]*?handoffs=\{snapshot\.handoffs\}/,
+    read("panel/QuotaSection.tsx"),
+    /<BoardHeading[\s\S]*?handoffs=\{snapshot\.handoffs\}/,
+  );
+  // An agent with no block (ChatGPT) gets the same head, its relays by its
+  // source, not its mark's name.
+  assert.match(
+    read("panel/SourceSessions.tsx"),
+    /<BoardHeading\s+card\s+vendor=\{focusVendor\}\s+place=\{selectedSources\?\.\[0\]\}/,
+  );
+  // The waiting and reply lists no longer print a plane of their own.
+  for (const list of [
+    "permissions/ApprovalContent.tsx",
+    "alerts/CompletionAlertView.tsx",
+  ])
+    assert.doesNotMatch(read(list), /<EnterRelay/);
+  // News comes on the agent's own card, under its seal.
+  assert.match(
+    read("scene/NewsCard.tsx"),
+    /<NewsSealContext\.Provider value=\{list\.seal\}>\s*<SourceHoverPanel/,
   );
 });
 

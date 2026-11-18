@@ -898,6 +898,7 @@ fn hermes_bots(gateways: &[agent_hud_agents::hermes::Gateway], now: i64) -> Valu
                         "id": job.id,
                         "name": job.name,
                         "enabled": job.enabled,
+                        "pausedReason": job.paused_reason,
                         "failed": job.failed,
                         "schedule": job.schedule,
                         "lastRunAt": job.last_run_at.and_then(iso),
@@ -983,7 +984,7 @@ mod hermes_bot_tests {
         assert_eq!(bot["downSince"], at(now - 720_000));
         assert_eq!(
             bot["jobs"],
-            json!([{"id": "w", "name": "周报（新结构·并跑）", "enabled": true, "failed": true,
+            json!([{"id": "w", "name": "周报（新结构·并跑）", "enabled": true, "pausedReason": null, "failed": true,
                 "schedule": "45 7 * * 1", "lastRunAt": at(now - 86_400_000), "nextRunAt": at(now + 86_400_000)}])
         );
         assert_eq!(

@@ -73,3 +73,26 @@ export function workspaceOf(
     ),
   };
 }
+
+/** What a stub's peek counts on its work line (ADR-0001 C3): waiting on
+ * you, not those 「待核对」; running; and the relays it takes part in. */
+export interface PeekWork {
+  waiting: number;
+  running: number;
+  relays: number;
+}
+
+/** The work line's counts for the place behind a mark; none for Hermes, the
+ * Feishu desk, which is not a workplace (ADR-0001). */
+export function peekWork(
+  snapshot: Pick<Snapshot, "providers" | "sessions" | "approvals" | "handoffs">,
+  mark: string,
+): PeekWork | undefined {
+  if (mark === "hermes") return undefined;
+  const place = workspaceOf(snapshot, mark);
+  return {
+    waiting: place.waiting.filter((entry) => !entry.stale).length,
+    running: place.running.length,
+    relays: place.relays.length,
+  };
+}

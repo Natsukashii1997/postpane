@@ -2,6 +2,7 @@
 // chats on the receipt, then, when there are any, the reviews on a lower
 // slip of the reviews' paper under an airmail band, with no perforation
 // where the two meet.
+import type { ReactNode } from "react";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat } from "@agent-hud/ui/format";
 import type { ChatGPTDesk, DeskReview } from "../chatgpt-desk";
@@ -54,12 +55,15 @@ export function DeskLines({
   inks,
   /** How far the lower slip bleeds to the bubble's edges: its padding. */
   bleed,
+  children,
 }: {
   desk: ChatGPTDesk;
   scale: number;
   zh: boolean;
   inks: DeskInks;
   bleed: { left: number; right: number; bottom: number };
+  /** The peek's work line: on the upper slip, over the reviews' one. */
+  children?: ReactNode;
 }) {
   const { calendar } = useFormat();
   const locale = zh ? "zh-CN" : "en-US";
@@ -184,6 +188,7 @@ export function DeskLines({
               : `${desk.more} more today`}
         </div>
       )}
+      {children}
       {desk.reviews.length > 0 && (
         <div
           style={{

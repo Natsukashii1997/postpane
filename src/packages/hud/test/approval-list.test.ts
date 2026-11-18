@@ -4,6 +4,7 @@ import type { Approval, IslandEvent, Session } from "@agent-hud/protocol";
 import {
   answersElsewhere,
   approvalGroups,
+  SHOWN_ENTRIES,
   entryTitle,
   findSession,
   asksOnlyHere,
@@ -15,7 +16,6 @@ import {
   requestTitle,
   sessionToOpen,
   tagColor,
-  tagCounts,
   tagTone,
   waitedText,
   type ApprovalEntry,
@@ -98,6 +98,7 @@ test("the newest request leads; replies follow the requests, newest first (#325)
       asked("timeless", "not a time"),
     ],
     "old",
+    Infinity,
   );
   assert.equal(hidden, 0);
   assert.deepEqual(
@@ -129,41 +130,26 @@ test("lines group by sidebar section, the group with the newest line first (#325
   assert.equal(none.sectioned, false, "no section anywhere: no group titles");
 });
 
-test("past five lines the oldest fold away, the open one always shown (#325)", () => {
+test("past four lines the oldest fold away, the open one always shown (#325; four since 2026-11-15)", () => {
   const entries = Array.from({ length: 8 }, (_, n) =>
     asked(`q${n}`, `2026-11-05T00:0${n}:00Z`),
   );
   const newest = approvalGroups(entries, "q7");
-  assert.equal(newest.hidden, 3);
+  assert.equal(SHOWN_ENTRIES, 4);
+  assert.equal(newest.hidden, 4);
   assert.deepEqual(
     newest.groups[0].entries.map((entry) => entry.id),
-    ["q7", "q6", "q5", "q4", "q3"],
+    ["q7", "q6", "q5", "q4"],
   );
-  // The open one is the oldest (the queue's front): the four newest, then it.
+  // The open one is the oldest (the queue's front): the three newest, then it.
   const oldest = approvalGroups(entries, "q0");
-  assert.equal(oldest.hidden, 3);
+  assert.equal(oldest.hidden, 4);
   assert.deepEqual(
     oldest.groups[0].entries.map((entry) => entry.id),
-    ["q7", "q6", "q5", "q4", "q0"],
+    ["q7", "q6", "q5", "q0"],
   );
   assert.equal(approvalGroups(entries, "q0", Infinity).hidden, 0);
-  assert.equal(approvalGroups(entries.slice(0, 5), "q0").hidden, 0);
-});
-
-test("the head counts ASK first, permissions next, REPLY last", () => {
-  assert.deepEqual(
-    tagCounts([
-      reply("r", "2026-11-05T00:00:00Z"),
-      asked("b", "2026-11-05T00:01:00Z", undefined, "BASH"),
-      asked("a1", "2026-11-05T00:02:00Z"),
-      asked("a2", "2026-11-05T00:03:00Z"),
-    ]),
-    [
-      { badge: "ASK", count: 2 },
-      { badge: "BASH", count: 1 },
-      { badge: "REPLY", count: 1 },
-    ],
-  );
+  assert.equal(approvalGroups(entries.slice(0, 4), "q0").hidden, 0);
 });
 
 test("a request finds its session by id, preferring the same client", () => {

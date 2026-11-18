@@ -238,8 +238,9 @@ export interface ApprovalGroup {
   entries: ApprovalEntry[];
 }
 
-/** At most this many lines show before the rest fold into one. */
-export const SHOWN_ENTRIES = 5;
+/** At most this many lines show before the rest fold into one; 4 on every
+ * card (owner, 2026-11-15). */
+export const SHOWN_ENTRIES = 4;
 
 /**
  * The list as the card prints it: the first `limit` lines in `order` (the
@@ -276,25 +277,4 @@ export function approvalGroups(
     hidden: ordered.length - shown.length,
     sectioned: groups.some((group) => group.section !== null),
   };
-}
-
-/** The counts in the card's head: ASK and PLAN first, then each permission
- * as it first appears, REPLY last. */
-export function tagCounts(
-  entries: readonly ApprovalEntry[],
-): { badge: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const entry of orderEntries(entries))
-    counts.set(entry.badge, (counts.get(entry.badge) ?? 0) + 1);
-  const rank = (badge: string) =>
-    badge === "ASK"
-      ? 0
-      : badge === "PLAN" || badge === START_BADGE
-        ? 1
-        : badge === REPLY_BADGE
-          ? 3
-          : 2;
-  return [...counts]
-    .map(([badge, count]) => ({ badge, count }))
-    .sort((a, b) => rank(a.badge) - rank(b.badge));
 }

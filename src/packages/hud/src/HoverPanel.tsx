@@ -12,17 +12,15 @@ import { motion, MotionConfig } from "motion/react";
 import type { Quota, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
 import {
-  blockRows,
   defaultHUDConfig,
-  quotaRowKey,
   vendorKey,
   type HUDConfig,
   type HUDUpdateNotice,
 } from "./model";
 import { usePanelServices } from "./PanelContext";
 import { FittingName } from "./panel/FittingName";
-import { SourceBalances, SourceProviderBlock } from "./panel/QuotaSection";
-import { SourceSessions } from "./panel/SessionsSection";
+import { useBoardBlocks } from "./panel/board-blocks";
+import { SourceSessions } from "./panel/SourceSessions";
 import {
   densityMetrics,
   inPanelOrder,
@@ -34,8 +32,7 @@ import { OpenNotice } from "./OpenNotice";
 import { usePaper } from "./paper";
 import { SourceTokenChart } from "./panel/TokenChartSection";
 import { SourceIndexing } from "./panel/IndexingSection";
-import { blockListed, panelHidesTokens } from "./panel/agent-board";
-import { agentVendorName } from "./agent-artwork";
+import { blockListed } from "./panel/agent-board";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 
@@ -62,6 +59,8 @@ export interface SourceHoverPanelProps {
   maxHeight?: number;
   active?: boolean;
   inlineAlert?: ReactNode;
+  /** The agent's requests or replies, as what waits on you; no quota (2026-11-15). */
+  news?: { count: number; content: ReactNode };
 }
 
 /** Default HoverPanelView arrangement. Missing account plans and per-cycle measures remain unknown. */
@@ -80,6 +79,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   maxHeight,
   active = true,
   inlineAlert,
+  news,
 }: SourceHoverPanelProps) {
   const colors = usePanelPalette(light);
   const paper = usePaper();
@@ -97,8 +97,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       ...box.querySelectorAll<HTMLElement>("[data-hud-block]"),
     ].find(
       (element) =>
-        vendorKey((element.dataset.hudBlock ?? "").replace(/^api:/, "")) ===
-        spotlight,
+        vendorKey(
+          (element.dataset.hudBlock ?? "").replace(/^(api|sessions):/, ""),
+        ) === spotlight,
     );
     if (!block) return;
     const reach = () => {
@@ -192,48 +193,18 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       !focusVendor || vendorKey(account.vendor) === vendorKey(focusVendor),
   );
   const density = densityMetrics[config.layoutDensity] ?? densityMetrics.normal;
-  const blocks = inPanelOrder<{ key: string; content: ReactNode }>(
-    [
-      ...vendorNames.map((vendor) => ({
-        key: vendor,
-        content: (
-          <SourceProviderBlock
-            vendor={vendor}
-            rows={blockRows(
-              rowsByVendor.get(vendor) ?? [],
-              config.panelLayout.blocks?.[vendor],
-            ).map((row) => ({ ...row, key: quotaRowKey(row) }))}
-            layout={config.panelLayout.blocks?.[vendor]}
-            snapshot={snapshot}
-            active={active}
-            now={Date.parse(snapshot.generatedAt)}
-            light={light}
-            Logo={Logo}
-            showReset={config.resetCountdown}
-            accountInfo={snapshot.accounts}
-            onStats={onStats}
-          />
-        ),
-      })),
-      ...[...new Set(billing.map((account) => account.vendor))]
-        .filter(
-          (vendor) => !config.panelLayout.blocks?.[`api:${vendor}`]?.hidden,
-        )
-        .map((vendor) => ({
-          key: `api:${vendor}`,
-          content: (
-            <SourceBalances
-              billing={billing.filter((account) => account.vendor === vendor)}
-              layout={config.panelLayout.blocks?.[`api:${vendor}`]}
-              light={light}
-              Logo={Logo}
-              onStats={onStats}
-            />
-          ),
-        })),
-    ],
-    config.panelOrder ?? [],
-  );
+  const { blocks, split, waiting } = useBoardBlocks({
+    config,
+    snapshot,
+    focusVendor,
+    vendorNames,
+    rowsByVendor,
+    billing,
+    active,
+    light,
+    Logo,
+    onStats,
+  });
   const blockLines: (typeof blocks)[] = [];
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i],
@@ -249,29 +220,11 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     } else blockLines.push([block]);
   }
   const customTokens = Object.keys(config.panelLayout.tokens ?? {}).length > 0;
-  // A panel on an agent with no quota shows no day's tokens (owner, 2026-11-06).
-  const tokensAbove =
-    Boolean(focusVendor) &&
-    ((config.quotaDetails &&
-      vendorNames.length > 0 &&
-      vendorNames.every((vendor) =>
-        panelHidesTokens(
-          snapshot.quotas,
-          vendor,
-          config.panelLayout.blocks?.[vendor]?.widget,
-        ),
-      )) ||
-      // An agent with no block at all (ChatGPT's web channel) has no tokens
-      // to show either (#145).
-      (!vendorNames.length &&
-        !snapshot.quotas.some(
-          (row) => vendorKey(row.vendor) === vendorKey(focusVendor ?? ""),
-        )));
   const sections = inPanelOrder<{ key: string; content: ReactNode }>(
     [
       {
         key: "blocks",
-        content: config.quotaDetails && blocks.length > 0 && (
+        content: !news && config.quotaDetails && blocks.length > 0 && (
           <div
             className="hud-source-blocks"
             style={{
@@ -326,7 +279,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
         // The day's tokens now sit in the sessions' folded line, or under an
         // agent with no quota (owner, 2026-11-05); the chart with its periods
         // stays for a layout that sets the chart up itself.
-        content: config.tokenUsage && customTokens && (
+        content: !news && config.tokenUsage && customTokens && (
           <SourceTokenChart
             snapshot={snapshot}
             focusVendor={focusVendor}
@@ -339,7 +292,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       },
       {
         key: "sessions",
-        content: config.sessionList && (
+        content: config.sessionList && !split && (
           <SourceSessions
             snapshot={snapshot}
             focusVendor={focusVendor}
@@ -347,9 +300,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
             Logo={Logo}
             onStats={onStats}
             layout={config.panelLayout.sessions}
-            tokenAgents={config.panelLayout.tokens?.agents}
-            showTokens={config.tokenUsage && !tokensAbove}
-            active={active}
+            bare={Boolean(focusVendor) && (!blocks.length || Boolean(news))}
+            news={news}
           />
         ),
       },
@@ -426,11 +378,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
               <SourceIndexing snapshot={snapshot} light={light} />
             </div>
           )}
-          {focusVendor && !vendorNames.length && (
-            <strong style={{ fontSize: 13, fontWeight: 600 }}>
-              {agentVendorName(focusVendor)}
-            </strong>
-          )}
+          {waiting}
           {sections.map((section) =>
             section.content ? (
               <div key={section.key} data-hud-section={section.key}>

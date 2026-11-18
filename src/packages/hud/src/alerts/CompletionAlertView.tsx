@@ -5,7 +5,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CheckCheck } from "lucide-react";
 import type { Handoff, IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { newsTitle } from "../IslandNews";
@@ -27,16 +26,14 @@ import {
 } from "../permissions/approval-list";
 import {
   EntryRow,
-  FoldButton,
   SEAL_COLUMN,
-  ListTear,
-  SectionTitle,
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
-import { ListHead } from "../permissions/ListHead";
+import { FoldButton } from "../permissions/FoldButton";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
+import { DismissAll } from "./DismissAll";
 import { useHandoffCard } from "./HandoffCard";
 import { handoffFor, relayLegend, relayLegendInks } from "./handoff-card";
 import { OpenNotice, useOpenFailures } from "../OpenNotice";
@@ -83,10 +80,9 @@ export function CompletionAlertView({
 
   const entries = replyEntries(replies, snapshot.sessions);
   const openId = openReplyId(entries, chosen);
-  const { groups, hidden, sectioned } = replyGroups(
+  const { groups, hidden } = replyGroups(
     entries,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
-    zh,
   );
 
   // Only ↗ goes back, and only once the session is in front are its
@@ -253,52 +249,10 @@ export function CompletionAlertView({
       className="hud-reply-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      <ListHead
-        label={zh ? "新回复" : "Replies"}
-        entries={entries}
-        stamp={zh ? "已回" : "DONE"}
-        stampInk="blue"
-        paper={paper}
-        inks={inks}
-        light={light}
-        zh={zh}
-        action={
-          <button
-            type="button"
-            className="hud-press"
-            onClick={() => drop(entries.map((each) => each.id))}
-            style={{
-              ...buttonFace,
-              height: 24,
-              padding: "0 10px",
-              fontSize: 12,
-              flex: "none",
-              border: `1.5px solid ${inks.faint}`,
-              background: "transparent",
-              color: inks.mid,
-            }}
-          >
-            <CheckCheck size={13} strokeWidth={2.2} />
-            {entries.length > 1
-              ? zh
-                ? "全部知道了"
-                : "Dismiss all"
-              : zh
-                ? "知道了"
-                : "Got it"}
-          </button>
-        }
-      />
-      <ListTear paper={paper} inks={inks} />
       {groups
         .filter((group) => group.entries.some((entry) => !review(entry)))
         .map((group) => (
           <div key={group.section ?? ""} style={cardColumn(0)}>
-            {sectioned && (
-              <SectionTitle inks={inks}>
-                {group.section ?? (zh ? "未分区" : "No section")}
-              </SectionTitle>
-            )}
             {group.entries
               .filter((entry) => !review(entry))
               .map((entry, index, list) =>
@@ -313,14 +267,28 @@ export function CompletionAlertView({
           )}
         </ReviewSlip>
       )}
-      {hidden > 0 && (
-        <FoldButton
-          hidden={hidden}
-          onUnfold={() => setUnfolded(true)}
-          inks={inks}
+      <FoldButton
+        hidden={hidden}
+        unfolded={unfolded}
+        onToggle={() => setUnfolded((open) => !open)}
+        inks={inks}
+        zh={zh}
+      />
+      {/* 「知道了 / 全部知道了」, from the old head to the list's foot. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          padding: "8px 0 2px",
+        }}
+      >
+        <DismissAll
+          count={entries.length}
           zh={zh}
+          inks={inks}
+          onClick={() => drop(entries.map((each) => each.id))}
         />
-      )}
+      </div>
       {/* A review slip runs to the foot. */}
       {!reviews.length && <div style={{ height: 6 }} />}
     </div>

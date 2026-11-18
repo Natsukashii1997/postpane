@@ -8,7 +8,7 @@ import { liveSessions } from "../src/panel/agent-board.ts";
 import { runningForMark } from "../src/panel/running-rows.ts";
 import { handoffFor } from "../src/alerts/handoff-doer.ts";
 import { staysUntilSeen } from "../src/alerts/reply-stays.ts";
-import { cardRelays, workspaceOf } from "../src/workspace.ts";
+import { cardRelays, relaysOf, workspaceOf } from "../src/workspace.ts";
 import { WORKPLACES, type Place } from "./scenes/build.ts";
 import { SCENES, scene } from "./scenes/scenes.ts";
 
@@ -96,6 +96,15 @@ test("接力：不参与接力的一家，卡上进不了任何接力（B4）", 
     cardRelays(handoffs, [{ source: "claude" }]).map((h) => h.id),
     ["h-claude"],
   );
+});
+
+test("接力：回复卡、单家面板也只进本家参与的接力（C2，#359）", () => {
+  const { handoffs } = scene("two-relays").snapshot;
+  const ids = (place: string) => relaysOf(handoffs, place).map((h) => h.id);
+  assert.deepEqual(ids("claude"), ["h-claude"]);
+  assert.deepEqual(ids("codex"), ["h-codex"]);
+  assert.deepEqual(ids("deepseek"), []);
+  assert.deepEqual(ids("hermes"), []);
 });
 
 test("回执停留：Claude、Codex、DeepSeek 自动收起，ChatGPT 看过才收（D2）", () => {

@@ -198,6 +198,19 @@ export function relay(spec: RelaySpec): Handoff {
   };
 }
 
+function account(vendor: "claude" | "codex", plan: string) {
+  return {
+    id: `account:scene-${vendor}`,
+    provider: vendor,
+    label: "scene",
+    plan,
+    planLabel: plan,
+    checkedAt: new Date(NOW).toISOString(),
+    stale: false,
+    current: true,
+  };
+}
+
 function quota(
   vendor: "claude" | "codex",
   short: "5h" | "7d",
@@ -276,7 +289,8 @@ export function snapshot(parts: SceneParts): Snapshot {
       quota("codex", "7d", 40),
     ],
     billing: [BALANCE],
-    accounts: [],
+    // One account each, so the card's head shows its plan (#371).
+    accounts: [account("claude", "Max"), account("codex", "Pro")],
     sessions: parts.sessions ?? [],
     approvals: parts.approvals ?? [],
     requestDeliveries: [],

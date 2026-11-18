@@ -16,7 +16,7 @@ import {
   type HUDEdge,
   type HUDVendor,
 } from "../model";
-import { hoverMayOpen } from "../request-hover";
+import { clickMayPin, hoverMayOpen } from "../request-hover";
 import type { HUDDragPreview } from "./useHUDDrag";
 
 /** Native input is authoritative while a transparent host toggles mouse passthrough. */
@@ -328,7 +328,7 @@ export function useHUDInteraction({
       suppressDragClick.current
     )
       return;
-    if (config.mode === "notch" || request || event) return;
+    if (!clickMayPin(key, (request ?? event)?.source, config.mode)) return;
     if (key) setHovered(key);
     setExpanded(false);
     setPinned(true);

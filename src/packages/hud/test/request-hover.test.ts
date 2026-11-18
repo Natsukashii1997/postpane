@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hoverMayOpen } from "../src/request-hover.ts";
+import { clickMayPin, hoverMayOpen } from "../src/request-hover.ts";
 
 const marks = ["claude", "codex", "hermes"];
 
@@ -74,4 +74,13 @@ test("the notes pendant is not a mark: hovering it never opens the panel", () =>
     });
   assert.equal(on(null), false);
   assert.equal(on("claude"), false);
+});
+
+test("a click on another agent's mark pins its own card; on the front news's own mark or in the notch it does not (#359)", () => {
+  assert.equal(clickMayPin("codex", undefined, "dynamic"), true);
+  assert.equal(clickMayPin("codex", "claude", "dynamic"), true);
+  assert.equal(clickMayPin("claude", "claude", "dynamic"), false);
+  assert.equal(clickMayPin(undefined, "claude", "dynamic"), false);
+  assert.equal(clickMayPin("codex", "claude", "notch"), false);
+  assert.equal(clickMayPin("codex", undefined, "notch"), false);
 });
