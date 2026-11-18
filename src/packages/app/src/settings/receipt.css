@@ -1155,8 +1155,7 @@
   color: var(--rc-paper) !important;
 }
 .statistics-window [data-slot="button"],
-.statistics-window [data-slot="select-trigger"],
-.statistics-window [data-slot="badge"] {
+.statistics-window [data-slot="select-trigger"] {
   border-radius: 0;
   box-shadow: none;
 }
