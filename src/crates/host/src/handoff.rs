@@ -965,7 +965,13 @@ impl Desk {
                     let text = no_rounds_left(handoff.budget());
                     return Err(by_doer(&text, handoff.doer.as_deref()));
                 }
-                if !self.change(|book| book.resume(id, now)) {
+                // Not while its trouble is being told (#318): it would be
+                // out of date. Let go before driving, which sends.
+                let resumed = {
+                    let _telling = self.claim(id)?;
+                    self.change(|book| book.resume(id, now))
+                };
+                if !resumed {
                     return Err(l10n::text(
                         "自动往返已经开着，或接力已结束",
                         "The auto round trip is on already, or the handoff ended",
@@ -985,6 +991,8 @@ impl Desk {
                 if !lines.connected() {
                     return Err(not_connected());
                 }
+                // Not while its trouble is being told (#318).
+                let _telling = self.claim(id)?;
                 let brief = self.change(|book| book.retry(id, now)).ok_or_else(|| {
                     l10n::text("这次接力不能重试", "This handoff cannot be retried")
                 })?;
@@ -5000,6 +5008,54 @@ mod tests {
         let desk = Desk::new(Some(data));
         assert!(!desk.tell(&lines, now_ms()), "told once");
         assert_eq!(sent_as(&lines, "reply").len(), 1);
+    }
+
+    /// #318 review P2-03: trouble found, then the person retries or turns
+    /// the auto round trip back on before it is told: it is not told, the
+    /// words being out of date; and while it is being told, neither waits.
+    #[test]
+    fn trouble_moved_on_from_before_it_is_told_is_not_told() {
+        let (_temp, desk) = desk();
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        let Started::Opening { handoff, .. } = desk
+            .start(&failing, "s1", None, "修登录", None, "brief", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || 2)
+            .is_err());
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        {
+            let _telling = desk.claim(&id).unwrap();
+            assert!(
+                desk.act(&failing, &id, "retry", 3).is_err(),
+                "not while it is told"
+            );
+        }
+        desk.act(&failing, &id, "retry", 3).unwrap();
+        assert!(!desk.tell_one(&failing, &id, at, &trouble, 4));
+        assert!(sent_as(&failing, "reply").is_empty());
+
+        // ChatGPT did not answer; the person turns it back on meanwhile.
+        let (_temp, desk) = self::desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        desk.late(late);
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        {
+            let _telling = desk.claim(&id).unwrap();
+            assert!(desk.act(&lines, &id, "resume", late + 1).is_err());
+        }
+        desk.act(&lines, &id, "resume", late + 1).unwrap();
+        assert!(!desk.tell_one(&lines, &id, at, &trouble, late + 2));
+        assert!(sent_as(&lines, "reply").is_empty());
+        let _ = handoff;
     }
 
     /// #318: ChatGPT not answering in time stops the auto round trip and is

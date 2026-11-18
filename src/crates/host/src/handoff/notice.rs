@@ -16,35 +16,53 @@ impl Desk {
         let mut changed = self.late(now);
         let untold = self.lock().untold(self.since);
         for (id, at, trouble) in untold {
-            // Words on their way meanwhile: told at the next look.
-            let Ok(_sending) = self.claim(&id) else {
-                continue;
-            };
-            let Some(handoff) = self.lock().get(&id).cloned() else {
-                continue;
-            };
-            let (doer, session) = (
-                handoff.doer.as_deref().unwrap_or(CLAUDE),
-                &handoff.claude_session,
-            );
-            let text = notice_text(&handoff, &trouble);
-            // Its own id: told again after a restart, it leaves no second copy.
-            let prompt = format!("{id}-n{at}");
-            let sent = lines
-                .reaches(doer, session)
-                .map_err(Unsent::Failed)
-                .and_then(|()| lines.reply(doer, session, &prompt, &text));
-            let how = match sent {
-                Ok(()) | Err(Unsent::Again) => told(),
-                Err(Unsent::Failed(_)) => match lines.queue(doer, session, &prompt, &text) {
-                    Ok(()) | Err(Unsent::Again) => told_queued(),
-                    Err(Unsent::Failed(error)) => not_told(&error),
-                },
-            };
-            let how = by_doer(&how, Some(doer));
-            changed |= self.change(|book| book.told(&id, at, &how, now));
+            changed |= self.tell_one(lines, &id, at, &trouble, now);
         }
         changed
+    }
+    /// Tells `id`'s session of `trouble` at step `at`. Whether it did.
+    pub(super) fn tell_one(
+        &self,
+        lines: &dyn Lines,
+        id: &str,
+        at: usize,
+        trouble: &Trouble,
+        now: i64,
+    ) -> bool {
+        // Words on their way meanwhile: told at the next look.
+        let Ok(_sending) = self.claim(id) else {
+            return false;
+        };
+        // Still so, now that nothing else moves it (review of #318, P2-03):
+        // a retry or the auto round trip on again since makes it out of date.
+        let Some(handoff) = self
+            .lock()
+            .get(id)
+            .filter(|h| h.untold(self.since).as_ref() == Some(&(at, trouble.clone())))
+            .cloned()
+        else {
+            return false;
+        };
+        let (doer, session) = (
+            handoff.doer.as_deref().unwrap_or(CLAUDE),
+            &handoff.claude_session,
+        );
+        let text = notice_text(&handoff, trouble);
+        // Its own id: told again after a restart, it leaves no second copy.
+        let prompt = format!("{id}-n{at}");
+        let sent = lines
+            .reaches(doer, session)
+            .map_err(Unsent::Failed)
+            .and_then(|()| lines.reply(doer, session, &prompt, &text));
+        let how = match sent {
+            Ok(()) | Err(Unsent::Again) => told(),
+            Err(Unsent::Failed(_)) => match lines.queue(doer, session, &prompt, &text) {
+                Ok(()) | Err(Unsent::Again) => told_queued(),
+                Err(Unsent::Failed(error)) => not_told(&error),
+            },
+        };
+        let how = by_doer(&how, Some(doer));
+        self.change(|book| book.told(id, at, &how, now))
     }
 }
 
