@@ -7,6 +7,24 @@
 
 
 
+## 接力审核门 #348 第 4 轮返修：补格式与送审分开记、送审第一行写请求号、思维评审续审把关、送达未知通知（2026-11-18，Claude，常浩回「按推荐返修并续审」；已提交、未发布，等 L3 专项续审）
+
+- 时间：开工 `2026-11-18 13:32`（`date '+%F %H:%M'` 记录）。来由：L3 返修复审（接力 `h1a1ed14e5b302`，受审 `6e68292`）判返修：P1-10、P1-11 未关，新增 P1-13、P1-14、P1-15、P2-16，P1-12 核心关闭；按旧规则预算已用完，常浩授权按推荐返修并续审一次。
+- 改了哪些文件：
+  - `platform/.../handoffs/unsure.rs`（新，送达记录逻辑从 `guard.rs` 挪来）：`Gate.mending` 与送审的 `pending` 分开（P1-10），确认补格式只清 mending；`tagged` / `untagged`（续审、补格式第一行「【驿窗送审 请求号】」，指纹去掉这一行，P1-11）；`ask_mending`（Format 步与待确认一次改，P1-15）；`unconfirmed(…, tell)` 给停下那一步打 `Cause::Unconfirmed`（P1-14）。
+  - `handoffs/notice.rs`：`Cause::Unconfirmed`、`Trouble::Unconfirmed`，接力开着且仍有未答待确认才报。`handoffs/guard.rs`：`unsettled_top` 加审查种类参数（P1-13）。`handoffs/gate.rs`：`mending` 字段。`handoffs.rs`：Ask 步指纹去请求行，导出新模块。
+  - `host/handoff.rs`：续审带请求行；`extra` 入口不再只给工程审查、思维评审也查到顶未了结（P1-13）；`went_in` 找不到本次运行的请求时按磁盘记录补记迟到确认（P2-16）。`host/handoff/gate.rs`：补格式走 `ask_mending`、请求行、发不出去时通知；`pass_blocked` 用 `unsure()`。`host/handoff/guard.rs`：`change_kept`（返回 `Result<bool>`，从 `handoff.rs` 挪来守住行数上限）。`host/handoff/notice.rs`：送达状态未知的通知话术。
+  - `docs/chatgpt-channel.md` 同步；PR 评论 `issuecomment-6970293402` 记复审与返修对照。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1040 failed 0（host 153），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。新增 host 测试 6 项（补格式不清送审、前 600 字相同三轮、思维评审到顶要常浩开口、重启后通知与迟到确认、回信先到不通知、补格式落不了盘不发）；撤修复验证 7 处各自对应测试失败（`revert-checks.log`「第 4 轮返修」）。日志 `*-3.log`。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布，切换条件同上一节。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - P1-11 没照复审原话做「全文指纹」：页面读到的提问会渲染 Markdown（#366 反引号连判 35 次 unmatched），送审包常有代码块，全文逐字比对容易拒掉正常回信；改用第一行请求号让前缀按请求唯一，送审时说明理由。
+  - 新会话第一段（open 路径）不加请求行：那时会话里没有更早的轮次。
+  - skill 进化：无。
+- 本轮新坑：无
+
 ## 接力审核门 #348 返修：送达未确认收成一条规则、按 Fable 评审修五处、合入 main（2026-11-18，Claude，常浩回「按推荐返修」；已提交、未发布，等 L3 复审）
 
 - 时间：开工 `2026-11-18 12:25`（`date '+%F %H:%M'` 记录）。来由：常浩问上限 5 为什么没生效，查明 #348 没合并、11-14 18:11 的 L3 P1-10 定向复核（接力 `h1a1d98406d000`，受审 `e9cfca3`）判返修却没记下；常浩请 Fable 5.2（High）独立评审，结论是还不能合并与切换，常浩选「按推荐返修」。
