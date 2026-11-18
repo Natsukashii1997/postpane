@@ -40,7 +40,12 @@ pub struct Gate {
     /// A review asked and not yet known to have gone in (L3 P1-10): kept
     /// before it is sent, so a restart cannot lose it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending: Option<super::guard::Pending>,
+    pub pending: Option<super::unsure::Pending>,
+    /// PostPane's ask to mend the last lines, sent and not yet known to
+    /// have gone in: kept apart, so word of it never clears the review's
+    /// (round 4 P1-10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mending: Option<super::unsure::Pending>,
 }
 
 fn is_zero_at(at: &i64) -> bool {

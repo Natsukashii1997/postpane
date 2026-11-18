@@ -348,7 +348,7 @@ impl Desk {
             // One whose commit is to be checked against its pull request
             // waits for the round trip, which checks it first (#347).
             .filter(|h| !h.thinking() && h.next() == Some(Next::Pass))
-            .filter(|h| h.pr.is_none() && h.gate.head.is_none() && h.gate.pending.is_none())
+            .filter(|h| h.pr.is_none() && h.gate.head.is_none() && !h.unsure())
             .map(|h| h.id.clone())
             .collect::<Vec<_>>();
         let mut ended = false;
@@ -378,17 +378,20 @@ impl Desk {
     }
     /// Changes the book and keeps it on disk, or leaves it as it was and
     /// says why: for what must outlive a restart before anything goes.
-    fn change_kept(&self, change: impl FnOnce(&mut Book) -> bool) -> Result<(), String> {
+    pub(super) fn change_kept(
+        &self,
+        change: impl FnOnce(&mut Book) -> bool,
+    ) -> Result<bool, String> {
         let mut book = self.lock();
         let before = book.clone();
         if !change(&mut book) {
-            return Ok(());
+            return Ok(false);
         }
         let Some(data) = &self.data else {
-            return Ok(());
+            return Ok(true);
         };
         handoffs::slim_kept(data, &mut book);
-        handoffs::save(data, &book).map_err(|error| {
+        handoffs::save(data, &book).map(|()| true).map_err(|error| {
             *book = before;
             guard::not_kept(&error)
         })
@@ -634,7 +637,7 @@ impl Desk {
             .extra
             .as_deref()
             .map(str::trim)
-            .filter(|text| !text.is_empty() && engineering);
+            .filter(|text| !text.is_empty());
         if !agent_hud_runtime::claude_plugin::valid_name(session) {
             return Err(l10n::text(
                 "Claude 会话 id 不对",
@@ -744,13 +747,18 @@ impl Desk {
                 return Err(leave_unheard());
             }
         }
-        // A cap reached here and not settled: no new review here without
-        // the person's word, whatever chain it names (P1-08).
-        if engineering && !past {
-            let top = self.lock().unsettled_top(session, cwd).and_then(|t| {
-                let other = earlier.as_ref().is_none_or(|e| e.id != t.id);
-                other.then(|| (t.id.clone(), t.gate.chain.clone().unwrap_or_default()))
-            });
+        // A cap reached here and not settled: no new review of its kind here
+        // without the person's word, whatever chain it names (P1-08; a 思维
+        // 评审 too, round 4 P1-13).
+        if !past {
+            let top = self
+                .lock()
+                .unsettled_top(session, cwd, !engineering)
+                .and_then(|t| {
+                    let other = earlier.as_ref().is_none_or(|e| e.id != t.id);
+                    let named = t.gate.chain.clone().unwrap_or_else(|| t.title.clone());
+                    other.then(|| (t.id.clone(), named))
+                });
             if let Some((top, chain)) = top {
                 if !self.lock().leave_spoken(&top, turn().as_ref()) {
                     return Err(guard::top_unsettled(&chain));
@@ -881,6 +889,9 @@ impl Desk {
         // Kept until they go in: the extension may only say so after the
         // wait gave up (`observe`, #223).
         let request = format!("{}~send{now}", handoff.id);
+        // Named by its request, so an earlier round's words never pass for
+        // these (round 4 P1-11).
+        let sent = &handoffs::tagged(&request, brief);
         // Kept, on disk, before it goes, so a restart before word of it
         // cannot let an answer pass (L3 P1-10): not kept, not sent.
         self.change_kept(|book| {
@@ -891,7 +902,7 @@ impl Desk {
                     pr: anchor.pr.clone(),
                     head: anchor.head.clone(),
                     limit: anchor.limit,
-                    words: Some(brief.to_owned()),
+                    words: Some(sent.to_owned()),
                     ..Default::default()
                 },
             )
@@ -901,15 +912,18 @@ impl Desk {
             Asking {
                 request: request.clone(),
                 summary: summary.map(str::to_owned),
-                brief: brief.to_owned(),
+                brief: sent.to_owned(),
                 evidence,
                 anchor: anchor.clone(),
             },
         );
-        if let Err(error) = lines.send(conversation, brief, &request) {
+        if let Err(error) = lines.send(conversation, sent, &request) {
             // Never known to have gone in: the round trip stops on it, and
-            // its answer, if one comes, cannot pass (L3 P1-10).
-            self.change(|book| book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), now));
+            // its answer, if one comes, cannot pass (L3 P1-10). The caller
+            // hears it now, so no notice besides.
+            self.change(|book| {
+                book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), false, now)
+            });
             return Err(guard::sent_unknown(&error));
         }
         self.went_in(&request, now);
@@ -930,7 +944,12 @@ impl Desk {
         let asking = {
             let mut asking = self.asking();
             if !asking.get(id).is_some_and(|a| a.request == request) {
-                return false;
+                drop(asking);
+                // Not asked in this run (a restart since): word after its
+                // answer still goes on the card (round 4 P2-16).
+                return self.change(|book| {
+                    book.confirmed_late(id, request, &guard::confirmed_late(), now)
+                });
             }
             asking.remove(id)
         };
@@ -2217,6 +2236,12 @@ mod tests {
         *lines.left_as.borrow_mut() =
             state.map(|state| (state.to_owned(), reason.map(str::to_owned)));
     }
+    /// A desk with a cap of `limit` reviews.
+    fn desk_of(limit: u32) -> (tempfile::TempDir, Desk) {
+        let (temp, desk) = desk();
+        handoffs::set_review_limit(&temp.path().join("data"), limit).unwrap();
+        (temp, desk)
+    }
     fn desk() -> (tempfile::TempDir, Desk) {
         let temp = tempfile::tempdir().unwrap();
         let data = temp.path().join("data");
@@ -2345,7 +2370,8 @@ mod tests {
         let last = lines.sent.borrow().last().unwrap().clone();
         assert_eq!((last.0.as_str(), last.1.as_str()), ("send", "c-new"));
         assert!(
-            last.2.starts_with("第二轮\n\n---\n【驿窗附注】"),
+            handoffs::untagged(&last.2).starts_with("第二轮\n\n---\n【驿窗附注】")
+                && last.2.starts_with("【驿窗送审 "),
             "{}",
             last.2
         );
@@ -3311,7 +3337,7 @@ mod tests {
         let (kind, to, text) = last_sent(&lines);
         assert_eq!((kind.as_str(), to.as_str()), ("send", "c-new"));
         assert!(
-            text.starts_with("新证据如下") && text.contains("【驿窗附注】"),
+            handoffs::untagged(&text).starts_with("新证据如下") && text.contains("【驿窗附注】"),
             "{text}"
         );
         assert_eq!(desk.projection(later + 1)[0]["phase"], "delivered");
@@ -5137,6 +5163,231 @@ mod tests {
         desk.drive(&lines, 7);
         let more = desk.start(&lines, "s1", Some("/w"), title, None, "第三版", false, 8);
         assert_eq!(more.err(), Some(budget_spent(2)));
+    }
+
+    /// Review round 4 P1-10: word that a mending went in clears only the
+    /// mending; a review never known to have gone in still holds its pass.
+    #[test]
+    fn a_mending_confirmed_never_clears_a_review_still_unsure() {
+        let (_temp, desk) = desk_of(5);
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        desk.observe(&reply_as(asked(), "1. 都好", "m2"), 6);
+        // 继续自动 takes the waiting answer up at once: it asks for the last lines.
+        desk.act(&lines, &handoff.id, "resume", 7).unwrap();
+        desk.drive(&lines, 8);
+        assert!(last_sent(&lines).2.contains("驿窗自动发送"));
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert!(kept.gate.mending.is_none() && kept.gate.pending.is_some());
+        desk.observe(&reply_as(asked(), PASS, "m3"), 9);
+        desk.drive(&lines, 10);
+        assert_eq!(status(&desk, 10).0, "open");
+        assert!(last_reply_to_claude(&lines).contains(&guard::unconfirmed()));
+    }
+
+    /// Review round 4 P1-11: an earlier round's words, the same for their
+    /// first 600 characters, never pass for the round on its way, nor for
+    /// the one gone in.
+    #[test]
+    fn an_earlier_rounds_words_never_pass_for_this_ones() {
+        let long = "同".repeat(700);
+        let (_temp, desk) = desk_of(5);
+        let lines = Fake::default();
+        let first = format!("{long}\n第一版");
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", &first, 1).unwrap()
+        else {
+            panic!()
+        };
+        let a = asked();
+        desk.observe(&reply_as(a.clone(), FIX, "m1"), 3);
+        desk.drive(&lines, 4);
+        let counted = || desk.lock().get(&handoff.id).unwrap().counted();
+        // On its way and never confirmed: A answered again is not B's.
+        lines.send_fails.set(true);
+        assert!(engineering(&desk, &lines, "s1", "/w", &format!("{long}\n第二版"), 5).is_err());
+        lines.send_fails.set(false);
+        desk.observe(&reply_as(a.clone(), FIX, "regen-1"), 6);
+        assert_eq!(counted(), 1);
+        // Its own answer counts.
+        desk.observe(&reply_as(asked(), FIX, "m2"), 7);
+        assert_eq!(counted(), 2);
+        // Gone in, a third: A answered again is still not it.
+        desk.act(&lines, &handoff.id, "resume", 8).unwrap();
+        desk.drive(&lines, 9);
+        engineering(&desk, &lines, "s1", "/w", &format!("{long}\n第三版"), 10).unwrap();
+        desk.observe(&reply_as(a, FIX, "regen-2"), 11);
+        assert_eq!(counted(), 2);
+        desk.observe(&reply_as(asked(), FIX, "m3"), 12);
+        assert_eq!(counted(), 3);
+    }
+
+    /// Review round 4 P1-14, P2-16: words never known to have gone in when
+    /// the app restarted are told of once, as unknown; word of them after
+    /// their answer still goes on the card.
+    #[test]
+    fn words_unsure_at_a_restart_are_told_of_and_late_word_is_noted() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        let (request, words) = (lines.requests.borrow().last().unwrap().clone(), asked());
+        let told = sent_as(&lines, "reply").len();
+        drop(desk);
+        let mut desk = Desk::new(Some(temp.path().join("data")));
+        desk.since = 0;
+        assert!(desk.tell(&lines, 6));
+        let said = sent_as(&lines, "reply");
+        assert_eq!(said.len(), told + 1);
+        assert!(said.last().unwrap().1.contains("送达状态未知"), "{said:?}");
+        assert!(!desk.tell(&lines, 7), "told once");
+        // Its answer, then word it went in: noted, nothing else moves.
+        desk.observe(&reply_as(words, FIX, "m2"), 8);
+        let before = desk.lock().get(&handoff.id).cloned().unwrap();
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 9);
+        let after = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            (after.phase, after.counted()),
+            (before.phase, before.counted())
+        );
+        assert_eq!(
+            after.steps.last().unwrap().text.as_deref(),
+            Some(guard::confirmed_late().as_str())
+        );
+    }
+
+    /// Review round 4 P1-14: an answer come before the notice went makes it
+    /// out of date.
+    #[test]
+    fn an_answer_before_the_notice_leaves_nothing_to_tell() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        let words = asked();
+        drop(desk);
+        let mut desk = Desk::new(Some(temp.path().join("data")));
+        desk.since = 0;
+        desk.observe(&reply_as(words, FIX, "m2"), 6);
+        let told = sent_as(&lines, "reply").len();
+        desk.tell(&lines, 7);
+        assert_eq!(sent_as(&lines, "reply").len(), told);
+    }
+
+    /// Review round 4 P1-15: the ask to mend that cannot be kept first
+    /// leaves the handoff as it was, and does not go.
+    #[test]
+    fn a_mending_that_cannot_be_kept_first_does_not_go() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", "1. 都好"), 3);
+        let file = temp
+            .path()
+            .join("data")
+            .join("chatgpt")
+            .join("handoffs.json");
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir_all(file.join("in-the-way")).unwrap();
+        let sends = lines.sent.borrow().len();
+        desk.drive(&lines, 4);
+        std::fs::remove_dir_all(&file).unwrap();
+        assert_eq!(lines.sent.borrow().len(), sends);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert!(kept.steps.iter().all(|s| s.kind != StepKind::Format));
+        assert_eq!(kept.phase, Phase::Replied);
+        assert!(kept.gate.mending.is_none());
+    }
+
+    /// Review round 4 P1-13: a 思维评审 at its cap goes on only with the
+    /// person's word; begun again here after it ended itself, too.
+    #[test]
+    fn a_thinking_review_past_its_cap_needs_the_persons_word() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let first = thinking(&desk, &lines);
+        let deepen = "1. 还要深化\n评审出口：继续深化\n结论：需修改";
+        let title = "思维评审｜方案 A";
+        desk.observe(&turn("complete", deepen), 3);
+        desk.drive(&lines, 4);
+        desk.start(&lines, "s1", Some("/w"), title, None, "第二版", false, 5)
+            .unwrap();
+        desk.observe(&turn("complete", deepen), 6);
+        desk.drive(&lines, 7);
+        let leave = |now| {
+            let rule = Rule {
+                extra: Some("常浩要求再评一轮".into()),
+                ..Rule::default()
+            };
+            desk.start_ruled(
+                &lines,
+                "s1",
+                Some("/w"),
+                title,
+                None,
+                "第三版",
+                false,
+                &rule,
+                now,
+            )
+        };
+        // The agent's own word is no leave.
+        *lines.opener.borrow_mut() = None;
+        assert_eq!(leave(8).err(), Some(leave_unheard()));
+        // Ended by itself after a day: begun again here, still not settled.
+        let idle = 9 + handoffs::IDLE_END_MS + 1;
+        assert!(desk.change(|book| book.idle(idle, "闲置结束")));
+        let again = desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            title,
+            None,
+            "重开",
+            false,
+            idle + 1,
+        );
+        assert_eq!(again.err(), Some(guard::top_unsettled(title)));
+        // The person's word lets it go on, counted from one.
+        *lines.opener.borrow_mut() = Some((Opener::Person, idle + 2));
+        let Started::Opening { handoff, .. } = desk
+            .start(
+                &lines,
+                "s1",
+                Some("/w"),
+                title,
+                None,
+                "重开",
+                false,
+                idle + 3,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_ne!(handoff.id, first.id);
     }
 
     /// L3 P1-10 C: PostPane's ask to mend the last lines, never known to

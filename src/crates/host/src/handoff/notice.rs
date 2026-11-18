@@ -111,6 +111,8 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
                 handoffs::REPLY_WAIT_MS / 60_000
             )
         }
+        // Not a failure: it may well have gone in (round 4 P1-14).
+        Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
     };
     format!("驿窗接力「{}」出错：{what}", handoff.title)
 }

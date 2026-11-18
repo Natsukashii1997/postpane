@@ -82,23 +82,17 @@ impl Desk {
         if handoff.next() != Some(handoffs::Next::Format) {
             return false;
         }
-        let text = format_ask(&handoff);
         let request = format!("{id}~format{now}");
-        // Recorded before it goes, so an answer quicker than the send's own
-        // word is taken; and any that came early is caught up after.
-        if !self.change(|book| book.format_asked(id, &text, now)) {
-            return false;
-        }
-        // Pending till it is known to have gone in, as a review is (L3
-        // P1-10): a pass to it never known to have gone in cannot end it.
-        let pending = handoffs::Pending {
-            request: request.clone(),
-            words: Some(text.clone()),
-            booked: true,
-            ..Default::default()
-        };
-        if let Err(error) = self.change_kept(|book| book.ask_pending(id, pending)) {
-            return self.change(|book| book.stop(id, &error, true, now));
+        // Named by its request, so an earlier ask's answer never passes for
+        // this one's (round 4 P1-11).
+        let text = handoffs::tagged(&request, &format_ask(&handoff));
+        // On the card and kept apart from the review as one change, before
+        // it goes (round 4 P1-10, P1-15): an answer quicker than the send's
+        // own word is taken, and any that came early is caught up after.
+        match self.change_kept(|book| book.ask_mending(id, &request, &text, now)) {
+            Ok(true) => {}
+            Ok(false) => return false,
+            Err(error) => return self.change(|book| book.stop(id, &error, true, now)),
         }
         match lines.send(&conversation, &text, &request) {
             Ok(()) => {
@@ -106,9 +100,10 @@ impl Desk {
                 self.caught_up(&conversation);
                 true
             }
+            // Never known to have gone in: the session is told (P1-14).
             Err(error) => self.change(|book| {
                 book.trouble(id, &format_failed(&error), now);
-                book.stop(id, &format_failed(&error), true, now)
+                book.unconfirmed(id, &super::guard::send_unconfirmed(), true, now)
             }),
         }
     }
@@ -119,7 +114,7 @@ impl Desk {
         let held = |why: String, resend: bool| Some(Held { why, resend });
         // Sent and not known to have gone in: what it reviewed is not
         // known (L3 P1-10).
-        if handoff.gate.pending.is_some() {
+        if handoff.unsure() {
             return held(super::guard::unconfirmed(), false);
         }
         let pr = handoff.pr.as_deref()?;
@@ -205,8 +200,8 @@ fn format_ask(handoff: &Handoff) -> String {
 }
 fn format_failed(error: &str) -> String {
     l10n::text(
-        &format!("请 ChatGPT 补写末尾几行没发出去：{error}；自动往返停下，交还常浩"),
-        &format!("Could not ask ChatGPT to mend its last lines: {error}; left to you"),
+        &format!("请 ChatGPT 补写末尾几行没确认送到：{error}"),
+        &format!("Never heard the ask to mend its last lines went in: {error}"),
     )
 }
 fn moved_on(pr: &str, head: &str, now: &str) -> String {

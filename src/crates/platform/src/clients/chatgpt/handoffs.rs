@@ -21,6 +21,7 @@ mod guard;
 mod leave;
 mod notice;
 mod pull_request;
+mod unsure;
 pub use chain::{chain_id, Earlier};
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
@@ -28,10 +29,10 @@ pub use gate_io::{
     archive, archived, head_in, ledger, review_limit, reviewed_commit, same_commit,
     set_review_limit, slim_kept,
 };
-pub use guard::Pending;
 pub use idle::IDLE_END_MS;
 pub use notice::{notices_since, Cause, Trouble};
 pub use pull_request::pull_request;
+pub use unsure::{tagged, untagged, Pending};
 pub use wake::WAKE_AFTER_MS;
 
 /// How many handoffs are kept, newest first.
@@ -804,7 +805,7 @@ impl Book {
         }
         handoff
             .steps
-            .push(Step::new(now, StepKind::Ask, Some(text)).keyed(&key(text)));
+            .push(Step::new(now, StepKind::Ask, Some(text)).keyed(&key(untagged(text))));
         handoff.queued_at = None;
         handoff.waking_since = None;
         handoff.rounds += 1;
