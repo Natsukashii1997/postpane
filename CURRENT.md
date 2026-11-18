@@ -7,7 +7,7 @@
 
 
 
-## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交、已发布 `c4501330017c`，L2 第 1 轮返修、未修）
+## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾）
 
 - 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。
 - 改了哪些文件：
@@ -25,6 +25,13 @@
 - 合并 main：Auto-fix 报 PR 与 main 冲突，按授权 `git merge FETCH_HEAD`（`df4170c`），只冲突 `CURRENT.md`（两节都留）；合并后接力测试 `76 passed; 0 failed`。合并后没重跑全量（未做）。
 - 第二次装机：`c4501330017c`（`df4170c`，含 main 的 #366 和本 PR），装前已装的是 #366 会话装的 `55b028cf8046`，回读一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-14-318-error-notice-r2/PostPane-55b028cf8046.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 审查现状（22:30）：`h1a1d99b32c700` 仍是 open / working、自动往返已停；重读要 Chrome 插件在线，19:51 之后一次都没重读（插件没连上），所以 #366 的修复还没机会收下这份回信，审查结论尚未拿到。注意：main 合进的 #368「接力闲置 24 小时自动结束」会在约 11-15 19:00 结束这单，结束后不再重读，要在那之前拿到结论。更新（11-15 07:42）：03:30 Chrome 插件连上后驿窗重读、按 #366 收下回信（`taken`，#366 实机生效），第 1 轮「审查出口：返修 / 结论：需修改」，无 P0/P1；自动往返已停，按设计没有自动转回，本会话从 `handoffs.json` 直接读的。要本轮修的 P2：P2-01「打不开」通知断言「不会有回信」过度（迟到的 opened 仍可恢复）；P2-02 `since` 每次启动重置，上一进程里新出错、还没通知就重启的会永久丢；P2-03 发送前没二次核对状态，常浩同时重试或继续自动时会收到过期指示。可顺手修的 P3：P3-01 只看最新一步会漏（超时 Stop 后又追加无关 Fail）；P3-02 用本地化文字认 NoAnswer 脆弱；P3-03「已告诉 Claude」措辞强于送达保证。L2 还剩 1 轮。返修未做（上下文过半，待新会话）。
+- 返修（11-18 开工 `2026-11-18 11:12`，新会话接手；提交 `3862617`、`c838da2`、`7bcf7d5`、`71e76e8`）：
+  - P3-01、P3-02（`3862617`）：`Step` 加结构化标记 `cause`（`notOpened` 由 `failed` 写、`noAnswer` 由 `overdue` 写），新增 `Handoff::untold`：认最近一条带标记、之后只追加过 `fail`、状态还停在那里的步；不再拿说明文字比对。红测 `a_failure_after_the_stop_does_not_hide_it`、`a_stop_is_known_whatever_the_language` 先红后绿；`trouble_moved_on_from_is_not_told` 守住回信、继续自动之后不补发。顺手：`replied` 里的 `Step` 字面量改用 `..Step::new`，省掉 platform `handoffs.rs` 行数（上限 1583，现 1574）。
+  - P2-02（`c838da2`）：通知起点 `notices_since` 存进 `<数据目录>/chatgpt/notices.json`，新版第一次启动时写下、之后沿用；`Desk.since` 取它。红测 `trouble_a_stop_left_untold_is_told_after_the_restart`（出错存盘、没通知就重启 → 补发一次，再重启不重发）先红后绿。AGENTS.md「AI 接入」的写到哪里补上这个文件；设置页那一栏原本就只列 `handoffs.json`，没改。
+  - P2-03（`7bcf7d5`）：`tell` 拆出 `tell_one`，占住 `claim` 后按当前状态再算一遍，和候选不一致就不发；「重试」「继续自动」也先占 `claim`（继续自动在 `drive` 之前放掉）。红测 `trouble_moved_on_from_before_it_is_told_is_not_told` 先红后绿。**行为变化**：通知正在发的那一瞬间点这两个，会提示「上一段还在送，等它送完再试。」，和「结束接力」原来一样。
+  - P2-01、P3-03（`71e76e8`）：打不开的通知改为「驿窗没能确认 ChatGPT 审核会话已打开……目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里」；侧栏后缀「已告诉 Claude」改「已发到 Claude 会话」，「没能告诉 Claude」改「没能通知 Claude」（常浩确认计划时同意）。红测 `an_opening_told_of_that_comes_late_still_carries_on`（超时 → 通知 → 迟到 opened → open → 「通过」转回并结束）先红后绿。接回后不另发通知（审查说不需要）。
+  - 文档：`docs/chatgpt-channel.md` 那一段改写；`docs/安装与使用.md`、MCP 工具说明原文仍准确，没改。
+- 返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `998 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；最后一组 Chrome 插件 `ℹ pass 3` / `ℹ fail 20`，报 Playwright 浏览器不存在，`~/Library/Caches/ms-playwright/` 整个没了，照 L-16 补装 `chromium-headless-shell` 后重跑 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r1-{check,test,playwright-install,test-extension,node}.log`。
 - 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
 - 本轮新坑：无
 
