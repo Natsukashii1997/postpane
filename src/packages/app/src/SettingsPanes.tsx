@@ -11,7 +11,6 @@ import { DisplayPane } from "./settings/DisplayPane";
 import { GeneralPane } from "./settings/GeneralPane";
 import { PricesPane } from "./settings/PricesPane";
 import { RelaysPane } from "./settings/RelaysPane";
-import { UpdatesPane } from "./settings/UpdatesPane";
 import type { SettingsPaneProps } from "./settings/SettingsPrimitives";
 
 export type { SettingsPaneProps } from "./settings/SettingsPrimitives";
@@ -50,7 +49,6 @@ export default function SettingsPane({
   if (page === "general") return <GeneralPane {...settingsProps} />;
   if (page === "prices") return <PricesPane {...settingsProps} />;
   if (page === "relays") return <RelaysPane {...settingsProps} />;
-  if (page === "updates") return <UpdatesPane {...settingsProps} />;
   if (page === "display")
     return ready && selectedId ? (
       <DisplayPane

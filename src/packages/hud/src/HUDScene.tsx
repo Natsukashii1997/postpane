@@ -57,7 +57,6 @@ import {
   configuredVendors,
   type HUDConfig,
   type HUDDecision,
-  type HUDUpdateNotice,
   vendorKey,
 } from "./model";
 import { glowAlert } from "./HUDGlow";
@@ -79,13 +78,7 @@ import { WeeklyMark } from "./scene/WeeklyMark";
 import { useOpenSettings } from "./scene/useOpenSettings";
 import { weeklyFor } from "./card-weekly";
 
-export type {
-  HUDConfig,
-  HUDDecision,
-  HUDEdge,
-  HUDMode,
-  HUDUpdateNotice,
-} from "./model";
+export type { HUDConfig, HUDDecision, HUDEdge, HUDMode } from "./model";
 export { defaultHUDConfig, HUD_METRICS } from "./model";
 export type { HUDDragPreview, HUDDragStartArgs } from "./scene/useHUDDrag";
 export type { HUDNativePointer } from "./scene/useHUDInteraction";
@@ -107,9 +100,6 @@ export interface HUDSceneProps {
   onDiskSlim?: (anchor: HUDRect) => Promise<void>;
   /** Opens Statistics; may reject with why it could not. */
   onStats?: (target?: StatsTarget) => unknown;
-  /** The product's newer version, and the way to it (the panel footer's arrow). */
-  update?: HUDUpdateNotice | null;
-  onUpdate?: () => void;
   /** The native host owns movement, edge snapping and configuration commits. */
   onDragStart?: (args: HUDDragStartArgs) => void | Promise<void>;
   /** Incremented by the host after its global mouse-button owner ends a drag. */
@@ -196,8 +186,6 @@ export function HUDScene({
   diskSlim,
   onDiskSlim,
   onStats,
-  update,
-  onUpdate,
   onDragStart,
   dragEndSequence = 0,
   dragPreview,
@@ -1137,15 +1125,6 @@ export function HUDScene({
                               : undefined
                           }
                           openFailure={panelFailure}
-                          update={update}
-                          onUpdate={
-                            onUpdate
-                              ? () => {
-                                  endHold();
-                                  onUpdate();
-                                }
-                              : undefined
-                          }
                           inlineAlert={inlineAlert(measured.snapshot)}
                         />
                       </PaperContext.Provider>

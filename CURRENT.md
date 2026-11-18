@@ -10,6 +10,23 @@
 
 
 
+
+## 删更新通知链：设置「更新」页、托盘「发现新版本」、面板页脚更新箭头（#395）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删更新链路」；已提交、已发布 `4d81bf2fb2ca` 回读通过）
+
+- 时间：开工 `2026-11-18 14:38`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。更新通知只能由产品扩展发出，驿窗启动时传的扩展是空的（`main.rs` 传 `None`），这条链永远走不到。扩展口本身还被接力（`Flight`）、互发消息（`Delivery`）和 MCP 工具通道在用，按常浩选的甲不动。
+- 改了哪些文件：
+  - 常浩要求的：删 `src/packages/app/src/settings/UpdatesPane.tsx`；`src/packages/app/src/App.tsx` 去掉 `updates` 页定义、`hiddenPages` 里的 `updates`、渲染判断里的 `updates` 和不再用的 `Download` 图标；`SettingsPanes.tsx` 去掉对应分支；`src/crates/host/src/tray.rs` 去掉 `tray-update` 菜单项、点击处理、托盘状态里的 `update` 和 `project` 的 `update` 参数；`src/crates/host/src/coordinator.rs` 去掉通知状态、`UPDATE` 标志、`update_notice`、`current_notice`、`open_update_page`、`hud_update_notice`、`open_update` 和发 `hud:update` 那段；`src/crates/host/src/lib.rs` 去掉两条命令登记和扩展口上下文里的 `update`；`src/crates/host/src/extension.rs` 去掉 `UpdateNotice`、`ShowUpdate` 和 `HostContext.update`；`src/packages/hud/src/model.ts` 去掉 `HUDUpdateNotice`；`HUDScene.tsx`、`HoverPanel.tsx`、`src/packages/app/src/HUDSurface.tsx` 去掉页脚更新箭头和一路传下来的 `update` / `onUpdate`，以及跟着不再用的 `CircleArrowDown`、`motion` 导入。
+  - 顺手改的：`coordinator.rs` 开头说明去掉「the product's update notice」；它的测试 `callbacks_before_the_window_worker_starts_keep_their_initial_facts` 去掉通知那半、保留快照不被降级的断言；托盘测试 `an_update_notice_redraws_the_menu` 随功能删掉；`file-size-baseline.json` 收紧（`coordinator.rs` 降到 300 行以下出了基线，`tray.rs` 454→436、`App.tsx` 1022→1012、`HUDSurface.tsx` 713→684、`HUDScene.tsx` 1459→1438、`HoverPanel.tsx` 605→552、`model.ts` 337→330）。
+  - **改变了已有行为的**：无可见变化。设置「更新」页本来就藏着；托盘「发现新版本…」和页脚箭头只在有通知时出现，而驿窗从来发不出通知。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 退出码 0（新 worktree 首轮一次通过）：cargo 合计 `998 passed; 0 failed`（比上一轮少的 1 条是删掉的托盘测试），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/`（`check-1.log`、`test-1.log`、`node-test-1.log`）。
+- 验证：
+  - 场景预览台：改前用主目录（`53092f9`，和本分支同一基点）、改后用本 worktree，各量三处面板页脚的 outerHTML：暗色 `all-running`、`claude-many-asks` 都是 len 3018 / hash 600255833，浅色 `hermes-desks` 是 len 3013 / hash 804948324，改前改后逐字一致，按钮都只有「设置 / 用量统计」；控制台没有报错（`footer-compare.txt`）。
+  - 实机（装机后）：MCP 截面板，页脚仍是「设置 / 统计 ↗」，版面和改前（`00-panel-before.png`）一致；真实屏幕隔 2 秒截两张侧栏（`01-strip-a.png`、`02-strip-b.png`），Claude 头上的问号、Codex 的鼻涕泡、DeepSeek 的水泡都在变，小人是动的，两个挂件都在（L-35）；数据目录 21:05 有更新，应用日志没有报错。MCP 的离屏截图（`show: hud`）两次一样，它画的是静态帧，不能用来判断动没动。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/`：`00-panel-before.png`（改前面板）、`01-strip-a.png`、`02-strip-b.png`（改后真实屏幕右侧侧栏，已裁掉别的窗口）。
+- 发布与回读：打包前 main 仍是 `53092f9`。第一次打包在会话重启时被中断（`build-1.log` 里 `Command was killed with SIGTERM`），没有产出；重打 `build-2.log` 退出码 0。`install.sh 395-update-notice`：装前 `2fd869f9082b`（已备份），退出于 21:04:59、启动于 21:04:59，产物 `4d81bf2fb2ca` / 已装 `4d81bf2fb2ca`，签名照常（`H"b773068e`）；合并前 `install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/PostPane-2fd869f9082b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：设置页分组里的 `about` 现在没有自带页面了（`updates` 原本是它唯一的一页，本来就藏着），分组定义没动，扩展页面默认还会落到这一组。`model.ts` 里 `HUDConfig` 上方有一段讲「Per-screen placement」的注释原本就摆错了位置，没动。第二档还剩两项要单独确认：简约形态代码、`docs/upstream/` 与宣传素材。skill 进化：无。
+- 本轮新坑：无
+
 ## 修偶发失败的引擎客户端测试：替身引擎启动慢时第二个被当成第一个（#393）（2026-11-18，Claude，常浩回「修偶发测试」；已提交、无需发布）
 
 - 时间：开工 `2026-11-18 14:05`（`date '+%F %H:%M'` 记录）。来由：#389、#391 两个新 worktree 的首轮 `pnpm test` 都在 `src/packages/engine-client/test/late-output.test.ts` 失败，46 秒后 `Engine request timed out`，重跑都过。#391 那一轮查出原因并复现，常浩让修。

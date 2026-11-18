@@ -302,7 +302,6 @@ impl Service {
             let answers = snapshots.clone();
             let events = app.clone();
             let flights = app.clone();
-            let updates = app.clone();
             product.start(extension::HostContext {
                 snapshot: Arc::new(move || {
                     let backend = snapshots.upgrade().ok_or("Application is stopping")?;
@@ -331,7 +330,6 @@ impl Service {
                     let _ = events.emit("product:event", value);
                 }),
                 fly: Arc::new(move |flight| activity::publish(&flights, "hud:flight", &flight)),
-                update: Arc::new(move |notice| coordinator::update_notice(&updates, notice)),
             })?;
         }
         // Agent messages, over the product's senders when it has some.
@@ -936,8 +934,6 @@ pub fn run_with_options(
             take_settings_page,
             coordinator::hud_bot_directions,
             coordinator::hud_bot_looked,
-            coordinator::hud_update_notice,
-            coordinator::open_update,
         ])
         .setup(move |app| {
             app.manage(system::System::new(app.config().identifier.clone()));

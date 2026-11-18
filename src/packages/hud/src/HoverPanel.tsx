@@ -7,16 +7,11 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ArrowUpRight, CircleArrowDown, Settings } from "lucide-react";
-import { motion, MotionConfig } from "motion/react";
+import { ArrowUpRight, Settings } from "lucide-react";
+import { MotionConfig } from "motion/react";
 import type { Quota, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
-import {
-  defaultHUDConfig,
-  vendorKey,
-  type HUDConfig,
-  type HUDUpdateNotice,
-} from "./model";
+import { defaultHUDConfig, vendorKey, type HUDConfig } from "./model";
 import { usePanelServices } from "./PanelContext";
 import { FittingName } from "./panel/FittingName";
 import { useBoardBlocks } from "./panel/board-blocks";
@@ -52,10 +47,6 @@ export interface SourceHoverPanelProps {
   /** Why Settings or Statistics did not open just now (#220); empty when
    * it gave no reason. */
   openFailure?: string | null;
-  /** The product's newer version, as Open's HUD showed it: an arrow beside
-   * Statistics that opens the update in Settings. */
-  update?: HUDUpdateNotice | null;
-  onUpdate?: () => void;
   maxHeight?: number;
   active?: boolean;
   inlineAlert?: ReactNode;
@@ -74,8 +65,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   onConfigure,
   onStats,
   openFailure = null,
-  update,
-  onUpdate,
   maxHeight,
   active = true,
   inlineAlert,
@@ -473,48 +462,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
           {snapshotLanguage(snapshot) === "zh" ? "设置" : "Settings"}
         </Button>
         <div style={{ display: "flex", alignItems: "center" }}>
-          {update && (
-            // It arrives as the HUD's other changes do: it grows in, or with
-            // reduced motion only fades in.
-            <motion.span
-              key={update.version}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              style={{ display: "inline-flex" }}
-            >
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  snapshotLanguage(snapshot) === "zh"
-                    ? "发现新版本"
-                    : "New version available"
-                }
-                title={
-                  snapshotLanguage(snapshot) === "zh"
-                    ? `更新至 ${update.version}`
-                    : `Update to ${update.version}`
-                }
-                disabled={!onUpdate}
-                onClick={onUpdate}
-                style={{
-                  width: 28,
-                  height: 28,
-                  minHeight: 28,
-                  padding: 0,
-                  borderRadius: 0,
-                  color: colors.accent,
-                  background: "transparent",
-                }}
-              >
-                <CircleArrowDown
-                  style={{ width: 14, height: 14 }}
-                  strokeWidth={1.7}
-                />
-              </Button>
-            </motion.span>
-          )}
           <Button
             variant="ghost"
             size="sm"
