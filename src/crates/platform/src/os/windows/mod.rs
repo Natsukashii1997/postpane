@@ -37,7 +37,6 @@ pub(crate) fn data_parent(home: &Path) -> PathBuf {
         .unwrap_or_else(|| home.join("AppData/Local"))
 }
 pub(crate) const DATA_FOLDER: &str = crate::data_folder::WINDOWS;
-pub(crate) const EARLIER_FOLDER: &str = crate::data_folder::EARLIER_WINDOWS;
 pub(crate) fn caches_dir(home: &Path) -> PathBuf {
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
