@@ -7,6 +7,20 @@
 
 
 
+## Hermes 卡定时任务表：隐藏没写原因就关掉的任务、去掉「下次」、「多久一次」改口语、任务表装框（#384）（2026-11-18，Claude，常浩提三条，看三版预览 https://claude.ai/artifact/8reLtXF5coyTEWjxxyRVVG 后回「甲，丙（只给任务表装框就行了，不需要加额外注脚，还是之前的私和群的标识）」；PR 已 squash 合并、已发布 `9fa6402761e2` 回读通过）
+
+- 时间：开工 `2026-11-18 10:37`（`date '+%F %H:%M'` 记录）。来由：常浩说停用的任务不要出现（除非明确暂停）、删「下次」、「多久一次」要清晰（举例「5d / 次」）、对话和定时任务混在一起分不清。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/agents/src/hermes/mod.rs` 读任务的 `paused_reason`；`src/crates/core/src/snapshot.rs` 快照带 `pausedReason`；`src/packages/protocol/src/index.ts` 加字段。`src/packages/hud/src/panel/hermes-board.ts` 关掉且没写暂停原因的任务不进表，写了原因的「执行情况」显示「已暂停」（悬停看原因）；去掉 `next`；`hermes-cadence.ts`（新）把排期写成口语：每天 09:50、工作日 09:45、每周一 07:45、每月 1 日 10:30、每 5 天 08:00、每 15 分钟、每 30 分钟（9–23 点）、每 2 小时、每小时、Hermes 的 `every 5m` → 每 5 分钟，读不出的照原样。`HermesBoard.tsx` 表只剩「定时任务 / 多久一次 / 执行情况」三列，装进细线框（圆角 7、`inks.divider` 边），对话行（私 / 群）不变。
+  - 顺手改的：任务表改成固定列宽（134 / 58），两个机器人的表竖着对齐，多久一次过长时省略并带悬停全文；`shortWhen` 只剩过去时间（「下次」去掉后将来时间那半没人用）；场景预览台加 `hermes-desks` 场景（合成数据：3 个没写原因的暂停任务、1 个写了原因的、1 个失败的、两步合一行的）；`hermes-board.test.ts` 改写 4 条、加 1 条，Rust 加 1 条；行数基线收紧（`HermesBoard.tsx` 386 → 382）。
+  - **改变了已有行为的**：关掉（`enabled: false`）但没写暂停原因的任务不再显示（原来显示「停用」）；「下次」列没了；「上次」改叫「执行情况」；「多久一次」原来只认每天 / 工作日 / 单个星期几，其余照抄 cron（如 `*/15 * * * *`），现在都写成口语，单个星期几从「周一 07:45」变「每周一 07:45」；任务表有了外框，表下对话行离表略远（上移从 -4 改 -2）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `988 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`（`check-3.log`、`test-3.log`）；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`node-test-3.log`）。中途一次 Chrome 插件 20 条挂，照 L-16 补装 `chromium-headless-shell` 后全过（`test.log`、`test-extension-2.log`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1480，`scenes-384`）真实点击 `hermes-desks` 的 Hermes 票根：机器人甲 3 个没写原因的暂停任务不出现、「学习报告」显示灰「已暂停」、「周会纪要」红「✗ 11/9」、项目日报两步合一行；两张表三列竖线对齐（页面脚本量列左边两表相同），最长「每 30 分钟（9–23 点）」不截断；对话行「私 / 群」样式没变；浅色纸、整张看板都看过。真实数据：用本机两份 `jobs.json` 跑 `jobRows`，猛鬼兽 5 行（Tidings 周报卡片 每 15 分钟、skill 月度体检 每月 1 日 10:30、个人项目日报 每天 10:00、AI HOT 热点榜 工作日 09:45、AI 前沿群学习报告 每天 10:45），亚古兽 1 行（记忆日报 每天 07:30），工程自检、影子合并官、multica 夜跑主控三个暂停任务（都没写原因）不出现。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-384-hermes-jobs/`：`00-card-before-fixed-columns.jpg`（改固定列宽前，两表没对齐）、`01-card-dark.jpg`、`02-card-light.jpg`、`03-board-light.jpg`。
+- 发布与回读：打包前 main 仍是 `11de767`，没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 384-hermes-jobs`：装前 `7eec140627cc`，产物 `9fa6402761e2` / 已装 `9fa6402761e2`，签名照常（`H"b773068e`）。实机截屏看过：无文稿权限弹窗，侧栏在右边运行；截屏里有常浩的私人内容，看完已删。实机点开 Hermes 卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-18-384-hermes-jobs/PostPane-7eec140627cc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：「暂停时写了原因才算明确暂停」是我的推断（Hermes 只有暂停一种关闭状态），预览页上写明了，常浩没提异议；以后想留着显示某个暂停任务，让 Hermes 暂停时带原因。悬停小收据（AgentPeek）不显示任务，没动。定时任务失败的细条（`island_events`）仍按所有任务判断，暂停的任务不会再跑，不影响。
+- 本轮新坑：无
+
 ## 卡片「还有 n 条」改成贴着列表的一行小字「展开其余 n 条 ⌄」（#382）（2026-11-15，Claude，常浩说「还有 n 条」那一行（上面点线 + 下面大块留白）突兀，看三版预览 https://claude.ai/artifact/8eBxUJbGCj3zfajbRLKKQw 后回「按乙开工」；PR 已 squash 合并、已发布 `7eec140627cc` 回读通过）
 
 - 时间：开工 `2026-11-15 10:15`（`date '+%F %H:%M'` 记录）。来由：折叠入口自成一块（上边 1px 点线、上下各 12px 留白），夹在「等待处理」和「正在进行」两段中间显得突兀。
