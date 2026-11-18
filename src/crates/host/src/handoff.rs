@@ -223,8 +223,8 @@ pub(crate) struct Desk {
     /// When the extension was last asked to read each quiet handoff's
     /// conversation again (#356).
     reread_at: Mutex<HashMap<String, i64>>,
-    /// When the app started: trouble from before it is not told of (#318),
-    /// so an upgrade tells no session of an old one.
+    /// When the notices began (`notices_since`): trouble from before is not
+    /// told of (#318), so an upgrade tells no session of an old one.
     since: i64,
 }
 
@@ -275,9 +275,12 @@ impl Desk {
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
         let now = now_ms();
+        let since = data
+            .as_deref()
+            .map_or(now, |data| handoffs::notices_since(data, now));
         let desk = |book: Book| Self {
             data,
-            since: now,
+            since,
             tossed: Mutex::new(
                 book.list
                     .iter()
@@ -4962,6 +4965,40 @@ mod tests {
         drop(desk);
         let desk = Desk::new(Some(data));
         assert!(!desk.tell(&lines, now_ms()), "not told again");
+        assert_eq!(sent_as(&lines, "reply").len(), 1);
+    }
+
+    /// #318 review P2-02: trouble that came after the notices began but the
+    /// app stopped before telling is told once it runs again, once.
+    #[test]
+    fn trouble_a_stop_left_untold_is_told_after_the_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("data");
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        let desk = Desk::new(Some(data.clone()));
+        let at = now_ms();
+        let Started::Opening { handoff, .. } = desk
+            .start(&failing, "s1", None, "修登录", None, "brief", false, at)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        assert!(desk
+            .open(&failing, &handoff.id, "brief", None, || at)
+            .is_err());
+        // The app stops before the next look.
+        drop(desk);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let lines = Fake::default();
+        let desk = Desk::new(Some(data.clone()));
+        assert!(desk.tell(&lines, now_ms()));
+        assert_eq!(sent_as(&lines, "reply").len(), 1);
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert!(!desk.tell(&lines, now_ms()), "told once");
         assert_eq!(sent_as(&lines, "reply").len(), 1);
     }
 

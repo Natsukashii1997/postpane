@@ -18,7 +18,7 @@ mod notice;
 mod pull_request;
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use idle::IDLE_END_MS;
-pub use notice::{Cause, Trouble};
+pub use notice::{notices_since, Cause, Trouble};
 pub use pull_request::pull_request;
 pub use wake::WAKE_AFTER_MS;
 

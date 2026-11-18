@@ -2,8 +2,28 @@
 //! or ChatGPT did not answer in time. The session that handed its work over
 //! waits on, unaware, unless it is told — once for each, never for trouble
 //! from before the notices began, so an upgrade tells no old session.
-use super::{Book, Handoff, Status, Step, StepKind};
+use super::super::{folder, write_private};
+use super::{read_small, Book, Handoff, Status, Step, StepKind};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+/// When the notices began here: trouble from before is not told of. Kept
+/// from the first start that tells (review of #318, P2-02): set at every
+/// start, trouble the app stopped before telling of was never told.
+pub fn notices_since(data: &Path, now: i64) -> i64 {
+    let path = folder(data).join("notices.json");
+    let kept = read_small(&path)
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .and_then(|kept| kept["since"].as_i64());
+    if let Some(since) = kept {
+        return since;
+    }
+    let bytes = serde_json::json!({ "since": now }).to_string();
+    if let Err(error) = write_private(data, "notices", bytes.as_bytes(), &path) {
+        eprintln!("{error}");
+    }
+    now
+}
 
 /// What went wrong before any answer came.
 #[derive(Clone, Debug, PartialEq, Eq)]
