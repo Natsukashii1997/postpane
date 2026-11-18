@@ -35,12 +35,12 @@ impl Desk {
         };
         // Still so, now that nothing else moves it (review of #318, P2-03):
         // a retry or the auto round trip on again since makes it out of date.
-        let Some(handoff) = self
-            .lock()
-            .get(id)
-            .filter(|h| h.untold(self.since).as_ref() == Some(&(at, trouble.clone())))
-            .cloned()
-        else {
+        let handoff = {
+            let book = self.lock();
+            let still = book.untold_of(id, self.since).as_ref() == Some(&(at, trouble.clone()));
+            book.get(id).filter(|_| still).cloned()
+        };
+        let Some(handoff) = handoff else {
             return false;
         };
         let (doer, session) = (

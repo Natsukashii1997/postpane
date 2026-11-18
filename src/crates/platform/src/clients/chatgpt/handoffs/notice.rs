@@ -85,10 +85,18 @@ impl Book {
         self.list
             .iter()
             .filter_map(|h| {
-                h.untold(since)
-                    .map(|(at, trouble)| (h.id.clone(), at, trouble))
+                let (at, trouble) = self.untold_of(&h.id, since)?;
+                Some((h.id.clone(), at, trouble))
             })
             .collect()
+    }
+    /// `id`'s trouble to tell of, unless its session handed over again
+    /// since, in a newer handoff (review of #318, P2-04).
+    pub fn untold_of(&self, id: &str, since: i64) -> Option<(usize, Trouble)> {
+        if self.superseded(id) {
+            return None;
+        }
+        self.get(id)?.untold(since)
     }
     /// The step `overdue` just put down for `id` is of trouble `cause`.
     pub(super) fn caused_last(&mut self, id: &str, cause: Cause) {
@@ -161,6 +169,19 @@ mod tests {
         let untold = book.untold(0);
         assert_eq!(untold.len(), 1, "{untold:?}");
         assert_eq!(untold[0].2, Trouble::NoAnswer);
+    }
+
+    /// Review of #318, P2-04: the session handed over again since, in a new
+    /// handoff: the old one's trouble is out of date, and not told.
+    #[test]
+    fn trouble_of_a_handoff_handed_over_again_is_not_told() {
+        let mut book = Book::default();
+        let old = book.begin("s1", None, "修登录", None, "请审核", 1);
+        assert!(book.failed(&old.id, "timeout", 2));
+        assert_eq!(book.untold(0).len(), 1);
+        let new = book.begin("s1", None, "修登录", None, "请审核", 3);
+        assert!(book.opened(&new.id, "c1", 4));
+        assert!(book.untold(0).is_empty(), "{:?}", book.untold(0));
     }
 
     /// What moved the handoff on since its trouble — an answer, the auto
