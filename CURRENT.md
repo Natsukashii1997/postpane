@@ -13,6 +13,21 @@
 
 
 
+
+## 侧栏调整说明书（customize-agent-hud）删掉简约形态（#404）（2026-11-18，Claude，常浩问清这份 skill 是什么后回「删掉简约形态」；已提交、已发布 `aaa1ba79c85d` 回读通过）
+
+- 时间：开工 `2026-11-18 22:34`（`date '+%F %H:%M'` 记录）。来由：#397 已让侧栏工具拒绝简约形态，但驿窗写给智能体的侧栏调整说明书还有 5 处把它当可选项。上一轮交接说这份文件「不在本仓库」是错的：源文件是 `src/crates/platform/src/hud_tools/customize-agent-hud.md`，编进应用，装侧栏工具时写进各客户端的 skill 目录，驿窗每次启动（`mcp_clients::repair_on_launch`）把旧版副本换成新版。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/platform/src/hud_tools/customize-agent-hud.md`：形态只列 `notch`、`dynamic`；「`dynamic` and `simple`」的 `edge`、`position` 并进「`dynamic` only」一行；删掉「`simple` only」那一行（5 个参数和用量样式说明）；光晕一节去掉「not drawn in `simple`」；单家面板截图的条件改为只要 `dynamic`。净减 2 行，全文不再出现 `simple` 形态。
+  - 顺手改的：无。
+  - **改变了已有行为的**：智能体读到的说明书不再列简约形态和它的参数；侧栏界面不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0（一次通过）：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-404-skill-no-simple/`（`check-1.log`、`test-1.log`、`node-test-1.log`）。
+- 验证：装前两份副本（`~/.claude/skills/customize-agent-hud/SKILL.md`、`~/.agents/skills/customize-agent-hud/SKILL.md`，11-09 08:16 写入）各有 5 行提到 `simple`；装机后驿窗 22:44:54 启动，22:44:56 两份都被重写，`simple` 行数 0，与仓库源文件逐字一致；应用日志没有报错（`skill-copies.txt`）。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `52c2be7`。`tauri build --bundles app` 退出码 0；`install.sh 404-skill-no-simple`：装前 `32a5ebaa4109`（已备份），退出于 22:44:54、启动于 22:44:54，产物 `aaa1ba79c85d` / 已装 `aaa1ba79c85d`，签名照常（`H"b773068e`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-404-skill-no-simple/PostPane-32a5ebaa4109.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：已经开着的智能体会话加载的是旧版说明书，重开会话后才读到新版；照旧版提议简约形态会被后端拒绝（#397）。废纸篓里约 19 GB 旧备份（#399）等常浩自己清空。skill 进化：无。
+- 本轮新坑：无
+
 ## 项目规则改为与全局一致：看到的相关问题可以顺手修，守三条底线（#402）（2026-11-18，Claude，历史包袱清理收尾时报了规则冲突，常浩回「以全局为准，测试先不修」；已提交、无需发布）
 
 - 时间：开工 `2026-11-18 22:29`（`date '+%F %H:%M'` 记录）。来由：项目 `AGENTS.md`「分工」和 `postpane-round`「不做」写「范围外的问题记进交接，不顺手修」，全局 `~/.claude/CLAUDE.md` 第 3 节（2026-11-10 常浩定）写「代码库归你」、可以直接修看到的相关问题。两边对不上，常浩定以全局为准。
