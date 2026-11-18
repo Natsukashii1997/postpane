@@ -376,26 +376,6 @@ impl Desk {
     fn lock(&self) -> MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(|p| p.into_inner())
     }
-    /// Changes the book and keeps it on disk, or leaves it as it was and
-    /// says why: for what must outlive a restart before anything goes.
-    pub(super) fn change_kept(
-        &self,
-        change: impl FnOnce(&mut Book) -> bool,
-    ) -> Result<bool, String> {
-        let mut book = self.lock();
-        let before = book.clone();
-        if !change(&mut book) {
-            return Ok(false);
-        }
-        let Some(data) = &self.data else {
-            return Ok(true);
-        };
-        handoffs::slim_kept(data, &mut book);
-        handoffs::save(data, &book).map(|()| true).map_err(|error| {
-            *book = before;
-            guard::not_kept(&error)
-        })
-    }
     /// Changes the book and keeps it.
     fn change<R>(&self, change: impl FnOnce(&mut Book) -> R) -> R {
         let _quiet = self.quiet();

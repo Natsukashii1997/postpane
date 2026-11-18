@@ -5,6 +5,7 @@
 //! and not settled (P1-08).
 use super::back::held_back_text;
 use super::{back_text, Desk, Lines};
+use agent_hud_runtime::chatgpt::handoffs::{self as book_file, Book};
 use agent_hud_runtime::chatgpt::handoffs::{Handoff, Next};
 use agent_hud_runtime::l10n;
 
@@ -18,6 +19,28 @@ pub(super) struct Held {
 }
 
 impl Desk {
+    /// Changes the book and keeps it on disk, or leaves it as it was and
+    /// says why: for what must outlive a restart before anything goes.
+    pub(super) fn change_kept(
+        &self,
+        change: impl FnOnce(&mut Book) -> bool,
+    ) -> Result<bool, String> {
+        let mut book = self.lock();
+        let before = book.clone();
+        if !change(&mut book) {
+            return Ok(false);
+        }
+        let Some(data) = &self.data else {
+            return Ok(true);
+        };
+        book_file::slim_kept(data, &mut book);
+        book_file::save(data, &book)
+            .map(|()| true)
+            .map_err(|error| {
+                *book = before;
+                not_kept(&error)
+            })
+    }
     /// The words back for `handoff`'s newest answer `reply`, and, for a
     /// pass that does not hold for the commit under review, why: every
     /// way back, by hand or by itself, says the same.
