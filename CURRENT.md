@@ -16,7 +16,7 @@
   - agent-kit#71（`f6a1cfd`）：《工程流程》第 8 节第 3 条改为摘要并指向 MA-02 与驿窗通道文档。
   - digital-twin#185（`345021e`）：DT-ORC 3.3 工具参数与 Codex 发起、6.2 表（补送达未确认、读不到 PR 当前 HEAD，版本问题转回重送，证据不足暂停写明驿窗做法）、6.4。
   - my-skills#97（`f2a84ff`）：thinking-review 1.1.2，`references/relay.md`（上限、到顶条件、补格式会转回、到顶后续审与新开、送达未确认）、SKILL.md 版本、CHANGELOG。
-- 测试：驿窗 `cargo test -p agent-hud-platform` 286/0、`agent-hud-host` 155/0（全量见 PR）；multi-agent `node --test tests/*.test.mjs` `ℹ pass 17` / `ℹ fail 0`、规则检查通过；agent-kit `ℹ pass 78` / `ℹ fail 0`；my-skills `ℹ pass 15` / `ℹ fail 0`；digital-twin 没有测试脚本。四仓旧说法扫描只剩历史记录（`rules/old-phrase-sweep.log`）。
+- 测试：驿窗合入 main（#393–#406）后 `pnpm run check` 退出码 0；`pnpm test` 第一次 cargo 1 条失败（`core` 的 `demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes`，按当前时间判断，单独跑 3 次都过，属机器忙时偶发），重跑退出码 0，cargo 合计 passed 1040 failed 0，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`（`pnpm-test-8.log`）；`node scripts/check-rules.mjs` 通过；multi-agent `node --test tests/*.test.mjs` `ℹ pass 17` / `ℹ fail 0`、规则检查通过；agent-kit `ℹ pass 78` / `ℹ fail 0`；my-skills `ℹ pass 15` / `ℹ fail 0`；digital-twin 没有测试脚本。四仓旧说法扫描只剩历史记录（`rules/old-phrase-sweep.log`）。
 - 验证：只做了文字核对与各仓测试；未装机。
 - 截图：无（无界面改动）。
 - 发布与回读：未发布。四份草稿保持草稿，等生效切换。
