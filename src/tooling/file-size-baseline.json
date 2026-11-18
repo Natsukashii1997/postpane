@@ -56,7 +56,7 @@
   "src/crates/hud/src/bots.rs": 635,
   "src/crates/hud/src/presentation.rs": 604,
   "src/crates/hud/src/presentation/rules.rs": 1366,
-  "src/crates/hud/src/presentation/style_rules.rs": 719,
+  "src/crates/hud/src/presentation/style_rules.rs": 717,
   "src/crates/hud/src/presentation/tools.rs": 841,
   "src/crates/hud/src/vendors.rs": 417,
   "src/crates/platform/src/accounts/credentials.rs": 446,

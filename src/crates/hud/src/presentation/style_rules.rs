@@ -194,7 +194,7 @@ const GLOW: &[GlowField] = &[
     },
 ];
 
-const MODES: &[&str] = &["notch", "dynamic", "simple"];
+const MODES: &[&str] = &["notch", "dynamic"];
 const EDGES: &[&str] = &["top", "right", "bottom", "left"];
 const APPEARANCES: &[&str] = &["dark", "light", "system"];
 const GLOW_STYLES: &[&str] = &["blur", "dots", "ascii", "blocks", "braille", "binary"];
@@ -465,7 +465,7 @@ fn issues(
     let mode = text("mode");
     let mut found = vec![];
     if changes.get("mode") == Some(&json!("notch")) && !has_notch {
-        found.push(format!("hud.mode: {screen} has no notch, so its HUD cannot be \"notch\". It can be \"dynamic\" or \"simple\"."));
+        found.push(format!("hud.mode: {screen} has no notch, so its HUD cannot be \"notch\". It can be \"dynamic\"."));
     }
     let named = format!("the HUD of {screen} would be \"{}\"", agent_mode(&mode));
     for field in FIELDS.iter().filter(|f| f.name != "mode") {
@@ -476,10 +476,8 @@ fn issues(
                 .map(|m| format!("\"{}\"", agent_mode(m)))
                 .collect::<Vec<_>>()
                 .join(" or ");
-            found.push(format!(
-                "hud.{}: {} sets a {modes} HUD, and {named}. Leave it out, or set mode to {modes}.",
-                field.name, field.name
-            ));
+            let refused = super::simple_style::refusal(field.name, field.modes, &modes, &named);
+            found.push(refused);
         }
     }
     let (style, effect) = (text("glowStyle"), text("glowEffect"));

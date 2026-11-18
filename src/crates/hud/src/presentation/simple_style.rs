@@ -24,6 +24,20 @@ pub fn simple_style<'a>(scopes: impl IntoIterator<Item = &'a Value>) -> &'static
     "segments"
 }
 
+/// The refusal of field `name`, which only `modes` draw (`listed`: those
+/// modes as the sentence names them), on a screen whose HUD would be another
+/// (`named`). Simple is no mode to propose: Settings dropped it on 2026-11-05
+/// (#66) and proposals on 2026-11-18 (#397), so a simple-only field can only
+/// be left out. A screen saved as simple still draws as one and takes them.
+pub(super) fn refusal(name: &str, modes: &[&str], listed: &str, named: &str) -> String {
+    let advice = if modes == ["simple"] {
+        "Leave it out: PostPane no longer offers the \"simple\" HUD.".to_owned()
+    } else {
+        format!("Leave it out, or set mode to {listed}.")
+    };
+    format!("hud.{name}: {name} sets a {listed} HUD, and {named}. {advice}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
