@@ -29,20 +29,40 @@
     return text === "ChatGPT" ? "" : text;
   }
 
-  const last = (doc, selector) => {
-    const all = doc.querySelectorAll(selector);
-    return all.length ? all[all.length - 1] : null;
-  };
+  // The page holds the conversation twice (#410): first a hidden copy with
+  // every turn in order (answers not drawn), then the drawn one, which only
+  // keeps the turns near the view. The last node in the page can so be an
+  // older turn's. Order is each message's first place in the page (its key);
+  // of its copies the last, the drawn one when there is one, is read.
+  const UNIT = "data-chatgpt-search-unit-key";
+
+  /** The newest of `selector`'s messages, by conversation order, and where
+   * it stands in that order. A node outside any unit is a message of its own. */
+  function newest(doc, selector) {
+    const order = new Map();
+    const keyOf = (node) => node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
+    // One order for prompts and replies alike, so their places compare.
+    for (const node of doc.querySelectorAll(`[${UNIT}], ${SEL.user}, ${SEL.assistant}`)) {
+      const key = keyOf(node);
+      if (!order.has(key)) order.set(key, order.size);
+    }
+    let found = null;
+    for (const node of doc.querySelectorAll(selector)) {
+      const place = order.get(keyOf(node));
+      if (!found || place >= found.place) found = { node, place };
+    }
+    return found;
+  }
 
   function lastReply(doc) {
-    const node = last(doc, SEL.assistant);
+    const node = newest(doc, SEL.assistant)?.node;
     if (!node) return null;
     const ids = (node.getAttribute("data-chatgpt-search-message-ids") || "").split(/\s+/).filter(Boolean);
     return { messageId: ids[ids.length - 1] || null, markdown: markdown(node) };
   }
 
   function lastPrompt(doc) {
-    const node = last(doc, SEL.user);
+    const node = newest(doc, SEL.user)?.node;
     return node ? node.textContent.trim() : null;
   }
 
@@ -50,10 +70,22 @@
    * answered yet leaves the reply before it as the last one (#356). A reply
    * with no prompt drawn yet (the history loading) answers nothing known. */
   function answered(doc) {
-    const reply = last(doc, SEL.assistant);
-    const prompt = last(doc, SEL.user);
-    if (!reply || !prompt) return false;
-    return !!(prompt.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const reply = newest(doc, SEL.assistant);
+    const prompt = newest(doc, SEL.user);
+    return !!reply && !!prompt && reply.place > prompt.place;
+  }
+
+  /** Scrolls the conversation to its end, so the newest answer is drawn when
+   * only the hidden copy holds it (#410). Whether there was a list to scroll. */
+  function reveal(doc) {
+    const drawn = [...doc.querySelectorAll(`[${UNIT}]`)].pop();
+    for (let node = drawn?.parentElement; node; node = node.parentElement) {
+      if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(doc.defaultView.getComputedStyle(node).overflowY)) {
+        node.scrollTop = node.scrollHeight;
+        return true;
+      }
+    }
+    return false;
   }
 
   // --- Markdown ------------------------------------------------------------
@@ -171,27 +203,46 @@
     return null;
   }
 
+  const bare = (text) => text.replace(/\s/g, "");
+
+  /** Whether the composer holds no more than `text`: words left from before
+   * show as more. The box may draw Markdown (fewer characters) or turn a long
+   * paste into an attachment (none), so only more counts; a few characters
+   * more (a code block's label) are allowed, a left brief is far more. */
+  function holds(box, text) {
+    return bare(box.textContent).length <= bare(text).length + 40;
+  }
+
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`. */
   async function submit(doc, text) {
     if (streaming(doc)) return { ok: false, reason: "busy" };
     const box = await waitFor(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return { ok: false, reason: "no-composer" };
     box.focus();
+    // A draft ChatGPT kept (an earlier turn's words) would go out in front of
+    // these (#410): the box is emptied first, and send is waited off, so the
+    // button the draft lit is not taken for these words'.
+    if (bare(box.textContent)) {
+      doc.execCommand("selectAll", false);
+      doc.execCommand("delete", false);
+      await waitFor(() => !sendReady(doc), 2000);
+    }
     // Paste keeps paragraphs and lets ChatGPT turn a very long text into an attachment.
     const data = new DataTransfer();
     data.setData("text/plain", text);
     box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    let button = await waitFor(() => sendReady(doc), 3000);
+    let button = await waitFor(() => holds(box, text) && sendReady(doc), 3000);
     if (!button) {
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
       button = await waitFor(() => sendReady(doc), 5000);
     }
     if (!button) return { ok: false, reason: "send-failed" };
+    if (!holds(box, text)) return { ok: false, reason: "composer-mismatch" };
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
     return started ? { ok: true } : { ok: false, reason: "send-failed" };
   }
 
-  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, answered, markdown, submit };
+  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, answered, reveal, markdown, submit };
 })();

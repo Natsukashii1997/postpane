@@ -14,6 +14,24 @@
 
 
 
+## 接力回信认不出导致「30 分钟没回信」：读错最新一轮、代码块、输入框旧稿（#410）（2026-11-19，Claude，常浩问「驿窗超时如何根治」，看过原因与三处修法后回「按方案开工」；已提交、发布见下）
+
+- 时间：开工 `2026-11-19 05:28`（`date '+%F %H:%M'` 记录）。来由：接力反复「ChatGPT 30 分钟没回信」，实际 ChatGPT 一两分钟就回了，`turns.jsonl` 记的是 `complete unmatched`：驿窗没认出这是这次送审的回信。三处原因见 L-51。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/apps/chrome-extension/page.js`：`lastPrompt` / `lastReply` / `answered` 不再取页面最后一个节点，改按单元键第一次出现的顺序定最新一轮，读它最后一份（显示的那份）；新增 `reveal` 把对话滚到底。`submit` 输入框有字先清空、等发送键灭了再粘贴，点发送前核对输入框没多出旧字，多了报 `composer-mismatch`。
+    - `src/apps/chrome-extension/content.js`：重读时最新一轮已答、回信只在隐藏那份里，滚到底让它画出来，这次不报。
+    - `src/apps/chrome-extension/background.js`：`composer-mismatch` 和 `send-failed` 一样把标签页提到前面再试一次。
+    - `src/crates/host/src/handoff/belongs.rs`：比对提问两种归一都试（去掉代码块标记行 / 只去反引号），任一对上算这次的回信。
+  - 顺手改的：无。
+  - **改变了已有行为的**：插件认「最新一轮」的方式；发送前会清空输入框里已有的文字；重读时会把 ChatGPT 页面滚到底；开头带代码块的送审现在能被认领。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 27` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。新增 4 条插件测试、1 条 Rust 测试，都先在旧代码上跑过、确认失败。
+- 验证：Chrome 里只读打开 5 个出过事的 ChatGPT 会话核对 DOM（不发送），记录在证据目录 `page-checks.md`；把新取数逻辑注入 #318 专项复核那个会话：旧逻辑取到第 2 轮的提问和回信，新逻辑取到「专项复核」，滚到底 3 秒后它的回信（1558 字）画出来。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `7a4b3d9`。`tauri build --bundles app` 退出码 0；`install.sh 410-relay-unmatched`：装前 `aaa1ba79c85d`（已备份），退出于 05:49:55、启动于 05:49:55，产物 `08256f49a34b` / 已装 `08256f49a34b`，签名照常（`H"b773068e`）；应用日志无报错。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/PostPane-aaa1ba79c85d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。Chrome 插件从主目录 `src/apps/chrome-extension/` 加载，合并后要在 `chrome://extensions` 重新加载一次才换上新版。
+- 与授权不一致之处、遗留问题、范围外发现：「插件没能完成：timeout」（打开或发送那一步失败，83 次里 2 次）不在本轮。另提过一项兜底「回信到了但认不出时几分钟内提醒」，属新功能，常浩没说要做，未做。skill 进化：无。
+- 本轮新坑：L-51
+
 ## 侧栏调整说明书（customize-agent-hud）删掉简约形态（#404）（2026-11-18，Claude，常浩问清这份 skill 是什么后回「删掉简约形态」；已提交、已发布 `aaa1ba79c85d` 回读通过）
 
 - 时间：开工 `2026-11-18 22:34`（`date '+%F %H:%M'` 记录）。来由：#397 已让侧栏工具拒绝简约形态，但驿窗写给智能体的侧栏调整说明书还有 5 处把它当可选项。上一轮交接说这份文件「不在本仓库」是错的：源文件是 `src/crates/platform/src/hud_tools/customize-agent-hud.md`，编进应用，装侧栏工具时写进各客户端的 skill 目录，驿窗每次启动（`mcp_clients::repair_on_launch`）把旧版副本换成新版。

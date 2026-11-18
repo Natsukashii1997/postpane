@@ -9,16 +9,24 @@
 //! shows the prompt as sent but lays it out its own way (2026-11-14, a
 //! 6887-character brief matched the 600 kept to the last character). So are
 //! backticks: the page draws inline code as code and drops its marks
-//! (2026-11-14, a brief naming `Desk::open` went unmatched 35 times). Two
+//! (2026-11-14, a brief naming `Desk::open` went unmatched 35 times).
+//! Code-fence lines are held to two ways (#410): a page that draws the
+//! fenced block as code shows no fence line, language and all (2026-11-17,
+//! three briefs with a ```python or ```diff block in their first 600
+//! characters never matched); one that shows the words as typed keeps them,
+//! with its line breaks lost. Either way counts. Two
 //! sendings of the very same words, or a prompt of the person's own that
 //! starts with all the kept words, still cannot be told apart.
 use super::Desk;
 use agent_hud_runtime::chatgpt::handoffs::{Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
 
-/// The words without their spaces and inline-code marks.
-fn bare(text: &str) -> String {
-    text.chars()
+/// The words without their spaces and inline-code marks, and without
+/// code-fence lines when `fences` is false.
+fn bare(text: &str, fences: bool) -> String {
+    text.lines()
+        .filter(|line| fences || !line.trim_start().starts_with("```"))
+        .flat_map(str::chars)
         .filter(|c| !c.is_whitespace() && *c != '`')
         .collect()
 }
@@ -40,13 +48,16 @@ pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
     let Some(prompt) = prompt else {
         return false;
     };
-    let prompt = bare(prompt);
     // A step keeps `EXCERPT` characters and marks the cut with 「…」.
     let cut = asked.chars().count() == EXCERPT + 1;
-    match asked.strip_suffix('…').filter(|_| cut) {
-        Some(kept) => prompt.starts_with(&bare(kept)),
-        None => prompt == bare(asked),
-    }
+    let kept = asked.strip_suffix('…').filter(|_| cut);
+    [true, false].into_iter().any(|fences| {
+        let prompt = bare(prompt, fences);
+        match kept {
+            Some(kept) => prompt.starts_with(&bare(kept, fences)),
+            None => prompt == bare(asked, fences),
+        }
+    })
 }
 
 /// Whether a finished turn in `conversation` may count for its live

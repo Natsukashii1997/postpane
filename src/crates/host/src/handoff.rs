@@ -4855,6 +4855,51 @@ mod tests {
         assert_eq!(phase(&second, &cut.id), Phase::Replied);
     }
 
+    // #410: a brief with a fenced block early on. One page draws the block as
+    // code, without its fence lines (```python and all); another shows the
+    // words as typed, its line breaks lost. Both are the review's; a prompt
+    // of other words with the same block is not.
+    #[test]
+    fn a_prompt_drawn_without_its_code_fences_is_still_the_review() {
+        let complete = |prompt: &str, id: &str| {
+            json!({"type":"turn","phase":"complete","conversation":"c-new",
+                "prompt":prompt,"reply":"1. 少一项\n结论：需修改","messageId":id})
+        };
+        let open = |desk: &Desk, lines: &Fake, brief: &str| {
+            let Started::Opening { handoff, .. } = desk
+                .start(lines, "s1", Some("/w"), "t", None, brief, false, 1)
+                .unwrap()
+            else {
+                panic!("a first brief opens a conversation")
+            };
+            desk.open(lines, &handoff.id, brief, None, || 2).unwrap();
+            handoff
+        };
+        let phase = |desk: &Desk, id: &str| desk.lock().get(id).unwrap().phase;
+        let code = "```python\ndef send_pending(path=None):\n    with tx(path) as con:\n```\n";
+        let long = format!("## 1. 竞态\n{code}{}", "说明这一处怎么改的。".repeat(80));
+        let drawn = format!(
+            "## 1. 竞态\ndef send_pending(path=None):\n    with tx(path) as con:\n{}",
+            "说明这一处怎么改的。".repeat(80)
+        );
+        let typed = long.replace('\n', "");
+        for (n, prompt) in [drawn, typed].into_iter().enumerate() {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let cut = open(&desk, &lines, &long);
+            let other = format!("## 2. 别的\n{code}");
+            assert!(!desk.observe(&complete(&other, "a4"), 3));
+            assert!(desk.observe(&complete(&prompt, "a3"), 4), "page {n}");
+            assert_eq!(phase(&desk, &cut.id), Phase::Replied);
+        }
+        // Short words kept in full, the fence cut off at the page.
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let short = open(&desk, &lines, "看这段\n```diff\n-a\n+b\n```");
+        assert!(desk.observe(&complete("看这段\n-a\n+b", "b3"), 3));
+        assert_eq!(phase(&desk, &short.id), Phase::Replied);
+    }
+
     // #356 P2-04: a handoff with no words kept cannot be held to them; its
     // conversation's turns are not taken.
     #[test]
