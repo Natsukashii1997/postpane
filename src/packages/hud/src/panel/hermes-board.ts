@@ -1,16 +1,17 @@
 // The hover panel's Hermes block (issue #136, the owner's 丙 · 各管一摊):
 // one desk per Feishu bot, by its job. 猛鬼兽 keeps the scheduled tasks, so
-// its desk lists them with how often they run, how the last run went and
-// when the next is; 亚古兽 is asked by colleagues, so its desk lists the
+// its desk lists them with how often they run and how the last run went
+// (#384 dropped the next run); 亚古兽 is asked by colleagues, so its desk lists the
 // latest asks and whether they were answered. Kept free of the UI so the
 // tests can run it.
 import type { HermesBotStatus } from "@agent-hud/protocol";
 import { dateFormat, type Language } from "@agent-hud/ui/format";
+import { cadence } from "./hermes-cadence.ts";
+
+export { cadence };
 
 const say = (language: Language, zh: string, en: string) =>
   language === "zh" ? zh : en;
-const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** What each bot is for, under its name. */
 export function deskRole(id: string, language: Language): string | null {
@@ -72,36 +73,6 @@ export function shortJobName(name: string): string {
   return short || name.trim();
 }
 
-const two = (n: number) => String(n).padStart(2, "0");
-
-/** How often a task runs, from its cron expression: 每天 07:30, 周一 07:45,
- * 工作日 09:00; any other schedule as Hermes wrote it. */
-export function cadence(
-  schedule: string | null | undefined,
-  language: Language,
-) {
-  const text = (schedule ?? "").trim();
-  const fields = text.split(/\s+/);
-  if (fields.length !== 5) return text;
-  const [minute, hour, day, month, weekday] = fields;
-  if (
-    !/^\d+$/.test(minute) ||
-    !/^\d+$/.test(hour) ||
-    day !== "*" ||
-    month !== "*"
-  )
-    return text;
-  const time = `${two(Number(hour))}:${two(Number(minute))}`;
-  if (weekday === "*") return say(language, `每天 ${time}`, `Daily ${time}`);
-  if (weekday === "1-5")
-    return say(language, `工作日 ${time}`, `Weekdays ${time}`);
-  if (/^[0-7]$/.test(weekday)) {
-    const index = Number(weekday) % 7;
-    return `${(language === "zh" ? WEEKDAYS_ZH : WEEKDAYS_EN)[index]} ${time}`;
-  }
-  return text;
-}
-
 /** Calendar days from `now` to `at` in `timeZone`: 0 today, 1 tomorrow, -1
  * yesterday. */
 function dayOffset(at: number, now: number, timeZone: string): number {
@@ -115,8 +86,7 @@ function dayOffset(at: number, now: number, timeZone: string): number {
   return Math.round((utc(at) - utc(now)) / 86_400_000);
 }
 
-/** When, short enough for a column: past runs read 今天 / 昨天 / 11/2;
- * coming ones read 11:30 (today) / 明天 / 周一 (this week) / 11/9. */
+/** When a run was, short enough for a column: 今天 / 昨天 / 11/2. */
 export function shortWhen(
   at: number,
   now: number,
@@ -124,34 +94,13 @@ export function shortWhen(
   language: Language,
 ): string {
   const offset = dayOffset(at, now, timeZone);
-  const parts = Object.fromEntries(
-    dateFormat("en-US", {
-      timeZone,
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      weekday: "short",
-      hourCycle: "h23",
-    })
-      .formatToParts(at)
-      .map((part) => [part.type, part.value]),
-  );
-  const date = `${parts.month}/${parts.day}`;
-  if (at > now) {
-    if (offset === 0) return `${parts.hour}:${parts.minute}`;
-    if (offset === 1) return say(language, "明天", "Tomorrow");
-    if (offset < 7) {
-      const index = WEEKDAYS_EN.indexOf(parts.weekday);
-      return language === "zh" && index >= 0
-        ? WEEKDAYS_ZH[index]
-        : parts.weekday;
-    }
-    return date;
-  }
   if (offset === 0) return say(language, "今天", "Today");
   if (offset === -1) return say(language, "昨天", "Yesterday");
-  return date;
+  return dateFormat("en-US", {
+    timeZone,
+    month: "numeric",
+    day: "numeric",
+  }).format(at);
 }
 
 /** When something was asked: its time today, 昨天 HH:MM, or M/D HH:MM. */
@@ -184,8 +133,8 @@ export interface JobRow {
   /** The full name, for the tooltip. */
   title: string;
   cadence: string;
-  last: { tone: "ok" | "fail" | "none"; text: string };
-  next: string;
+  /** How it is going: its last run, or 已暂停. */
+  last: { tone: "ok" | "fail" | "none" | "paused"; text: string };
 }
 
 type Job = NonNullable<HermesBotStatus["jobs"]>[number];
@@ -215,16 +164,23 @@ function groupSteps(jobs: readonly Job[]): Job[][] {
   return [...groups.values()];
 }
 
-/** The scheduled tasks as the desk's table rows, in Hermes' order. The steps
- * of one job read as one row (#326): how often and the next run from its last
- * step in the day, failed if any step failed, off if any step is off. */
+/** Whether a task shows on the desk: one turned off shows only when whoever
+ * paused it said why, so it reads as paused on purpose (owner, 2026-11-18). */
+const shown = (job: Job) => job.enabled || Boolean(job.pausedReason?.trim());
+
+/** The scheduled tasks as the desk's table rows, in Hermes' order, without
+ * the ones turned off for no stated reason. The steps of one job read as one
+ * row (#326): how often from its last step in the day, failed if any step
+ * failed, 已暂停 if any step is paused. */
 export function jobRows(
   jobs: NonNullable<HermesBotStatus["jobs"]>,
   now: number,
   timeZone: string,
   language: Language,
 ): JobRow[] {
-  const lastRun = (job: Job): JobRow["last"] => {
+  const status = (job: Job): JobRow["last"] => {
+    if (!job.enabled)
+      return { tone: "paused", text: say(language, "已暂停", "Paused") };
     const at = job.lastRunAt ? Date.parse(job.lastRunAt) : NaN;
     if (!Number.isFinite(at))
       return { tone: "none", text: say(language, "没跑过", "Never") };
@@ -233,7 +189,11 @@ export function jobRows(
       ? { tone: "fail", text: `✗ ${when}` }
       : { tone: "ok", text: `✓ ${when}` };
   };
-  return groupSteps(jobs).map((steps) => {
+  const reason = (job: Job) =>
+    job.enabled
+      ? ""
+      : `\n${say(language, "暂停原因", "Paused for")}：${job.pausedReason?.trim()}`;
+  return groupSteps(jobs.filter(shown)).map((steps) => {
     const ordered = steps
       .map((job, index) => ({ job, index }))
       .sort(
@@ -243,27 +203,22 @@ export function jobRows(
       )
       .map(({ job }) => job);
     const final = ordered[ordered.length - 1];
+    const paused = ordered.find((job) => !job.enabled);
     const failed = ordered.find((job) => job.failed && job.lastRunAt);
-    const nextAt = final.nextRunAt ? Date.parse(final.nextRunAt) : NaN;
     const single = steps.length === 1;
     return {
       id: steps.map((job) => job.id).join("+"),
       name: single ? shortJobName(final.name) : jobOf(final),
       title: single
-        ? final.name
+        ? final.name + reason(final)
         : ordered
             .map(
               (job) =>
-                `${job.name}：${cadence(job.schedule, language)} · ${lastRun(job).text}`,
+                `${job.name}：${cadence(job.schedule, language)} · ${status(job).text}${reason(job)}`,
             )
             .join("\n"),
       cadence: cadence(final.schedule, language),
-      last: lastRun(failed ?? final),
-      next: steps.some((job) => !job.enabled)
-        ? say(language, "停用", "Off")
-        : Number.isFinite(nextAt)
-          ? shortWhen(nextAt, now, timeZone, language)
-          : "",
+      last: status(paused ?? failed ?? final),
     };
   });
 }

@@ -1,7 +1,7 @@
 // The hover panel's Hermes block (issue #136, the owner's 丙 · 各管一摊):
-// a desk per Feishu bot. A bot with scheduled tasks lists them, how often
-// they run, how the last run went and when the next is, then the latest
-// thing it was asked; a bot without lists the latest three asks and whether
+// a desk per Feishu bot. A bot with scheduled tasks lists them in a ruled
+// box (#384), how often they run and how the last run went, then the latest
+// thing it was asked under the box; a bot without lists the latest three asks and whether
 // each was answered.
 import { type CSSProperties } from "react";
 import { GoButton } from "../GoButton";
@@ -231,6 +231,12 @@ function Desk({
     letterSpacing: "0.06em",
     padding: "2px 0 4px",
   };
+  const statusInk = {
+    fail: inks.red,
+    ok: inks.word ?? inks.green,
+    none: inks.word ?? inks.tertiary,
+    paused: inks.tertiary,
+  };
   const cell: CSSProperties = {
     padding: "5px 0",
     borderBottom: `1px dotted ${inks.rule}`,
@@ -272,67 +278,57 @@ function Desk({
           aria-label={zh ? "定时任务" : "Scheduled tasks"}
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) 74px 66px 56px",
-            columnGap: 10,
+            // Fixed columns, so both desks' tables line up.
+            gridTemplateColumns: "minmax(0, 1fr) 134px 58px",
+            columnGap: 12,
             fontSize: 12.5,
+            // The tasks sit in a ruled box, apart from the asks under it
+            // (owner's 丙, 2026-11-18).
+            border: `1px solid ${inks.divider}`,
+            borderRadius: 7,
+            padding: "4px 10px 0",
           }}
         >
           <span style={head}>{zh ? "定时任务" : "Task"}</span>
           <span style={head}>{zh ? "多久一次" : "Runs"}</span>
-          <span style={head}>{zh ? "上次" : "Last"}</span>
-          <span style={head}>{zh ? "下次" : "Next"}</span>
-          {jobs.map((job) => (
-            <div key={job.id} style={{ display: "contents" }}>
-              <span
-                title={job.title}
-                style={{ ...cell, ...ellipsis, color: inks.text }}
-              >
-                {job.name}
-              </span>
-              <span
-                style={{
-                  ...cell,
-                  ...tabular,
-                  ...ellipsis,
-                  color: inks.secondary,
-                }}
-              >
-                {job.cadence}
-              </span>
-              <span
-                style={{
-                  ...cell,
-                  ...tabular,
-                  whiteSpace: "nowrap",
-                  color:
-                    job.last.tone === "fail"
-                      ? inks.red
-                      : job.last.tone === "ok"
-                        ? (inks.word ?? inks.green)
-                        : (inks.word ?? inks.tertiary),
-                }}
-              >
-                {job.last.text}
-              </span>
-              <span
-                style={{
-                  ...cell,
-                  ...tabular,
-                  whiteSpace: "nowrap",
-                  color: inks.secondary,
-                }}
-              >
-                {job.next}
-              </span>
-            </div>
-          ))}
+          <span style={head}>{zh ? "执行情况" : "Status"}</span>
+          {jobs.map((job, index) => {
+            const row: CSSProperties =
+              index === jobs.length - 1
+                ? { ...cell, borderBottom: "none" }
+                : cell;
+            const figure: CSSProperties = {
+              ...row,
+              ...tabular,
+              whiteSpace: "nowrap",
+            };
+            return (
+              <div key={job.id} style={{ display: "contents" }}>
+                <span
+                  title={job.title}
+                  style={{ ...row, ...ellipsis, color: inks.text }}
+                >
+                  {job.name}
+                </span>
+                <span
+                  title={job.cadence}
+                  style={{ ...figure, ...ellipsis, color: inks.secondary }}
+                >
+                  {job.cadence}
+                </span>
+                <span style={{ ...figure, color: statusInk[job.last.tone] }}>
+                  {job.last.text}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       {!jobs.length && asks.length > 0 && (
         <span style={head}>{zh ? "最近被问" : "Latest asks"}</span>
       )}
       {asks.length > 0 ? (
-        <div style={{ display: "grid", marginTop: jobs.length ? -4 : -6 }}>
+        <div style={{ display: "grid", marginTop: jobs.length ? -2 : -6 }}>
           {asks.map((ask, index) => (
             <AskRow
               key={`${ask.at}-${index}`}
