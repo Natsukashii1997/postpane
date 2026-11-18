@@ -7,7 +7,7 @@
 
 
 
-## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾）
+## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾；第 2 轮判「决策升级」，常浩选「甲：两条都修再专项复核」，已修、待专项复核）
 
 - 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。
 - 改了哪些文件：
@@ -32,7 +32,13 @@
   - P2-01、P3-03（`71e76e8`）：打不开的通知改为「驿窗没能确认 ChatGPT 审核会话已打开……目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里」；侧栏后缀「已告诉 Claude」改「已发到 Claude 会话」，「没能告诉 Claude」改「没能通知 Claude」（常浩确认计划时同意）。红测 `an_opening_told_of_that_comes_late_still_carries_on`（超时 → 通知 → 迟到 opened → open → 「通过」转回并结束）先红后绿。接回后不另发通知（审查说不需要）。
   - 文档：`docs/chatgpt-channel.md` 那一段改写；`docs/安装与使用.md`、MCP 工具说明原文仍准确，没改。
 - 返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `998 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；最后一组 Chrome 插件 `ℹ pass 3` / `ℹ fail 20`，报 Playwright 浏览器不存在，`~/Library/Caches/ms-playwright/` 整个没了，照 L-16 补装 `chromium-headless-shell` 后重跑 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r1-{check,test,playwright-install,test-extension,node}.log`。
-- 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：无。
+- 第 2 轮复审（11-18，接力 `h1a1ecb8e84700`，HEAD `53ca8c8`）：P2-01、P2-02、P3-01、P3-02、P3-03 关闭；P2-03 只关了一部分（插件报来的迟到打开、回信经 `observe` 改账本，不受 claim 管）；新增 P2-04（同一会话已开新接力，旧接力的打不开通知照发）。审查出口「决策升级」。我核实两条都属实：`listen` 线程调 `observe`；失败的接力不算 live，`begin` 不关它。常浩选「甲：两条都修再专项复核」。
+- 第 2 轮返修（提交 `38b3bca`、`210eab2`）：
+  - P2-04（`38b3bca`）：`Book::untold_of(id, since)` 先查 `superseded`，`untold` 和 `tell_one` 的复核都走它。红测 `trouble_of_a_handoff_handed_over_again_is_not_told` 先红后绿。
+  - P2-03（`210eab2`）：`Desk` 加 `telling` 计数和 `told_out` 条件变量；`change()`、`late()`、`start` 里的 `expire` 改账本前先 `quiet()`，有通知正在发就等它发完；`tell_one` 占住 claim 后 `Telling::begin`，复核到发完都挡着别的改动，发完放开再记 `told`，然后 `caught_up(对话)`，把这期间被 `turn_waits` 压进暂放区的回合补收。这一步修掉了第 1 轮给通知加 claim 时带进来的问题：通知发送期间到的回信会卡在暂放区，要等下一次往这个对话发话才被收下。第 1 轮给「重试」「继续自动」加的 claim 拿掉，改为等通知发完再生效（不再提示「上一段还在送」，回到原来的体验）。新测 `Held` 替身（`reply` 卡住直到放行）加 `while_told`：`an_opening_reported_while_its_failure_is_told_waits_for_it`、`an_answer_that_comes_while_no_answer_is_told_waits_for_it`、`a_retry_while_its_failure_is_told_waits_for_it`，修前前两条红（状态被改成 Open、回信卡在暂放区）；修后临时拿掉补收或加闸，对应测试都会变红；三条连跑 20 遍 20 过。
+  - 没做：审查的 P3 建议（`overdue` 的 late 集合直接带结构化原因），审查说不卡合并，留着。
+- 第 2 轮返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `1002 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；Chrome 插件组 `ℹ pass 3` / `ℹ fail 20`，Playwright 缓存一小时内又被清掉（L-16），补装后 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r2-*.log`。
+- 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：`~/Library/Caches/ms-playwright/` 一天内被清两次，第一次装机后截屏看到 DiskSlim（磁盘瘦身）在要「下载」文件夹权限，怀疑是它在清缓存（推断，未核实）。
 - 本轮新坑：无
 
 ## Hermes 卡定时任务表：隐藏没写原因就关掉的任务、去掉「下次」、「多久一次」改口语、任务表装框（#384）（2026-11-18，Claude，常浩提三条，看三版预览 https://claude.ai/artifact/8reLtXF5coyTEWjxxyRVVG 后回「甲，丙（只给任务表装框就行了，不需要加额外注脚，还是之前的私和群的标识）」；PR 已 squash 合并、已发布 `9fa6402761e2` 回读通过）
