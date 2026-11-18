@@ -61,6 +61,98 @@
 
 
 
+
+
+
+
+
+## 侧栏调整说明书（customize-agent-hud）删掉简约形态（#404）（2026-11-18，Claude，常浩问清这份 skill 是什么后回「删掉简约形态」；已提交、已发布 `aaa1ba79c85d` 回读通过）
+
+- 时间：开工 `2026-11-18 22:34`（`date '+%F %H:%M'` 记录）。来由：#397 已让侧栏工具拒绝简约形态，但驿窗写给智能体的侧栏调整说明书还有 5 处把它当可选项。上一轮交接说这份文件「不在本仓库」是错的：源文件是 `src/crates/platform/src/hud_tools/customize-agent-hud.md`，编进应用，装侧栏工具时写进各客户端的 skill 目录，驿窗每次启动（`mcp_clients::repair_on_launch`）把旧版副本换成新版。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/platform/src/hud_tools/customize-agent-hud.md`：形态只列 `notch`、`dynamic`；「`dynamic` and `simple`」的 `edge`、`position` 并进「`dynamic` only」一行；删掉「`simple` only」那一行（5 个参数和用量样式说明）；光晕一节去掉「not drawn in `simple`」；单家面板截图的条件改为只要 `dynamic`。净减 2 行，全文不再出现 `simple` 形态。
+  - 顺手改的：无。
+  - **改变了已有行为的**：智能体读到的说明书不再列简约形态和它的参数；侧栏界面不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0（一次通过）：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-404-skill-no-simple/`（`check-1.log`、`test-1.log`、`node-test-1.log`）。
+- 验证：装前两份副本（`~/.claude/skills/customize-agent-hud/SKILL.md`、`~/.agents/skills/customize-agent-hud/SKILL.md`，11-09 08:16 写入）各有 5 行提到 `simple`；装机后驿窗 22:44:54 启动，22:44:56 两份都被重写，`simple` 行数 0，与仓库源文件逐字一致；应用日志没有报错（`skill-copies.txt`）。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `52c2be7`。`tauri build --bundles app` 退出码 0；`install.sh 404-skill-no-simple`：装前 `32a5ebaa4109`（已备份），退出于 22:44:54、启动于 22:44:54，产物 `aaa1ba79c85d` / 已装 `aaa1ba79c85d`，签名照常（`H"b773068e`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-404-skill-no-simple/PostPane-32a5ebaa4109.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：已经开着的智能体会话加载的是旧版说明书，重开会话后才读到新版；照旧版提议简约形态会被后端拒绝（#397）。废纸篓里约 19 GB 旧备份（#399）等常浩自己清空。skill 进化：无。
+- 本轮新坑：无
+
+## 项目规则改为与全局一致：看到的相关问题可以顺手修，守三条底线（#402）（2026-11-18，Claude，历史包袱清理收尾时报了规则冲突，常浩回「以全局为准，测试先不修」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 22:29`（`date '+%F %H:%M'` 记录）。来由：项目 `AGENTS.md`「分工」和 `postpane-round`「不做」写「范围外的问题记进交接，不顺手修」，全局 `~/.claude/CLAUDE.md` 第 3 节（2026-11-10 常浩定）写「代码库归你」、可以直接修看到的相关问题。两边对不上，常浩定以全局为准。
+- 改了哪些文件：
+  - 常浩要求的：`AGENTS.md`「分工」前两条改写：保留「不做没要求的新功能」，改为可以直接合并重复实现、清死代码、修看到的相关问题、补测试和文档，并写明三条底线（已定内容先单独确认；改变已有行为先列出来；交付时分两栏列全部改动）和「顺手改的同样跑全量测试」。`.agents/skills/postpane-round/SKILL.md`「不做」第 3 条同步改写。
+  - 顺手改的：`.agents/skills/postpane-round/EVOLUTION.md` 追加 E-21（来由、证据，状态「已采纳（本 PR，#402）」），因为 SKILL.md 改动按该文件规矩要有一条记录。
+  - **改变了已有行为的**：以后在这个项目里，看到的相关问题、重复实现、死代码会直接修，交付时单列「我顺手改的」；原来只记进交接。
+- 测试：纯文档改动。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（含交接格式、通用规则、`postpane-round` 的 SKILL/EVOLUTION 格式检查）；`node scripts/check-rules.mjs` 输出「通用规则检查通过」。`pnpm run check`、`pnpm test` 未跑：没有改任何代码或脚本。
+- 验证：全仓搜「顺手修」「范围外的问题」，项目规则里只剩改后的写法；`CURRENT.md` 和 `docs/history/` 里的旧交接按原样保留。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：常浩同时定「测试先不修」：`core` 的 `tests::ingestion::the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry`（高负载下 10 秒余量不够，#393 那轮碰到一次）不在本轮修，以后再出现按新规则可以顺手修。`~/.claude/skills/customize-agent-hud/SKILL.md` 还写着简约形态，常浩还没定改不改。废纸篓里约 19 GB 旧备份（#399 移过去的）等常浩自己清空。skill 进化：E-21 已采纳。
+- 本轮新坑：无
+
+## 删上游原版说明与宣传素材：`docs/upstream/` 与 videos、screenshots、badges、buttons（#399）（2026-11-18，Claude，常浩看过改动确认后选「乙：连目录一起删」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 21:46`（`date '+%F %H:%M'` 记录）。来由：历史包袱清理（#387）第二档最后一项。2026-11-04 阶段 1-4（`2ecdc51`）把上游原版 README 移到 `docs/upstream/` 留作对照；查过上游宣传素材只被这两份 README 引用，内容多是驿窗已删的功能（iPhone、手表、Remote、简约形态），Apache 2.0 只要求留 `LICENSE`、`NOTICE`。
+- 改了哪些文件：
+  - 常浩要求的：删 `docs/upstream/`（`README.md`、`README.zh-CN.md`）和 `docs/videos/`（7 张动图，11 MB）、`docs/screenshots/`（11 张）、`docs/badges/`（4 个）、`docs/buttons/`（5 个），共 29 个文件约 11.5 MB。`README.md` 第 12 行改为「上游原版说明见上游仓库提交 `917df21`」并链到上游；`AGENTS.md` 结构一节去掉 `upstream/` 一行；`docs/ROADMAP.md` 1-4 补记 2026-11-18 常浩改定（#399）。
+  - 顺手改的：无。
+  - 改变了已有行为的：无（纯文档）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` 交接写好后重跑 `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-399-drop-upstream/`（`check.log`、`test.log`、`node-test.log`、`node-test-2.log`）。
+- 验证：`git grep` 查 `docs/upstream`、`upstream/README`、`docs/(videos|screenshots|badges|buttons)`，除 ROADMAP 1-4 的历史记述外没有引用（`docs/history/` 和 CURRENT 旧节是历史记录，不改）。
+- 截图：无（没有界面改动）。
+- 发布与回读：无需发布（纯文档）。
+- 与授权不一致之处、遗留问题、范围外发现：主线第 9 项「磁盘清单」同轮只读做完，没删任何东西，清单见下一条。worktree（`worktree-sweep list --fetch` 加人工核对）：`353-bg-reply`、`356-chatgpt-reread` 脚本判可安全删除（838 MB）；`nostalgic-bartik-8bdeee`（#365）、`interesting-hugle-7778fb`（#360）只多一份过时的 `.claude/launch.json`，主目录那份更全；`359-board-peek` 没推送的「第 3 批之二」`0f40a3b` 已随 PR #369（`695fd5b`）进 main；`relay-inline-code`（`build/366-with-318`）的 3 个提交是 #318（PR #365）加合并提交，#366 已由 PR #367 合入。这四个人工核对后可删（约 1.7 GB）。保留：`347-review-gate`（PR #348 开着，10.8 GB）、`codex-audit-fix-1112`（PR #315 开着）。证据目录 21 GB，其中 187 个装机备份 `.app` 共 19.7 GB；只留最近 5 个（397、395、391、384、318-r4），其余 182 个共 19.2 GB 可移到废纸篓；次大的是 `2026-11-05-panel-inventory` 974 MB（帧截图）。删不删、删哪些等常浩逐项定。skill 进化：无。
+- 磁盘清理结果（合并后，常浩经侧栏回「删甲乙，丙不动」，与给出的按钮一致）：甲，6 个 worktree 都删了（`353-bg-reply`、`356-chatgpt-reread` 用 `worktree_sweep.py sweep --confirm`；另外 4 个用 `git worktree remove`，都没加 `--force`），本地分支一并删掉，找回命令在 `~/.cache/worktree-sweep/sweep-20261118-215601.json` 和 `evidence/2026-11-18-disk-sweep/branches-removed.txt`，远端没动；两份旧 `launch.json` 备份在同一目录。乙，182 个旧备份 `.app` 移到废纸篓 `~/.Trash/postpane-备份-2026-11-18/`（19 GB，0 个失败，清单 `trashed.txt`，留下的 5 个见 `kept.txt`），证据目录从 21 GB 降到 2.2 GB；废纸篓没清空，空间要常浩清空废纸篓后才真正腾出。丙不动。剩下的 worktree：`347-review-gate`、`codex-audit-fix-1112`。
+- 本轮新坑：无
+
+## 侧栏工具不再能切到简约形态：只堵入口，渲染代码不动（#397）（2026-11-18，Claude，常浩看过改动确认后回「乙 只堵入口」，中途交接卡没能远程启动，常浩回「继续在这里做完 #397」；已提交、已发布 `32a5ebaa4109` 回读通过）
+
+- 时间：开工 `2026-11-18 21:10`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。设置页 2026-11-05（#66 / PR #67）已去掉「简约」形态，但侧栏工具（MCP「agent-hud」的 `draft_hud`）仍接受 `mode: "simple"`，智能体被要求改侧栏时可能把它切回来。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/hud/src/presentation/style_rules.rs` 的 `MODES` 去掉 `simple`（所有入口都经过这一层）；没有刘海时的提示从「可以用 dynamic 或 simple」改为只推荐 dynamic；只在简约形态生效的参数（`simpleSize`、`simpleGap`、`ringWidth`、`simpleStyle`、`showNumbers`）被提议时，拒绝文字改由 `src/crates/hud/src/presentation/simple_style.rs` 新函数 `refusal` 生成，说「别填：驿窗已不提供简约形态」，不再叫人切到 simple。`src/apps/mcp/src/index.ts` 的 `mode` 枚举去掉 `simple`。
+  - 顺手改的：`tool_tests.rs` 改一条旧断言（没刘海的提示），原来「简约形态不画光晕」那条移到新测试 `a_screen_saved_as_simple_keeps_its_rules`（存为简约的屏幕照旧拒光晕、照旧能调 `simpleSize`、能切回 dynamic）；新增 `the_simple_hud_is_no_mode_to_propose`。拒绝文字挪进 `simple_style.rs` 是为了守 300 行棘轮：第一版直接写在 `style_rules.rs` 里，从 719 行涨到 728 行，`check` 和 `check-file-size.test.mjs` 因此失败；挪走后降到 717 行，基线已 `--update`。
+  - **改变了已有行为的**：智能体经侧栏工具提议简约形态、或在非简约屏幕上提议简约专用参数，原来前者会被接受，现在都被拒绝。设置页和侧栏显示不变；已存为简约形态的屏幕（本机两块屏幕都是动态，没有）照旧显示。
+- 测试：第一次全量 `pnpm run check` 退出码 1（`check-file-size`：`style_rules.rs` 728 行超基线 719），`pnpm test` 退出码 0（cargo `1000 passed; 0 failed`），`node --test tests/*.test.mjs` `ℹ pass 21` / `ℹ fail 1`（同一个棘轮）。修好后最终版本：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-397-no-simple/`（`check-1.log`、`test-1.log`、`node-test-1.log` 是第一次，`check-2.log`、`test-2.log`、`node-test-2.log` 是最终版）。
+- 验证：实机（装机后）经 MCP `draft_hud` 对内屏 `37D8832A` 提议两次：`{"mode":"simple"}` 返回 `Nothing was changed. hud.mode is one of "notch", "dynamic".`；`{"simpleSize":30}` 返回 `... would be "dynamic". Leave it out: PostPane no longer offers the "simple" HUD.`。本会话的 MCP 连接是装机前起的旧进程（参数定义仍含 simple），所以两次都穿过了旧的参数校验，由新应用的后端规则拒绝，验的正是最终那一层；新包里 `agent-hud-mcp` 的参数定义已是 `enum(["notch", "dynamic"])`。之后读 `presentation.json` 两块屏幕仍是 `logos`，数据目录 21:30 有更新，应用日志没有报错（`draft-hud-check.txt`）。渲染代码没动，没有做截图对比。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `2713381`。`tauri build --bundles app` 退出码 0；`install.sh 397-no-simple`：装前 `4d81bf2fb2ca`（已备份），退出于 21:29:46、启动于 21:29:46，产物 `32a5ebaa4109` / 已装 `32a5ebaa4109`，签名照常（`H"b773068e`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-397-no-simple/PostPane-4d81bf2fb2ca.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：本机 `~/.claude/skills/customize-agent-hud/SKILL.md` 第 82、85、87、89 行仍写着 `simple` 形态和它的参数，它不在本仓库（也不在 `my-skills`），没改；智能体照它提议会被拒并看到说明，要不要改那份文档由常浩定。已经开着的智能体会话里的 MCP 连接是旧进程，参数定义还含 simple，重开会话后才换新，但后端照样拒绝。历史包袱清理的第二档还剩一项要单独确认：`docs/upstream/` 与上游宣传素材。skill 进化：无。
+- 本轮新坑：无
+
+## 删更新通知链：设置「更新」页、托盘「发现新版本」、面板页脚更新箭头（#395）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删更新链路」；已提交、已发布 `4d81bf2fb2ca` 回读通过）
+
+- 时间：开工 `2026-11-18 14:38`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。更新通知只能由产品扩展发出，驿窗启动时传的扩展是空的（`main.rs` 传 `None`），这条链永远走不到。扩展口本身还被接力（`Flight`）、互发消息（`Delivery`）和 MCP 工具通道在用，按常浩选的甲不动。
+- 改了哪些文件：
+  - 常浩要求的：删 `src/packages/app/src/settings/UpdatesPane.tsx`；`src/packages/app/src/App.tsx` 去掉 `updates` 页定义、`hiddenPages` 里的 `updates`、渲染判断里的 `updates` 和不再用的 `Download` 图标；`SettingsPanes.tsx` 去掉对应分支；`src/crates/host/src/tray.rs` 去掉 `tray-update` 菜单项、点击处理、托盘状态里的 `update` 和 `project` 的 `update` 参数；`src/crates/host/src/coordinator.rs` 去掉通知状态、`UPDATE` 标志、`update_notice`、`current_notice`、`open_update_page`、`hud_update_notice`、`open_update` 和发 `hud:update` 那段；`src/crates/host/src/lib.rs` 去掉两条命令登记和扩展口上下文里的 `update`；`src/crates/host/src/extension.rs` 去掉 `UpdateNotice`、`ShowUpdate` 和 `HostContext.update`；`src/packages/hud/src/model.ts` 去掉 `HUDUpdateNotice`；`HUDScene.tsx`、`HoverPanel.tsx`、`src/packages/app/src/HUDSurface.tsx` 去掉页脚更新箭头和一路传下来的 `update` / `onUpdate`，以及跟着不再用的 `CircleArrowDown`、`motion` 导入。
+  - 顺手改的：`coordinator.rs` 开头说明去掉「the product's update notice」；它的测试 `callbacks_before_the_window_worker_starts_keep_their_initial_facts` 去掉通知那半、保留快照不被降级的断言；托盘测试 `an_update_notice_redraws_the_menu` 随功能删掉；`file-size-baseline.json` 收紧（`coordinator.rs` 降到 300 行以下出了基线，`tray.rs` 454→436、`App.tsx` 1022→1012、`HUDSurface.tsx` 713→684、`HUDScene.tsx` 1459→1438、`HoverPanel.tsx` 605→552、`model.ts` 337→330）。
+  - **改变了已有行为的**：无可见变化。设置「更新」页本来就藏着；托盘「发现新版本…」和页脚箭头只在有通知时出现，而驿窗从来发不出通知。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 退出码 0（新 worktree 首轮一次通过）：cargo 合计 `998 passed; 0 failed`（比上一轮少的 1 条是删掉的托盘测试），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/`（`check-1.log`、`test-1.log`、`node-test-1.log`）。
+- 验证：
+  - 场景预览台：改前用主目录（`53092f9`，和本分支同一基点）、改后用本 worktree，各量三处面板页脚的 outerHTML：暗色 `all-running`、`claude-many-asks` 都是 len 3018 / hash 600255833，浅色 `hermes-desks` 是 len 3013 / hash 804948324，改前改后逐字一致，按钮都只有「设置 / 用量统计」；控制台没有报错（`footer-compare.txt`）。
+  - 实机（装机后）：MCP 截面板，页脚仍是「设置 / 统计 ↗」，版面和改前（`00-panel-before.png`）一致；真实屏幕隔 2 秒截两张侧栏（`01-strip-a.png`、`02-strip-b.png`），Claude 头上的问号、Codex 的鼻涕泡、DeepSeek 的水泡都在变，小人是动的，两个挂件都在（L-35）；数据目录 21:05 有更新，应用日志没有报错。MCP 的离屏截图（`show: hud`）两次一样，它画的是静态帧，不能用来判断动没动。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/`：`00-panel-before.png`（改前面板）、`01-strip-a.png`、`02-strip-b.png`（改后真实屏幕右侧侧栏，已裁掉别的窗口）。
+- 发布与回读：打包前 main 仍是 `53092f9`。第一次打包在会话重启时被中断（`build-1.log` 里 `Command was killed with SIGTERM`），没有产出；重打 `build-2.log` 退出码 0。`install.sh 395-update-notice`：装前 `2fd869f9082b`（已备份），退出于 21:04:59、启动于 21:04:59，产物 `4d81bf2fb2ca` / 已装 `4d81bf2fb2ca`，签名照常（`H"b773068e`）；合并前 `install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-395-update-notice/PostPane-2fd869f9082b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：设置页分组里的 `about` 现在没有自带页面了（`updates` 原本是它唯一的一页，本来就藏着），分组定义没动，扩展页面默认还会落到这一组。`model.ts` 里 `HUDConfig` 上方有一段讲「Per-screen placement」的注释原本就摆错了位置，没动。第二档还剩两项要单独确认：简约形态代码、`docs/upstream/` 与宣传素材。skill 进化：无。
+- 本轮新坑：无
+
+## 修偶发失败的引擎客户端测试：替身引擎启动慢时第二个被当成第一个（#393）（2026-11-18，Claude，常浩回「修偶发测试」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 14:05`（`date '+%F %H:%M'` 记录）。来由：#389、#391 两个新 worktree 的首轮 `pnpm test` 都在 `src/packages/engine-client/test/late-output.test.ts` 失败，46 秒后 `Engine request timed out`，重跑都过。#391 那一轮查出原因并复现，常浩让修。
+- 改了哪些文件：
+  - 常浩要求的：`src/packages/engine-client/test/late-output.test.ts`。原来靠标记文件分「第一个 / 第二个」替身引擎，替身的启动算在要验的 1.5 秒超时里；启动一慢，第一个还没写标记就被杀，第二个被当成第一个、不回话。现在第一个替身先回一次话表示已启动（这一步给 60 秒），之后才开始计 1.5 秒；第二个的回话也给 60 秒。要验的东西没变：超时后旧引擎晚到的半行不能混进新引擎的缓冲。
+  - 顺手改的：`docs/LESSONS.md` 的 L-48 下补记这次再现和「用标记文件分角色的替身，要先确认第一个真的跑起来了」。
+  - **改变了已有行为的**：无（只改测试）。
+- 测试：`pnpm run check` 退出码 0。`pnpm test` 第一次退出码 101：cargo `496 passed; 1 failed`，失败的是 `core` 的 `tests::ingestion::the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry`（`ingestion.rs:710`，断言下一次扫目录在 290–300 秒后，实测 `273.253120375s`），前端几组因此没跑；当时 `uptime` 负载 62–70，另一个会话在 `347-review-gate` 跑测试。完整重跑退出码 0：cargo `999 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；重跑开始时负载 62、结束时 24。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-393-late-output/`（`check-1.log`、`test-1.log`、`test-2.log`、`node-test-1.log`）。
+- 验证：四项，都在本 worktree。① 正常连跑 3 次全过（2.0、2.5、6.1 秒，当时后台在编译）。② 临时撤掉 #351 B14 的修复（`git show 110f321 -- src/packages/engine-client/src/index.ts | git apply -R`），测试失败并报 `Engine returned an invalid protocol frame`，说明没有变成空过；随后 `git checkout` 恢复。③ 两个替身启动前都忙等 2 秒（旧写法必败），通过，6.6 秒（`slow-start-fixed.test.ts`）。④ 边批量新建并执行程序边连跑 20 次（`load-393.sh`），20 过 0 败，耗时 1.9–5.6 秒，其中多次启动超过 1.5 秒；压测进程已确认没有残留。
+- 截图：无。
+- 发布与回读：无需发布（只改测试和文档）。
+- 与授权不一致之处、遗留问题、范围外发现：`core` 那条 `the_next_pass_is_due_...` 是另一种对时间敏感的断言（留 10 秒余量，机器负载 60 以上时一次快照就能超过），这次只碰到一次、重跑通过，没改，再出现建议把窗口放宽或改成注入时钟。同目录的 `utf8-chunks.test.ts` 也用替身脚本，但没有短超时，不受影响。历史包袱清理的第二档还剩三项要单独确认：更新链路与扩展口、简约形态代码、`docs/upstream/` 与宣传素材。skill 进化：无。
+- 本轮新坑：无（L-48 再次出现，已在该条下补记）
+
 ## 删数据目录迁移：数据目录固定为 `app.postpane.mac`，启动时不再看旧目录（#391）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删目录迁移」；已提交、已发布 `2fd869f9082b` 回读通过）
 
 - 时间：开工 `2026-11-18 13:31`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。迁移是阶段 2 的交付物，11-04 已搬完；之后它每次启动仍把旧目录 `app.agenthud.mac` 里驿窗没有的文件并进来，新目录没锁时还会直接改用旧目录。排查发现 11-08 深夜另一个会话用演示模式跑过下载的上游 0.6.0 应用，往旧目录写了演示数据（这次没并进来，只因为同名文件驿窗都有）。旧目录已于当天 13:19 移到 `evidence/2026-11-18-agenthud-old-data-folder/`。

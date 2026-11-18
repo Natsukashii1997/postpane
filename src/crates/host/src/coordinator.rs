@@ -2,12 +2,8 @@
 //! itself so Settings can close: the HUD windows' plans, the menu bar item, the
 //! notch glow switch and the Bots' directions. One worker does it all, woken by
 //! a collection pass, a display preference, a display change, the system
-//! appearance, a Bot looked at, the product's update notice, or the next moment
-//! a Bot's direction changes.
-use crate::{
-    activity, bots, extension::UpdateNotice, hud, presentation::Presentation, screens, tray,
-    vendors,
-};
+//! appearance, a Bot looked at, or the next moment a Bot's direction changes.
+use crate::{activity, bots, hud, presentation::Presentation, screens, tray, vendors};
 use serde_json::{json, Value};
 use std::{
     sync::{Arc, Condvar, Mutex, PoisonError},
@@ -25,8 +21,6 @@ const DISPLAY: u8 = 4;
 const SCREENS: u8 = 8;
 /// The system's light or dark appearance.
 const APPEARANCE: u8 = 16;
-/// The product's update notice.
-const UPDATE: u8 = 32;
 
 #[derive(Default)]
 struct Pending {
@@ -42,8 +36,6 @@ pub(crate) struct Coordinator {
     wake: Condvar,
     /// The Bots' directions as last published, for a page that comes back.
     directions: Mutex<Value>,
-    /// The product's update notice, for the menu bar and every HUD.
-    notice: Mutex<Option<UpdateNotice>>,
 }
 
 impl Default for Coordinator {
@@ -55,7 +47,6 @@ impl Default for Coordinator {
             }),
             wake: Condvar::new(),
             directions: Mutex::new(json!({"startedAt": 0, "directions": {}})),
-            notice: Mutex::new(None),
         }
     }
 }
@@ -87,17 +78,6 @@ impl Coordinator {
         pending.changed |= changed;
         update(&mut pending);
         self.wake.notify_one();
-    }
-
-    fn update_notice(&self, notice: Option<UpdateNotice>) {
-        {
-            let mut shown = self.notice.lock().unwrap_or_else(PoisonError::into_inner);
-            if *shown == notice {
-                return;
-            }
-            *shown = notice;
-        }
-        self.wake(UPDATE, |_| {});
     }
 }
 
@@ -153,41 +133,6 @@ pub(crate) fn save_placement(app: &tauri::AppHandle, placement: Value) {
             Err(error) => eprintln!("Agent HUD placement was not saved: {error}"),
         }
     });
-}
-
-/// The product found a newer version, or no longer offers one.
-pub(crate) fn update_notice(app: &tauri::AppHandle, notice: Option<UpdateNotice>) {
-    let Some(owner) = app.try_state::<Coordinator>() else {
-        return;
-    };
-    owner.update_notice(notice);
-}
-
-fn current_notice(app: &tauri::AppHandle) -> Option<UpdateNotice> {
-    app.try_state::<Coordinator>()?
-        .notice
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-}
-
-/// The menu bar's New Version… and the HUD's arrow: Settings, on the page
-/// the notice names.
-pub(crate) fn open_update_page(app: &tauri::AppHandle) {
-    if let Some(notice) = current_notice(app) {
-        crate::show_settings_page(app, notice.settings_page);
-    }
-}
-
-/// The update notice, for a HUD page that starts or comes back.
-#[tauri::command]
-pub(crate) fn hud_update_notice(app: tauri::AppHandle) -> Option<UpdateNotice> {
-    current_notice(&app)
-}
-
-#[tauri::command]
-pub(crate) fn open_update(app: tauri::AppHandle) {
-    open_update_page(&app);
 }
 
 #[tauri::command]
@@ -327,10 +272,6 @@ fn run(app: &tauri::AppHandle) {
         if changed & (SNAPSHOT | DISPLAY | SCREENS) != 0 {
             planner.apply(app, &view, snapshot.as_deref(), now_ms);
         }
-        let notice = current_notice(app);
-        if changed & UPDATE != 0 {
-            activity::publish(app, "hud:update", &notice);
-        }
         if let Some(snapshot) = snapshot.as_deref().filter(|_| changed != 0) {
             // The primary screen's HUD names the menu's agents and its colors.
             let id = planner.primary().unwrap_or("");
@@ -345,7 +286,6 @@ fn run(app: &tauri::AppHandle) {
                     .unwrap_or(snapshot["settings"]["showMenuBarIcon"] == true),
                 view["glowHidden"] == true,
                 appearance == "light" || appearance == "system" && light,
-                notice.as_ref().map(|notice| notice.version.as_str()),
                 now_ms,
             );
             if let Err(error) = tray::apply(app, state) {
@@ -364,22 +304,15 @@ mod tests {
         let owner = Coordinator::default();
         let initial = Arc::new(json!({"settings":{"hudVisible":false},"generatedAt":"first"}));
         owner.wake(SNAPSHOT, |pending| pending.snapshot = Some(initial));
-        let notice = UpdateNotice {
-            version: "0.7.0".into(),
-            settings_page: "updates".into(),
-        };
-        owner.update_notice(Some(notice.clone()));
-        // A later clock or a repeated version must not downgrade or discard
-        // the first projection before its consumer has taken it.
+        // A later clock must not downgrade or discard the first projection
+        // before its consumer has taken it.
         let later = Arc::new(json!({"settings":{"hudVisible":false},"generatedAt":"later"}));
         owner.wake(CLOCK, |pending| pending.snapshot = Some(later.clone()));
-        owner.update_notice(Some(notice.clone()));
         let pending = owner.pending.lock().unwrap();
         assert_eq!(
-            pending.changed & (SCREENS | DISPLAY | SNAPSHOT | UPDATE),
-            SCREENS | DISPLAY | SNAPSHOT | UPDATE
+            pending.changed & (SCREENS | DISPLAY | SNAPSHOT),
+            SCREENS | DISPLAY | SNAPSHOT
         );
         assert_eq!(pending.snapshot.as_ref().unwrap().as_ref(), later.as_ref());
-        assert_eq!(*owner.notice.lock().unwrap(), Some(notice));
     }
 }

@@ -85,4 +85,4 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 
 - 不重写 `project-starter`、`worktree-sweep`、`session-retro` 的内容；它们改了，这里只改调用方式。
 - 不替常浩点隐私权限弹窗、不替他做 UI 三选一。
-- 授权范围外的问题记进交接，不顺手修。
+- 不做没要求的新功能。看到的相关问题可以顺手修，守 AGENTS.md「分工」的三条底线，交接和 PR 里单列「我顺手改的」（E-21）。

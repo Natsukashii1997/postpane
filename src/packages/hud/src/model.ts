@@ -36,13 +36,6 @@ export type HUDEdge = "top" | "right" | "bottom" | "left";
 export type HUDDecision = RequestDecision;
 
 /** Per-screen placement, with the same defaults and limits as ScreenPlacement.swift. */
-/** A newer version of the app that the product found: the host's
- * `UpdateNotice`, which every HUD panel shows as an arrow in its footer. */
-export interface HUDUpdateNotice {
-  version: string;
-  settingsPage: string;
-}
-
 export interface HUDConfig {
   panelLayout: PanelLayout;
   mode: HUDMode;

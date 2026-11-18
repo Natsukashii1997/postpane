@@ -17,7 +17,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   CircleHelp,
   Coins,
-  Download,
   Monitor,
   MoreHorizontal,
   Plug,
@@ -185,14 +184,6 @@ const pages: {
     description: "What each model costs. Set your own when it is wrong.",
     group: "agents",
   },
-  {
-    id: "updates",
-    label: "Updates",
-    icon: Download,
-    color: "#007aff",
-    description: "PostPane updates and beta releases.",
-    group: "about",
-  },
 ];
 const chinesePages: Record<string, [string, string]> = {
   general: ["通用", "外观、语言与启动。"],
@@ -244,7 +235,7 @@ type SidebarPage = {
   customIcon?: ReactNode;
 };
 /** Built-in pages PostPane keeps but does not show (docs/ROADMAP.md, stage 1). */
-const hiddenPages = ["relays", "prices", "updates"];
+const hiddenPages = ["relays", "prices"];
 /** The sidebar's pages in order: a product page that replaces a built-in
  * one takes its slot; the others join their group, before the page they
  * name or at the group's end. */
@@ -989,8 +980,7 @@ function AppContent({
                           page === "display" ||
                           page === "agents" ||
                           page === "agent-plugins" ||
-                          page === "ai-access" ||
-                          page === "updates") && (
+                          page === "ai-access") && (
                           <SettingsPane
                             page={page}
                             settingsProps={settingsProps}

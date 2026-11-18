@@ -23,8 +23,6 @@ pub(crate) struct Presentation {
     remaining: bool,
     levels: Vec<Level>,
     entries: Vec<Entry>,
-    /// The product's newer version, for New Version….
-    update: Option<String>,
 }
 
 impl Default for Presentation {
@@ -38,7 +36,6 @@ impl Default for Presentation {
             remaining: false,
             levels: vec![],
             entries: vec![],
-            update: None,
         }
     }
 }
@@ -97,7 +94,6 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
             "tray-statistics" => statistics(app),
             "tray-toggle-glow" => crate::coordinator::toggle_glow(app),
             "tray-refresh" => super::refresh_data(app),
-            "tray-update" => crate::coordinator::open_update_page(app),
             "tray-quit" => app.exit(0),
             id if id.starts_with("tray-data-") => statistics(app),
             _ => {}
@@ -145,7 +141,6 @@ pub(crate) fn project(
     visible: bool,
     glow_hidden: bool,
     light: bool,
-    update: Option<&str>,
     now_ms: i64,
 ) -> Presentation {
     let zh = snapshot["language"] == "zh";
@@ -235,7 +230,6 @@ pub(crate) fn project(
                 .collect()
         },
         entries,
-        update: update.map(str::to_owned),
     }
 }
 
@@ -366,18 +360,6 @@ fn make_menu(app: &tauri::AppHandle, state: &Presentation) -> tauri::Result<Menu
         true,
         Some("CmdOrCtrl+,"),
     )?)?;
-    // Open's AppUpdater.menuItems(): New Version… only while the product offers a
-    // newer version. A native menu draws it in the menu's own ink, and has no tooltip
-    // for the version, which Settings shows.
-    if state.update.is_some() {
-        menu.append(&MenuItem::with_id(
-            app,
-            "tray-update",
-            text("发现新版本…", "New Version…"),
-            true,
-            None::<&str>,
-        )?)?;
-    }
     menu.append(&MenuItem::with_id(
         app,
         "tray-quit",
@@ -485,7 +467,7 @@ mod tests {
             "providers": [], "approvals": [], "sessions": []
         });
         let agents = crate::vendors::vendors(&snapshot, "simple", now);
-        let state = project(&snapshot, &agents, true, false, false, None, now);
+        let state = project(&snapshot, &agents, true, false, false, now);
         assert_eq!(
             titles(&state),
             [
@@ -506,7 +488,7 @@ mod tests {
         let paused = json!({"language": "zh", "status": {"paused": true}, "quotas": [], "billing": [], "providers": [], "approvals": [],
             "sessions": [{"id": "a", "source": "kimi", "state": "idle", "updatedAt": "2026-10-21T11:00:00Z"}]});
         let agents = crate::vendors::vendors(&paused, "logos", now);
-        let state = project(&paused, &agents, true, true, false, None, now);
+        let state = project(&paused, &agents, true, true, false, now);
         assert_eq!(titles(&state), ["Kimi", "暂无额度读数 —"]);
         assert!(state.levels.is_empty() && state.glow_hidden && state.used_percent.is_none());
     }
@@ -523,10 +505,10 @@ mod tests {
             "billing":[], "providers":[], "approvals":[], "sessions":[]
         });
         let agents = crate::vendors::vendors(&snapshot, "simple", 0);
-        let consumed = project(&snapshot, &agents, true, false, false, None, 0);
+        let consumed = project(&snapshot, &agents, true, false, false, 0);
         let mut remaining_snapshot = snapshot.clone();
         remaining_snapshot["settings"]["quotaDisplay"] = json!("remaining");
-        let remaining = project(&remaining_snapshot, &agents, true, false, false, None, 0);
+        let remaining = project(&remaining_snapshot, &agents, true, false, false, 0);
         assert_eq!(
             titles(&remaining),
             ["Claude", "5h 100%", "Week 8%", "—", "Codex", "5h —"]
@@ -560,16 +542,5 @@ mod tests {
         );
         assert!(reset_countdown("2026-10-23T12:00:00Z", now).is_some_and(|text| text.len() == 9));
         assert_eq!(reset_countdown("soon", now), None);
-    }
-
-    #[test]
-    fn an_update_notice_redraws_the_menu() {
-        let snapshot =
-            json!({"language": "en", "quotas": [], "billing": [], "providers": [], "sessions": []});
-        let none = project(&snapshot, &[], true, false, false, None, 0);
-        let offered = project(&snapshot, &[], true, false, false, Some("0.6.1"), 0);
-        assert_eq!(offered.update.as_deref(), Some("0.6.1"));
-        // `apply` skips an unchanged presentation, so the notice must change it.
-        assert!(none != offered);
     }
 }

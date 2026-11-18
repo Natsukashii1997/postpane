@@ -79,14 +79,12 @@ Agent HUD adds its tools to this client as an MCP server named `agent-hud`. This
 **HUD style (display key only), under `hud`:**
 
 - **Every mode:**
-  - `mode`: `notch` (only on a display with a notch), `dynamic` or `simple`
+  - `mode`: `notch` (only on a display with a notch) or `dynamic`
   - `appearance`: `dark`, `light` or `system`
   - `transparency`: 0–1
-- **`dynamic` and `simple`:** `edge` (top, right, bottom or left), `position` (0–1).
-- **`dynamic` only:** `logoSize` (20–60), `logoGap` (0.1–0.6), `edgeDistance` (0–20) and `showLogos`.
-- **`simple` only:** `simpleSize` (20–60), `simpleGap` (0.1–0.6), `ringWidth` (1–4), `simpleStyle` and `showNumbers`. `simpleStyle` is how each logo shows its usage: `rings` (concentric rings round it), `segments` (one ring split per window, the default), `bars` (bars beside it) or `numbers` (the most used window's percentage alone). `ringWidth` is also the bars' thickness, and `showNumbers` adds the percentage beside rings, segments or bars.
+- **`dynamic` only:** `edge` (top, right, bottom or left), `position` (0–1), `logoSize` (20–60), `logoGap` (0.1–0.6), `edgeDistance` (0–20) and `showLogos`.
 - **`reset: true`:** restores the default look. Send it alone, with no other style field.
-- **`glow` (not drawn in `simple`):**
+- **`glow`:**
   - `style`: `blur`, `dots`, `ascii`, `blocks`, `braille` or `binary`
   - `effect`: `breathe`, `flow`, `scan`, `ripple`, `shimmer` or `boot`
   - `brightness`: 0.2–1
@@ -132,7 +130,7 @@ Agent HUD adds its tools to this client as an MCP server named `agent-hud`. This
 
 - **What it shows:** the app's own panel, or one display's resting HUD, with drafts included. It renders offscreen and never captures the desktop.
 - **Masking:** accounts are masked, and session titles and notices are left out.
-- **Display key required:** `show: "hud"` and `agent` need one. `agent` also needs a `dynamic` or `simple` HUD, not the notch.
+- **Display key required:** `show: "hud"` and `agent` need one. `agent` also needs a `dynamic` HUD, not the notch.
 - **One at a time:** it renders one picture at a time and times out after 25 s, naming the step it was waiting for.
 - **Slow data:** a panel picture waits about 8 s for the token chart and the sessions list. If a section has not loaded by then, it is drawn as it looks while loading and is named in `loading`. Take the picture again to see it filled.
 - **Motion:** an animated glow may not show in a still picture.
