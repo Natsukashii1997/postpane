@@ -216,6 +216,9 @@ pub struct CronJob {
     pub id: String,
     pub name: String,
     pub enabled: bool,
+    /// Why it was paused (`paused_reason`), when whoever paused it said; a
+    /// task turned off without a reason is not shown (owner, 2026-11-18).
+    pub paused_reason: Option<String>,
     /// Its last run failed (`last_status` "error"); a task never run is not.
     pub failed: bool,
     /// When its last run was (ms).
@@ -246,6 +249,11 @@ pub fn cron_jobs(text: &str) -> Option<Vec<CronJob>> {
                     id: job["id"].as_str()?.to_string(),
                     name: job["name"].as_str().unwrap_or_default().to_string(),
                     enabled: job["enabled"].as_bool().unwrap_or(true),
+                    paused_reason: job["paused_reason"]
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|reason| !reason.is_empty())
+                        .map(str::to_string),
                     failed: job["last_status"] == "error",
                     last_run_at: millis(&job["last_run_at"]),
                     next_run_at: millis(&job["next_run_at"]),
@@ -490,6 +498,29 @@ mod gateway_tests {
                 .map(|j| j.schedule.as_deref())
                 .collect::<Vec<_>>(),
             vec![Some("45 7 * * 1"), Some("every 30m"), None]
+        );
+    }
+
+    #[test]
+    fn a_paused_cron_job_keeps_the_reason_it_was_paused_for() {
+        let text = json!({"jobs": [
+            {"id": "a", "enabled": false, "state": "paused", "paused_reason": "等新版上线"},
+            {"id": "b", "enabled": false, "state": "paused", "paused_reason": null},
+            {"id": "c", "enabled": false, "state": "paused", "paused_reason": "  "},
+            {"id": "d", "enabled": true}
+        ]})
+        .to_string();
+        let jobs = cron_jobs(&text).unwrap();
+        assert_eq!(
+            jobs.iter()
+                .map(|j| (j.enabled, j.paused_reason.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (false, Some("等新版上线")),
+                (false, None),
+                (false, None),
+                (true, None)
+            ]
         );
     }
 

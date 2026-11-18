@@ -1,7 +1,7 @@
 // The workplace scenes (#349, ADR-0001 「验收场景」): each the state one
 // acceptance case needs, shared by the contract tests and the scene preview.
-import type { Snapshot } from "@agent-hud/protocol";
-import { approval, relay, reply, session, snapshot } from "./build.ts";
+import type { HermesCronJob, Snapshot } from "@agent-hud/protocol";
+import { approval, at, relay, reply, session, snapshot } from "./build.ts";
 
 export interface Scene {
   key: string;
@@ -375,6 +375,88 @@ const everything: Scene = {
   }),
 };
 
+const job = (
+  id: string,
+  name: string,
+  schedule: string,
+  lastAgo: number | null,
+  over: Partial<HermesCronJob> = {},
+): HermesCronJob => ({
+  id,
+  name,
+  enabled: true,
+  failed: false,
+  schedule,
+  lastRunAt: lastAgo === null ? null : at(lastAgo),
+  nextRunAt: null,
+  ...over,
+});
+
+const hermesDesks: Scene = {
+  key: "hermes-desks",
+  title:
+    "Hermes 两个机器人的定时任务：任务表装框，只有多久一次和执行情况；没写原因就关掉的任务不显示（#384）",
+  snapshot: snapshot({
+    bots: [
+      {
+        id: "default",
+        name: "机器人甲",
+        down: null,
+        turnsToday: 6,
+        lastReplyAt: at(20),
+        jobs: [
+          job("check", "工程自检（每天 09:50）", "50 9 * * *", 4320, {
+            enabled: false,
+          }),
+          job("cards", "周报卡片（每 15 分钟看一次）", "*/15 * * * *", 6),
+          job("merge", "合并巡查", "*/30 9-23 * * *", 6000, {
+            enabled: false,
+          }),
+          job("night", "夜跑主控", "every 5m", 9000, { enabled: false }),
+          job("monthly", "月度体检（每月 1 号）", "30 10 1 * *", 4300),
+          job("daily-write", "项目日报·写稿", "15 9 * * *", 285),
+          job("daily-send", "项目日报·发送", "0 10 * * *", 240),
+          job("hot", "热点榜（工作日）", "45 9 * * 1-5", 255),
+          job("patrol", "仓库巡检", "*/30 9-23 * * *", 20),
+          job("weekly", "周会纪要（每周一）", "45 7 * * 1", 7400, {
+            failed: true,
+          }),
+          job("learn", "学习报告", "every 2h", null, {
+            enabled: false,
+            pausedReason: "等新数据源接好",
+          }),
+        ],
+        asks: [
+          {
+            chat: "dm",
+            chatId: "oc_scene_dm",
+            title: "问一下回答为什么变慢",
+            at: at(1660),
+            answer: "answered",
+          },
+        ],
+      },
+      {
+        id: "agumon",
+        name: "机器人乙",
+        down: null,
+        turnsToday: 2,
+        lastReplyAt: at(90),
+        jobs: [job("memo", "记忆日报", "30 7 * * *", 390)],
+        asks: [
+          {
+            chat: "group",
+            chatId: "oc_scene_grp",
+            title: "整理调研方法",
+            at: at(1500),
+            answer: "answered",
+          },
+        ],
+      },
+    ],
+  }),
+};
+
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
@@ -388,6 +470,7 @@ export const SCENES: readonly Scene[] = [
   everything,
   claudeBusy,
   claudeManyAsks,
+  hermesDesks,
 ];
 
 export function scene(key: string): Scene {

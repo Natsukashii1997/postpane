@@ -78,24 +78,41 @@ test("a task reads by its name without the bracketed note", () => {
   assert.equal(shortJobName("（全在括号里）"), "（全在括号里）");
 });
 
-test("how often a task runs reads from its cron expression", () => {
-  assert.equal(cadence("30 7 * * *", "zh"), "每天 07:30");
-  assert.equal(cadence("45 7 * * 1", "zh"), "周一 07:45");
-  assert.equal(cadence("0 9 * * 1-5", "zh"), "工作日 09:00");
-  assert.equal(cadence("*/30 * * * *", "zh"), "*/30 * * * *");
-  assert.equal(cadence("every 30m", "zh"), "every 30m");
-  assert.equal(cadence(null, "zh"), "");
+test("how often a task runs reads in words (#384)", () => {
+  const zh = (schedule: string | null) => cadence(schedule, "zh");
+  assert.equal(zh("30 7 * * *"), "每天 07:30");
+  assert.equal(zh("45 7 * * 1"), "每周一 07:45");
+  assert.equal(zh("0 9 * * 0"), "每周日 09:00");
+  assert.equal(zh("0 9 * * 1-5"), "工作日 09:00");
+  assert.equal(zh("30 10 1 * *"), "每月 1 日 10:30");
+  assert.equal(zh("0 8 */5 * *"), "每 5 天 08:00");
+  assert.equal(zh("*/15 * * * *"), "每 15 分钟");
+  assert.equal(zh("*/30 9-23 * * *"), "每 30 分钟（9–23 点）");
+  assert.equal(zh("0 */2 * * *"), "每 2 小时");
+  assert.equal(zh("0 * * * *"), "每小时");
+  assert.equal(zh("0 9-18 * * 1-5"), "工作日每小时（9–18 点）");
+  assert.equal(zh("every 5m"), "每 5 分钟");
+  assert.equal(zh("every 2h"), "每 2 小时");
+  assert.equal(zh("every 1d"), "每天");
+  // What it cannot say plainer reads as Hermes wrote it.
+  assert.equal(zh("0 9 * 6 *"), "0 9 * 6 *");
+  assert.equal(zh("0 9 1 * 1"), "0 9 1 * 1");
+  assert.equal(zh("*/5 */2 * * *"), "*/5 */2 * * *");
+  assert.equal(zh("2026-12-01T09:00"), "2026-12-01T09:00");
+  assert.equal(zh(null), "");
+  assert.equal(cadence("45 7 * * 1", "en"), "Every Mon 07:45");
+  assert.equal(cadence("*/15 * * * *", "en"), "Every 15 min");
+  assert.equal(
+    cadence("*/30 9-18 * * 1-5", "en"),
+    "Weekdays, every 30 min (9–18h)",
+  );
 });
 
-test("runs read short: 今天 / 昨天 / date behind, time / 明天 / weekday ahead", () => {
+test("runs read short: 今天 / 昨天 / date", () => {
   const when = (iso: string) => shortWhen(at(iso), now, tz, "zh");
   assert.equal(when("2026-11-06T07:35:51+08:00"), "今天");
   assert.equal(when("2026-11-05T09:50:00+08:00"), "昨天");
   assert.equal(when("2026-11-02T09:14:01+08:00"), "11/2");
-  assert.equal(when("2026-11-06T11:30:00+08:00"), "11:30");
-  assert.equal(when("2026-11-07T07:30:00+08:00"), "明天");
-  assert.equal(when("2026-11-09T07:45:00+08:00"), "周一");
-  assert.equal(when("2026-11-20T07:45:00+08:00"), "11/20");
 });
 
 test("an ask reads its time today, 昨天 HH:MM, or its date", () => {
@@ -113,7 +130,7 @@ test("an ask reads its time today, 昨天 HH:MM, or its date", () => {
   );
 });
 
-test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
+test("the task table: last run ✓ / ✗ / never, 已暂停, no next run (#384)", () => {
   const rows = jobRows(
     [
       {
@@ -135,13 +152,23 @@ test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
         nextRunAt: "2026-11-09T07:45:00+08:00",
       },
       {
+        id: "c",
+        name: "AI 前沿群学习报告",
+        enabled: true,
+        failed: false,
+        schedule: "45 10 * * *",
+        lastRunAt: null,
+        nextRunAt: "2026-11-06T10:45:00+08:00",
+      },
+      {
         id: "t",
         name: "Tidings 周报卡片（每周一 11:30，发到私聊）",
         enabled: false,
         failed: false,
         schedule: "30 11 * * 1",
-        lastRunAt: null,
-        nextRunAt: "2026-11-09T11:30:00+08:00",
+        lastRunAt: "2026-11-02T11:30:00+08:00",
+        nextRunAt: null,
+        pausedReason: "等 Tidings 新版上线",
       },
     ],
     now,
@@ -149,20 +176,37 @@ test("the task table: last run ✓ / ✗ / never, next run, or off", () => {
     "zh",
   );
   assert.deepEqual(
-    rows.map((row) => [
-      row.name,
-      row.cadence,
-      row.last.tone,
-      row.last.text,
-      row.next,
-    ]),
+    rows.map((row) => [row.name, row.cadence, row.last.tone, row.last.text]),
     [
-      ["日报", "每天 07:30", "ok", "✓ 今天", "明天"],
-      ["周报", "周一 07:45", "fail", "✗ 11/2", "周一"],
-      ["Tidings 周报卡片", "周一 11:30", "none", "没跑过", "停用"],
+      ["日报", "每天 07:30", "ok", "✓ 今天"],
+      ["周报", "每周一 07:45", "fail", "✗ 11/2"],
+      ["AI 前沿群学习报告", "每天 10:45", "none", "没跑过"],
+      ["Tidings 周报卡片", "每周一 11:30", "paused", "已暂停"],
     ],
   );
   assert.equal(rows[0].title, "日报（新结构·并跑）");
+  assert.equal(
+    rows[3].title,
+    "Tidings 周报卡片（每周一 11:30，发到私聊）\n暂停原因：等 Tidings 新版上线",
+  );
+  assert.ok(rows.every((row) => !("next" in row)));
+});
+
+test("a task turned off without a stated reason does not show (#384)", () => {
+  const off = (id: string, pausedReason?: string | null) => ({
+    id,
+    name: `任务${id}`,
+    enabled: false,
+    failed: false,
+    schedule: "50 9 * * *",
+    lastRunAt: "2026-11-05T09:50:00+08:00",
+    nextRunAt: null,
+    pausedReason,
+  });
+  const names = (jobs: Parameters<typeof jobRows>[0]) =>
+    jobRows(jobs, now, tz, "zh").map((row) => row.name);
+  assert.deepEqual(names([off("a"), off("b", null), off("c", "  ")]), []);
+  assert.deepEqual(names([off("a"), off("d", "先停一周")]), ["任务d"]);
 });
 
 // The steps of one job, as 猛鬼兽 runs 个人项目日报 (digital-twin #159).
@@ -186,7 +230,6 @@ const table = (jobs: Parameters<typeof jobRows>[0]) =>
     row.name,
     row.cadence,
     row.last.text,
-    row.next,
   ]);
 
 test("the steps of one job (名字·步骤) read as one row by the job's name (#326)", () => {
@@ -209,11 +252,11 @@ test("the steps of one job (名字·步骤) read as one row by the job's name (#
   // Listed send first: the last step is the latest in the day, not the last listed.
   const rows = jobRows([before, send, write, after], now, tz, "zh");
   assert.deepEqual(
-    rows.map((row) => [row.name, row.cadence, row.last.text, row.next]),
+    rows.map((row) => [row.name, row.cadence, row.last.text]),
     [
-      ["Tidings 周报卡片", "*/15 * * * *", "✓ 昨天", "明天"],
-      ["个人项目日报", "每天 10:00", "✓ 昨天", "明天"],
-      ["AI HOT 热点榜", "工作日 09:45", "✓ 昨天", "明天"],
+      ["Tidings 周报卡片", "每 15 分钟", "✓ 昨天"],
+      ["个人项目日报", "每天 10:00", "✓ 昨天"],
+      ["AI HOT 热点榜", "工作日 09:45", "✓ 昨天"],
     ],
   );
   assert.equal(rows[1].id, "s+w");
@@ -226,7 +269,7 @@ test("the steps of one job (名字·步骤) read as one row by the job's name (#
   );
 });
 
-test("a job's row fails when any step failed, is off when any step is off (#326)", () => {
+test("a job's row fails when any step failed, is paused when any step is (#326, #384)", () => {
   const write = (over = {}) =>
     step("w", "个人项目日报·写稿", "15 9 * * *", over);
   const send = (over = {}) =>
@@ -236,13 +279,18 @@ test("a job's row fails when any step failed, is off when any step is off (#326)
       write({ failed: true, lastRunAt: "2026-11-04T09:15:00+08:00" }),
       send(),
     ]),
-    [["个人项目日报", "每天 10:00", "✗ 11/4", "明天"]],
+    [["个人项目日报", "每天 10:00", "✗ 11/4"]],
   );
+  assert.deepEqual(
+    table([write(), send({ enabled: false, pausedReason: "换模板" })]),
+    [["个人项目日报", "每天 10:00", "已暂停"]],
+  );
+  // A step turned off for no reason drops; the rest of the job still shows.
   assert.deepEqual(table([write(), send({ enabled: false })]), [
-    ["个人项目日报", "每天 10:00", "✓ 昨天", "停用"],
+    ["个人项目日报·写稿", "每天 09:15", "✓ 昨天"],
   ]);
   assert.deepEqual(table([write(), send({ lastRunAt: null })]), [
-    ["个人项目日报", "每天 10:00", "没跑过", "明天"],
+    ["个人项目日报", "每天 10:00", "没跑过"],
   ]);
 });
 
@@ -253,8 +301,8 @@ test("one task named 名字·步骤 alone keeps its own row (#326)", () => {
       step("d", "日报（新结构·并跑）", "30 7 * * *"),
     ]),
     [
-      ["个人项目日报·写稿", "每天 09:15", "✓ 昨天", "明天"],
-      ["日报", "每天 07:30", "✓ 昨天", "明天"],
+      ["个人项目日报·写稿", "每天 09:15", "✓ 昨天"],
+      ["日报", "每天 07:30", "✓ 昨天"],
     ],
   );
 });
