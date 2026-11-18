@@ -12,6 +12,21 @@
 
 
 
+
+## 项目规则改为与全局一致：看到的相关问题可以顺手修，守三条底线（#402）（2026-11-18，Claude，历史包袱清理收尾时报了规则冲突，常浩回「以全局为准，测试先不修」；已提交、无需发布）
+
+- 时间：开工 `2026-11-18 22:29`（`date '+%F %H:%M'` 记录）。来由：项目 `AGENTS.md`「分工」和 `postpane-round`「不做」写「范围外的问题记进交接，不顺手修」，全局 `~/.claude/CLAUDE.md` 第 3 节（2026-11-10 常浩定）写「代码库归你」、可以直接修看到的相关问题。两边对不上，常浩定以全局为准。
+- 改了哪些文件：
+  - 常浩要求的：`AGENTS.md`「分工」前两条改写：保留「不做没要求的新功能」，改为可以直接合并重复实现、清死代码、修看到的相关问题、补测试和文档，并写明三条底线（已定内容先单独确认；改变已有行为先列出来；交付时分两栏列全部改动）和「顺手改的同样跑全量测试」。`.agents/skills/postpane-round/SKILL.md`「不做」第 3 条同步改写。
+  - 顺手改的：`.agents/skills/postpane-round/EVOLUTION.md` 追加 E-21（来由、证据，状态「已采纳（本 PR，#402）」），因为 SKILL.md 改动按该文件规矩要有一条记录。
+  - **改变了已有行为的**：以后在这个项目里，看到的相关问题、重复实现、死代码会直接修，交付时单列「我顺手改的」；原来只记进交接。
+- 测试：纯文档改动。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（含交接格式、通用规则、`postpane-round` 的 SKILL/EVOLUTION 格式检查）；`node scripts/check-rules.mjs` 输出「通用规则检查通过」。`pnpm run check`、`pnpm test` 未跑：没有改任何代码或脚本。
+- 验证：全仓搜「顺手修」「范围外的问题」，项目规则里只剩改后的写法；`CURRENT.md` 和 `docs/history/` 里的旧交接按原样保留。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：常浩同时定「测试先不修」：`core` 的 `tests::ingestion::the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry`（高负载下 10 秒余量不够，#393 那轮碰到一次）不在本轮修，以后再出现按新规则可以顺手修。`~/.claude/skills/customize-agent-hud/SKILL.md` 还写着简约形态，常浩还没定改不改。废纸篓里约 19 GB 旧备份（#399 移过去的）等常浩自己清空。skill 进化：E-21 已采纳。
+- 本轮新坑：无
+
 ## 删上游原版说明与宣传素材：`docs/upstream/` 与 videos、screenshots、badges、buttons（#399）（2026-11-18，Claude，常浩看过改动确认后选「乙：连目录一起删」；已提交、无需发布）
 
 - 时间：开工 `2026-11-18 21:46`（`date '+%F %H:%M'` 记录）。来由：历史包袱清理（#387）第二档最后一项。2026-11-04 阶段 1-4（`2ecdc51`）把上游原版 README 移到 `docs/upstream/` 留作对照；查过上游宣传素材只被这两份 README 引用，内容多是驿窗已删的功能（iPhone、手表、Remote、简约形态），Apache 2.0 只要求留 `LICENSE`、`NOTICE`。
