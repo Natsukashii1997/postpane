@@ -14,7 +14,7 @@
     "build:windows": "node src/tooling/build.mjs --platform windows",
     "build:linux": "node src/tooling/build.mjs --platform linux",
     "mcp:build": "pnpm --filter @agent-hud/mcp run build",
-    "check": "pnpm run format:check && pnpm run typecheck && pnpm run build && pnpm run check:platform && pnpm run check:packages && pnpm run check:clients && pnpm run check:test-paths && pnpm run check:file-size && node src/tooling/parity-ledger.mjs --check && cargo check --workspace",
+    "check": "pnpm run format:check && pnpm run typecheck && pnpm run build && pnpm run check:platform && pnpm run check:packages && pnpm run check:clients && pnpm run check:test-paths && pnpm run check:file-size && cargo check --workspace",
     "check:platform": "node src/tooling/check-platform-boundary.mjs",
     "check:packages": "node src/tooling/check-package-boundary.mjs",
     "check:clients": "node src/tooling/check-clients.mjs",
@@ -29,8 +29,6 @@
     "test:mcp": "node --test src/apps/mcp/test/*.test.mjs",
     "test:plugins": "node --test src/crates/platform/src/deepseek_plugin/*.test.mjs",
     "test:extension": "node --test src/apps/chrome-extension/test/*.test.mjs",
-    "parity:ledger": "node src/tooling/parity-ledger.mjs",
-    "parity:oracle": "swift run -Xswiftc -enable-testing --package-path src/tooling/parity-oracle parity-oracle src/fixtures/parity/contracts",
     "test:core": "cargo test --workspace",
     "mcp": "pnpm --filter @agent-hud/mcp run start"
   },

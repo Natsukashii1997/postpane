@@ -130,7 +130,7 @@ quota through `/usage` in JSON print mode. This fallback starts no model turn;
 it is labeled **Antigravity CLI**, and automatic updates are disabled for the
 short-lived query. It cannot refresh an inactive identified CLI account. The
 verified CLI contract and official references are recorded in
-[the Antigravity parity ledger](parity/c02b-antigravity-cursor.md#cli-account-selection-investigation-2026-10-22).
+[the investigation below](#antigravity-cli-account-selection-investigation-2026-10-22).
 
 Quota observations and complete per-call usage are persisted in Agent HUD's own
 SQLite ledger. The five picker measures use separate facts: the current share
@@ -211,3 +211,34 @@ A relay can also be added by hand on the Relays page, for any agent: its HTTPS a
 
 Settings → Prices lists every model the selected logs used in the last 30 days, with its tokens, its price per million tokens and where that comes from. A price is looked for in this order: the owner's own price for the model on that route, then on every route (`customPrices`); free on this computer (a named model server, or a local host the owner calls one in `localKinds`, or by default a local host whose model has no list price); the relay's own list; the vendor's list times the owner's multiplier for the relay (`relayMultipliers`); the vendor's list through its own API or plan. A change prices every log again.
 
+## Antigravity CLI account selection investigation (2026-10-22)
+
+The installed `agy 1.3.5` exposes no profile, account, or home selector in
+`--help`; `agy help auth` returns `unknown subcommand`. Its binary does not
+contain `GEMINI_CLI_HOME`. `ANTIGRAVITY_APP_DATA_DIR` is emitted into a child
+tool's environment, rather than read as the CLI's account selector. The
+[official authentication guide](https://www.antigravity.google/docs/cli/install/)
+describes the operating system's keyring, while the
+[command reference](https://www.antigravity.google/docs/cli/reference/) documents
+`/usage` and `/logout` but no multiple-profile contract.
+
+Consequently, arbitrary inactive CLI homes are not presented as separately
+queryable accounts. The CLI fallback reads the current default sign-in and
+cannot identify or deduplicate it against native services, so it runs only when
+no identified account is available. Existing third-party account switchers use their
+own credential isolation or replacement; Agent HUD does not rewrite those
+credentials. The older `GEMINI_CLI_HOME` transcript-path descriptor is not
+evidence that the CLI's authentication follows that variable.
+
+The implemented route for identifying active CLI accounts is the official
+[status-line payload](https://www.antigravity.google/docs/cli/statusline/)
+contains `email`, `plan_tier`, and quota buckets with `remaining_fraction` and
+`reset_time`. The ordinary
+[lifecycle hook payloads](https://www.antigravity.google/docs/hooks/) do not
+include those account fields. Agent HUD now installs a separate callback through
+the selected CLI settings files, chains an existing user status-line command,
+and restores that command on disconnect. The callback stores only account and
+quota facts, with the local observation time. It merges duplicate emails and
+retains each account's latest sample after switching sign-ins. Samples become
+stale after five minutes and expire after 30 days. This route supports multiple
+accounts without assuming a profile flag or replacing keychain credentials.
