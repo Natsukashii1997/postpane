@@ -468,3 +468,11 @@
 - 补充（同日装机实测）：新插件在后台标签页里滚到底也画不出回信。ChatGPT 不在后台标签页渲染新内容，常浩把那个标签页切到前台后，下一次重读（10:16:51）立刻认领。重读遇到「已答但没画出来」时，把标签页在自己窗口里短暂切到前台再问，问完切回。另外，Chrome 开发者模式加载的插件目录要核对：本机有 6 份插件副本，重新加载了另一份等于没更新（这次常浩移除后重新加载主目录那份才生效）。
 - 证据：`src/apps/chrome-extension/test/page.test.mjs` 三条 #410 测试、`background.test.mjs`「an answer not drawn in a background tab…」、`content.test.mjs`「an answer held only in the hidden copy…」、`src/crates/host/src/handoff.rs`「a_prompt_drawn_without_its_code_fences_is_still_the_review」，均先在旧代码上失败；真实页面核对记录在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。
 - 升级：未升级。
+
+## L-52 用 Pillow 的 `ImageChops.difference(...).getbbox()` 比两张 RGBA 截图，只看透明度，小人明明在动却报「一样」（2026-11-18）
+
+- 现象：#401 调查装后冒烟时，对真实侧栏窗口隔 2 秒截两张（`screencapture -l`，RGBA），用 `ImageChops.difference(a, b).getbbox()` 比，第一对返回 `None`，差点据此得出「隔 2 秒的两张可能恰好一样，要多截几张」的结论。同两张图换成逐像素比四个通道，有 2024 个像素不同，范围正落在小人上。
+- 根因：Pillow 的 `getbbox()` 对带透明通道的图默认只看透明通道（`alpha_only=True`）。侧栏窗口的透明度两帧不变，颜色变了也报 `None`。#395 那次先 `.convert('RGB')` 再比，所以没踩到。
+- 正确做法：比截图先转 RGB 再 `getbbox()`，或用 `getbbox(alpha_only=False)`；驿窗装机冒烟直接用 `.agents/skills/postpane-round/scripts/smoke.mjs compare <前.png> <后.png> [差异图.png]`，四个通道都比，并出一张标红的差异图。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/smoke-live/`（同一个运行中的驿窗上 `smoke.mjs after` 判「在动」、1356 个像素不同，差异图 `smoke-motion-1.png`）。
+- 升级：已写成工具和测试（`smoke.mjs`、`tests/smoke-diff.test.mjs`）。换个项目也成立（拿 Pillow 比任何带透明的截图都会踩），可提议提升为全局坑。
