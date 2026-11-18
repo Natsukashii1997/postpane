@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { Handoff } from "@agent-hud/protocol";
 import { AIRMAIL_BLUE, AIRMAIL_RED, type Paper } from "../paper";
 import type { Inks } from "../permissions/ListCard";
-import { relayLegend, relayLegendInks } from "./handoff-card";
+import { relayLegend, relayLegendInks } from "./relay-legend";
 
 /** Where the frame's legend starts along its top edge. */
 const LEGEND_LEFT = 14;

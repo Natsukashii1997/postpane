@@ -552,11 +552,7 @@ export function StubFace({
           <ReviewStamp
             unit={unit}
             zh={zh}
-            reply={vendor.relay.replied}
-            answering={vendor.relay.answering}
-            overdue={vendor.relay.overdue}
-            lingering={vendor.relay.lingering}
-            since={vendor.relay.since}
+            relay={vendor.relay}
             reduceMotion={reduceMotion}
           >
             <span

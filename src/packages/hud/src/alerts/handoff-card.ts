@@ -1,6 +1,5 @@
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
-import { paperOf, type Paper } from "../paper.ts";
 import { doerName, doerOf } from "./handoff-doer.ts";
 export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 
@@ -41,8 +40,19 @@ export type Action =
 export const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
 /** Stopped at its cap, the person's to decide (#347, #409): 「停」. */
-export const stopped = (handoff: Handoff) =>
-  live(handoff) && handoff.notice === "top";
+// The gate keeps `notice: "top"` after a leave to review on; the auto round
+// trip back on, or a review asked since, means it is under way again.
+export const stopped = (handoff: Handoff) => {
+  const at = handoff.topAt ?? 0;
+  return (
+    live(handoff) &&
+    handoff.notice === "top" &&
+    !handoff.auto &&
+    !handoff.steps?.some(
+      (s) => s.at > at && ["work", "ask", "resume"].includes(s.kind),
+    )
+  );
+};
 
 /** Answers since its rounds last began (#258), but those only mending the
  * last lines of the one before (#347, gate.rs `reviewed`). */
@@ -104,7 +114,7 @@ export function since(from: number, now: number, zh: boolean): string {
   return zh ? `已 ${hours} 小时` : `${hours} h`;
 }
 
-const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
+export const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
   verdict === "pass"
     ? zh
       ? "通过"
@@ -120,36 +130,6 @@ const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
 /** The newest reply step. */
 export const lastReply = (handoff: Handoff) =>
   [...(handoff.steps ?? [])].reverse().find((step) => step.kind === "reply");
-
-/** What the frame round a relay's reply says (owner, 2026-11-07, 甲 ·
- * 航空虚线框): the round it is in and ChatGPT's verdict, once there is one. */
-export function relayLegend(
-  handoff: Handoff,
-  zh: boolean,
-): { trip: string; verdict?: string; missing: boolean } {
-  const D = doerName(handoff);
-  const { at, of } = round(handoff);
-  const reply = lastReply(handoff);
-  return {
-    trip: zh
-      ? `${D} ⇄ ChatGPT · 第 ${at} / ${of} 轮`
-      : `${D} ⇄ ChatGPT · round ${at} / ${of}`,
-    verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
-    missing: !!reply && reply.verdict !== "pass" && reply.verdict !== "revise",
-  };
-}
-
-/** The legend's inks: the paper's own, and where there is none (the notch,
- * #190) the paper's of that appearance, not plain ink. Words written out take
- * the word ink; a missing verdict, something gone wrong, stays red (#308). */
-export function relayLegendInks(
-  paper: Paper | null,
-  light: boolean,
-  missing = false,
-): { relay: string; verdict: string } {
-  const inks = paper ?? paperOf(light);
-  return { relay: inks.word, verdict: missing ? inks.red : inks.word };
-}
 
 /** The stamp in the card's corner, by where it stands. */
 export function stamp(

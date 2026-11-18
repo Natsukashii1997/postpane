@@ -3,12 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { actions, pointMarkColumn } from "../src/alerts/handoff-actions.ts";
+import { relayLegend, relayLegendInks } from "../src/alerts/relay-legend.ts";
 import {
   autoLabel,
   handoffFor,
   progressLine,
-  relayLegend,
-  relayLegendInks,
   round,
   stamp,
   timeline,
@@ -666,4 +665,47 @@ test("stopped at its cap: a red 「停」, the person's call, and the way on is 
   };
   assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });
   assert.deepEqual(actions(ended), ["close"]);
+});
+
+test("reviewed on past its cap, it is no longer stopped; stopped again only at the new cap (#409)", () => {
+  const top = T + 12 * minute;
+  const base = handoff({
+    phase: "returned",
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: top,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", top),
+      step("stop", top, { auto: true }),
+    ],
+  });
+  assert.deepEqual(stamp(base, true), { text: "停", tone: "red" });
+  // The person's leave (`extra`): the auto round trip is on again, a 「专项续审」 step.
+  const going = {
+    ...base,
+    auto: true,
+    halt: null,
+    phase: "working" as const,
+    steps: [
+      ...base.steps!,
+      step("work", top + minute, { text: "专项续审：常浩：再审" }),
+      step("ask", top + minute),
+    ],
+  };
+  assert.notDeepEqual(stamp(going, true).text, "停");
+  // Stopped there for another reason: 「未完暂停」, not 「停」.
+  const paused = {
+    ...going,
+    auto: false,
+    halt: "回信末尾认不出",
+    phase: "replied" as const,
+  };
+  assert.notEqual(stamp(paused, true).text, "停");
+  assert.equal(autoLabel(paused, true), "未完暂停");
+  // At the new cap: stopped again.
+  const again = { ...paused, halt: "又审满了", topAt: top + 20 * minute };
+  assert.deepEqual(stamp(again, true), { text: "停", tone: "red" });
 });
