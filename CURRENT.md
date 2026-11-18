@@ -7,7 +7,7 @@
 
 
 
-## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾；第 2 轮判「决策升级」，常浩选「甲：两条都修再专项复核」，已修、待专项复核）
+## 接力还没回信就出错也通知发起会话：打不开、重启中断、30 分钟没回（#318）（2026-11-12 开工、11-14 续做，Claude，常浩在 #316 收尾时回「接着做」，看完计划回「按计划开工」；已提交；11-18 新会话按第 1 轮审查返修完，3 条 P2、3 条 P3 全修，常浩看完返修计划回「按计划开工」；装机与第 2 轮复审见本节末尾；第 2 轮判「决策升级」，常浩选「甲：两条都修再专项复核」；专项复核「通过」，已 squash 合并）
 
 - 时间：开工 `2026-11-12 12:50`。来由：#316（PR #317）之后回信到了的终局都会转回发起会话，但还没回信就出的错仍只停在侧栏：新会话打不开（当场失败 / 2 分钟没打开 / 驿窗重启时还在打开）、ChatGPT 30 分钟没回信。
 - 改了哪些文件：
@@ -38,7 +38,9 @@
   - P2-03（`210eab2`）：`Desk` 加 `telling` 计数和 `told_out` 条件变量；`change()`、`late()`、`start` 里的 `expire` 改账本前先 `quiet()`，有通知正在发就等它发完；`tell_one` 占住 claim 后 `Telling::begin`，复核到发完都挡着别的改动，发完放开再记 `told`，然后 `caught_up(对话)`，把这期间被 `turn_waits` 压进暂放区的回合补收。这一步修掉了第 1 轮给通知加 claim 时带进来的问题：通知发送期间到的回信会卡在暂放区，要等下一次往这个对话发话才被收下。第 1 轮给「重试」「继续自动」加的 claim 拿掉，改为等通知发完再生效（不再提示「上一段还在送」，回到原来的体验）。新测 `Held` 替身（`reply` 卡住直到放行）加 `while_told`：`an_opening_reported_while_its_failure_is_told_waits_for_it`、`an_answer_that_comes_while_no_answer_is_told_waits_for_it`、`a_retry_while_its_failure_is_told_waits_for_it`，修前前两条红（状态被改成 Open、回信卡在暂放区）；修后临时拿掉补收或加闸，对应测试都会变红；三条连跑 20 遍 20 过。
   - 没做：审查的 P3 建议（`overdue` 的 late 集合直接带结构化原因），审查说不卡合并，留着。
 - 第 2 轮返修测试：`pnpm run check` 退出码 0；`pnpm test` Rust 合计 `1002 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`、`ℹ pass 9` / `ℹ fail 0`、`ℹ pass 14` / `ℹ fail 0`；Chrome 插件组 `ℹ pass 3` / `ℹ fail 20`，Playwright 缓存一小时内又被清掉（L-16），补装后 `pnpm run test:extension` `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-18-318-r2-*.log`。
-- 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：`~/Library/Caches/ms-playwright/` 一天内被清两次，第一次装机后截屏看到 DiskSlim（磁盘瘦身）在要「下载」文件夹权限，怀疑是它在清缓存（推断，未核实）。
+- 装机：`e8cd0d31fe20`（`745966b`），`install.sh` 回读一致；`notices.json` 沿用 `1794972821711`，74 张接力没有补发；截屏无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-18-318-error-notice-r4/PostPane-673afe926468.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 专项复核（常浩授权，`extra` 写明「只复核 P2-03、P2-04」，同一接力 `h1a1ecb8e84700`）：ChatGPT 12:46 答完「审查出口：通过 / 结论：通过」，两条都关闭，唯一非阻断观察是 `telling` 为全局计数，单条通知慢时别的接力也要等（出现延迟再考虑按会话隔离）。驿窗没收下这条回信：对话里每次重读都记 `unmatched`（`turns.jsonl`，messageId `b7742406…`，4152 字），12:53 按「30 分钟没回信」停下，并经本 PR 的通知告诉了本会话（#318 实机第三次触发，后缀「已发到 Claude 会话」）。我经 Chrome 打开该对话读到原文，存 `evidence/2026-11-18-318-special-review.md`。接力卡停在「30 分钟没回信」，可由常浩点「结束接力」，或等 24 小时闲置自动结束。
+- 遗留：Claude 2 小时没交回复审、转回排队 1 小时没领不通知（前者卡在会话自己，后者会话本就收不到）。范围外发现：① 专项复核的回信被 #356 匹配规则判 `unmatched`，原因没查清（同一对话第 2 轮能对上；页面上提问原样显示、行内代码去掉了反引号，和前 600 字比对的规则看不出差别），值得另开一单查；② `~/Library/Caches/ms-playwright/` 一天内被清两次，第一次装机后截屏看到 DiskSlim（磁盘瘦身）在要「下载」文件夹权限，怀疑是它在清缓存（推断，未核实）。
 - 本轮新坑：无
 
 ## 清理历史包袱第一档：零引用文件、过期文档、CURRENT 旧节归档（#387）（2026-11-18，Claude，常浩看过三档清单后回「清第一档」；已提交、无需发布）
