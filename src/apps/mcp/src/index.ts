@@ -179,7 +179,7 @@ const hud = z
   .object({
     agents: keys.optional(),
     reset: z.boolean().optional(),
-    mode: z.enum(["notch", "dynamic", "simple"]).optional(),
+    mode: z.enum(["notch", "dynamic"]).optional(),
     edge: z.enum(["top", "right", "bottom", "left"]).optional(),
     position: z.number().min(0).max(1).optional(),
     logoSize: z.number().min(20).max(60).optional(),

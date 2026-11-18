@@ -431,12 +431,7 @@ fn style_fields_the_mode_or_glow_does_not_draw_are_refused() {
     assert!(error.contains("hud.glow.gridDensity: gridDensity is a number from 0.5 to 1.5 in steps of 0.05, as Settings sets it, which 0.53 is not."), "{error}");
     assert!(error.contains("hud.glow.idleSpeed: idleSpeed is a number from 1 to 24 in steps of 0.5, as Settings sets it, which 2.2 is not."), "{error}");
     let error = refused(&owner, json!({"screen": "side", "hud": {"mode": "notch"}}));
-    assert!(error.contains("hud.mode: \"Display 2\" has no notch, so its HUD cannot be \"notch\". It can be \"dynamic\" or \"simple\"."), "{error}");
-    let error = refused(
-        &owner,
-        json!({"screen": "side", "hud": {"mode": "simple", "glow": {"brightness": 0.5}}}),
-    );
-    assert!(error.contains("hud.glow.brightness: A \"simple\" HUD draws no glow, and the HUD of \"Display 2\" would be \"simple\"."), "{error}");
+    assert!(error.contains("hud.mode: \"Display 2\" has no notch, so its HUD cannot be \"notch\". It can be \"dynamic\"."), "{error}");
     let error = refused(
         &owner,
         json!({"screen": "all", "hud": {"appearance": "light"}}),
@@ -455,6 +450,45 @@ fn style_fields_the_mode_or_glow_does_not_draw_are_refused() {
     draft(
         &owner,
         json!({"screen": "main", "hud": {"glow": {"style": "dots", "gridPitch": 7, "gridDensity": 0.55, "idleSpeed": 2.5}}}),
+    );
+}
+
+// #397: Settings dropped the simple HUD on 2026-11-05 (#66); a proposal can
+// no longer bring it back, nor its own fields to a screen that is not simple.
+#[test]
+fn the_simple_hud_is_no_mode_to_propose() {
+    let (_folder, owner) = notched_owner();
+    let error = refused(&owner, json!({"screen": "side", "hud": {"mode": "simple"}}));
+    assert!(
+        error.contains("hud.mode is one of \"notch\", \"dynamic\"."),
+        "{error}"
+    );
+    let error = refused(
+        &owner,
+        json!({"screen": "side", "hud": {"simpleSize": 30, "showNumbers": false}}),
+    );
+    assert!(error.contains("hud.simpleSize: simpleSize sets a \"simple\" HUD, and the HUD of \"Display 2\" would be \"dynamic\". Leave it out: PostPane no longer offers the \"simple\" HUD."), "{error}");
+    assert!(
+        error.contains("hud.showNumbers: showNumbers sets a \"simple\" HUD"),
+        "{error}"
+    );
+    assert!(!error.contains("set mode to \"simple\""), "{error}");
+}
+
+// A screen saved as simple before #397 still draws as one: it draws no glow,
+// takes its own fields, and can be moved to Dynamic.
+#[test]
+fn a_screen_saved_as_simple_keeps_its_rules() {
+    let (_folder, owner) = owner_with(Some(json!({"screens": {"side": {"mode": "simple"}}})));
+    let error = refused(
+        &owner,
+        json!({"screen": "side", "hud": {"glow": {"brightness": 0.5}}}),
+    );
+    assert!(error.contains("hud.glow.brightness: A \"simple\" HUD draws no glow, and the HUD of \"Display 2\" would be \"simple\"."), "{error}");
+    draft(&owner, json!({"screen": "side", "hud": {"simpleSize": 30}}));
+    draft(
+        &owner,
+        json!({"screen": "side", "hud": {"mode": "dynamic"}}),
     );
 }
 
