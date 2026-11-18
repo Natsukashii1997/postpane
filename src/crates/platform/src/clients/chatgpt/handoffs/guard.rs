@@ -1,15 +1,17 @@
 //! What keeps a review's count and its commit whole however it is handed
 //! on (#347, L3 round 2): the pull request a later brief names (P1-02), a
-//! review still with ChatGPT (P1-04), and a cap reached here and not
-//! settled (P1-08).
+//! review still with ChatGPT (P1-04), a cap reached here and not settled
+//! (P1-08), and words sent and never known to have gone in (P1-10..12).
 
-use super::{excerpt, Book, Handoff, Notice, Phase, Status, Step, StepKind, EXCERPT};
+use super::{excerpt, key, Book, Handoff, Notice, Phase, Status, Step, StepKind, EXCERPT};
 use serde::{Deserialize, Serialize};
 
-/// A review asked and not yet known to have gone in (L3 P1-10): the
-/// request it is sent as, and the pull request, commit and cap it goes
-/// with. An answer that comes while it is kept cannot pass: what it
-/// reviewed is not known.
+/// Words sent to ChatGPT and not yet known to have gone in (L3 P1-10): a
+/// review, or PostPane's ask to mend the last lines. One rule for them, till
+/// word comes or a later review goes in: no other words go, and the same
+/// words are not sent twice; an answer is held to these words only, counts
+/// once, and cannot pass or close; word that comes after the answer only
+/// goes on the card.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pending {
@@ -24,18 +26,56 @@ pub struct Pending {
     /// not, is known as this review's (#356).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub words: Option<String>,
+    /// The words' fingerprint: the same words again are not sent twice.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub key: String,
+    /// Already on the card as sent (an ask to mend the last lines): an
+    /// answer adds no 「送审」 step for them.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub booked: bool,
+    /// Their answer came: booked once, and kept so it cannot pass (P1-12).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub answered: bool,
+}
+
+impl Pending {
+    /// Whether `text` is these words again.
+    pub fn same(&self, text: &str) -> bool {
+        !self.key.is_empty() && self.key == key(text)
+    }
 }
 
 impl Handoff {
     /// Whether words of its are with ChatGPT, unanswered: a review asked,
-    /// or its last lines asked to be mended (P1-04).
+    /// its last lines asked to be mended (P1-04), or words sent and never
+    /// known to have gone in (P1-10).
     pub fn in_flight(&self) -> bool {
         self.status == Status::Opening
             || (self.live()
-                && matches!(
+                && (matches!(
                     self.phase,
                     Phase::Sending | Phase::Delivered | Phase::Working
-                ))
+                ) || self.unanswered().is_some()))
+    }
+    /// Words sent, never known to have gone in, their answer not yet in.
+    pub fn unanswered(&self) -> Option<&Pending> {
+        self.gate.pending.as_ref().filter(|p| !p.answered)
+    }
+    /// An answer to words never known to have gone in (P1-11): they go on
+    /// the card before it, as word of them would have put them, so the
+    /// count and the timeline keep their order; the pending stays, answered,
+    /// so the answer cannot pass.
+    pub(super) fn answer_pending(&mut self, now: i64) {
+        let Some(pending) = self.gate.pending.as_mut().filter(|p| !p.answered) else {
+            return;
+        };
+        pending.answered = true;
+        if !pending.booked {
+            let step = Step::new(now, StepKind::Ask, pending.words.as_deref());
+            let step = step.keyed(&pending.key.clone());
+            self.steps.push(step);
+            self.rounds += 1;
+        }
     }
 }
 
@@ -45,9 +85,35 @@ impl Book {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
+        let fingerprint = pending.words.as_deref().map(key).unwrap_or_default();
         let words = pending.words.as_deref().map(|w| excerpt(w, EXCERPT));
-        handoff.gate.pending = Some(Pending { words, ..pending });
+        handoff.gate.pending = Some(Pending {
+            words,
+            key: fingerprint,
+            answered: false,
+            ..pending
+        });
         true
+    }
+    /// Word that `request` went in came after its answer (P1-12): it goes on
+    /// the card, and nothing else changes; the answer still cannot pass.
+    /// Whether it was such late word.
+    pub fn confirmed_late(&mut self, id: &str, request: &str, note: &str, now: i64) -> bool {
+        let Some(handoff) = self.list.iter_mut().find(|h| h.id == id) else {
+            return false;
+        };
+        let late = handoff
+            .gate
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.request == request && p.answered);
+        if late {
+            handoff
+                .steps
+                .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
+            handoff.updated_at = now;
+        }
+        late
     }
     /// The review sent as `request` went in: it is no longer pending.
     pub fn confirm_pending(&mut self, id: &str, request: &str) -> bool {
@@ -65,20 +131,35 @@ impl Book {
         }
         false
     }
-    /// Reviews pending when the app stopped: nothing will say they went
-    /// in, so their answers count but cannot pass; each card says so.
+    /// Words pending when the app stopped: nothing will say they went in,
+    /// so the auto round trip stops on them, as when word never came; their
+    /// answers count but cannot pass. Each card says so.
     pub fn pending_at_restart(&mut self, text: &str, now: i64) -> bool {
-        let mut any = false;
-        for h in self
+        let ids = self
             .list
-            .iter_mut()
-            .filter(|h| h.live() && h.gate.pending.is_some())
-        {
-            h.steps
-                .push(Step::new(now, StepKind::Work, Some(text)).by_auto());
-            any = true;
+            .iter()
+            .filter(|h| h.live() && h.unanswered().is_some())
+            .map(|h| h.id.clone())
+            .collect::<Vec<_>>();
+        for id in &ids {
+            self.unconfirmed(id, text, now);
         }
-        any
+        !ids.is_empty()
+    }
+    /// Word that words of handoff `id` went in never came (P1-10): the auto
+    /// round trip stops, saying so; one already off says so on the card.
+    pub fn unconfirmed(&mut self, id: &str, text: &str, now: i64) -> bool {
+        if self.stop(id, text, true, now) {
+            return true;
+        }
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Work, Some(text)).by_auto());
+        handoff.updated_at = now;
+        true
     }
     /// Binds handoff `id` to the pull request its newest brief names
     /// (P1-02): the one a pass is checked against.

@@ -88,8 +88,20 @@ impl Desk {
         if !self.change(|book| book.format_asked(id, &text, now)) {
             return false;
         }
+        // Pending till it is known to have gone in, as a review is (L3
+        // P1-10): a pass to it never known to have gone in cannot end it.
+        let pending = handoffs::Pending {
+            request: request.clone(),
+            words: Some(text.clone()),
+            booked: true,
+            ..Default::default()
+        };
+        if let Err(error) = self.change_kept(|book| book.ask_pending(id, pending)) {
+            return self.change(|book| book.stop(id, &error, true, now));
+        }
         match lines.send(&conversation, &text, &request) {
             Ok(()) => {
+                self.change(|book| book.confirm_pending(id, &request));
                 self.caught_up(&conversation);
                 true
             }

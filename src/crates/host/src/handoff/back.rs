@@ -23,7 +23,17 @@ pub(super) fn back_text(handoff: &Handoff, _reply: &str) -> String {
 /// 转回 Claude for a pass PostPane did not let through (`why`, L3 P1-09):
 /// ChatGPT's answer in full, and words that say it did not pass.
 pub(super) fn held_back_text(handoff: &Handoff, why: &str) -> String {
-    review_back_text(handoff, &handoff.answer(), Some(why))
+    if !handoff.thinking() {
+        return review_back_text(handoff, &handoff.answer(), Some(why));
+    }
+    // A 思维评审's close held back (L3 P1-10): it did not settle.
+    let ask = left_to_person(&format!("评审回信写了收口，但驿窗没有放行：{why}。这次评审没有收口、没有结束，不要当成已收口汇报。"), "读意见、整理要点；可起草决策记录，待定的不记成已定", "再调用 relay_to_chatgpt 送审、按评审结论动手实施");
+    format!(
+        "ChatGPT 对「{title}」的评审意见（第 {round} 轮）：\n\n{reply}\n\n{ask}",
+        title = handoff.title,
+        round = handoff.counted().max(1),
+        reply = handoff.answer(),
+    )
 }
 
 /// What the next review is, by the person's leave (#347).

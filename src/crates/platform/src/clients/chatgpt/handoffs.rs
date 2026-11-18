@@ -826,13 +826,13 @@ impl Book {
         let Some(handoff) = self.conversation_mut(conversation) else {
             return false;
         };
-        // A review pending (L3 P1-10) may have gone in unheard of: its
-        // answer counts, and cannot pass.
+        // Words never known to have gone in (L3 P1-10) may have: their
+        // answer counts once, and cannot pass.
         if reply.trim().is_empty()
             || !(matches!(
                 handoff.phase,
                 Phase::Sending | Phase::Delivered | Phase::Working
-            ) || handoff.gate.pending.is_some())
+            ) || handoff.unanswered().is_some())
         {
             return false;
         }
@@ -845,6 +845,7 @@ impl Book {
         }) {
             return false;
         }
+        handoff.answer_pending(now);
         // One being mended (#347) stays whole: it goes back with the mending.
         let keep = handoff
             .steps

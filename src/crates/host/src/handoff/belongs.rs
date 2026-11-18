@@ -30,26 +30,23 @@ pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
     let Some(prompt) = prompt.map(bare) else {
         return false;
     };
-    // The words a review went with, or PostPane's own ask to mend its last
-    // lines (#347): whichever went last is what ChatGPT answers. Words sent
-    // and not yet known to have gone in (L3 P1-10) may be on the page too:
-    // an answer to them counts, and the gate keeps it from passing.
-    let asked = handoff
-        .steps
-        .iter()
-        .rev()
-        .find(|step| matches!(step.kind, StepKind::Ask | StepKind::Format))
-        .and_then(|step| step.text.as_deref());
-    let pending = handoff
-        .gate
-        .pending
-        .as_ref()
-        .and_then(|p| p.words.as_deref());
-    [asked, pending]
-        .into_iter()
-        .flatten()
+    // Words sent and never known to have gone in (L3 P1-10) are the only
+    // ones it may answer while they wait: an earlier review's words, asked
+    // again on the page, are not this round (P1-11). Else the words a review
+    // went with, or PostPane's own ask to mend its last lines (#347):
+    // whichever went last.
+    let words = match handoff.unanswered() {
+        Some(pending) => pending.words.as_deref(),
+        None => handoff
+            .steps
+            .iter()
+            .rev()
+            .find(|step| matches!(step.kind, StepKind::Ask | StepKind::Format))
+            .and_then(|step| step.text.as_deref()),
+    };
+    words
         .filter(|text| !text.trim().is_empty())
-        .any(|text| held_to(&prompt, text))
+        .is_some_and(|text| held_to(&prompt, text))
 }
 
 /// Whether `prompt`, spaces left out, is `text` as a step keeps it.

@@ -18,7 +18,9 @@ impl Desk {
         handoff: &Handoff,
         reply: &str,
     ) -> (String, Option<String>) {
-        let blocked = (handoff.outcome() == Next::Pass && !handoff.thinking())
+        // A 思维评审's close ends it as a pass does: words never known to
+        // have gone in hold it back too (L3 P1-10).
+        let blocked = matches!(handoff.outcome(), Next::Pass | Next::Close)
             .then(|| self.pass_blocked(lines, handoff))
             .flatten();
         // Not the pass's words with a word against them: words that say it
@@ -68,19 +70,49 @@ pub(super) fn unconfirmed() -> String {
         "PostPane never heard this review went in to ChatGPT (no word after it was sent, or a restart first), so what the answer reviewed is not known; not ended as a pass. Send the current commit (head, 40 digits) again",
     )
 }
-/// Other words while a review waits on ChatGPT (L3 P1-10).
+/// Other words while a review waits on ChatGPT, or was never known to
+/// have gone in (L3 P1-10).
 pub(super) fn still_waiting() -> String {
     l10n::text(
-        "这张接力上一段送审还在等 ChatGPT 回信，没有发出：等回信到了再送；同一段话重送不受影响。",
-        "This handoff's review still waits on ChatGPT; nothing was sent. Send once the answer is in; the same words again are fine.",
+        "这张接力上一段送审还在等 ChatGPT 回信（或没确认送到），没有发出：等回信到了再送；同一段话重送不会重复发。",
+        "This handoff's review still waits on ChatGPT (or was never known to have gone in); nothing was sent. Send once the answer is in; the same words again are not sent twice.",
     )
 }
-/// What a restart says of a review pending (L3 P1-10), in the language
+/// Why the round trip stopped: words sent and never known to have gone in
+/// (L3 P1-10).
+pub(super) fn send_unconfirmed() -> String {
+    l10n::text(
+        "送审没确认送到 ChatGPT，自动往返停下，交还常浩：回信到了照样计一轮，但不按通过结束",
+        "The review was never known to have gone in to ChatGPT; the auto round trip stopped, left to you: an answer counts, and cannot pass",
+    )
+}
+/// What Claude hears when its words were never known to have gone in.
+pub(super) fn sent_unknown(error: &str) -> String {
+    l10n::text(
+        &format!("驿窗没确认这段话送到了 ChatGPT（{error}），自动往返已停下交常浩。不要换一段话再送：同一段话重送不会重复发；它的回信到了也不会按通过结束。"),
+        &format!("PostPane never heard these words went in to ChatGPT ({error}); the auto round trip stopped, left to the person. Do not send other words: the same words again are not sent twice, and an answer to them cannot pass."),
+    )
+}
+/// Word that a review went in, come after its answer (L3 P1-12).
+pub(super) fn confirmed_late() -> String {
+    l10n::text(
+        "插件随后确认这一轮送审已送到；回信先到了，仍不按通过结束",
+        "The extension later said this review went in; its answer came first, and still cannot pass",
+    )
+}
+/// Words that must be on disk before they go could not be kept.
+pub(super) fn not_kept(error: &str) -> String {
+    l10n::text(
+        &format!("驿窗没能把这一轮送审记到磁盘（{error}），没有发出：稍后再送"),
+        &format!("PostPane could not keep this review on disk ({error}); nothing was sent. Send again later"),
+    )
+}
+/// What a restart says of words pending (L3 P1-10), in the language
 /// stored (Core does not follow the setting yet then).
 pub(super) fn pending_at_restart(chinese: bool) -> String {
     if chinese {
-        "驿窗重启时这一轮送审还没确认送到 ChatGPT：回信到了照样计一轮，但不按通过结束".to_owned()
+        "驿窗重启时这一轮送审还没确认送到 ChatGPT，自动往返停下，交还常浩：回信到了照样计一轮，但不按通过结束".to_owned()
     } else {
-        "PostPane restarted before this review was known to have gone in: its answer counts, and cannot pass".to_owned()
+        "PostPane restarted before this review was known to have gone in; the auto round trip stopped, left to you: its answer counts, and cannot pass".to_owned()
     }
 }
