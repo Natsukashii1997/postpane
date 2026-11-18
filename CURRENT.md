@@ -24,6 +24,7 @@
 - 截图：无（没有界面改动）。
 - 发布与回读：无需发布（纯文档）。
 - 与授权不一致之处、遗留问题、范围外发现：主线第 9 项「磁盘清单」同轮只读做完，没删任何东西，清单见下一条。worktree（`worktree-sweep list --fetch` 加人工核对）：`353-bg-reply`、`356-chatgpt-reread` 脚本判可安全删除（838 MB）；`nostalgic-bartik-8bdeee`（#365）、`interesting-hugle-7778fb`（#360）只多一份过时的 `.claude/launch.json`，主目录那份更全；`359-board-peek` 没推送的「第 3 批之二」`0f40a3b` 已随 PR #369（`695fd5b`）进 main；`relay-inline-code`（`build/366-with-318`）的 3 个提交是 #318（PR #365）加合并提交，#366 已由 PR #367 合入。这四个人工核对后可删（约 1.7 GB）。保留：`347-review-gate`（PR #348 开着，10.8 GB）、`codex-audit-fix-1112`（PR #315 开着）。证据目录 21 GB，其中 187 个装机备份 `.app` 共 19.7 GB；只留最近 5 个（397、395、391、384、318-r4），其余 182 个共 19.2 GB 可移到废纸篓；次大的是 `2026-11-05-panel-inventory` 974 MB（帧截图）。删不删、删哪些等常浩逐项定。skill 进化：无。
+- 磁盘清理结果（合并后，常浩经侧栏回「删甲乙，丙不动」，与给出的按钮一致）：甲，6 个 worktree 都删了（`353-bg-reply`、`356-chatgpt-reread` 用 `worktree_sweep.py sweep --confirm`；另外 4 个用 `git worktree remove`，都没加 `--force`），本地分支一并删掉，找回命令在 `~/.cache/worktree-sweep/sweep-20261118-215601.json` 和 `evidence/2026-11-18-disk-sweep/branches-removed.txt`，远端没动；两份旧 `launch.json` 备份在同一目录。乙，182 个旧备份 `.app` 移到废纸篓 `~/.Trash/postpane-备份-2026-11-18/`（19 GB，0 个失败，清单 `trashed.txt`，留下的 5 个见 `kept.txt`），证据目录从 21 GB 降到 2.2 GB；废纸篓没清空，空间要常浩清空废纸篓后才真正腾出。丙不动。剩下的 worktree：`347-review-gate`、`codex-audit-fix-1112`。
 - 本轮新坑：无
 
 ## 侧栏工具不再能切到简约形态：只堵入口，渲染代码不动（#397）（2026-11-18，Claude，常浩看过改动确认后回「乙 只堵入口」，中途交接卡没能远程启动，常浩回「继续在这里做完 #397」；已提交、已发布 `32a5ebaa4109` 回读通过）
