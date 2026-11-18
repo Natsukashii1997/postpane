@@ -11,6 +11,21 @@
 
 
 
+
+## 侧栏工具不再能切到简约形态：只堵入口，渲染代码不动（#397）（2026-11-18，Claude，常浩看过改动确认后回「乙 只堵入口」，中途交接卡没能远程启动，常浩回「继续在这里做完 #397」；已提交、已发布 `32a5ebaa4109` 回读通过）
+
+- 时间：开工 `2026-11-18 21:10`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。设置页 2026-11-05（#66 / PR #67）已去掉「简约」形态，但侧栏工具（MCP「agent-hud」的 `draft_hud`）仍接受 `mode: "simple"`，智能体被要求改侧栏时可能把它切回来。
+- 改了哪些文件：
+  - 常浩要求的：`src/crates/hud/src/presentation/style_rules.rs` 的 `MODES` 去掉 `simple`（所有入口都经过这一层）；没有刘海时的提示从「可以用 dynamic 或 simple」改为只推荐 dynamic；只在简约形态生效的参数（`simpleSize`、`simpleGap`、`ringWidth`、`simpleStyle`、`showNumbers`）被提议时，拒绝文字改由 `src/crates/hud/src/presentation/simple_style.rs` 新函数 `refusal` 生成，说「别填：驿窗已不提供简约形态」，不再叫人切到 simple。`src/apps/mcp/src/index.ts` 的 `mode` 枚举去掉 `simple`。
+  - 顺手改的：`tool_tests.rs` 改一条旧断言（没刘海的提示），原来「简约形态不画光晕」那条移到新测试 `a_screen_saved_as_simple_keeps_its_rules`（存为简约的屏幕照旧拒光晕、照旧能调 `simpleSize`、能切回 dynamic）；新增 `the_simple_hud_is_no_mode_to_propose`。拒绝文字挪进 `simple_style.rs` 是为了守 300 行棘轮：第一版直接写在 `style_rules.rs` 里，从 719 行涨到 728 行，`check` 和 `check-file-size.test.mjs` 因此失败；挪走后降到 717 行，基线已 `--update`。
+  - **改变了已有行为的**：智能体经侧栏工具提议简约形态、或在非简约屏幕上提议简约专用参数，原来前者会被接受，现在都被拒绝。设置页和侧栏显示不变；已存为简约形态的屏幕（本机两块屏幕都是动态，没有）照旧显示。
+- 测试：第一次全量 `pnpm run check` 退出码 1（`check-file-size`：`style_rules.rs` 728 行超基线 719），`pnpm test` 退出码 0（cargo `1000 passed; 0 failed`），`node --test tests/*.test.mjs` `ℹ pass 21` / `ℹ fail 1`（同一个棘轮）。修好后最终版本：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-397-no-simple/`（`check-1.log`、`test-1.log`、`node-test-1.log` 是第一次，`check-2.log`、`test-2.log`、`node-test-2.log` 是最终版）。
+- 验证：实机（装机后）经 MCP `draft_hud` 对内屏 `37D8832A` 提议两次：`{"mode":"simple"}` 返回 `Nothing was changed. hud.mode is one of "notch", "dynamic".`；`{"simpleSize":30}` 返回 `... would be "dynamic". Leave it out: PostPane no longer offers the "simple" HUD.`。本会话的 MCP 连接是装机前起的旧进程（参数定义仍含 simple），所以两次都穿过了旧的参数校验，由新应用的后端规则拒绝，验的正是最终那一层；新包里 `agent-hud-mcp` 的参数定义已是 `enum(["notch", "dynamic"])`。之后读 `presentation.json` 两块屏幕仍是 `logos`，数据目录 21:30 有更新，应用日志没有报错（`draft-hud-check.txt`）。渲染代码没动，没有做截图对比。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `2713381`。`tauri build --bundles app` 退出码 0；`install.sh 397-no-simple`：装前 `4d81bf2fb2ca`（已备份），退出于 21:29:46、启动于 21:29:46，产物 `32a5ebaa4109` / 已装 `32a5ebaa4109`，签名照常（`H"b773068e`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-18-397-no-simple/PostPane-4d81bf2fb2ca.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：本机 `~/.claude/skills/customize-agent-hud/SKILL.md` 第 82、85、87、89 行仍写着 `simple` 形态和它的参数，它不在本仓库（也不在 `my-skills`），没改；智能体照它提议会被拒并看到说明，要不要改那份文档由常浩定。已经开着的智能体会话里的 MCP 连接是旧进程，参数定义还含 simple，重开会话后才换新，但后端照样拒绝。历史包袱清理的第二档还剩一项要单独确认：`docs/upstream/` 与上游宣传素材。skill 进化：无。
+- 本轮新坑：无
+
 ## 删更新通知链：设置「更新」页、托盘「发现新版本」、面板页脚更新箭头（#395）（2026-11-18，Claude，常浩看过改动确认后回「甲 只删更新链路」；已提交、已发布 `4d81bf2fb2ca` 回读通过）
 
 - 时间：开工 `2026-11-18 14:38`（`date '+%F %H:%M'` 记录）。来由：历史包袱第二档（#387 的后续）。更新通知只能由产品扩展发出，驿窗启动时传的扩展是空的（`main.rs` 传 `None`），这条链永远走不到。扩展口本身还被接力（`Flight`）、互发消息（`Delivery`）和 MCP 工具通道在用，按常浩选的甲不动。
