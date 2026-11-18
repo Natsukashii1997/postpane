@@ -29,40 +29,64 @@ impl Desk {
         trouble: &Trouble,
         now: i64,
     ) -> bool {
-        // Words on their way meanwhile: told at the next look.
-        let Ok(_sending) = self.claim(id) else {
-            return false;
+        let (how, conversation) = {
+            // Words on their way meanwhile: told at the next look.
+            let Ok(_sending) = self.claim(id) else {
+                return false;
+            };
+            // The book's other changes wait till the words are out.
+            let _telling = Telling::begin(self);
+            // Still so (review of #318, P2-03): a retry, the auto round trip
+            // on again or a newer handoff since makes it out of date.
+            let handoff = {
+                let book = self.lock();
+                let still = book.untold_of(id, self.since).as_ref() == Some(&(at, trouble.clone()));
+                book.get(id).filter(|_| still).cloned()
+            };
+            let Some(handoff) = handoff else {
+                return false;
+            };
+            let (doer, session) = (
+                handoff.doer.as_deref().unwrap_or(CLAUDE),
+                &handoff.claude_session,
+            );
+            let text = notice_text(&handoff, trouble);
+            // Its own id: told again after a restart, it leaves no second copy.
+            let prompt = format!("{id}-n{at}");
+            let sent = lines
+                .reaches(doer, session)
+                .map_err(Unsent::Failed)
+                .and_then(|()| lines.reply(doer, session, &prompt, &text));
+            let how = match sent {
+                Ok(()) | Err(Unsent::Again) => told(),
+                Err(Unsent::Failed(_)) => match lines.queue(doer, session, &prompt, &text) {
+                    Ok(()) | Err(Unsent::Again) => told_queued(),
+                    Err(Unsent::Failed(error)) => not_told(&error),
+                },
+            };
+            (by_doer(&how, Some(doer)), handoff.chatgpt_conversation)
         };
-        // Still so, now that nothing else moves it (review of #318, P2-03):
-        // a retry or the auto round trip on again since makes it out of date.
-        let handoff = {
-            let book = self.lock();
-            let still = book.untold_of(id, self.since).as_ref() == Some(&(at, trouble.clone()));
-            book.get(id).filter(|_| still).cloned()
-        };
-        let Some(handoff) = handoff else {
-            return false;
-        };
-        let (doer, session) = (
-            handoff.doer.as_deref().unwrap_or(CLAUDE),
-            &handoff.claude_session,
-        );
-        let text = notice_text(&handoff, trouble);
-        // Its own id: told again after a restart, it leaves no second copy.
-        let prompt = format!("{id}-n{at}");
-        let sent = lines
-            .reaches(doer, session)
-            .map_err(Unsent::Failed)
-            .and_then(|()| lines.reply(doer, session, &prompt, &text));
-        let how = match sent {
-            Ok(()) | Err(Unsent::Again) => told(),
-            Err(Unsent::Failed(_)) => match lines.queue(doer, session, &prompt, &text) {
-                Ok(()) | Err(Unsent::Again) => told_queued(),
-                Err(Unsent::Failed(error)) => not_told(&error),
-            },
-        };
-        let how = by_doer(&how, Some(doer));
-        self.change(|book| book.told(id, at, &how, now))
+        let told = self.change(|book| book.told(id, at, &how, now));
+        // Turns ChatGPT reported meanwhile were held back, words being on
+        // their way (`turn_waits`): taken now, in order.
+        let caught = conversation.is_some_and(|conversation| self.caught_up(&conversation));
+        told | caught
+    }
+}
+
+/// A session being told of trouble: the book's other changes wait
+/// (`Desk::quiet`) till it is dropped.
+struct Telling<'a>(&'a Desk);
+impl<'a> Telling<'a> {
+    fn begin(desk: &'a Desk) -> Self {
+        *desk.telling.lock().unwrap_or_else(|p| p.into_inner()) += 1;
+        Self(desk)
+    }
+}
+impl Drop for Telling<'_> {
+    fn drop(&mut self) {
+        *self.0.telling.lock().unwrap_or_else(|p| p.into_inner()) -= 1;
+        self.0.told_out.notify_all();
     }
 }
 

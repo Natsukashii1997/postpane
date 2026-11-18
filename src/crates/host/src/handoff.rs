@@ -26,7 +26,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::{Mutex, MutexGuard},
+    sync::{Condvar, Mutex, MutexGuard},
 };
 use tauri::Manager;
 
@@ -226,6 +226,11 @@ pub(crate) struct Desk {
     /// When the notices began (`notices_since`): trouble from before is not
     /// told of (#318), so an upgrade tells no session of an old one.
     since: i64,
+    /// How many sessions are being told of trouble now (#318): the book's
+    /// other changes wait till they are (`quiet`), so what a notice checked
+    /// still holds when it arrives (review P2-03).
+    telling: Mutex<usize>,
+    told_out: Condvar,
 }
 
 /// How many early turns are kept: those of conversations never bound (the
@@ -293,6 +298,8 @@ impl Desk {
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
             reread_at: Mutex::new(HashMap::new()),
+            telling: Mutex::new(0),
+            told_out: Condvar::new(),
         };
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted(chinese));
@@ -334,6 +341,7 @@ impl Desk {
     }
     /// Changes the book and keeps it.
     fn change<R>(&self, change: impl FnOnce(&mut Book) -> R) -> R {
+        let _quiet = self.quiet();
         let mut book = self.lock();
         let result = change(&mut book);
         if let Some(data) = &self.data {
@@ -342,6 +350,14 @@ impl Desk {
             }
         }
         result
+    }
+    /// Waits till no session is being told of trouble (#318); held while
+    /// the book changes.
+    fn quiet(&self) -> MutexGuard<'_, usize> {
+        let telling = self.telling.lock().unwrap_or_else(|p| p.into_inner());
+        self.told_out
+            .wait_while(telling, |telling| *telling > 0)
+            .unwrap_or_else(|p| p.into_inner())
     }
     /// The ChatGPT project new review conversations open in.
     pub(crate) fn project(&self) -> Option<String> {
@@ -374,6 +390,7 @@ impl Desk {
     /// long stop. Whether any did.
     fn late(&self, now: i64) -> bool {
         let late = {
+            let _quiet = self.quiet();
             let mut book = self.lock();
             book.expire(now, &timed_out())
                 | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
@@ -584,7 +601,11 @@ impl Desk {
         // One start per session at a time, so two calls side by side cannot
         // each begin a handoff.
         let _starting = self.claim(&format!("session:{session}"))?;
-        if self.lock().expire(now, &timed_out()) {
+        let expired = {
+            let _quiet = self.quiet();
+            self.lock().expire(now, &timed_out())
+        };
+        if expired {
             self.change(|_| ());
         }
         let current = (!fresh)
@@ -965,13 +986,7 @@ impl Desk {
                     let text = no_rounds_left(handoff.budget());
                     return Err(by_doer(&text, handoff.doer.as_deref()));
                 }
-                // Not while its trouble is being told (#318): it would be
-                // out of date. Let go before driving, which sends.
-                let resumed = {
-                    let _telling = self.claim(id)?;
-                    self.change(|book| book.resume(id, now))
-                };
-                if !resumed {
+                if !self.change(|book| book.resume(id, now)) {
                     return Err(l10n::text(
                         "自动往返已经开着，或接力已结束",
                         "The auto round trip is on already, or the handoff ended",
@@ -991,8 +1006,6 @@ impl Desk {
                 if !lines.connected() {
                     return Err(not_connected());
                 }
-                // Not while its trouble is being told (#318).
-                let _telling = self.claim(id)?;
                 let brief = self.change(|book| book.retry(id, now)).ok_or_else(|| {
                     l10n::text("这次接力不能重试", "This handoff cannot be retried")
                 })?;
@@ -5012,7 +5025,7 @@ mod tests {
 
     /// #318 review P2-03: trouble found, then the person retries or turns
     /// the auto round trip back on before it is told: it is not told, the
-    /// words being out of date; and while it is being told, neither waits.
+    /// words being out of date.
     #[test]
     fn trouble_moved_on_from_before_it_is_told_is_not_told() {
         let (_temp, desk) = desk();
@@ -5030,13 +5043,6 @@ mod tests {
             .open(&failing, &handoff.id, "brief", None, || 2)
             .is_err());
         let (id, at, trouble) = desk.lock().untold(0).remove(0);
-        {
-            let _telling = desk.claim(&id).unwrap();
-            assert!(
-                desk.act(&failing, &id, "retry", 3).is_err(),
-                "not while it is told"
-            );
-        }
         desk.act(&failing, &id, "retry", 3).unwrap();
         assert!(!desk.tell_one(&failing, &id, at, &trouble, 4));
         assert!(sent_as(&failing, "reply").is_empty());
@@ -5048,10 +5054,6 @@ mod tests {
         let late = 2 + handoffs::REPLY_WAIT_MS + 1;
         desk.late(late);
         let (id, at, trouble) = desk.lock().untold(0).remove(0);
-        {
-            let _telling = desk.claim(&id).unwrap();
-            assert!(desk.act(&lines, &id, "resume", late + 1).is_err());
-        }
         desk.act(&lines, &id, "resume", late + 1).unwrap();
         assert!(!desk.tell_one(&lines, &id, at, &trouble, late + 2));
         assert!(sent_as(&lines, "reply").is_empty());
@@ -5090,6 +5092,164 @@ mod tests {
         assert!(desk.drive(&lines, late + 4));
         assert_eq!(sent_as(&lines, "reply").len(), 2, "the answer went back");
         assert_eq!(desk.projection(late + 4)[0]["status"], "closed");
+    }
+
+    /// Lines whose words back hold until let go: what else happens while a
+    /// session is being told of trouble (review of #318, P2-03).
+    struct Held {
+        entered: std::sync::mpsc::Sender<()>,
+        go: std::sync::mpsc::Receiver<()>,
+    }
+    impl Lines for Held {
+        fn connected(&self) -> bool {
+            true
+        }
+        fn open(&self, _: &str, _: Option<&str>, _: &str, _: &str) -> Result<String, String> {
+            Err("not here".into())
+        }
+        fn send(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Err("not here".into())
+        }
+        fn reread(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn reaches(&self, _: &str, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn reply(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), Unsent> {
+            self.entered.send(()).unwrap();
+            self.go.recv().unwrap();
+            Ok(())
+        }
+        fn leave(&self, _: &str, _: &str) -> Result<String, String> {
+            Err("not here".into())
+        }
+        fn queue(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), Unsent> {
+            Err(Unsent::Failed("not here".into()))
+        }
+        fn left(&self, _: &str, _: &str, _: &str, _: &str) -> Option<(String, Option<String>)> {
+            None
+        }
+        fn opener(&self, _: &str, _: &str) -> Option<(Opener, i64)> {
+            None
+        }
+        fn stopped(&self, _: &str) -> bool {
+            false
+        }
+        fn withdraw(&self, _: &str, _: &str) -> bool {
+            false
+        }
+        fn wake(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+            Err("not here".into())
+        }
+    }
+
+    /// Tells `id`'s trouble with words back held; while they are, `meanwhile`
+    /// runs on its own thread, and `during` reads the desk: what it read,
+    /// and whether `meanwhile` changed anything once all is done.
+    fn while_told<T: Send>(
+        desk: &Desk,
+        now: i64,
+        meanwhile: impl FnOnce() -> bool + Send,
+        during: impl FnOnce() -> T,
+    ) -> (T, bool) {
+        let (id, at, trouble) = desk.lock().untold(0).remove(0);
+        let (entered, held) = std::sync::mpsc::channel();
+        let (go, wait) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let telling = scope.spawn(move || {
+                let lines = Held { entered, go: wait };
+                desk.tell_one(&lines, &id, at, &trouble, now)
+            });
+            held.recv().unwrap();
+            let other = scope.spawn(meanwhile);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let read = during();
+            // Let go before asserting: a failed assert must not leave it held.
+            go.send(()).unwrap();
+            assert!(telling.join().unwrap(), "told");
+            (read, other.join().unwrap())
+        })
+    }
+
+    /// Review of #318, P2-03: while a session is told its opening failed,
+    /// the extension says it opened after all: that waits till the words
+    /// are out, so they were true when sent, and it is not lost.
+    #[test]
+    fn an_opening_reported_while_its_failure_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        desk.late(late);
+        let opened = json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-new"});
+        let (during, bound) = while_told(
+            &desk,
+            late + 1,
+            || desk.observe(&opened, late + 2),
+            || desk.lock().get(&handoff.id).unwrap().status,
+        );
+        assert_eq!(during, Status::Failed, "it waited while the words went");
+        assert!(bound, "and was not lost");
+        assert_eq!(desk.projection(late + 3)[0]["status"], "open");
+    }
+
+    /// Review of #318, P2-03: while a session is told ChatGPT has not
+    /// answered, the answer comes: it waits till the words are out, and is
+    /// taken then.
+    #[test]
+    fn an_answer_that_comes_while_no_answer_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+        desk.late(late);
+        let answer = turn("complete", "结论：需修改");
+        let (during, took) = while_told(
+            &desk,
+            late + 1,
+            || desk.observe(&answer, late + 2),
+            || desk.lock().get(&handoff.id).unwrap().last_reply().is_some(),
+        );
+        assert!(!during, "it waited while the words went");
+        // Held back while words were on their way (`turn_waits`), it is
+        // taken once they are out: not lost.
+        let _ = took;
+        assert_eq!(desk.projection(late + 3)[0]["phase"], "replied");
+    }
+
+    /// Review of #318, P2-03: the person retries while the session is told
+    /// the opening failed: the retry waits till the words are out (no error
+    /// for the person), then opens again.
+    #[test]
+    fn a_retry_while_its_failure_is_told_waits_for_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+        desk.late(late);
+        let (during, retried) = while_told(
+            &desk,
+            late + 1,
+            || {
+                let lines = Fake::default();
+                desk.act(&lines, &handoff.id, "retry", late + 2).is_ok()
+            },
+            || desk.lock().get(&handoff.id).unwrap().status,
+        );
+        assert_eq!(during, Status::Failed, "it waited while the words went");
+        assert!(retried);
+        assert_eq!(desk.projection(late + 3)[0]["status"], "opening");
     }
 
     /// #318: ChatGPT not answering in time stops the auto round trip and is
