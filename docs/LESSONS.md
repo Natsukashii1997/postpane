@@ -578,3 +578,11 @@
 - 正确做法：读线程上的回调只记账（`observe`），推进和通知侧栏都交给另一条线程（`handoff/driver.rs` 的 `Driver`）。看一个函数能不能放在读线程上，要顺着调用链看到底，名字像「通知」「刷新」的不等于没有副作用。给会「发出去再等回应」的接口写测试时，替身要带上真实约束（回应只能由读线程带回，`handoff/tests/driver.rs` 的 `Wired`），回调的每个参数都要用和实机等价的实现测一遍（`Rig::refresh` 带后台锁、会推进）。
 - 证据：`src/crates/host/src/handoff/tests/driver.rs`。`an_ask_to_mend_hears_that_it_went_in` 在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`）；`the_sidebar_is_not_refreshed_on_the_reading_thread`、`a_refresh_that_waits_for_the_data_thread_does_not_hold_the_reading_thread` 在第一版修复上失败（`red-round2.txt`），第二版 6 条都过（`green-round2.txt`）。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。
+
+## L-61 回信在 ChatGPT 页面里，窗口不在屏幕上就不画，重读也读不到，又等满 30 分钟（2026-11-20）
+
+- 现象：#439 第 2 轮（接力 `h1a1f4958c4300`）05:31 送审，提问编号已记上。插件 05:31:18 报了「开始答」，之后没报答完，也没有 `unmatched`；06:01 驿窗按「ChatGPT 30 分钟没回信」停下。06:15 在 Claude in Chrome 新开前台标签页只读打开这个对话：回信早已答完（思考 14 分 19 秒，8054 字，结论「返修」）；页面里这一轮隐藏的那份只有 17 字（没画出），前台画出的一份是全文。打开约 1 分钟后，驿窗的定时重读读到它并收下（06:16:46 `complete taken`）。
+- 根因（推断，原标签页当时的样子没看到，插件状态不落盘）：ChatGPT 只在看得见的页面里画新内容。原标签页所在的 Chrome 窗口不在屏幕上（最小化、被挡住或在别的桌面），页面一直算在后台；#413 的「切到前台再问」只在窗口里切标签、不抬窗口，救不回来。驿窗每 2 分钟让插件重读，插件不回报结果，所以这 30 分钟里驿窗和事后的人都看不出卡在哪。
+- 正确做法：重读必须回报结果和标签页状态（`outcome`、`hidden`、`active`、`minimized`、`fronted`），记进 `turns.jsonl`（#457）；「已答完、没画出」连续两次就停下交给常浩，并说清点开那个 ChatGPT 标签页就能收回，不再干等 30 分钟。凡是「请对方再做一次、做没做成不回话」的补救，都要让它回话，否则补救失灵时没人知道。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-439第2轮漏报.md`；`evidence/2026-11-20-457-reread-undrawn/` 下 `red-background.txt`、`red-host.txt`、`red-platform.txt`（改前红）。测试：插件 `reading again tells PostPane what it found and how the tab stood`、`a read again says whether it was told, …`；驿窗 `handoff::tests::undrawn` 三条；平台 `the_extension_opens_a_conversation_and_reports_its_reply` 里 #457 那段。
+- 升级：〔提醒〕部分升级（2026-11-20：写成测试；「窗口不在屏幕上就不画」还没有实测，等第 1 批记录攒到证据，再定第 3 批的自动救回）。

@@ -97,23 +97,31 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
         // The extension may still report it opened (`opened_late`), and the
         // handoff carries on: not told there will be no answer (P2-01).
         Trouble::NotOpened(error) => format!("驿窗没能确认 ChatGPT 审核会话已打开（{error}），这次送审目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里。先不要再调用 relay_to_chatgpt：常浩可以在驿窗接力卡上点「重试」，重试成功后回信也照常转回这里；常浩让你重送时再调用。请向常浩说明送审目前没发出去。"),
-        Trouble::NoAnswer => {
-            // The answer goes back all the same (#410 S1); what comes next
-            // is the person's, but for a pass, which ends the handoff.
-            let later = if handoff.thinking() {
-                "回信会照样转回这里，收口以外的结论会写明下一步等常浩决定"
-            } else {
-                "回信会照样转回这里；写「通过」的驿窗结束接力，其他结论会写明下一步等常浩决定"
-            };
-            format!(
-                "ChatGPT {} 分钟没回信，驿窗的自动往返已经停下，这次接力交常浩处理。ChatGPT 之后回信，驿窗仍会收下：{later}。先不要再调用 relay_to_chatgpt 重送，请向常浩说明还在等 ChatGPT 回信。",
-                handoffs::REPLY_WAIT_MS / 60_000
-            )
-        }
+        Trouble::NoAnswer => format!(
+            "ChatGPT {} 分钟没回信，驿窗的自动往返已经停下，这次接力交常浩处理。ChatGPT 之后回信，驿窗仍会收下：{}。先不要再调用 relay_to_chatgpt 重送，请向常浩说明还在等 ChatGPT 回信。",
+            handoffs::REPLY_WAIT_MS / 60_000,
+            later(handoff)
+        ),
+        // Answered all the same: the person opening the tab draws it (#457).
+        Trouble::Undrawn => format!(
+            "ChatGPT 已经答完，但它所在的标签页没画出回信（那个 Chrome 窗口多半不在屏幕上），驿窗读不到，自动往返已经停下，这次接力交常浩处理。常浩点开那个 ChatGPT 标签页，驿窗就能收下回信：{}。先不要再调用 relay_to_chatgpt 重送，请向常浩说明回信已在 ChatGPT 里，点开那个标签页就能收回。",
+            later(handoff)
+        ),
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
     };
     format!("驿窗接力「{}」出错：{what}", handoff.title)
+}
+
+/// What becomes of an answer that comes after the stop: it goes back all
+/// the same (#410 S1); what comes next is the person's, but for a pass,
+/// which ends the handoff.
+fn later(handoff: &Handoff) -> &'static str {
+    if handoff.thinking() {
+        "回信会照样转回这里，收口以外的结论会写明下一步等常浩决定"
+    } else {
+        "回信会照样转回这里；写「通过」的驿窗结束接力，其他结论会写明下一步等常浩决定"
+    }
 }
 
 /// What the card's line for the trouble ends with: sent, not yet taken up
