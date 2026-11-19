@@ -42,7 +42,7 @@
 ```sh
 bash scripts/setup-worktree.sh           # 新目录备环境：先定构建目录，再 pnpm install、生成打包资源目录（不进仓库），顺序写死（L-01、L-34）；共用构建目录时把绝对路径当参数
 pnpm run check                           # 先查 src/ 下有没有没提交的文件（L-13、L-43），再格式、类型、构建、边界检查、cargo check
-pnpm test                                # Rust + 前端 + MCP + 插件测试：五套都跑完再汇总，任何一套失败整体非零（L-47）
+pnpm test                                # Rust + 前端 + MCP + 插件 + Chrome 插件 + 注入脚本：六套都跑完再汇总，任何一套失败整体非零（L-47）
 pnpm --filter @agent-hud/desktop exec tauri build --bundles app   # 打包；不要用 --bundle（生成 DMG 时会自动启动应用）
 node --test tests/*.test.mjs             # 交接格式 + 通用规则（含自测）
 node scripts/check-rules.mjs             # 只跑通用规则检查

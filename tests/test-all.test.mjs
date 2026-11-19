@@ -1,4 +1,4 @@
-// `pnpm test` 五套全跑完再汇总（L-47）：原来 `&&` 串联，前面一套挂了后面的不跑，容易当成「只挂了这一套」。
+// `pnpm test` 每套都跑完再汇总（L-47）：原来 `&&` 串联，前面一套挂了后面的不跑，容易当成「只挂了这一套」。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SUITES, runSuites, summary } from "../src/tooling/test-all.mjs";
 
-test("pnpm test 走汇总脚本，五套和原来 && 串的一样", () => {
+test("pnpm test 走汇总脚本，原来 && 串的五套加上注入脚本（#419）", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.scripts.test, "node src/tooling/test-all.mjs");
   assert.deepEqual(
@@ -17,6 +17,7 @@ test("pnpm test 走汇总脚本，五套和原来 && 串的一样", () => {
       "pnpm run test:mcp",
       "pnpm run test:plugins",
       "pnpm run test:extension",
+      "pnpm run test:host",
     ],
   );
   for (const [, command, args] of SUITES)
@@ -30,7 +31,11 @@ test("前面一套失败，后面的照跑；汇总写清哪套挂了，整体�
   const results = runSuites(
     [
       ["甲", process.execPath, ["-e", "process.exit(3)"]],
-      ["乙", process.execPath, ["-e", `require("fs").writeFileSync(${JSON.stringify(ran)}, "")`]],
+      [
+        "乙",
+        process.execPath,
+        ["-e", `require("fs").writeFileSync(${JSON.stringify(ran)}, "")`],
+      ],
     ],
     undefined,
     "ignore",
