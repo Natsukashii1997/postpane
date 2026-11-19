@@ -7,6 +7,21 @@
 
 
 
+## ChatGPT 面板：接力并进「等待处理 / 正在进行」，小收据同一份名单，接力卡能切单（#427）（2026-11-19，Claude，常浩看三版预览 https://claude.ai/artifact/KmRLtP44LmBG37UbfK1zVi 后选「甲」，看改动确认（改 #368「审核纸条和闲着的接力行不再列，接力只从纸飞机进」）后回「改，按计划开工」；已提交、PR 见下、未发布：合并装机等常浩点头）
+
+- 时间：开工 `2026-11-19 20:15`（`date '+%F %H:%M'` 记录）。来由：#427。常浩说小卡片能看到正在审什么，停 1.5 秒展开成大卡片后接力全不见，只能经纸飞机进最近一单，八九条接力不知道怎么切。根子：同一批接力三层三套数法（小收据丢掉 2 小时没动静的，纸飞机数全部，大卡不列），展开反而变少，接力卡没有去别的单子的路，「等你 · 在跑」不算接力。
+- 改了哪些文件：
+  - 常浩要求的：`hud/src/relay-groups.ts`（新，一份名单三组排法：要你管 → 在动 → 静着）；`chatgpt-desk.ts`、`scene/DeskLines.tsx`、`scene/peek-size.ts`（小收据全列、最多 4 条加「另 n 条」、标签「开着 n 条 · 要你管 n」）；`workspace.ts`（ChatGPT「等你 · 在跑」按接力分组计）；`panel/SourceSessions.tsx`、`panel/WorkSections.tsx`、`panel/RelayRows.tsx`（新，ChatGPT 大卡两段里的接力行）；`alerts/RelaySwitch.tsx`（新，接力卡上一单 / 下一单）、`alerts/HandoffCard.tsx`、`alerts/RelayToggle.tsx`（纸飞机打开时带上名单）；场景 `chatgpt-nine-relays`。
+  - 我顺手改的：`panel/RelayTag.tsx`（新，会话行「接力 n/m」小签抽成共用，样子不变）；为 300 行棘轮拆出 `alerts/handoff-store.ts`、`scene/desk-words.ts`，`handoff-doer.ts` 加 `chatgptTarget`，基线收紧；删掉没人用的 `quietRelays` 及其测试；`GLOSSARY.md` 加「要你管 / 在动 / 静着」、补「内层接力卡」入口。
+  - **改变了已有行为的**：ChatGPT 大卡出现接力行；小收据不再藏 2 小时没动静的接力、改按三组排、超过 4 条折起；小收据 ChatGPT「等你 · 在跑」算上接力（场景 `mixed` 从 0 · 1 变 0 · 2）；接力卡多一行切单。票根（待你看 / 在答）、1.5 秒展开、纸飞机样子和「进最近一单 + 红数字」、Claude / Codex 卡都不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1051 passed` / `0 failed`，前端 `ℹ pass 484` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 28`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。新测试 `relay-groups.test.ts` 8 条，`chatgpt-desk`、`board-sessions` 改写预期；实现前先红（`red-relay-groups.txt`、`red-chatgpt-desk.txt`、`red-peek-work.txt`、`red-card.txt`）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-427-relay-ia/`。
+- 验证：场景预览台（本 worktree，127.0.0.1:1487）`chatgpt-nine-relays`：悬停 ChatGPT 票根出小收据「等你 5 · 在跑 3 · 接力 9」「开着 9 条 · 要你管 5」4 行加「另 5 条」；1.5 秒后长成大卡「等待处理 · 7」（5 单接力在前，4 条后「展开其余 3 条」）、「正在进行 · 4」；点 #348 那行进接力卡「在动 · 第 6 单，共 9 单」，下一单到第 7、上一单两次到第 5「要你管」，纸飞机按下回到大卡。改前对照（主目录预览台 1488）：`chatgpt-reviews` 的 Codex 卡「接力 1/5」小签前后一样。
+- 截图：同一证据目录 `peek-nine.jpg`、`card-nine.jpg`、`relay-card-switch.jpg`、`codex-card-tag.jpg`、`before-codex-card-tag.jpg`、`before-chatgpt-card.jpg`。
+- 发布与回读：未发布（合并、装机等常浩点头）。
+- 与授权不一致之处、遗留问题、范围外发现：ADR-0001 第 5 条仍写纸飞机「多条给列表」，与 #359 定的「不改成列表」不一致，没改；驿窗还没有 `docs/DECIDED.md`；悬停面板里的真实点击留给常浩（L-09）。
+- 本轮新坑：无
+- skill 进化：无。
+
 ## Hermes 待处理 / 正在进行 / 回执行点 ↗ 跳回飞书聊天（#424）（2026-11-19，Claude，常浩截图说「hermes 这个侧栏页面又无法跳转到飞书会话了」，看排查后回「按 A 开工」；已提交、PR 见下、已发布 `6a849670c973` 回读通过）
 
 - 时间：开工 `2026-11-19 18:16`（`date '+%F %H:%M'` 记录）。来由：#424。两处原因：① #371 起有待处理时展开卡不画额度区块，Hermes 唯一能跳飞书的「最近被问」画在那个位置，一起不见了；待处理 / 正在进行 / 回执里的 Hermes 会话 `navigationTarget` 一直为空（#196 遗留），↗ 是暗的（L-56）。② 亚古兽 11-19 的私聊 `user_id` 记成 `e9cgcf77`，只比用户 id 认本人，`chatId` 为空（L-57）。
