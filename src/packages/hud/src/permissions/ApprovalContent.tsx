@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   Approval,
   IslandEvent,
@@ -29,7 +28,7 @@ import {
   type ApprovalEntry,
 } from "./approval-list";
 import { EntryRow, cardInks } from "./ListCard";
-import { FoldButton } from "./FoldButton";
+import { cardFolds, FoldButton } from "./FoldButton";
 import type { NewsSeal } from "./PaperSeal";
 
 export function ApprovalContent({
@@ -62,7 +61,7 @@ export function ApprovalContent({
   const inks = cardInks(paper, light);
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
-  const [unfolded, setUnfolded] = useState(false);
+  const [unfolded, toggleFold] = cardFolds.use("approvals");
   const entries: ApprovalEntry[] = [
     ...requests.map((request): ApprovalEntry => ({
       kind: "request",
@@ -216,7 +215,7 @@ export function ApprovalContent({
       <FoldButton
         hidden={hidden}
         unfolded={unfolded}
-        onToggle={() => setUnfolded((open) => !open)}
+        onToggle={toggleFold}
         inks={inks}
         zh={zh}
       />

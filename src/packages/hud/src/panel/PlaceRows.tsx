@@ -2,7 +2,7 @@
 // 2026-11-14): each row the panel's own `LiveRow`; past three running ones
 // they fold into one line 「在跑 n」 that opens to show them all. The board
 // lists them under each place's block, the one-agent panel under its own.
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { WorkSections } from "./WorkSections";
 import type { Snapshot } from "@agent-hud/protocol";
@@ -17,28 +17,13 @@ import { removedKey, useRemovedSessions } from "./removed-sessions";
 import { ReviewRows } from "./ReviewSlip";
 import { RunningMark } from "./RunningMark";
 import { LiveRow } from "./SessionsSection";
+import { foldStore } from "./fold-store";
 import { GRID, noButtonChrome, tabular } from "./theme";
 
 /** The places whose running rows are open: shared, so the panel's hidden
  * measuring copy (HUDScene) opens with the one in view and the panel grows
  * to fit; kept until the app restarts. */
-const unfolded = new Set<string>();
-const listeners = new Set<() => void>();
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-};
-function useUnfolded(place?: string): [boolean, () => void] {
-  const open = useSyncExternalStore(subscribe, () =>
-    Boolean(place && unfolded.has(place)),
-  );
-  const toggle = () => {
-    if (!place) return;
-    if (!unfolded.delete(place)) unfolded.add(place);
-    listeners.forEach((listener) => listener());
-  };
-  return [open, toggle];
-}
+const boardFolds = foldStore();
 
 /** The rows of one list. With `fold`, the place they belong to, those
  * waiting come first, 「待核对」 last, then the running ones, folded past
@@ -62,7 +47,9 @@ export function PlaceRows({
   const inks = useBoardInks(light);
   const { remove } = useRemovedSessions();
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [open, toggle] = useUnfolded(fold && agentArtworkKey(fold));
+  const [open, toggle] = boardFolds.use(
+    fold ? agentArtworkKey(fold) : undefined,
+  );
   const rows = fold
     ? placeRows(entries, open)
     : { waiting: entries, running: [], folded: 0 };

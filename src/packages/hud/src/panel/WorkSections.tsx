@@ -6,12 +6,12 @@
 // few with the rest behind 「还有 n 条」 (owner, 2026-11-15). On ChatGPT's
 // card its relays come first in each (#427, the owner chose 甲 on
 // 2026-11-19): the person's in 「等待处理」, the rest in 「正在进行」.
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePaper } from "../paper";
 import { SHOWN_ENTRIES } from "../permissions/approval-list";
-import { FoldButton } from "../permissions/FoldButton";
+import { cardFolds, FoldButton } from "../permissions/FoldButton";
 import { cardInks } from "../permissions/ListCard";
 import type { GroupedRelay } from "../relay-groups";
 import type { LiveSession } from "./agent-board";
@@ -31,6 +31,7 @@ export function WorkSections({
   card = false,
   news,
   relays,
+  place,
 }: {
   snapshot: Snapshot;
   entries: readonly LiveSession[];
@@ -45,6 +46,8 @@ export function WorkSections({
   news?: { count: number; content: ReactNode };
   /** ChatGPT's relays by section, and all of them in the order its handoff
    * card steps through (#427). */
+  /** The card's place: its sections' open lists are kept by it (#430). */
+  place?: string;
   relays?: {
     waiting: readonly GroupedRelay[];
     running: readonly GroupedRelay[];
@@ -70,6 +73,7 @@ export function WorkSections({
   );
   // A section's relays, then its own rows: folded together on a card.
   const section = <T,>(
+    name: "waiting" | "running",
     before: readonly GroupedRelay[],
     after: readonly T[],
     shown: number,
@@ -102,7 +106,13 @@ export function WorkSections({
       );
     };
     return card ? (
-      <Folded items={items} shown={shown} light={light} render={draw} />
+      <Folded
+        items={items}
+        shown={shown}
+        light={light}
+        render={draw}
+        foldKey={`${place ?? "card"}:${name}`}
+      />
     ) : (
       draw(items)
     );
@@ -118,6 +128,7 @@ export function WorkSections({
         // A list of its own folds itself; the replied chats fold here.
         Array.isArray(news.content) && card ? (
           section(
+            "waiting",
             relaysWaiting,
             news.content as ReactNode[],
             SHOWN_ENTRIES,
@@ -126,12 +137,14 @@ export function WorkSections({
         ) : (
           <>
             {relaysWaiting.length > 0 &&
-              section(relaysWaiting, [], Infinity, () => null)}
+              section("waiting", relaysWaiting, [], Infinity, () => null)}
             {news.content}
           </>
         )
       ) : (
-        section(relaysWaiting, waiting, SHOWN_ENTRIES, (list) => rows(list))
+        section("waiting", relaysWaiting, waiting, SHOWN_ENTRIES, (list) =>
+          rows(list),
+        )
       )}
       {card && !waitingCount && (
         <Empty light={light}>
@@ -144,11 +157,13 @@ export function WorkSections({
             {zh ? "正在进行" : "IN PROGRESS"}
           </SessionsHeading>
           {card ? (
-            section(relaysRunning, running, RUNNING_SHOWN, (list) => rows(list))
+            section("running", relaysRunning, running, RUNNING_SHOWN, (list) =>
+              rows(list),
+            )
           ) : (
             <>
               {relaysRunning.length > 0 &&
-                section(relaysRunning, [], Infinity, () => null)}
+                section("running", relaysRunning, [], Infinity, () => null)}
               {rows(running, fold)}
             </>
           )}
@@ -170,14 +185,17 @@ function Folded<T>({
   shown,
   light,
   render,
+  foldKey,
 }: {
   items: readonly T[];
   shown: number;
   light: boolean;
   render: (items: readonly T[]) => ReactNode;
+  /** Kept in the shared store, so the measuring copy opens too (#430). */
+  foldKey?: string;
 }) {
   const zh = useFormat().language === "zh";
-  const [unfolded, setUnfolded] = useState(false);
+  const [unfolded, toggle] = cardFolds.use(foldKey);
   const inks = cardInks(usePaper(), light);
   return (
     <>
@@ -185,7 +203,7 @@ function Folded<T>({
       <FoldButton
         hidden={items.length - shown}
         unfolded={unfolded}
-        onToggle={() => setUnfolded((open) => !open)}
+        onToggle={toggle}
         inks={inks}
         zh={zh}
       />

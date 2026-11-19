@@ -17,7 +17,7 @@ import {
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
-import { FoldButton } from "../permissions/FoldButton";
+import { cardFolds, FoldButton } from "../permissions/FoldButton";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { DismissAll } from "./DismissAll";
@@ -63,7 +63,7 @@ export function CompletionAlertView({
   const inks = cardInks(paper, light);
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
-  const [unfolded, setUnfolded] = useState(false);
+  const [unfolded, toggleFold] = cardFolds.use("replies");
   // The reply whose row was clicked: it opens in place of the newest.
   const [chosen, setChosen] = useState<string | null>(null);
   const card = useHandoffCard();
@@ -262,7 +262,7 @@ export function CompletionAlertView({
       <FoldButton
         hidden={hidden}
         unfolded={unfolded}
-        onToggle={() => setUnfolded((open) => !open)}
+        onToggle={toggleFold}
         inks={inks}
         zh={zh}
       />

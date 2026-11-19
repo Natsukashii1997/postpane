@@ -74,10 +74,8 @@ test("「还有 n 条」展开后变成「收起」，能折回去", () => {
     "permissions/ApprovalContent.tsx",
     "alerts/CompletionAlertView.tsx",
   ])
-    assert.match(
-      read(card),
-      /onToggle=\{\(\) => setUnfolded\(\(open\) => !open\)\}/,
-    );
+    // Toggled in the store both copies of the card read (#430).
+    assert.match(read(card), /onToggle=\{toggleFold\}/);
 });
 
 test("单家面板和消息卡一样宽", () => {
@@ -127,9 +125,9 @@ test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、�
   assert.match(work, /暂无等待处理的事/);
   assert.match(work, /暂无在跑的会话/);
   // Each section folds its relays and rows together past its few (#427).
-  assert.match(work, /<Folded items=\{items\} shown=\{shown\}/);
-  assert.match(work, /section\(relaysWaiting, waiting, SHOWN_ENTRIES,/);
-  assert.match(work, /section\(relaysRunning, running, RUNNING_SHOWN,/);
+  assert.match(work, /<Folded\s+items=\{items\}\s+shown=\{shown\}/);
+  assert.match(work, /"waiting",\s*relaysWaiting,\s*waiting,\s*SHOWN_ENTRIES,/);
+  assert.match(work, /"running",\s*relaysRunning,\s*running,\s*RUNNING_SHOWN,/);
   // The card no longer folds its running rows into 「在跑 n」.
   assert.doesNotMatch(read("panel/SourceSessions.tsx"), /fold=\{fold\}/);
 });

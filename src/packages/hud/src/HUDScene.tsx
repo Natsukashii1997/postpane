@@ -47,6 +47,7 @@ import {
   type HUDNativePointer,
 } from "./scene/useHUDInteraction";
 import { useHUDLayout } from "./scene/useHUDLayout";
+import { useCloseWithSidebar } from "./scene/close-with-sidebar";
 import { PanelServicesProvider, usePanelServices } from "./PanelContext";
 import { SourceHoverPanel } from "./HoverPanel";
 import { stripMetrics, type HUDRect } from "./geometry";
@@ -439,11 +440,9 @@ export function HUDScene({
     ? snapshot.handoffs?.find((handoff) => handoff.id === cardId)
     : undefined;
   const weekly = weeklyFor(snapshot, config, cardHandoff, frontOf);
-  // It closes with the sidebar: folded away with no card of news out.
+  // It closes with the sidebar, as do lists opened past their few.
   const sidebarShown = open || Boolean(event || request);
-  useEffect(() => {
-    if (!sidebarShown) openHandoffCard(null);
-  }, [sidebarShown]);
+  useCloseWithSidebar(sidebarShown);
   // The replies' folded tag: the newest reply's session and the count.
   const reply = replyChip(news.replies, snapshot.sessions, (each) =>
     clientDisplayName(each.source),

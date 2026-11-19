@@ -1,6 +1,7 @@
 // The list cards' fold, moved out of ListCard.tsx for the 300-line ratchet.
 import { GRID } from "../panel/theme";
 import type { Inks } from "./ListCard";
+export { cardFolds } from "../panel/fold-store";
 
 /** The fold: a small line hung under the list's last row, on the text line,
  * 「展开其余 n 条 ⌄」; unfolded, 「收起 ⌃」 folds them back (owner, 2026-11-14:

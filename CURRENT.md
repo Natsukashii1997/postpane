@@ -6,12 +6,12 @@
 
 ## 长 brief 不再被 ChatGPT 转成附件，回信能收回（#429）（2026-11-19，Claude，新规则冒烟中发现；常浩回「开 issue 并修」「按方案改」，看 Fable 5.2 评估清单后回「按清单做」（经上级会话转达）；已提交、PR 见下、未发布）
 
-- 时间：开工 `2026-11-19 20:41`（`date '+%F %H:%M'` 记录）。来由：#429。#348 解冲突 L1 复核（接力 `h1a1f38f8b6200`）的 brief 11516 个字符，被 ChatGPT 转成附件「粘贴的文本.txt」：页面上没有用户消息气泡、也没有原文，插件不报 `turn complete`，回信 9 分钟就到了，驿窗却报「30 分钟没回信」（L-58）。
+- 时间：开工 `2026-11-19 20:41`（`date '+%F %H:%M'` 记录）。来由：#429。#348 解冲突 L1 复核（接力 `h1a1f38f8b6200`）的 brief 11516 个字符，被 ChatGPT 转成附件「粘贴的文本.txt」：页面上没有用户消息气泡、也没有原文，插件不报 `turn complete`，回信 9 分钟就到了，驿窗却报「30 分钟没回信」（L-59）。
 - 改了哪些文件：
   - 常浩要求的：
     - `src/apps/chrome-extension/page.js`：`pieces()` 按行切成每段不超过 6000 字（单行超长在行内切，不切开 emoji 这类双码元字符）；`paste()` 逐段贴到末尾，每段等输入框变长再贴下一段；`holds()` 加下限，输入框（去空白）不到原文八成就不算装下；`submit()` 在贴之前输入框空着、发送键却亮着（上次留下的附件）就报 `composer-mismatch` 不发，贴完没装下而发送键亮着也报 `composer-mismatch` 不发。
     - `src/apps/chrome-extension/test/page.test.mjs`：仿 ChatGPT 的输入框替身（单次超上限或第 n 段起转附件、可预置残留附件），新增 5 条：长文分段（拼回等于原文、除末段外在换行处切开、每段不超 6000、无附件）、单行超长行内切、不切开 emoji、第 2 段才转附件不发、已有残留附件不发；原「装不下不发」1 条。
-    - 文档：`docs/chatgpt-channel.md` 原因码加 `composer-mismatch` 及重试清不掉附件、「驿窗这一端」加分段粘贴与阈值；`docs/LESSONS.md` 新增 L-58。
+    - 文档：`docs/chatgpt-channel.md` 原因码加 `composer-mismatch` 及重试清不掉附件、「驿窗这一端」加分段粘贴与阈值；`docs/LESSONS.md` 新增 L-59。
   - 我顺手改的：无（Fable 评估里建议进本 PR 的几项都经常浩「按清单做」确认，算要求的）。
   - **改变了已有行为的**：① 送话超过 6000 字时分几次粘贴（原来一次贴完、超过阈值由 ChatGPT 转成附件，#99 起的注释写着这是有意的；没找到常浩定过它的记录）；② 输入框装不下八成原文、发送键却亮着时不发，报 `composer-mismatch`（原来照样发出）；③ 贴之前输入框空着、发送键却亮着时不发（原来会带着残留附件一起发出）。插件收到 `composer-mismatch` 仍按原逻辑切前台重试一次，留着附件时两次都失败，交常浩到页面上移除。
 - 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1051 passed` / `0 failed`，前端 `ℹ pass 484` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 34`（原 28 + 新增 6）、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。实现前先红：`red-before.txt`（长文分段、装不下不发 2 条）、`red-round2.txt`（不切开 emoji、残留附件 2 条；另 2 条在第一版实现下已成立）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-429-long-brief/`（`check-2.txt`、`test-2.txt`、`skeleton-2.txt`）。
@@ -22,6 +22,30 @@
   - 审核门新规则冒烟（接力 `h1a1f38f8b6200`，#348 解冲突 L1 复核）结果：送出跑通（工具说明是新规则，账本 `limit` 5、`risk` L1、`head` 5ad81cb、审查链 `r1a1f38f8b6200` 都对，30 分钟没回信按规则停下并通知到发起会话），ChatGPT 判通过（受审版本 5ad81cb7a56fa94b2869e948ee0a944e64161bc4，未决 P0 0、P1 0，审查出口「通过」，台账只有 P2-01「Format 正向归属缺直接测试」范围外转单 → #434），但回信没被驿窗收到：brief 以附件形式进了页面，插件没报 `turn complete`（`turns.jsonl` 这个会话只有两条 `start`），19:57 被判「30 分钟没回信」。回信是手动在 Chrome 页面读到的，已在 PR #348 评论写明，未过审核门；回信自动转回、卡上轮数、末四行解析、通过前回读 head、回信存 `replies/` 这几项新规则没验到，留到 #435 装机后用长 brief 重跑一张接力时验。这张接力修复后也收不回（页面那条提问永远是附件），常浩在侧栏手动结束。
   - 旧接力 `h1a1ed39518503` 第 2 轮回信被判 `unmatched` 约 470 次，11-19 20:49 被自动结束，digital-twin PR #210 第 2 轮回信没转回发起会话（#432）。
   - 另开：#431 接收侧「提问读不到」提示与提问指纹、#433 插件等待按真实时间计与重读退避、#434 原因码人话与 Format 正向归属测试（#348 复核 P2-01）。
+- 本轮新坑：L-59
+- skill 进化：无。
+
+## 展开「其余 n 条」后卡片跟着长高（#430）（2026-11-19，Claude，常浩截图说 ChatGPT 卡展开后快 10 条、框还是很短在里面滚，要多任务时展开卡和 Claude 卡一样长宽；看分批计划后回「开始」，看完 PR #436 后回「合并装机」；已提交、已 squash 合并、已发布 `51c89b1dbbce` 回读通过）
+
+- 时间：开工 `2026-11-19 21:16`（issue #430 建立时间；上一会话查根因、写修复时没用 `date` 记，本会话收尾 `2026-11-19 21:36` 起）。来由：#430。宽度四家本来都是 470（#368），问题在高度：侧栏每个面板画两份，框高按隐藏的测高副本定，「展开其余 n 条」的开合是各组件自己的 `useState`，只展开了看得见的那份，测高副本一直折着（L-58）。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `hud/src/panel/fold-store.ts`（新）：`foldStore()` 建一份两边共读的开合状态（`useSyncExternalStore`，带服务端快照），`cardFolds` 是展开卡用的那份，可 `reset()`。
+    - `panel/WorkSections.tsx`：`Folded` 改用 `cardFolds.use(foldKey)`，键是 `<哪家>:waiting` / `<哪家>:running`；`panel/SourceSessions.tsx` 传 `place={focusVendor}`。
+    - `permissions/ApprovalContent.tsx`（提问 / 审批列表，键 `approvals`）、`alerts/CompletionAlertView.tsx`（回复列表，键 `replies`）同样改用 `cardFolds`；`permissions/FoldButton.tsx` 再导出 `cardFolds`。
+    - `scene/close-with-sidebar.ts`（新）：`useCloseWithSidebar(shown)` 侧栏收起时关接力卡、`cardFolds.reset()`，替换 `HUDScene.tsx` 原来只关接力卡的那段 effect。
+  - 我顺手改的：
+    - `panel/PlaceRows.tsx`：看板「在跑」超过 3 条的折叠也改用 `foldStore()` 的另一份（不随侧栏收起复位），和展开卡共用一套实现，行为不变。
+    - `src/tooling/file-size-baseline.json`：`HUDScene.tsx` 变短，收紧 300 行棘轮基线。
+    - `docs/LESSONS.md` 加 L-58。
+  - **改变了已有行为的**：展开「其余 n 条」后框跟着长高（最多屏幕高 - 80，屏幕放得下就不在框里滚），ChatGPT、Claude 等各家展开卡的「等待处理」「正在进行」、提问列表、回复列表都算；展开状态在侧栏收起时折回，下次打开仍默认 4 / 6 条（#374、#382 不变）。宽度 470、折叠按钮样子、看板折叠都不变。
+- 测试：`pnpm run check` 退出码 0（第一次提示 `HUDScene.tsx` 比基线短，`--update` 后基线收紧）；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1051 passed` / `0 failed`，前端 `ℹ pass 486` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 28`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。新测试 `test/fold-store.test.ts`，实现前先红（`red.txt`：`WorkSections.tsx` 不含 `cardFolds.use(foldKey)`）；`unified-card.test.ts` 两条断言改成新写法。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-430-fold-measure/`（`check.txt`、`pnpm-test.txt`、`node-tests.txt`）。
+- 验证：场景预览台（本 worktree，127.0.0.1:1491，`?still`，视口 1440×1600）：`chatgpt-nine-relays` 点 ChatGPT 票根，展开卡 666，点「展开其余 3 条」后测高副本与可见框都到 849，等待处理 7 条全显示；`claude-many-asks` 点 Claude 票根，展开卡 790，点「展开其余 4 条」后都到 1089，8 条全显示。视口 1440×900 时 Claude 卡展开前已顶到上限 764，展开后测高 1089、可见框仍 764、超出部分卡内滚动（屏幕放不下，符合上限）。上一会话改前对照：展开后 ChatGPT 测高仍 665、Claude 仍 790。记录见 `preview-measure.md`。**未验证**：侧栏收起再打开后折回（只有 `fold-store.test.ts` 守着，没在预览台点过）；实机悬停面板里点展开（L-09），留给常浩。
+- 截图：同一证据目录 `before-chatgpt-expanded.jpg`、`after-chatgpt-expanded.jpg`（上一会话）、`after-chatgpt-nine-relays-1600.jpg`、`after-claude-many-asks-1600.jpg`。
+- 发布与回读：常浩回「合并装机」后从本分支打包（开工后 main 没有新提交，代码与合并后一致）。`install.sh 430-fold-measure` 第一次停下：装着的是 #427 worktree 的包（L-05）；核实 #428 已合并为 `8afa990`、本分支含它后加 `--takeover`。装前 `dd310b3d79ed`（已备份），22:27:10 退出并启动，产物 `51c89b1dbbce` / 已装 `51c89b1dbbce`，签名 leaf `H"b773068e`；冒烟：侧栏在动，装前装后 0.06% 像素不同，落在侧栏区；整屏截图 `after-install-screen.png` 没有「想访问文稿」弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-19-430-fold-measure/PostPane-dd310b3d79ed.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 范围外，未核实：`CompletionAlertView` 里「点开的那条回复」`chosen` 也是本地状态，可能同类问题，没顺手扩。
+  - ADR-0001 第 5 条「多条给列表」与 #359 不一致，之前已报告，没改。
 - 本轮新坑：L-58
 - skill 进化：无。
 
