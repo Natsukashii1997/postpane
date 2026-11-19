@@ -472,7 +472,7 @@ export function StubFace({
     sealed: marks.sealed,
     deskReview: vendor.desk?.stub.review ?? false,
     review: vendor.relay?.review ?? false,
-    replied: vendor.relay?.replied ?? false,
+    replied: !!(vendor.relay?.replied || vendor.relay?.stopped), // 「停」 on relay paper too
   });
   // The relay's paper runs out over the perforated strip too, holes and all,
   // so the stub's side is covered to its edge (owner 2026-11-10); the print

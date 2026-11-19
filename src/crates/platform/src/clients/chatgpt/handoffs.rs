@@ -444,7 +444,11 @@ impl Handoff {
             (pending.words, pending.key) = (None, String::new());
         }
         for step in &mut shown.steps {
-            step.key = None;
+            // An answer's key is its ChatGPT message id, which its receipt
+            // names too (#411 L2 P2-01); the others are what was sent, hashed.
+            if step.kind != StepKind::Reply {
+                step.key = None;
+            }
             if let Some(text) = &mut step.text {
                 if text.chars().count() > EXCERPT {
                     *text = excerpt(text, EXCERPT);
@@ -1727,8 +1731,20 @@ mod tests {
             kept.steps[0].text.as_deref(),
             Some("改了 6 个文件 · 测试全过")
         );
-        // The snapshot carries neither the brief nor what was sent hashed.
-        assert!(kept.shown().steps.iter().all(|step| step.key.is_none()));
+        // The snapshot carries neither the brief nor what was sent hashed;
+        // an answer keeps its ChatGPT message id, which its receipt names
+        // too (#411 L2 P2-01).
+        let shown = kept.shown();
+        assert!(shown
+            .steps
+            .iter()
+            .all(|step| step.kind == StepKind::Reply || step.key.is_none()));
+        let answer = shown
+            .steps
+            .iter()
+            .find(|step| step.kind == StepKind::Reply)
+            .unwrap();
+        assert_eq!(answer.key.as_deref(), Some("m1"));
         // Nor the words of a review on its way, or of an ask to mend (#409).
         let mut sending = kept.clone();
         let words = || unsure::Pending {

@@ -1,6 +1,7 @@
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { doerName, doerOf } from "./handoff-doer.ts";
+import { endWords, stopped } from "./relay-stop.ts";
 export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
@@ -39,21 +40,6 @@ export type Action =
 
 export const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
-/** Stopped at its cap, the person's to decide (#347, #409): 「停」. */
-// The gate keeps `notice: "top"` after a leave to review on; the auto round
-// trip back on, or a review asked since, means it is under way again.
-export const stopped = (handoff: Handoff) => {
-  const at = handoff.topAt ?? 0;
-  return (
-    live(handoff) &&
-    handoff.notice === "top" &&
-    !handoff.auto &&
-    !handoff.steps?.some(
-      (s) => s.at > at && ["work", "ask", "resume"].includes(s.kind),
-    )
-  );
-};
-
 /** Answers since its rounds last began (#258), but those only mending the
  * last lines of the one before (#347, gate.rs `reviewed`). */
 export function reviews(handoff: Handoff): number {
@@ -394,13 +380,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         rows.push({
           who: "post",
           time,
-          title: step.auto
-            ? zh
-              ? "审核通过，自动结束接力"
-              : "Passed: the handoff ended by itself"
-            : zh
-              ? "结束接力"
-              : "Handoff ended",
+          ...endWords(handoff, step, zh),
           state: "done",
         });
         break;
@@ -489,7 +469,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     state: "todo",
   };
   const phase = phaseOf(handoff);
-  if (stopped(handoff) && (phase === "returned" || phase === "replied")) {
+  if (stopped(handoff) && ["returned", "replied", "ended"].includes(phase)) {
     rows.push({
       who: "post",
       time: clock(handoff.topAt ?? at),

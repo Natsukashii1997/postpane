@@ -7,7 +7,11 @@ import type { ApprovalEntry } from "../src/permissions/approval-list.ts";
 const T = Date.UTC(2026, 10, 19, 6, 0);
 const minute = 60_000;
 
-const entry = (at: number, session = "chatgpt:g1"): ApprovalEntry =>
+const entry = (
+  at: number,
+  session = "chatgpt:g1",
+  turnId?: string,
+): ApprovalEntry =>
   ({
     kind: "reply",
     id: `done:${at}`,
@@ -18,6 +22,7 @@ const entry = (at: number, session = "chatgpt:g1"): ApprovalEntry =>
       at: new Date(at).toISOString(),
       source: "chatgpt",
       sessionId: session,
+      turnId,
     } as IslandEvent,
   }) as ApprovalEntry;
 
@@ -66,4 +71,35 @@ test("the reply PostPane let pass gets 「过」 on the receipt, and only that o
     phase: "working",
   });
   assert.equal(passedReply(entry(T), [relay(), again]), false);
+});
+
+test("the 「过」 goes on the answer by its ChatGPT message id; by time only when there is none (#411 L2 P2-01)", () => {
+  const keyed = relay({
+    steps: [
+      { at: T - 30 * minute, kind: "ask" },
+      { at: T - minute, kind: "reply", verdict: "revise", key: "m1" },
+      { at: T - minute, kind: "ask" },
+      { at: T, kind: "reply", verdict: "pass", key: "m2" },
+    ],
+  });
+  assert.equal(passedReply(entry(T, "chatgpt:g1", "m2"), [keyed]), true);
+  // The answer a minute before, that asked for changes: its own id, no 「过」.
+  assert.equal(
+    passedReply(entry(T - minute, "chatgpt:g1", "m1"), [keyed]),
+    false,
+  );
+  // Chat in the same conversation after the pass, however soon.
+  assert.equal(
+    passedReply(entry(T + 30_000, "chatgpt:g1", "m3"), [keyed]),
+    false,
+  );
+  assert.equal(
+    passedReply(entry(T + 30 * minute, "chatgpt:g1", "m4"), [keyed]),
+    false,
+  );
+  // No id on either side (older records): within two minutes either way.
+  assert.equal(passedReply(entry(T + 90_000), [relay()]), true);
+  assert.equal(passedReply(entry(T - 90_000), [relay()]), true);
+  assert.equal(passedReply(entry(T + 3 * minute), [relay()]), false);
+  assert.equal(passedReply(entry(T + 30 * minute), [relay()]), false);
 });

@@ -25,6 +25,9 @@ export interface HandoffStep {
   /** A reply's numbered points. */
   points?: string[];
   verdict?: "pass" | "revise" | null;
+  /** A `reply`'s ChatGPT message id: its receipt's `turnId` (#411 L2 P2-01).
+   * The snapshot carries no other step's key. */
+  key?: string | null;
   /** Done by the auto round trip, not by the person (#72). */
   auto?: boolean;
   /** Words back to Claude (`back`, `again`, #257): the id they were left

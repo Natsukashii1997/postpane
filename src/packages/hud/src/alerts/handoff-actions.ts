@@ -1,12 +1,6 @@
 import type { Handoff } from "@agent-hud/protocol";
-import {
-  budget,
-  counted,
-  live,
-  phaseOf,
-  stopped,
-  type Action,
-} from "./handoff-card.ts";
+import { budget, counted, live, phaseOf, type Action } from "./handoff-card.ts";
+import { idleEnded, stopped } from "./relay-stop.ts";
 
 /** The buttons along the card's foot, the main one last. */
 export function actions(handoff: Handoff): Action[] {
@@ -24,13 +18,17 @@ export function actions(handoff: Handoff): Action[] {
     ...toggle,
     ...(handoff.chatgptConversation ? (["open"] as const) : []),
   ];
+  // Stopped at its cap (#409): not 「再审一轮」 or 「继续自动」 — a word in
+  // the session goes on. Ended by PostPane after a day idle, it cannot be
+  // ended again (#411 L2 P2-02).
   if (stopped(handoff))
-    // Stopped at its cap (#409): not 「再审一轮」 or 「继续自动」 — a word in the session goes on.
-    return [
-      "end",
-      ...(handoff.chatgptConversation ? (["open"] as const) : []),
-      "session",
-    ];
+    return idleEnded(handoff)
+      ? ["close", "session"]
+      : [
+          "end",
+          ...(handoff.chatgptConversation ? (["open"] as const) : []),
+          "session",
+        ];
   switch (phase) {
     case "ended":
       return ["close"];
@@ -57,8 +55,13 @@ export function pointMarkColumn(count: number): string {
   return more > 0 ? `calc(16px + ${more}ch)` : "16px";
 }
 
-/** The buttons' words; `D` the doer (Claude, Codex). */
-export function actionLabels(zh: boolean, D: string): Record<Action, string> {
+/** The buttons' words; `D` the doer (Claude, Codex). `reachable`: the doer's
+ * session is there to go back to (#411 L2 P2-04). */
+export function actionLabels(
+  zh: boolean,
+  D: string,
+  reachable = true,
+): Record<Action, string> {
   return {
     end: zh ? "结束接力" : "End handoff",
     open: zh ? "查看 ChatGPT 对话" : "Open ChatGPT",
@@ -68,10 +71,51 @@ export function actionLabels(zh: boolean, D: string): Record<Action, string> {
     close: zh ? "知道了" : "Got it",
     pause: zh ? "暂停自动" : "Pause auto",
     resume: zh ? "继续自动" : "Resume auto",
-    session: zh ? "去会话里说一句" : "Say it in the session",
+    session: reachable
+      ? zh
+        ? "去会话里说一句"
+        : "Say it in the session"
+      : zh
+        ? "原会话已不在"
+        : "Session gone",
   };
 }
 
 /** The buttons that take the person elsewhere, with ↗ (#200). */
 export const jumps = (action: Action) =>
   action === "open" || action === "session";
+
+/** A button that cannot do its job: the jump back with no session to go to. */
+export const actionOff = (action: Action, reachable: boolean) =>
+  action === "session" && !reachable;
+
+/** A button's hover words: what 「再审一轮」 asks for (`round` as now), or
+ * why 「去会话里说一句」 cannot go. */
+export function actionTitle(
+  action: Action,
+  zh: boolean,
+  D: string,
+  { at, of }: { at: number; of: number },
+  reachable: boolean,
+): string | undefined {
+  if (action === "again")
+    return zh
+      ? `${D} 改完后送 ChatGPT，第 ${at + 1} / ${Math.max(of, at + 1)} 轮`
+      : `${D} hands its changes to ChatGPT, round ${at + 1}`;
+  if (actionOff(action, reachable))
+    return zh
+      ? `找不到发起这单的 ${D} 会话（可能已关掉或不在列表里），去那边说一句再续审，或结束接力`
+      : `The ${D} session that started this is not listed; review on from it, or end`;
+  return undefined;
+}
+
+/** Beside 「知道了」 on an ended card: ended, or put away by PostPane after a
+ * day idle while still stopped at its cap (#411 L2 P2-02). */
+export const endedNote = (handoff: Handoff, zh: boolean) =>
+  stopped(handoff)
+    ? zh
+      ? "闲置一天已自动收起，还没了结"
+      : "Put away after a day idle, not settled"
+    : zh
+      ? "接力已结束"
+      : "This handoff has ended";

@@ -2,7 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
-import { actions, pointMarkColumn } from "../src/alerts/handoff-actions.ts";
+import {
+  actionLabels,
+  actionOff,
+  actionTitle,
+  actions,
+  endedNote,
+  pointMarkColumn,
+} from "../src/alerts/handoff-actions.ts";
 import { relayLegend, relayLegendInks } from "../src/alerts/relay-legend.ts";
 import {
   autoLabel,
@@ -260,7 +267,11 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
     handoff({
       status: "closed",
       phase: "ended",
-      steps: [...handoff().steps!, step("end", T + 9 * minute, { auto: true })],
+      steps: [
+        ...handoff().steps!,
+        step("reply", T + 8 * minute, { verdict: "pass" }),
+        step("end", T + 9 * minute, { auto: true }),
+      ],
     }),
     T + 10 * minute,
     true,
@@ -708,4 +719,109 @@ test("reviewed on past its cap, it is no longer stopped; stopped again only at t
   // At the new cap: stopped again.
   const again = { ...paused, halt: "又审满了", topAt: top + 20 * minute };
   assert.deepEqual(stamp(again, true), { text: "停", tone: "red" });
+});
+
+test("「去会话里说一句」 says so when its session is gone, and cannot be pressed (#411 L2 P2-04)", () => {
+  assert.equal(actionLabels(true, "Claude", true).session, "去会话里说一句");
+  assert.equal(actionLabels(true, "Claude", false).session, "原会话已不在");
+  assert.equal(actionOff("session", false), true);
+  assert.equal(actionOff("session", true), false);
+  assert.equal(
+    actionOff("end", false),
+    false,
+    "only the jump needs the session",
+  );
+  assert.match(
+    actionTitle("session", true, "Claude", { at: 2, of: 2 }, false) ?? "",
+    /找不到发起这单的 Claude 会话/,
+  );
+  assert.equal(
+    actionTitle("session", true, "Claude", { at: 2, of: 2 }, true),
+    undefined,
+  );
+  assert.equal(
+    actionTitle("again", true, "Claude", { at: 1, of: 2 }, true),
+    "Claude 改完后送 ChatGPT，第 2 / 2 轮",
+  );
+});
+
+test("stopped at its cap and ended by PostPane after a day idle, it is still stopped; ended by the person, it is not (#411 L2 P2-02)", () => {
+  const top = T + 12 * minute;
+  const idle = top + 25 * 60 * minute;
+  const stoppedOne = handoff({
+    phase: "returned",
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: top,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", top),
+      step("stop", top, { auto: true }),
+    ],
+  });
+  const idled = {
+    ...stoppedOne,
+    status: "closed" as const,
+    phase: "ended" as const,
+    steps: [
+      ...stoppedOne.steps!,
+      step("end", idle, { text: "闲置一天自动结束", auto: true }),
+    ],
+  };
+  assert.deepEqual(stamp(idled, true), { text: "停", tone: "red" });
+  assert.equal(
+    timeline(idled, idle + minute, true).at(-1)?.title,
+    "已停：审满 2 轮",
+  );
+  assert.deepEqual(actions(idled), ["close", "session"]);
+  assert.equal(endedNote(idled, true), "闲置一天已自动收起，还没了结");
+  // Ended by the person: only ended.
+  const ended = { ...idled, steps: [...stoppedOne.steps!, step("end", idle)] };
+  assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });
+  assert.deepEqual(actions(ended), ["close"]);
+  assert.equal(endedNote(ended, true), "接力已结束");
+});
+
+test("an end by PostPane reads as a pass only after a passing answer (#411)", () => {
+  const passed = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("end", T + 12 * minute, { auto: true }),
+    ],
+  });
+  assert.equal(
+    timeline(passed, T + 13 * minute, true).at(-1)?.title,
+    "审核通过，自动结束接力",
+  );
+  const idle = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("end", T + 25 * 60 * minute, {
+        auto: true,
+        text: "闲置一天，驿窗自动结束",
+      }),
+    ],
+  });
+  const last = timeline(idle, T + 26 * 60 * minute, true).at(-1);
+  assert.deepEqual(
+    [last?.title, last?.sub],
+    ["驿窗自动结束接力", "闲置一天，驿窗自动结束"],
+  );
+  const byHand = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [...handoff().steps!, step("end", T + 2 * minute)],
+  });
+  assert.equal(
+    timeline(byHand, T + 3 * minute, true).at(-1)?.title,
+    "结束接力",
+  );
 });

@@ -1,7 +1,7 @@
 import type { Handoff, Snapshot } from "@agent-hud/protocol";
 import { STALE_REVIEW } from "./chatgpt-desk.ts";
 import { doerOf, type Doer } from "./alerts/handoff-doer.ts";
-import { stopped as atCap } from "./alerts/handoff-card.ts";
+import { settledSince, stopped as atCap } from "./alerts/relay-stop.ts";
 import { STORY } from "./scene/flight-plan.ts";
 
 /** What relays print on the stubs (#171), by the phase they are in rather
@@ -79,7 +79,8 @@ export function relayStamps(
     (handoff) => handoff.status === "open",
   );
   if (end === "chatgpt") {
-    const top = open.filter(atCap);
+    const all = snapshot.handoffs ?? [];
+    const top = all.filter((h) => atCap(h) && !settledSince(h, all));
     if (top.length)
       return {
         review: true,

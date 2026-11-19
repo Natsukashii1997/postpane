@@ -92,3 +92,45 @@ export const relayPaused: Scene = {
     ],
   }),
 };
+
+// Stopped at its cap, then put away by PostPane after a day idle; its Claude
+// session is no longer listed (#411 L2 P2-02, P2-04).
+const idled = relay({
+  id: "h-idle",
+  title: "整理部署脚本",
+  doer: "claude",
+  session: "c-gone",
+  chatgpt: "g-idle",
+  phase: "returned",
+  minutesAgo: 25 * 60,
+  reviews: 5,
+  limit: 5,
+  auto: false,
+  halt: "已审满 5 轮仍需修改，自动往返停下，交常浩决定",
+  notice: "top",
+});
+export const relayIdleStopped: Scene = {
+  key: "relay-idle-stopped",
+  title:
+    "停了一天没人管，驿窗自动收起但还没了结（「停」还在；原会话已不在，按钮置灰）",
+  snapshot: snapshot({
+    sessions: [pair("idle", "整理部署脚本", 60)[1]],
+    handoffs: [
+      {
+        ...idled,
+        status: "closed",
+        phase: "ended",
+        steps: [
+          ...(idled.steps ?? []),
+          {
+            at: idled.updatedAt + 24 * 3_600_000 + 60_000,
+            kind: "end",
+            auto: true,
+            text: "闲置一天，驿窗自动结束",
+          },
+        ],
+        updatedAt: idled.updatedAt + 24 * 3_600_000 + 60_000,
+      },
+    ],
+  }),
+};

@@ -354,6 +354,7 @@ impl Desk {
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
+            book.note(id, Notice::Passed, now);
             ended |= book.passed(id, &passed(chinese), now);
         }
         if interrupted | woke | ended | adopted | unconfirmed {
@@ -1379,11 +1380,10 @@ impl Desk {
             (_, Some(held)) => book.stop(id, &named(gate::stale(&held.why, how)), true, now),
             (Next::Pass | Next::Close, _) => {
                 book.note(id, Notice::Passed, now);
-                let words = if next == Next::Pass {
-                    passed_back(how)
-                } else {
-                    thinking_closed()
-                };
+                let pass = next == Next::Pass;
+                let words = pass
+                    .then(|| passed_back(how))
+                    .unwrap_or_else(thinking_closed);
                 book.passed(id, &named(words), now)
             }
             // Another commit than the one sent: the current one sent again
@@ -3551,6 +3551,8 @@ mod tests {
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "closed");
         assert_eq!(shown[0]["phase"], "ended");
+        // A pass as any other: the person is told, and its chain starts over (#411 L2 P2-03).
+        assert_eq!(shown[0]["notice"], "passed");
     }
 
     #[test]

@@ -302,3 +302,45 @@ test("a relay stopped at its cap stamps ChatGPT's stub 「停」 in wax red unti
     false,
   );
 });
+
+test("an idle-ended relay still at its cap keeps 「停」 until a review begins there since (#411 L2 P2-02)", () => {
+  const idled: Handoff = {
+    ...relay(
+      "ended",
+      [
+        { at: 50, kind: "stop", auto: true },
+        { at: 90, kind: "end", auto: true },
+      ],
+      "closed",
+    ),
+    id: "h-idle",
+    notice: "top",
+    topAt: 50,
+    auto: false,
+  };
+  assert.equal(
+    relayStamps({ handoffs: [idled] }, "chatgpt", NOW)?.stopped,
+    true,
+  );
+  // Ended by the person: settled.
+  const byHand = {
+    ...idled,
+    steps: [
+      { at: 50, kind: "stop" as const },
+      { at: 90, kind: "end" as const },
+    ],
+  };
+  assert.equal(relayStamps({ handoffs: [byHand] }, "chatgpt", NOW), undefined);
+  // A review begun since in the same session settles it, as the gate does.
+  const since = { ...relay("working"), id: "h-new", createdAt: 95 };
+  assert.equal(
+    relayStamps({ handoffs: [idled, since] }, "chatgpt", NOW)?.stopped,
+    false,
+  );
+  // One begun elsewhere does not.
+  const elsewhere = { ...since, claudeSession: "s2", cwd: "/other" };
+  assert.equal(
+    relayStamps({ handoffs: [idled, elsewhere] }, "chatgpt", NOW)?.stopped,
+    true,
+  );
+});
