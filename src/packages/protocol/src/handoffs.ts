@@ -18,7 +18,8 @@ export interface HandoffStep {
     | "end"
     | "stop"
     | "resume"
-    | "wake";
+    | "wake"
+    | "format";
   /** What was said, cut to a few hundred characters. */
   text?: string | null;
   /** A reply's numbered points. */
@@ -75,8 +76,8 @@ export interface Handoff {
   auto?: boolean;
   /** Why the auto round trip stopped, while it is off. */
   halt?: string | null;
-  /** An engineering review's risk level (#217): L1 gets one review, L2 and
-   * L3 two. */
+  /** An engineering review's risk level (#217): what the review asks
+   * for, not how many it gets (#347). */
   risk?: "L1" | "L2" | "L3";
   /** The pull request under review, 「owner/repo#n」 (#217). */
   pr?: string;
@@ -94,4 +95,17 @@ export interface Handoff {
    * Claude session and it handed over again. Earlier reviews, carried ones
    * too, no longer count. */
   roundsFrom?: number;
+  /** The review gate's own (#347): the cap as set when it last asked, its
+   * review chain and that chain's reviews before it, the commit under
+   * review, and what the person is to hear of. */
+  limit?: number;
+  chain?: string;
+  chainCarried?: number;
+  head?: string;
+  notice?: "passed" | "top";
+  /** When it reached its cap (L3 P2-07). */
+  topAt?: number;
+  /** A review sent and not yet known to have gone in (L3 P1-10): its
+   * answer counts and cannot pass. */
+  pending?: { request: string; pr?: string; head?: string; limit: number };
 }

@@ -7,6 +7,92 @@
 
 
 
+## 接力审核门第 3 批开工准备：现状摸清、计划与常浩的选择记进 #409（2026-11-19，Claude，常浩回「做第 3 批」「按推荐改」；只开了 issue，代码未改）
+
+- 时间：开工 `2026-11-19 00:10`（会话记录时间，未用 `date` 记）。来由：#348 与四份规则草稿审查都已通过，生效门还差第 3 批界面与第 4 批模拟台账；常浩选先做第 3 批。
+- 改了哪些文件：无代码改动。计划、现状、常浩 11-19 对 3 处已定内容的选择（圆章加红色「到顶」；侧栏到顶提醒先出三版预览；回执接力单加蓝色「过」章）写进 issue #409。
+- 测试：未跑（没有代码改动）。
+- 验证：只读调研（子 agent）对照代码。
+- 截图：无。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 本会话上下文已过半，第 3 批的三版预览与实现建议在新会话里做：从 `claude/347-review-gate` 切 `claude/409-review-gate-ui`，先读 #409 和本节。
+  - 侧栏「到顶」提醒（甲 / 乙 / 丙）要出三版预览、常浩挑定后才实现；其余照 #409 直接做。
+  - skill 进化：无。
+- 本轮新坑：无
+
+## 接力审核门：上限只能调低到 1–5，四份规则草稿对齐 #348 实现（2026-11-18，Claude，常浩回「按推荐办」：上限改 1–5、四份合并送一轮 L1；已提交、未发布；L1 审查补改后定向复核已通过）
+
+- 时间：开工 `2026-11-18 23:28`（`date '+%F %H:%M'` 记录）。来由：常浩选「先对齐规则文档」；对齐计划经 Fable 5.2（High）独立评估，指出上限 1–9 放宽了常浩 11-14「最高走审核 5 轮」、DT-ORC 写进架构基线的规则不算 L0，常浩回「按推荐办」。
+- 改了哪些文件：
+  - 驿窗：`platform/.../handoffs/gate.rs` `LIMIT_MAX` 9 → 5，测试改为 6 拒收、5 可设；`docs/chatgpt-channel.md` 上限一句。提交 `716c472`。
+  - multi-agent#7（`765b1b0`）：MA-02 第 4 节（`head` / `chain`、送出前拒收、版本问题转回重送不停、送达未确认、补格式细节）、5.2（issue 由 ChatGPT 核）、5.3（通过后补改）、5.4（计轮细化、继承与信任边界）、5.5（上限只能调低、最后一轮预警与到顶的确切条件、第 3 批界面、`extra` 口径与到顶未了结）、5.6 生效门（第 2–4 批、合并顺序、回退先还原数据目录）、落地边界表；MA-01 第 6 节；`docs/runs.md` 的 `over_budget`。分工写明本契约写语义，驿窗 `docs/chatgpt-channel.md`「审核门」写机械细节。
+  - agent-kit#71（`f6a1cfd`）：《工程流程》第 8 节第 3 条改为摘要并指向 MA-02 与驿窗通道文档。
+  - digital-twin#185（`345021e`）：DT-ORC 3.3 工具参数与 Codex 发起、6.2 表（补送达未确认、读不到 PR 当前 HEAD，版本问题转回重送，证据不足暂停写明驿窗做法）、6.4。
+  - my-skills#97（`f2a84ff`）：thinking-review 1.1.2，`references/relay.md`（上限、到顶条件、补格式会转回、到顶后续审与新开、送达未确认）、SKILL.md 版本、CHANGELOG。
+- 测试：驿窗合入 main（#393–#406）后 `pnpm run check` 退出码 0；`pnpm test` 第一次 cargo 1 条失败（`core` 的 `demo::tests::a_pass_with_nothing_new_renders_nothing_until_something_changes`，按当前时间判断，单独跑 3 次都过，属机器忙时偶发），重跑退出码 0，cargo 合计 passed 1040 failed 0，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`（`pnpm-test-8.log`）；`node scripts/check-rules.mjs` 通过；multi-agent `node --test tests/*.test.mjs` `ℹ pass 17` / `ℹ fail 0`、规则检查通过；agent-kit `ℹ pass 78` / `ℹ fail 0`；my-skills `ℹ pass 15` / `ℹ fail 0`；digital-twin 没有测试脚本。四仓旧说法扫描只剩历史记录（`rules/old-phrase-sweep.log`）。
+- 验证：只做了文字核对与各仓测试；未装机。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布。四份草稿保持草稿，等生效切换。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - Fable 另指出两处 #348 代码问题，按它的建议另开单、本轮不改：到上限那一轮遇到版本问题，自动往返不停也不记到顶，但重送会被拒；`relay.ts` 与 `texts.rs` 里 `extra` 的说明写窄了。
+  - digital-twin 草稿分支落后 main 56 个提交，合并时要变基。
+  - L1 审查（驿窗 `h1a1ef4f4d7200`）：返修，P1-01（三处摘要把 `extra` 的外部消息口径写窄了）、P2-01（续审与新开的 `extra` 要求没分开）、P2-02（DT-ORC 漏「新发现的」）；没有改到常浩已裁决的内容。已补改并推送（multi-agent `4d3a0d5`、agent-kit `c43536d`、digital-twin `8b2f950`、my-skills `ee6953a`），四个 PR 写了「补改未复审」；常浩回「送定向复核」，定向复核（驿窗 `h1a1ef59ed7101`）通过，P1-01、P2-01、P2-02 已验证关闭，未决 P0 0、P1 0，无非阻断意见；四份保持草稿等生效切换。
+  - skill 进化：无。
+- 本轮新坑：无
+
+## 接力审核门 #348 第 5 轮返修：补格式失败也补收回信、送达记录没记上不发、迟到确认去重（2026-11-18，Claude，常浩回「修并续审」；已提交、未发布；L3 专项续审已通过，PR 先不合并，等生效切换）
+
+- 时间：开工 `2026-11-18 14:04`（`date '+%F %H:%M'` 记录）。来由：第 5 轮专项续审（接力 `h1a1ed14e5b302`，受审 `1bcd955`）判返修：P1-10、P1-11、P1-13、P1-14、P1-15 关闭，新增 P1-17、P1-18，P2-16 部分关闭。
+- 改了哪些文件：`host/handoff/gate.rs`（`ask_format` 发送成功或失败都 `caught_up`，P1-17）；`host/handoff.rs`（送审 `change_kept` 返回 false 就不发，P1-18；测试替身加 `on_opener` 钩子）；`host/handoff/guard.rs`（`moved_meanwhile` 话术）；`platform/.../handoffs/unsure.rs`（`Pending.noted`，迟到确认只记一次，P2-16）；`docs/chatgpt-channel.md` 同步。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1042 failed 0（host 155、platform 289），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。新增测试 2 项（补格式发送期间回信先到再失败、送审准备期间接力被关掉），重启测试补「同一确认来两次、跨重启再来」；撤修复验证 3 处各自对应测试失败。日志 `*-5.log`。合入 main #392 后另跑一次全量，见 PR。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布，切换条件同前。
+- 续审结果：专项续审（受审 `d6210fd`）通过，P1-17、P1-18、P2-16 关闭，未决 P0 0、P1 0，无非阻断意见；第 4、5 轮台账全部关闭。复审写明不等于授权装机或启用。
+- 与授权不一致之处、遗留问题、范围外发现：PR #348 先不合并（合进 main 后下次打包就带上审核门）；剩下第 3 批界面、四份规则草稿对齐、第 4 批模拟台账与实机、生效切换，都要常浩另行点头。skill 进化：无。
+- 本轮新坑：无
+
+## 接力审核门 #348 第 4 轮返修：补格式与送审分开记、送审第一行写请求号、思维评审续审把关、送达未知通知（2026-11-18，Claude，常浩回「按推荐返修并续审」；已提交、未发布，等 L3 专项续审）
+
+- 时间：开工 `2026-11-18 13:32`（`date '+%F %H:%M'` 记录）。来由：L3 返修复审（接力 `h1a1ed14e5b302`，受审 `6e68292`）判返修：P1-10、P1-11 未关，新增 P1-13、P1-14、P1-15、P2-16，P1-12 核心关闭；按旧规则预算已用完，常浩授权按推荐返修并续审一次。
+- 改了哪些文件：
+  - `platform/.../handoffs/unsure.rs`（新，送达记录逻辑从 `guard.rs` 挪来）：`Gate.mending` 与送审的 `pending` 分开（P1-10），确认补格式只清 mending；`tagged` / `untagged`（续审、补格式第一行「【驿窗送审 请求号】」，指纹去掉这一行，P1-11）；`ask_mending`（Format 步与待确认一次改，P1-15）；`unconfirmed(…, tell)` 给停下那一步打 `Cause::Unconfirmed`（P1-14）。
+  - `handoffs/notice.rs`：`Cause::Unconfirmed`、`Trouble::Unconfirmed`，接力开着且仍有未答待确认才报。`handoffs/guard.rs`：`unsettled_top` 加审查种类参数（P1-13）。`handoffs/gate.rs`：`mending` 字段。`handoffs.rs`：Ask 步指纹去请求行，导出新模块。
+  - `host/handoff.rs`：续审带请求行；`extra` 入口不再只给工程审查、思维评审也查到顶未了结（P1-13）；`went_in` 找不到本次运行的请求时按磁盘记录补记迟到确认（P2-16）。`host/handoff/gate.rs`：补格式走 `ask_mending`、请求行、发不出去时通知；`pass_blocked` 用 `unsure()`。`host/handoff/guard.rs`：`change_kept`（返回 `Result<bool>`，从 `handoff.rs` 挪来守住行数上限）。`host/handoff/notice.rs`：送达状态未知的通知话术。
+  - `docs/chatgpt-channel.md` 同步；PR 评论 `issuecomment-6970293402` 记复审与返修对照。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1040 failed 0（host 153），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。新增 host 测试 6 项（补格式不清送审、前 600 字相同三轮、思维评审到顶要常浩开口、重启后通知与迟到确认、回信先到不通知、补格式落不了盘不发）；撤修复验证 7 处各自对应测试失败（`revert-checks.log`「第 4 轮返修」）。日志 `*-3.log`。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布，切换条件同上一节。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - P1-11 没照复审原话做「全文指纹」：页面读到的提问会渲染 Markdown（#366 反引号连判 35 次 unmatched），送审包常有代码块，全文逐字比对容易拒掉正常回信；改用第一行请求号让前缀按请求唯一，送审时说明理由。
+  - 新会话第一段（open 路径）不加请求行：那时会话里没有更早的轮次。
+  - skill 进化：无。
+- 本轮新坑：无
+
+## 接力审核门 #348 返修：送达未确认收成一条规则、按 Fable 评审修五处、合入 main（2026-11-18，Claude，常浩回「按推荐返修」；已提交、未发布，等 L3 复审）
+
+- 时间：开工 `2026-11-18 12:25`（`date '+%F %H:%M'` 记录）。来由：常浩问上限 5 为什么没生效，查明 #348 没合并、11-14 18:11 的 L3 P1-10 定向复核（接力 `h1a1d98406d000`，受审 `e9cfca3`）判返修却没记下；常浩请 Fable 5.2（High）独立评审，结论是还不能合并与切换，常浩选「按推荐返修」。
+- 改了哪些文件：
+  - 补记：PR #348 评论 `issuecomment-6969031048`（P1-10 未关、新增 P1-11、P1-12）；worktree 里未提交的半截修复（`guard.rs` +61 行）备份为证据目录 `wip-guard-before-simplify.diff` 后撤掉。
+  - 合入 main（`6e89124`，#364–#386；推送前 main 又合进 #365（#318 接力出错通知发起会话）、#388（清理历史包袱），再合一次，冲突在 `AGENTS.md`、`CURRENT.md`、`mcp/src/index.ts`、`handoff.rs`、`handoffs.rs`，两边都留，#365 新加的那句「打不开或 30 分钟没回信也通知」并进 `relay.ts`）：`CURRENT.md` 两边交接都留；`docs/chatgpt-channel.md` 回信核对同时写去反引号（#366）和只认未确认的话；`handoffs.rs` 导出合并（`idle`）。
+  - `platform/.../handoffs/guard.rs`：`Pending` 加 `key`、`booked`、`answered`；`in_flight` 算上未答的 pending；`answer_pending`（回信入账前补「送审」一步、计一轮）、`confirmed_late`、`unconfirmed`（停下）；`pending_at_restart` 改为停下；`unsettled_top` 把闲置自动结束（#368）的到顶接力仍算未了结。`handoffs.rs`：`replied` 只收未答的 pending、调 `answer_pending`；`sent_back` 去掉投递标签（`unlabelled`，手机标签除外）；`allow_extra` 不再排除思维评审。`gate_io.rs`：台账按标题级别截取。
+  - `host/handoff.rs`：送审时同一段未确认的话返回 `repeated`、别的话拒收；`change_kept` 先落盘再发；发送失败停下并报 `sent_unknown`；`went_in` 先认迟到确认；思维评审到顶同样拒收；`auto_back` 对可重送的拦下（PR 新提交、没记受审提交）和 `Stale` 不停；再审 / 左滑话术改成「问题台账 + 末四行」；去掉「通知常浩」。`handoff/belongs.rs`：有未答 pending 时只认它。`handoff/gate.rs`：`pass_blocked` 返回 `Held { why, resend }`、补格式记 pending。`handoff/guard.rs`：`Held`、收口也拦、新话术。`handoff/back.rs`：拦下时按可否重送分两种话术，思维评审另写。
+  - `src/apps/mcp/src/relay.ts`：上限说成默认 5、可在 config.json 改，去掉「通知常浩」，写明 PR 有新提交时转回请重送。`docs/chatgpt-channel.md`：审核门一节、自动往返终局一段同步。`docs/LESSONS.md`：L-54（原写 L-51，并入 main 时已被 #410 占用，改号）。
+- 测试：第二次合入 main 之后（`0b814b6`）`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1034 failed 0（platform 289、host 147 等），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。第一次合入后也全过（cargo 1020/0、前端 463/0）。日志（`*-2.log` 为第二次） `~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/`。新增测试：host 6 项（未确认的话一整套、思维评审收口被拦、补格式未确认不放行、落不了盘不发、受审版本不符转回重送、思维评审到顶拒收），platform 断言 3 处（带标签 / 手机标签插话、闲置结束不算了结、分组台账）。撤修复验证 8 处各自对应测试失败（`revert-checks.log`）。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（无界面改动）。
+- 发布与回读：未发布。按生效门要和第 3 批、四份规则 PR 一起切换；切换步骤（查开着的接力、先备份 `<数据目录>/chatgpt/`、回滚先还原备份再装旧版）写在 PR #348 描述。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - Fable 第 4 条（Codex 转回带标签导致每轮重算）实查 11-09 的 Codex 会话记录，转回的话没带标签，这条按防守做了。
+  - 「送达未确认」照 Fable #14 收成一条，但没删 `Pending` 字段：「迟到确认只补记」和「补格式不计轮」需要 `answered`、`booked` 两个标记。
+  - 还没做：第 3 批界面（到顶 / 通过通知、上限设置入口、到顶卡出口，Fable #2、#3）；四份规则草稿对齐实现（Fable #11）；第 4 批模拟台账与实机走一次（Fable #13）。挂起：链总轮数兜底（#10）、授权改卡上按钮（#15，涉及常浩 11-14 定的 P1-06 口径，要先单独确认）、有 PR 时只认 `head`（#16）。
+  - 本机现开着 5 张接力（3 张在答），切换前要处理。
+  - skill 进化：无。
+- 本轮新坑：L-54（原编 L-51，并入 main 时改号）
+
+
 
 
 
@@ -486,6 +572,35 @@
 - 与授权不一致之处、遗留问题、范围外发现：常浩的「都选甲」「都按推荐」是侧栏回复转进会话的，和给出的按钮 / 推荐一致，按常浩本人的回答处理。新回复卡的飞机只在场景预览台的代码层验证（预览台里场景回复事件已过期，看不到实物卡），靠 `relay-toggle.test.ts` 钉住；实机下一次有接力回信时再看。下一步：第 3 批之二「看板分家 + 小收据一行」。
 - 本轮新坑：无
 
+## 接力审核门第 2 批：驿窗判定实现（#347）（2026-11-14，Claude，常浩回「按推荐开工」批准第 2 批计划与三项推荐；已提交、未发布，等 L3 审查）
+
+- 时间：开工 `2026-11-14 12:09`。来由：接力审核门 v1.1（决策记录 #343、勘误 #345；规则 multi-agent#7、agent-kit#71、digital-twin#185、my-skills#97 均为草稿）第 2 批，把「按风险级 1/2 轮」换成审核门。
+- 改了哪些文件：
+  - `src/crates/platform/src/clients/chatgpt/handoffs/gate.rs`（新）：上限（`reviewLimit`，默认 5）、计轮（证据不足暂停计、补格式不计）、判定 `decide()`（`Format` / `Stale` / 到顶 `Limit`）、`Gate` 字段（limit、chain、chainCarried、head、notice）。
+  - `handoffs/chain.rs`（新）：审查链继承 `Book::earlier`、未知链校验、`format_asked`、第 2 轮起的「【驿窗附注】」（轮次 + 上一轮问题台账原文）。
+  - `handoffs/gate_io.rs`（新）：台账截取、受审版本 / brief 里 head 的解析、`config.json` 读写（`set_project` 改为保留其他键）、回信全文存档 `replies/`。
+  - `handoffs.rs`：去掉 `ROUNDS`、`Risk::reviews`、`Next::Settle`；新增 `StepKind::Format`、`Next::Format`、`Next::Stale`、`Flaw::NoVersion`；`rule()` 接审查链；`allow_extra` 改为开新授权周期；被补格式的那封回信保留全文。
+  - `src/crates/host/src/handoff/gate.rs`（新）：发补格式请求、通过前 `git ls-remote` 回读 PR 当前提交、相关话术。`handoff.rs`：发送入口读上限 / head / 链并附注、`drive` 走补格式、`auto_back` 通过前核版本并记通知、回信存档、`relay` 返回 `chain`。`back.rs`、`texts.rs`：到顶、第 4 轮预警、版本不符、去掉 L1「补改未复审」。`lines.rs`：`pr_head`。
+  - `src/apps/mcp/src/relay.ts`（新）：工具说明与参数（新增 `head`、`chain`，`extra` 改义），`index.ts` 引用它（基线 661→619）。
+  - `src/packages/protocol/src/handoffs.ts`、`src/packages/hud/src/alerts/handoff-card.ts`：`format` 步、`limit` 等字段，卡上轮数按新口径算，时间线加「请 ChatGPT 补写末尾几行（不算一轮）」一行（沿用现有行样式）。
+  - `docs/chatgpt-channel.md`「审核门」、`AGENTS.md`「AI 接入」、设置 →「AI 接入」页（`AiAccessPane.tsx`）读写说明同步。
+- 会改变的现有行为（开工前已向常浩列出并获批）：上限 1/2 → 设置值（默认 5）；L1 补改不复审 → 复核；证据不足暂停不计 → 计；`extra` 加 1 轮 → 新授权周期；末尾认不出直接交常浩 → 先自动补一次；没写「审查出口」只看结论 → 先补格式。
+- 测试：`pnpm run check` 通过；`pnpm test` 原样结果：cargo 合计 passed 947 failed 0；前端 `ℹ pass 433` / `ℹ fail 0`；MCP `ℹ pass 9` / `ℹ fail 0`；插件 `ℹ pass 14` / `ℹ fail 0`；扩展 `ℹ pass 13` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-14-347-review-gate/pnpm-test.log`。`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。新增测试：platform `gate.rs` 4 项（五轮到顶与第五轮通过、证据不足计轮与预警、跨 PR 审查链与新周期、版本锚点与补格式、解析与设置读写），host 2 项（通过前回读 PR：一致 / 已变 / 读不到；未知链拒收、到顶标记、回信存档）。
+- 验证：只做了单元与集成测试；未装机、未实机走接力。
+- 截图：无（界面只多一行时间线文字，外观改动在第 3 批）。
+- 发布与回读：未发布。按生效门，四个规则 PR 与本 PR 装机要一起切换；装机前确认没有开着的自动往返接力。
+- 与授权不一致之处：计划写「`chains.json`」，实际没另建文件：审查链标识和累计数记在每张接力上（`chain`、`chainCarried`），新接力从同链最近一张继承，避免两份记录对不上；接力记录只留最近 200 张，链上最后一张被挤掉后再填这个 `chain` 会被拒收。「未决」行缺失不触发补格式（只展示）。转单 issue 是否存在驿窗不核（常浩选的推荐）。
+- L3 第 1 轮返修（驿窗 `h1a1d854efb902`，返修，P1 ×7、P2 ×4）：P1-01 重启时有 PR / 受审提交的通过不再直接结束，留给自动往返先回读；P1-02 有 PR 的工程送审必须带 40 位受审提交，否则拒收；P1-03 「已通过」改看驿窗确认的 `notice=passed`，被版本闸拦下的通过照样继承轮数；P1-04 同一审查链新接力加入时关掉同链其他开着的接力（每步记「同一审查链转到新接力」）；P1-05 下一轮台账取最近一封实质回信（跳过补格式那封），优先读 `replies/` 存档原文；P1-07 `handoffs.json` 读不了就改名挪开、不再被空账本覆盖，结束的接力回信只留摘录；P2-01 补格式先记步再发，发完补收提前到的回信；P2-02 存档存原始回信（截断前）；P2-03 `git ls-remote` 超时真正结束子进程，凭据不交互；P2-04 旧的开着的接力启动时分配审查链并记一步「按审核门续审：已审 n 轮」。**P1-06（`extra` 凭文字就能开新授权周期）未改**：要改 #217 定下的授权方式，已单独发改动确认给常浩。测试：cargo 合计 passed 951 failed 0；前端 433/0、MCP 9/0、插件 14/0、扩展 13/0；`node --test tests/*.test.mjs` 22/0；新增反向测试 platform 3 项、host 1 项。日志 `evidence/2026-11-14-347-review-gate/pnpm-test-r1.log`。补改未复审（L3 第 2 轮待 P1-06 定了再送）。
+- P1-06 落地（常浩 2026-11-14 先选「核实本人开头」，后定口径「外面进来的话开头就算数，只拦 Claude 自己写 extra」：他开「以我的身份发送」就是授权智能体替他说话，不想要就关掉开关）：新增 `platform/.../handoffs/leave.rs` 的 `Book::leave_spoken`，在 #258 `spoke_up` 之上再排除任何一张接力转回过的原话；`start_ruled` 新开一张到顶后的续审、`ask` 续审开着的那张，带 `extra` 时都读发起会话当前这一轮的开头（Codex 读它自己的会话记录），不是这条链最近一次转回之后、外面的话开的头就拒收，提示「请常浩在会话里说一句再送」（`texts.rs` `leave_unheard`）；核实通过时照样记「专项续审：…」并打开自动往返。`relay.ts` 的 `extra` 说明、`docs/chatgpt-channel.md`「审核门」同步。测试：两条旧的 extra 测试先在新实现下跑红（Claude 单方面写 extra 被拒），再改成正反两面（读不到开头、转回原话、转回之前开头都拒；常浩打字、插件进来的话放行并从 1 重计；Codex 读 `codex|会话`）；平台新增 1 项（跨接力的转回原话也不算）。`pnpm run check` 第 1 次只因 `cargo fmt` 失败，格式化后退出码 0；`pnpm test` 退出码 0：cargo 合计 passed 952 failed 0，前端 `ℹ pass 433` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-347-review-gate/{check-p106,check-p106-2,pnpm-test-p106,rules-p106}.log`。补改未复审，送 L3 第 2 轮。
+- L3 第 2 轮（驿窗 `h1a1d872e80203`，返修；旧规则下 L3 最后一轮，交常浩）：P1-03、P1-05、P1-06、P1-07、P2-01～P2-04 关闭；P1-01、P1-02、P1-04 未关全，新增 P1-08、P1-09、P2-05、P2-06。常浩回「按推荐做」（七项全修，P1-08 用推荐做法，修完由他授权再审一轮）。返修：P1-02 续审时 brief 里新出现或换了的 PR 改绑到接力（`Book::set_pr`），同样要完整 SHA；P1-01 有 PR、没记受审提交的旧接力，通过一律不放行（宿主 `guard::no_anchor`）；P1-09 手动「转回 Claude」送通过的回信改走 `auto_back`，同样回读版本、对得上才结束（这一步卡上记成自动做的），非通过回信的文字也走同一个 `back_words`；P1-04 同链上一张还在等 ChatGPT 回信时拒收新接力（`Handoff::in_flight`、`guard::chain_busy`）；P1-08 同一会话或工作目录里有到顶未了结的工程接力，新开工程接力不论填不填 chain 都要外面的话开头（`Book::unsettled_top`、`guard::top_unsettled`），换会话又换目录且不填 chain、不写同 PR 的写明为信任边界；P2-05 结束接力的回信先确认 `replies/` 有全文（没有当场补存）才截，存不进去保持全文，旧记录读入时同样处理（`slim_kept`，从 `Book::trim` 挪到宿主保存前和 `load`）；P2-06 证据不足补证续审不再绕过当时的上限。新文件 `platform/.../handoffs/guard.rs`、`host/src/handoff/guard.rs`；`relay.ts` 的 `chain` 说明、`docs/chatgpt-channel.md`「审核门」同步。测试：宿主新增 6 项、平台新增 2 项；先改代码后写测试，逐项把修复撤掉重跑，每次恰好对应那条测试失败（P2-05 同样验过），恢复后全过；旧测试 `words_back_to_claude_wait_for_an_answer_and_a_way_there` 的回信从「通过」改成「返修」（手动转回通过改走自动往返，是 P1-09 定的新行为）。`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 passed 960 failed 0，前端 `ℹ pass 433` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-347-review-gate/{check-r2,pnpm-test-r2,rules-r2}.log`。补改未复审，等常浩授权再审一轮。
+- L3 专项续审（常浩在会话里授权「再审一轮」，同一接力 `h1a1d872e80203`，受审 `8c10ecc`；返修）：P1-01、P1-02、P1-08、P2-05、P2-06 关闭；P1-04、P1-09 未关全；新增 P2-07～P2-10。回信 14:34 已到，但装着的旧版驿窗授权续审后没重开自动往返，回信卡在侧栏约 40 分钟，常浩问起才从 `handoffs.json` 读出（新代码的 `allow_extra` 会重开自动往返）。常浩回「按推荐做」：六项全修，修完授权一次只看这六项的定向复核。返修：P1-04 新接力接链时，同链打开失败、还可能晚到的那张（failed 且留着 brief）在 `close_others` 里去掉 brief，晚到的打开不能救活它；P1-09 版本没放行时转回整段改用 `held_back_text`（「回信写了通过，但驿窗没有放行……没有通过、没有结束」），不再先写已通过再补否定；顺手：后台续接 `wake_queued` 改发排队时的原文（无专门测试）；P2-07 `note` 带时间、到顶记 `topAt`，`unsettled_top` 以它为界（旧记录退回 `updatedAt`）；P2-08 续审的 PR、提交号、上限放进 `Asking.anchor`，只在 `went_in` 时记到接力上，额度、授权检查和附注用套上新锚点的副本算；P2-09 手动转回通过没执行且仍待转时报 `back_not_done`；P2-10 回信入账和存全文放进同一次 `change`，`archived` 取最长那份。测试新增宿主 3 项、平台 3 项，改了 3 条旧断言（「驿窗没有按通过结束」→「驿窗没有放行」且不得含「驿窗已结束这次接力」）。逐项撤掉修复重跑：P1-04、P1-09、P2-07、P2-08、P2-09 各自对应测试失败；P2-10 第一版测试撤修复仍过（读目录顺序碰巧先给长的），改成 12 组后撤修复失败。第一次撤修复验证时 tar 还原了旧修改时间、cargo 没重编，结果串了，改 `tar xmf` 重跑。还原后平台单测有一次 `268 passed; 1 failed`，没记下是哪条，之后连跑 4 次 269/0，原因未查明。`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 passed 965 failed 0，前端 `ℹ pass 433` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-347-review-gate/{check-r3,pnpm-test-r3,rules-r3}.log`。补改未复审，等常浩授权定向复核。
+- L3 定向复核（常浩授权，同一接力，受审 `80601ca`；返修）：P1-04、P1-09、P2-07、P2-09、P2-10 关闭，P2-08 未关全并新增 P1-10（发送确认前重启，可能用旧锚点放行新 PR 的审查）。回信 15:36 已写完，但插件没报 `turn complete`（另一个会话 15:32:50 装机让驿窗 15:33:29 重启；`turns.jsonl` 和收件箱都没有那条），从常浩 Chrome 读出原文；漏报另开 #356 修。常浩回「按计划做」。P1-10 返修：送审前把请求号、PR、提交号、上限记成 `gate.pending`（落盘，`handoffs/guard.rs` 的 `Pending`），`went_in` 确认送到才清；`pending` 在时到的回信照样入账计一轮（`replied` 放宽，哪怕已转回 Claude），但 `pass_blocked` 一律拦下（`guard::unconfirmed`）；重启时有 `pending` 的卡上记一步（`pending_at_restart`），重启直接结束的通过排除有 `pending` 的；同一接力已送达 / 正在答时不收另一段不同的话（`guard::still_waiting`，同一段重送照旧）。协议类型补 `topAt`、`pending`。两条旧测试（`the_first_brief_opens_a_review_and_the_next_goes_into_it`、`a_swipe_is_done_only_by_the_handoff_that_names_it`）原来在第一段未回信时就送第二段，改为先回信再送（后者把上限设为 5）；新增 2 项：发送没确认 → 重启 → 回信通过：计一轮、不放行；在途拒收不同的话、同一段重送照旧、送到后 pending 清掉。逐项撤修复（拦通过、放宽入账、在途拒收、送前落盘）各自对应测试失败。`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 passed 967 failed 0，前端 `ℹ pass 433` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 13` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `evidence/2026-11-14-347-review-gate/{check-r4,pnpm-test-r4,rules-r4}.log`。补改未复审，按复核意见只需针对 P1-10 做一次对应验证，是否再送审由常浩定。
+- 合入 main（含 #356 的 #361、#363）（2026-11-14，常浩回「授权送审 P1-10」后做，为送审准备最终版本）：`CURRENT.md`、`docs/chatgpt-channel.md`、`handoff.rs` 有冲突，按两边意图合并：`take` 在同一次 `change` 里先 `belongs::fits` 再 `replied`、收下后存全文（#347 P2-10）；测试手写回信都带上提问。合并时发现两处要补：
+  - #348 原有的缺陷：同链新接力开新对话时，`extend_brief` 把「【驿窗附注】」拼进了登记的原文，但 `open_away` 发出去的是调用方传入的原始 brief，附注只记在驿窗、没进 ChatGPT。改为 `Desk::open` 发出登记的原文（`h.brief`）。测试：跨会话续审那条加断言「开新对话的原文带【驿窗附注】」。
+  - #356 的核对与 P1-10 衔接：核对认最近的「送审」或「补格式」（`Format`，#347 的补格式请求）步骤；还没确认送达的那段话存进 `gate.pending.words`（落盘前按 600 字截成摘录），也参与核对，回信照 P1-10 计一轮、不放行。不这样做，P1-10 的「重启后到的回信照样计一轮」会被 #356 当成别人的回信拒收。
+  - 撤修复验证：两处撤掉各自对应测试失败（`evidence/2026-11-14-347-review-gate/revert-merge356.log`）。
+  - 全量（合并后）：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1011 failed 0，前端 `ℹ pass 449` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；规则检查通过（`*-merged.log`）。
+- 本轮新坑：无。
 ## #356 返修：补报的回信必须是这一轮的、正文写完再报、发送失败 15 秒重试（2026-11-14，Claude，PR #361 合并后补做 L2 审查（接力 `h1a1d954523b00`）返修 P1 ×2、P2 ×3，常浩回「按推荐做 P1」，第 2 轮后回「甲，授权专项续审」，专项续审通过；已提交、未发布）
 
 - 时间：开工 `2026-11-14 17:18`（ChatGPT 回信转回的时间，取自 `turns.jsonl`，没用 `date` 记）。来由：#361 合并后送 ChatGPT 做 L2 工程审查，结论返修；P2 只动 #356 新加的重读代码，直接改；P1 两条会让原有的正常上报变严，先向常浩列出、他回「按推荐做 P1」再改。

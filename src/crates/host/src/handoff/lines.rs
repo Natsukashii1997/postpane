@@ -171,6 +171,9 @@ impl Lines for AppLines<'_> {
     fn withdraw(&self, session: &str, id: &str) -> bool {
         super::wake::withdraw(self.0, session, id)
     }
+    fn pr_head(&self, pr: &str) -> Result<String, String> {
+        super::gate::read_pr_head(pr)
+    }
     fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
         super::wake::wake(self.0, handoff, session, text)
     }

@@ -7,7 +7,7 @@
 //! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
 use crate::extension::Flight;
 use agent_hud_runtime::chatgpt::handoffs::{
-    self, by_doer, Book, Delivery, Handoff, Next, Phase, Risk, Status, Step, StepKind,
+    self, by_doer, Book, Delivery, Handoff, Next, Notice, Phase, Risk, Status, Step, StepKind,
 };
 use agent_hud_runtime::claude_plugin::Opener;
 
@@ -20,6 +20,10 @@ pub(crate) struct Rule {
     pub(crate) extra: Option<String>,
     /// The client doing the work when it is not Claude Code: `codex` (#280).
     pub(crate) doer: Option<String>,
+    /// The review chain it goes on with, when named (#347).
+    pub(crate) chain: Option<String>,
+    /// The commit under review, when named; else the brief's (#347).
+    pub(crate) head: Option<String>,
 }
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
@@ -32,6 +36,8 @@ use tauri::Manager;
 
 mod back;
 mod belongs;
+mod gate;
+mod guard;
 mod lines;
 mod notice;
 mod reread;
@@ -108,6 +114,8 @@ pub(crate) trait Lines {
     /// the desktop app would (its folder, model and permission mode). The
     /// run's end comes back through `Desk::woke_up` for `handoff`.
     fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String>;
+    /// A pull request's current commit, 「owner/repo#n」 (#347).
+    fn pr_head(&self, pr: &str) -> Result<String, String>;
 }
 
 /// Why words did not go to a Claude Code session.
@@ -244,6 +252,28 @@ struct Asking {
     brief: String,
     /// They bring the evidence a 思维评审 paused for (#209).
     evidence: bool,
+    /// The cap, commit and pull request they go with: kept once they go
+    /// in, not before (L3 P2-08).
+    anchor: Anchor,
+}
+
+/// What a review is asked against (#347): the cap as set, the commit and
+/// the pull request.
+#[derive(Clone, Default)]
+struct Anchor {
+    limit: u32,
+    head: Option<String>,
+    pr: Option<String>,
+}
+
+impl Anchor {
+    fn set(&self, book: &mut Book, id: &str) {
+        book.set_limit(id, self.limit);
+        book.set_head(id, self.head.as_deref());
+        if let Some(pr) = &self.pr {
+            book.set_pr(id, pr);
+        }
+    }
 }
 
 /// A turn the ChatGPT channel reported before the desk could take it.
@@ -304,6 +334,10 @@ impl Desk {
         // Not `||`: both are to happen.
         let interrupted = book.interrupted(now, &interrupted(chinese));
         let woke = book.restarted();
+        // Open ones from before the review gate move over, counts kept (#347).
+        let adopted = book.adopt(now);
+        // Reviews sent and not known to have gone in (L3 P1-10).
+        let unconfirmed = book.pending_at_restart(&guard::pending_at_restart(chinese), now);
         // Reviews that passed while nothing drove them (the auto round trip
         // off) end now, as a pass coming in would (owner, 2026-11-07). Not a
         // 思维评审 one (#209): its answer has to reach Claude first, so it
@@ -311,14 +345,17 @@ impl Desk {
         let passed_ids = book
             .list
             .iter()
+            // One whose commit is to be checked against its pull request
+            // waits for the round trip, which checks it first (#347).
             .filter(|h| !h.thinking() && h.next() == Some(Next::Pass))
+            .filter(|h| h.pr.is_none() && h.gate.head.is_none() && !h.unsure())
             .map(|h| h.id.clone())
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
             ended |= book.passed(id, &passed(chinese), now);
         }
-        if interrupted | woke | ended {
+        if interrupted | woke | ended | adopted | unconfirmed {
             let desk = desk(book);
             desk.change(|_| ());
             return desk;
@@ -345,6 +382,7 @@ impl Desk {
         let mut book = self.lock();
         let result = change(&mut book);
         if let Some(data) = &self.data {
+            handoffs::slim_kept(data, &mut book);
             if let Err(error) = handoffs::save(data, &book) {
                 eprintln!("{error}");
             }
@@ -579,7 +617,7 @@ impl Desk {
             .extra
             .as_deref()
             .map(str::trim)
-            .filter(|text| !text.is_empty() && engineering);
+            .filter(|text| !text.is_empty());
         if !agent_hud_runtime::claude_plugin::valid_name(session) {
             return Err(l10n::text(
                 "Claude 会话 id 不对",
@@ -627,7 +665,16 @@ impl Desk {
                     }
                     let sent = {
                         let _sending = self.claim(&handoff.id)?;
-                        self.ask(lines, handoff, &conversation, summary, brief, extra, now)
+                        self.ask(
+                            lines,
+                            handoff,
+                            &conversation,
+                            summary,
+                            brief,
+                            extra,
+                            rule,
+                            now,
+                        )
                     };
                     // ChatGPT may have begun, or finished, before `send` answered.
                     self.caught_up(&conversation);
@@ -647,15 +694,60 @@ impl Desk {
         } else {
             title.to_owned()
         };
-        // A review of a pull request reviewed before counts on (#217).
+        // A review of a pull request, or a review chain, reviewed before
+        // counts on (#217, #347); a chain named must be known.
         let pr = engineering.then(|| handoffs::pull_request(brief)).flatten();
-        let carried = pr
+        let chain = rule
+            .chain
             .as_deref()
-            .and_then(|pr| self.lock().carried_for(pr))
-            .map_or(0, |(_, count)| count);
-        let past = carried >= risk.map_or(handoffs::ROUNDS, Risk::reviews);
+            .map(str::trim)
+            .filter(|c| !c.is_empty() && engineering);
+        if let Some(chain) = chain.filter(|c| self.lock().chain_last(c).is_none()) {
+            return Err(gate::chain_unknown(chain));
+        }
+        let earlier = self.lock().earlier("", pr.as_deref(), chain);
+        // Its chain's handoff still with ChatGPT: that answer would come
+        // uncounted once this one took over (P1-04).
+        if let Some(e) = &earlier {
+            if self.lock().get(&e.id).is_some_and(Handoff::in_flight) {
+                return Err(guard::chain_busy(&e.chain, &e.id));
+            }
+        }
+        let carried = earlier.as_ref().map_or(0, |earlier| earlier.period);
+        let limit = self.review_limit();
+        let past = carried >= limit;
         if past && extra.is_none() {
             return Err(budget_spent(carried));
+        }
+        // Leave past the cap goes only with words from outside the agent,
+        // since the chain last went back (#347 P1-06).
+        let turn = || lines.opener(rule.doer.as_deref().unwrap_or(CLAUDE), session);
+        if let Some(earlier) = earlier.as_ref().filter(|_| past) {
+            if !self.lock().leave_spoken(&earlier.id, turn().as_ref()) {
+                return Err(leave_unheard());
+            }
+        }
+        // A cap reached here and not settled: no new review of its kind here
+        // without the person's word, whatever chain it names (P1-08; a 思维
+        // 评审 too, round 4 P1-13).
+        if !past {
+            let top = self
+                .lock()
+                .unsettled_top(session, cwd, !engineering)
+                .and_then(|t| {
+                    let other = earlier.as_ref().is_none_or(|e| e.id != t.id);
+                    let named = t.gate.chain.clone().unwrap_or_else(|| t.title.clone());
+                    other.then(|| (t.id.clone(), named))
+                });
+            if let Some((top, chain)) = top {
+                if !self.lock().leave_spoken(&top, turn().as_ref()) {
+                    return Err(guard::top_unsettled(&chain));
+                }
+            }
+        }
+        let head = self.head(rule, brief);
+        if engineering {
+            Self::head_needed(pr.as_deref(), head.as_deref())?;
         }
         let handoff = self.change(|book| {
             let handoff = book.begin(session, cwd, &title, summary, brief, now);
@@ -663,11 +755,16 @@ impl Desk {
                 book.set_doer(&handoff.id, doer);
             }
             if engineering {
-                book.rule(&handoff.id, risk, pr.as_deref());
+                book.rule(&handoff.id, risk, pr.as_deref(), chain);
+                book.set_head(&handoff.id, head.as_deref());
             }
+            book.set_limit(&handoff.id, limit);
             if let Some(reason) = extra.filter(|_| past) {
                 book.allow_extra(&handoff.id, reason, now);
             }
+            // Which round it is, and the chain's newest problem ledger (#347).
+            let carry = self.carry(book, &handoff.id);
+            book.extend_brief(&handoff.id, &carry);
             book.get(&handoff.id).cloned().unwrap_or(handoff)
         });
         Ok(Started::Opening {
@@ -686,14 +783,53 @@ impl Desk {
         summary: Option<&str>,
         brief: &str,
         extra: Option<&str>,
+        rule: &Rule,
         now: i64,
     ) -> Result<Started, String> {
-        // The same words again (a retry after a slow answer) are not sent twice.
-        if self.lock().asked_already(&handoff.id, brief) {
+        // The cap and the commit as set now (#347).
+        let head = self.head(rule, brief);
+        // The pull request this brief names, else the one bound before:
+        // one named now binds the handoff to it, and goes with its commit
+        // (P1-02).
+        let pr = (!handoff.thinking())
+            .then(|| handoffs::pull_request(brief).or_else(|| handoff.pr.clone()))
+            .flatten();
+        if !handoff.thinking() {
+            Self::head_needed(pr.as_deref(), head.as_deref())?;
+        }
+        let limit = self.review_limit();
+        // Checked and noted as they would go; kept only once they go in
+        // (L3 P2-08): a refusal or a send that fails leaves the handoff's.
+        let anchor = Anchor { limit, head, pr };
+        let ahead = || {
+            let mut book = self.lock().clone();
+            anchor.set(&mut book, &handoff.id);
+            book
+        };
+        // The same words again (a retry after a slow answer) are not sent
+        // twice; they went with PostPane's note (#347).
+        let noted = format!("{brief}{}", self.carry(&ahead(), &handoff.id));
+        if self.lock().asked_already(&handoff.id, &noted) {
             return Ok(Started::Sent {
                 handoff,
                 repeated: true,
             });
+        }
+        // Words never known to have gone in (L3 P1-10): the same words again
+        // are not sent twice, and no others go while they wait.
+        let unanswered = self
+            .lock()
+            .get(&handoff.id)
+            .and_then(|h| h.unanswered().map(|p| p.same(&noted)));
+        if unanswered == Some(true) {
+            return Ok(Started::Sent {
+                handoff,
+                repeated: true,
+            });
+        }
+        // Its review still with ChatGPT: other words would take its answer.
+        if self.lock().get(&handoff.id).is_some_and(Handoff::in_flight) {
+            return Err(guard::still_waiting());
         }
         // Evidence a 思维评审 paused for (#209): it goes on by itself again.
         let evidence = self
@@ -703,32 +839,77 @@ impl Desk {
         // An engineering review past its budget goes only with the
         // person's leave (#217).
         let (spent, counted) = {
-            let book = self.lock();
+            let book = ahead();
             let counted = book.pr_counted(&handoff.id);
-            let spent = book
-                .get(&handoff.id)
-                .is_some_and(|h| !h.thinking() && counted >= h.budget());
-            (!evidence && spent, counted)
+            // A 思维评审 too (Fable review #9): one cap, kept by PostPane.
+            let spent = book.get(&handoff.id).is_some_and(|h| counted >= h.budget());
+            // Evidence a review paused for goes on by itself, yet never past
+            // the cap as set now (P2-06).
+            (spent, counted)
         };
         if spent && extra.is_none() {
             return Err(budget_spent(counted));
         }
-        if let Some(reason) = extra.filter(|_| spent) {
+        // Leave goes only with words from outside the agent (#347 P1-06);
+        // they may have begun the count again already (#258), and the
+        // leave still goes on the card and turns the round trip back on.
+        let heard = extra.is_some() && {
+            let doer = handoff.doer.as_deref().unwrap_or(CLAUDE);
+            let turn = lines.opener(doer, &handoff.claude_session);
+            self.lock().leave_spoken(&handoff.id, turn.as_ref())
+        };
+        if spent && !heard {
+            return Err(leave_unheard());
+        }
+        if let Some(reason) = extra.filter(|_| heard) {
             self.change(|book| book.allow_extra(&handoff.id, reason, now));
         }
+        // Which round it is, and the newest problem ledger (#347).
+        let brief = &format!("{brief}{}", self.carry(&ahead(), &handoff.id));
         // Kept until they go in: the extension may only say so after the
         // wait gave up (`observe`, #223).
         let request = format!("{}~send{now}", handoff.id);
+        // Named by its request, so an earlier round's words never pass for
+        // these (round 4 P1-11).
+        let sent = &handoffs::tagged(&request, brief);
+        // Kept, on disk, before it goes, so a restart before word of it
+        // cannot let an answer pass (L3 P1-10): not kept, not sent; nor
+        // when the handoff ended meanwhile (round 5 P1-18).
+        let kept = self.change_kept(|book| {
+            book.ask_pending(
+                &handoff.id,
+                handoffs::Pending {
+                    request: request.clone(),
+                    pr: anchor.pr.clone(),
+                    head: anchor.head.clone(),
+                    limit: anchor.limit,
+                    words: Some(sent.to_owned()),
+                    ..Default::default()
+                },
+            )
+        })?;
+        if !kept {
+            return Err(guard::moved_meanwhile());
+        }
         self.asking().insert(
             handoff.id.clone(),
             Asking {
                 request: request.clone(),
                 summary: summary.map(str::to_owned),
-                brief: brief.to_owned(),
+                brief: sent.to_owned(),
                 evidence,
+                anchor: anchor.clone(),
             },
         );
-        lines.send(conversation, brief, &request)?;
+        if let Err(error) = lines.send(conversation, sent, &request) {
+            // Never known to have gone in: the round trip stops on it, and
+            // its answer, if one comes, cannot pass (L3 P1-10). The caller
+            // hears it now, so no notice besides.
+            self.change(|book| {
+                book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), false, now)
+            });
+            return Err(guard::sent_unknown(&error));
+        }
         self.went_in(&request, now);
         let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
         Ok(Started::Sent {
@@ -747,7 +928,12 @@ impl Desk {
         let asking = {
             let mut asking = self.asking();
             if !asking.get(id).is_some_and(|a| a.request == request) {
-                return false;
+                drop(asking);
+                // Not asked in this run (a restart since): word after its
+                // answer still goes on the card (round 4 P2-16).
+                return self.change(|book| {
+                    book.confirmed_late(id, request, &guard::confirmed_late(), now)
+                });
             }
             asking.remove(id)
         };
@@ -755,6 +941,12 @@ impl Desk {
             return false;
         };
         self.change(|book| {
+            // After its answer: only goes on the card (L3 P1-12).
+            if book.confirmed_late(id, request, &guard::confirmed_late(), now) {
+                return true;
+            }
+            book.confirm_pending(id, request);
+            asking.anchor.set(book, id);
             book.asked(id, asking.summary.as_deref(), &asking.brief, now)
                 && (!asking.evidence || book.evidence_in(id, now))
         })
@@ -775,12 +967,16 @@ impl Desk {
         let opened = {
             // Held while it opens, so 结束接力 waits for it (#223).
             let _opening = self.claim(id)?;
-            let (title, request) = self
+            let (title, request, kept) = self
                 .lock()
                 .get(id)
                 .filter(|h| h.status == Status::Opening)
-                .map(|h| (h.title.clone(), h.request()))
+                .map(|h| (h.title.clone(), h.request(), h.brief.clone()))
                 .ok_or_else(|| l10n::text("这次接力已经结束", "This handoff has ended"))?;
+            // The words as kept: with PostPane's note on a chain's round
+            // (#347), the same words its 「ask」 step records and an answer
+            // is held to (#356).
+            let brief = kept.as_deref().unwrap_or(brief);
             let opened = lines.open(brief, project, &title, &request);
             self.change(|book| match &opened {
                 Ok(conversation) => book.opened(id, conversation, now()),
@@ -824,12 +1020,24 @@ impl Desk {
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();
         let prompt = message["prompt"].as_str();
+        let id = self
+            .lock()
+            .for_conversation(conversation)
+            .map(|h| h.id.clone());
         // Another turn's answer is not this review's (#356 P1-01): checked
         // under the same hold as it is taken, so no words sent in between
-        // make an answer to the earlier ones count for them.
+        // make an answer to the earlier ones count for them. Every answer
+        // kept in full (#347), in the same change as it is booked: nothing
+        // cuts it between (L3 P2-10).
         self.change(|book| {
-            belongs::fits(book, conversation, prompt)
-                && book.replied(conversation, reply, message_id, at)
+            if !belongs::fits(book, conversation, prompt) {
+                return false;
+            }
+            let took = book.replied(conversation, reply, message_id, at);
+            if let Some(id) = id.filter(|_| took) {
+                self.keep_answer(book, &id, reply);
+            }
+            took
         })
     }
 
@@ -921,6 +1129,19 @@ impl Desk {
                 if !handoff.live() {
                     return Err(l10n::text("这次接力已经结束", "This handoff has ended"));
                 }
+                // A pass goes back as the auto round trip sends it: checked
+                // against the pull request's commit, and ended only when it
+                // holds (P1-09).
+                if action == "back" && handoff.next() == Some(Next::Pass) {
+                    // Done, or done meanwhile by another way; else say it
+                    // did not go (L3 P2-09).
+                    let still = || self.lock().get(id).and_then(Handoff::next) == Some(Next::Pass);
+                    return if self.auto_back(lines, id, Next::Pass, now) || !still() {
+                        Ok(Acted::Done)
+                    } else {
+                        Err(guard::back_not_done())
+                    };
+                }
                 let (kind, text) = if action == "back" {
                     let reply = handoff
                         .last_reply()
@@ -928,9 +1149,9 @@ impl Desk {
                         .ok_or_else(|| {
                             l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
                         })?;
-                    (StepKind::Back, back_text(&handoff, &reply))
+                    (StepKind::Back, self.back_words(lines, &handoff, &reply).0)
                 } else {
-                    let round = handoff.rounds_used() + 1;
+                    let round = handoff.counted() + 1;
                     let text = if handoff.thinking() {
                         thinking_again_text(round)
                     } else {
@@ -1038,7 +1259,11 @@ impl Desk {
             .collect::<Vec<_>>();
         let mut changed = tracked;
         for (id, next) in due {
-            changed |= self.auto_back(lines, &id, next, now);
+            changed |= if next == Next::Format {
+                self.ask_format(lines, &id, now)
+            } else {
+                self.auto_back(lines, &id, next, now)
+            };
         }
         changed
     }
@@ -1134,7 +1359,9 @@ impl Desk {
         let Some(reply) = handoff.last_reply().and_then(|step| step.text.clone()) else {
             return false;
         };
-        let text = back_text(&handoff, &reply);
+        // A pass holds only while the commit reviewed is the pull
+        // request's still (#347): else it goes back and stops.
+        let (text, blocked) = self.back_words(lines, &handoff, &reply);
         if self.lock().returned_already(id, &text) {
             return false;
         }
@@ -1145,23 +1372,38 @@ impl Desk {
         let named = |text: String| by_doer(&text, Some(doer));
         // An end's reason keeps what the review came to, and says how its
         // answer went (#316): reached, queued, or not at all.
-        let then = |book: &mut Book, how: Sent| match next {
-            Next::Pass => book.passed(id, &named(passed_back(how)), now),
-            Next::Close => book.passed(id, &named(thinking_closed()), now),
-            Next::Settle => book.passed(id, &named(settled()), now),
-            Next::Pause => book.stop(id, &named(evidence_paused()), true, now),
-            Next::Escalate => book.stop(id, &named(escalated()), true, now),
-            Next::Limit => book.stop(id, &named(at_limit(handoff.budget(), how)), true, now),
-            Next::NoVerdict => book.stop(id, &named(no_verdict(how)), true, now),
-            Next::BadTail(flaw) => book.stop(id, &named(bad_review_tail(flaw, how)), true, now),
-            Next::Invalid(flaw) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
-            Next::Back => true,
+        let then = |book: &mut Book, how: Sent| match (next, &blocked) {
+            // Set right by the current commit sent again: it goes on.
+            (_, Some(held)) if held.resend => true,
+            (_, Some(held)) => book.stop(id, &named(gate::stale(&held.why, how)), true, now),
+            (Next::Pass, _) => {
+                book.note(id, Notice::Passed, now);
+                book.passed(id, &named(passed_back(how)), now)
+            }
+            (Next::Close, _) => book.passed(id, &named(thinking_closed()), now),
+            // Another commit than the one sent: the current one sent again
+            // goes on (Fable review #8).
+            (Next::Stale, _) => true,
+            (Next::Pause, _) => book.stop(id, &named(evidence_paused()), true, now),
+            (Next::Escalate, _) => book.stop(id, &named(escalated()), true, now),
+            (Next::Limit, _) => {
+                book.note(id, Notice::Top, now);
+                book.stop(id, &named(at_limit(handoff.budget(), how)), true, now)
+            }
+            (Next::NoVerdict, _) => book.stop(id, &named(no_verdict(how)), true, now),
+            (Next::BadTail(flaw), _) => {
+                book.stop(id, &named(bad_review_tail(flaw, how)), true, now)
+            }
+            (Next::Invalid(flaw), _) => book.stop(id, &named(invalid_tail(flaw, how)), true, now),
+            (Next::Back | Next::Format, _) => true,
         };
         // Could not reach Claude: the ends this round trip added end or
         // stop all the same, saying so — a pass ends with the auto round
         // trip off too, so stopping it would leave it tried at every turn;
         // the rest stop for the person as before.
+        let goes_on = blocked.as_ref().is_some_and(|held| held.resend);
         let give_up = |book: &mut Book| match next {
+            _ if goes_on => book.stop(id, &named(back_failed()), true, now),
             Next::Pass | Next::Limit | Next::NoVerdict | Next::BadTail(_) | Next::Invalid(_) => {
                 then(book, Sent::Failed)
             }
@@ -1233,9 +1475,12 @@ pub(crate) enum Acted {
 /// 再审一轮: Claude hands its changes over again.
 fn again_text(round: u32) -> String {
     format!(
-        "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，最后请 ChatGPT 写「结论：通过」或「结论：需修改」；summary 写一句这轮改了什么。"
+        "请把按意见修改后的改动交回 ChatGPT 复审（第 {round} 轮）：调用 relay_to_chatgpt，brief 写这轮改了什么、对应哪几条意见、diff 或 PR 链接，head 填改完的提交，{REVIEW_TAIL}；summary 写一句这轮改了什么。"
     )
 }
+/// What an engineering review's answer is asked to end with, as the
+/// relay tool says (#347): its ledger and four last lines.
+const REVIEW_TAIL: &str = "请 ChatGPT 按严重程度列问题、给出「## 问题台账」，回信最后四行依次写「受审版本：<SHA>」「未决：P0 n，P1 n」「审查出口：通过 / 返修 / 证据不足暂停 / 决策升级」「结论：通过 / 需修改」";
 /// 再审一轮 for a 思维评审 (#209): only what is to deepen goes, and the
 /// answer ends with its way out and verdict.
 fn thinking_again_text(round: u32) -> String {
@@ -1247,7 +1492,7 @@ fn thinking_again_text(round: u32) -> String {
 /// hands its own work to ChatGPT; None for a kind that cannot start yet.
 fn launch_text(kind: &str, code: &str) -> Option<String> {
     let ask = match kind {
-        "review" => "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出，请 ChatGPT 按严重程度列问题，最后单独一行写「结论：通过」或「结论：需修改」；summary 写一句这轮做了什么。",
+        "review" => "请把这一轮的工作交给 ChatGPT 审核：先自己整理背景——任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（git diff，太长写摘要加关键片段）、希望重点看哪里——然后调用 relay_to_chatgpt 送出（有 PR 时 head 填受审提交），按工具说明请 ChatGPT 按严重程度列问题、给出「## 问题台账」，回信最后四行依次写「受审版本」「未决」「审查出口」「结论」；summary 写一句这轮做了什么。",
         "discuss" => "请把眼下的方案交给 ChatGPT 讨论，只聊方案、不改代码：先自己整理背景——要解决的问题、已有的做法和限制、你考虑过的几种做法——然后调用 relay_to_chatgpt 送出，请 ChatGPT 比较可选做法，给出推荐和理由；summary 写一句要讨论什么。",
         _ => return None,
     };
@@ -1635,6 +1880,8 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         risk: params["risk"].as_str().map(str::to_owned),
         extra: params["extra"].as_str().map(str::to_owned),
         doer,
+        chain: params["chain"].as_str().map(str::to_owned),
+        head: params["head"].as_str().map(str::to_owned),
     };
     let mut answer = start(app, &session, cwd, title, summary, brief, false, &rule)?;
     // A swipe's words named here: that swipe is done (左滑发起).
@@ -1647,20 +1894,36 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         }
     }
     answer["claudeSession"] = json!(session);
+    // The review chain it counts on (#347): name it when going on with the
+    // same acceptance goal from another pull request or session.
+    let chain = answer["handoffId"]
+        .as_str()
+        .and_then(|id| app.try_state::<Desk>()?.lock().get(id)?.gate.chain.clone());
+    answer["chain"] = json!(chain);
+    let gate = l10n::text(
+        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在 chatgpt/config.json 的 reviewLimit 改）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
+        "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, sent back and ended; the cap, an escalation or last lines PostPane cannot read, left to the person.",
+    );
     answer["message"] = json!(if answer["status"] == "repeated" {
         l10n::text(
             "这段内容刚才已经送到 ChatGPT，还没回信，没有再送一次；回信会出现在驿窗侧栏。",
             "These words already reached ChatGPT and await an answer; they were not sent again. The answer shows in PostPane's sidebar.",
         )
     } else if answer["status"] == "sent" {
-        l10n::text(
-            "已送进这个会话对应的 ChatGPT 审核会话；回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话；写「通过」、预算用完或没写结论，也会把回信转回这个会话，写明是否已是终局。",
-            "Sent into this session's ChatGPT review conversation; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; so does a pass, a spent budget or an answer without a verdict, saying whether it is the end.",
+        format!(
+            "{}{gate}",
+            l10n::text(
+                "已送进这个会话对应的 ChatGPT 审核会话。",
+                "Sent into this session's ChatGPT review conversation. "
+            )
         )
     } else {
-        l10n::text(
-            "已交给 ChatGPT 审核：新会话正在打开，回复会出现在驿窗侧栏；写「需修改」且审查预算没用完时（L1 1 轮，L2、L3 和不填 2 轮，同一 PR 跨会话累计）驿窗会自动把意见转回这个会话；写「通过」、预算用完或没写结论，也会把回信转回这个会话，写明是否已是终局。",
-            "Handed to ChatGPT for review: a new conversation is opening; the reply shows in PostPane's sidebar. A \"changes needed\" answer within the review budget (L1 one round; L2, L3 or none named two; a pull request counted across sessions) comes back here by itself; so does a pass, a spent budget or an answer without a verdict, saying whether it is the end.",
+        format!(
+            "{}{gate}",
+            l10n::text(
+                "已交给 ChatGPT 审核：新会话正在打开。",
+                "Handed to ChatGPT for review: a new conversation is opening. "
+            )
         )
     });
     Ok(answer)
@@ -1753,6 +2016,8 @@ mod tests {
         on_send: Option<Box<dyn Fn()>>,
         /// What happens while a conversation is being opened.
         on_open: Option<Box<dyn Fn()>>,
+        /// What happens while who began the session's turn is read.
+        on_opener: Option<Box<dyn Fn()>>,
         /// Sending gives up waiting for the extension.
         send_fails: std::cell::Cell<bool>,
         /// The request each sending was asked as.
@@ -1771,6 +2036,8 @@ mod tests {
         left_by: RefCell<HashMap<String, (String, Option<String>)>>,
         /// Who began the Claude session's current turn, and when (#258).
         opener: RefCell<Option<(Opener, i64)>>,
+        /// Whose turns were asked about: `doer|session`.
+        opener_asked: RefCell<Vec<String>>,
         /// The words each look at words left was asked with (#283).
         words: RefCell<Vec<String>>,
         /// The session's process stopped (L-14).
@@ -1779,6 +2046,8 @@ mod tests {
         withdraw_fails: std::cell::Cell<bool>,
         /// Running Claude Code in the background fails, and why.
         wake_fails: RefCell<Option<String>>,
+        /// Pull requests' current commits, as GitHub would say (#347).
+        heads: RefCell<HashMap<String, Result<String, String>>>,
         /// Passing a read-again on to the extension fails (#356).
         reread_fails: std::cell::Cell<bool>,
     }
@@ -1918,6 +2187,13 @@ mod tests {
             left_by(self, id, "cancelled", None);
             true
         }
+        fn pr_head(&self, pr: &str) -> Result<String, String> {
+            self.heads
+                .borrow()
+                .get(pr)
+                .cloned()
+                .unwrap_or(Err("未设置".into()))
+        }
         fn wake(&self, handoff: &str, session: &str, text: &str) -> Result<(), String> {
             if let Some(error) = self.wake_fails.borrow().clone() {
                 return Err(error);
@@ -1929,7 +2205,13 @@ mod tests {
             ));
             Ok(())
         }
-        fn opener(&self, _doer: &str, _session: &str) -> Option<(Opener, i64)> {
+        fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)> {
+            if let Some(during) = &self.on_opener {
+                during();
+            }
+            self.opener_asked
+                .borrow_mut()
+                .push(format!("{doer}|{session}"));
             self.opener.borrow().clone()
         }
     }
@@ -1943,9 +2225,18 @@ mod tests {
         *lines.left_as.borrow_mut() =
             state.map(|state| (state.to_owned(), reason.map(str::to_owned)));
     }
+    /// A desk with a cap of `limit` reviews.
+    fn desk_of(limit: u32) -> (tempfile::TempDir, Desk) {
+        let (temp, desk) = desk();
+        handoffs::set_review_limit(&temp.path().join("data"), limit).unwrap();
+        (temp, desk)
+    }
     fn desk() -> (tempfile::TempDir, Desk) {
         let temp = tempfile::tempdir().unwrap();
-        let mut desk = Desk::new(Some(temp.path().join("data")));
+        let data = temp.path().join("data");
+        // The cap these tests were written for: two reviews (#347 made it a setting).
+        handoffs::set_review_limit(&data, 2).unwrap();
+        let mut desk = Desk::new(Some(data));
         // The tests' clocks start near 0: trouble from then is not old (#318).
         desk.since = 0;
         (temp, desk)
@@ -1983,6 +2274,16 @@ mod tests {
     }
     fn shown(text: &str) {
         ASKED.with(|asked| *asked.borrow_mut() = Some(text.to_owned()));
+    }
+    /// An answer whose last lines do not hold: PostPane asks ChatGPT once
+    /// to mend them (#347, not counted), and it answers `again`.
+    fn mend(desk: &Desk, lines: &Fake, again: &str, at: i64) {
+        assert!(desk.drive(lines, at));
+        let (kind, _, text) = lines.sent.borrow().last().unwrap().clone();
+        assert_eq!(kind, "send");
+        assert!(text.contains("驿窗自动发送"), "{text}");
+        assert!(!desk.drive(lines, at), "asked once");
+        desk.observe(&turn("complete", again), at);
     }
 
     #[test]
@@ -2027,6 +2328,12 @@ mod tests {
                 handoff.id
             )
         );
+        // Answered: the next words may go (while it waits, other words do
+        // not, L3 P1-10).
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            3,
+        );
         let Started::Sent {
             handoff: sent,
             repeated,
@@ -2048,9 +2355,14 @@ mod tests {
         assert!(!repeated);
         assert_eq!(sent.id, handoff.id);
         assert_eq!(sent.reviews(), 2);
-        assert_eq!(
-            lines.sent.borrow().last().unwrap(),
-            &("send".into(), "c-new".into(), "第二轮".into())
+        // Its words, with PostPane's note of the round (#347).
+        let last = lines.sent.borrow().last().unwrap().clone();
+        assert_eq!((last.0.as_str(), last.1.as_str()), ("send", "c-new"));
+        assert!(
+            handoffs::untagged(&last.2).starts_with("第二轮\n\n---\n【驿窗附注】")
+                && last.2.starts_with("【驿窗送审 "),
+            "{}",
+            last.2
         );
         // The same words again are not sent twice.
         let Started::Sent { repeated, .. } = desk
@@ -2094,7 +2406,7 @@ mod tests {
         let handoff = opened(&desk, &lines);
         assert!(desk.observe(&turn("start", ""), 3));
         assert_eq!(desk.projection(3)[0]["phase"], "working");
-        let reply = "1. 会话认不准时不该猜\n2. opening 要超时\n结论：需修改";
+        let reply = "1. 会话认不准时不该猜\n2. opening 要超时\n审查出口：返修\n结论：需修改";
         assert!(desk.observe(&turn("complete", reply), 4));
         assert!(
             !desk.observe(&turn("complete", reply), 4),
@@ -2125,7 +2437,7 @@ mod tests {
         assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
         assert!(
             text.contains(reply)
-                && text.contains("结论：需修改")
+                && text.contains("审查出口：返修\n结论：需修改")
                 && text.contains("relay_to_chatgpt")
         );
         desk.act(&lines, &handoff.id, "back", 7).unwrap();
@@ -2153,7 +2465,9 @@ mod tests {
 
     #[test]
     fn a_swipe_is_done_only_by_the_handoff_that_names_it() {
-        let (_temp, desk) = desk();
+        let (temp, desk) = desk();
+        // Three rounds go in here (the answers between them, L3 P1-10).
+        handoffs::set_review_limit(&temp.path().join("data"), 5).unwrap();
         let lines = Fake::default();
         // The session already has a review open: its next round goes into it.
         opened(&desk, &lines);
@@ -2161,6 +2475,10 @@ mod tests {
         launch(&desk, &lines, CLAUDE, "s1", "review", 10).unwrap();
         let code = code_of(&lines);
         assert!(code.starts_with('L'));
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            10,
+        );
         // A handoff of the same session for something else settles nothing.
         desk.start(
             &lines,
@@ -2176,6 +2494,10 @@ mod tests {
         assert!(!desk.launch_relayed("s1", "L-other", 11));
         assert!(!desk.launch_relayed("s2", &code, 11), "another session's");
         assert_eq!(desk.launch_projection(&lines, 11)[0]["state"], "started");
+        desk.observe(
+            &turn("complete", "2. 还差\n审查出口：返修\n结论：需修改"),
+            11,
+        );
         // The round it asked for, into the review already open, does.
         desk.start(
             &lines,
@@ -2275,7 +2597,10 @@ mod tests {
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
         assert!(!desk.drive(&lines, 3), "nothing before an answer");
-        desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         let (kind, to, text) = lines.sent.borrow().last().unwrap().clone();
         assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
@@ -2316,7 +2641,7 @@ mod tests {
         assert_eq!((kind.as_str(), to.as_str()), ("reply", "s1"));
         assert!(text.contains("审查出口：通过，结论：通过"), "{text}");
         assert!(text.contains("P2：日志少一行") && text.contains("P3：命名"));
-        assert!(text.contains("这是终局") && text.contains("审查预算不再消耗"));
+        assert!(text.contains("这是终局") && text.contains("驿窗已结束这次接力"));
         assert!(text.contains("不需要再调用 relay_to_chatgpt"));
         assert!(!desk.drive(&lines, 10), "sent back once");
         assert_eq!(replies(&lines), 2);
@@ -2328,7 +2653,7 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         desk.drive(&lines, 5);
         desk.start(
             &lines,
@@ -2342,7 +2667,7 @@ mod tests {
         )
         .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n结论：需修改","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         assert!(desk.drive(&lines, 8));
@@ -2353,7 +2678,7 @@ mod tests {
         // The last answer goes back too, saying it is left to the person.
         assert_eq!(replies(&lines), 2);
         let text = last_sent(&lines).2;
-        assert!(text.contains("还差一点") && text.contains("审查预算已用完"));
+        assert!(text.contains("还差一点") && text.contains("到顶"));
         assert!(text.contains("这是终局") && text.contains("交常浩决定"));
         assert!(!desk.drive(&lines, 8), "sent back once");
         // The person's button sends the same words: they went already.
@@ -2368,6 +2693,7 @@ mod tests {
         let lines = Fake::default();
         opened(&desk, &lines);
         desk.observe(&turn("complete", "看了，挺好"), 4);
+        mend(&desk, &lines, "看了，挺好", 4);
         assert!(desk.drive(&lines, 5));
         assert_eq!(desk.projection(5)[0]["halt"], no_verdict(Sent::Back));
         assert_eq!(desk.projection(5)[0]["auto"], false);
@@ -2427,13 +2753,15 @@ mod tests {
             let lines = Fake::default();
             let handoff = opened(&desk, &lines);
             desk.observe(&turn("complete", reply), 4);
+            mend(&desk, &lines, reply, 4);
             ended(&desk, &lines, &handoff.id);
         }
         // A 思维评审 whose last two lines do not hold.
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = thinking(&desk, &lines);
-        desk.observe(&turn("complete", "意见如上\n结论：通过"), 4);
+        desk.observe(&turn("complete", "意见如上\n审查出口：通过\n结论：通过"), 4);
+        mend(&desk, &lines, "意见如上\n审查出口：通过\n结论：通过", 4);
         ended(&desk, &lines, &handoff.id);
         assert!(last_sent(&lines).2.contains("不要记成已定决策"));
     }
@@ -2453,7 +2781,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = quiet();
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "P2：补注释\n结论：通过"), 4);
+        desk.observe(
+            &turn("complete", "P2：补注释\n审查出口：通过\n结论：通过"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         assert_eq!(sent_as(&lines, "queue").len(), 1);
         let shown = desk.projection(5);
@@ -2481,12 +2812,12 @@ mod tests {
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         desk.drive(&lines, 5);
         desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 6)
             .unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n结论：需修改","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             7,
         );
         lines.reply_fails.set(2);
@@ -2547,7 +2878,10 @@ mod tests {
             desk.lock().get(&handoff.id).unwrap().doer.as_deref(),
             Some(CODEX)
         );
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         let sent = lines.sent.borrow();
         let back = sent
@@ -2590,7 +2924,10 @@ mod tests {
         );
         assert!(sent[0].from_left);
         assert_eq!(sent[0].lane, format!("relay:{}:codex", handoff.id));
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let back = desk.tosses();
         assert_eq!(
             (back[0].from.as_str(), back[0].to.as_str()),
@@ -2604,13 +2941,17 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = codex_opened(&desk, &lines, Some("L1"));
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 要改方案\n审查出口：决策升级\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         let said = serde_json::to_string(&desk.projection(5)).unwrap();
-        assert!(said.contains(&by_doer(&settled(), Some(CODEX))), "{said}");
+        let up = by_doer(&escalated(), Some(CODEX));
+        assert!(said.contains(&up), "{said}");
         assert!(!said.contains("Claude"), "{said}");
         // A Claude review's words stay as they were.
-        assert_eq!(by_doer(&settled(), None), settled());
+        assert_eq!(by_doer(&escalated(), None), escalated());
         assert_eq!(
             desk.lock().get(&handoff.id).unwrap().doer.as_deref(),
             Some(CODEX)
@@ -2653,7 +2994,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = codex_opened(&desk, &lines, None);
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         let (prompt, delivery) = last_back(&desk, 5);
         assert_eq!(delivery, "waiting");
@@ -2681,7 +3025,7 @@ mod tests {
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
         assert_eq!(desk.lock().get(&handoff.id).unwrap().doer, None);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         assert_eq!(replies(&lines), 1);
     }
@@ -2691,7 +3035,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let ended = Fake {
             unreachable: true,
             ..Fake::default()
@@ -2720,7 +3067,7 @@ mod tests {
         let lines = Fake::default();
         lines.reply_fails.set(1);
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         assert_eq!(replies(&lines), 1, "the second try went through");
         let steps = kinds(&desk, 5);
@@ -2738,7 +3085,7 @@ mod tests {
         let lines = Fake::default();
         lines.reply_fails.set(2);
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         assert_eq!(replies(&lines), 0);
         let left = lines
@@ -2785,7 +3132,7 @@ mod tests {
         lines.reply_fails.set(2);
         lines.leave_fails.set(true);
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         let shown = desk.projection(5);
         assert_eq!(shown[0]["phase"], "replied");
@@ -2805,7 +3152,7 @@ mod tests {
         let lines = Fake::default();
         lines.reply_fails.set(2);
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         desk.drive(&lines, 5);
         assert!(desk.projection(5 + handoffs::QUEUE_WAIT_MS)[0]["halt"].is_null());
         let shown = desk.projection(6 + handoffs::QUEUE_WAIT_MS);
@@ -2907,7 +3254,7 @@ mod tests {
     // T2
     #[test]
     fn a_thinking_review_quoting_an_old_pass_is_escalated_not_passed() {
-        let reply = "上一轮写的是：\n结论：通过\n这一轮有分歧，要常浩定\n评审出口：决策升级\n结论：交常浩裁决";
+        let reply = "上一轮写的是：\n审查出口：通过\n结论：通过\n这一轮有分歧，要常浩定\n评审出口：决策升级\n结论：交常浩裁决";
         let (_temp, desk) = desk();
         let lines = Fake::default();
         thinking(&desk, &lines);
@@ -2976,9 +3323,11 @@ mod tests {
         };
         assert!(!repeated);
         assert_eq!(again.id, handoff.id);
-        assert_eq!(
-            last_sent(&lines),
-            ("send".into(), "c-new".into(), "新证据如下".into())
+        let (kind, to, text) = last_sent(&lines);
+        assert_eq!((kind.as_str(), to.as_str()), ("send", "c-new"));
+        assert!(
+            handoffs::untagged(&text).starts_with("新证据如下") && text.contains("【驿窗附注】"),
+            "{text}"
         );
         assert_eq!(desk.projection(later + 1)[0]["phase"], "delivered");
     }
@@ -2988,6 +3337,7 @@ mod tests {
     #[test]
     fn a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence() {
         let (_temp, desk) = desk();
+        handoffs::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
         let lines = Fake::default();
         let handoff = thinking(&desk, &lines);
         desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
@@ -3027,8 +3377,9 @@ mod tests {
         let _ = handoff;
 
         // Two asks, one paused for evidence: 继续深化 still goes back by
-        // itself, and the card can still turn it back on.
+        // itself under the cap, and the card can still turn it back on.
         let (_temp, desk) = self::desk();
+        handoffs::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
         let lines = Fake::default();
         let handoff = thinking(&desk, &lines);
         desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
@@ -3041,8 +3392,9 @@ mod tests {
         assert!(desk.drive(&lines, 8));
         assert_eq!(desk.projection(8)[0]["phase"], "returned");
         assert_eq!(desk.projection(8)[0]["auto"], true);
-        let used = desk.lock().get(&handoff.id).unwrap().rounds_used();
-        assert_eq!(used, 1);
+        // The pause counted too (#347).
+        let used = desk.lock().get(&handoff.id).unwrap().counted();
+        assert_eq!(used, 2);
 
         // Paused by the person after the evidence pause: a new relay does
         // not override that.
@@ -3106,7 +3458,7 @@ mod tests {
         assert_eq!(desk.projection(8)[0]["halt"], at_limit(2, Sent::Back));
         assert_eq!(replies(&lines), 2, "the last round goes back too");
         let text = last_sent(&lines).2;
-        assert!(text.contains("评审已用满 2 轮") && text.contains("交常浩决定"));
+        assert!(text.contains("到顶") && text.contains("交常浩决定"));
         assert!(!text.contains("交回 ChatGPT 评审"), "{text}");
     }
 
@@ -3118,12 +3470,13 @@ mod tests {
             ("评审出口：成熟退出\n结论：通过\n以上。", Flaw::NoVerdict),
             ("评审出口：成熟退出\n结论：大体可以", Flaw::UnknownVerdict),
             ("评审出口：成熟退出\n结论：需修改", Flaw::Mismatch),
-            ("意见如上\n结论：通过", Flaw::NoExit),
+            ("意见如上\n审查出口：通过\n结论：通过", Flaw::NoExit),
         ] {
             let (_temp, desk) = desk();
             let lines = Fake::default();
             thinking(&desk, &lines);
             desk.observe(&turn("complete", reply), 4);
+            mend(&desk, &lines, reply, 4);
             assert!(desk.drive(&lines, 5), "{reply}");
             assert_eq!(replies(&lines), 1, "{reply}");
             let text = last_sent(&lines).2;
@@ -3171,7 +3524,7 @@ mod tests {
         let handoff = opened(&desk, &lines);
         desk.act(&lines, &handoff.id, "pause", 3).unwrap();
         assert_eq!(desk.projection(3)[0]["halt"], paused());
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(!desk.drive(&lines, 5), "paused: left to the person");
         assert_eq!(replies(&lines), 0);
         // Turned back on, the waiting answer goes back at once.
@@ -3192,7 +3545,7 @@ mod tests {
         let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
         book.opened(&handoff.id, "c1", 2);
         assert!(book.stop(&handoff.id, "停", true, 3));
-        book.replied("c1", "都改好了\n结论：通过", Some("m1"), 4);
+        book.replied("c1", "都改好了\n审查出口：通过\n结论：通过", Some("m1"), 4);
         handoffs::save(&data, &book).unwrap();
         let desk = Desk::new(Some(data));
         let shown = desk.projection(5);
@@ -3208,7 +3561,10 @@ mod tests {
         let desk = Desk::new(Some(data.clone()));
         opened(&desk, &lines);
         // An answer that came in just before the restart, not yet sent back.
-        desk.observe(&turn("complete", "1. 要改\n结论：需修改"), 3);
+        desk.observe(
+            &turn("complete", "1. 要改\n审查出口：返修\n结论：需修改"),
+            3,
+        );
         drop(desk);
         let desk = Desk::new(Some(data));
         let shown = desk.projection(4);
@@ -3255,7 +3611,12 @@ mod tests {
             desk.act(&lines, &handoff.id, "back", 3).is_err(),
             "no answer yet"
         );
-        desk.observe(&turn("complete", "结论：通过"), 4);
+        // A pass goes back as the auto round trip sends it (P1-09); other
+        // answers wait for a way there.
+        desk.observe(
+            &turn("complete", "1. 还差\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let unreachable = Fake {
             unreachable: true,
             ..Fake::default()
@@ -3376,7 +3737,7 @@ mod tests {
         let sent = lines.sent.borrow().clone();
         assert_eq!(sent.len(), 2);
         assert_eq!((sent[0].0.as_str(), sent[0].1.as_str()), ("leave", "s1"));
-        assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("结论：通过"));
+        assert!(sent[0].2.contains("relay_to_chatgpt") && sent[0].2.contains("审查出口"));
         assert!(sent[1].2.contains("relay_to_chatgpt") && sent[1].2.contains("不改代码"));
         // Kinds not open yet, a bad id, no way out: nothing is sent.
         assert!(launch(&desk, &lines, CLAUDE, "s3", "test", 1).is_err());
@@ -3583,7 +3944,10 @@ mod tests {
         // the brief it was opened with.
         shown("brief");
         assert!(!desk.observe(&turn("start", ""), 2));
-        assert!(!desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        assert!(!desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            3
+        ));
         desk.open(&lines, &handoff.id, "brief", None, || 4).unwrap();
         let shown = desk.projection(5);
         assert_eq!(shown[0]["phase"], "replied");
@@ -3616,7 +3980,7 @@ mod tests {
         desk.open(&lines, &handoff.id, "brief", None, || 3).unwrap();
         // The empty placeholder of 2026-11-07, then the answer.
         desk.observe(&turn("complete", ""), 4);
-        desk.observe(&turn("complete", "结论：通过"), 5);
+        desk.observe(&turn("complete", "审查出口：通过\n结论：通过"), 5);
         for i in 0..=EARLY_KEPT {
             desk.observe(
                 &json!({"type":"turn","phase":"start","conversation":format!("own-{i}")}),
@@ -3652,7 +4016,7 @@ mod tests {
                 row("complete", "taken"),
             ]
         );
-        assert_eq!(lines[3]["replyChars"], 5);
+        assert_eq!(lines[3]["replyChars"], 13);
         assert!(lines
             .iter()
             .any(|l| l["conversation"] == "own-0" && l["outcome"] == "evicted"));
@@ -3664,12 +4028,15 @@ mod tests {
         let desk: &'static Desk = Box::leak(Box::new(desk));
         let mut lines = Fake::default();
         let handoff = opened(desk, &lines);
-        assert!(desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3));
+        assert!(desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            3
+        ));
         // Round 2: ChatGPT starts, and answers, before `send` returns.
         lines.on_send = Some(Box::new(|| {
             assert!(!desk.observe(&turn("start", ""), 5));
             assert!(!desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：通过","messageId":"m2","prompt":asked()}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2","prompt":asked()}),
                 6
             ));
         }));
@@ -3777,7 +4144,10 @@ mod tests {
         assert!(desk.tosses().is_empty());
         assert!(desk.observe(&turn("start", ""), 3));
         assert!(desk.tosses().is_empty(), "ChatGPT starting moves no words");
-        assert!(desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4));
+        assert!(desk.observe(
+            &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+            4
+        ));
         let back = desk.tosses();
         assert_eq!(back.len(), 1);
         assert_eq!(
@@ -3797,7 +4167,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 3);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            3,
+        );
         desk.act(&lines, &handoff.id, "back", 3).unwrap();
         lines.send_fails.set(true);
         assert!(desk
@@ -3824,7 +4197,7 @@ mod tests {
         assert!(repeated);
         // The answer that follows is the review's.
         assert!(desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：通过","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：通过","messageId":"m2","prompt":asked()}),
             7
         ));
         assert_eq!(desk.projection(7)[0]["phase"], "replied");
@@ -3838,7 +4211,10 @@ mod tests {
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
         desk.act(&lines, &handoff.id, "pause", 3).unwrap();
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let unreachable = Fake {
             unreachable: true,
             ..Fake::default()
@@ -3859,7 +4235,7 @@ mod tests {
         // A reply that fails is queued too.
         let (_temp, desk) = self::desk();
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         let failing = Fake::default();
         failing.reply_fails.set(1);
         desk.act(&failing, &handoff.id, "back", 5).unwrap();
@@ -3899,7 +4275,7 @@ mod tests {
             let passed = book.begin("s3", None, "第三个", None, "请审核", 1).id;
             book.opened(&passed, "c3", 2);
             book.stop(&passed, "停", true, 3);
-            book.replied("c3", "结论：通过", Some("m1"), 4);
+            book.replied("c3", "审查出口：通过\n结论：通过", Some("m1"), 4);
             handoffs::save(&data, &book).unwrap();
             let desk = Desk::new(Some(data));
             let book = desk.lock();
@@ -3953,6 +4329,8 @@ mod tests {
     }
 
     const PR: &str = "PR：https://github.com/Natsukashii1997/dt-sandbox/pull/4";
+    /// The commit those reviews are of (#347), and their pull request's still.
+    const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
     /// Starts an engineering review of `PR` from `session` at `risk`
     /// (#217); one that opens a conversation is opened.
@@ -3967,9 +4345,13 @@ mod tests {
         let rule = Rule {
             risk: Some(risk.to_owned()),
             extra: extra.map(str::to_owned),
-            doer: None,
+            ..Rule::default()
         };
-        let brief = format!("{PR}\n改动如下（{session} {now}）");
+        lines
+            .heads
+            .borrow_mut()
+            .insert("natsukashii1997/dt-sandbox#4".into(), Ok(HEAD.into()));
+        let brief = format!("{PR}\nhead_sha {HEAD}\n改动如下（{session} {now}）");
         let started = desk.start_ruled(
             lines,
             session,
@@ -3987,6 +4369,175 @@ mod tests {
         }
         Ok(started)
     }
+    /// #347: a pass ends the handoff only while the commit reviewed is the
+    /// pull request's still; the person hears of it either way.
+    #[test]
+    fn a_pass_holds_only_for_the_pull_requests_current_commit() {
+        const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+        let pass = "全部关闭\n受审版本：0123456\n未决：P0 0，P1 0\n审查出口：通过\n结论：通过";
+        let cases = [
+            (Ok(HEAD.to_owned()), "closed"),
+            (
+                Ok("fedcba9876543210fedcba9876543210fedcba98".to_owned()),
+                "open",
+            ),
+            (Err("网络断了".to_owned()), "open"),
+        ];
+        for (head, status) in cases {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let started = desk.start_ruled(
+                &lines,
+                "s1",
+                Some("/w"),
+                "修登录",
+                None,
+                &format!("{PR}\nhead_sha {HEAD}\n改动"),
+                false,
+                &Rule {
+                    risk: Some("L2".into()),
+                    ..Rule::default()
+                },
+                1,
+            );
+            let Ok(Started::Opening { handoff, project }) = started else {
+                panic!()
+            };
+            desk.open(&lines, &handoff.id, "改动", project.as_deref(), || 1)
+                .unwrap();
+            let pr = desk.lock().get(&handoff.id).unwrap().pr.clone().unwrap();
+            lines.heads.borrow_mut().insert(pr, head.clone());
+            desk.observe(&turn("complete", pass), 3);
+            assert!(desk.drive(&lines, 4));
+            let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+            assert_eq!(desk.projection(4)[0]["status"], status, "{head:?}");
+            let said = last_reply_to_claude(&lines);
+            if status == "closed" {
+                assert_eq!(kept.gate.notice, Some(handoffs::Notice::Passed));
+            } else {
+                // Words that say it did not pass, none that it did (L3 P1-09).
+                assert!(
+                    said.contains("驿窗没有放行") && !said.contains("驿窗已结束这次接力"),
+                    "{said}"
+                );
+                if head.is_ok() {
+                    // Moved on: the current commit sent again goes on
+                    // (Fable review #8), the round trip not stopped.
+                    let moved = said.contains("现在是") || said.contains("is at");
+                    assert!(moved && said.contains("自动往返没有停"), "{said}");
+                    assert!(kept.auto && kept.halt.is_none());
+                } else {
+                    let halt = kept.halt.unwrap();
+                    assert!(
+                        halt.contains("版本待核") || halt.contains("unverified"),
+                        "{halt}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Fable review #8: a pass of another commit than the one sent goes back
+    /// for the current one to be sent again; the round trip goes on.
+    #[test]
+    fn a_pass_of_another_commit_goes_back_to_be_sent_again() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", &PASS.replace("0123456", "fedcba9")), 3);
+        assert!(desk.drive(&lines, 4));
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!((kept.phase, kept.auto), (Phase::Returned, true));
+        assert!(kept.halt.is_none() && kept.gate.notice.is_none());
+        let said = last_reply_to_claude(&lines);
+        assert!(
+            said.contains("对不上") && said.contains("自动往返没有停"),
+            "{said}"
+        );
+    }
+
+    /// #347 review P1-01, P1-02: a pass waiting across a restart is checked
+    /// against its pull request first; a pull request without the commit
+    /// under review is not sent.
+    #[test]
+    fn a_pass_across_a_restart_is_checked_and_a_pr_needs_its_commit() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let refused = desk.start_ruled(&lines, "s1", None, "t", None, PR, false, &rule, 1);
+        assert!(refused.unwrap_err().contains("head"));
+        let id = match ruled(&desk, &lines, "s1", "L2", None, 1).unwrap() {
+            Started::Opening { handoff, .. } | Started::Sent { handoff, .. } => handoff.id,
+        };
+        desk.observe(
+            &turn("complete", "受审版本：0123456\n审查出口：通过\n结论：通过"),
+            3,
+        );
+        // The app stops before the round trip took it up; the pull request moved on.
+        let data = desk.data.clone().unwrap();
+        drop(desk);
+        let desk = Desk::new(Some(data));
+        assert_eq!(
+            desk.lock().get(&id).unwrap().status,
+            Status::Open,
+            "not ended unchecked"
+        );
+        lines.heads.borrow_mut().insert(
+            "natsukashii1997/dt-sandbox#4".into(),
+            Ok("fedcba9876543210fedcba9876543210fedcba98".into()),
+        );
+        assert!(desk.catch_up(&lines, 5));
+        let kept = desk.lock().get(&id).cloned().unwrap();
+        assert!(kept.live() && kept.gate.notice.is_none());
+        assert_eq!(
+            (kept.phase, kept.auto),
+            (Phase::Returned, true),
+            "sent back to resend"
+        );
+        drop(temp);
+    }
+
+    /// #347: a chain named must be known; the cap reached is noted for
+    /// the person; every answer is kept in full.
+    #[test]
+    fn an_unknown_chain_is_refused_and_the_top_is_noted() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let rule = Rule {
+            risk: Some("L2".into()),
+            chain: Some("r-nope".into()),
+            ..Rule::default()
+        };
+        let refused = desk.start_ruled(&lines, "s1", None, "t", None, "b", false, &rule, 1);
+        assert_eq!(refused.err(), Some(gate::chain_unknown("r-nope")));
+        let id = match ruled(&desk, &lines, "s1", "L2", None, 1).unwrap() {
+            Started::Opening { handoff, .. } => handoff.id,
+            Started::Sent { handoff, .. } => handoff.id,
+        };
+        for (n, at) in [(1, 3), (2, 6)] {
+            if n == 2 {
+                ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+            }
+            desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":format!("第 {n} 轮\n受审版本：0123456\n审查出口：返修\n结论：需修改"),"messageId":format!("m{n}")}), at);
+            desk.drive(&lines, at + 1);
+        }
+        let kept = desk.lock().get(&id).cloned().unwrap();
+        assert_eq!(kept.gate.notice, Some(handoffs::Notice::Top));
+        let kept_dir = desk
+            .data
+            .as_deref()
+            .unwrap()
+            .join("chatgpt")
+            .join("replies");
+        assert_eq!(std::fs::read_dir(kept_dir).unwrap().count(), 2);
+    }
+
     fn last_reply_to_claude(lines: &Fake) -> String {
         lines
             .sent
@@ -4015,7 +4566,7 @@ mod tests {
         let rule = Rule {
             risk: Some("L0".into()),
             extra: None,
-            doer: None,
+            ..Rule::default()
         };
         assert!(desk
             .start_ruled(
@@ -4043,16 +4594,910 @@ mod tests {
     }
 
     #[test]
-    fn an_l1_revise_goes_back_to_close_without_another_review() {
+    fn an_l1_revise_goes_back_to_be_fixed_and_reviewed_again() {
+        // #347: an L1 with a blocking point is fixed, then reviewed again;
+        // only the points left to P2/P3 pass with suggestions.
         let (_temp, desk) = desk();
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L1", None, 1).unwrap();
-        desk.observe(&turn("complete", "1. 补一条 P2\n结论：需修改"), 3);
+        desk.observe(
+            &turn(
+                "complete",
+                "1. P1 漏了回滚\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
+            3,
+        );
         assert!(desk.drive(&lines, 4));
-        assert!(last_reply_to_claude(&lines).contains("补改未复审"));
+        let said = last_reply_to_claude(&lines);
+        assert!(
+            !said.contains("补改未复审") && said.contains("复审"),
+            "{said}"
+        );
         let shown = desk.projection(4);
-        assert_eq!(shown[0]["status"], "closed", "it settled");
+        assert_eq!(
+            (shown[0]["status"].as_str(), shown[0]["auto"].as_bool()),
+            (Some("open"), Some(true))
+        );
         assert_eq!(replies(&lines), 1);
+    }
+
+    const PR_KEY: &str = "natsukashii1997/dt-sandbox#4";
+    const MOVED: &str = "fedcba9876543210fedcba9876543210fedcba98";
+    const PASS: &str = "全部关闭\n受审版本：0123456\n未决：P0 0，P1 0\n审查出口：通过\n结论：通过";
+    const FIX: &str = "1. 还差\n受审版本：0123456\n审查出口：返修\n结论：需修改";
+    fn engineering(
+        desk: &Desk,
+        lines: &Fake,
+        session: &str,
+        cwd: &str,
+        brief: &str,
+        now: i64,
+    ) -> Result<Started, String> {
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let started = desk.start_ruled(
+            lines,
+            session,
+            Some(cwd),
+            "修登录",
+            None,
+            brief,
+            false,
+            &rule,
+            now,
+        )?;
+        if let Started::Opening { handoff, project } = &started {
+            desk.open(lines, &handoff.id, brief, project.as_deref(), || now)
+                .unwrap();
+        }
+        Ok(started)
+    }
+    fn status(desk: &Desk, now: i64) -> (String, Option<String>) {
+        let shown = desk.projection(now);
+        let last = shown.as_array().unwrap().last().unwrap().clone();
+        (
+            last["status"].as_str().unwrap().to_owned(),
+            last["notice"].as_str().map(str::to_owned),
+        )
+    }
+
+    /// L3 round 2, P1-02: a pull request first named in a later brief binds
+    /// the handoff, needs its commit, and a pass is checked against it.
+    #[test]
+    fn a_pull_request_named_later_binds_the_review_to_its_commit() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        engineering(&desk, &lines, "s1", "/w", "改动（还没开 PR）", 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        let refused = engineering(&desk, &lines, "s1", "/w", &format!("{PR}\n改好了"), 5);
+        assert!(refused.unwrap_err().contains("no full commit under review"));
+        let Started::Sent { handoff, .. } = engineering(
+            &desk,
+            &lines,
+            "s1",
+            "/w",
+            &format!("{PR}\nhead_sha {HEAD}\n改好了"),
+            6,
+        )
+        .unwrap() else {
+            panic!("it goes into the open conversation");
+        };
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            (kept.pr.as_deref(), kept.gate.head.as_deref()),
+            (Some(PR_KEY), Some(HEAD))
+        );
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(MOVED.into()));
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":PASS,"messageId":"m2"}), 7);
+        desk.drive(&lines, 8);
+        assert_eq!(status(&desk, 8), ("open".to_owned(), None));
+        let said = last_reply_to_claude(&lines);
+        assert!(
+            said.contains("驿窗没有放行") && !said.contains("驿窗已结束这次接力"),
+            "{said}"
+        );
+    }
+
+    /// P1-01: a review of a pull request kept with no commit (from before
+    /// the gate) does not pass, after a restart too.
+    #[test]
+    fn a_review_kept_with_no_commit_does_not_pass_after_a_restart() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", "改动", 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.change(|book| book.set_pr(&handoff.id, PR_KEY));
+        desk.observe(&turn("complete", PASS), 3);
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(HEAD.into()));
+        desk.drive(&lines, 4);
+        assert_eq!(status(&desk, 4), ("open".to_owned(), None));
+        assert!(last_reply_to_claude(&lines).contains(&guard::no_anchor(PR_KEY)));
+    }
+
+    /// P1-09: the person's 「转回 Claude」 on a pass is checked as the auto
+    /// round trip's is, and ends it only when the commit holds.
+    #[test]
+    fn a_pass_sent_back_by_hand_is_checked_against_the_commit() {
+        for (head, ended) in [(MOVED, false), (HEAD, true)] {
+            let (_temp, desk) = desk();
+            let lines = Fake::default();
+            let Started::Opening { handoff, .. } =
+                ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+            else {
+                panic!()
+            };
+            lines
+                .heads
+                .borrow_mut()
+                .insert(PR_KEY.into(), Ok(head.into()));
+            desk.observe(&turn("complete", PASS), 3);
+            assert_eq!(desk.act(&lines, &handoff.id, "back", 4), Ok(Acted::Done));
+            let said = last_reply_to_claude(&lines);
+            assert_eq!(said.contains("驿窗没有放行"), !ended, "{said}");
+            assert_eq!(said.contains("驿窗已结束这次接力"), ended, "{said}");
+            let (status, notice) = status(&desk, 4);
+            assert_eq!(status == "closed", ended);
+            assert_eq!(notice.as_deref() == Some("passed"), ended);
+        }
+    }
+
+    /// P1-04: a chain is taken over only once its review with ChatGPT is
+    /// answered and counted.
+    #[test]
+    fn a_chain_is_taken_over_only_once_its_review_is_answered() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        let busy = ruled(&desk, &lines, "s2", "L2", None, 2).unwrap_err();
+        assert!(busy.contains("still waits on ChatGPT"), "{busy}");
+        desk.observe(&turn("complete", FIX), 3);
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s2", "L2", None, 4).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(handoff.carried, 1, "the answer that came is counted");
+    }
+
+    /// P1-08: a cap reached in a session or working directory and not
+    /// settled lets no new review begin there without the person's word,
+    /// whatever chain or pull request it names.
+    #[test]
+    fn a_cap_reached_here_lets_no_new_review_begin_without_the_persons_word() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":FIX,"messageId":"m2"}), 6);
+        desk.drive(&lines, 7);
+        assert_eq!(status(&desk, 7).1.as_deref(), Some("top"));
+        // No chain, no pull request: refused in the same directory and session.
+        for (session, cwd) in [("s9", "/w"), ("s1", "/elsewhere")] {
+            let refused = desk.start_ruled(
+                &lines,
+                session,
+                Some(cwd),
+                "修登录",
+                None,
+                "另一件事",
+                true,
+                &Rule::default(),
+                8,
+            );
+            assert!(
+                refused.unwrap_err().contains("reached its cap"),
+                "{session} {cwd}"
+            );
+        }
+        // Elsewhere it goes: a trust boundary, written as one.
+        assert!(engineering(&desk, &lines, "s8", "/other", "另一件事", 8).is_ok());
+        // With the person's word it goes, and the cap is settled here.
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        assert!(engineering(&desk, &lines, "s9", "/w", "另一件事", 9).is_ok());
+        *lines.opener.borrow_mut() = None;
+        assert!(engineering(&desk, &lines, "s10", "/w", "第三件事", 10).is_ok());
+    }
+
+    /// P2-06: evidence a review paused for never goes past the cap as set now.
+    #[test]
+    fn evidence_never_goes_past_a_cap_lowered_meanwhile() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L1", None, 1).unwrap();
+        desk.observe(
+            &turn(
+                "complete",
+                "缺复现日志\n受审版本：0123456\n审查出口：证据不足暂停\n结论：需修改",
+            ),
+            3,
+        );
+        desk.drive(&lines, 4);
+        handoffs::set_review_limit(&temp.path().join("data"), 1).unwrap();
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L1", None, 5).err(),
+            Some(budget_spent(1))
+        );
+    }
+
+    /// L3 special review, P1-04: a handoff whose opening failed and may
+    /// still come late is let go when its chain is taken over.
+    #[test]
+    fn a_failed_opening_coming_late_does_not_revive_a_chain_taken_over() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let failing = Fake {
+            open_fails: true,
+            ..Fake::default()
+        };
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(HEAD.into()));
+        let brief = format!("{PR}\nhead_sha {HEAD}\n改动");
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let Started::Opening { handoff: a, .. } = desk
+            .start_ruled(
+                &failing,
+                "s1",
+                Some("/w"),
+                "修登录",
+                None,
+                &brief,
+                false,
+                &rule,
+                1,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert!(desk.open(&failing, &a.id, &brief, None, || 2).is_err());
+        ruled(&desk, &lines, "s2", "L2", None, 3).unwrap();
+        assert!(!desk.observe(
+            &json!({"type":"opened","requestId":format!("{}~0", a.id),"ok":true,"conversation":"c-late"}),
+            4
+        ));
+        let live = desk.lock().list.iter().filter(|h| h.live()).count();
+        assert_eq!(live, 1, "one handoff counts the chain");
+    }
+
+    /// P2-08: a pull request and commit named by a call that is refused, or
+    /// whose words do not go, are not kept.
+    #[test]
+    fn a_refused_or_unsent_review_keeps_the_commit_it_had() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        let other = format!(
+            "PR：https://github.com/Natsukashii1997/dt-sandbox/pull/5\nhead_sha {MOVED}\n改好了"
+        );
+        let rule = Rule {
+            risk: Some("L2".into()),
+            ..Rule::default()
+        };
+        let kept = || {
+            let h = desk.lock().get(&handoff.id).cloned().unwrap();
+            (h.pr, h.gate.head)
+        };
+        let before = kept();
+        lines.send_fails.set(true);
+        let unsent = desk.start_ruled(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            None,
+            &other,
+            false,
+            &rule,
+            5,
+        );
+        assert!(unsent.is_err());
+        assert_eq!(kept(), before, "words that did not go");
+        lines.send_fails.set(false);
+        // Other words wait on words never known to have gone in (L3 P1-10);
+        // the answer to those counts.
+        let sends = lines.sent.borrow().len();
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L2", None, 6).err(),
+            Some(guard::still_waiting())
+        );
+        assert_eq!(lines.sent.borrow().len(), sends);
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":FIX,"messageId":"m2"}), 7);
+        desk.drive(&lines, 8);
+        let refused = desk.start_ruled(
+            &lines,
+            "s1",
+            Some("/w"),
+            "修登录",
+            None,
+            &other,
+            false,
+            &rule,
+            9,
+        );
+        assert_eq!(refused.err(), Some(budget_spent(2)));
+        assert_eq!(kept(), before, "a refusal");
+    }
+
+    /// P2-09: the person's 「转回 Claude」 on a pass that another send holds
+    /// says it did not go.
+    #[test]
+    fn a_pass_sent_back_by_hand_while_another_send_holds_it_says_so() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", PASS), 3);
+        let busy = desk.claim(&handoff.id).unwrap();
+        assert_eq!(
+            desk.act(&lines, &handoff.id, "back", 4),
+            Err(guard::back_not_done())
+        );
+        drop(busy);
+        assert_eq!(desk.act(&lines, &handoff.id, "back", 5), Ok(Acted::Done));
+        assert_eq!(status(&desk, 5).0, "closed");
+    }
+
+    /// L3 P1-10: a review sent and not known to have gone in when the app
+    /// restarted counts its answer, which cannot pass.
+    #[test]
+    fn a_review_unconfirmed_at_a_restart_counts_and_cannot_pass() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", "改动（还没开 PR）", 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        // Sent with pull request B, no word of it before the restart.
+        lines.send_fails.set(true);
+        let brief = format!("{PR}\nhead_sha {MOVED}\n改好了");
+        assert!(engineering(&desk, &lines, "s1", "/w", &brief, 5).is_err());
+        let pending = desk.lock().get(&handoff.id).unwrap().gate.pending.clone();
+        assert_eq!(pending.unwrap().head.as_deref(), Some(MOVED));
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        lines
+            .heads
+            .borrow_mut()
+            .insert(PR_KEY.into(), Ok(MOVED.into()));
+        let pass = PASS.replace("0123456", "fedcba9");
+        desk.observe(&json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),"reply":pass,"messageId":"m2"}), 7);
+        desk.drive(&lines, 8);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(kept.counted(), 2, "the answer counts");
+        assert_eq!(status(&desk, 8), ("open".to_owned(), None));
+        assert!(last_reply_to_claude(&lines).contains(&guard::unconfirmed()));
+    }
+
+    /// L3 P1-10: while a review waits on ChatGPT, other words do not go;
+    /// the same words again are fine, and words that went in are no longer
+    /// pending.
+    #[test]
+    fn a_review_waiting_on_chatgpt_takes_no_other_words() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+        assert!(desk.lock().get(&handoff.id).unwrap().gate.pending.is_none());
+        let sends = lines.sent.borrow().len();
+        let Started::Sent { repeated, .. } = ruled(&desk, &lines, "s1", "L2", None, 5).unwrap()
+        else {
+            panic!()
+        };
+        assert!(repeated, "the same words again");
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L2", None, 6).err(),
+            Some(guard::still_waiting())
+        );
+        assert_eq!(lines.sent.borrow().len(), sends);
+    }
+
+    fn reply_as(prompt: Option<String>, reply: &str, message: &str) -> Value {
+        json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":prompt,"reply":reply,"messageId":message})
+    }
+
+    /// L3 P1-10..12: words never known to have gone in stop the round trip;
+    /// other words wait and the same are not sent twice; only an answer to
+    /// them counts, once, after their step, and cannot pass; word of them
+    /// after it only goes on the card.
+    #[test]
+    fn words_never_known_to_have_gone_in_hold_their_round() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        let first = asked();
+        desk.observe(&reply_as(first.clone(), FIX, "m1"), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        let (request, words) = (lines.requests.borrow().last().unwrap().clone(), asked());
+        let get = || desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(get().halt, Some(guard::send_unconfirmed()));
+        // P1-10 A: the same words are not sent twice; others wait.
+        let sends = lines.sent.borrow().len();
+        let Started::Sent { repeated, .. } = ruled(&desk, &lines, "s1", "L2", None, 5).unwrap()
+        else {
+            panic!()
+        };
+        assert!(repeated);
+        assert_eq!(
+            ruled(&desk, &lines, "s1", "L2", None, 6).err(),
+            Some(guard::still_waiting())
+        );
+        assert_eq!(lines.sent.borrow().len(), sends);
+        // P1-11: the earlier review's words, answered again, are not this round.
+        desk.observe(&reply_as(first, PASS, "again"), 7);
+        assert_eq!(get().counted(), 1);
+        // Its own answer counts once, after its step, and cannot pass.
+        desk.observe(&reply_as(words, PASS, "m2"), 8);
+        desk.drive(&lines, 9);
+        let answered = get();
+        assert_eq!(answered.counted(), 2);
+        let kinds = answered.steps.iter().map(|s| s.kind).collect::<Vec<_>>();
+        let ask = kinds.iter().rposition(|k| *k == StepKind::Ask).unwrap();
+        assert_eq!(
+            kinds.iter().rposition(|k| *k == StepKind::Reply),
+            Some(ask + 1)
+        );
+        assert_eq!(status(&desk, 9).0, "open");
+        assert!(last_reply_to_claude(&lines).contains(&guard::unconfirmed()));
+        // P1-12: word of them after the answer only goes on the card.
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 10);
+        let late = get();
+        assert_eq!((late.phase, late.counted()), (answered.phase, 2));
+        assert!(late.gate.pending.is_some(), "still cannot pass");
+        assert_eq!(
+            late.steps.last().unwrap().text.as_deref(),
+            Some(guard::confirmed_late().as_str())
+        );
+        desk.drive(&lines, 11);
+        assert_eq!(status(&desk, 11).0, "open");
+    }
+
+    /// L3 P1-10 B: a 思维评审's close to words never known to have gone in
+    /// does not end it.
+    #[test]
+    fn a_thinking_close_to_words_never_known_to_have_gone_in_does_not_end_it() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = thinking(&desk, &lines);
+        desk.observe(
+            &turn("complete", "1. 还要深化\n评审出口：继续深化\n结论：需修改"),
+            3,
+        );
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        let title = "思维评审｜方案 A";
+        let sent = desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            title,
+            None,
+            "深化后的送审包",
+            false,
+            5,
+        );
+        assert!(sent.is_err());
+        lines.send_fails.set(false);
+        desk.observe(
+            &turn("complete", "1. 论证完整\n评审出口：成熟退出\n结论：通过"),
+            6,
+        );
+        desk.drive(&lines, 7);
+        assert_eq!(status(&desk, 7).0, "open");
+        // The person sends it back by hand: held back, not closed.
+        desk.act(&lines, &handoff.id, "back", 8).unwrap();
+        assert_eq!(status(&desk, 8).0, "open");
+        let back = last_reply_to_claude(&lines);
+        assert!(
+            back.contains("没有放行") && back.contains(&guard::unconfirmed()),
+            "{back}"
+        );
+        assert!(desk.lock().get(&handoff.id).unwrap().live());
+    }
+
+    /// Fable review #9: a 思维评审 at its cap takes no more words without
+    /// the person's leave, as an engineering one.
+    #[test]
+    fn a_thinking_review_at_its_cap_takes_no_more_words() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        thinking(&desk, &lines);
+        let deepen = "1. 还要深化\n评审出口：继续深化\n结论：需修改";
+        let title = "思维评审｜方案 A";
+        desk.observe(&turn("complete", deepen), 3);
+        desk.drive(&lines, 4);
+        desk.start(&lines, "s1", Some("/w"), title, None, "第二版", false, 5)
+            .unwrap();
+        desk.observe(&turn("complete", deepen), 6);
+        desk.drive(&lines, 7);
+        let more = desk.start(&lines, "s1", Some("/w"), title, None, "第三版", false, 8);
+        assert_eq!(more.err(), Some(budget_spent(2)));
+    }
+
+    /// Review round 4 P1-10: word that a mending went in clears only the
+    /// mending; a review never known to have gone in still holds its pass.
+    #[test]
+    fn a_mending_confirmed_never_clears_a_review_still_unsure() {
+        let (_temp, desk) = desk_of(5);
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        desk.observe(&reply_as(asked(), "1. 都好", "m2"), 6);
+        // 继续自动 takes the waiting answer up at once: it asks for the last lines.
+        desk.act(&lines, &handoff.id, "resume", 7).unwrap();
+        desk.drive(&lines, 8);
+        assert!(last_sent(&lines).2.contains("驿窗自动发送"));
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert!(kept.gate.mending.is_none() && kept.gate.pending.is_some());
+        desk.observe(&reply_as(asked(), PASS, "m3"), 9);
+        desk.drive(&lines, 10);
+        assert_eq!(status(&desk, 10).0, "open");
+        assert!(last_reply_to_claude(&lines).contains(&guard::unconfirmed()));
+    }
+
+    /// Review round 4 P1-11: an earlier round's words, the same for their
+    /// first 600 characters, never pass for the round on its way, nor for
+    /// the one gone in.
+    #[test]
+    fn an_earlier_rounds_words_never_pass_for_this_ones() {
+        let long = "同".repeat(700);
+        let (_temp, desk) = desk_of(5);
+        let lines = Fake::default();
+        let first = format!("{long}\n第一版");
+        let Started::Opening { handoff, .. } =
+            engineering(&desk, &lines, "s1", "/w", &first, 1).unwrap()
+        else {
+            panic!()
+        };
+        let a = asked();
+        desk.observe(&reply_as(a.clone(), FIX, "m1"), 3);
+        desk.drive(&lines, 4);
+        let counted = || desk.lock().get(&handoff.id).unwrap().counted();
+        // On its way and never confirmed: A answered again is not B's.
+        lines.send_fails.set(true);
+        assert!(engineering(&desk, &lines, "s1", "/w", &format!("{long}\n第二版"), 5).is_err());
+        lines.send_fails.set(false);
+        desk.observe(&reply_as(a.clone(), FIX, "regen-1"), 6);
+        assert_eq!(counted(), 1);
+        // Its own answer counts.
+        desk.observe(&reply_as(asked(), FIX, "m2"), 7);
+        assert_eq!(counted(), 2);
+        // Gone in, a third: A answered again is still not it.
+        desk.act(&lines, &handoff.id, "resume", 8).unwrap();
+        desk.drive(&lines, 9);
+        engineering(&desk, &lines, "s1", "/w", &format!("{long}\n第三版"), 10).unwrap();
+        desk.observe(&reply_as(a, FIX, "regen-2"), 11);
+        assert_eq!(counted(), 2);
+        desk.observe(&reply_as(asked(), FIX, "m3"), 12);
+        assert_eq!(counted(), 3);
+    }
+
+    /// Review round 4 P1-14, P2-16: words never known to have gone in when
+    /// the app restarted are told of once, as unknown; word of them after
+    /// their answer still goes on the card.
+    #[test]
+    fn words_unsure_at_a_restart_are_told_of_and_late_word_is_noted() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        let (request, words) = (lines.requests.borrow().last().unwrap().clone(), asked());
+        let told = sent_as(&lines, "reply").len();
+        drop(desk);
+        let mut desk = Desk::new(Some(temp.path().join("data")));
+        desk.since = 0;
+        assert!(desk.tell(&lines, 6));
+        let said = sent_as(&lines, "reply");
+        assert_eq!(said.len(), told + 1);
+        assert!(said.last().unwrap().1.contains("送达状态未知"), "{said:?}");
+        assert!(!desk.tell(&lines, 7), "told once");
+        // Its answer, then word it went in: noted, nothing else moves.
+        desk.observe(&reply_as(words, FIX, "m2"), 8);
+        let before = desk.lock().get(&handoff.id).cloned().unwrap();
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 9);
+        let after = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            (after.phase, after.counted()),
+            (before.phase, before.counted())
+        );
+        assert_eq!(
+            after.steps.last().unwrap().text.as_deref(),
+            Some(guard::confirmed_late().as_str())
+        );
+        // The same word again, here or after another restart: noted once
+        // (round 5 P2-16).
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 10);
+        drop(desk);
+        let desk = Desk::new(Some(temp.path().join("data")));
+        desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 11);
+        let again = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(again.steps.len(), after.steps.len());
+    }
+
+    /// Review round 4 P1-14: an answer come before the notice went makes it
+    /// out of date.
+    #[test]
+    fn an_answer_before_the_notice_leaves_nothing_to_tell() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(true);
+        assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+        lines.send_fails.set(false);
+        let words = asked();
+        drop(desk);
+        let mut desk = Desk::new(Some(temp.path().join("data")));
+        desk.since = 0;
+        desk.observe(&reply_as(words, FIX, "m2"), 6);
+        let told = sent_as(&lines, "reply").len();
+        desk.tell(&lines, 7);
+        assert_eq!(sent_as(&lines, "reply").len(), told);
+    }
+
+    /// Review round 5 P1-17: an answer to the ask to mend, come while its
+    /// send gave up waiting, is taken all the same: counted as a mending,
+    /// and still held back.
+    #[test]
+    fn an_answer_come_while_a_mending_send_gives_up_is_taken() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", "1. 都好"), 3);
+        lines.send_fails.set(true);
+        lines.on_send = Some(Box::new(|| {
+            assert!(
+                !desk.observe(&reply_as(asked(), PASS, "m2"), 4),
+                "held till the send is done"
+            );
+        }));
+        desk.drive(&lines, 4);
+        lines.on_send = None;
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(kept.last_reply().and_then(|s| s.key.as_deref()), Some("m2"));
+        assert_eq!(kept.counted(), 1, "a mending is no round");
+        assert!(kept.gate.mending.as_ref().is_some_and(|m| m.answered));
+        desk.drive(&lines, 5);
+        assert_eq!(status(desk, 5).0, "open");
+    }
+
+    /// Review round 5 P1-18: a review whose handoff ended while it was made
+    /// ready keeps nothing and sends nothing.
+    #[test]
+    fn a_review_whose_handoff_ended_meanwhile_does_not_go() {
+        let (_temp, desk) = desk();
+        let desk: &'static Desk = Box::leak(Box::new(desk));
+        let mut lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        ruled(desk, &lines, "s1", "L2", None, 5).unwrap();
+        desk.observe(&reply_as(asked(), FIX, "m2"), 6);
+        desk.drive(&lines, 7);
+        // Past the cap, while who began the turn is read, another hand ends it.
+        let id: &'static str = Box::leak(handoff.id.clone().into_boxed_str());
+        lines.on_opener = Some(Box::new(move || {
+            let mut book = desk.lock();
+            if let Some(h) = book.list.iter_mut().find(|h| h.id == id) {
+                h.status = Status::Closed;
+            }
+        }));
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        let sends = lines.sent.borrow().len();
+        let refused = ruled(desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9);
+        assert_eq!(refused.err(), Some(guard::moved_meanwhile()));
+        assert_eq!(lines.sent.borrow().len(), sends);
+        assert!(desk.lock().get(id).unwrap().gate.pending.is_none());
+    }
+
+    /// Review round 4 P1-15: the ask to mend that cannot be kept first
+    /// leaves the handoff as it was, and does not go.
+    #[test]
+    fn a_mending_that_cannot_be_kept_first_does_not_go() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        desk.observe(&turn("complete", "1. 都好"), 3);
+        let file = temp
+            .path()
+            .join("data")
+            .join("chatgpt")
+            .join("handoffs.json");
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir_all(file.join("in-the-way")).unwrap();
+        let sends = lines.sent.borrow().len();
+        desk.drive(&lines, 4);
+        std::fs::remove_dir_all(&file).unwrap();
+        assert_eq!(lines.sent.borrow().len(), sends);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert!(kept.steps.iter().all(|s| s.kind != StepKind::Format));
+        assert_eq!(kept.phase, Phase::Replied);
+        assert!(kept.gate.mending.is_none());
+    }
+
+    /// Review round 4 P1-13: a 思维评审 at its cap goes on only with the
+    /// person's word; begun again here after it ended itself, too.
+    #[test]
+    fn a_thinking_review_past_its_cap_needs_the_persons_word() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let first = thinking(&desk, &lines);
+        let deepen = "1. 还要深化\n评审出口：继续深化\n结论：需修改";
+        let title = "思维评审｜方案 A";
+        desk.observe(&turn("complete", deepen), 3);
+        desk.drive(&lines, 4);
+        desk.start(&lines, "s1", Some("/w"), title, None, "第二版", false, 5)
+            .unwrap();
+        desk.observe(&turn("complete", deepen), 6);
+        desk.drive(&lines, 7);
+        let leave = |now| {
+            let rule = Rule {
+                extra: Some("常浩要求再评一轮".into()),
+                ..Rule::default()
+            };
+            desk.start_ruled(
+                &lines,
+                "s1",
+                Some("/w"),
+                title,
+                None,
+                "第三版",
+                false,
+                &rule,
+                now,
+            )
+        };
+        // The agent's own word is no leave.
+        *lines.opener.borrow_mut() = None;
+        assert_eq!(leave(8).err(), Some(leave_unheard()));
+        // Ended by itself after a day: begun again here, still not settled.
+        let idle = 9 + handoffs::IDLE_END_MS + 1;
+        assert!(desk.change(|book| book.idle(idle, "闲置结束")));
+        let again = desk.start(
+            &lines,
+            "s1",
+            Some("/w"),
+            title,
+            None,
+            "重开",
+            false,
+            idle + 1,
+        );
+        assert_eq!(again.err(), Some(guard::top_unsettled(title)));
+        // The person's word lets it go on, counted from one.
+        *lines.opener.borrow_mut() = Some((Opener::Person, idle + 2));
+        let Started::Opening { handoff, .. } = desk
+            .start(
+                &lines,
+                "s1",
+                Some("/w"),
+                title,
+                None,
+                "重开",
+                false,
+                idle + 3,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_ne!(handoff.id, first.id);
+    }
+
+    /// L3 P1-10 C: PostPane's ask to mend the last lines, never known to
+    /// have gone in, cannot let the mended pass end the review.
+    #[test]
+    fn a_mending_never_known_to_have_gone_in_cannot_pass() {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", "1. 都好"), 3);
+        lines.send_fails.set(true);
+        desk.drive(&lines, 4);
+        lines.send_fails.set(false);
+        assert!(lines
+            .sent
+            .borrow()
+            .last()
+            .unwrap()
+            .2
+            .contains("驿窗自动发送"));
+        desk.observe(&turn("complete", PASS), 5);
+        desk.drive(&lines, 6);
+        assert_eq!(status(&desk, 6).0, "open");
+    }
+
+    /// L3 P1-10 D: words that cannot be kept on disk first do not go.
+    #[test]
+    fn a_review_that_cannot_be_kept_first_does_not_go() {
+        let (temp, desk) = desk();
+        let lines = Fake::default();
+        ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+        desk.observe(&turn("complete", FIX), 3);
+        desk.drive(&lines, 4);
+        // A folder where the book is kept: it cannot be written over.
+        let file = temp
+            .path()
+            .join("data")
+            .join("chatgpt")
+            .join("handoffs.json");
+        std::fs::remove_file(&file).unwrap();
+        std::fs::create_dir_all(file.join("in-the-way")).unwrap();
+        let sends = lines.sent.borrow().len();
+        let refused = ruled(&desk, &lines, "s1", "L2", None, 5);
+        std::fs::remove_dir_all(&file).unwrap();
+        assert_eq!(
+            refused.err(),
+            Some(guard::not_kept("The handoffs could not be saved"))
+        );
+        assert_eq!(lines.sent.borrow().len(), sends);
+        let h = desk.lock().list.last().cloned().unwrap();
+        assert!(h.gate.pending.is_none(), "left as it was");
     }
 
     #[test]
@@ -4060,12 +5505,18 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
-        desk.observe(&turn("complete", "1. 原子写入\n结论：需修改"), 3);
+        desk.observe(
+            &turn(
+                "complete",
+                "1. 原子写入\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
+            3,
+        );
         desk.drive(&lines, 4);
-        assert!(last_reply_to_claude(&lines).contains("最多 2 轮"));
+        assert!(last_reply_to_claude(&lines).contains("最后一轮"));
         ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n结论：需修改","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             6,
         );
         desk.drive(&lines, 7);
@@ -4075,7 +5526,25 @@ mod tests {
             ruled(&desk, &lines, "s1", "L2", None, 8).err(),
             Some(budget_spent(2))
         );
+        // The agent's own word is no leave (P1-06): not told who began the
+        // turn, the words PostPane sent back, or a turn begun before them.
         let sends = lines.sent.borrow().len();
+        let back = last_reply_to_claude(&lines);
+        for turn in [
+            None,
+            Some((Opener::Plugin(back), 8)),
+            Some((Opener::Person, 6)),
+        ] {
+            *lines.opener.borrow_mut() = turn;
+            assert_eq!(
+                ruled(&desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9).err(),
+                Some(leave_unheard())
+            );
+        }
+        assert_eq!(lines.sent.borrow().len(), sends);
+        // Words from outside after them are: the person's, or another
+        // agent's in their name.
+        *lines.opener.borrow_mut() = Some((Opener::Plugin("常浩：再审一次".into()), 8));
         let Started::Sent { handoff, .. } =
             ruled(&desk, &lines, "s1", "L2", Some("常浩要求再审一次"), 9).unwrap()
         else {
@@ -4083,6 +5552,8 @@ mod tests {
         };
         assert_eq!(lines.sent.borrow().len(), sends + 1);
         assert_eq!((handoff.extra, handoff.auto), (1, true));
+        assert_eq!(handoff.counted(), 0, "a new leave counts from one");
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "claude|s1");
     }
 
     #[test]
@@ -4090,7 +5561,13 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
-        desk.observe(&turn("complete", "1. 原子写入\n结论：需修改"), 3);
+        desk.observe(
+            &turn(
+                "complete",
+                "1. 原子写入\n受审版本：0123456\n审查出口：返修\n结论：需修改",
+            ),
+            3,
+        );
         // Round 2 from another Claude session (SBX-8): a new handoff that
         // carries round 1.
         let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s2", "L2", None, 4).unwrap()
@@ -4098,8 +5575,12 @@ mod tests {
             panic!("another session opens its own");
         };
         assert_eq!(handoff.carried, 1);
+        // The new conversation opens with PostPane's note on it, as kept:
+        // it went with the words, not only into the record (#356 merge).
+        let opening = asked().unwrap();
+        assert!(opening.contains("【驿窗附注】"), "{opening}");
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n结论：需修改","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"还差\n受审版本：0123456\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
             5,
         );
         desk.drive(&lines, 6);
@@ -4116,7 +5597,39 @@ mod tests {
             ruled(&desk, &lines, "s3", "L2", None, 7).err(),
             Some(budget_spent(2))
         );
-        assert!(ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).is_ok());
+        // Leave for a new handoff is heard since the chain last went back.
+        let back = last_reply_to_claude(&lines);
+        for turn in [
+            None,
+            Some((Opener::Plugin(back), 8)),
+            Some((Opener::Person, 5)),
+        ] {
+            *lines.opener.borrow_mut() = turn;
+            assert_eq!(
+                ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).err(),
+                Some(leave_unheard())
+            );
+        }
+        // A Codex thread's leave is read from its own turn (#283).
+        *lines.opener.borrow_mut() = None;
+        let codex = Rule {
+            risk: Some("L2".into()),
+            extra: Some("常浩授权".into()),
+            doer: Some(CODEX.into()),
+            ..Rule::default()
+        };
+        let brief = format!("{PR}\nhead_sha {HEAD}\n改动");
+        let refused = desk.start_ruled(&lines, "t9", None, "t", None, &brief, false, &codex, 9);
+        assert_eq!(refused.err(), Some(leave_unheard()));
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "codex|t9");
+        *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+        let Started::Opening { handoff, .. } =
+            ruled(&desk, &lines, "s3", "L2", Some("常浩授权"), 8).unwrap()
+        else {
+            panic!("a third session opens its own");
+        };
+        assert_eq!((handoff.extra, handoff.counted()), (1, 0));
+        assert_eq!(lines.opener_asked.borrow().last().unwrap(), "claude|s3");
     }
 
     #[test]
@@ -4127,7 +5640,7 @@ mod tests {
         desk.observe(
             &turn(
                 "complete",
-                "缺复现日志\n审查出口：证据不足暂停\n结论：需修改",
+                "缺复现日志\n受审版本：0123456\n审查出口：证据不足暂停\n结论：需修改",
             ),
             3,
         );
@@ -4140,10 +5653,16 @@ mod tests {
             panic!("it goes into the open conversation");
         };
         assert!(handoff.auto);
-        assert_eq!(handoff.counted(), 0, "the paused review is not counted");
+        assert_eq!(handoff.counted(), 1, "the paused review counts (#347)");
         // A way out that does not go with its verdict stops it.
         desk.observe(
-            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：通过\n结论：需修改","messageId":"m2","prompt":asked()}),
+            &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"受审版本：0123456\n审查出口：通过\n结论：需修改","messageId":"m2","prompt":asked()}),
+            6,
+        );
+        mend(
+            &desk,
+            &lines,
+            "受审版本：0123456\n审查出口：通过\n结论：需修改",
             6,
         );
         assert!(desk.drive(&lines, 7));
@@ -4163,7 +5682,10 @@ mod tests {
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
         desk.act(&lines, &handoff.id, "pause", 3).unwrap();
-        desk.observe(&turn("complete", "P2：补注释\n结论：通过"), 4);
+        desk.observe(
+            &turn("complete", "P2：补注释\n审查出口：通过\n结论：通过"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         assert_eq!(desk.projection(5)[0]["status"], "closed");
         assert_eq!(replies(&lines), 1);
@@ -4191,7 +5713,7 @@ mod tests {
             ..Fake::default()
         };
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：通过"), 4);
+        desk.observe(&turn("complete", "审查出口：通过\n结论：通过"), 4);
         assert!(desk.drive(&lines, 5));
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "closed");
@@ -4230,7 +5752,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         let (prompt, delivery) = last_back(&desk, 5);
         assert!(prompt.starts_with(&handoff.id), "{prompt}");
@@ -4249,7 +5774,10 @@ mod tests {
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let prompt = desk
             .lock()
             .get(&handoff.id)
@@ -4273,7 +5801,10 @@ mod tests {
         let (_temp, desk) = desk();
         let lines = Fake::default();
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         let ended = Fake {
             unreachable: true,
             ..Fake::default()
@@ -4311,7 +5842,10 @@ mod tests {
             ..Fake::default()
         };
         let handoff = opened(&desk, &Fake::default());
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         desk.drive(&lines, 5);
         let (prompt, _) = last_back(&desk, 5);
         left_by(&lines, &prompt, "expired", None);
@@ -4340,7 +5874,10 @@ mod tests {
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         desk.drive(&lines, 5);
         let (prompt, _) = last_back(&desk, 5);
         left_by(&lines, &prompt, "refused", Some("busy"));
@@ -4360,7 +5897,10 @@ mod tests {
             let (temp, desk) = self::desk();
             let lines = Fake::default();
             opened(&desk, &lines);
-            desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+            desk.observe(
+                &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+                4,
+            );
             desk.drive(&lines, 5);
             let back = lines.sent.borrow().last().unwrap().2.clone();
             *lines.opener.borrow_mut() = Some((opener(&back), 6));
@@ -4376,7 +5916,7 @@ mod tests {
             )
             .unwrap();
             desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"1. 还差一点\n结论：需修改","messageId":"m2","prompt":asked()}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"1. 还差一点\n审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
                 8,
             );
             desk.drive(&lines, 9);
@@ -4389,7 +5929,7 @@ mod tests {
         assert!(shown[0]["roundsFrom"].is_null());
         // It goes back as the end, left to the person (#316).
         assert_eq!(replies(&lines), 2);
-        assert!(last_sent(&lines).2.contains("审查预算已用完"));
+        assert!(last_sent(&lines).2.contains("到顶"));
         // The person's own words began it: round one again, back it goes.
         let (_temp, desk, lines) = round_two(|_| Opener::Person);
         let shown = desk.projection(9);
@@ -4402,12 +5942,15 @@ mod tests {
             let (temp, desk) = self::desk();
             let lines = Fake::default();
             opened(&desk, &lines);
-            desk.observe(&turn("complete", "1. 要超时\n结论：需修改"), 4);
+            desk.observe(
+                &turn("complete", "1. 要超时\n审查出口：返修\n结论：需修改"),
+                4,
+            );
             desk.drive(&lines, 5);
             desk.start(&lines, "s1", Some("/w"), "修登录", None, "第二轮", false, 7)
                 .unwrap();
             desk.observe(
-                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"结论：需修改","messageId":"m2","prompt":asked()}),
+                &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":"审查出口：返修\n结论：需修改","messageId":"m2","prompt":asked()}),
                 8,
             );
             desk.drive(&lines, 9);
@@ -4435,7 +5978,10 @@ mod tests {
         };
         lines.stopped.set(true);
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "1. 补测试\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 补测试\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         assert_eq!(replies(&lines), 0);
         assert!(
@@ -4488,7 +6034,7 @@ mod tests {
         lines.stopped.set(true);
         *lines.wake_fails.borrow_mut() = Some("权限模式是 default".into());
         opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         assert!(desk.drive(&lines, 5));
         let shown = desk.projection(5);
         assert_eq!(shown[0]["auto"], false);
@@ -4512,7 +6058,7 @@ mod tests {
         };
         lines.stopped.set(true);
         let handoff = opened(&desk, &lines);
-        desk.observe(&turn("complete", "结论：需修改"), 4);
+        desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
         desk.drive(&lines, 5);
         assert!(desk.woke_up(&handoff.id, Err("exit 1".into()), 9));
         let shown = desk.projection(9);
@@ -4534,7 +6080,7 @@ mod tests {
             let lines = Fake::default();
             lines.reply_fails.set(2);
             let handoff = opened(&desk, &lines);
-            desk.observe(&turn("complete", "结论：需修改"), 4);
+            desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
             assert!(desk.drive(&lines, 5));
             assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
             (temp, desk, lines, handoff)
@@ -4670,7 +6216,10 @@ mod tests {
         };
         desk.open(&lines, &handoff.id, "改动如下", project.as_deref(), || 2)
             .unwrap();
-        desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 4);
+        desk.observe(
+            &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+            4,
+        );
         assert!(desk.drive(&lines, 5));
         assert!(sent_as(&lines, "wake").is_empty());
         assert_eq!(sent_as(&lines, "codex").len(), 1, "queued for Codex");
@@ -4709,7 +6258,7 @@ mod tests {
         assert_eq!(desk.reread(&lines, started + QUIET_MS - 1), 0);
         assert_eq!(desk.reread(&lines, started + QUIET_MS), 1);
         // The answer told again is taken, once by its message id.
-        let told = json!({"type":"turn","phase":"complete","conversation":"c-new",
+        let told = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
             "reply":"1. 少一项\n结论：需修改","messageId":"m9","reread":true,"prompt":asked()});
         let answered = started + QUIET_MS + 1;
         assert!(desk.observe(&told, answered));
@@ -4755,10 +6304,10 @@ mod tests {
         let lines = Fake::default();
         let handoff = opened(&desk, &lines);
         let review = asked();
-        let theirs = json!({"type":"turn","phase":"complete","conversation":"c-new",
+        let theirs = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
             "prompt":"顺便问一下，周末天气怎么样？","reply":"晴。","messageId":"a4"});
         assert!(!desk.observe(&theirs, 3));
-        let unread = json!({"type":"turn","phase":"complete","conversation":"c-new",
+        let unread = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
             "prompt":null,"reply":"1. 少一项\n结论：需修改","messageId":"a5"});
         assert!(!desk.observe(&unread, 4));
         assert_eq!(
@@ -4767,7 +6316,7 @@ mod tests {
         );
         let log = std::fs::read_to_string(turns_path(&temp.path().join("data"))).unwrap();
         assert_eq!(log.matches("\"outcome\":\"unmatched\"").count(), 2);
-        let ours = json!({"type":"turn","phase":"complete","conversation":"c-new",
+        let ours = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
             "prompt":review,"reply":"1. 少一项\n结论：需修改","messageId":"a3","reread":true});
         assert!(desk.observe(&ours, 5));
         assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
@@ -4779,7 +6328,7 @@ mod tests {
     #[test]
     fn a_prompt_counts_only_as_the_whole_words_kept() {
         let complete = |prompt: &str, id: &str| {
-            json!({"type":"turn","phase":"complete","conversation":"c-new",
+            json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":asked(),
                 "prompt":prompt,"reply":"1. 少一项\n结论：需修改","messageId":id})
         };
         let open = |desk: &Desk, lines: &Fake, brief: &str| {
@@ -5133,11 +6682,14 @@ mod tests {
         assert!(!desk.tell(&lines, late + 2), "nothing more to tell");
         // ChatGPT answers the brief the opening carried.
         shown("改动如下");
-        assert!(desk.observe(&turn("complete", "结论：通过"), late + 3));
+        assert!(desk.observe(&turn("complete", GATE_PASS), late + 3));
         assert!(desk.drive(&lines, late + 4));
         assert_eq!(sent_as(&lines, "reply").len(), 2, "the answer went back");
         assert_eq!(desk.projection(late + 4)[0]["status"], "closed");
     }
+
+    /// A pass in the review gate's last lines (#347), with no pull request.
+    const GATE_PASS: &str = "1. 都好\n审查出口：通过\n结论：通过";
 
     /// Lines whose words back hold until let go: what else happens while a
     /// session is being told of trouble (review of #318, P2-03).
@@ -5148,6 +6700,9 @@ mod tests {
     impl Lines for Held {
         fn connected(&self) -> bool {
             true
+        }
+        fn pr_head(&self, _pr: &str) -> Result<String, String> {
+            Err("not read here".into())
         }
         fn open(&self, _: &str, _: Option<&str>, _: &str, _: &str) -> Result<String, String> {
             Err("not here".into())
@@ -5320,7 +6875,7 @@ mod tests {
         assert_eq!(last_step_text(&desk, late), halt);
         assert!(!desk.tell(&lines, late + 1), "told once");
         // ChatGPT answers after all: taken, and a pass goes back and ends it.
-        desk.observe(&turn("complete", "结论：通过"), late + 2);
+        desk.observe(&turn("complete", GATE_PASS), late + 2);
         assert_eq!(desk.projection(late + 2)[0]["phase"], "replied");
         assert!(desk.drive(&lines, late + 3));
         assert_eq!(sent_as(&lines, "reply").len(), 2);

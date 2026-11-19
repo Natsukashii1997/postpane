@@ -32,6 +32,9 @@ pub enum Trouble {
     NotOpened(String),
     /// ChatGPT has not answered in `REPLY_WAIT_MS`; the auto round trip stopped.
     NoAnswer,
+    /// Words were sent and never known to have gone in; the auto round
+    /// trip stopped (#347 round 4 P1-14).
+    Unconfirmed,
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -43,6 +46,8 @@ pub enum Cause {
     NotOpened,
     /// `overdue`: ChatGPT did not answer in time.
     NoAnswer,
+    /// `unconfirmed`: words sent were never known to have gone in.
+    Unconfirmed,
 }
 
 impl Step {
@@ -72,6 +77,10 @@ impl Handoff {
                 Trouble::NotOpened(self.error.clone().unwrap_or_default())
             }
             Cause::NoAnswer if self.live() && !self.auto => Trouble::NoAnswer,
+            // Its answer, come since, moved it on; so did word it went in.
+            Cause::Unconfirmed if self.live() && self.unanswered().is_some() => {
+                Trouble::Unconfirmed
+            }
             _ => return None,
         };
         Some((at, trouble))

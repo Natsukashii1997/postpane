@@ -515,3 +515,11 @@
 - 正确做法：测这类模块，在测试里用 Vite 加载：`createServer({ configFile: false, root: <包目录>, appType: "custom", server: { middlewareMode: true, hmr: false, watch: null } })` 后 `ssrLoadModule("/src/…")`，拿到模块再 `close()`（中间件模式不开端口）。包目录和仓库里别处的文件用 `join(import.meta.dirname, …)` 拼路径，写成 `new URL("..", import.meta.url)` 会被 `check:packages` 当成越出包（本轮第一次全量就挂在这里）。写法见 `src/packages/hud/test/director-cases.test.ts`。不要为了能测去改 `model.ts` 的引用链。
 - 证据：本轮会话；`director-cases.test.ts` 用 Vite 加载后 `ℹ pass 1`。
 - 升级：〔提醒〕未升级（2026-11-19：只有一处用到，先记坑）。
+
+## L-54 撤修复验证用 `cp` 备份、`mv` 还原，文件修改时间退回去，cargo 不重编、跑的还是撤改版（2026-11-18）
+
+- 现象：#348 返修逐项「撤一处修复 → 跑对应测试 → 还原」，几项都如预期失败；全部还原后再跑全量，那条落盘失败的新测试一直失败，代码却已是对的。
+- 根因：`cp f f.bak` 给备份打上当时的修改时间，改完再 `mv f.bak f` 还原，文件修改时间回到撤改之前，早于刚编出的撤改版产物；cargo 只比修改时间，认为不用重编，跑的还是撤改版（同 G-23 一类：cargo 只看修改时间）。
+- 正确做法：还原后马上 `touch` 还原的文件（或改用 `git checkout -- <文件>` / `git stash` 一类会写新修改时间的方式），再跑全量；撤修复验证的结论照常有效，因为每一次撤改都写了新修改时间、触发了重编。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/revert-checks.log`；`touch` 后全量 `cargo test -p agent-hud-host` 135/0。
+- 升级：〔提醒〕未升级。可提议并进全局 G-23（同一根因）。

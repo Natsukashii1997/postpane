@@ -31,9 +31,17 @@ impl Desk {
             if taken || !lines.stopped(&session) || !lines.withdraw(&session, &prompt) {
                 continue;
             }
+            // The words as they were queued, a pass held back by its commit
+            // too (L3 P1-09); else as an answer goes back now.
             let Some(text) = self.lock().get(&id).and_then(|handoff| {
+                let queued = handoff
+                    .steps
+                    .iter()
+                    .rev()
+                    .find(|s| s.prompt.as_deref() == Some(prompt.as_str()))
+                    .and_then(|s| s.text.clone());
                 let reply = handoff.last_reply()?.text.clone()?;
-                Some(back_text(handoff, &reply))
+                Some(queued.unwrap_or_else(|| back_text(handoff, &reply)))
             }) else {
                 continue;
             };

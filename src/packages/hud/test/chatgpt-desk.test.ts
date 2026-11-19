@@ -66,7 +66,8 @@ test("the owner's own chats go on top, reviews below, each once", () => {
   assert.equal(desk.today, 4);
   assert.deepEqual(
     desk.reviews.map((r) => [r.id, r.phase, r.round]),
-    [["h1", "returned", "1/2"]],
+    // The cap unset: five (#347).
+    [["h1", "returned", "1/5"]],
   );
   assert.deepEqual(desk.stub, { text: "在答", tone: "blue", review: true });
 });

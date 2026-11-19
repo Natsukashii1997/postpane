@@ -35,6 +35,8 @@ const handoff = (extra: Partial<Handoff> = {}): Handoff => ({
   createdAt: T,
   updatedAt: T,
   rounds: 0,
+  // The cap these tests were written for: two reviews (#347 made it a setting).
+  limit: 2,
   phase: "delivered",
   phaseAt: T + minute,
   steps: [
@@ -451,20 +453,42 @@ test("the relay legend writes in the word ink, a missing verdict in red (#308)",
   assert.equal(relayLegendInks(light, true, true).verdict, light.red);
 });
 
-test("an engineering review counts by its risk level and its pull request (#217)", () => {
-  // L1 gets one review: once asked, nothing is left for 「再审一轮」.
-  const l1 = handoff({ risk: "L1", phase: "returned" });
-  assert.deepEqual(round(l1), { at: 1, of: 1 });
-  assert.ok(!actions(l1).includes("again"));
+test("the review cap, not the risk level, sets the rounds (#217, #347)", () => {
+  const answered = (extra: Partial<Handoff>) =>
+    handoff({
+      phase: "returned",
+      steps: [
+        ...handoff().steps!,
+        step("reply", T + 5 * minute),
+        step("back", T + 6 * minute),
+      ],
+      ...extra,
+    });
+  // Unset, the cap is five, whatever the level.
+  const l1 = answered({ risk: "L1", limit: undefined });
+  assert.deepEqual(round(l1), { at: 1, of: 5 });
+  assert.ok(actions(l1).includes("again"));
   // A follow-up from another session carries the first one's review.
-  const carried = handoff({ risk: "L2", carried: 1, phase: "returned" });
+  const carried = answered({ risk: "L2", carried: 1 });
   assert.deepEqual(round(carried), { at: 2, of: 2 });
   assert.ok(!actions(carried).includes("again"));
-  // The person's leave adds one.
-  const allowed = handoff({ risk: "L1", extra: 1, phase: "returned" });
-  assert.deepEqual(round(allowed), { at: 1, of: 2 });
-  assert.ok(actions(allowed).includes("again"));
-  // None named: two, as before.
+  // An answer only mending the last lines is no review of its own.
+  const mended = answered({
+    steps: [
+      ...handoff().steps!,
+      step("reply", T + 5 * minute),
+      step("format", T + 6 * minute),
+      step("reply", T + 7 * minute),
+    ],
+  });
+  assert.deepEqual(round(mended), { at: 1, of: 2 });
+  assert.equal(
+    timeline(mended, T + 8 * minute, true).find((row) =>
+      row.title.includes("补写"),
+    )?.who,
+    "post",
+  );
+  // Asked and not answered yet: the round it is in.
   assert.deepEqual(round(handoff()), { at: 1, of: 2 });
 });
 
