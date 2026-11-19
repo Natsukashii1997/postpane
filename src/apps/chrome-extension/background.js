@@ -153,10 +153,12 @@ async function open(text, project) {
     watched.add(page.conversation);
     await chrome.storage.local.set({ watched: [...watched] });
     statusSoon();
-    const { title } = await chrome.tabs
-      .sendMessage(tab.id, { op: "state" })
-      .catch(() => ({}));
-    return { ok: true, conversation: page.conversation, title: title || "" };
+    const state =
+      (await chrome.tabs.sendMessage(tab.id, { op: "state" }).catch(() => null)) ?? {};
+    // The prompt's id ties its answer to it (#410); a new conversation's
+    // page may only show it once it has its address.
+    const promptId = result.promptId ?? state.promptId ?? null;
+    return { ok: true, conversation: page.conversation, title: state.title || "", ...(promptId && { promptId }) };
   } finally {
     opening.delete(tab.id);
   }

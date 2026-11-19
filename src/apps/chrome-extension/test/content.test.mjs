@@ -103,6 +103,34 @@ test("after its own send, a reply counts even if no stop button was seen", async
   );
 });
 
+// #410: an answer to a brief ChatGPT made an attachment is told, with the
+// id of the prompt it answers, so PostPane holds it to the words it sent.
+test("a reply to a prompt ChatGPT made an attachment is told with that prompt's id", async () => {
+  const page = await open();
+  await page.evaluate(async () => {
+    const result = await new Promise((resolve) =>
+      window.listener({ op: "submit", text: "很长的送审" }, {}, resolve),
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="y:0:user" data-chatgpt-search-message-ids="p7"><span><span>粘贴的文本.txt</span><span>文档</span></span></div>' +
+          '<div data-chatgpt-search-unit-key="y:2:assistant" data-chatgpt-search-message-ids="m7"><p data-d-component="text">复核结论</p></div>',
+      );
+  });
+  await page.waitForTimeout(1500);
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.deepEqual(
+    done.map((m) => [m.messageId, m.promptId, m.prompt]),
+    [["m7", "p7", "粘贴的文本.txt文档"]],
+  );
+});
+
 test("an empty placeholder is not the reply that fills it later", async () => {
   // 2026-11-07 h1a1b1fed89e00: ChatGPT put an empty reply up first, the
   // extension reported it as finished, and the answer that then filled the
