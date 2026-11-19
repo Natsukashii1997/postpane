@@ -28,6 +28,10 @@ const COLLAPSE: &str = "postpane-notes://collapse";
 const COLLAPSE_SCRIPT: &str = r#"(()=>{const sheet=new CSSStyleSheet();sheet.replaceSync(".fn-standalone-collapsed{visibility:hidden}");document.adoptedStyleSheets=[...document.adoptedStyleSheets,sheet];let folded=false;new MutationObserver(()=>{const now=!!document.querySelector(".fn-standalone-collapsed");if(now&&!folded)location.href="postpane-notes://collapse";folded=now;}).observe(document,{childList:true,subtree:true});})();"#;
 /// The page's own call for its host showing it again: the panel comes back.
 const RESTORE_SCRIPT: &str = "window.floatingNotesHost?.focus?.()";
+/// Run in the page each time the notes open again: it reloads the page once
+/// the Digital World app serves a new build, unless a note is being written
+/// (#419). Its cases are tested in `float_notes_refresh.test.mjs`.
+const REFRESH_SCRIPT: &str = include_str!("float_notes_refresh.js");
 /// Told to the HUD windows each time the notes show or hide, so the
 /// pendant's halo follows the window, a 收起 inside the page included (#224).
 const SHOWN_EVENT: &str = "float-notes:shown";
@@ -190,11 +194,16 @@ pub(crate) async fn toggle_float_notes(
     );
     let notes = match app.get_webview_window(LABEL) {
         Some(notes) => {
-            // Each opening looks again whether the Digital World app answers.
+            // Each opening looks again whether the Digital World app answers,
+            // and whether it has been updated since the page was loaded.
             let showing = notes.url().map_err(|error| error.to_string())?;
             let wanted = start_url()?;
             if showing.scheme() != wanted.scheme() {
                 notes.navigate(wanted).map_err(|error| error.to_string())?;
+            } else if is_digital_world(&showing) {
+                notes
+                    .eval(REFRESH_SCRIPT)
+                    .map_err(|error| error.to_string())?;
             }
             notes
         }
@@ -328,6 +337,16 @@ mod tests {
         assert!(!allowed(&collapse));
         assert!(COLLAPSE_SCRIPT.contains(COLLAPSE));
         assert!(!is_collapse(&PAGE.parse().unwrap()));
+    }
+
+    #[test]
+    fn reopening_checks_for_a_new_build_without_touching_a_note_being_written() {
+        assert!(REFRESH_SCRIPT.contains(r#"fetch("/", { cache: "no-store" })"#));
+        assert!(REFRESH_SCRIPT.contains("prepareCollapse"));
+        assert!(REFRESH_SCRIPT.contains("location.reload()"));
+        // The away note is not the notes page: it is never asked to reload.
+        assert!(!is_digital_world(&away_page().parse().unwrap()));
+        assert!(is_digital_world(&PAGE.parse().unwrap()));
     }
 
     #[test]

@@ -29,6 +29,7 @@
     "test:ts": "node --test \"src/packages/*/test/*.test.ts\"",
     "test:mcp": "node --test src/apps/mcp/test/*.test.mjs",
     "test:plugins": "node --test src/crates/platform/src/deepseek_plugin/*.test.mjs",
+    "test:host": "node --test src/crates/host/src/*.test.mjs",
     "test:extension": "node --test src/apps/chrome-extension/test/*.test.mjs",
     "test:core": "cargo test --workspace",
     "mcp": "pnpm --filter @agent-hud/mcp run start"

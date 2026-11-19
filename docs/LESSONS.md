@@ -14,9 +14,9 @@
 - 能用机器判定的：写成测试或脚本（如 `scripts/check-rules.mjs`），条目注明。
 - 换个项目也成立的（不依赖本项目的业务、页面、发布脚本）：提议提升到全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md`，写成 G-xx；原条目保留，末尾加一行「提升：已提升为全局 G-xx（日期）」。只出提案，用户批准才写。
 - 条目超过约 30 条时整理一次：已升级、且之后没再犯的，归档到 `docs/history/`。
-- 「升级」一行每条都要有，开头写层级词〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，再写状态（未升级 / 不升级 / 部分升级 / 已升级）、日期、编号和去处；还没升级的写「〔提醒〕未升级。」。层级变了就改标签，原来的记录保留。层级的含义和怎么选，以全局 LESSONS「怎么升级」为准。`scripts/check-rules.mjs` 的 `lessons` 规则会查。
+- 「升级」一行每条都要有，开头写层级词〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，再写状态（未升级 / 不升级 / 部分升级 / 已升级 / 关闭）、日期、编号和去处；还没升级的写「〔提醒〕未升级。」。层级变了就改标签，原来的记录保留。层级的含义和怎么选，以全局 LESSONS「怎么升级」为准。`scripts/check-rules.mjs` 的 `lessons` 规则会查。
 - 本项目没有提交前钩子，也没有 CI（GitHub Actions 已停用），`tauri build` 的 `beforeBuildCommand` 只生成资源、构建前端，不跑测试（2026-11-19 核实）：只写成测试的条目标〔提醒〕部分升级，不算〔机检〕。算〔机检〕的只有每次都必经、自动报错的检查：装机脚本 `install.sh` 里的步骤（装机锁、归属检查、接力检查、装后冒烟），以及本机 Claude Code 的 Bash 预检钩子（agent-kit `hooks/bash-precheck.mjs`）。
-- 坑本身已被代码消除的，状态后加「关闭」并写证据，如「〔结构〕已升级，关闭（…）」；靠测试守住的写明测试名和「未接进必经检查」。确认不升级的写「〔提醒〕不升级（理由）」。（2026-11-19，积压清单组 15、16）
+- 坑本身已被代码消除、不再需要升级的，状态写「关闭」：「〔层级〕关闭（日期，依据）：证据」，层级写现在靠什么守住，不和其他状态叠写（不写「已升级，关闭」）；靠测试守住、测试未接进必经检查的标〔提醒〕，写明测试名和「未接进必经检查」（2026-11-19 统一写法，同全局 LESSONS「怎么升级」，agent-kit#84）。确认不升级的写「〔提醒〕不升级（理由）」。（2026-11-19，积压清单组 15、16）
 
 ---
 
@@ -34,7 +34,7 @@
 - 根因：`bun build --compile` 产出的程序签名无效（`codesign -v` 报 `invalid signature`），macOS 启动即杀，退出码 137。测试里的替身程序起不来，中转程序就拿不到工具列表。
 - 正确做法：凡是 bun 编译出的程序，在 macOS 上编译后立刻 `codesign --force --sign - <文件>`。已在 `src/tooling/package-resources.mjs` 和 `src/apps/mcp/test/host-tools.test.mjs` 补上。
 - 证据：2026-11-04 实测，未签名的 bun 程序退出码 137，补签后正常输出；补签后 `test:mcp` 由 `ℹ fail 6` 变为 `ℹ pass 6` / `ℹ fail 0`。
-- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：本仓库只有两处 bun 编译，都编完立即补签：打包 `src/tooling/package-resources.mjs` 第 54～68 行（`--compile` 后在 macOS 上 `codesign --force --sign -`），MCP 测试替身 `src/apps/mcp/test/host-tools.test.mjs` 第 54～60 行；2026-11-19 `git grep -- --compile` 核实没有第三处。本机只有驿窗用 bun 编译，暂不提升。不覆盖：以后在别处新加的 bun 编译。 原记录：未升级。换个项目也成立，可提议提升为全局坑。
+- 升级：〔结构〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：本仓库只有两处 bun 编译，都编完立即补签：打包 `src/tooling/package-resources.mjs` 第 54～68 行（`--compile` 后在 macOS 上 `codesign --force --sign -`），MCP 测试替身 `src/apps/mcp/test/host-tools.test.mjs` 第 54～60 行；2026-11-19 `git grep -- --compile` 核实没有第三处。本机只有驿窗用 bun 编译，暂不提升。不覆盖：以后在别处新加的 bun 编译。 原记录：未升级。换个项目也成立，可提议提升为全局坑。 原写法：「〔结构〕已升级，关闭」（2026-11-19 统一写法）。
 
 ## L-03 安装时先删旧版，打包路径读错导致应用被删（2026-11-04）
 
@@ -42,7 +42,7 @@
 - 根因：那一行末尾带了大小「(106.23 MiB)」，路径不对；删旧版放在复制成功之前。另外 `pgrep -f "/Applications/PostPane.app/Contents/MacOS"` 会匹配到各会话起的 `agent-hud-mcp`、`agent-hud-engine`，不能用来判断应用本体是否已退出。
 - 正确做法：打包产物用固定路径 `target/release/bundle/macos/PostPane.app`（在 worktree 根目录下）；不先删，直接 `ditto <新版> /Applications/PostPane.app` 覆盖；判断本体是否退出用 `pgrep -f "Contents/MacOS/PostPane$"`。
 - 证据：2026-11-04 本轮安装，补跑 `ditto` 后成功，应用 22:25:58 重新启动；旧版备份在 `evidence/2026-11-04-receipt-quota/PostPane-before.app`。
-- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：装机只留 `.agents/skills/postpane-round/scripts/install.sh` 一种做法：产物用固定路径 `target/release/bundle/macos/PostPane.app`（第 33 行），`ditto` 直接覆盖、不先删（第 104 行），退出判断只认主程序本体 `Contents/MacOS/PostPane$`（第 18、97 行）（E-02）。不覆盖：不走脚本手敲命令。 原记录：未升级。
+- 升级：〔结构〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：装机只留 `.agents/skills/postpane-round/scripts/install.sh` 一种做法：产物用固定路径 `target/release/bundle/macos/PostPane.app`（第 33 行），`ditto` 直接覆盖、不先删（第 104 行），退出判断只认主程序本体 `Contents/MacOS/PostPane$`（第 18、97 行）（E-02）。不覆盖：不走脚本手敲命令。 原记录：未升级。 原写法：「〔结构〕已升级，关闭」（2026-11-19 统一写法）。
 
 ## L-04 云端会话列表里也有本机会话，不过滤会重复（2026-11-05）
 
@@ -67,7 +67,7 @@
 - 正确做法：装完新包先截屏看有没有这个权限弹窗，有就请常浩点「允许」（隐私权限只能本人点）；不要误判成改动把数据读取弄坏了，也不要反复重装。
 - 根治（2026-11-06，#134）：`tauri.macos.conf.json` 改用登录钥匙串里的本机自用证书 `PostPane Local Signing` 签名，系统改按「标识 `app.postpane.mac` + 证书」认应用（`codesign -d -r- /Applications/PostPane.app` 应显示 `certificate leaf = H"b773068e…"`，不再是 `cdhash`）。换签名后第一次装还要点一次「允许」，之后重装不再弹。证书没信任设置，`security find-identity -v` 不列它属正常，签名照样可用。换电脑或证书丢了打包会报找不到身份：用 openssl 生成带 `extendedKeyUsage = critical,codeSigning` 的自签证书，`security import <p12> -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign` 导入，名字仍叫 `PostPane Local Signing`；证书一换，要再点一次「允许」。
 - 证据：2026-11-05 19:32 截屏 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-gap/d1s.png`，采样 `sample.txt` 同目录。
-- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/apps/desktop/src-tauri/tauri.macos.conf.json` 第 5 行固定用 `PostPane Local Signing` 签名（E-05 `9f9d7a5`），重装不再换签名、不再重弹文稿权限；`install.sh` 第 109 行装后回读证书。 原记录：未升级。
+- 升级：〔结构〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/apps/desktop/src-tauri/tauri.macos.conf.json` 第 5 行固定用 `PostPane Local Signing` 签名（E-05 `9f9d7a5`），重装不再换签名、不再重弹文稿权限；`install.sh` 第 109 行装后回读证书。 原记录：未升级。 原写法：「〔结构〕已升级，关闭」（2026-11-19 统一写法）。
 
 ## L-07 读取层去掉一个 Claude 额度窗口，旧行还会在侧栏挂 30 天（2026-11-05）
 
@@ -435,7 +435,7 @@
 - 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
 - 2026-11-14 收窄（常浩选甲）：同一天驿窗改成重启后自动往返接着跑，重启不再暂停，上面的根因只剩「回信刚到、正在转回」这一刻（`phase` 为 `replied`）；`live-auto-relays.mjs` 只查这一种，平时开着自动往返也照装。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
-- 升级：〔机检〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`install.sh` 每次装机必经，第 71～79 行在备份（第 90 行）、退出旧应用之前调 `live-auto-relays.mjs`，有回信正在转回的接力就 exit 3、什么都不动，问过常浩才加 `--force`；脚本的判断由 `tests/postpane-round.test.mjs`「live-auto-relays 只列…」两条守住，`install.sh` 里 exit 3 这条路没有端到端测试。不覆盖：不走 `install.sh` 手动装。上一版：〔机检〕已升级（2026-11-19 补写升级行）。
+- 升级：〔机检〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`install.sh` 每次装机必经，第 71～79 行在备份（第 90 行）、退出旧应用之前调 `live-auto-relays.mjs`，有回信正在转回的接力就 exit 3、什么都不动，问过常浩才加 `--force`；脚本的判断由 `tests/postpane-round.test.mjs`「live-auto-relays 只列…」两条守住，`install.sh` 里 exit 3 这条路没有端到端测试。不覆盖：不走 `install.sh` 手动装。上一版：〔机检〕已升级（2026-11-19 补写升级行）。 原写法：「〔机检〕已升级，关闭」（2026-11-19 统一写法）。
 
 ## L-45 预览脚手架的 `?still` 用展开复制伪造 `matchMedia`，小人全退成静态图（2026-11-14）
 
@@ -443,7 +443,7 @@
 - 根因：`{ ...real(q), matches: true }` 只复制自有属性，`MediaQueryList` 的 `addEventListener` 等方法在原型上，展开后就没了；`BotMark.tsx` 订阅减少动效变化时抛错，被兜底成静态图。
 - 正确做法：用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`，方法照原对象绑定（`src/packages/hud/preview/main.tsx`）。以后预览一律用常设的场景预览台（`pnpm --filter @agent-hud/hud run scenes`），不再另抄脚手架；截图前用 `document.querySelectorAll("canvas").length` 确认小人画布在。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`。
-- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：常设场景预览台 `src/packages/hud/preview/main.tsx` 第 36～49 行的 `?still` 用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`；仓库里已没有 `{ ...real(q) }` 那种展开复制（2026-11-19 `git grep` 核实），旧脚手架只留在证据目录里。不覆盖：从证据目录把旧脚手架抄回来用（组 12 另在 `pnpm run check` 开头拦 `src/` 下没提交的文件）。上一版：〔提醒〕未升级（2026-11-19 补层级：常设场景预览台已改用 `Proxy`，但仍可另抄脚手架）。
+- 升级：〔结构〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：常设场景预览台 `src/packages/hud/preview/main.tsx` 第 36～49 行的 `?still` 用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`；仓库里已没有 `{ ...real(q) }` 那种展开复制（2026-11-19 `git grep` 核实），旧脚手架只留在证据目录里。不覆盖：从证据目录把旧脚手架抄回来用（组 12 另在 `pnpm run check` 开头拦 `src/` 下没提交的文件）。上一版：〔提醒〕未升级（2026-11-19 补层级：常设场景预览台已改用 `Proxy`，但仍可另抄脚手架）。 原写法：「〔结构〕已升级，关闭」（2026-11-19 统一写法）。
 
 ## L-46 Claude 会话挂着后台命令等通知，侧栏却出 REPLY（2026-11-14）
 
@@ -451,7 +451,7 @@
 - 根因：`claude/transcript.rs` 看到 `stop_reason: end_turn` 就把回合记为 completed。一轮结束不等于会话停下：Claude Code 会在后台命令结束（完成、失败、被杀、停止）时送一条 `<task-notification>`（空闲时是 `origin.kind = task-notification` 的用户消息，忙时是 `queued_command` 附件）唤醒它。原来只有「子 agent 还在写记录」会压住 completed，后台 Bash 不算。
 - 正确做法：判断 Claude 会话「做完了没有」，除了回合结束，还要看有没有没收到通知的后台命令（`toolUseResult.backgroundTaskId` 记入，通知里的 `<task-id>` 或 `TaskStop` 移除），在 `src/crates/agents/src/claude/background.rs`；兜底同子 agent，启动 30 分钟（`ABANDONED_MS`）仍没通知就照常算完成。
 - 证据：`claude::background::tests` 4 项；去掉修复后其中 2 项变红。
-- 升级：〔提醒〕部分升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/crates/agents/src/claude/background.rs` 记下没收到通知的后台命令，`src/crates/agents/src/transcript/live.rs` 第 524、567、625 行判断「做完没有」时都经 `with_background`；靠测试 `claude::background::tests` 4 条守住（去掉修复后其中 2 条变红，见上方证据），测试未接进必经检查。 原记录：未升级。
+- 升级：〔提醒〕关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/crates/agents/src/claude/background.rs` 记下没收到通知的后台命令，`src/crates/agents/src/transcript/live.rs` 第 524、567、625 行判断「做完没有」时都经 `with_background`；靠测试 `claude::background::tests` 4 条守住（去掉修复后其中 2 条变红，见上方证据），测试未接进必经检查。 原记录：未升级。 原写法：「〔提醒〕部分升级，关闭」（2026-11-19 统一写法）。
 
 ## L-47 本机负载高时 MCP 测试偶发约 45 秒超时，每次挂的不是同一条（2026-11-14）
 
