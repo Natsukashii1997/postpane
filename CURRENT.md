@@ -12,6 +12,26 @@
 
 
 
+## 装机脚本加锁和归属记录，装后自动冒烟（#401）（2026-11-18，Claude 子 agent，常浩在月度复盘后批准本批；已提交、未发布：按授权不做真实装机，冒烟未实机验证）
+
+- 时间：开工 `2026-11-18 22:17`（`date '+%F %H:%M'` 记录）。来由：月度复盘两条——L-05 之后并行装机又互相覆盖多次（交接里记着「装前是别的会话装的包，被覆盖」），现有防线只有事后比 shasum；L-35 小人变静态图靠人眼 6 小时后才发现，`AGENTS.md`「已定内容」的「隔 2 秒截两张、和改前对比」是手工步骤。
+- 改了哪些文件：
+  - 常浩要求的：`.agents/skills/postpane-round/scripts/install-guard.sh`（新，被 `install.sh` source）：装机锁 `~/Library/Application Support/postpane/install/lock/`（`mkdir` 原子拿锁，`owner` 记 worktree、分支、提交、是否有没提交的改动、进程号、时间；持锁进程不在、锁超过 30 分钟、或一分钟还没写下是谁，算死锁，经 `takeover/` 小锁串行接管）；归属记录 `installed.txt`（每次装成功记来源、包的 shasum、时间、证据目录）；装前归属检查（装着的包既不是 main 构建的、也不是本 worktree 上次装的就 exit 5，写清是谁、什么时候装的，出口是确认对方的包不再需要后加 `--takeover`；「main 构建的」= 记录里没有未提交改动，且提交已在 origin/main 里或整支已 squash 合进 main）。`install.sh`：拿锁 → 查归属 → 原有的接力检查 → 备份 → 截装前侧栏 → 退出 → 覆盖 → 启动 → 回读 → 记归属 → 装后冒烟；`check` 多打一行「已装的是谁的」；新增 `--takeover`、退出码 4/5/6；`POSTPANE_INSTALL_APP` 仅供测试换安装位。`smoke.mjs`（新）：用系统窗口表找 PostPane 层级大于 0 的侧栏窗口，`screencapture -x -o -l <窗口号>` 只截侧栏窗口；装后等窗口出现、再等 8 秒加载，隔 2 秒最多截 6 张，任一张和基准差 ≥50 像素就算在动（布局变了的一对不算、换基准），写 `smoke-motion-<n>.png`；和装前 `smoke-before-<n>.png` 对比写 `smoke-before-after-<n>.png`（前 / 后 / 标红三联）；`compare` 子命令单独比两张图。`png-diff.mjs`（新）：只用 Node 自带 zlib 的 PNG 读写、像素比较、差异图。测试 `tests/install-guard.test.mjs`（12 条）、`tests/smoke-diff.test.mjs`（9 条）、替身工具 `tests/install-stubs.mjs`。
+  - 顺手改的：`tests/postpane-round.test.mjs` 第 129 行注释原写「不在测试里真跑 install.sh」，现在有带替身的整体跑法，改成指向 `install-guard.test.mjs`；`docs/LESSONS.md` 加 L-52（原写 L-51，变基时 #410 已占用，改号）；`EVOLUTION.md` 加 E-22（待批；E-21 已被 #403 用掉，变基时改号）。
+  - **改变了已有行为的**：① 原来两个会话可以同时跑 `install.sh`、交错执行；现在后到的直接 exit 4，打印持锁者。② 原来能直接覆盖任何人装的包；现在装着的包既不是 main 构建的、也不是本 worktree 上次装的（含不在记录里的，如旧版脚本装的、手动 ditto / 回滚过的）就 exit 5，要加 `--takeover`。第一次用（还没有记录）照装。③ 原来回读一致就 exit 0；现在还要装后冒烟通过，截不到图或小人没动 exit 6（包已经装上、归属照记，回滚命令在冒烟之前打印）。④ 装前多截一张侧栏（截不到不拦）。⑤ `check` 多一行输出。
+- 测试：改动前 `node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；基线（origin/main `5967bba`）`pnpm run check` exit 0，`pnpm test` exit 0（cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`）。改动后：`pnpm run check` exit 0；`pnpm test` exit 0，各项与基线相同（cargo `1000 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 23/0）；`node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`（+21 条新测试）。没有偶发失败。本 worktree 自己的 `target`，没共用构建目录。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/`（`*-baseline.log`、`*-final.log`、`node-test-pre.log`，脚本 `run-full.sh`，后台跑，L-37）。另做两次变异检查：去掉 squash 判断，对应测试变红，还原后 `cmp` 一致；并发测试断言三轮里至少一轮被锁挡下（确认两边真重叠）。
+- 验证：所有装机测试都在临时目录里：HOME、安装位、git 仓库（bare origin + main + 两个 worktree）都是临时的，`osascript`、`pgrep`、`open`、`codesign`、`screencapture` 是替身，`sandbox()` 先核对替身生效才跑。**没有对 `/Applications` 跑过 install.sh，没有退出或重启驿窗。** 只读试了截图那一步：在正在运行的驿窗上跑 `smoke.mjs shot` 和 `smoke.mjs after`（不装机，只截侧栏窗口），判「在动」，1356 个像素不同、范围落在小人上；装前装后差异图把截第一张时展开着的卡片标了出来。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/smoke-live/`（`smoke-before-1.png`、`smoke-after-1-1.png`、`smoke-after-2-1.png`、`smoke-motion-1.png`、`smoke-before-after-1.png`）。
+- 发布与回读：未发布（纯脚本与测试，按授权不做真实装机）。实机验证要常浩同意后做：合并后在 main 打包，`bash .agents/skills/postpane-round/scripts/install.sh 401-install-guard`（第一次没有记录照装；之后看证据目录 `smoke-*.png`）；再从一个别的 worktree 跑一次，确认 exit 5 的提示；最后 `install.sh check`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 任务说明写的路径 `scripts/install.sh` 不存在，实际在 `.agents/skills/postpane-round/scripts/install.sh`，照实际改。
+  - SKILL.md 第 3 步没改：SKILL.md 第 6 步规定改它要先记 E-xx、常浩批了才改，已记 E-22 待批。`AGENTS.md`「已定内容」的手工截图要求没改。
+  - 冒烟比的是整个侧栏窗口，不只是小人：侧栏里还有别的动画（如运行中的加载动画）时，小人变静态也可能被它「带过」。要只看小人，得让应用给出小人的位置（建议另开 issue）。
+  - 冒烟要终端有屏幕录制权限（这台机器上 Claude 已经有，`screencapture` 能截）；锁屏、显示器休眠时截不到，退出码 6 并说明，不当成改坏了。
+  - 开工时本仓库 `AGENTS.md`「分工」写「不顺手修」、全局第 3 节写可以顺手修；变基时 main 已合进 #403（改为与全局一致），不再冲突。本轮顺手改的只有上面三处。
+  - skill 进化：E-22 待批。
+- 本轮新坑：L-52
+
 
 
 ## 重读遇到后台标签页里没画出的回信：短暂切到前台再读（#410 续）（2026-11-19，Claude，#412 装机实测发现后台标签页不渲染，常浩切到前台验证成立，按上轮说的推荐做法补；已提交、无需发布驿窗本体，插件要重新加载）
