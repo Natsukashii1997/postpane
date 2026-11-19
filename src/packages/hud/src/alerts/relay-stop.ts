@@ -25,16 +25,25 @@ export function stopped(handoff: Handoff): boolean {
   );
 }
 
-/** A review begun since it stopped, in its session or folder, settles it,
- * as the gate counts (guard.rs `unsettled_top`). */
+/** A 思维评审 (#209), as the gate tells it (handoffs.rs `thinking`). */
+export function thinking(handoff: Handoff): boolean {
+  const title = handoff.title.trimStart();
+  return title.startsWith("思维评审｜") || title.startsWith("思维评审|");
+}
+
+/** A review of its kind begun since it stopped, in its session or folder,
+ * settles it, as the gate counts (guard.rs `unsettled_top`): a 思维评审
+ * settles no engineering review, nor the other way round (#411 L2 P2-02). */
 export function settledSince(
   handoff: Handoff,
   all: readonly Handoff[],
 ): boolean {
   const at = handoff.topAt || handoff.updatedAt;
+  const kind = thinking(handoff);
   return all.some(
     (other) =>
       other.id !== handoff.id &&
+      thinking(other) === kind &&
       (other.claudeSession === handoff.claudeSession ||
         (!!handoff.cwd && other.cwd === handoff.cwd)) &&
       other.createdAt > at,
@@ -43,22 +52,28 @@ export function settledSince(
 
 /** The timeline's words for an `end` step: the person's, a pass PostPane
  * ended, or PostPane's for another reason (a day idle, #368), with that
- * reason. Every end by PostPane used to read as a pass (#411). */
+ * reason. Every end by PostPane used to read as a pass (#411). A pass is
+ * the gate's, `notice: "passed"`, not the answer's verdict: a pass on
+ * another commit than the one under review is not let through (#411 L2
+ * P2-05). */
 export function endWords(
   handoff: Handoff,
   step: HandoffStep,
   zh: boolean,
 ): { title: string; sub?: string } {
   if (!step.auto) return { title: zh ? "结束接力" : "Handoff ended" };
-  const answer = [...(handoff.steps ?? [])]
-    .reverse()
-    .find((s) => s.kind === "reply" && s.at <= step.at);
-  if (answer?.verdict === "pass")
-    return {
-      title: zh
-        ? "审核通过，自动结束接力"
-        : "Passed: the handoff ended by itself",
-    };
+  if (handoff.notice === "passed")
+    return thinking(handoff)
+      ? {
+          title: zh
+            ? "思维评审收口，自动结束接力"
+            : "Thinking review settled: the handoff ended by itself",
+        }
+      : {
+          title: zh
+            ? "审核通过，自动结束接力"
+            : "Passed: the handoff ended by itself",
+        };
   return {
     title: zh ? "驿窗自动结束接力" : "Ended by PostPane",
     sub: step.text ?? undefined,

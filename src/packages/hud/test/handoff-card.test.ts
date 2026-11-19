@@ -267,6 +267,7 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
     handoff({
       status: "closed",
       phase: "ended",
+      notice: "passed",
       steps: [
         ...handoff().steps!,
         step("reply", T + 8 * minute, { verdict: "pass" }),
@@ -784,10 +785,11 @@ test("stopped at its cap and ended by PostPane after a day idle, it is still sto
   assert.equal(endedNote(ended, true), "接力已结束");
 });
 
-test("an end by PostPane reads as a pass only after a passing answer (#411)", () => {
+test("an end by PostPane reads as a pass only when the gate let a pass through (#411, L2 P2-05)", () => {
   const passed = handoff({
     status: "closed",
     phase: "ended",
+    notice: "passed",
     steps: [
       ...handoff().steps!,
       { ...reply, verdict: "pass" },
@@ -797,6 +799,43 @@ test("an end by PostPane reads as a pass only after a passing answer (#411)", ()
   assert.equal(
     timeline(passed, T + 13 * minute, true).at(-1)?.title,
     "审核通过，自动结束接力",
+  );
+  // A pass on another commit than the one under review is sent back, not
+  // let through (gate.rs `Next::Stale`): ended after a day idle, it is no pass.
+  const stale = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("back", T + 12 * minute),
+      step("end", T + 25 * 60 * minute, {
+        auto: true,
+        text: "闲置一天，驿窗自动结束",
+      }),
+    ],
+  });
+  assert.deepEqual(
+    (({ title, sub }) => [title, sub])(
+      timeline(stale, T + 26 * 60 * minute, true).at(-1)!,
+    ),
+    ["驿窗自动结束接力", "闲置一天，驿窗自动结束"],
+  );
+  // A 思维评审 settled reads as settled, not as a pass.
+  const settled = handoff({
+    title: "思维评审｜驿窗｜方向",
+    status: "closed",
+    phase: "ended",
+    notice: "passed",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("end", T + 12 * minute, { auto: true }),
+    ],
+  });
+  assert.equal(
+    timeline(settled, T + 13 * minute, true).at(-1)?.title,
+    "思维评审收口，自动结束接力",
   );
   const idle = handoff({
     status: "closed",

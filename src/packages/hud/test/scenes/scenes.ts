@@ -4,6 +4,8 @@ import type { HermesCronJob, Snapshot } from "@agent-hud/protocol";
 import { approval, at, relay, reply, session, snapshot } from "./build.ts";
 import {
   relayIdleStopped,
+  relayStaleIdle,
+  relayStopOtherKind,
   relayPassed,
   relayPaused,
   relayStopped,
@@ -481,6 +483,8 @@ export const SCENES: readonly Scene[] = [
   relayPassed,
   relayPaused,
   relayIdleStopped,
+  relayStaleIdle,
+  relayStopOtherKind,
 ];
 
 export function scene(key: string): Scene {

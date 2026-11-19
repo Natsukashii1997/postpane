@@ -7,6 +7,29 @@
 
 
 
+## #411 L2 第 2 轮返修：停章按审查类型了结、到顶未了结的不受一天限制、「审核通过」看后台放行（2026-11-19，Claude，常浩回「按推荐开工」：补做第 4 批、授权第 3 轮复审、四份草稿送一轮合并复核、别项目开着的接力只备份不动；已提交、未发布）
+
+- 时间：开工 `2026-11-19 13:50`（会话记录推算，未用 `date` 记）。来由：L2 第 2 轮（驿窗 `h1a1f09f8a3f02`，审 `b520036`）返修，剩 P2-02a、P2-02b、P2-05。
+- 改了哪些文件：
+  - 常浩要求的：
+    - P2-02a：`hud/src/alerts/relay-stop.ts` 加 `thinking()`（同 Rust `handoffs.rs` 的 `thinking`：标题去掉开头空白后以「思维评审｜」或「思维评审|」开头），`settledSince()` 只认同类新接力才算了结，和 `guard.rs` `unsettled_top` 一致。
+    - P2-02b：`platform/.../handoffs/guard.rs` 加 `Book::holds_back()`（单张接力是否到顶未了结，和 `unsettled_top` 同口径：`notice=top`、还开着或被驿窗闲置结束、之后同会话或同目录没开过同类接力）与 `Book::in_sight()`（快照里留不留：在途；失败或结束一天内；或 `holds_back`）；`unsettled_top` 抽出 `open_top()`、`top_at()` 两个小函数共用。`host/src/handoff.rs` `projection()` 改调 `in_sight`，到顶未了结的不论多久都留在快照里，普通已结束的照旧一天后清走。
+    - P2-05：`relay-stop.ts` `endWords()` 改看 `handoff.notice === "passed"`（后台真正放行才记），不看回信的 verdict；思维评审收口写「思维评审收口，自动结束接力」。
+    - 测试：`relay-stamps.test.ts` 加四个方向的类型隔离（工程停后开思维评审不算了结、反过来也不算、同类算、ASCII 竖线与开头空格也认）；`handoff-card.test.ts` 加版本核对拦下后闲置结束、思维评审收口两种结束文字，原「通过」用例补 `notice: "passed"`；`guard.rs` 测试加闲置结束后一年仍 `in_sight`、开思维评审仍在、开工程审查后不在；`handoff.rs` 思维评审到顶测试加「过了两天仍在快照里、常浩开口新开一张后一天就清走」。
+    - 场景预览台：`test/scenes/relay-gate.ts` 加 `relay-stop-other-kind`（工程停后同会话开思维评审，「停」还在）、`relay-stale-idle`（旧版本通过被拦后闲置结束，不写「审核通过」），登记进 `scenes.ts`。
+    - 文档：`docs/chatgpt-channel.md` 到顶界面一条补「同类才算了结」「不受快照一天限制」「自动结束写不写通过看 notice」，快照一条补「到顶还没了结的」。
+  - 我顺手改的：无。
+  - 看到没改的：`handoff-card.ts` `upcoming()` 里 `passed = lastReply(handoff)?.verdict === "pass"` 也按回信结论判，在途接力遇版本核对拦下（`Next::Stale`）后，时间线「接下来」会少一行「第 N 轮：ChatGPT 再审核」；只影响在途的预告行，审查只要求修这三处，没动。
+- 测试：`pnpm run check` 退出码 0（`check-5.log`）；`pnpm test` 退出码 0：cargo 合计 `1041 passed; 0 failed`（没加新测试函数，断言加在已有函数里），前端 `ℹ pass 473` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/*-4.log`、`check-5.log`。加场景后单跑侧栏 `ℹ pass 398` / `ℹ fail 0`。
+- 验证：场景预览台（127.0.0.1:1480，本 worktree）：`relay-stop-other-kind` 隔 2 秒两张，ChatGPT 票根红色「停」章都在；`relay-stale-idle` 开卡滚到底两张，末步「驿窗自动结束接力」+「等常浩处理 24 小时没动静，驿窗自动结束接力」；回查 `relay-passed` 末步仍是「审核通过，自动结束接力」。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/shots-r3/`（`stop-other-kind-{1,2}.png`、`stale-idle-{1,2}.png`、`passed-regression.png`）。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 常浩 11-19 回「按推荐开工」，四项照推荐：补做第 4 批模拟台账；授权 #411 第 3 轮复审（`extra` 写常浩原话）；四份规则草稿送一轮合并定向复核；本机别项目开着的接力只备份、不动、记下已累计轮数。
+  - #348 现在和 main 冲突（`docs/LESSONS.md`、`src/crates/host/src/handoff/belongs.rs`），合并前要解，只解冲突、不改已审过的判定；之后 #411 跟着变基。
+  - skill 进化：无。
+- 本轮新坑：无
+
 ## 接力审核门第 3 批：上限 1–9、到上限「停」、未完暂停、回执「过」章、设置入口、三个场景（#409）（2026-11-19，Claude，常浩回「按修订计划开工」，11-19 另定上限 1–9 默认 5、到上限显示「停」、别的停下叫「未完暂停」，侧栏提醒选甲「票根停章」；已提交、未发布，PR 待 L2 审查，不合并、不装机，等生效切换）
 
 - 时间：开工 `2026-11-19 05:10`（`date '+%F %H:%M'` 记录）。来由：生效门还差第 3 批界面；分支 `claude/409-review-gate-ui` 从 `claude/347-review-gate`（`5c21f84`）切出。

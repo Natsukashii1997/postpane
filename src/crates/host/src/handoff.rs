@@ -415,12 +415,7 @@ impl Desk {
         let shown = book
             .list
             .iter()
-            .filter(|handoff| {
-                handoff.live()
-                    || (matches!(handoff.phase, Phase::Failed | Phase::Ended)
-                        && handoff.status != Status::Open
-                        && now - handoff.updated_at < FAILED_SHOWN_MS)
-            })
+            .filter(|handoff| book.in_sight(handoff, now, FAILED_SHOWN_MS))
             .map(Handoff::shown)
             .collect::<Vec<_>>();
         json!(shown)
@@ -5431,6 +5426,16 @@ mod tests {
             idle + 1,
         );
         assert_eq!(again.err(), Some(guard::top_unsettled(title)));
+        // Past the day an ended one is shown, it stays in the snapshot while
+        // it holds reviews back, so its 「停」 stays in sight (#411 L2 P2-02).
+        let shown = |now| {
+            desk.projection(now)
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|h| h["id"] == first.id.as_str())
+        };
+        assert!(shown(idle + 2 * FAILED_SHOWN_MS));
         // The person's word lets it go on, counted from one.
         *lines.opener.borrow_mut() = Some((Opener::Person, idle + 2));
         let Started::Opening { handoff, .. } = desk
@@ -5449,6 +5454,8 @@ mod tests {
             panic!()
         };
         assert_ne!(handoff.id, first.id);
+        // Settled by that review, it leaves after the day as any ended one.
+        assert!(!shown(idle + 2 * FAILED_SHOWN_MS));
     }
 
     /// L3 P1-10 C: PostPane's ask to mend the last lines, never known to

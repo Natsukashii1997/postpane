@@ -134,3 +134,79 @@ export const relayIdleStopped: Scene = {
     ],
   }),
 };
+
+// An engineering review stopped at its cap; a 思维评审 begun since in the
+// same session settles nothing, as the gate counts (#411 L2 P2-02).
+export const relayStopOtherKind: Scene = {
+  key: "relay-stop-other-kind",
+  title: "工程审查停了，同一会话随后开了思维评审（不算了结：「停」还在）",
+  snapshot: snapshot({
+    sessions: pair("kind", "导入流程第 2 批", 1),
+    handoffs: [
+      relay({
+        id: "h-kind-stop",
+        title: "导入流程第 2 批",
+        doer: "claude",
+        session: "c-kind",
+        chatgpt: "g-kind",
+        phase: "returned",
+        minutesAgo: 30,
+        reviews: 5,
+        limit: 5,
+        auto: false,
+        halt: "已审满 5 轮仍需修改，自动往返停下，交常浩决定",
+        notice: "top",
+      }),
+      relay({
+        id: "h-kind-think",
+        title: "思维评审｜导入流程的方向",
+        doer: "claude",
+        session: "c-kind",
+        chatgpt: "g-kind-2",
+        phase: "working",
+        minutesAgo: 1,
+      }),
+    ],
+  }),
+};
+
+// ChatGPT passed an older commit than the one under review: the gate sent
+// it back, not through; a day idle later PostPane put it away. No pass
+// (#411 L2 P2-05).
+const stale = relay({
+  id: "h-stale",
+  title: "清理旧配置",
+  doer: "claude",
+  session: "c-stale",
+  chatgpt: "g-stale",
+  phase: "returned",
+  minutesAgo: 25 * 60,
+  reviews: 2,
+  limit: 5,
+  verdict: "pass",
+});
+export const relayStaleIdle: Scene = {
+  key: "relay-stale-idle",
+  title:
+    "ChatGPT 对旧版本写了通过、被版本核对拦下，闲置一天驿窗收起（不写「审核通过」）",
+  snapshot: snapshot({
+    sessions: pair("stale", "清理旧配置", 60),
+    handoffs: [
+      {
+        ...stale,
+        status: "closed",
+        phase: "ended",
+        steps: [
+          ...(stale.steps ?? []),
+          {
+            at: stale.updatedAt + 24 * 3_600_000 + 60_000,
+            kind: "end",
+            auto: true,
+            text: "等常浩处理 24 小时没动静，驿窗自动结束接力",
+          },
+        ],
+        updatedAt: stale.updatedAt + 24 * 3_600_000 + 60_000,
+      },
+    ],
+  }),
+};

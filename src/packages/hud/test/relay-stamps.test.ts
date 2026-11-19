@@ -344,3 +344,41 @@ test("an idle-ended relay still at its cap keeps 「停」 until a review begins
     true,
   );
 });
+
+test("only a review of its kind begun since settles a stop: 思维评审 and engineering count apart, as the gate does (#411 L2 P2-02)", () => {
+  const engineering: Handoff = {
+    ...relay("returned"),
+    id: "h-eng",
+    cwd: "/w",
+    notice: "top",
+    topAt: 60,
+    auto: false,
+  };
+  const review: Handoff = {
+    ...engineering,
+    id: "h-think",
+    title: "思维评审｜驿窗｜方向",
+  };
+  const later = (title: string, id: string): Handoff => ({
+    ...relay("working"),
+    id,
+    title,
+    claudeSession: "s2",
+    cwd: "/w",
+    createdAt: 95,
+  });
+  const cases: [Handoff, Handoff, boolean][] = [
+    // A 思维评审 begun since settles no engineering stop, nor the reverse.
+    [engineering, later("思维评审｜驿窗｜方向", "h-t2"), true],
+    [review, later("驿窗｜接力", "h-e2"), true],
+    // One of its kind does, ASCII bar and leading space too.
+    [engineering, later("驿窗｜接力第 2 单", "h-e3"), false],
+    [review, later(" 思维评审|驿窗｜再想", "h-t3"), false],
+  ];
+  for (const [top, next, stopped] of cases)
+    assert.equal(
+      relayStamps({ handoffs: [top, next] }, "chatgpt", NOW)?.stopped,
+      stopped,
+      `${top.title} then ${next.title}`,
+    );
+});
