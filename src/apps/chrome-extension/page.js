@@ -253,12 +253,15 @@
    * characters into an attachment (#429, 2026-11-19: 8000 stayed text, 10000
    * did not). */
   const PIECE = 6000;
+  const GLUE = 1000;
 
   /** `text` in pieces of at most `max` characters, cut after a line where it
    * can be: a line longer than `max` is cut within, never inside a character
    * of two UTF-16 units (an emoji) nor between a CR and its LF. A piece of
    * only spaces and line breaks is not cut off: it goes with the next words,
-   * a few characters over `max`, so every piece shows it went in. */
+   * a few characters over `max`, so every piece shows it went in; only a run
+   * of them longer than `GLUE` more is cut off by itself (#435 review P2-02),
+   * so no piece nears the attachment length. */
   function pieces(text, max = PIECE) {
     const out = [];
     let piece = "";
@@ -267,7 +270,7 @@
         end = Math.min(at + max, line.length);
         if (end < line.length && /[\uD800-\uDBFF\r]/.test(line[end - 1])) end -= 1;
         const part = line.slice(at, end);
-        if (piece.length + part.length > max && bare(piece)) {
+        if (piece.length + part.length > max && (bare(piece) || piece.length + part.length > max + GLUE)) {
           out.push(piece);
           piece = "";
         }

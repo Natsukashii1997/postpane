@@ -274,6 +274,22 @@ test("a blank line at a cut still goes in", async () => {
   await fresh.close();
 });
 
+// #435 review round 2 P2-02: spaces glued to the next words without end made
+// one piece of 10001 characters, an attachment again.
+test("a long run of spaces or blank lines still goes in pieces", async () => {
+  for (const run of [" ".repeat(10000), "\n".repeat(10000)]) {
+    const fresh = await composer();
+    const text = run + "x";
+    assert.deepEqual(await send(fresh, text), { ok: true });
+    const pastes = await fresh.evaluate(() => window.pastes);
+    assert.ok(pastes.join("") === text, "the pieces make up the words");
+    const largest = Math.max(...pastes.map((piece) => piece.length));
+    assert.ok(largest <= 7000, `largest piece ${largest}`);
+    assert.equal(await attachments(fresh), 0);
+    await fresh.close();
+  }
+});
+
 test("a piece that went in short stops the sending", async () => {
   const fresh = await composer({ keep: 0.9 });
   assert.deepEqual(await send(fresh, brief(800)), {
