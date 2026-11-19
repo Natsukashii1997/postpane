@@ -515,6 +515,7 @@ mod tests {
             last_run_at: Some(1_793_582_041_841),
             next_run_at: Some(1_794_181_500_000),
             schedule: None,
+            delivers_to: None,
         };
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("hermes-cron-told.json");
@@ -602,6 +603,7 @@ mod tests {
             last_run_at: Some(1_793_582_041_841),
             next_run_at: Some(1_794_181_500_000),
             schedule: None,
+            delivers_to: None,
         };
         let told = |tracker: &Tracker| {
             tracker

@@ -10,6 +10,10 @@ pub(super) struct Presentation<'a> {
     discovery: &'a [ProviderDiscovery],
     pending: HashMap<String, HashMap<String, Vec<Value>>>,
     native_waiting: HashMap<String, HashSet<String>>,
+    /// The Hermes homes read, and where each of their sessions opens in
+    /// Feishu, read once the first Hermes session asks (#424).
+    hermes_roots: Vec<PathBuf>,
+    hermes_chats: std::cell::OnceCell<HashMap<String, String>>,
     now: i64,
 }
 impl AgentHudCore {
@@ -22,6 +26,13 @@ impl AgentHudCore {
             discovery: &self.discovery,
             pending: self.requests.session_attention(),
             native_waiting: self.requests.native_waiting_sessions(),
+            hermes_roots: self
+                .provider_roots
+                .iter()
+                .filter(|(_, source)| *source == "hermes")
+                .map(|(root, _)| root.clone())
+                .collect(),
+            hermes_chats: Default::default(),
             now,
         }
     }
@@ -71,6 +82,21 @@ impl Presentation<'_> {
                 .and_then(agent_hud_agents::hermes::bot)
             {
                 session["bot"] = json!({"id": bot.id, "name": bot.name});
+            }
+            // Its row's ↗ opens its Feishu chat (#424).
+            let chats = self.hermes_chats.get_or_init(|| {
+                self.hermes_roots
+                    .iter()
+                    .flat_map(|root| agent_hud_agents::hermes::gateways(root, self.now))
+                    .flat_map(|gateway| gateway.session_chats())
+                    .collect()
+            });
+            if let Some(target) = session["id"]
+                .as_str()
+                .and_then(|id| chats.get(id))
+                .and_then(|chat| agent_hud_agents::hermes::chat_target(chat))
+            {
+                session["navigationTarget"] = target;
             }
         }
         let claude = session["source"].as_str() == Some("claude");

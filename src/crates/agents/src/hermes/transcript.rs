@@ -366,6 +366,47 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
     Ok(asks)
 }
 
+/// A Feishu chat or scheduled task's run in the database: what decides
+/// where in Feishu it opens.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Place {
+    /// The session's own id in the database.
+    pub session: String,
+    /// `feishu` or `cron`.
+    pub source: String,
+    pub chat: Option<String>,
+    pub chat_id: Option<String>,
+    pub user: Option<String>,
+}
+
+/// Every Feishu chat and scheduled task's run in the database; a database
+/// without the columns it needs has none.
+pub fn places(db: &Connection) -> rusqlite::Result<Vec<Place>> {
+    let s = sql_columns(db, "sessions")?;
+    if !s.contains("source") {
+        return Ok(Vec::new());
+    }
+    let mut statement = db.prepare(&format!(
+        "SELECT s.id,s.source,{},{},{} FROM sessions s WHERE s.source IN ('feishu','cron')",
+        sql_column(&s, "s", "chat_type", "NULL"),
+        sql_column(&s, "s", "chat_id", "NULL"),
+        sql_column(&s, "s", "user_id", "NULL"),
+    ))?;
+    let places = statement
+        .query_map([], |row| {
+            Ok(Place {
+                session: row.get(0)?,
+                source: row.get(1)?,
+                chat: row.get(2)?,
+                chat_id: row.get(3)?,
+                user: row.get(4)?,
+            })
+        })?
+        .flatten()
+        .collect();
+    Ok(places)
+}
+
 /// The session's latest question of the person's own words: its message
 /// id, words and time (ms).
 fn last_question(db: &Connection, session: &str) -> Option<(i64, String, i64)> {
