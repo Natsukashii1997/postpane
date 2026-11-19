@@ -12,13 +12,22 @@ use agent_hud_runtime::chatgpt::handoffs::{self, Exit, Handoff, Next, Review, Ve
 
 /// 转回 Claude: ChatGPT's answer in full, and what to do with it.
 /// An answer that only mended its last lines goes with the one it mended (#347).
-pub(super) fn back_text(handoff: &Handoff, _reply: &str) -> String {
+/// `held`: it came in while the auto round trip was off, and goes back all
+/// the same (#410): what comes next is the person's.
+pub(super) fn back_text(handoff: &Handoff, _reply: &str, held: bool) -> String {
     let reply = handoff.answer();
+    let off = held.then(|| handoff.halt.clone().unwrap_or_default());
     if handoff.thinking() {
-        thinking_back_text(handoff, &reply)
+        thinking_back_text(handoff, &reply, off.as_deref())
     } else {
-        review_back_text(handoff, &reply, None)
+        review_back_text(handoff, &reply, None, off.as_deref())
     }
+}
+
+/// What an answer that came in while the auto round trip was off (`halt`
+/// says why) asks of the session: read and sort, and wait on the person.
+fn held_ask(halt: &str, meanwhile: &str, not_yet: &str) -> String {
+    format!("驿窗的自动往返停着（{halt}），这封回信照样转给你，下一步交常浩决定。现在可以做：{meanwhile}。先不要做：{not_yet}。整理好后向常浩汇报审查结论和你的建议，等常浩回话。")
 }
 
 /// 转回 Claude for a pass PostPane did not let through (`why`, L3 P1-09):
@@ -26,7 +35,7 @@ pub(super) fn back_text(handoff: &Handoff, _reply: &str) -> String {
 pub(super) fn held_back_text(handoff: &Handoff, held: &Held) -> String {
     let why = held.why.as_str();
     if !handoff.thinking() {
-        return review_back_text(handoff, &handoff.answer(), Some(held));
+        return review_back_text(handoff, &handoff.answer(), Some(held), None);
     }
     // A 思维评审's close held back (L3 P1-10): it did not settle.
     let ask = left_to_person(&format!("评审回信写了收口，但驿窗没有放行：{why}。这次评审没有收口、没有结束，不要当成已收口汇报。"), "读意见、整理要点；可起草决策记录，待定的不记成已定", "再调用 relay_to_chatgpt 送审、按评审结论动手实施");
@@ -55,7 +64,12 @@ fn left_to_person(why: &str, meanwhile: &str, not_yet: &str) -> String {
 
 const NOT_YET: &str = "动手改代码、再调用 relay_to_chatgpt 送审、合并 PR";
 
-fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&Held>) -> String {
+fn review_back_text(
+    handoff: &Handoff,
+    reply: &str,
+    held: Option<&Held>,
+    off: Option<&str>,
+) -> String {
     let round = handoff.counted().max(1);
     let budget = handoff.budget();
     let verdict = match handoff.last_reply().and_then(|step| step.verdict) {
@@ -75,6 +89,13 @@ fn review_back_text(handoff: &Handoff, reply: &str, held: Option<&Held>) -> Stri
         Next::Pause => format!("审查认为证据不足，先暂停：补齐证据（测试、复现、日志）后再调用 relay_to_chatgpt 送审，summary 写一句补了什么证据；补到证据前不要按意见动手改。这一轮照样计数，{}。", next_round(handoff)),
         Next::Escalate => "审查要求决策升级：请整理可选做法、各自的依据和你的推荐交给常浩，等常浩决定；不要再调用 relay_to_chatgpt，也不要先动手改。".to_owned(),
         _ => format!("请按意见处理：逐条写处理（已修并附证据 / 提议判定不成立并附反证 / 提议转单并附已建好的 issue），不同意的说明理由。改完后调用 relay_to_chatgpt 交回 ChatGPT 复审，head 填改完的提交，summary 写一句这轮改了什么；{}。", next_round(handoff)),
+    };
+    // Off when it came in (#410): a pass still ends; the rest waits on the person.
+    let ask = match off {
+        Some(halt) if handoff.outcome() != Next::Pass => {
+            held_ask(halt, "读意见、按严重程度整理要点和返修方案", NOT_YET)
+        }
+        _ => ask,
     };
     let tail = match handoffs::review_exit(reply) {
         Ok(Some(way)) => format!("审查出口：{}，结论：{verdict}", review_way(way)),
@@ -97,7 +118,7 @@ fn review_way(way: Review) -> &'static str {
 
 /// 转回 Claude for a 思维评审 (#209): ChatGPT's answer in full, and what
 /// its way out asks of Claude.
-fn thinking_back_text(handoff: &Handoff, reply: &str) -> String {
+fn thinking_back_text(handoff: &Handoff, reply: &str, off: Option<&str>) -> String {
     let round = handoff.counted().max(1);
     // Drafting is fine; what is undecided is not recorded as decided.
     let draft = "逐条整理意见、起草决策记录（待常浩裁决的写成待定，不要记成已定决策）";
@@ -123,6 +144,11 @@ fn thinking_back_text(handoff: &Handoff, reply: &str) -> String {
                 not_yet,
             ),
         ),
+    };
+    // Off when it came in (#410): a close still closes; the rest waits on the person.
+    let ask = match off {
+        Some(halt) if handoff.outcome() != Next::Close => held_ask(halt, draft, not_yet),
+        _ => ask,
     };
     format!(
         "ChatGPT 对「{title}」的思维评审回信（第 {round} 轮，{tail}）：\n\n{reply}\n\n{ask}",

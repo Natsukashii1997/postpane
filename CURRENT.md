@@ -7,6 +7,31 @@
 
 
 
+## S1 回信认领了就一定送回发起会话（#410）（2026-11-19，Claude，常浩选「S1 按推荐做」、确认三批计划，本会话回「按计划开工」（回章按推荐：已转回、停着的都盖）；已提交、PR 见下、未发布）
+
+- 时间：开工 `2026-11-19 17:28`（本会话创建时间；第 1 批前半由上一会话做到 `f056723`）。来由：Fable 5.2 评估「等不到回信」22 单里 16 单是回信认领了、但自动往返停过，回信停在侧栏等常浩点「转回」，发起会话不知道。
+- 改了哪些文件：
+  - 常浩要求的：
+    - 停着时到的回信照样转回：`platform/.../handoffs/held.rs`（新）`Handoff::held_answer`（开着、`replied`、自动往返关、`next()` 不管、这封回信之后没 `fail`）、`stopped_by_itself`、`paused_by_person`、`resume_for_ask`；`host/.../handoff/held.rs`（新）`hand_back`（手动与自动转回共用一条路）、`hand_held`（转不进去记 `trouble`、不自动重试）、`relay_gate`；`handoff.rs` 的 `drive` / `catch_up` 处理这类回信；`back.rs` 转回文字加「驿窗的自动往返停着（停因），这封回信照样转给你，下一步交常浩决定」，通过照旧结束、思维评审收口照常。
+    - 新送审重开：驿窗自己停的，下一轮送审确认送到时（`Book::asked`）先记一步自动 `resume`、清 `halt`；常浩手动暂停的不动。`went_in` 里证据补齐和送审的顺序跟着调。到上限无授权的送审本来就收不进，不会绕开。
+    - `relay_to_chatgpt` 返回：常浩手动暂停时如实写「回信到了照样转回，但下一步等常浩决定」。
+    - 侧栏「回」章：`hud/src/relay-stamps.ts` 在 `returned`、`auto` 关、有 `halt` 时也给发起方盖「回」，到顶的不算（那是 ChatGPT 的「停」，#409 已定 Claude 那边保持原样）；场景 `relay-held-back`（`test/scenes/relay-gate.ts`）。
+    - 文档：`docs/chatgpt-channel.md` 自动往返加「停着时到的回信」「新送审重开」两条，阶段、插话重算、#318 通知、票根章四处同步；`docs/LESSONS.md` L-51 补 S1 与不做切前台分支的理由。
+  - 我顺手改的：
+    - 第 1 批让 `handoff.rs`、`handoffs.rs`、`texts.rs` 超出行数上限，把新增的转回逻辑拆到两个 `held.rs` 子模块，三份回到上限内。
+    - 「ChatGPT 30 分钟没回信」发给会话的通知（`handoff/notice.rs`）原写「其他结论要常浩点『转回』才会转过来」，S1 后不对，改成「回信会照样转回这里，通过的结束接力，其他结论写明下一步等常浩决定」（**改了发给会话的文字**）；去掉了不再需要的 `by_doer`。
+    - `relay` 判断「常浩暂停」从「自动往返关着」收紧为 `paused_by_person`（驿窗自己停的会被这次送审重开，不算暂停）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1049 passed`，前端 `ℹ pass 476` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 28`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（`collab.log`）。新增 `host/.../handoff/tests/held_back.rs` 6 条（停因 5 种 × 回信结论 4 种每格恰好转回一次、三单真实步骤回放 `h1a1f09f8a3f02` `h1a1f1cdd3f600` `h1a1f26a454202`、新送审重开、暂停不清、到上限无授权不重开、转不回不自动重试），把 `held_answer` 和 `resume_for_ask` 临时关掉时其中 4 条失败（另 2 条守原本不变的行为，照样过）；`relay-stamps.test.ts` 加 1 条；改了 6 条旧测试的预期（4 条上一会话改、2 条通知文字）。日志 `~/Library/Application Support/postpane/evidence/410-relay-deliver/`（`check.log`、`test.log`）。
+- 验证：场景预览台（127.0.0.1:1480，本 worktree，1440×900）：改前 `relay-held-back` 没有章、改后有「回」；`relay-paused` 与 `relay-held-back` 的「回」静态终态一致（字、颜色 rgb(153, 89, 26)、位置 1406,290、21×21），每 250 ms 取样 28 次序列相同；`relay-stopped` 仍只有 ChatGPT「停」。预览窗当时隐藏，动画以实机装机对比为准。
+- 截图：`~/Library/Application Support/postpane/evidence/410-relay-deliver/`（`still-relay-paused.png`、`still-relay-held-back.png`、`batch2-stamp-compare.md`）。
+- 发布与回读：未发布（PR 合并后从 main 打包装机，见下）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 常浩手动暂停时到的回信也照样转回（原来留在侧栏等点「转回」），开工前已在消息里列出，常浩回「按计划开工」。
+  - 「回」章范围按推荐扩大到所有「已转回、停着」的接力（例如「回信没写结论，已转回，自动往返停下」以前不盖），到顶的除外，保 #409。
+  - 已开着、自动往返停着、回信在侧栏等的两单（`h1a1ed56ea0e00`、`h1a1f09f8a3f02`，后者是 #411 L2 审查那单）：装上新版后会被自动转回各自的发起会话。
+  - 切前台分支 `claude/410-relay-front2`（`f5bf0d2`）不合并，删分支和 worktree；S3（改读 ChatGPT 对话接口）这次不做。
+- 本轮新坑：无（补在 L-51）
+
 ## 接力审核门生效上线：四处规则、#348、#411 合并，从 main 打包装机，MA-02 v0.3 生效（2026-11-19，Claude，常浩回「三件都按推荐」、旧接力已在侧栏结束，此前授权「按推荐开工」含合并装机；已提交、已发布 `d074d92e787e` 回读通过）
 
 - 时间：开工 `2026-11-19 17:20`（会话记录推算，未用 `date` 记）。来由：常浩 11-19「抓紧把任务完成上线，运行新的规则」；生效门合并前四项（第 2 批 L3、第 3 批、第 4 批模拟台账、四处规则复核）齐了。
@@ -28,6 +53,7 @@
   - 已在用的会话要重开或重连 MCP，旧 MCP 进程的工具说明还是旧规则。
   - skill 进化：`postpane-round` 装机一步可补「生效切换类手动备份数据目录照 L-55」，未改，待常浩点头。
 - 本轮新坑：L-55
+
 
 ## #411 L2 第 2、3 轮返修：停章按审查类型了结、到顶未了结的不受一天限制、「审核通过」和下一轮预告看后台放行（2026-11-19，Claude，常浩回「按推荐开工」：补做第 4 批、授权第 3 轮复审、四份草稿送一轮合并复核、别项目开着的接力只备份不动；第 3 轮后回「修，补改未复审」；已提交、未发布）
 

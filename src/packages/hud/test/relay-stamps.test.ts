@@ -120,6 +120,57 @@ test("Claude's stub takes the 「回」 seal while an answer waits for the perso
   );
 });
 
+test("an answer sent back while the round trip is stopped keeps Claude's 「回」 (#410 S1)", () => {
+  const steps: Handoff["steps"] = [
+    { at: 20, kind: "ask" },
+    { at: 30, kind: "reply" },
+    { at: 31, kind: "back", auto: true },
+  ];
+  const held = (halt: string | null, auto = false): Handoff => ({
+    ...relay("returned", steps),
+    auto,
+    halt,
+  });
+  for (const halt of [
+    "ChatGPT 30 分钟没回信，自动往返停下，交还常浩",
+    "常浩暂停",
+  ]) {
+    const stamps = relayStamps({ handoffs: [held(halt)] }, "claude", NOW);
+    assert.equal(stamps?.replied, true, halt);
+    // The same seal at the same moment as one held on the sidebar.
+    assert.deepEqual(
+      stamps,
+      relayStamps(
+        { handoffs: [{ ...relay("replied", steps.slice(0, 2)) }] },
+        "claude",
+        NOW,
+      ),
+    );
+  }
+  // Going on by itself, or never stopped: back with Claude to work on, no seal.
+  assert.equal(
+    relayStamps({ handoffs: [held(null, true)] }, "claude", NOW),
+    undefined,
+  );
+  assert.equal(
+    relayStamps({ handoffs: [held(null)] }, "claude", NOW),
+    undefined,
+  );
+  // Nor on ChatGPT's stub, nor once ended.
+  assert.equal(
+    relayStamps({ handoffs: [held("常浩暂停")] }, "chatgpt", NOW),
+    undefined,
+  );
+  assert.equal(
+    relayStamps(
+      { handoffs: [{ ...held("常浩暂停"), status: "closed" }] },
+      "claude",
+      NOW,
+    ),
+    undefined,
+  );
+});
+
 test("a stamp that shows while its letter is in the air waits for it to land", () => {
   assert.equal(stampWait(1000, 1000), LETTER_LANDS_MS);
   assert.equal(stampWait(1000, 1000 + LETTER_LANDS_MS - 400), 400);

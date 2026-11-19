@@ -49,6 +49,7 @@ impl Desk {
         lines: &dyn Lines,
         handoff: &Handoff,
         reply: &str,
+        held: bool,
     ) -> (String, Option<Held>) {
         // A 思维评审's close ends it as a pass does: words never known to
         // have gone in hold it back too (L3 P1-10).
@@ -59,7 +60,7 @@ impl Desk {
         // did not pass (L3 P1-09).
         let text = match &blocked {
             Some(held) => held_back_text(handoff, held),
-            None => back_text(handoff, reply),
+            None => back_text(handoff, reply, held),
         };
         (text, blocked)
     }

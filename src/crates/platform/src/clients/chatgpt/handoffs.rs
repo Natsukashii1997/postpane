@@ -7,6 +7,7 @@ use super::{folder, write_private};
 use agent_hud_agents::chatgpt as agent;
 use agent_hud_core::l10n;
 use serde::{Deserialize, Serialize};
+mod held;
 mod idle;
 mod wake;
 use std::{
@@ -497,12 +498,7 @@ impl Handoff {
             && !self.auto
             && self.phase == Phase::Returned
             && reply.is_some_and(paused)
-            && self
-                .steps
-                .iter()
-                .rev()
-                .find(|step| matches!(step.kind, StepKind::Stop | StepKind::Resume))
-                .is_some_and(|step| step.kind == StepKind::Stop && step.auto)
+            && self.stopped_by_itself()
     }
     /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
     pub fn thinking(&self) -> bool {
@@ -809,6 +805,7 @@ impl Book {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
+        handoff.resume_for_ask(now);
         if let Some(summary) = summary {
             handoff
                 .steps

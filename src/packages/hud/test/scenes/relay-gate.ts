@@ -93,6 +93,32 @@ export const relayPaused: Scene = {
   }),
 };
 
+// The same answer as 「relay-paused」, now gone back to Claude all the same
+// with the round trip still off (#410 S1): Claude's 「回」 stays up as it
+// did while the answer waited, until the person settles it.
+export const relayHeldBack: Scene = {
+  key: "relay-held-back",
+  title: "自动往返停着时到的回信已照样转回 Claude（Claude 仍盖「回」）",
+  snapshot: snapshot({
+    sessions: pair("held", "重写缓存层", 3),
+    handoffs: [
+      relay({
+        id: "h-held",
+        title: "重写缓存层",
+        doer: "claude",
+        session: "c-held",
+        chatgpt: "g-held",
+        phase: "returned",
+        minutesAgo: 3,
+        reviews: 2,
+        limit: 5,
+        auto: false,
+        halt: "ChatGPT 30 分钟没回信，自动往返停下，交还常浩",
+      }),
+    ],
+  }),
+};
+
 // Stopped at its cap, then put away by PostPane after a day idle; its Claude
 // session is no longer listed (#411 L2 P2-02, P2-04).
 const idled = relay({

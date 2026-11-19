@@ -38,6 +38,7 @@ mod back;
 mod belongs;
 mod gate;
 mod guard;
+mod held;
 mod lines;
 mod notice;
 mod reread;
@@ -944,8 +945,13 @@ impl Desk {
             }
             book.confirm_pending(id, request);
             asking.anchor.set(book, id);
-            book.asked(id, asking.summary.as_deref(), &asking.brief, now)
-                && (!asking.evidence || book.evidence_in(id, now))
+            // Taken words turn a self-stopped round trip on again (#410),
+            // evidence paused for among them; `evidence_in` is left the rest.
+            let asked = book.asked(id, asking.summary.as_deref(), &asking.brief, now);
+            if asking.evidence {
+                book.evidence_in(id, now);
+            }
+            asked
         })
     }
 
@@ -1146,7 +1152,10 @@ impl Desk {
                         .ok_or_else(|| {
                             l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
                         })?;
-                    (StepKind::Back, self.back_words(lines, &handoff, &reply).0)
+                    (
+                        StepKind::Back,
+                        self.back_words(lines, &handoff, &reply, false).0,
+                    )
                 } else {
                     let round = handoff.counted() + 1;
                     let text = if handoff.thinking() {
@@ -1156,36 +1165,7 @@ impl Desk {
                     };
                     (StepKind::Again, text)
                 };
-                let _sending = self.claim(id)?;
-                if self.lock().returned_already(id, &text) {
-                    return Ok(Acted::Done);
-                }
-                // The step's own id (#257): words left under it before went
-                // already, and are not left twice.
-                let prompt = self
-                    .lock()
-                    .get(id)
-                    .map_or_else(|| handoff.prompt_for(kind), |h| h.prompt_for(kind));
-                let (doer, session) = (
-                    handoff.doer.as_deref().unwrap_or(CLAUDE),
-                    &handoff.claude_session,
-                );
-                if let Err(Unsent::Failed(error)) = lines
-                    .reaches(doer, session)
-                    .map_err(Unsent::Failed)
-                    .and_then(|()| lines.reply(doer, session, &prompt, &text))
-                {
-                    // As the auto round trip's (#223): they wait in the
-                    // session's queue and go in once it is opened.
-                    if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
-                        return Err(error);
-                    }
-                    self.change(|book| {
-                        book.returned(id, kind, &text, &prompt, false, now) && book.queued(id, now)
-                    });
-                    return Ok(Acted::Done);
-                }
-                self.change(|book| book.returned(id, kind, &text, &prompt, false, now));
+                self.hand_back(lines, &handoff, kind, &text, false, now)?;
                 Ok(Acted::Done)
             }
             "pause" => {
@@ -1262,6 +1242,16 @@ impl Desk {
                 self.auto_back(lines, &id, next, now)
             };
         }
+        let held = self
+            .lock()
+            .list
+            .iter()
+            .filter(|h| h.held_answer())
+            .map(|h| h.id.clone())
+            .collect::<Vec<_>>();
+        for id in held {
+            changed |= self.hand_held(lines, &id, now);
+        }
         changed
     }
     /// Drives the answers that wait to go on (#72) when nothing else did:
@@ -1269,7 +1259,11 @@ impl Desk {
     /// extension followed. Only when there is one, so the sidebar's refresh
     /// can call it every time. Whether anything changed.
     pub(crate) fn catch_up(&self, lines: &dyn Lines, now: i64) -> bool {
-        let waiting = self.lock().list.iter().any(|h| h.next().is_some());
+        let waiting = self
+            .lock()
+            .list
+            .iter()
+            .any(|h| h.next().is_some() || h.held_answer());
         waiting && self.drive(lines, now)
     }
     /// Follows the newest words back to Claude in each handoff shown, as its
@@ -1358,7 +1352,7 @@ impl Desk {
         };
         // A pass holds only while the commit reviewed is the pull
         // request's still (#347): else it goes back and stops.
-        let (text, blocked) = self.back_words(lines, &handoff, &reply);
+        let (text, blocked) = self.back_words(lines, &handoff, &reply, false);
         if self.lock().returned_already(id, &text) {
             return false;
         }
@@ -1900,10 +1894,12 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         .as_str()
         .and_then(|id| app.try_state::<Desk>()?.lock().get(id)?.gate.chain.clone());
     answer["chain"] = json!(chain);
-    let gate = l10n::text(
-        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在驿窗设置「智能体插件」的「审核轮数上限」里调，1–9 轮）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
-        "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, sent back and ended; the cap, an escalation or last lines PostPane cannot read, left to the person.",
-    );
+    // Paused by the person still: its answer comes back all the same (#410).
+    let paused = answer["handoffId"]
+        .as_str()
+        .and_then(|id| Some(app.try_state::<Desk>()?.lock().get(id)?.paused_by_person()))
+        .unwrap_or(false);
+    let gate = held::relay_gate(paused);
     answer["message"] = json!(if answer["status"] == "repeated" {
         l10n::text(
             "这段内容刚才已经送到 ChatGPT，还没回信，没有再送一次；回信会出现在驿窗侧栏。",
@@ -1981,6 +1977,7 @@ pub async fn relay_launch(
 
 #[cfg(test)]
 mod tests {
+    mod held_back;
     use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
     use super::*;
@@ -3354,10 +3351,10 @@ mod tests {
         let shown = desk.projection(6);
         assert_eq!(shown[0]["auto"], true, "on again");
         assert!(shown[0]["halt"].is_null());
-        assert_eq!(
-            kinds(&desk, 6).last().unwrap(),
-            &("resume".to_owned(), true)
-        );
+        // Turned on as the words were taken (#410): just before them.
+        let steps = kinds(&desk, 6);
+        assert_eq!(steps.last().unwrap().0, "ask");
+        assert!(steps.contains(&("resume".to_owned(), true)));
         let reply = "证据够了\n评审出口：成熟退出\n结论：通过";
         desk.observe(
             &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":reply,"messageId":"m2","prompt":asked()}),
@@ -3520,12 +3517,25 @@ mod tests {
         desk.act(&lines, &handoff.id, "pause", 3).unwrap();
         assert_eq!(desk.projection(3)[0]["halt"], paused());
         desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
-        assert!(!desk.drive(&lines, 5), "paused: left to the person");
-        assert_eq!(replies(&lines), 0);
-        // Turned back on, the waiting answer goes back at once.
+        // Paused, the answer goes back all the same (#410), saying the
+        // person decides; the round trip stays off.
+        desk.drive(&lines, 5);
+        assert_eq!(replies(&lines), 1);
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["auto"], false);
+        assert_eq!(shown[0]["halt"], paused());
+        assert!(lines
+            .sent
+            .borrow()
+            .last()
+            .unwrap()
+            .2
+            .contains("下一步交常浩决定"));
+        // Turned back on, nothing goes twice.
         desk.act(&lines, &handoff.id, "resume", 6).unwrap();
         assert_eq!(replies(&lines), 1);
-        assert_eq!(desk.projection(6)[0]["phase"], "returned");
+        assert_eq!(desk.projection(6)[0]["auto"], true);
         assert!(
             desk.act(&lines, &handoff.id, "resume", 7).is_err(),
             "already on"
@@ -5367,14 +5377,18 @@ mod tests {
             .join("handoffs.json");
         std::fs::remove_file(&file).unwrap();
         std::fs::create_dir_all(file.join("in-the-way")).unwrap();
-        let sends = lines.sent.borrow().len();
+        let to_chatgpt =
+            |lines: &Fake| lines.sent.borrow().iter().filter(|s| s.0 == "send").count();
+        let sends = to_chatgpt(&lines);
         desk.drive(&lines, 4);
         std::fs::remove_dir_all(&file).unwrap();
-        assert_eq!(lines.sent.borrow().len(), sends);
+        assert_eq!(to_chatgpt(&lines), sends);
         let kept = desk.lock().get(&handoff.id).cloned().unwrap();
         assert!(kept.steps.iter().all(|s| s.kind != StepKind::Format));
-        assert_eq!(kept.phase, Phase::Replied);
         assert!(kept.gate.mending.is_none());
+        // Stopped for it, the answer still went back to Claude (#410).
+        assert!(!kept.auto);
+        assert_eq!(kept.phase, Phase::Returned);
     }
 
     /// Review round 4 P1-13: a 思维评审 at its cap goes on only with the
@@ -6875,7 +6889,9 @@ mod tests {
         assert_eq!(told.len(), 1);
         assert!(
             told[0].1.contains("ChatGPT 30 分钟没回信")
-                && told[0].1.contains("写「通过」会自动转回这里")
+                && told[0].1.contains("回信会照样转回这里")
+                && !told[0].1.contains("才会转过来"),
+            "every answer goes back now (#410 S1)"
         );
         let shown = desk.projection(late);
         assert_eq!(shown[0]["auto"], false);
@@ -6891,14 +6907,17 @@ mod tests {
         assert_eq!(desk.projection(late + 3)[0]["status"], "closed");
         let _ = handoff;
 
-        // A 思维评审's pass waits for the person, so it says so.
+        // A 思维评审 has no pass that ends it by itself, so it says none.
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         thinking(&desk, &lines);
         assert!(desk.tell(&lines, late));
         let text = last_sent(&lines).2;
-        assert!(!text.contains("写「通过」会自动转回"), "{text}");
-        assert!(text.contains("要常浩在接力卡上点「转回 Claude」"));
+        assert!(!text.contains("写「通过」"), "{text}");
+        assert!(
+            text.contains("收口以外的结论会写明下一步等常浩决定"),
+            "{text}"
+        );
     }
 
     /// #318: a session that cannot take it now finds it in its queue; one
@@ -6934,7 +6953,7 @@ mod tests {
         assert!(desk.tell(&lines, late));
         let told = sent_as(&lines, "codex");
         assert_eq!(told.len(), 1);
-        assert!(told[0].1.contains("点「转回 Codex」"), "{}", told[0].1);
+        assert!(told[0].1.contains("回信会照样转回这里"), "{}", told[0].1);
         assert!(
             last_step_text(&desk, late).ends_with("已发到 Codex 会话")
                 || last_step_text(&desk, late).ends_with("sent to the Codex session")
