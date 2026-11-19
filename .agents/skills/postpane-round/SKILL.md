@@ -17,6 +17,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 - 一张 issue 一个分支，从 `origin/main` 拉，开在独立 worktree：
   `git fetch -q origin && git worktree add .claude/worktrees/<号>-<短名> -b claude/<号>-<短名> origin/main`。
   并行会话不共用目录（G-04）。
+- 开工前看要改的文件是不是正被别的分支改着：`git worktree list`，再对各分支 `git log --stat origin/main..<分支>`。有、而且那支还没合并，就从那支的提交往下接（`git worktree add … -b claude/<号>-<短名> <那支的提交>`），不从 `origin/main` 开，否则必然冲突；PR 描述第一段写明连带了哪支；合并前问常浩合并顺序，不替那个会话合它的分支。那支先合并后，本 PR 就只剩自己的改动（E-19）。
 - 同一会话接着做下一张、上一张已合并且原 worktree 干净（`git status --short` 为空）时，可以留在原 worktree 里从最新 main 切新分支，保留构建缓存，省掉一次从头编译：`git fetch -q origin && git switch -c claude/<号>-<短名> origin/main`。目录名对不上新号没关系，合并后照第 5 步清理。别的会话还在用的 worktree 不碰，并行会话仍各开各的（E-09）。
 - 新 worktree 先备环境：`bash scripts/setup-worktree.sh`。它按写死的顺序先定构建目录，再 `pnpm install --frozen-lockfile`、生成打包资源；不生成资源目录，`cargo test` 一项都跑不起来（L-01）。要共用构建目录时把绝对路径当参数传给它，之后跑测试、打包的 shell 里也 `export CARGO_TARGET_DIR=` 同一个值；先生成资源、后导出变量，会在 worktree 里另生成一份 `target`（L-34、E-13）。
 - 并行 worktree 各用自己的构建目录。磁盘不够非共用 `CARGO_TARGET_DIR` 时，每次测试前把本 worktree 的 `.rs`、`Cargo.toml` 修改时间改到未来，并核对 `Compiling` 行是本 worktree 路径、新测试名出现、通过总数 = 基线 + 新增；否则跑的可能是别的 worktree 的代码（L-26、G-23、E-11）。
@@ -26,7 +27,9 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 ## 2. 测试（test）
 
 - 先格式化再测：`cargo fmt --all`，改过的前端文件 `pnpm exec prettier --write <文件>`。不先做，`pnpm run check` 常卡在格式检查（E-07）。
+- 先写测试、跑出红，再写实现：新测试先单独跑一次，把失败输出存进证据目录，再写实现。写完一起跑、第一次就全绿，只能事后临时改源码补红，容易被打断、留在改过的状态（L-32、E-14）。
 - 三条全跑：`pnpm run check`、`pnpm test`、`node --test tests/*.test.mjs`。改了任何脚本也跑全量，不只验一条路径（G-03）。
+- 性能、动画时长不在隐藏的内置浏览器面板里量：面板隐藏时 `requestAnimationFrame` 暂停、longtask 不报，测到的数不算；改用无头 Chrome，并记住它是 Chromium、不是驿窗的 WKWebView（L-29 补充、E-14）。
 - 多个 PR 连着合并后，在主目录用 main 自己的构建目录再跑一次三条全量，过了再打包装机（E-11）。
 - 报告时照抄原样结果（通过数、失败数那两行），不改写成「测试通过」（`docs/OPERATIONS.md`「报告与验收」第 3 条）。
 - bun 编译出的程序在 macOS 上要 `codesign --force --sign -` 补签，否则一运行就被杀（L-02）。
@@ -37,7 +40,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 有界面或应用行为改动时做；纯文档、纯测试改动跳过，并在交接里写「无需发布」。
 
 1. 打包：`pnpm --filter @agent-hud/desktop exec tauri build --bundles app`（不用 `--bundle`，生成 DMG 会自动启动应用）。
-2. 打包前看一眼 main 有没有在你开工后合进别的界面改动、别的会话装过没有：有就先变基到最新 main 再打，否则你装上去的包不含它们（L-05）。
+2. 打包前看一眼 main 有没有在你开工后合进别的界面改动、别的会话装过没有：有就先变基到最新 main 再打，否则你装上去的包不含它们（L-05）。变基一次后 main 又合进新的界面提交，就不再追：先装本分支的包把实机做完，交接里写明「装的包不含 #xx」，合并后按第 5 步从最新 main 重打、重装一次补齐。实机前看一眼并行会话是不是正在对它们自己的 PR 做实机，正在做就先错开（E-10）。
 3. 装：`bash .agents/skills/postpane-round/scripts/install.sh <证据目录短名>`，短名不带日期（如 `341-relay-toggle`，脚本自己加；带了就拒绝，E-17）。脚本按顺序做：先查回信刚到、正在转回 Claude 的自动往返接力，有就列出来、`exit 3`、什么都不动，等它转回完再装，急的话问过常浩才加 `--force`（L-44）→ 备份旧版到 `evidence/<今天>-<短名>/`（G-01）→ 退出旧应用，只认主程序本体 → `ditto` 覆盖、不先删（L-03）→ 启动 → 比对产物与已装的 `shasum`、读签名证书（L-06）→ 打印回滚命令。把它的输出原样写进交接的「发布与回读」。
 4. 装完截屏看有没有「想访问文稿」的权限弹窗，有就请常浩点允许，不要误判成改坏了、也不要反复重装（L-06）。
 5. 实机点击验证：每组真实点击前查锁屏和显示器没变（L-11）；侧栏悬停面板里的按钮电脑控制点不动，逻辑在浏览器预览里用真实组件点，实机那一下留给常浩（L-09）。往别人的页面注入脚本，浏览器里测过不算，要在驿窗的 WebKit 窗口里实测（L-10）。
@@ -59,6 +62,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 - 本轮踩到的新坑先写进 `docs/LESSONS.md`（L-xx），交接里「本轮新坑」写编号；没有写「无」。`tests/handoff-format.test.mjs` 会查。
 - 换个项目也成立的坑，在交接里写「可提议提升为全局坑」，出提案等常浩批，不直接改全局 LESSONS。
 - 沿用别人的测试或截图要明说，没做的写「未做」。
+- 多张并行（一次授权多张 issue，主会话分给几个子 agent 各开 worktree、各开 PR）：子 agent 的交接写进 PR 正文和给主会话的报告，不写 `CURRENT.md`、不占 `docs/LESSONS.md` 的编号（新坑只在报告里起草）、不装机、不合并；主会话逐张审 diff、squash 合并，最后一张收尾 PR 统一写 CURRENT 一节和新坑，再从 main 打包装机一次。会改仓库检查规则的 PR（如 300 行棘轮）放最后合，合前按当时的 main 重新生成基线（E-12）。
 
 ## 5. 合并与清理（merge-clean）
 
