@@ -27,7 +27,7 @@ impl Lines for AppLines<'_> {
         project: Option<&str>,
         title: &str,
         request: &str,
-    ) -> Result<String, String> {
+    ) -> Result<(String, Option<String>), String> {
         let state = self
             .0
             .try_state::<crate::chatgpt::ChatGpt>()
@@ -35,20 +35,26 @@ impl Lines for AppLines<'_> {
         let opened = state
             .channel()?
             .open_as(text, project, Some(title), Some(request))?;
+        let asked_id = opened["promptId"].as_str().map(str::to_owned);
         opened["conversation"]
             .as_str()
-            .map(str::to_owned)
+            .map(|conversation| (conversation.to_owned(), asked_id))
             .ok_or_else(|| "The ChatGPT extension named no conversation".into())
     }
-    fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String> {
+    fn send(
+        &self,
+        conversation: &str,
+        text: &str,
+        request: &str,
+    ) -> Result<Option<String>, String> {
         let state = self
             .0
             .try_state::<crate::chatgpt::ChatGpt>()
             .ok_or("The ChatGPT channel is unavailable")?;
-        state
+        let sent = state
             .channel()?
-            .send_as(conversation, text, Some(request))
-            .map(drop)
+            .send_as(conversation, text, Some(request))?;
+        Ok(sent["promptId"].as_str().map(str::to_owned))
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {
         let state = self

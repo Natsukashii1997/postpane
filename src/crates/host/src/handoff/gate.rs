@@ -95,8 +95,11 @@ impl Desk {
             Err(error) => return self.change(|book| book.stop(id, &error, true, now)),
         }
         let done = match lines.send(&conversation, &text, &request) {
-            Ok(()) => {
-                self.change(|book| book.confirm_pending(id, &request));
+            Ok(asked_id) => {
+                self.change(|book| {
+                    book.confirm_pending(id, &request);
+                    book.asked_as(id, asked_id.as_deref())
+                });
                 true
             }
             // Never known to have gone in: the session is told (P1-14).
