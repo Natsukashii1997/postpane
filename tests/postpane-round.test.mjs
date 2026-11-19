@@ -126,7 +126,7 @@ test("统计脚本在夹具上：按工作目录筛会话、跳过子代理、�
 
 // L-44：装机会重启驿窗。重启不再暂停自动往返（2026-11-14），只剩「回信刚到、正在转回」那一刻重启可能出岔子，
 // 装前查这一种，有就拒装、要 --force 才装（常浩选甲）。只测查的那一步和它在脚本里的位置，
-// 不在测试里真跑 install.sh（会退出正在用的驿窗）。
+// 这里不真跑 install.sh；整条装机流程在临时目录里用替身命令跑，见 install-guard.test.mjs（不碰正在用的驿窗）。
 const AUTO = join(SKILL_DIR, "scripts/live-auto-relays.mjs");
 function relays(list) {
   const dir = mkdtempSync(join(tmpdir(), "postpane-auto-"));

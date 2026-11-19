@@ -79,7 +79,7 @@
   - 合入 main（`6e89124`，#364–#386；推送前 main 又合进 #365（#318 接力出错通知发起会话）、#388（清理历史包袱），再合一次，冲突在 `AGENTS.md`、`CURRENT.md`、`mcp/src/index.ts`、`handoff.rs`、`handoffs.rs`，两边都留，#365 新加的那句「打不开或 30 分钟没回信也通知」并进 `relay.ts`）：`CURRENT.md` 两边交接都留；`docs/chatgpt-channel.md` 回信核对同时写去反引号（#366）和只认未确认的话；`handoffs.rs` 导出合并（`idle`）。
   - `platform/.../handoffs/guard.rs`：`Pending` 加 `key`、`booked`、`answered`；`in_flight` 算上未答的 pending；`answer_pending`（回信入账前补「送审」一步、计一轮）、`confirmed_late`、`unconfirmed`（停下）；`pending_at_restart` 改为停下；`unsettled_top` 把闲置自动结束（#368）的到顶接力仍算未了结。`handoffs.rs`：`replied` 只收未答的 pending、调 `answer_pending`；`sent_back` 去掉投递标签（`unlabelled`，手机标签除外）；`allow_extra` 不再排除思维评审。`gate_io.rs`：台账按标题级别截取。
   - `host/handoff.rs`：送审时同一段未确认的话返回 `repeated`、别的话拒收；`change_kept` 先落盘再发；发送失败停下并报 `sent_unknown`；`went_in` 先认迟到确认；思维评审到顶同样拒收；`auto_back` 对可重送的拦下（PR 新提交、没记受审提交）和 `Stale` 不停；再审 / 左滑话术改成「问题台账 + 末四行」；去掉「通知常浩」。`handoff/belongs.rs`：有未答 pending 时只认它。`handoff/gate.rs`：`pass_blocked` 返回 `Held { why, resend }`、补格式记 pending。`handoff/guard.rs`：`Held`、收口也拦、新话术。`handoff/back.rs`：拦下时按可否重送分两种话术，思维评审另写。
-  - `src/apps/mcp/src/relay.ts`：上限说成默认 5、可在 config.json 改，去掉「通知常浩」，写明 PR 有新提交时转回请重送。`docs/chatgpt-channel.md`：审核门一节、自动往返终局一段同步。`docs/LESSONS.md`：L-51。
+  - `src/apps/mcp/src/relay.ts`：上限说成默认 5、可在 config.json 改，去掉「通知常浩」，写明 PR 有新提交时转回请重送。`docs/chatgpt-channel.md`：审核门一节、自动往返终局一段同步。`docs/LESSONS.md`：L-54（原写 L-51，并入 main 时已被 #410 占用，改号）。
 - 测试：第二次合入 main 之后（`0b814b6`）`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo 合计 passed 1034 failed 0（platform 289、host 147 等），前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。第一次合入后也全过（cargo 1020/0、前端 463/0）。日志（`*-2.log` 为第二次） `~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/`。新增测试：host 6 项（未确认的话一整套、思维评审收口被拦、补格式未确认不放行、落不了盘不发、受审版本不符转回重送、思维评审到顶拒收），platform 断言 3 处（带标签 / 手机标签插话、闲置结束不算了结、分组台账）。撤修复验证 8 处各自对应测试失败（`revert-checks.log`）。
 - 验证：只做了单元与集成测试；未装机、未实机走接力。
 - 截图：无（无界面改动）。
@@ -90,15 +90,156 @@
   - 还没做：第 3 批界面（到顶 / 通过通知、上限设置入口、到顶卡出口，Fable #2、#3）；四份规则草稿对齐实现（Fable #11）；第 4 批模拟台账与实机走一次（Fable #13）。挂起：链总轮数兜底（#10）、授权改卡上按钮（#15，涉及常浩 11-14 定的 P1-06 口径，要先单独确认）、有 PR 时只认 `head`（#16）。
   - 本机现开着 5 张接力（3 张在答），切换前要处理。
   - skill 进化：无。
+- 本轮新坑：L-54（原编 L-51，并入 main 时改号）
+
+
+
+
+
+
+
+## 积压清单第二批（组 12）：`pnpm run check` 第一步查 `src/` 下没提交的文件，预览只用场景预览台（2026-11-19，Claude 子 agent，常浩 11-19 回「全部按推荐」批了积压清单组 12；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 11:37`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 12：L-13、L-43 两次都是 `src/` 下没提交的自查页 / 预览脚手架把 `pnpm run check` 拦在格式或包边界检查上；E-18 预览统一用场景预览台。同批的 #416（坑记录与 SKILL）先合，本 PR 合并前要变基。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/tooling/check-untracked.mjs`（新）：`git ls-files --others --exclude-standard -- src`，有就列出文件、写明正确做法（场景预览台；一次性页面放 `src/` 外；要提交的先 `git add`），退出 1。`package.json`：新增 `check:untracked`，放在 `check` 第一步。
+    - `tests/check-untracked.test.mjs`（新）：L-13 的 `src/apps/desktop/relay-real/`、L-43 的 `src/apps/desktop/preview-328/` 两个样本各报一次错，忽略的构建产物、已 `git add` 的新文件、`src/` 外的草稿放行，并查 `check` 第一步是它。
+    - E-18：`.agents/skills/postpane-round/SKILL.md` 第 3 步第 5 条改指场景预览台（命令、端口、参数、缺场景在哪补）；`docs/LESSONS.md` L-13、L-43 的「正确做法」改成场景预览台（原来「对自查页也 prettier」「截完图挪走再跑 check」两种旧做法写明作废），L-09 的「浏览器预览」补一句只用场景预览台；`EVOLUTION.md` E-18 改「已采纳（本 PR，#417）」。
+    - `docs/LESSONS.md` L-13、L-43 升级行改成「〔提醒〕部分升级」（子 agent 原标〔机检〕；`pnpm run check` 靠约定去跑，常浩 11-19 定降一层）。
+  - 顺手改的：`AGENTS.md`「运行」里 `pnpm run check` 那行注释补「先查 src/ 下有没有没提交的文件」。
+  - **改变了已有行为的**：`pnpm run check` 原来不管 `src/` 下有没有没提交的文件，直接从格式检查开始；现在第一步先查，有没提交、也没被 `.gitignore` 忽略的文件就退出 1、后面都不跑。连本轮新写、还没 `git add` 的源文件也会被拦（本轮自己就碰上了：新脚本没 add 时被列出来），报错里写了「先 git add」。
+- 测试：改动前（origin/main `0e5083c`）`node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP 9/0，插件 14/0，Chrome 插件 28/0）。新测试先在旧代码上红：`tests/check-untracked.test.mjs` 对着 origin/main 跑 `ℹ pass 0` / `ℹ fail 4`（`red/check-untracked-old-code.log`）。改动后 `node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（+4 条新测试），`pnpm run check` exit 0（第一步打印「src/ 下没有未提交的文件。」），`pnpm test` exit 0，各项与改动前相同。和 #416 共用构建目录 `~/Sandbox/worktrees/postpane-b2-target`（两边 Rust 代码相同）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`（`baseline-*`、`pr2-final-*`、`red/`）。
+- 验证：真实样本放回 `src/` 跑 `pnpm run check`（样本是证据目录里当时的 `relay-real-page/`、`preview-328/` 的 `index.html`、`main.tsx`、`vite.config.ts`，不含私人快照；跑完删掉，`git status` 核过）：旧代码上 L-13 样本 8 秒后挂在 `format:check`（`[warn] src/apps/desktop/relay-real/main.tsx` 等，和当时一样），L-43 样本格式化后 19 秒挂在 `check:packages`（`preview-328/main.tsx:11: ../../../packages/hud/src/HUDScene leaves the package` 等 4 处，和当时一样）；新代码上两份样本都在第一步、2 秒内停下，列出文件和正确做法。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/red/`（`old-code-*`、`new-code-*`）。
+- 截图：无（没有界面改动）。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 删旧脚手架：仓库里已没有旧脚手架的代码（只在证据目录），能删的是指向它的文字，即 L-13、L-43 的旧做法；`docs/history/` 里的历史交接照原样留。主目录本机的 `.claude/launch.json`（不进仓库）还有 `preview-243`～`preview-341` 等十几项旧脚手架启动配置，有几项写着「用前放回 src/apps/desktop/」，按规矩不动主目录，建议删掉只留 `scenes`。
+  - 预览台、固定场景都是 ADR-0001（`docs/adr/0001-工作场所契约.md` 第 8 条）已定的做法，本 PR 只是让 SKILL 和 LESSONS 跟它一致，没改预览台本身；本项目没有 `docs/DECIDED.md`。
+  - L-13、L-43 原标〔机检〕，常浩 11-19 定降为〔提醒〕部分升级：新检查接在 `pnpm run check` 里，坑只在跑这条命令时出现，跑它就一定先查；单独跑 `format:check`、`check:packages` 等子步骤不经过它。
+  - skill 进化：E-18 已采纳（本 PR）；无新 E 条目。
+- 本轮新坑：无
+
+## 积压清单第二批（坑记录与 SKILL）：提升行补全局编号、组 15 关闭、组 16 不升级、E 条目采纳（2026-11-19，Claude 子 agent，常浩 11-19 回「全部按推荐」批了积压清单组 3、7～17；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 11:37`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）第二批里驿窗不改代码的部分。组 12 的代码改动（`pnpm run check` 查 `src/` 下没提交的文件、E-18）在同批另一个 PR，那边要等本 PR 合并后变基。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `docs/LESSONS.md`「提升」行，编号照主会话定死的表：L-10 → G-33（L-35 并入 G-33，是同类第二例）、L-30 → G-34、L-23 → G-35、L-18 → G-36、L-09 与 L-11 → G-37、L-32 → G-40；组 13：L-29 并入 G-11、L-38 并入 G-26。PR 号先写「agent-kit#83」，主会话合并时统一替换。这几条的升级行把「待批：…提升为全局坑」改成「已批：…见下方『提升』」，层级不变。
+    - 组 15 关闭（每条核过证据，见 PR）：L-02、L-03、L-06、L-45 →「〔结构〕已升级，关闭」；L-44 →「〔机检〕已升级，关闭」；L-46 →「〔提醒〕部分升级，关闭」，写明靠测试 `claude::background::tests` 守住、未接进必经检查。
+    - 组 16「〔提醒〕不升级」并写理由：L-07、L-08、L-31、L-40、L-42、L-50。L-07 照积压清单第 4 节第 2 点选了不升级，理由里写了「也可以从结构上消除，改动面没评估」。
+    - `.agents/skills/postpane-round/SKILL.md`：组 17 采纳 E-19（第 1 步：要改的文件正被别的分支改着时从那支接）、E-14（第 2 步：先写测试跑出红；性能不在隐藏面板里量）、E-10（第 3 步第 2 条：变基一次后不再追）、E-12（第 4 步：多张并行时子 agent 不写 CURRENT、不占坑编号、不装机）。
+    - `.agents/skills/postpane-round/EVOLUTION.md`：E-10、E-12、E-14、E-19 改「已采纳（本 PR，#416）」并加「批准」行；E-16 改「已否（被 E-18 取代…）」（组 12）。
+  - 顺手改的：`docs/LESSONS.md`「怎么升级」加一句「关闭」「不升级」怎么写。
+  - **改变了已有行为的**：无（只改文档和 skill 文字）。`steps.json` 没改：四条 E 加的都是判断和顺序，没有新的命令痕迹（E-19 的 `git worktree list` 开工、清理都用，算进开工会把清理也数成开工）。
+- 测试：改动前（origin/main `0e5083c`）`node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP 9/0，插件 14/0，Chrome 插件 28/0）。改动后 `node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`（`postpane-round.test.mjs` 查 EVOLUTION 状态写法、SKILL 与 `steps.json` 对应，`check-rules` 的 lessons 规则查新升级行，都过），`pnpm run check` exit 0，`pnpm test` exit 0，各项与改动前相同。两个 PR 共用构建目录 `~/Sandbox/worktrees/postpane-b2-target`（两边 Rust 代码相同）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`（`baseline-*`、`pr1-final-*`）。
+- 验证：只改文档，没有界面与应用改动。组 15 每条关闭前都对着当前代码核了证据（文件、行号见 LESSONS 各条），没有对不上的。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - E-12 写的「子 agent 不写 CURRENT」和这次的做法对不上：这次主会话让子 agent 各自写交接，两个 PR 都写了 CURRENT 顶部，合并时 CURRENT 会冲突，两节都留即可。
+  - L-45 关闭的「不覆盖」：主目录本机的 `.claude/launch.json`（不进仓库）还留着 `preview-243`～`preview-341` 等十几项旧脚手架的启动配置，有几项写着「用前放回 src/apps/desktop/」；按规矩不动主目录，建议常浩或下一个在主目录干活的会话删掉，只留 `scenes`。
+  - 本项目没有 `docs/DECIDED.md`；本 PR 不碰界面。
+  - skill 进化：E-10、E-12、E-14、E-19 已采纳，E-16 已否（本 PR）；无新 E 条目。
+- 本轮新坑：无
+
+## 积压清单 B 批：时间敏感测试固定时钟、MCP 替身预热、全量测试跑完再汇总、TS 小人导演对拍、check 按归属记录比、备环境脚本（2026-11-19，Claude 子 agent，常浩批了积压清单组 1、2、4、5；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 11:01`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 1（L-12、L-17、L-47）、组 2（L-49）、组 4（E-15、E-20）、组 5（L-34、E-13）的项目内改动。依赖 PR #414（LESSONS 补层级词）：#414 合并后本 PR 要变基，LESSONS 同几行会冲突，以本 PR 的为准。
+- 改了哪些文件：
+  - 常浩要求的：
+    - L-12：`src/crates/core/src/demo/mod.rs` 的 `a_pass_with_nothing_new_renders_nothing_until_something_changes` 改用固定时钟 `snapshot::PINNED_CLOCK`，末尾补一句「到时限照样重画」。
+    - L-17：`src/crates/core/src/lib.rs`（`look`）、`source_db.rs`（记下次轮询时间）改读 `snapshot::wall_clock_ms()`（正式运行就是真实时间）；`source_db/tests.rs` 的 Grok 测试固定时钟，验「差 1 毫秒不到点、满 10 秒到点」，去掉原来把到点时间改成 0 的写法；`snapshot.rs` 注释同步。
+    - L-47：`src/apps/mcp/test/host-tools.test.mjs` 替身引擎编完先单独启动一次（给 120 秒），中转等引擎的 45 秒只算请求；新增 `src/tooling/test-all.mjs`，`package.json` 的 `test` 改成它：五套依次跑完再汇总；测试 `tests/test-all.test.mjs`。
+    - L-49：新增 `src/packages/hud/test/director-cases.test.ts`，TS 导演回放 `src/crates/hud/src/bots/director-cases.json`，和 Rust 那条回放同一份用例；`mark-director.ts` 经 Vite 加载（L-53）。
+    - E-15、E-20：`.agents/skills/postpane-round/scripts/install-guard.sh` 加 `check_record`、`main_worktree`，`install.sh check` 不给产物路径时调它；`tests/install-guard.test.mjs` 加两条。
+    - L-34、E-13：新增 `scripts/setup-worktree.sh`，测试 `tests/setup-worktree.test.mjs`；`AGENTS.md`「运行」、「结构」和 `SKILL.md` 第 1 步指向它，`steps.json` 的 start 痕迹加它。
+    - `docs/LESSONS.md`：L-05、L-12、L-17、L-34、L-47、L-49 的升级行改成实际结果；`EVOLUTION.md`：E-13、E-15、E-20 改「已采纳」并写批准与落地。
+  - 顺手改的：`AGENTS.md`「运行」里 `pnpm test` 那行注释补「五套都跑完再汇总」。
+  - **改变了已有行为的**：① `pnpm test` 原来 `&&` 串联、一套失败后面不跑；现在五套都跑，最后打印汇总，任何一套失败整体退出码 1（以前是失败那一套自己的退出码，如 cargo 的 101）。② `install.sh check` 不给产物路径时，原来拿当前目录下的产物比；现在按归属记录比：功能 worktree 只认自己装的，主目录还认已合进 main 的，没有记录就让带产物路径；带产物路径的用法不变。③ MCP 测试每个替身多启动一次（每次零点几秒）。
+- 测试：改动前（origin/main `a342c1c`）`node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（cargo 合计 `1001 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 28/0）。改动后见下一行。每项改前都在旧代码上红过一次：L-12、L-17 注入「机器忙」的延时，旧代码两条都失败、新代码同样注入两条都过；L-47 注入「替身第一次启动停 50 秒」，旧代码 45 秒后 `Cannot read properties of undefined (reading 'description')`、新代码通过；L-49 把 TS 的 failed 提示改成 limit-hit，原有前端 462 条全绿、新回放测试变红；E-15/E-20、备环境脚本、汇总脚本的新测试先在旧代码上跑出红。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/`（`red/` 是验红，`*-baseline.log`、`*-final.log` 是全量）。
+- 改动后全量：`node --test tests/*.test.mjs` `ℹ pass 50` / `ℹ fail 0`（+7：装机守卫 2、备环境 3、汇总 2）；`pnpm run check` exit 0；`pnpm test` exit 0，汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`（改的是现有测试，条数不变），前端 `ℹ pass 463` / `ℹ fail 0`（+1 回放），MCP 9/0，插件 14/0，Chrome 插件 28/0。前两次改动后全量没过、已修：第一次 EVOLUTION 编号少写「#」，跑到生成资源就按进程号停了（`aborted-*`）；第二次 `check:file-size`（`snapshot.rs` 注释多一行，超了棘轮基线）和 `check:packages`（回放测试用 `new URL("..")` 算越出包，记进 L-53）失败，`node --test` 也因棘轮挂 1 条（`run2-failed-*`）；修好后第三次即上面的结果。
+- 验证：全在测试里；`install.sh` 只在 `tests/install-guard.test.mjs` 的临时目录和替身里跑，没有对 `/Applications` 装机。
+- 截图：无（没有界面改动）。
+- 发布与回读：无需发布（测试、脚本和文档）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - L-49 积压清单目标是〔机检〕，驿窗没有必经检查，只能标〔提醒〕部分升级；`model.ts` ↔ `vendors.rs`、`stale.ts` ↔ `stale.rs` 两对没有对拍。
+  - SKILL.md 第 1 步按组 5 已批改了（E-13 落地）；E-15/E-20 改做〔机检〕，SKILL.md 不用改。
+  - 本项目没有 `docs/DECIDED.md`，本 PR 不碰界面。
+  - skill 进化：E-13、E-15、E-20 已采纳（本 PR）。
+- 本轮新坑：L-53
+
+## LESSONS 升级行补层级词，规则检查加 lessons 规则（2026-11-19，Claude 子 agent，常浩批了积压清单组 1、2、4、5 和「LESSONS 升级行一次补齐」；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 10:47`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）第 4 节：项目 LESSONS 的升级行不带〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕层级词，L-29 之后 13 条干脆没有升级行。
+- 改了哪些文件：
+  - 常浩要求的：`docs/LESSONS.md` 52 条全部补层级词，原文字保留（状态变了的放「原记录：」后面），缺的 13 条（L-29～L-35、L-37、L-38、L-40、L-42～L-44）新写一行；补「提升」：L-19 → G-31、L-33 → G-32、L-48 → G-30，L-49 并入 G-31，L-37 另并入 G-32（agent-kit#82）；「怎么升级」一节补层级词约定，并写明本项目没有提交前钩子和 CI，只写成测试的算〔提醒〕部分升级，`install.sh` 里必经的步骤和本机 Bash 预检钩子算〔机检〕。`scripts/check-rules.mjs` 照剪藏插件 #10 那一版加 `lessons` 规则；`tests/check-rules.test.mjs` 加一条：真实样本 L-29（缺行）、L-52（不带层级词）各报一次，借剪藏插件 L-02 的标题（反引号里 `<all_urls>`）验不被当成占位跳过，L-41 缩进的「  - 升级：」不顶替顶层那一行。
+  - 顺手改的：L-48 与 L-49 之间补了一个空行。
+  - **改变了已有行为的**：`node scripts/check-rules.mjs` 和 `node --test tests/*.test.mjs` 多查一项，LESSONS 新条目没有带层级词的升级行就报错。
+- 测试：见 PR 正文与下面的证据目录；改动前 `node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（cargo `1001 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 28/0）。补齐前在真实 LESSONS 上跑新规则：`通用规则检查未通过：52 处`（13 条缺行、39 条不带层级词，`check-rules-red-before.log`）；补齐后 `通用规则检查通过`。变异检查：去掉「反引号里的尖括号先剥掉」，新测试变红（`mutation-no-backtick-strip.log`），还原后 `cmp` 一致。改动后：`node --test tests/*.test.mjs` `ℹ pass 44` / `ℹ fail 0`（+1），`pnpm run check` exit 0，`pnpm test` exit 0，各项与基线相同（cargo `1001 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 28/0）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-lessons-levels/`。
+- 验证：只改文档和规则检查，没有界面与应用改动。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 层级按条目现状选，拿不准的选低一层，列在 PR「拿不准的」。组 1、2、4、5 里 PR 2 才实现的条目（L-12、L-17、L-34、L-47、L-49）这里先标目标层级加「未升级（已批…待实现）」。
+  - L-49 的目标层级是〔机检〕，但驿窗没有 CI 和提交前钩子，回放测试写好也只算〔提醒〕部分升级，PR 2 照实标，要常浩定要不要给驿窗加必经检查。
+  - 本项目没有 `docs/DECIDED.md`。
+  - E 条目本 PR 没动。skill 进化：无。
+- 本轮新坑：无
+
+## 装机脚本加锁和归属记录，装后自动冒烟（#401）（2026-11-18，Claude 子 agent，常浩在月度复盘后批准本批；已提交、未发布：按授权不做真实装机，冒烟未实机验证）
+
+- 时间：开工 `2026-11-18 22:17`（`date '+%F %H:%M'` 记录）。来由：月度复盘两条——L-05 之后并行装机又互相覆盖多次（交接里记着「装前是别的会话装的包，被覆盖」），现有防线只有事后比 shasum；L-35 小人变静态图靠人眼 6 小时后才发现，`AGENTS.md`「已定内容」的「隔 2 秒截两张、和改前对比」是手工步骤。
+- 改了哪些文件：
+  - 常浩要求的：`.agents/skills/postpane-round/scripts/install-guard.sh`（新，被 `install.sh` source）：装机锁 `~/Library/Application Support/postpane/install/lock/`（`mkdir` 原子拿锁，`owner` 记 worktree、分支、提交、是否有没提交的改动、进程号、时间；持锁进程不在、锁超过 30 分钟、或一分钟还没写下是谁，算死锁，经 `takeover/` 小锁串行接管）；归属记录 `installed.txt`（每次装成功记来源、包的 shasum、时间、证据目录）；装前归属检查（装着的包既不是 main 构建的、也不是本 worktree 上次装的就 exit 5，写清是谁、什么时候装的，出口是确认对方的包不再需要后加 `--takeover`；「main 构建的」= 记录里没有未提交改动，且提交已在 origin/main 里或整支已 squash 合进 main）。`install.sh`：拿锁 → 查归属 → 原有的接力检查 → 备份 → 截装前侧栏 → 退出 → 覆盖 → 启动 → 回读 → 记归属 → 装后冒烟；`check` 多打一行「已装的是谁的」；新增 `--takeover`、退出码 4/5/6；`POSTPANE_INSTALL_APP` 仅供测试换安装位。`smoke.mjs`（新）：用系统窗口表找 PostPane 层级大于 0 的侧栏窗口，`screencapture -x -o -l <窗口号>` 只截侧栏窗口；装后等窗口出现、再等 8 秒加载，隔 2 秒最多截 6 张，任一张和基准差 ≥50 像素就算在动（布局变了的一对不算、换基准），写 `smoke-motion-<n>.png`；和装前 `smoke-before-<n>.png` 对比写 `smoke-before-after-<n>.png`（前 / 后 / 标红三联）；`compare` 子命令单独比两张图。`png-diff.mjs`（新）：只用 Node 自带 zlib 的 PNG 读写、像素比较、差异图。测试 `tests/install-guard.test.mjs`（12 条）、`tests/smoke-diff.test.mjs`（9 条）、替身工具 `tests/install-stubs.mjs`。
+  - 顺手改的：`tests/postpane-round.test.mjs` 第 129 行注释原写「不在测试里真跑 install.sh」，现在有带替身的整体跑法，改成指向 `install-guard.test.mjs`；`docs/LESSONS.md` 加 L-52（原写 L-51，变基时 #410 已占用，改号）；`EVOLUTION.md` 加 E-22（待批；E-21 已被 #403 用掉，变基时改号）。
+  - **改变了已有行为的**：① 原来两个会话可以同时跑 `install.sh`、交错执行；现在后到的直接 exit 4，打印持锁者。② 原来能直接覆盖任何人装的包；现在装着的包既不是 main 构建的、也不是本 worktree 上次装的（含不在记录里的，如旧版脚本装的、手动 ditto / 回滚过的）就 exit 5，要加 `--takeover`。第一次用（还没有记录）照装。③ 原来回读一致就 exit 0；现在还要装后冒烟通过，截不到图或小人没动 exit 6（包已经装上、归属照记，回滚命令在冒烟之前打印）。④ 装前多截一张侧栏（截不到不拦）。⑤ `check` 多一行输出。
+- 测试：改动前 `node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`；基线（origin/main `5967bba`）`pnpm run check` exit 0，`pnpm test` exit 0（cargo 合计 `1000 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 23` / `ℹ fail 0`）。改动后：`pnpm run check` exit 0；`pnpm test` exit 0，各项与基线相同（cargo `1000 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 23/0）；`node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`（+21 条新测试）。没有偶发失败。本 worktree 自己的 `target`，没共用构建目录。日志在 `~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/`（`*-baseline.log`、`*-final.log`、`node-test-pre.log`，脚本 `run-full.sh`，后台跑，L-37）。另做两次变异检查：去掉 squash 判断，对应测试变红，还原后 `cmp` 一致；并发测试断言三轮里至少一轮被锁挡下（确认两边真重叠）。
+- 验证：所有装机测试都在临时目录里：HOME、安装位、git 仓库（bare origin + main + 两个 worktree）都是临时的，`osascript`、`pgrep`、`open`、`codesign`、`screencapture` 是替身，`sandbox()` 先核对替身生效才跑。**没有对 `/Applications` 跑过 install.sh，没有退出或重启驿窗。** 只读试了截图那一步：在正在运行的驿窗上跑 `smoke.mjs shot` 和 `smoke.mjs after`（不装机，只截侧栏窗口），判「在动」，1356 个像素不同、范围落在小人上；装前装后差异图把截第一张时展开着的卡片标了出来。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/smoke-live/`（`smoke-before-1.png`、`smoke-after-1-1.png`、`smoke-after-2-1.png`、`smoke-motion-1.png`、`smoke-before-after-1.png`）。
+- 发布与回读：未发布（纯脚本与测试，按授权不做真实装机）。实机验证要常浩同意后做：合并后在 main 打包，`bash .agents/skills/postpane-round/scripts/install.sh 401-install-guard`（第一次没有记录照装；之后看证据目录 `smoke-*.png`）；再从一个别的 worktree 跑一次，确认 exit 5 的提示；最后 `install.sh check`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 任务说明写的路径 `scripts/install.sh` 不存在，实际在 `.agents/skills/postpane-round/scripts/install.sh`，照实际改。
+  - SKILL.md 第 3 步没改：SKILL.md 第 6 步规定改它要先记 E-xx、常浩批了才改，已记 E-22 待批。`AGENTS.md`「已定内容」的手工截图要求没改。
+  - 冒烟比的是整个侧栏窗口，不只是小人：侧栏里还有别的动画（如运行中的加载动画）时，小人变静态也可能被它「带过」。要只看小人，得让应用给出小人的位置（建议另开 issue）。
+  - 冒烟要终端有屏幕录制权限（这台机器上 Claude 已经有，`screencapture` 能截）；锁屏、显示器休眠时截不到，退出码 6 并说明，不当成改坏了。
+  - 开工时本仓库 `AGENTS.md`「分工」写「不顺手修」、全局第 3 节写可以顺手修；变基时 main 已合进 #403（改为与全局一致），不再冲突。本轮顺手改的只有上面三处。
+  - skill 进化：E-22 待批。
+- 本轮新坑：L-52
+
+
+
+## 重读遇到后台标签页里没画出的回信：短暂切到前台再读（#410 续）（2026-11-19，Claude，#412 装机实测发现后台标签页不渲染，常浩切到前台验证成立，按上轮说的推荐做法补；已提交、无需发布驿窗本体，插件要重新加载）
+
+- 时间：开工 `2026-11-19 10:18`（`date '+%F %H:%M'` 记录）。来由：#412 合并后实测，#318 那单旧接力不再误报旧回信，但回信一直没上报；常浩把那个 ChatGPT 标签页切到前台后，10:16:51 那次重读立刻 `taken`（2008 字）。ChatGPT 不在后台标签页里渲染新回信，光滚到底不够。
+- 改了哪些文件：
+  - 常浩要求的：`src/apps/chrome-extension/content.js`：重读时最新一轮已答、回信没画出来，回复里带 `undrawn: true`。`src/apps/chrome-extension/background.js`：收到 `undrawn` 且标签页不在前台，就把它在自己窗口里切到前台，最多再问 3 次、每次隔 1.5 秒，问到就停；然后切回原来在前台的标签页（这期间常浩自己换过标签就不动）；不把 Chrome 窗口提到最前。
+  - 顺手改的：`docs/chatgpt-channel.md` 的 `reread` 一行补上 #410 两轮的做法；`docs/LESSONS.md` L-51 补「后台标签页不渲染」和「插件目录要核对」。
+  - **改变了已有行为的**：重读时，回信只在后台标签页里没画出来，驿窗会把那个 ChatGPT 标签页短暂切到前台再切回。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 28` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-front/`。新增的后台测试先在旧代码上确认失败。
+- 验证：#412 装机后在常浩的 Chrome 里实测：重新添加主目录那份插件后，#318 那单不再报旧回信；常浩手动切到前台后下一次重读 `taken`。本轮的自动切前台还没在真实接力里跑过。
+- 截图：无。
+- 发布与回读：只改 Chrome 插件，驿窗本体无需发布；合并后常浩在 `chrome://extensions` 重新加载驿窗插件（来源须是主目录 `src/apps/chrome-extension/`）。
+- 与授权不一致之处、遗留问题、范围外发现：0E-1 第 2 轮那单（`h1a1ed39518503`）的提问是昨天旧代码拼成的「第 1 轮 + 第 2 轮」，开头对不上，新代码也认不了，要常浩手动处理；以后新发的不会再拼。skill 进化：无。
+- 本轮新坑：L-51（补充）
+
+## 接力回信认不出导致「30 分钟没回信」：读错最新一轮、代码块、输入框旧稿（#410）（2026-11-19，Claude，常浩问「驿窗超时如何根治」，看过原因与三处修法后回「按方案开工」；已提交、发布见下）
+
+- 时间：开工 `2026-11-19 05:28`（`date '+%F %H:%M'` 记录）。来由：接力反复「ChatGPT 30 分钟没回信」，实际 ChatGPT 一两分钟就回了，`turns.jsonl` 记的是 `complete unmatched`：驿窗没认出这是这次送审的回信。三处原因见 L-51。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/apps/chrome-extension/page.js`：`lastPrompt` / `lastReply` / `answered` 不再取页面最后一个节点，改按单元键第一次出现的顺序定最新一轮，读它最后一份（显示的那份）；新增 `reveal` 把对话滚到底。`submit` 输入框有字先清空、等发送键灭了再粘贴，点发送前核对输入框没多出旧字，多了报 `composer-mismatch`。
+    - `src/apps/chrome-extension/content.js`：重读时最新一轮已答、回信只在隐藏那份里，滚到底让它画出来，这次不报。
+    - `src/apps/chrome-extension/background.js`：`composer-mismatch` 和 `send-failed` 一样把标签页提到前面再试一次。
+    - `src/crates/host/src/handoff/belongs.rs`：比对提问两种归一都试（去掉代码块标记行 / 只去反引号），任一对上算这次的回信。
+  - 顺手改的：无。
+  - **改变了已有行为的**：插件认「最新一轮」的方式；发送前会清空输入框里已有的文字；重读时会把 ChatGPT 页面滚到底；开头带代码块的送审现在能被认领。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 462` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 27` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。新增 4 条插件测试、1 条 Rust 测试，都先在旧代码上跑过、确认失败。
+- 验证：Chrome 里只读打开 5 个出过事的 ChatGPT 会话核对 DOM（不发送），记录在证据目录 `page-checks.md`；把新取数逻辑注入 #318 专项复核那个会话：旧逻辑取到第 2 轮的提问和回信，新逻辑取到「专项复核」，滚到底 3 秒后它的回信（1558 字）画出来。
+- 截图：无（没有界面改动）。
+- 发布与回读：打包前 main 仍是 `7a4b3d9`。`tauri build --bundles app` 退出码 0；`install.sh 410-relay-unmatched`：装前 `aaa1ba79c85d`（已备份），退出于 05:49:55、启动于 05:49:55，产物 `08256f49a34b` / 已装 `08256f49a34b`，签名照常（`H"b773068e`）；应用日志无报错。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/PostPane-aaa1ba79c85d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。Chrome 插件从主目录 `src/apps/chrome-extension/` 加载，合并后要在 `chrome://extensions` 重新加载一次才换上新版。
+- 与授权不一致之处、遗留问题、范围外发现：「插件没能完成：timeout」（打开或发送那一步失败，83 次里 2 次）不在本轮。另提过一项兜底「回信到了但认不出时几分钟内提醒」，属新功能，常浩没说要做，未做。skill 进化：无。
 - 本轮新坑：L-51
-
-
-
-
-
-
-
-
 
 ## 侧栏调整说明书（customize-agent-hud）删掉简约形态（#404）（2026-11-18，Claude，常浩问清这份 skill 是什么后回「删掉简约形态」；已提交、已发布 `aaa1ba79c85d` 回读通过）
 

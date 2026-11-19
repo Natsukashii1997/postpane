@@ -17,6 +17,7 @@ function load(
     watched = [],
     answers = [],
     now = false,
+    fronted = [],
   } = {},
 ) {
   const listeners = {};
@@ -39,6 +40,11 @@ function load(
     },
     tabs: {
       query: async () => tabs,
+      get: async (tabId) => tabs.find((tab) => tab.id === tabId),
+      update: async (tabId, { active }) => {
+        fronted.push(tabId);
+        for (const tab of tabs) tab.active = tab.id === tabId ? active : false;
+      },
       sendMessage: async (tabId, message) => {
         if (message.op === "state") return null;
         asked.push([tabId, message.op]);
@@ -127,4 +133,53 @@ test("reading again asks a tab without its history again, a few times", async ()
   await new Promise((resolve) => setImmediate(resolve));
   await again.listeners.port({ type: "reread", conversation });
   assert.equal(never.length, 6, "once and five more, then left to PostPane");
+});
+
+// #410: ChatGPT draws nothing new in a tab in the background. An answer the
+// tab holds but has not drawn gets the tab put in front for a moment; the tab
+// that was in front comes back. One already in front is left as it is.
+test("an answer not drawn in a background tab is read with the tab in front, then the front tab comes back", async () => {
+  const conversation = "6afd1d01-7f94-83ee-9a56-242c44a95051";
+  const asked = [];
+  const fronted = [];
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${conversation}`,
+      active: false,
+      windowId: 9,
+    },
+    { id: 5, url: "https://chatgpt.com/c/other", active: true, windowId: 9 },
+  ];
+  const undrawn = {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: true,
+    undrawn: true,
+  };
+  const { listeners } = load(tabs, {
+    asked,
+    fronted,
+    watched: [conversation],
+    answers: [undrawn, undrawn, { ok: true, told: true, loaded: true }],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(asked.length, 3, "asked in front until told");
+  assert.deepEqual(fronted, [2, 5]);
+  // Already in front: nothing is moved.
+  const still = [];
+  tabs[0].active = true;
+  tabs[1].active = false;
+  const again = load(tabs, {
+    fronted: still,
+    watched: [conversation],
+    answers: [undrawn],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await again.listeners.port({ type: "reread", conversation });
+  assert.deepEqual(still, []);
 });

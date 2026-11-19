@@ -502,3 +502,43 @@ test("a page showing the newest prompt without its answer yet is not loaded", as
   const done = (await turns(page)).filter((m) => m.phase === "complete");
   assert.equal(done.at(-1).messageId, "m7");
 });
+
+// #410: the newest turn answered, its answer only in the page's hidden copy
+// (the drawn one shows older turns): nothing is told, and the conversation
+// is scrolled to its end so the answer gets drawn.
+test("an answer held only in the hidden copy is not told, and the page scrolls to it", async () => {
+  const page = await open(() => {
+    const main = document.querySelector("main");
+    main.style.cssText = "height:200px;overflow-y:auto";
+    // The hidden copy lists every turn, the fixture's and a later one.
+    const hidden = [0, 1, 2, 3]
+      .map(
+        (n) =>
+          `<div data-chatgpt-search-unit-key="fallback-turn-0:${n}:${n % 2 ? "assistant" : "user"}"></div>`,
+      )
+      .join("");
+    main.insertAdjacentHTML(
+      "afterbegin",
+      `<div style="height:0;overflow:hidden">${hidden}` +
+        '<div data-chatgpt-search-unit-key="later:0:user"><div data-user-message-bubble="true">专项复核</div></div>' +
+        '<div data-chatgpt-search-unit-key="later:2:assistant" data-chatgpt-search-message-ids="m9 m9"></div>' +
+        "</div>",
+    );
+    main.insertAdjacentHTML("beforeend", '<div style="height:3000px"></div>');
+  });
+  const answer = await reread(page);
+  assert.deepEqual(answer, {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: true,
+    undrawn: true,
+  });
+  assert.ok(
+    await page.evaluate(() => document.querySelector("main").scrollTop > 0),
+  );
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+});

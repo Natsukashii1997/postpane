@@ -128,8 +128,9 @@ async function group(tabId) {
 async function submit(tabId, text) {
   try {
     let result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
-    if (!result.ok && result.reason === "send-failed") {
-      // Some pages only accept input while the tab is in front.
+    if (!result.ok && ["send-failed", "composer-mismatch"].includes(result.reason)) {
+      // Some pages only accept input while the tab is in front; a draft that
+      // came back in the box (#410) is emptied again on the second try.
       await chrome.tabs.update(tabId, { active: true });
       result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
     }
@@ -218,9 +219,30 @@ async function reread(conversation) {
     await new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
     answer = await ask().catch(() => null);
   }
+  if (answer?.undrawn) await drawnInFront(tabId, ask);
 }
 const REREAD_TRIES = 5;
 const REREAD_PAUSE = 2000;
+
+// ChatGPT draws nothing new in a tab in the background (#410, 2026-11-19: an
+// answer stayed undrawn until the tab was shown). One answered but not drawn
+// is put in front of its window for a moment and asked again; the tab that
+// was in front comes back, unless the person moved on meanwhile. The window
+// itself is not raised.
+async function drawnInFront(tabId, ask) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || tab.active) return;
+  const front = (await chrome.tabs.query({ active: true, windowId: tab.windowId })).find((t) => t.active);
+  await chrome.tabs.update(tabId, { active: true });
+  for (let tries = 0; tries < FRONT_TRIES; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
+    if ((await ask().catch(() => null))?.told) break;
+  }
+  const now = await chrome.tabs.get(tabId).catch(() => null);
+  if (front && now?.active) await chrome.tabs.update(front.id, { active: true }).catch(() => {});
+}
+const FRONT_TRIES = 3;
+const FRONT_PAUSE = 1500;
 
 async function focus(conversation) {
   const tabId = tabFor(conversation);

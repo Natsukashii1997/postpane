@@ -40,10 +40,9 @@
 先 `source ~/.cargo/env`，并把 `~/.bun/bin` 放进 PATH。
 
 ```sh
-pnpm install
-node src/tooling/package-resources.mjs   # 生成打包资源目录（不进仓库）；新目录跑 cargo test 前必须先跑
-pnpm run check                           # 格式、类型、构建、边界检查、cargo check
-pnpm test                                # Rust + 前端 + MCP + 插件测试
+bash scripts/setup-worktree.sh           # 新目录备环境：先定构建目录，再 pnpm install、生成打包资源目录（不进仓库），顺序写死（L-01、L-34）；共用构建目录时把绝对路径当参数
+pnpm run check                           # 先查 src/ 下有没有没提交的文件（L-13、L-43），再格式、类型、构建、边界检查、cargo check
+pnpm test                                # Rust + 前端 + MCP + 插件测试：五套都跑完再汇总，任何一套失败整体非零（L-47）
 pnpm --filter @agent-hud/desktop exec tauri build --bundles app   # 打包；不要用 --bundle（生成 DMG 时会自动启动应用）
 node --test tests/*.test.mjs             # 交接格式 + 通用规则（含自测）
 node scripts/check-rules.mjs             # 只跑通用规则检查
@@ -74,6 +73,7 @@ docs/
   其余               上游技术文档（开发、接入约定、钩子、会话数据、平台构建等）
 scripts/
   check-rules.mjs    通用规则检查（只查机器能判定的）
+  setup-worktree.sh  新 worktree 备环境（见「运行」）
 tests/               node:test 测试（协作骨架）
 ```
 
@@ -99,7 +99,8 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 
 常浩明确定过的内容，以后要改都得先说清楚、等他再确认，给他留出重新考虑的空隙。来由：2026-11-09 第二批上游借鉴在「直接通过」的批量授权下合进 #264，侧栏小人被改成静态图标（L-35）。
 
-- **什么算已定**：CURRENT.md、PR、issue、记忆里写着常浩「选 / 定 / 定稿 / 验收」的内容，范围包括但不限于外观、动效、交互、文案、行为、数据格式。拿不准算不算，按已定处理。
+- **什么算已定**：项目的已定内容登记表（`docs/DECIDED.md`，有的话先查它）、CURRENT.md、PR、issue、记忆里写着常浩「选 / 定 / 定稿 / 验收」的内容，范围包括但不限于外观、动效、交互、文案、行为、数据格式。登记表只是依据之一，没登记不等于没定；拿不准算不算，按已定处理。
+- **定了就登记**：常浩选定或验收一项内容的当轮，把日期、定了什么、提交号、基线截图路径（界面类）、在哪定的，登记进项目的 `docs/DECIDED.md`。项目还没有这个文件的，交付时提一句要不要建。
 - **什么时候要问**：动手前发现改动会改变已定内容，不论是本来就要改它，还是改别处会顺带波及它。
 - **怎么问**：单独发一条「改动确认」，写四件事，问完就停，等他明确回复，不在同一轮里先做后问：
   1. 原来怎么定的：哪天、在哪定的（CURRENT 哪一节 / PR / issue / 记忆），当时的思路和理由；
