@@ -17,10 +17,14 @@ impl Desk {
             let mut asking = self.asking();
             if !asking.get(id).is_some_and(|a| a.request == request) {
                 drop(asking);
-                // Not asked in this run (a restart since): word after its
-                // answer still goes on the card (round 4 P2-16).
-                return self.change(|book| {
-                    book.confirmed_late(id, request, &super::guard::confirmed_late(), now)
+                // No review asked in this run. A mending's word (#446):
+                // late, and before its answer, it went in all the same.
+                // Else (a restart since) word after its answer still goes
+                // on the card (round 4 P2-16).
+                let mended = super::guard::mending_confirmed_late();
+                return self.change(|book| match book.mending_heard(id, request, &mended, now) {
+                    Some(changed) => book.asked_as(id, asked_id) || changed,
+                    None => book.confirmed_late(id, request, &super::guard::confirmed_late(), now),
                 });
             }
             asking.remove(id)

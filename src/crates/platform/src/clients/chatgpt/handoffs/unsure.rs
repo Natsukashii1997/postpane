@@ -10,12 +10,18 @@
 //! mending, never a review still unsure; only a later review known to have
 //! gone in clears both.
 //!
+//! Word of a mending that comes late is taken as a review's is
+//! (`mending.rs`, #446).
+//!
 //! Every word sent into a conversation already holding a review begins with
 //! a line naming its request (round 4 P1-11): an earlier round's words, even
 //! the same for their first 600 characters, never pass for these.
 
 use super::{excerpt, key, notice::Cause, Book, Handoff, Phase, Status, Step, StepKind, EXCERPT};
 use serde::{Deserialize, Serialize};
+
+mod mending;
+pub use mending::Word;
 
 const TAG_OPEN: &str = "【驿窗送审 ";
 const TAG_CLOSE: &str = "】";
@@ -64,6 +70,9 @@ pub struct Pending {
     /// however often it comes again (round 5 P2-16).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub noted: bool,
+    /// How word of them stands in this run (a mending's, #446).
+    #[serde(skip)]
+    pub word: Word,
 }
 
 impl Pending {
@@ -137,24 +146,6 @@ impl Book {
             return false;
         };
         handoff.gate.pending = Some(pending.kept());
-        true
-    }
-    /// PostPane's ask to mend `id`'s last lines is about to be sent: on the
-    /// card as sent, and kept apart from the review (round 4 P1-10, P1-15:
-    /// one change, kept whole or not at all).
-    pub fn ask_mending(&mut self, id: &str, request: &str, text: &str, now: i64) -> bool {
-        if !self.format_asked(id, text, now) {
-            return false;
-        }
-        let Some(handoff) = self.live_mut(id) else {
-            return false;
-        };
-        let mending = Pending {
-            request: request.to_owned(),
-            words: Some(text.to_owned()),
-            ..Pending::default()
-        };
-        handoff.gate.mending = Some(mending.kept());
         true
     }
     /// Word that `request` went in came after its answer (P1-12): it goes on
