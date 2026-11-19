@@ -6914,7 +6914,10 @@ mod tests {
         assert!(desk.tell(&lines, late));
         let text = last_sent(&lines).2;
         assert!(!text.contains("写「通过」"), "{text}");
-        assert!(text.contains("收口以外的结论会写明下一步等常浩决定"), "{text}");
+        assert!(
+            text.contains("收口以外的结论会写明下一步等常浩决定"),
+            "{text}"
+        );
     }
 
     /// #318: a session that cannot take it now finds it in its queue; one
