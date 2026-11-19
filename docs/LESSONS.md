@@ -57,7 +57,7 @@
 - 根因：每个 PR 从自己的分支打包，分支各自基于当时的 main，互不包含；并行会话都按 L-03 直接 `ditto` 覆盖，谁后装谁生效，装的人也不知道被覆盖了。
 - 正确做法：请常浩看实物前，比一下 `/Applications` 里的二进制和自己打的包是否一致（`shasum …/Contents/MacOS/PostPane`）；不一致就说明被覆盖，先重装再请他看。几个 PR 前后合并后，从最新 main 重新打包安装一次，让实机包含全部改动。
 - 证据：2026-11-05 13:29 比对 shasum；`CURRENT.md`「正在进行显示 Claude 云端会话」一节写的安装时间 13:14:07；合并后从 main `cdcb999` 重新打包安装，日志 `~/Library/Application Support/postpane/evidence/2026-11-05-quota-strip/build-main.log`。
-- 升级：〔机检〕部分升级（2026-11-19 补层级：#405 `a342c1c`，每次装机都经 `install.sh` 里的 `install-guard.sh`：别的会话正在装就 exit 4；装着的包既不是 main 构建的、也不是本 worktree 上次装的就 exit 5，测试 `tests/install-guard.test.mjs`。缺口：不走 `install.sh` 手动 `ditto` 拦不住；还没在真实装机上跑过；积压清单组 4）。原记录：未升级。
+- 升级：〔机检〕部分升级（2026-11-19 补层级：#405 `a342c1c`，每次装机都经 `install.sh` 里的 `install-guard.sh`：别的会话正在装就 exit 4；装着的包既不是 main 构建的、也不是本 worktree 上次装的就 exit 5，测试 `tests/install-guard.test.mjs`；#415 起 `install.sh check` 不给产物路径时按归属记录比，不再拿主目录的旧产物比（E-15、E-20）。缺口：不走 `install.sh` 手动 `ditto` 拦不住；还没在真实装机上跑过；积压清单组 4）。原记录：未升级。
 
 ## L-06 新装的包卡在「正在读取本机活动…」，侧栏不出现（2026-11-05）
 
@@ -114,7 +114,7 @@
 - 根因：未核实。这条测试用 `Utc::now()` 起演示数据，再连做两次 `request_snapshot`，断言第二次是 `{"unchanged": true}`；推测两次之间演示数据里跟时间有关的内容变了（比如「已 N 分钟」跨过一格）。全量并行跑、机器忙的时候更容易碰上。
 - 正确做法：全量只失败这一条、改动又不碰 core 时，先单独重跑它（`cargo test -p agent-hud-core a_pass_with_nothing_new_renders_nothing_until_something_changes`），过了再重跑一次全量，以第二次全量为准；交接里两次的结果都照实写。再出现就把这条测试的时间固定下来，另开一单修。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-launch-attribution/test.log`（第一次，失败）、`test2.log`（第二次，Rust 734 passed / 0 failed）；PR #170 描述。
-- 升级：〔结构〕未升级（已批：积压清单组 1，待实现：演示测试改用固定时间；2026-11-19 补层级）。原记录：未升级。
+- 升级：〔结构〕已升级（2026-11-19，#415：这条测试改用固定时钟 `snapshot::PINNED_CLOCK`，两次 pass 之间真实时间走多久都不影响；在两次 pass 之间注入「停到下一个时限之后」的延时，旧代码失败、新代码通过，证据 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/red/`；积压清单组 1。不覆盖：别的测试里直接读 `Utc::now()` 的写法）。原记录：未升级。
 
 ## L-13 不提交的自查页放在 `src/` 下，`pnpm run check` 卡在格式检查（2026-11-07）
 
@@ -163,7 +163,7 @@
 - 根因：这条测试要求刷新完之后 10 秒内再看一次「不该到点」；当时 `uptime` 负载均值 64–71（多个会话同时编译），一次刷新本身就超过 10 秒，轮询已经到点。与改动无关。
 - 正确做法：这条失败先看 `uptime`；负载均值远高于核数时等别的编译跑完再重跑全量，不要为它改代码或改测试。交接里写明当时的负载和重跑结果。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-reply-dismiss-all/test.log`（失败）、`test-2.log`、`test-3.log`（负载 14–17 时通过，Rust 合计 742、743 passed / 0 failed）。
-- 升级：〔结构〕未升级（已批：积压清单组 1，待实现：Grok 计时测试改用可控时钟；2026-11-19 补层级）。原记录：未升级。
+- 升级：〔结构〕已升级（2026-11-19，#415：Grok 轮询的「到点」改读 `snapshot::wall_clock_ms()`（`lib.rs` 的 `look`、`source_db.rs` 记下次轮询时间），测试固定时钟，验「差 1 毫秒不到点、满 10 秒到点」，不再按真实 10 秒计时；注入「一次刷新超过 10 秒」的延时，旧代码失败、新代码通过，证据 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/red/`；积压清单组 1。正式运行时两处读的仍是真实时间，行为不变）。原记录：未升级。
 
 ## L-18 ChatGPT 实际回了，驿窗没收到：插件把空占位块报成了「答完」（2026-11-07）
 
@@ -315,7 +315,7 @@
 - 根因：这个脚本会编译打包用的程序，它用哪个构建目录取决于当时有没有设 `CARGO_TARGET_DIR`。主会话写给子 agent 的共用规矩把两步顺序写反了。
 - 正确做法：共用构建目录时，先 `export CARGO_TARGET_DIR=…`，再跑 `package-resources` 和其他任何会编译的命令。
 - 证据：#260 子 agent 报告（已删掉那 387 MB）；共用规矩已在第二批改过来。
-- 升级：〔结构〕未升级（已批：积压清单组 5，与 E-13 合并收成备环境脚本，待实现；2026-11-19 补写升级行）。
+- 升级：〔结构〕已升级（2026-11-19，#415：备环境收成 `scripts/setup-worktree.sh`，顺序写死：先定构建目录（参数或已有的 `CARGO_TARGET_DIR`），再 `pnpm install --frozen-lockfile`、生成打包资源；AGENTS.md「运行」和驿窗一轮 SKILL.md 第 1 步指向它，测试 `tests/setup-worktree.test.mjs`；积压清单组 5，与 E-13 合并。不覆盖：不用脚本、手敲命令）。
 
 ## L-35 移植上游的性能优化后，驿窗侧栏的小人全变成静态图标（2026-11-09）
 
@@ -448,7 +448,7 @@
 - 根因：MCP 测试要起宿主进程、走 stdio，负载高时等不到回应就超时；不是代码问题。另外 `pnpm test` 是 `&&` 串起来的，MCP 一挂，后面的插件和 Chrome 插件测试根本没跑，不能当成「只挂了 MCP」。
 - 正确做法：全量测试不和打包放在同一条命令里并行，先测完再打。MCP 失败且耗时在 45 秒上下时，等负载降下来单独重跑 `test:mcp` 确认，再补跑 `test:plugins`、`test:extension`；交接里两次结果都写，不改代码去「修」它。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-354-workplace-state/` 的 `test-rebased.txt`、`test-rebased-rest.txt`、`test-mcp-3.txt`、`test-rebased-plugins.txt`。
-- 升级：〔结构〕未升级（已批：积压清单组 1，待实现：MCP 测试起进程单给长超时，`pnpm test` 各套件跑完再汇总；2026-11-19 补层级）。原记录：未升级。
+- 升级：〔结构〕已升级（2026-11-19，#415：MCP 测试的替身引擎编完先单独启动一次、给 120 秒，中转等引擎的 45 秒只算请求本身；`pnpm test` 改成 `src/tooling/test-all.mjs`，五套依次跑完再汇总，任何一套失败整体非零退出，测试 `tests/test-all.test.mjs`。注入「替身第一次启动停 50 秒」，旧代码 45 秒后报 `reading 'description'`、新代码通过，证据 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/red/`；积压清单组 1。不覆盖：机器忙时中转程序自己（node + tsx）启动慢）。原记录：未升级。
 
 ## L-48 测试里新写出的替身程序，机器忙时启动要好几秒，和要验的截止时间共用一个短超时就偶发失败（2026-11-14）
 
@@ -466,7 +466,7 @@
 - 根因：小人导演和票根派生是从 TS 移植到 Rust 的，两边并存；`bots.rs` 的对拍测试 `directs_as_the_typescript_director_did` 只回放 `director-cases.json` 里录好的步骤，TS 改了行为不会让它变红。
 - 正确做法：改小人行为、票根 working、vendor 派生时，Rust 那份一起改，两边各补测试：`mark-director.ts` ↔ `src/crates/hud/src/bots.rs`（会话事实在 `bots/facts.rs`），`model.ts` 的 `vendorsFromSnapshot` ↔ `vendors.rs`，`stale.ts` ↔ `stale.rs`。预览台只能证明 TS 那份。
 - 证据：#354 后续补漏 PR 的 `bots.rs` 测试 `a_stale_session_rests_its_bot_unless_a_card_stands`、`stale.rs` 测试。
-- 升级：〔机检〕未升级（已批：积压清单组 2，待实现：TS 测试回放 `director-cases.json`，TS、Rust 双向对拍；2026-11-19 补层级）。原记录：未升级。
+- 升级：〔提醒〕部分升级（2026-11-19，#415：加了 TS 回放测试 `src/packages/hud/test/director-cases.test.ts`，和 Rust 的 `directs_as_the_typescript_director_did` 回放同一份 `director-cases.json`，只改一边、不改用例，那一边就红；把 TS 的 failed 提示改成 limit-hit，原有前端 462 条全绿、新测试变红，证据 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/red/`。积压清单组 2 的目标是〔机检〕，但驿窗没有 CI 和提交前钩子，测试只能手动跑，所以只算〔提醒〕部分升级。不覆盖：`model.ts` ↔ `vendors.rs`、`stale.ts` ↔ `stale.rs` 两对）。原记录：未升级。
 - 提升：并入全局 G-31（2026-11-19，agent-kit#82），是「同一组取值或规则在几处各写一份」的第二例。
 
 ## L-50 ChatGPT 的标记名经 `vendorKey` 换算成 `openai`，按它筛接力会筛空（2026-11-14）
@@ -496,3 +496,11 @@
 - 正确做法：比截图先转 RGB 再 `getbbox()`，或用 `getbbox(alpha_only=False)`；驿窗装机冒烟直接用 `.agents/skills/postpane-round/scripts/smoke.mjs compare <前.png> <后.png> [差异图.png]`，四个通道都比，并出一张标红的差异图。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-18-401-install-guard/smoke-live/`（同一个运行中的驿窗上 `smoke.mjs after` 判「在动」、1356 个像素不同，差异图 `smoke-motion-1.png`）。
 - 升级：〔提醒〕部分升级（2026-11-19 补层级：驿窗自己的截图比对收进 `smoke.mjs compare`，测试 `tests/smoke-diff.test.mjs` 未接进必经检查；积压清单未列这条）。原记录：已写成工具和测试（`smoke.mjs`、`tests/smoke-diff.test.mjs`）。换个项目也成立（拿 Pillow 比任何带透明的截图都会踩），可提议提升为全局坑。
+
+## L-53 侧栏前端里经 `model.ts` 的模块，plain node 的 TS 测试加载不了：它按 Vite 的方式引 JSON 和图片（2026-11-19）
+
+- 现象：给 TS 小人导演写回放测试（L-49），`import { MarkDirector } from "../src/bots/mark-director.ts"` 直接报 `ERR_MODULE_NOT_FOUND …/src/model`。`test:ts` 是 `node --test "src/packages/*/test/*.test.ts"`，靠 node 自己去类型。
+- 根因：`mark-director.ts` 引 `../model`（不带扩展名），`model.ts` 又引 `@agent-hud/protocol/hud-defaults.json`（不带 `with { type: "json" }`）和 `./agent-artwork`（再往下引图片），这些只有 Vite 认。别的 TS 测试测的模块都是带 `.ts` 扩展名、不碰 `model.ts` 的叶子模块，所以以前没碰上；这也是 TS 导演一直没有单测、只靠预览台看的原因之一。
+- 正确做法：测这类模块，在测试里用 Vite 加载：`createServer({ configFile: false, root: <包目录>, appType: "custom", server: { middlewareMode: true, hmr: false, watch: null } })` 后 `ssrLoadModule("/src/…")`，拿到模块再 `close()`（中间件模式不开端口）。包目录和仓库里别处的文件用 `join(import.meta.dirname, …)` 拼路径，写成 `new URL("..", import.meta.url)` 会被 `check:packages` 当成越出包（本轮第一次全量就挂在这里）。写法见 `src/packages/hud/test/director-cases.test.ts`。不要为了能测去改 `model.ts` 的引用链。
+- 证据：本轮会话；`director-cases.test.ts` 用 Vite 加载后 `ℹ pass 1`。
+- 升级：〔提醒〕未升级（2026-11-19：只有一处用到，先记坑）。

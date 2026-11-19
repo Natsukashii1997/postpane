@@ -381,3 +381,54 @@ test("check 说现在装的是谁的", () => {
   assert.match(res.stdout, /已装的是 .*wt-a（分支 claude\/a/);
   assert.match(res.stdout, /一致/);
 });
+
+// E-15、E-20：check 没给产物路径时按归属记录比。原来拿当前目录下的产物比，合并后删了 worktree、
+// 在主目录跑，比的是主目录 11 月 9 日的旧产物，明明装的是本轮的包也报「被别的会话覆盖」。
+test("check 不给产物路径：worktree 删掉后在主目录跑，按归属记录说一致，不拿主目录的旧产物比", () => {
+  const { box, r } = setup();
+  assert.equal(install(box, r.a, ["t1", build(box, "a1")]).status, 0);
+  execFileSync(
+    "bash",
+    [
+      "-c",
+      "git checkout -q claude/a -- a.txt && git commit -q -m 'a (#1)' && git push -q origin main",
+    ],
+    { cwd: r.main, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" } },
+  );
+  git(r.main, "worktree", "remove", "--force", r.a);
+  // 主目录默认产物位置上有一份很早以前打的包
+  const stale = join(r.main, "target/release/bundle/macos");
+  mkdirSync(stale, { recursive: true });
+  execFileSync("ditto", [build(box, "main-old"), join(stale, "PostPane.app")]);
+  const res = install(box, r.main, ["check"]);
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /已装的是 .*wt-a（分支 claude\/a/);
+  assert.match(res.stdout, /一致：已装的是已合进 main 的包/);
+});
+
+test("check 不给产物路径：已装的被别的会话换掉、或本目录装完又打过包，都报不一致", () => {
+  const { box, r } = setup();
+  assert.equal(install(box, r.a, ["t1", build(box, "a1")]).status, 0);
+  assert.equal(
+    install(box, r.b, ["t2", build(box, "b1"), "--takeover"]).status,
+    0,
+  );
+  const covered = install(box, r.a, ["check"]);
+  assert.equal(covered.status, 1);
+  assert.match(covered.stdout, /已装的是 .*wt-b（分支 claude\/b/);
+  assert.match(covered.stderr, /不是本目录装的/);
+
+  // b 装完又在自己目录打了新包，还没装上
+  const out = join(r.b, "target/release/bundle/macos");
+  mkdirSync(out, { recursive: true });
+  execFileSync("ditto", [build(box, "b2"), join(out, "PostPane.app")]);
+  const rebuilt = install(box, r.b, ["check"]);
+  assert.equal(rebuilt.status, 1);
+  assert.match(rebuilt.stderr, /装完以后又打的/);
+
+  // 有人手动 ditto 过：已装的不在记录里
+  execFileSync("ditto", [build(box, "hand"), box.app]);
+  const manual = install(box, r.b, ["check"]);
+  assert.equal(manual.status, 1);
+  assert.match(manual.stderr, /不在归属记录里/);
+});

@@ -1181,12 +1181,15 @@ mod tests {
     }
 
     /// A collection pass with nothing new before the next deadline renders
-    /// nothing; a reading, a reply or the deadline renders again.
+    /// nothing; a reading, a reply or the deadline renders again. The wall
+    /// clock is pinned: on a busy machine the real one could pass the next
+    /// deadline between two passes and render again (L-12).
     #[test]
     fn a_pass_with_nothing_new_renders_nothing_until_something_changes() {
         let temp = tempfile::tempdir().unwrap();
         let mut core = AgentHudCore::new(Vec::new(), temp.path().to_owned());
         let now = Utc::now().timestamp_millis();
+        crate::snapshot::PINNED_CLOCK.set(Some(now));
         let mut sessions = DemoSessions::default();
         core.seed_demo(now, None, &mut sessions).unwrap();
         core.set_account_projection(demo_projection(now, &BTreeMap::new()));
@@ -1198,12 +1201,11 @@ mod tests {
         assert_eq!(pass(&mut core), json!({"unchanged": true}));
         // The demo's running sessions go quiet within the safety refresh.
         let due = core.next_due().unwrap();
-        assert!(
-            due > now && due <= Utc::now().timestamp_millis() + crate::snapshot::SAFETY_REFRESH_MS
-        );
+        assert!(due > now && due <= now + crate::snapshot::SAFETY_REFRESH_MS);
 
         // A new reading is something to show.
-        let later = Utc::now().timestamp_millis();
+        let later = now + 1_000;
+        crate::snapshot::PINNED_CLOCK.set(Some(later));
         core.set_account_projection(demo_projection(later, &BTreeMap::new()));
         assert!(pass(&mut core)["schemaVersion"].is_number());
         assert_eq!(pass(&mut core), json!({"unchanged": true}));
@@ -1214,5 +1216,8 @@ mod tests {
         assert_eq!(pass(&mut core), json!({"unchanged": true}));
         // And a request without changesOnly always gets the snapshot.
         assert!(core.request("request_snapshot", json!({})).unwrap()["schemaVersion"].is_number());
+        // At the deadline the pass renders again with nothing new.
+        crate::snapshot::PINNED_CLOCK.set(core.next_due());
+        assert!(pass(&mut core)["schemaVersion"].is_number());
     }
 }

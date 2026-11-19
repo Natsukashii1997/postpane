@@ -111,6 +111,42 @@ check_owner() {
   exit 5
 }
 
+# 本目录是不是主目录（不是 git worktree add 出来的那些）
+main_worktree() {
+  [ "$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" = "$(cd "$(git -C "$ROOT" rev-parse --absolute-git-dir)" && pwd -P)" ]
+}
+
+# install.sh check 不给产物路径（E-15、E-20）：按归属记录比，不拿当前目录下的产物比。合并后删了 worktree、
+# 在主目录跑时，当前目录下是主目录很早以前打的旧包，拿它比会把本轮装的包误报成「被别的会话覆盖」。
+# 功能 worktree 只认自己装的；主目录还认已合进 main 的（装它的 worktree 可能已经删了）。
+check_record() {
+  local installed
+  installed=$(hash12 "$APP")
+  if [ ! -f "$RECORD" ]; then
+    echo "还没有归属记录，比不了：带上产物路径再跑，install.sh check <产物 .app>。" >&2
+    exit 1
+  fi
+  echo "已装 $installed；已装的是 $(describe_record)"
+  if [ "$installed" != "$(field "$RECORD" hash)" ]; then
+    echo "不一致：已装的 $installed 不在归属记录里（用旧版 install.sh 的会话装的，或有人手动 ditto、回滚过）。先重装再请常浩看（L-05）。" >&2
+    exit 1
+  fi
+  if [ "$(field "$RECORD" worktree)" = "$ROOT" ]; then
+    if [ -x "$NEW/$BIN" ] && [ "$(hash12 "$NEW")" != "$installed" ]; then
+      echo "不一致：本目录的产物 $(hash12 "$NEW") 是装完以后又打的，还没装上。" >&2
+      exit 1
+    fi
+    echo "一致：已装的是本目录装的"
+    exit 0
+  fi
+  if main_worktree && from_main; then
+    echo "一致：已装的是已合进 main 的包"
+    exit 0
+  fi
+  echo "不一致：已装的是别的会话装的，不是本目录装的（L-05）。先重装再请常浩看。" >&2
+  exit 1
+}
+
 record_owner() {
   { who_am_i; echo "hash=$(hash12 "$APP")"; echo "artifact=$NEW"; echo "time=$(date '+%F %T')"; echo "evidence=$E"; } > "$RECORD.tmp"
   mv "$RECORD.tmp" "$RECORD"
