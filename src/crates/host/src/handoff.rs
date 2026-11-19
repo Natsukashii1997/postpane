@@ -34,6 +34,7 @@ use std::{
 };
 use tauri::Manager;
 
+mod asking;
 mod back;
 mod belongs;
 mod gate;
@@ -66,17 +67,20 @@ pub(crate) trait Lines {
     /// Whether the ChatGPT extension is connected.
     fn connected(&self) -> bool;
     /// Opens a conversation (in `project`) with `text`, listed under
-    /// `title` and asked as `request`: its id.
+    /// `title` and asked as `request`: its id, and ChatGPT's id of the
+    /// prompt the words went in as when the page showed it (#410).
     fn open(
         &self,
         text: &str,
         project: Option<&str>,
         title: &str,
         request: &str,
-    ) -> Result<String, String>;
-    /// Sends `text` into `conversation`, asked as `request`: the extension
-    /// may still say it went in after the wait gave up (`Desk::observe`).
-    fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String>;
+    ) -> Result<(String, Option<String>), String>;
+    /// Sends `text` into `conversation`, asked as `request`: the prompt it
+    /// went in as, as for `open`. The extension may still say it went in
+    /// after the wait gave up (`Desk::observe`).
+    fn send(&self, conversation: &str, text: &str, request: &str)
+        -> Result<Option<String>, String>;
     /// Asks the extension to tell `conversation`'s newest reply again, once
     /// written (#356); it comes back, if at all, as a turn (`observe`).
     fn reread(&self, conversation: &str) -> Result<(), String>;
@@ -899,59 +903,23 @@ impl Desk {
                 anchor: anchor.clone(),
             },
         );
-        if let Err(error) = lines.send(conversation, sent, &request) {
+        let asked_id = match lines.send(conversation, sent, &request) {
+            Ok(asked_id) => asked_id,
             // Never known to have gone in: the round trip stops on it, and
             // its answer, if one comes, cannot pass (L3 P1-10). The caller
             // hears it now, so no notice besides.
-            self.change(|book| {
-                book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), false, now)
-            });
-            return Err(guard::sent_unknown(&error));
-        }
-        self.went_in(&request, now);
+            Err(error) => {
+                self.change(|book| {
+                    book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), false, now)
+                });
+                return Err(guard::sent_unknown(&error));
+            }
+        };
+        self.went_in(&request, now, asked_id.as_deref());
         let sent = self.lock().get(&handoff.id).cloned().unwrap_or(handoff);
         Ok(Started::Sent {
             handoff: sent,
             repeated: false,
-        })
-    }
-
-    fn asking(&self) -> MutexGuard<'_, HashMap<String, Asking>> {
-        self.asking.lock().unwrap_or_else(|p| p.into_inner())
-    }
-    /// Words asked as `request` went into ChatGPT: into the book once,
-    /// whichever of `ask` and the extension's late word comes first.
-    fn went_in(&self, request: &str, now: i64) -> bool {
-        let id = request.rsplit_once('~').map_or("", |(id, _)| id);
-        let asking = {
-            let mut asking = self.asking();
-            if !asking.get(id).is_some_and(|a| a.request == request) {
-                drop(asking);
-                // Not asked in this run (a restart since): word after its
-                // answer still goes on the card (round 4 P2-16).
-                return self.change(|book| {
-                    book.confirmed_late(id, request, &guard::confirmed_late(), now)
-                });
-            }
-            asking.remove(id)
-        };
-        let Some(asking) = asking else {
-            return false;
-        };
-        self.change(|book| {
-            // After its answer: only goes on the card (L3 P1-12).
-            if book.confirmed_late(id, request, &guard::confirmed_late(), now) {
-                return true;
-            }
-            book.confirm_pending(id, request);
-            asking.anchor.set(book, id);
-            // Taken words turn a self-stopped round trip on again (#410),
-            // evidence paused for among them; `evidence_in` is left the rest.
-            let asked = book.asked(id, asking.summary.as_deref(), &asking.brief, now);
-            if asking.evidence {
-                book.evidence_in(id, now);
-            }
-            asked
         })
     }
 
@@ -982,10 +950,12 @@ impl Desk {
             let brief = kept.as_deref().unwrap_or(brief);
             let opened = lines.open(brief, project, &title, &request);
             self.change(|book| match &opened {
-                Ok(conversation) => book.opened(id, conversation, now()),
+                Ok((conversation, asked_id)) => {
+                    book.opened(id, conversation, now()) | book.asked_as(id, asked_id.as_deref())
+                }
                 Err(error) => book.failed(id, error, now()),
             });
-            opened
+            opened.map(|(conversation, _)| conversation)
         };
         if let Ok(conversation) = &opened {
             self.caught_up(conversation);
@@ -1022,7 +992,7 @@ impl Desk {
         }
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();
-        let prompt = message["prompt"].as_str();
+        let (prompt, prompt_id) = (message["prompt"].as_str(), message["promptId"].as_str());
         let id = self
             .lock()
             .for_conversation(conversation)
@@ -1033,7 +1003,7 @@ impl Desk {
         // kept in full (#347), in the same change as it is booked: nothing
         // cuts it between (L3 P2-10).
         self.change(|book| {
-            if !belongs::fits(book, conversation, prompt) {
+            if !belongs::fits(book, conversation, prompt, prompt_id) {
                 return false;
             }
             let took = book.replied(conversation, reply, message_id, at);
@@ -1090,7 +1060,8 @@ impl Desk {
             }
             // Words in: those whose wait gave up count now (#223).
             (Some("sent"), _) if message["ok"] == true => {
-                self.went_in(message["requestId"].as_str().unwrap_or(""), now)
+                let request = message["requestId"].as_str().unwrap_or("");
+                self.went_in(request, now, message["promptId"].as_str())
             }
             (Some("opened"), _) if message["ok"] == true => {
                 // Only a try that already gave up waiting: a waited-for
@@ -1101,8 +1072,14 @@ impl Desk {
                     .lock()
                     .get(id)
                     .is_some_and(|h| h.status == Status::Failed);
-                let bound =
-                    gave_up && self.change(|book| book.opened_late(request, conversation, now));
+                let asked_id = message["promptId"].as_str();
+                let bound = gave_up
+                    && self.change(|book| {
+                        book.opened_late(request, conversation, now) && {
+                            book.asked_as(id, asked_id);
+                            true
+                        }
+                    });
                 if bound {
                     self.caught_up(conversation);
                 }
@@ -1977,6 +1954,7 @@ pub async fn relay_launch(
 
 #[cfg(test)]
 mod tests {
+    mod asked_id;
     mod held_back;
     use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
@@ -1999,6 +1977,8 @@ mod tests {
         on_opener: Option<Box<dyn Fn()>>,
         /// Sending gives up waiting for the extension.
         send_fails: std::cell::Cell<bool>,
+        /// The prompt id the page shows words went in as (#410); none by default.
+        asked_as: RefCell<Option<String>>,
         /// The request each sending was asked as.
         requests: RefCell<Vec<String>>,
         /// How left words stand, as the plugin would say; None once gone.
@@ -2054,7 +2034,7 @@ mod tests {
             project: Option<&str>,
             title: &str,
             request: &str,
-        ) -> Result<String, String> {
+        ) -> Result<(String, Option<String>), String> {
             self.sent.borrow_mut().push((
                 "open".into(),
                 format!("{}|{title}|{request}", project.unwrap_or("")),
@@ -2067,10 +2047,15 @@ mod tests {
             if self.open_fails {
                 Err("timeout".into())
             } else {
-                Ok("c-new".into())
+                Ok(("c-new".into(), self.asked_as.borrow().clone()))
             }
         }
-        fn send(&self, conversation: &str, text: &str, request: &str) -> Result<(), String> {
+        fn send(
+            &self,
+            conversation: &str,
+            text: &str,
+            request: &str,
+        ) -> Result<Option<String>, String> {
             self.sent
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
@@ -2082,7 +2067,7 @@ mod tests {
             if self.send_fails.get() {
                 return Err("ChatGPT 插件没能完成：timeout".into());
             }
-            Ok(())
+            Ok(self.asked_as.borrow().clone())
         }
         fn reread(&self, conversation: &str) -> Result<(), String> {
             self.sent
@@ -6727,10 +6712,16 @@ mod tests {
         fn pr_head(&self, _pr: &str) -> Result<String, String> {
             Err("not read here".into())
         }
-        fn open(&self, _: &str, _: Option<&str>, _: &str, _: &str) -> Result<String, String> {
+        fn open(
+            &self,
+            _: &str,
+            _: Option<&str>,
+            _: &str,
+            _: &str,
+        ) -> Result<(String, Option<String>), String> {
             Err("not here".into())
         }
-        fn send(&self, _: &str, _: &str, _: &str) -> Result<(), String> {
+        fn send(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, String> {
             Err("not here".into())
         }
         fn reread(&self, _: &str) -> Result<(), String> {

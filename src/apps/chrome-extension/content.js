@@ -34,7 +34,7 @@
   }
 
   function tellStart() {
-    tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), at: Date.now() });
+    tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), promptId: page.lastPromptId(document), at: Date.now() });
   }
 
   function tellComplete(reply, extra = {}) {
@@ -46,6 +46,9 @@
       conversation: page.conversationId(location.href),
       title: page.title(document),
       prompt: page.lastPrompt(document),
+      // Which prompt it answers, by ChatGPT's id (#410): PostPane holds the
+      // answer to the words it sent by it, not by how the page draws them.
+      promptId: page.lastPromptId(document),
       reply: reply.markdown,
       messageId: reply.messageId ?? null,
       at: Date.now(),
@@ -149,6 +152,7 @@
         streaming: page.streaming(document),
         hidden: document.visibilityState === "hidden",
         title: page.title(document),
+        promptId: page.lastPromptId(document),
       });
     }
     return false;

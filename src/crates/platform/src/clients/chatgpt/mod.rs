@@ -583,7 +583,7 @@ impl Channel {
             .as_str()
             .filter(|id| agent::conversation_id(id))
             .ok_or_else(|| refused("send-failed"))?;
-        Ok(json!({"conversation":conversation,"title":reply["title"]}))
+        Ok(json!({"conversation":conversation,"title":reply["title"],"promptId":reply["promptId"]}))
     }
     /// Sends `text` to a watched conversation.
     pub fn send(&self, conversation: &str, text: &str) -> Result<Value, String> {
@@ -604,12 +604,12 @@ impl Channel {
             return Err(l10n::text("缺少要发出的文字", "Text is required"));
         }
         let id = request.map(str::to_owned).unwrap_or_else(request_id);
-        self.shared.ask_as(
+        let reply = self.shared.ask_as(
             id,
             json!({"type":"send","conversation":conversation,"text":text}),
             SEND_TIME,
         )?;
-        Ok(json!({"sent":true}))
+        Ok(json!({"sent":true,"promptId":reply["promptId"]}))
     }
     /// Tells `listener` of turns and openings from now on.
     pub fn listen(&self, listener: Listener) {

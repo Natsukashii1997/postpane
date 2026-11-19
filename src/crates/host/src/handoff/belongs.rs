@@ -17,6 +17,15 @@
 //! with its line breaks lost. Either way counts. Two
 //! sendings of the very same words, or a prompt of the person's own that
 //! starts with all the kept words, still cannot be told apart.
+//!
+//! Since #410 (2026-11-19) words are held to by the prompt they went in as:
+//! the extension reads ChatGPT's id of it off the page when it sends, and of
+//! the prompt each finished turn answers. Two ids decide alone, whatever the
+//! page shows: a long brief ChatGPT made an attachment showed no words, and
+//! its answer waited unclaimed. The words above are held to only when an id
+//! is missing (words from before, or a page that showed none); then a turn
+//! whose prompt is only that attachment counts for words long enough to
+//! have been made one.
 use super::Desk;
 use agent_hud_runtime::chatgpt::handoffs::{Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
@@ -31,10 +40,19 @@ fn bare(text: &str, fences: bool) -> String {
         .collect()
 }
 
-/// Whether `prompt` (the turn's user message, as the page shows it) is the
-/// words `handoff` last sent. One with no words kept, or a turn whose prompt
-/// could not be read, cannot be held to them and is not taken (P2-04).
-pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
+/// Whether a turn answering `prompt` (the turn's user message as the page
+/// shows it, `prompt_id` ChatGPT's id of it) answers the words `handoff`
+/// last sent. One with no words kept, or a turn whose prompt could not be
+/// read, cannot be held to them and is not taken (P2-04).
+pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>, prompt_id: Option<&str>) -> bool {
+    // Known by the prompt they went in as (#410): that alone. Words still
+    // waiting to be known gone in have no id yet.
+    let asked_id = handoff
+        .last_asked()
+        .and_then(|step| step.asked_id.as_deref());
+    if let (None, Some(asked_id), Some(prompt_id)) = (handoff.unanswered(), asked_id, prompt_id) {
+        return asked_id == prompt_id;
+    }
     let Some(prompt) = prompt else {
         return false;
     };
@@ -54,14 +72,27 @@ pub(super) fn answers(handoff: &Handoff, prompt: Option<&str>) -> bool {
     };
     words
         .filter(|text| !text.trim().is_empty())
-        .is_some_and(|text| held_to(prompt, text))
+        .is_some_and(|text| held_to(prompt, text) || (cut(text) && attached(prompt)))
+}
+
+/// Whether a step kept only the start of the words (`EXCERPT` characters
+/// and 「…」): words long enough for ChatGPT to make an attachment of.
+fn cut(asked: &str) -> bool {
+    asked.chars().count() == EXCERPT + 1 && asked.ends_with('…')
+}
+
+/// Whether a prompt is only the attachment ChatGPT made of a long paste:
+/// its name and kind, 「粘贴的文本 (1).txt文档」 or "Pasted text.txt Document".
+fn attached(prompt: &str) -> bool {
+    let name: String = prompt.split_whitespace().collect();
+    let pasted = name.starts_with("粘贴的文本") || name.to_lowercase().starts_with("pastedtext");
+    pasted && name.contains(".txt") && name.chars().count() <= 60
 }
 
 /// Whether `prompt`, held to as the module says, is `asked` as a step keeps it.
 fn held_to(prompt: &str, asked: &str) -> bool {
     // A step keeps `EXCERPT` characters and marks the cut with 「…」.
-    let cut = asked.chars().count() == EXCERPT + 1;
-    let kept = asked.strip_suffix('…').filter(|_| cut);
+    let kept = asked.strip_suffix('…').filter(|_| cut(asked));
     [true, false].into_iter().any(|fences| {
         let prompt = bare(prompt, fences);
         match kept {
@@ -74,12 +105,17 @@ fn held_to(prompt: &str, asked: &str) -> bool {
 /// Whether a finished turn in `conversation` may count for its live
 /// handoff: its prompt is the handoff's words. A conversation no live
 /// handoff holds is left to `Book::replied`, which takes nothing there.
-pub(super) fn fits(book: &Book, conversation: &str, prompt: Option<&str>) -> bool {
+pub(super) fn fits(
+    book: &Book,
+    conversation: &str,
+    prompt: Option<&str>,
+    prompt_id: Option<&str>,
+) -> bool {
     book.list
         .iter()
         .rev()
         .find(|h| h.live() && h.chatgpt_conversation.as_deref() == Some(conversation))
-        .is_none_or(|h| answers(h, prompt))
+        .is_none_or(|h| answers(h, prompt, prompt_id))
 }
 
 impl Desk {
@@ -87,7 +123,12 @@ impl Desk {
     /// those its live handoff last sent: logged as `unmatched`.
     pub(super) fn unmatched(&self, message: &Value, conversation: &str) -> bool {
         message["phase"] == "complete"
-            && !fits(&self.lock(), conversation, message["prompt"].as_str())
+            && !fits(
+                &self.lock(),
+                conversation,
+                message["prompt"].as_str(),
+                message["promptId"].as_str(),
+            )
     }
     /// How the turn log names what became of a turn: `taken`, `unmatched`
     /// (another prompt's answer) or `unused`.

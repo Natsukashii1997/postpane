@@ -4,6 +4,9 @@
   const SEL = {
     assistant: '[data-chatgpt-search-unit-key$=":assistant"]',
     user: "[data-user-message-bubble]",
+    // A prompt's whole turn: one ChatGPT made a long paste into an attachment
+    // has no bubble, only the file (#410, 2026-11-19).
+    prompt: '[data-chatgpt-search-unit-key$=":user"], [data-user-message-bubble]',
     composer: '.ProseMirror[contenteditable="true"]',
     send: 'form button[type="submit"]',
     stop: '[data-testid="stop-button"], form button[type="button"][aria-label]',
@@ -38,7 +41,7 @@
 
   /** The newest of `selector`'s messages, by conversation order, and where
    * it stands in that order. A node outside any unit is a message of its own. */
-  function newest(doc, selector) {
+  function newest(doc, selector, shows = () => true) {
     const order = new Map();
     const keyOf = (node) => node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
     // One order for prompts and replies alike, so their places compare.
@@ -48,6 +51,7 @@
     }
     let found = null;
     for (const node of doc.querySelectorAll(selector)) {
+      if (!shows(node)) continue;
       const place = order.get(keyOf(node));
       if (!found || place >= found.place) found = { node, place };
     }
@@ -61,9 +65,40 @@
     return { messageId: ids[ids.length - 1] || null, markdown: markdown(node) };
   }
 
+  /** A prompt's own words on the page, leaving out what only screen
+   * readers or buttons say (「你说：」, the copy button). */
+  function shownText(node) {
+    let text = "";
+    const walker = node.ownerDocument.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (!walker.currentNode.parentElement?.closest(SEL.skip)) text += walker.currentNode.textContent;
+    }
+    return text.trim();
+  }
+
+  /** Whether a prompt shows: its bubble, or a turn with words of its own
+   * (an attachment's name). One drawn with neither is history still
+   * loading, not a prompt yet (#356 P2-04). */
+  const promptShows = (node) => node.matches(SEL.user) || !!node.querySelector(SEL.user) || !!shownText(node);
+
+  const newestPrompt = (doc) => newest(doc, SEL.prompt, promptShows);
+
+  /** The newest prompt's words: its bubble's, or the turn's own when it has
+   * none (an attachment's name). */
   function lastPrompt(doc) {
-    const node = newest(doc, SEL.user)?.node;
-    return node ? node.textContent.trim() : null;
+    const node = newestPrompt(doc)?.node;
+    if (!node) return null;
+    const bubble = node.matches(SEL.user) ? node : node.querySelector(SEL.user);
+    return bubble ? bubble.textContent.trim() : shownText(node);
+  }
+
+  /** ChatGPT's message id of the newest prompt (#410): the one thing that
+   * ties an answer to the words it answers however the page draws them. */
+  function lastPromptId(doc) {
+    const node = newestPrompt(doc)?.node;
+    const turn = node?.closest(`[${UNIT}]`);
+    const ids = (turn?.getAttribute("data-chatgpt-search-message-ids") || "").split(/\s+/).filter(Boolean);
+    return ids[ids.length - 1] || null;
   }
 
   /** Whether the newest reply comes after the newest prompt: one sent but not
@@ -71,7 +106,7 @@
    * with no prompt drawn yet (the history loading) answers nothing known. */
   function answered(doc) {
     const reply = newest(doc, SEL.assistant);
-    const prompt = newest(doc, SEL.user);
+    const prompt = newestPrompt(doc);
     return !!reply && !!prompt && reply.place > prompt.place;
   }
 
@@ -260,7 +295,9 @@
     return true;
   }
 
-  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`. */
+  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`,
+   * and `promptId`, ChatGPT's id of the prompt it became, once the page
+   * shows it (#410). */
   async function submit(doc, text) {
     if (streaming(doc)) return { ok: false, reason: "busy" };
     const box = await waitFor(() => doc.querySelector(SEL.composer), 15000);
@@ -291,10 +328,16 @@
     }
     if (!button) return { ok: false, reason: "send-failed" };
     if (!holds(box, text)) return { ok: false, reason: "composer-mismatch" };
+    const before = lastPromptId(doc);
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
-    return started ? { ok: true } : { ok: false, reason: "send-failed" };
+    if (!started) return { ok: false, reason: "send-failed" };
+    const promptId = await waitFor(() => {
+      const id = lastPromptId(doc);
+      return id && id !== before ? id : null;
+    }, 3000);
+    return promptId ? { ok: true, promptId } : { ok: true };
   }
 
-  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, answered, reveal, markdown, submit };
+  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, lastPromptId, answered, reveal, markdown, submit };
 })();
