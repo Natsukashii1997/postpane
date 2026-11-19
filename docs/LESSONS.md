@@ -561,7 +561,11 @@
 ## L-60 在通道唯一的读线程上发送并等确认，确认永远读不出来：补格式每次都等满 30 秒超时（2026-11-19）
 
 - 现象：还没在实机出现，是全链路梳理时读代码发现的（#440）。回信末尾几行不合规时驿窗请 ChatGPT 补写格式，这次发送必然等满 30 秒，卡上会记「请 ChatGPT 补写末尾几行没确认送到：…timeout」，自动往返停下，发起会话收到「送达状态未知」；这 30 秒里别的接力的发送确认也读不出来。补格式随审核门 11-19 上线，本机还没有一封回信走到这条路。
-- 根因：插件的每句话由连接唯一的读线程读出（`platform/.../chatgpt/unix.rs`），监听回调在这条线程上同步执行。回调里 `Desk::drive` 遇到要补格式就调 `ask_format` → `Lines::send` → `Shared::ask_as`，在读线程上 `recv_timeout` 等 `sent` 确认，而确认只能由这条线程读出来。测试没拦住，是因为测试用的替身 `Fake::send` 立刻返回，比真实通道宽松（全局坑 G-34）。
-- 正确做法：读线程上的回调只记账，不做会经同一条通道等回应的事；推进交给另一条线程（`handoff/driver.rs` 的 `Driver`）。给会「发出去再等回应」的接口写测试时，替身要带上真实约束：回应只能由读线程带回（`handoff/tests/driver.rs` 的 `Wired`）。
-- 证据：`src/crates/host/src/handoff/tests/driver.rs` 的 `an_ask_to_mend_hears_that_it_went_in`，在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`：「word that it went in was heard while it waited」），改后通过（`green-after.txt`）。
-- 升级：〔提醒〕部分升级（2026-11-19：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。
+- 根因：插件的每句话由连接唯一的读线程读出（`platform/.../chatgpt/unix.rs`），监听回调在这条线程上同步执行。读线程上有三条路都会等到一个只有它自己能带回的确认：
+  1. 回调里直接 `Desk::drive`：遇到要补格式就调 `ask_format` → `Lines::send` → `Shared::ask_as`，`recv_timeout` 等 `sent`。
+  2. 回调里通知侧栏 `republish`：`Backend::refresh_handoffs` → `handoff::projection` → `catch_up` → `drive`，和上一条一样。第一版修复只挪走了第 1 条，L2 审查指出这条还在（#441 P1-01）。
+  3. `republish` 要拿后台锁；数据线程做快照时拿着这把锁走 `projection` → `ask_format` 等 `sent`，读线程卡在等锁上，读不到 `sent`。
+  测试没拦住，是因为替身 `Fake::send` 立刻返回，比真实通道宽松（全局坑 G-34）；第一版的新测试又把 `republish` 写成空函数，漏了第 2、3 条。
+- 正确做法：读线程上的回调只记账（`observe`），推进和通知侧栏都交给另一条线程（`handoff/driver.rs` 的 `Driver`）。看一个函数能不能放在读线程上，要顺着调用链看到底，名字像「通知」「刷新」的不等于没有副作用。给会「发出去再等回应」的接口写测试时，替身要带上真实约束（回应只能由读线程带回，`handoff/tests/driver.rs` 的 `Wired`），回调的每个参数都要用和实机等价的实现测一遍（`Rig::refresh` 带后台锁、会推进）。
+- 证据：`src/crates/host/src/handoff/tests/driver.rs`。`an_ask_to_mend_hears_that_it_went_in` 在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`）；`the_sidebar_is_not_refreshed_on_the_reading_thread`、`a_refresh_that_waits_for_the_data_thread_does_not_hold_the_reading_thread` 在第一版修复上失败（`red-round2.txt`），第二版 6 条都过（`green-round2.txt`）。
+- 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。

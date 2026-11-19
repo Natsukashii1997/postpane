@@ -1816,8 +1816,9 @@ pub(crate) fn listen(app: &tauri::AppHandle) {
         },
         // An answer that came in goes on by itself (#72).
         move || {
-            let desk = driven.try_state::<Desk>();
-            desk.is_some_and(|desk| desk.drive(&AppLines(&driven), now_ms()))
+            if let Some(desk) = driven.try_state::<Desk>() {
+                desk.drive(&AppLines(&driven), now_ms());
+            }
         },
         move || republish(&shown),
     )));
