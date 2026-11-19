@@ -1,4 +1,5 @@
 //! Hermes.
+mod chats;
 pub mod transcript;
 
 use crate::Agent;
@@ -228,6 +229,8 @@ pub struct CronJob {
     /// How often it runs: its cron expression (`45 7 * * 1`), or the
     /// schedule as Hermes prints it when it has none.
     pub schedule: Option<String>,
+    /// The Feishu chat it delivers to (`deliver: feishu:oc_…`), when it does.
+    pub delivers_to: Option<String>,
 }
 
 fn millis(value: &serde_json::Value) -> Option<i64> {
@@ -265,6 +268,12 @@ pub fn cron_jobs(text: &str) -> Option<Vec<CronJob>> {
                     .into_iter()
                     .find_map(|text| text.as_str().filter(|text| !text.trim().is_empty()))
                     .map(str::to_string),
+                    delivers_to: job["deliver"]
+                        .as_str()
+                        .and_then(|to| to.strip_prefix("feishu:"))
+                        .and_then(|to| to.split(':').next())
+                        .filter(|id| feishu_chat_id(id))
+                        .map(str::to_string),
                 })
             })
             .collect(),
@@ -283,39 +292,6 @@ impl Gateway {
         crate::sqlite::ReadOnlyDatabase::open(&self.home.join("state.db"))
             .and_then(|db| transcript::recent_asks(&db.connection, now, limit))
             .unwrap_or_default()
-    }
-
-    /// Who its bot answers to: the open id its `config.yaml` names for the
-    /// Feishu home channel (`platforms.feishu.home_channel.user_id`).
-    pub fn owner(&self) -> Option<String> {
-        let text = std::fs::read_to_string(self.home.join("config.yaml")).ok()?;
-        let config = serde_saphyr::from_str::<serde_json::Value>(&text).ok()?;
-        config["platforms"]["feishu"]["home_channel"]["user_id"]
-            .as_str()
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-            .map(str::to_string)
-    }
-
-    /// The latest `limit` asks at `now` (ms), each with the chat it opens:
-    /// a group or topic, or a private chat the owner had with the bot. A
-    /// colleague's private chat with the bot is theirs, not the owner's to
-    /// open.
-    pub fn asks_with_chats(
-        &self,
-        now: i64,
-        limit: usize,
-    ) -> Vec<(transcript::Ask, Option<String>)> {
-        let owner = self.owner();
-        self.asks(now, limit)
-            .into_iter()
-            .map(|ask| {
-                let mine =
-                    ask.chat.as_deref() != Some("dm") || (owner.is_some() && ask.user == owner);
-                let chat = ask.chat_id.clone().filter(|id| mine && feishu_chat_id(id));
-                (ask, chat)
-            })
-            .collect()
     }
 
     /// Its bot's Feishu activity since `since` (ms); none when its database
@@ -404,8 +380,10 @@ mod gateway_tests {
                ('mine','feishu','dm','我问的','oc_mine','ou_me'),
                ('theirs','feishu','dm','同事问的','oc_theirs','ou_colleague'),
                ('grp','feishu','group','群里问的','oc_grp','ou_colleague'),
-               ('odd','feishu','group','怪 id','oc_a/b','ou_me');
+               ('odd','feishu','group','怪 id','oc_a/b','ou_me'),
+               ('alias','feishu','dm','换了 id 也是我','oc_mine','e9cgcf77');
              INSERT INTO messages (session_id,role,content,timestamp) VALUES
+               ('alias','user','换了 id 也是我',50),
                ('mine','user','我问的',40),('theirs','user','同事问的',30),
                ('grp','user','群里问的',20),('odd','user','怪 id',10);",
         )
@@ -420,15 +398,17 @@ mod gateway_tests {
             down_since: None,
             home: home.path().to_path_buf(),
         };
-        assert_eq!(gateway.owner().as_deref(), Some("ou_me"));
         let chats = gateway
-            .asks_with_chats(NOW, 4)
+            .asks_with_chats(NOW, 5)
             .into_iter()
             .map(|(ask, chat)| (ask.session, chat))
             .collect::<Vec<_>>();
+        // Hermes once recorded the owner under another id (2026-11-19): the
+        // private chat its config names is theirs all the same.
         assert_eq!(
             chats,
             vec![
+                ("alias".into(), Some("oc_mine".into())),
                 ("mine".into(), Some("oc_mine".into())),
                 ("theirs".into(), None),
                 ("grp".into(), Some("oc_grp".into())),
@@ -438,6 +418,64 @@ mod gateway_tests {
         // Without a home channel no private chat is known to be the owner's.
         std::fs::write(home.path().join("config.yaml"), "platforms: {}\n").unwrap();
         assert_eq!(gateway.asks_with_chats(NOW, 1)[0].1, None);
+    }
+
+    #[test]
+    fn a_session_opens_its_feishu_chat_or_where_its_scheduled_task_delivers() {
+        let home = tempfile::tempdir().unwrap();
+        let profile = home.path().join("profiles").join("agumon");
+        std::fs::create_dir_all(profile.join("cron")).unwrap();
+        std::fs::write(
+            profile.join("config.yaml"),
+            "platforms:\n  feishu:\n    home_channel:\n      chat_id: oc_mine\n      user_id: ou_me\n",
+        )
+        .unwrap();
+        std::fs::write(
+            profile.join("cron").join("jobs.json"),
+            json!({"jobs": [
+                {"id": "da4fac30ca49", "name": "需求反馈", "deliver": "feishu:oc_mine"},
+                {"id": "b1", "name": "写稿", "deliver": "local"},
+                {"id": "c2", "name": "怪投递", "deliver": "feishu:oc_a/b"}]})
+            .to_string(),
+        )
+        .unwrap();
+        let db = rusqlite::Connection::open(profile.join("state.db")).unwrap();
+        db.execute_batch(
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, chat_id TEXT, user_id TEXT);
+             INSERT INTO sessions VALUES
+               ('mine','feishu','dm','oc_mine','e9cgcf77'),
+               ('theirs','feishu','dm','oc_theirs','ou_colleague'),
+               ('grp','feishu','group','oc_grp','ou_colleague'),
+               ('cron_da4fac30ca49_20261119_180002','cron',NULL,NULL,NULL),
+               ('cron_b1_20261119_091500','cron',NULL,NULL,NULL),
+               ('cron_c2_20261119_091500','cron',NULL,NULL,NULL),
+               ('cron_gone_20261119_091500','cron',NULL,NULL,NULL),
+               ('20261119_180404_f9e1ad','tool',NULL,NULL,NULL);",
+        )
+        .unwrap();
+        drop(db);
+        let gateway = Gateway {
+            bot: Bot {
+                id: "agumon".into(),
+                name: "亚古兽".into(),
+            },
+            down: None,
+            down_since: None,
+            home: profile,
+        };
+        let mut chats = gateway.session_chats().into_iter().collect::<Vec<_>>();
+        chats.sort();
+        assert_eq!(
+            chats,
+            vec![
+                (
+                    "hermes:agumon:cron_da4fac30ca49_20261119_180002".to_string(),
+                    "oc_mine".to_string()
+                ),
+                ("hermes:agumon:grp".to_string(), "oc_grp".to_string()),
+                ("hermes:agumon:mine".to_string(), "oc_mine".to_string()),
+            ]
+        );
     }
 
     #[test]

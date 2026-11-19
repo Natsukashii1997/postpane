@@ -7,6 +7,29 @@
 
 
 
+## Hermes 待处理 / 正在进行 / 回执行点 ↗ 跳回飞书聊天（#424）（2026-11-19，Claude，常浩截图说「hermes 这个侧栏页面又无法跳转到飞书会话了」，看排查后回「按 A 开工」；已提交、PR 见下、已发布 `6a849670c973` 回读通过）
+
+- 时间：开工 `2026-11-19 18:16`（`date '+%F %H:%M'` 记录）。来由：#424。两处原因：① #371 起有待处理时展开卡不画额度区块，Hermes 唯一能跳飞书的「最近被问」画在那个位置，一起不见了；待处理 / 正在进行 / 回执里的 Hermes 会话 `navigationTarget` 一直为空（#196 遗留），↗ 是暗的（L-56）。② 亚古兽 11-19 的私聊 `user_id` 记成 `e9cgcf77`，只比用户 id 认本人，`chatId` 为空（L-57）。
+- 改了哪些文件：
+  - 常浩要求的（方案 A）：
+    - `src/crates/agents/src/hermes/chats.rs`（新）：`Gateway::session_chats()` 给出每个会话在飞书的去向（按 `hermes:…` 会话 id）：飞书会话 → 它的聊天（同事私聊不给）；定时任务的一次运行（`cron_<任务 id>_<时间>`）→ 该任务 `jobs.json` 的 `deliver: feishu:oc_…`；工具 / 一次性会话不给。`HomeChannel::opens` 认本人私聊：用户 id 相同，或聊天 id 就是 `home_channel.chat_id`，满足一条即可。`asks_with_chats`、`places` 一并搬来。
+    - `src/crates/agents/src/hermes/mod.rs`：`CronJob` 加 `delivers_to`；`owner()` 换成 `home_channel()`（同时读 `user_id`、`chat_id`）。
+    - `src/crates/core/src/presentation/hermes.rs`（新）：`stamp_hermes` 盖机器人章（原样搬来），并按 `session_chats` 给 Hermes 会话填 `navigationTarget`（`feishu-chat`）；每个 `Presentation` 只在第一个 Hermes 会话时读一次（`OnceCell`）。`presentation.rs` 改调它。
+    - 前端不改：会话行和回执的 ↗ 本来就是有跳转目标才亮，点了走 `open_session` → 外壳 `feishu://` 打开飞书（#198）。
+  - 我顺手改的：两处新增让 `hermes/transcript.rs`、`presentation.rs` 超出 300 行棘轮，按接缝拆成上面两个新文件；`core/src/island_events.rs` 两处测试里手写的 `CronJob` 补 `delivers_to: None`。
+  - **改变了已有行为的**：Hermes 飞书会话和定时任务会话在「等待处理」「正在进行」、回执里的 ↗ 从暗着点不了，变成打开飞书对应聊天；亚古兽「最近被问」里用户 id 换了格式的本人私聊也能点了。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1051 passed` / `0 failed`（原 1049 + 新增 2），前端 `ℹ pass 476` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 28`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好后重跑见 `node-test-2.log`）。新增 `a_session_opens_its_feishu_chat_or_where_its_scheduled_task_delivers`（agents）、`a_hermes_session_goes_back_to_its_feishu_chat`（core），`an_ask_opens_its_group_or_the_owners_own_private_chat` 加 `alias` 一行；实现前三处都先红（`red-agents.log`：`left: []`、`("alias", None)`；`red-core.log`：`left: Null`）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-424-hermes-jump/`（`check.log`、`test.log`、`node-test.log`、`build.log`、`install.log`）。
+- 验证：装机后用 MCP 读实机会话（18:44:25）：亚古兽「确认沟通无误」（`user_id` `e9cgcf77`）`navigationTarget` = `feishu-chat` `oc_aa36…`；猛鬼兽「询问回答速度及变慢原因」= `oc_ce2c…`；亚古兽定时任务 `cron_da4fac30ca49_…`（需求反馈）= `oc_aa36…`；猛鬼兽日报 #6、#7（工具会话）仍为空。**未验证**：实机侧栏里点 ↗ 飞书是否打开到对的聊天（悬停面板电脑控制点不动，L-09），留给常浩点一次。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-424-hermes-jump/`：`after-install-screen.png`（无文稿权限弹窗）、`smoke-*.png`（装前装后差异落在装前开着的 Claude 展开卡，侧栏一致；本轮没有界面代码改动）。
+- 发布与回读：`install.sh 424-hermes-jump`：装前 `b915fa96a368`（S1 那版，已备份），18:44:01 退出并启动，产物 `6a849670c973` / 已装 `6a849670c973`，签名 leaf `H"b773068e`；`install.sh check` 一致。包从本分支打，开工后 main 只多了 `bc131a8`（只改 CURRENT.md），代码与合并后一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-19-424-hermes-jump/PostPane-b915fa96a368.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 工具 / 一次性会话（如数字分身调起的「你是猛鬼兽…」、日报写稿）没有对应的飞书聊天，↗ 照旧不亮。
+  - 话题群仍只能跳到群（#196 遗留，未动）。
+  - 范围外：术语表写 Hermes「不进『等你』」，实际有新回复时 Hermes 会话会进「等待处理」（截图里 4 条），本轮没动，没核实哪边是现行定稿。
+  - Hermes 为什么把私聊用户记成 `e9cgcf77` 未核实。
+- 本轮新坑：L-56、L-57
+- skill 进化：无。
+
 ## S1 回信认领了就一定送回发起会话（#410）（2026-11-19，Claude，常浩选「S1 按推荐做」、确认三批计划，本会话回「按计划开工」（回章按推荐：已转回、停着的都盖）；已提交、PR 见下、未发布）
 
 - 时间：开工 `2026-11-19 17:28`（本会话创建时间；第 1 批前半由上一会话做到 `f056723`）。来由：Fable 5.2 评估「等不到回信」22 单里 16 单是回信认领了、但自动往返停过，回信停在侧栏等常浩点「转回」，发起会话不知道。

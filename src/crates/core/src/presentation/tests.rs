@@ -372,6 +372,37 @@ fn a_hermes_session_names_the_bot_whose_home_it_was_read_from() {
     assert_eq!(codex["bot"], Value::Null);
 }
 
+#[test]
+fn a_hermes_session_goes_back_to_its_feishu_chat() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut core = core(temp.path());
+    let hermes = temp.path().join(".hermes");
+    core.provider_roots.push((hermes.clone(), "hermes"));
+    fs::create_dir_all(&hermes).unwrap();
+    fs::write(hermes.join("SOUL.md"), "# 猛鬼兽 · SOUL\n").unwrap();
+    fs::write(hermes.join("gateway_state.json"), "{}").unwrap();
+    let db = rusqlite::Connection::open(hermes.join("state.db")).unwrap();
+    db.execute_batch(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, chat_type TEXT, chat_id TEXT, user_id TEXT);
+         INSERT INTO sessions VALUES ('grp','feishu','group','oc_grp','ou_colleague'),
+           ('tool','tool',NULL,NULL,NULL);",
+    )
+    .unwrap();
+    drop(db);
+    let presentation = core.presentation(Utc::now().timestamp_millis());
+    let log = hermes.join("state.db").to_string_lossy().into_owned();
+    let mut chat = json!({"source":"hermes","id":"hermes:grp","logPath":log});
+    presentation.overlay(&mut chat, None, None, &Default::default());
+    assert_eq!(
+        chat["navigationTarget"],
+        json!({"kind":"feishu-chat","id":"oc_grp"})
+    );
+    // A run with no Feishu chat keeps no way back, as before.
+    let mut tool = json!({"source":"hermes","id":"hermes:tool","logPath":log});
+    presentation.overlay(&mut tool, None, None, &Default::default());
+    assert_eq!(tool["navigationTarget"], Value::Null);
+}
+
 /// A Claude log mid-turn: the user's prompt, just sent, no answer yet.
 fn turn_in_progress(home: &Path, id: &str) {
     let at = Utc::now().to_rfc3339();
