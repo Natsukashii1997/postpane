@@ -126,7 +126,7 @@
 - 根因：`format:check` 跑的是 `prettier --check "src/**/*.{ts,tsx,mjs,css}"`，按路径扫，不管文件是否被 git 跟踪；自查时临时改了自查页又没格式化，就把整条 check 拦下。E-07 的「先格式化」只格式化了改动文件，覆盖不到未跟踪的。
 - 正确做法（2026-11-19 改，E-18）：自查、预览不在 `src/` 下另搭页面，一律用常设场景预览台（`pnpm --filter @agent-hud/hud run scenes`，缺场景在 `src/packages/hud/test/scenes/scenes.ts` 补）；一次性的自查页、截图脚本放 `src/` 外（证据目录）。`pnpm run check` 第一步会查 `src/` 下没提交的文件，有就停下并说这些。原来写的「对自查页也 `prettier --write`」作废：它让自查页留在 `src/` 里，L-43 的包边界检查照样会拦。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-relay-toss/check-2.log`（删页后重跑的那次覆盖了失败那次，失败输出见本条现象）；自查页备份在同目录 `relay-real-page/`。
-- 升级：〔机检〕已升级（2026-11-19，积压清单组 12，#417）：`pnpm run check` 第一步 `pnpm run check:untracked`（`src/tooling/check-untracked.mjs`）查 `src/` 下没提交、也没被忽略的文件，有就列出来、写明正确做法并退出 1，后面的格式、类型、构建、边界检查都不跑；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/relay-real/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。与 L-43 合并。不覆盖：单独跑 `pnpm run format:check`、`check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12）。
+- 升级：〔提醒〕部分升级（2026-11-19，积压清单组 12，#417；`pnpm run check` 本身靠约定去跑，驿窗没有 CI 和提交前钩子，按「怎么升级」不算〔机检〕，常浩 11-19 定）：`pnpm run check` 第一步 `pnpm run check:untracked`（`src/tooling/check-untracked.mjs`）查 `src/` 下没提交、也没被忽略的文件，有就列出来、写明正确做法并退出 1，后面的格式、类型、构建、边界检查都不跑；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/relay-real/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。与 L-43 合并。不覆盖：单独跑 `pnpm run format:check`、`check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12）。
 
 ## L-14 自动转回 Claude 时，会话一轮做完就被桌面版结束了，直接送话必败（2026-11-07）
 
@@ -426,7 +426,7 @@
 - 根因：预览脚手架为了直接引组件源码，必须跨包相对引用；它不提交，但只要还在工作区里就会被边界检查扫到。
 - 正确做法（2026-11-19 改，E-18）：不再搭预览脚手架，预览只用常设场景预览台（`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480）；它在包里面，不跨包引用。原来写的「截完图挪到证据目录再跑 check」作废。报告里如实写第一次失败的原因，日志另存。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`。
-- 升级：〔机检〕已升级（2026-11-19，积压清单组 12，#417）：同 L-13，`pnpm run check` 第一步 `src/tooling/check-untracked.mjs` 拦 `src/` 下没提交的文件；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/preview-328/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。预览统一用常设场景预览台（E-18，〔结构〕）。不覆盖：单独跑 `check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12，与 L-13 合并做成〔机检〕）。
+- 升级：〔提醒〕部分升级（2026-11-19，积压清单组 12，#417；`pnpm run check` 本身靠约定去跑，驿窗没有 CI 和提交前钩子，按「怎么升级」不算〔机检〕，常浩 11-19 定）：同 L-13，`pnpm run check` 第一步 `src/tooling/check-untracked.mjs` 拦 `src/` 下没提交的文件；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/preview-328/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。预览统一用常设场景预览台（E-18，〔结构〕）。不覆盖：单独跑 `check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12，与 L-13 合并做成〔机检〕）。
 
 ## L-44 装机前查自动往返接力，查出有也照装了：查和装写在同一条命令里，中间没停（2026-11-14）
 

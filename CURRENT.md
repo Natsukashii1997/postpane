@@ -20,7 +20,7 @@
     - `src/tooling/check-untracked.mjs`（新）：`git ls-files --others --exclude-standard -- src`，有就列出文件、写明正确做法（场景预览台；一次性页面放 `src/` 外；要提交的先 `git add`），退出 1。`package.json`：新增 `check:untracked`，放在 `check` 第一步。
     - `tests/check-untracked.test.mjs`（新）：L-13 的 `src/apps/desktop/relay-real/`、L-43 的 `src/apps/desktop/preview-328/` 两个样本各报一次错，忽略的构建产物、已 `git add` 的新文件、`src/` 外的草稿放行，并查 `check` 第一步是它。
     - E-18：`.agents/skills/postpane-round/SKILL.md` 第 3 步第 5 条改指场景预览台（命令、端口、参数、缺场景在哪补）；`docs/LESSONS.md` L-13、L-43 的「正确做法」改成场景预览台（原来「对自查页也 prettier」「截完图挪走再跑 check」两种旧做法写明作废），L-09 的「浏览器预览」补一句只用场景预览台；`EVOLUTION.md` E-18 改「已采纳（本 PR，#417）」。
-    - `docs/LESSONS.md` L-13、L-43 升级行改成「〔机检〕已升级」。
+    - `docs/LESSONS.md` L-13、L-43 升级行改成「〔提醒〕部分升级」（子 agent 原标〔机检〕；`pnpm run check` 靠约定去跑，常浩 11-19 定降一层）。
   - 顺手改的：`AGENTS.md`「运行」里 `pnpm run check` 那行注释补「先查 src/ 下有没有没提交的文件」。
   - **改变了已有行为的**：`pnpm run check` 原来不管 `src/` 下有没有没提交的文件，直接从格式检查开始；现在第一步先查，有没提交、也没被 `.gitignore` 忽略的文件就退出 1、后面都不跑。连本轮新写、还没 `git add` 的源文件也会被拦（本轮自己就碰上了：新脚本没 add 时被列出来），报错里写了「先 git add」。
 - 测试：改动前（origin/main `0e5083c`）`node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP 9/0，插件 14/0，Chrome 插件 28/0）。新测试先在旧代码上红：`tests/check-untracked.test.mjs` 对着 origin/main 跑 `ℹ pass 0` / `ℹ fail 4`（`red/check-untracked-old-code.log`）。改动后 `node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（+4 条新测试），`pnpm run check` exit 0（第一步打印「src/ 下没有未提交的文件。」），`pnpm test` exit 0，各项与改动前相同。和 #416 共用构建目录 `~/Sandbox/worktrees/postpane-b2-target`（两边 Rust 代码相同）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`（`baseline-*`、`pr2-final-*`、`red/`）。
@@ -30,7 +30,7 @@
 - 与授权不一致之处、遗留问题、范围外发现：
   - 删旧脚手架：仓库里已没有旧脚手架的代码（只在证据目录），能删的是指向它的文字，即 L-13、L-43 的旧做法；`docs/history/` 里的历史交接照原样留。主目录本机的 `.claude/launch.json`（不进仓库）还有 `preview-243`～`preview-341` 等十几项旧脚手架启动配置，有几项写着「用前放回 src/apps/desktop/」，按规矩不动主目录，建议删掉只留 `scenes`。
   - 预览台、固定场景都是 ADR-0001（`docs/adr/0001-工作场所契约.md` 第 8 条）已定的做法，本 PR 只是让 SKILL 和 LESSONS 跟它一致，没改预览台本身；本项目没有 `docs/DECIDED.md`。
-  - L-13、L-43 标〔机检〕：新检查接在 `pnpm run check` 里，坑只在跑这条命令时出现，跑它就一定先查；单独跑 `format:check`、`check:packages` 等子步骤不经过它。
+  - L-13、L-43 原标〔机检〕，常浩 11-19 定降为〔提醒〕部分升级：新检查接在 `pnpm run check` 里，坑只在跑这条命令时出现，跑它就一定先查；单独跑 `format:check`、`check:packages` 等子步骤不经过它。
   - skill 进化：E-18 已采纳（本 PR）；无新 E 条目。
 
 ## 积压清单第二批（坑记录与 SKILL）：提升行补全局编号、组 15 关闭、组 16 不升级、E 条目采纳（2026-11-19，Claude 子 agent，常浩 11-19 回「全部按推荐」批了积压清单组 3、7～17；已提交、无需发布）
