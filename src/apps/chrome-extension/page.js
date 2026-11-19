@@ -240,15 +240,14 @@
 
   const bare = (text) => text.replace(/\s/g, "");
 
-  /** Whether the composer holds `text` and nothing more. Words left from
-   * before show as more: a few characters more (a code block's label) are
-   * allowed, a left brief is far more. The box may draw Markdown (a few
-   * characters fewer), but words it holds a fifth short of did not go in as
-   * text: in an attachment the page shows none of them (#429). */
+  /** Whether the composer holds `text`, spaces aside, give or take a few
+   * characters: a code block's label more, a Markdown mark the box drew
+   * fewer. Words left from before show as far more; words that went into an
+   * attachment, or a paste the page cut short, as fewer (#429). Pasted words
+   * are held to each piece in full (`paste`); this is what `insertText`,
+   * when paste is not taken, is held to. */
   function holds(box, text) {
-    const held = bare(box.textContent).length;
-    const words = bare(text).length;
-    return held <= words + 40 && held >= words * 0.8;
+    return Math.abs(bare(box.textContent).length - bare(text).length) <= 40;
   }
 
   /** chatgpt.com turns one paste of somewhere between 8000 and 10000
@@ -258,16 +257,18 @@
 
   /** `text` in pieces of at most `max` characters, cut after a line where it
    * can be: a line longer than `max` is cut within, never inside a character
-   * of two UTF-16 units (an emoji). */
+   * of two UTF-16 units (an emoji) nor between a CR and its LF. A piece of
+   * only spaces and line breaks is not cut off: it goes with the next words,
+   * a few characters over `max`, so every piece shows it went in. */
   function pieces(text, max = PIECE) {
     const out = [];
     let piece = "";
     for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
       for (let at = 0, end; at < line.length; at = end) {
         end = Math.min(at + max, line.length);
-        if (end < line.length && /[\uD800-\uDBFF]/.test(line[end - 1])) end -= 1;
+        if (end < line.length && /[\uD800-\uDBFF\r]/.test(line[end - 1])) end -= 1;
         const part = line.slice(at, end);
-        if (piece.length + part.length > max) {
+        if (piece.length + part.length > max && bare(piece)) {
           out.push(piece);
           piece = "";
         }
@@ -279,18 +280,18 @@
   }
 
   /** Pastes `text` at the end of the box a piece at a time; paste keeps its
-   * paragraphs. Whether each piece went in (the box grew). */
+   * paragraphs. Whether each piece went in whole: the box grew by all of its
+   * characters, spaces aside (the page takes a paste as typed, #429). */
   async function paste(doc, box, text) {
     for (const piece of pieces(text)) {
-      if (!bare(piece)) continue;
-      const before = bare(box.textContent).length;
+      const want = bare(box.textContent).length + bare(piece).length;
       const selection = doc.getSelection();
       selection.selectAllChildren(box);
       selection.collapseToEnd();
       const data = new DataTransfer();
       data.setData("text/plain", piece);
       box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-      if (!(await waitFor(() => bare(box.textContent).length > before, 3000))) return false;
+      if (!(await waitFor(() => bare(box.textContent).length >= want, 3000))) return false;
     }
     return true;
   }
