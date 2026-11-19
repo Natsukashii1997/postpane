@@ -7,7 +7,7 @@
 
 
 
-## #411 L2 第 2 轮返修：停章按审查类型了结、到顶未了结的不受一天限制、「审核通过」看后台放行（2026-11-19，Claude，常浩回「按推荐开工」：补做第 4 批、授权第 3 轮复审、四份草稿送一轮合并复核、别项目开着的接力只备份不动；已提交、未发布）
+## #411 L2 第 2、3 轮返修：停章按审查类型了结、到顶未了结的不受一天限制、「审核通过」和下一轮预告看后台放行（2026-11-19，Claude，常浩回「按推荐开工」：补做第 4 批、授权第 3 轮复审、四份草稿送一轮合并复核、别项目开着的接力只备份不动；第 3 轮后回「修，补改未复审」；已提交、未发布）
 
 - 时间：开工 `2026-11-19 13:50`（会话记录推算，未用 `date` 记）。来由：L2 第 2 轮（驿窗 `h1a1f09f8a3f02`，审 `b520036`）返修，剩 P2-02a、P2-02b、P2-05。
 - 改了哪些文件：
@@ -18,11 +18,12 @@
     - 测试：`relay-stamps.test.ts` 加四个方向的类型隔离（工程停后开思维评审不算了结、反过来也不算、同类算、ASCII 竖线与开头空格也认）；`handoff-card.test.ts` 加版本核对拦下后闲置结束、思维评审收口两种结束文字，原「通过」用例补 `notice: "passed"`；`guard.rs` 测试加闲置结束后一年仍 `in_sight`、开思维评审仍在、开工程审查后不在；`handoff.rs` 思维评审到顶测试加「过了两天仍在快照里、常浩开口新开一张后一天就清走」。
     - 场景预览台：`test/scenes/relay-gate.ts` 加 `relay-stop-other-kind`（工程停后同会话开思维评审，「停」还在）、`relay-stale-idle`（旧版本通过被拦后闲置结束，不写「审核通过」），登记进 `scenes.ts`。
     - 文档：`docs/chatgpt-channel.md` 到顶界面一条补「同类才算了结」「不受快照一天限制」「自动结束写不写通过看 notice」，快照一条补「到顶还没了结的」。
+    - L2 第 3 轮（驿窗 `h1a1f265307d01`，审 `f0d1e75`，常浩授权，`extra` 写他的原话）：P2-02a、P2-02b、P2-05 关闭，未发现新回归；新增 P2-06（下面），出口返修，预算用完交常浩。常浩回「修，补改未复审」。
+    - P2-06：`handoff-card.ts` 时间线「接下来」判通过改为 `notice === "passed"`，或 `replied` 阶段回信写通过（驿窗还没处理）；被版本核对转回的照常预告「第 N 轮：ChatGPT 再审核」。照审查人给的修法。`handoff-card.test.ts` 加回归测试（转回仍预告、刚到不预告、已放行不预告），撤修复时该测试失败、还原后通过。场景 `relay-stale-back`。文档 `chatgpt-channel.md` 同步一句。补改未复审。
   - 我顺手改的：无。
-  - 看到没改的：`handoff-card.ts` `upcoming()` 里 `passed = lastReply(handoff)?.verdict === "pass"` 也按回信结论判，在途接力遇版本核对拦下（`Next::Stale`）后，时间线「接下来」会少一行「第 N 轮：ChatGPT 再审核」；只影响在途的预告行，审查只要求修这三处，没动。
-- 测试：`pnpm run check` 退出码 0（`check-5.log`）；`pnpm test` 退出码 0：cargo 合计 `1041 passed; 0 failed`（没加新测试函数，断言加在已有函数里），前端 `ℹ pass 473` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/*-4.log`、`check-5.log`。加场景后单跑侧栏 `ℹ pass 398` / `ℹ fail 0`。
+- 测试：`pnpm run check` 退出码 0（`check-5.log`）；`pnpm test` 退出码 0：cargo 合计 `1041 passed; 0 failed`（没加新测试函数，断言加在已有函数里），前端 `ℹ pass 473` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，扩展 `ℹ pass 23` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/*-4.log`、`check-5.log`。加场景后单跑侧栏 `ℹ pass 398` / `ℹ fail 0`。 P2-06 后再跑一次：`pnpm run check` 退出码 0，`pnpm test` 退出码 0（cargo `1041 passed`、前端 `ℹ pass 474` / `ℹ fail 0`、MCP 9、插件 14、扩展 23），`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（`*-6.log`）。
 - 验证：场景预览台（127.0.0.1:1480，本 worktree）：`relay-stop-other-kind` 隔 2 秒两张，ChatGPT 票根红色「停」章都在；`relay-stale-idle` 开卡滚到底两张，末步「驿窗自动结束接力」+「等常浩处理 24 小时没动静，驿窗自动结束接力」；回查 `relay-passed` 末步仍是「审核通过，自动结束接力」。
-- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/shots-r3/`（`stop-other-kind-{1,2}.png`、`stale-idle-{1,2}.png`、`passed-regression.png`）。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-409-review-gate-ui/shots-r3/`（`stop-other-kind-{1,2}.png`、`stale-idle-{1,2}.png`、`passed-regression.png`、P2-06 的 `stale-back-{1,2}.png`）。
 - 发布与回读：未发布。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 常浩 11-19 回「按推荐开工」，四项照推荐：补做第 4 批模拟台账；授权 #411 第 3 轮复审（`extra` 写常浩原话）；四份规则草稿送一轮合并定向复核；本机别项目开着的接力只备份、不动、记下已累计轮数。

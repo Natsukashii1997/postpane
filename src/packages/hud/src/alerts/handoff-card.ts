@@ -454,7 +454,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       : `At most ${budget(handoff)} rounds; stops at a pass`,
     state: "todo",
   };
-  const passed = lastReply(handoff)?.verdict === "pass";
+  // A pass is the gate's (`notice: "passed"`); an answer saying pass counts
+  // only while PostPane has yet to act on it. Sent back, as on another
+  // commit than the one under review, a round more is to come (#411 L2 P2-06).
+  const passed =
+    handoff.notice === "passed" ||
+    (phaseOf(handoff) === "replied" && lastReply(handoff)?.verdict === "pass");
   const more = next <= budget(handoff) && !passed;
   const todoBack: Row = {
     who: "post",

@@ -864,3 +864,27 @@ test("an end by PostPane reads as a pass only when the gate let a pass through (
     "结束接力",
   );
 });
+
+test("a pass sent back unpassed (another commit) still shows the round to come; one just in does not (#411 L2 P2-06)", () => {
+  const pass = { ...reply, verdict: "pass" as const };
+  const again = (h: Handoff) =>
+    timeline(h, T + 13 * minute, true).some(
+      (row) => row.title === "第 2 轮：ChatGPT 再审核",
+    );
+  // Sent back by the gate without a pass (gate.rs `Next::Stale`).
+  const stale = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    steps: [...handoff().steps!, pass, step("back", T + 12 * minute)],
+  });
+  assert.ok(again(stale), "a round more is to come");
+  // Just in, PostPane yet to act on it: no round to come.
+  const fresh = handoff({
+    phase: "replied",
+    phaseAt: T + 11 * minute,
+    steps: [...handoff().steps!, pass],
+  });
+  assert.ok(!again(fresh));
+  // Passed by the gate: none either.
+  assert.ok(!again({ ...stale, notice: "passed" }));
+});

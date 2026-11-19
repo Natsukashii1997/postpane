@@ -210,3 +210,28 @@ export const relayStaleIdle: Scene = {
     ],
   }),
 };
+
+// ChatGPT passed an older commit; the gate sent it back to be reviewed on
+// the current one: Claude works on it, and a round more is still to come
+// (#411 L2 P2-06).
+export const relayStaleBack: Scene = {
+  key: "relay-stale-back",
+  title: "ChatGPT 对旧版本写了通过、被版本核对转回（时间线仍预告下一轮再审核）",
+  snapshot: snapshot({
+    sessions: pair("back", "清理旧配置二", 2),
+    handoffs: [
+      relay({
+        id: "h-back",
+        title: "清理旧配置二",
+        doer: "claude",
+        session: "c-back",
+        chatgpt: "g-back",
+        phase: "returned",
+        minutesAgo: 2,
+        reviews: 2,
+        limit: 5,
+        verdict: "pass",
+      }),
+    ],
+  }),
+};
