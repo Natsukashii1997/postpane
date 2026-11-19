@@ -5,8 +5,9 @@
 import type { ReactNode } from "react";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat } from "@agent-hud/ui/format";
-import type { ChatGPTDesk, DeskReview } from "../chatgpt-desk";
+import type { ChatGPTDesk } from "../chatgpt-desk";
 import { airmailStripes, relayPaperOf } from "../paper";
+import { reviewWord } from "./desk-words";
 import { replyTime } from "./hermes-peek";
 import {
   DESK_CHAT,
@@ -23,29 +24,6 @@ export interface DeskInks {
   dimOpacity?: number;
   answering: string;
   replied: string;
-}
-
-/** What a review's phase reads as on the slip, and in which ink. */
-export function reviewPhase(
-  phase: DeskReview["phase"],
-  zh: boolean,
-): { text: string; tone: "amber" | "blue" | "red" | "dim" } {
-  switch (phase) {
-    case "replied":
-      return { text: zh ? "待你看" : "Your call", tone: "amber" };
-    case "working":
-      return { text: zh ? "审核中" : "Reviewing", tone: "blue" };
-    case "sending":
-      return { text: zh ? "送出中" : "Sending", tone: "dim" };
-    case "delivered":
-      return { text: zh ? "已送到" : "Delivered", tone: "dim" };
-    case "returned":
-      return { text: zh ? "返修中" : "With Claude", tone: "dim" };
-    case "failed":
-      return { text: zh ? "没送出" : "Not sent", tone: "red" };
-    default:
-      return { text: zh ? "已结束" : "Ended", tone: "dim" };
-  }
 }
 
 export function DeskLines({
@@ -217,11 +195,17 @@ export function DeskLines({
             paper.word,
             paper.line,
             zh
-              ? `开着 ${desk.reviews.length} 条`
-              : `${desk.reviews.length} open`,
+              ? `开着 ${desk.open} 条${desk.need ? ` · 要你管 ${desk.need}` : ""}`
+              : `${desk.open} open${desk.need ? ` · ${desk.need} yours` : ""}`,
           )}
           {desk.reviews.map((review) => {
-            const phase = reviewPhase(review.phase, zh);
+            const phase = reviewWord(review, zh);
+            const ring =
+              review.group === "need"
+                ? paper.red
+                : review.group === "quiet"
+                  ? paper.dim
+                  : paper.blue;
             return (
               <div
                 key={review.id}
@@ -244,8 +228,8 @@ export function DeskLines({
                   <span
                     style={{
                       flex: "none",
-                      border: `${1.2 * scale}px solid ${paper.blue}`,
-                      color: paper.blue,
+                      border: `${1.2 * scale}px solid ${ring}`,
+                      color: ring,
                       borderRadius: 8 * scale,
                       padding: `0 ${4 * scale}px`,
                       fontSize: 10 * scale,
@@ -281,6 +265,20 @@ export function DeskLines({
               </div>
             );
           })}
+          {desk.reviewsMore > 0 && (
+            <div
+              style={{
+                height: DESK_NOTE * scale,
+                lineHeight: `${DESK_NOTE * scale}px`,
+                fontSize: 10.5 * scale,
+                color: paper.dim,
+              }}
+            >
+              {zh
+                ? `另 ${desk.reviewsMore} 条，展开看全`
+                : `${desk.reviewsMore} more on the card`}
+            </div>
+          )}
         </div>
       )}
     </>

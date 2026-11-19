@@ -8,6 +8,7 @@ import type { PanelLayout, Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { vendorKey } from "../model";
 import { chatgptDesk, isReview } from "../chatgpt-desk";
+import { groupRelays, splitRelays } from "../relay-groups";
 import { liveSessions } from "./agent-board";
 import { sessionScope } from "./place-sessions";
 import { PlaceRows, SessionsHeading } from "./PlaceRows";
@@ -22,7 +23,9 @@ import type { Logo } from "./theme";
 /** The panel's sessions (owner, 2026-11-05): those waiting on you, then
  * those at work, each with what it waits on or does and a way back to it.
  * On one agent's card they are its 「等待处理」 and
- * 「正在进行」 (owner, 2026-11-14); its relays are behind the paper plane. */
+ * 「正在进行」 (owner, 2026-11-14). ChatGPT's relays are its work too
+ * (#427, the owner chose 甲 on 2026-11-19): listed in both, not only behind
+ * the paper plane. */
 export function SourceSessions({
   snapshot,
   focusVendor,
@@ -69,6 +72,7 @@ export function SourceSessions({
     focusVendor && vendorKey(focusVendor) === vendorKey("chatgpt")
       ? chatgptDesk(snapshot, now, zh)
       : null;
+  const relays = desk ? groupRelays(handoffs, snapshot.sessions, now) : [];
   const replied = desk
     ? desk.day.flatMap((chat) => {
         const session =
@@ -137,6 +141,7 @@ export function SourceSessions({
           now={now}
           onStats={onStats}
           card
+          relays={desk ? splitRelays(relays) : undefined}
           news={
             news ??
             (replied.length

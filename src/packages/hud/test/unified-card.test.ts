@@ -122,11 +122,14 @@ test("单家卡：卡头是小签小人、没有撕线；等待处理 4 条、�
   );
   const work = read("panel/WorkSections.tsx");
   assert.match(work, /\(card \|\| waitingCount > 0\) &&/);
-  assert.match(work, /\(card \|\| running\.length > 0\) &&/);
+  // Running counts ChatGPT's relays under way too (#427).
+  assert.match(work, /\(card \|\| runningCount > 0\) &&/);
   assert.match(work, /暂无等待处理的事/);
   assert.match(work, /暂无在跑的会话/);
-  assert.match(work, /shown=\{SHOWN_ENTRIES\}/);
-  assert.match(work, /shown=\{RUNNING_SHOWN\}/);
+  // Each section folds its relays and rows together past its few (#427).
+  assert.match(work, /<Folded items=\{items\} shown=\{shown\}/);
+  assert.match(work, /section\(relaysWaiting, waiting, SHOWN_ENTRIES,/);
+  assert.match(work, /section\(relaysRunning, running, RUNNING_SHOWN,/);
   // The card no longer folds its running rows into 「在跑 n」.
   assert.doesNotMatch(read("panel/SourceSessions.tsx"), /fold=\{fold\}/);
 });

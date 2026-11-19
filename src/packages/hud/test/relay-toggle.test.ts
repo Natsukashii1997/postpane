@@ -94,7 +94,10 @@ test("on the waiting card the plane opens the handoff that moved last (#341)", (
   assert.match(enter, /if \(!card \|\| live\.length === 0\) return null;/);
   assert.match(enter, /pressed=\{false\}/);
   assert.match(enter, /live\.length > 1\s*\? \{ text: String\(live\.length\)/);
-  assert.match(enter, /onClick=\{\(\) => card\.open\(live\[0\]\.id\)\}/);
+  assert.match(
+    enter,
+    /onClick=\{\(\) =>\s*card\.open\(\s*live\[0\]\.id,\s*live\.map\(\(handoff\) => handoff\.id\),?\s*\)\s*\}/,
+  );
 });
 
 test("on the handoff card the same square, held down, goes back (#341)", () => {

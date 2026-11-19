@@ -4,14 +4,21 @@
 // matters most.
 import type { Handoff, Session } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
-import { handoffFor, round } from "./alerts/handoff-card.ts";
-import { liveHandoffs } from "./alerts/handoff-doer.ts";
+import { round } from "./alerts/handoff-card.ts";
+import { stopped } from "./alerts/relay-stop.ts";
+import {
+  busySessions,
+  groupRelays,
+  STALE_REVIEW,
+  type RelayGroup,
+} from "./relay-groups.ts";
 
-/** A relay left open with its Claude session gone quiet this long is no
- * longer the owner's business on the sidebar. */
-export const STALE_REVIEW = 2 * 60 * 60_000;
+export { STALE_REVIEW };
 /** The upper slip lists at most this many chats. */
 export const DESK_CHATS = 3;
+/** The lower slip lists at most this many relays; the card lists them all
+ * (#427). */
+export const DESK_REVIEWS = 4;
 
 export interface DeskChat {
   id: string;
@@ -28,6 +35,11 @@ export interface DeskReview {
   round: string;
   phase: NonNullable<Handoff["phase"]>;
   at: number;
+  /** 要你管, 在动 or 静着 (#427). */
+  group: RelayGroup;
+  /** Stopped at its cap (「停」), or its auto round trip paused. */
+  stopped: boolean;
+  paused: boolean;
 }
 
 export interface ChatGPTDesk {
@@ -40,7 +52,14 @@ export interface ChatGPTDesk {
   more: number;
   /** How many chats had a turn today. */
   today: number;
+  /** The relays the lower slip lists: the first `DESK_REVIEWS` of the
+   * open ones, in their groups (#427). */
   reviews: DeskReview[];
+  /** How many relays are open, how many of them are the person's, and how
+   * many the slip leaves unlisted. */
+  open: number;
+  need: number;
+  reviewsMore: number;
   /** The stub says something more pressing than an overdue review: ChatGPT
    * answering, or a reply to read. 「未审」 waits meanwhile (owner, #213). */
   pressing: boolean;
@@ -108,24 +127,28 @@ export function chatgptDesk(
       (live.has(s.id) && Date.parse(s.liveFacts?.turnStartedAt ?? "")) || at(s),
   }));
   const chats = listed.slice(0, DESK_CHATS);
-  const reviews = handoffs
-    .filter((h) => h.status === "open" || h.status === "opening")
-    .filter(
-      (h) =>
-        live.has(h.claudeSession) ||
-        now - (h.phaseAt || h.updatedAt) <= STALE_REVIEW,
-    )
-    .sort((a, b) => (b.phaseAt || b.updatedAt) - (a.phaseAt || a.updatedAt))
-    .map((h): DeskReview => {
-      const r = round(h);
-      return {
-        id: h.id,
-        title: h.title,
-        round: `${r.at}/${r.of}`,
-        phase: phaseOf(h),
-        at: h.phaseAt || h.updatedAt,
-      };
-    });
+  const grouped = groupRelays(handoffs, snapshot.sessions, now);
+  const listedReviews = grouped.map(({ handoff: h, group, at }): DeskReview => {
+    const r = round(h);
+    return {
+      id: h.id,
+      title: h.title,
+      round: `${r.at}/${r.of}`,
+      phase: phaseOf(h),
+      at,
+      group,
+      stopped: stopped(h),
+      paused: Boolean(h.halt) && !h.auto,
+    };
+  });
+  // The stub and 「在答」 go by the relays moved in the last two hours or
+  // whose doer is at work, as before #427 (owner, #213).
+  const busy = busySessions(snapshot.sessions);
+  const reviews = listedReviews.filter(
+    (r, index) =>
+      now - r.at <= STALE_REVIEW ||
+      busy.has(grouped[index].handoff.claudeSession),
+  );
   const answering =
     chats.some((c) => c.state === "answering") ||
     reviews.some((r) => r.phase === "working") ||
@@ -149,24 +172,11 @@ export function chatgptDesk(
     day: listed,
     more: Math.max(0, todays.length - chats.length),
     today: todays.length,
-    reviews,
+    reviews: listedReviews.slice(0, DESK_REVIEWS),
+    open: listedReviews.length,
+    need: listedReviews.filter((r) => r.group === "need").length,
+    reviewsMore: Math.max(0, listedReviews.length - DESK_REVIEWS),
     pressing: stub.tone === "amber" || stub.tone === "blue",
     stub,
   };
-}
-
-/** The open handoffs ChatGPT is not answering now (#288): none of the
- * listed review rows is theirs, so the slip lists them too, newest first,
- * however long they have been quiet and wherever their doer is. */
-export function quietRelays(
-  handoffs: readonly Handoff[],
-  reviewSessions: readonly string[],
-): Handoff[] {
-  const shown = new Set(
-    reviewSessions.flatMap((id) => {
-      const handoff = handoffFor(handoffs, "chatgpt", id);
-      return handoff ? [handoff.id] : [];
-    }),
-  );
-  return liveHandoffs(handoffs).filter((handoff) => !shown.has(handoff.id));
 }

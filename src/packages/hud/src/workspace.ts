@@ -2,6 +2,8 @@ import type { Approval, Handoff, Session, Snapshot } from "@agent-hud/protocol";
 import { doerOf, liveHandoffs } from "./alerts/handoff-doer.ts";
 import { liveSessions, type LiveSession } from "./panel/agent-board.ts";
 import { sourceID, sourcesForMark } from "./resting-agents.ts";
+import { isReview } from "./chatgpt-desk.ts";
+import { groupRelays } from "./relay-groups.ts";
 
 export { isStale } from "./stale.ts";
 
@@ -83,16 +85,38 @@ export interface PeekWork {
 }
 
 /** The work line's counts for the place behind a mark; none for Hermes, the
- * Feishu desk, which is not a workplace (ADR-0001). */
+ * Feishu desk, which is not a workplace (ADR-0001). ChatGPT counts its
+ * relays as its card lists them (#427): the person's as waiting on you,
+ * those under way as running, in place of its review conversations. */
 export function peekWork(
-  snapshot: Pick<Snapshot, "providers" | "sessions" | "approvals" | "handoffs">,
+  snapshot: Pick<
+    Snapshot,
+    "providers" | "sessions" | "approvals" | "handoffs" | "generatedAt"
+  >,
   mark: string,
 ): PeekWork | undefined {
   if (mark === "hermes") return undefined;
   const place = workspaceOf(snapshot, mark);
+  const waiting = place.waiting.filter((entry) => !entry.stale);
+  if (!sourcesForMark(snapshot, mark).includes("chatgpt"))
+    return {
+      waiting: waiting.length,
+      running: place.running.length,
+      relays: place.relays.length,
+    };
+  const handoffs = snapshot.handoffs ?? [];
+  const own = (list: readonly LiveSession[]) =>
+    list.filter((entry) => !isReview(entry.session, handoffs)).length;
+  const groups = groupRelays(
+    handoffs,
+    snapshot.sessions,
+    Date.parse(snapshot.generatedAt),
+  );
+  const count = (group: string) =>
+    groups.filter((entry) => entry.group === group).length;
   return {
-    waiting: place.waiting.filter((entry) => !entry.stale).length,
-    running: place.running.length,
+    waiting: own(waiting) + count("need"),
+    running: own(place.running) + count("move"),
     relays: place.relays.length,
   };
 }
