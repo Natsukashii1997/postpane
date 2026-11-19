@@ -16,12 +16,12 @@
     - `test/relay-toggle.test.ts` 的 #334 那条原本逐字匹配 `sidebarShown` 那行，改成断言新写法和 `handoff: !open && !news`，守的意思不变（接力卡等侧栏收起才关）。
     - `src/tooling/file-size-baseline.json`：`HUDScene.tsx` 变短，收紧基线。`docs/LESSONS.md` L-58 补一条。
   - **改变了已有行为的**：无新行为，修回 #374、#382 定的「下次打开仍默认 4 / 6 条」：展开卡关上后，展开过的列表折回，不论侧栏顶上有没有提醒挂着。接力卡什么时候关不变。
-- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1065 passed` / `0 failed`，前端 `ℹ pass 487` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 32`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。第一次跑 Rust 因新目录没有 `src-tauri/resources` 编译失败（已知坑，见 LESSONS 第 25 行那条），跑 `node src/tooling/package-resources.mjs` 后重跑全过。新测试 `fold-store.test.ts`「lists fold back when the card closes, even with a tag still out」实现前先红（`red.txt`：`does not provide an export named 'closesWith'`）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-20-448-fold-reset/`（`check.txt`、`pnpm-test.txt`、`node-tests.txt`）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1065 passed` / `0 failed`，前端 `ℹ pass 487` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 32`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。第一次跑 Rust 因新目录没有 `src-tauri/resources` 编译失败（已知坑，见 LESSONS 第 25 行那条），跑 `node src/tooling/package-resources.mjs` 后重跑全过。新测试 `fold-store.test.ts`「lists fold back when the card closes, even with a tag still out」实现前先红（`red.txt`：`does not provide an export named 'closesWith'`）。变基到 main `39bb4a7` 后三套重跑：`pnpm run check` 退出码 0；`pnpm test` 「6 套，失败 0 套」，cargo `1065 passed`、前端 `ℹ pass 487`、Chrome 插件 `ℹ pass 44`（main 新进 #435 的测试），其余同上，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-20-448-fold-reset/`（`check.txt`、`pnpm-test.txt`、`node-tests.txt`，变基后的带 `-rebased`）。
 - 验证：场景预览台，视口 1440×1600，`?still`，操作：点票根开卡 → 点「展开其余 n 条」→ 鼠标移到左下等 4 秒卡收起 → 再点票根。改前（主目录 main `70a94df`，127.0.0.1:1492）`claude-many-asks`（Claude 有提问挂着）：再打开仍是「收起」、框 1089，复现 #448。改后（本 worktree，127.0.0.1:1491）`claude-many-asks`：再打开回到「展开其余 4 条」、790；`chatgpt-nine-relays`：展开 849，再打开回到「展开其余 3 条」、666；鼠标停在卡上时展开保持。记录见 `preview-check.md`。**未验证**：实机侧栏里移开再悬停（L-09），装机后留给常浩。
 - 截图：同一证据目录 `before-reopen-still-open.jpg`、`after-reopen-folded.jpg`；代验截图在 `~/Sandbox/2026-11-19-inbox-verify/全屏重验-11-20/` 的 `01-` 三张（「人机协作」会话拍的）。
 - 发布与回读：未发布（等常浩看 PR 后决定合并装机）。
 - 与授权不一致之处、遗留问题、范围外发现：
-  - GitHub 开工时连不上，从本机 main `70a94df` 开的分支，开 PR 前已同步核对。
+  - GitHub 开工时连不上，从本机 main `70a94df` 开的分支；开 PR 前已同步，main 新进 4 个提交（`39bb4a7`），变基时 `CURRENT.md` 两节都在顶部，保留两节、本节在前。
   - 上一节 #440 写「装机位被 #442 的实机占着」：装机前要先看清现在装的是谁的包（L-05）。
   - 范围外仍未核实：`CompletionAlertView` 里「点开的那条回复」`chosen` 是本地状态（#430 交接已报）。
 - 本轮新坑：无（补在 L-58）
