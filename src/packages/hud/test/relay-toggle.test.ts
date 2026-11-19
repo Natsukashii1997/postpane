@@ -133,6 +133,8 @@ test("the pointer leaving still keeps the card open (#334)", () => {
   const scene = read("HUDScene.tsx");
   assert.match(
     scene,
-    /const sidebarShown = open \|\| Boolean\(event \|\| request\);/,
+    /useCloseWithSidebar\(open, Boolean\(event \|\| request\)\);/,
   );
+  // The handoff card waits for the sidebar to fold away, news and all (#448).
+  assert.match(read("scene/close-with-sidebar.ts"), /handoff: !open && !news/);
 });
