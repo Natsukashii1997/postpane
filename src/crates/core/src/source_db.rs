@@ -455,7 +455,7 @@ impl AgentHudCore {
         if is_bot {
             self.reads.bot_poll = bot_running.then(|| {
                 (
-                    chrono::Utc::now().timestamp_millis() + crate::BOT_POLL_MS,
+                    crate::snapshot::wall_clock_ms() + crate::BOT_POLL_MS,
                     path.to_path_buf(),
                 )
             });

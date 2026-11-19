@@ -324,7 +324,7 @@ impl AgentHudCore {
         let active = self.active_logs();
         let mut due = self.reads.listing.stale(&self.provider_roots, &active);
         if let Some((at, _)) = &self.reads.bot_poll {
-            if Utc::now().timestamp_millis() >= *at {
+            if snapshot::wall_clock_ms() >= *at {
                 if let Some((_, path)) = self.reads.bot_poll.take() {
                     self.reads.pending.insert(path.clone());
                     self.reads.forced.insert(path);
