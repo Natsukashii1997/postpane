@@ -795,7 +795,7 @@ export interface IslandEvent {
   islandAlert?: boolean;
   navigationTarget?: unknown;
 }
-export type { Handoff, HandoffStep } from "./handoffs.ts";
+export type { Handoff, HandoffPending, HandoffStep } from "./handoffs.ts";
 import type { Handoff } from "./handoffs.ts";
 export interface Snapshot {
   /** The interface language Core resolved from the Language setting and the

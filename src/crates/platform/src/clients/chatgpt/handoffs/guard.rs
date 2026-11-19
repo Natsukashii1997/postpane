@@ -3,7 +3,7 @@
 //! review still with ChatGPT (P1-04), a cap reached here and not settled
 //! (P1-08). Words sent and never known to have gone in: `unsure.rs`.
 
-use super::{Book, Handoff, Notice, StepKind};
+use super::{Book, Handoff, Notice, Phase, Status, StepKind};
 
 impl Book {
     /// Binds handoff `id` to the pull request its newest brief names
@@ -31,29 +31,64 @@ impl Book {
             h.thinking() == thinking
                 && (h.claude_session == session || (cwd.is_some() && h.cwd.as_deref() == cwd))
         };
-        // Ended by PostPane after a day untouched (#368) settles nothing:
-        // only the person's end, or a review begun since, does.
-        let unsettled = |h: &Handoff| {
-            h.live()
-                || h.steps
-                    .last()
-                    .is_some_and(|s| s.kind == StepKind::End && s.auto)
-        };
         let top = self
             .list
             .iter()
             .rev()
-            .find(|h| here(h) && h.gate.notice == Some(Notice::Top) && unsettled(h))?;
-        // When it reached the cap; kept from before that, its last change.
-        let at = match top.gate.top_at {
-            0 => top.updated_at,
-            at => at,
-        };
+            .find(|h| here(h) && h.gate.notice == Some(Notice::Top) && open_top(h))?;
+        let at = top_at(top);
         let since = self
             .list
             .iter()
             .any(|h| h.id != top.id && here(h) && h.created_at > at);
         (!since).then_some(top)
+    }
+
+    /// Whether handoff `h` is in the snapshot at `now`: live; failed or
+    /// ended within `day` of its last change; or a stop still holding
+    /// reviews back, however long ago (#411 L2 P2-02).
+    pub fn in_sight(&self, h: &Handoff, now: i64, day: i64) -> bool {
+        h.live()
+            || (matches!(h.phase, Phase::Failed | Phase::Ended)
+                && h.status != Status::Open
+                && now - h.updated_at < day)
+            || self.holds_back(h)
+    }
+
+    /// Whether `top` reached its cap and is not settled, as
+    /// [`Book::unsettled_top`] counts it for a review sent from its own
+    /// session or folder. Such a one stays in the snapshot past the day an
+    /// ended one is shown, so the 「停」 that still holds reviews back stays
+    /// in sight (#411 L2 P2-02).
+    pub fn holds_back(&self, top: &Handoff) -> bool {
+        if top.gate.notice != Some(Notice::Top) || !open_top(top) {
+            return false;
+        }
+        let at = top_at(top);
+        !self.list.iter().any(|h| {
+            h.id != top.id
+                && h.thinking() == top.thinking()
+                && (h.claude_session == top.claude_session
+                    || (top.cwd.is_some() && h.cwd == top.cwd))
+                && h.created_at > at
+        })
+    }
+}
+
+/// Live, or ended by PostPane after a day untouched (#368), which settles
+/// nothing: only the person's end, or a review begun since, does.
+fn open_top(h: &Handoff) -> bool {
+    h.live()
+        || h.steps
+            .last()
+            .is_some_and(|s| s.kind == StepKind::End && s.auto)
+}
+
+/// When it reached the cap; kept from before that, its last change.
+fn top_at(top: &Handoff) -> i64 {
+    match top.gate.top_at {
+        0 => top.updated_at,
+        at => at,
     }
 }
 
@@ -86,6 +121,15 @@ mod tests {
         let mut idle = book.clone();
         assert!(idle.idle(at + super::super::IDLE_END_MS + 1, "闲置结束"));
         assert!(idle.unsettled_top("s1", None, false).is_some());
+        // So it stays in the snapshot however long ago it ended (#411 L2
+        // P2-02); a review of its kind begun since lets it go after the day.
+        let year = at + 365 * super::super::IDLE_END_MS;
+        assert!(idle.in_sight(idle.get(&top.id).unwrap(), year, 1000));
+        let mut other = idle.clone();
+        other.begin("s1", None, "思维评审｜方向", None, "想法", at + 1);
+        assert!(other.in_sight(other.get(&top.id).unwrap(), year, 1000));
+        other.begin("s1", None, "修登录二", None, "改动", at + 2);
+        assert!(!other.in_sight(other.get(&top.id).unwrap(), year, 1000));
         // A thinking review begun since settles nothing; an engineering one does.
         book.begin("s2", Some("/w"), "思维评审｜方向", None, "想法", at + 1);
         assert!(book.unsettled_top("s3", Some("/w"), false).is_some());

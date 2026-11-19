@@ -25,6 +25,9 @@ export interface HandoffStep {
   /** A reply's numbered points. */
   points?: string[];
   verdict?: "pass" | "revise" | null;
+  /** A `reply`'s ChatGPT message id: its receipt's `turnId` (#411 L2 P2-01).
+   * The snapshot carries no other step's key. */
+  key?: string | null;
   /** Done by the auto round trip, not by the person (#72). */
   auto?: boolean;
   /** Words back to Claude (`back`, `again`, #257): the id they were left
@@ -107,5 +110,20 @@ export interface Handoff {
   topAt?: number;
   /** A review sent and not yet known to have gone in (L3 P1-10): its
    * answer counts and cannot pass. */
-  pending?: { request: string; pr?: string; head?: string; limit: number };
+  pending?: HandoffPending;
+  /** PostPane's ask to mend an answer's last lines, sent and not yet known
+   * to have gone in (round 4 P1-10). The snapshot carries neither its words
+   * nor theirs (#409). */
+  mending?: HandoffPending;
+}
+
+/** A review, or an ask to mend, on its way to ChatGPT. */
+export interface HandoffPending {
+  request: string;
+  pr?: string;
+  head?: string;
+  limit: number;
+  booked?: boolean;
+  answered?: boolean;
+  noted?: boolean;
 }

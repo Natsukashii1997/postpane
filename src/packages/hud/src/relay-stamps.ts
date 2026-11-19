@@ -1,6 +1,7 @@
 import type { Handoff, Snapshot } from "@agent-hud/protocol";
 import { STALE_REVIEW } from "./chatgpt-desk.ts";
 import { doerOf, type Doer } from "./alerts/handoff-doer.ts";
+import { settledSince, stopped as atCap } from "./alerts/relay-stop.ts";
 import { STORY } from "./scene/flight-plan.ts";
 
 /** What relays print on the stubs (#171), by the phase they are in rather
@@ -14,6 +15,10 @@ export interface RelayStamps {
   review: boolean;
   /** ChatGPT is answering one now. */
   answering: boolean;
+  /** A relay stopped at its cap waits for the person: 「停」 in wax red on
+   * ChatGPT's stub until it is ended or reviewed on (owner 2026-11-19, 甲,
+   * #409). Before every other stamp there, and it never yields. */
+  stopped: boolean;
   /** An answer is back with the doer, waiting for the person. */
   replied: boolean;
   /** When the latest of those words moved, in milliseconds. */
@@ -74,6 +79,19 @@ export function relayStamps(
     (handoff) => handoff.status === "open",
   );
   if (end === "chatgpt") {
+    const all = snapshot.handoffs ?? [];
+    const top = all.filter((h) => atCap(h) && !settledSince(h, all));
+    if (top.length)
+      return {
+        review: true,
+        answering: false,
+        stopped: true,
+        replied: false,
+        since: latest(top.map((handoff) => handoff.topAt ?? null)),
+        overdue: false,
+        lingering: false,
+        until: null,
+      };
     const waiting = open.filter(
       (handoff) => handoff.phase === "delivered" || handoff.phase === "working",
     );
@@ -104,6 +122,7 @@ export function relayStamps(
       answering:
         !overdue.length &&
         reviewing.some((handoff) => handoff.phase === "working"),
+      stopped: false,
       replied: false,
       since: latest(
         (overdue.length ? overdue : reviewing).map((handoff) =>
@@ -124,6 +143,7 @@ export function relayStamps(
     return {
       review: false,
       answering: false,
+      stopped: false,
       replied: true,
       since: latest(replied.map((handoff) => moved(handoff, "reply"))),
       overdue: false,
@@ -151,8 +171,12 @@ export const STAMP_INK = {
   overdue: "#b3261e",
 } as const;
 
-export function stampInk(stamp: { overdue: boolean; reply: boolean }): string {
-  return stamp.overdue
+export function stampInk(stamp: {
+  overdue: boolean;
+  reply: boolean;
+  stopped?: boolean;
+}): string {
+  return stamp.overdue || stamp.stopped
     ? STAMP_INK.overdue
     : stamp.reply
       ? STAMP_INK.reply

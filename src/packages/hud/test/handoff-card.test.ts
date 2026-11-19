@@ -3,13 +3,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import {
+  actionLabels,
+  actionOff,
+  actionTitle,
   actions,
+  endedNote,
+  pointMarkColumn,
+} from "../src/alerts/handoff-actions.ts";
+import { relayLegend, relayLegendInks } from "../src/alerts/relay-legend.ts";
+import {
   autoLabel,
   handoffFor,
-  pointMarkColumn,
   progressLine,
-  relayLegend,
-  relayLegendInks,
   round,
   stamp,
   timeline,
@@ -236,10 +241,12 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
   );
   // Every round used: nothing left for it to do, so no 「继续自动」 (#194).
   assert.deepEqual(actions(stopped), ["end", "open", "back"]);
-  assert.equal(autoLabel(stopped, true), "自动已停");
+  // Stopped short of a pass for another reason: 「未完暂停」 (owner 2026-11-19, #409).
+  assert.equal(autoLabel(stopped, true), "未完暂停");
+  assert.equal(autoLabel(stopped, false), "PAUSED");
   assert.equal(
     progressLine(stopped, T, true),
-    "回信到了 · 需修改 · 3 条意见 · 自动已停",
+    "回信到了 · 需修改 · 3 条意见 · 未完暂停",
   );
   // Paused by the person, then turned back on.
   const paused = timeline(
@@ -260,7 +267,12 @@ test("the auto round trip: its own steps, why it stopped, and a button to pause 
     handoff({
       status: "closed",
       phase: "ended",
-      steps: [...handoff().steps!, step("end", T + 9 * minute, { auto: true })],
+      notice: "passed",
+      steps: [
+        ...handoff().steps!,
+        step("reply", T + 8 * minute, { verdict: "pass" }),
+        step("end", T + 9 * minute, { auto: true }),
+      ],
     }),
     T + 10 * minute,
     true,
@@ -607,4 +619,272 @@ test("the points list sizes its number column by its count (#336)", () => {
   assert.match(list, /const marks = pointMarkColumn\(points\.length\);/);
   assert.match(list, /gridTemplateColumns: `\$\{marks\} 1fr`/);
   assert.doesNotMatch(list, /"16px 1fr"/);
+});
+
+test("stopped at its cap: a red 「停」, the person's call, and the way on is the session (#409)", () => {
+  const steps = [
+    ...handoff().steps!,
+    reply,
+    step("back", T + 12 * minute),
+    step("stop", T + 12 * minute, {
+      text: "已审满 2 轮仍需修改，自动往返停下，交常浩决定",
+      auto: true,
+    }),
+  ];
+  const stopped = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: T + 12 * minute,
+    steps,
+  });
+  assert.deepEqual(stamp(stopped, true), { text: "停", tone: "red" });
+  assert.deepEqual(stamp(stopped, false), { text: "STOP", tone: "red" });
+  // The stamp says it: nothing more beside 「接力」.
+  assert.equal(autoLabel(stopped, true), null);
+  assert.equal(
+    progressLine(stopped, T + 13 * minute, true),
+    "已停 · 审满 2 轮 · 等你决定",
+  );
+  const rows = timeline(stopped, T + 13 * minute, true);
+  const last = rows.at(-1)!;
+  assert.deepEqual(
+    [last.who, last.title, last.sub, last.state],
+    [
+      "post",
+      "已停：审满 2 轮",
+      "等你决定：在会话里说一句再续审，或结束接力",
+      "await",
+    ],
+  );
+  assert.ok(
+    !rows.some((row) => row.state === "todo"),
+    "no next review offered",
+  );
+  // No 「再审一轮」 or 「继续自动」: the session is where it goes on.
+  assert.deepEqual(actions(stopped), ["end", "open", "session"]);
+  assert.deepEqual(actions({ ...stopped, chatgptConversation: null }), [
+    "end",
+    "session",
+  ]);
+  // Ended, it is only ended.
+  const ended = {
+    ...stopped,
+    status: "closed" as const,
+    phase: "ended" as const,
+  };
+  assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });
+  assert.deepEqual(actions(ended), ["close"]);
+});
+
+test("reviewed on past its cap, it is no longer stopped; stopped again only at the new cap (#409)", () => {
+  const top = T + 12 * minute;
+  const base = handoff({
+    phase: "returned",
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: top,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", top),
+      step("stop", top, { auto: true }),
+    ],
+  });
+  assert.deepEqual(stamp(base, true), { text: "停", tone: "red" });
+  // The person's leave (`extra`): the auto round trip is on again, a 「专项续审」 step.
+  const going = {
+    ...base,
+    auto: true,
+    halt: null,
+    phase: "working" as const,
+    steps: [
+      ...base.steps!,
+      step("work", top + minute, { text: "专项续审：常浩：再审" }),
+      step("ask", top + minute),
+    ],
+  };
+  assert.notDeepEqual(stamp(going, true).text, "停");
+  // Stopped there for another reason: 「未完暂停」, not 「停」.
+  const paused = {
+    ...going,
+    auto: false,
+    halt: "回信末尾认不出",
+    phase: "replied" as const,
+  };
+  assert.notEqual(stamp(paused, true).text, "停");
+  assert.equal(autoLabel(paused, true), "未完暂停");
+  // At the new cap: stopped again.
+  const again = { ...paused, halt: "又审满了", topAt: top + 20 * minute };
+  assert.deepEqual(stamp(again, true), { text: "停", tone: "red" });
+});
+
+test("「去会话里说一句」 says so when its session is gone, and cannot be pressed (#411 L2 P2-04)", () => {
+  assert.equal(actionLabels(true, "Claude", true).session, "去会话里说一句");
+  assert.equal(actionLabels(true, "Claude", false).session, "原会话已不在");
+  assert.equal(actionOff("session", false), true);
+  assert.equal(actionOff("session", true), false);
+  assert.equal(
+    actionOff("end", false),
+    false,
+    "only the jump needs the session",
+  );
+  assert.match(
+    actionTitle("session", true, "Claude", { at: 2, of: 2 }, false) ?? "",
+    /找不到发起这单的 Claude 会话/,
+  );
+  assert.equal(
+    actionTitle("session", true, "Claude", { at: 2, of: 2 }, true),
+    undefined,
+  );
+  assert.equal(
+    actionTitle("again", true, "Claude", { at: 1, of: 2 }, true),
+    "Claude 改完后送 ChatGPT，第 2 / 2 轮",
+  );
+});
+
+test("stopped at its cap and ended by PostPane after a day idle, it is still stopped; ended by the person, it is not (#411 L2 P2-02)", () => {
+  const top = T + 12 * minute;
+  const idle = top + 25 * 60 * minute;
+  const stoppedOne = handoff({
+    phase: "returned",
+    auto: false,
+    halt: "已审满 2 轮仍需修改",
+    notice: "top",
+    topAt: top,
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("back", top),
+      step("stop", top, { auto: true }),
+    ],
+  });
+  const idled = {
+    ...stoppedOne,
+    status: "closed" as const,
+    phase: "ended" as const,
+    steps: [
+      ...stoppedOne.steps!,
+      step("end", idle, { text: "闲置一天自动结束", auto: true }),
+    ],
+  };
+  assert.deepEqual(stamp(idled, true), { text: "停", tone: "red" });
+  assert.equal(
+    timeline(idled, idle + minute, true).at(-1)?.title,
+    "已停：审满 2 轮",
+  );
+  assert.deepEqual(actions(idled), ["close", "session"]);
+  assert.equal(endedNote(idled, true), "闲置一天已自动收起，还没了结");
+  // Ended by the person: only ended.
+  const ended = { ...idled, steps: [...stoppedOne.steps!, step("end", idle)] };
+  assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });
+  assert.deepEqual(actions(ended), ["close"]);
+  assert.equal(endedNote(ended, true), "接力已结束");
+});
+
+test("an end by PostPane reads as a pass only when the gate let a pass through (#411, L2 P2-05)", () => {
+  const passed = handoff({
+    status: "closed",
+    phase: "ended",
+    notice: "passed",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("end", T + 12 * minute, { auto: true }),
+    ],
+  });
+  assert.equal(
+    timeline(passed, T + 13 * minute, true).at(-1)?.title,
+    "审核通过，自动结束接力",
+  );
+  // A pass on another commit than the one under review is sent back, not
+  // let through (gate.rs `Next::Stale`): ended after a day idle, it is no pass.
+  const stale = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("back", T + 12 * minute),
+      step("end", T + 25 * 60 * minute, {
+        auto: true,
+        text: "闲置一天，驿窗自动结束",
+      }),
+    ],
+  });
+  assert.deepEqual(
+    (({ title, sub }) => [title, sub])(
+      timeline(stale, T + 26 * 60 * minute, true).at(-1)!,
+    ),
+    ["驿窗自动结束接力", "闲置一天，驿窗自动结束"],
+  );
+  // A 思维评审 settled reads as settled, not as a pass.
+  const settled = handoff({
+    title: "思维评审｜驿窗｜方向",
+    status: "closed",
+    phase: "ended",
+    notice: "passed",
+    steps: [
+      ...handoff().steps!,
+      { ...reply, verdict: "pass" },
+      step("end", T + 12 * minute, { auto: true }),
+    ],
+  });
+  assert.equal(
+    timeline(settled, T + 13 * minute, true).at(-1)?.title,
+    "思维评审收口，自动结束接力",
+  );
+  const idle = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      reply,
+      step("end", T + 25 * 60 * minute, {
+        auto: true,
+        text: "闲置一天，驿窗自动结束",
+      }),
+    ],
+  });
+  const last = timeline(idle, T + 26 * 60 * minute, true).at(-1);
+  assert.deepEqual(
+    [last?.title, last?.sub],
+    ["驿窗自动结束接力", "闲置一天，驿窗自动结束"],
+  );
+  const byHand = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [...handoff().steps!, step("end", T + 2 * minute)],
+  });
+  assert.equal(
+    timeline(byHand, T + 3 * minute, true).at(-1)?.title,
+    "结束接力",
+  );
+});
+
+test("a pass sent back unpassed (another commit) still shows the round to come; one just in does not (#411 L2 P2-06)", () => {
+  const pass = { ...reply, verdict: "pass" as const };
+  const again = (h: Handoff) =>
+    timeline(h, T + 13 * minute, true).some(
+      (row) => row.title === "第 2 轮：ChatGPT 再审核",
+    );
+  // Sent back by the gate without a pass (gate.rs `Next::Stale`).
+  const stale = handoff({
+    phase: "returned",
+    phaseAt: T + 12 * minute,
+    steps: [...handoff().steps!, pass, step("back", T + 12 * minute)],
+  });
+  assert.ok(again(stale), "a round more is to come");
+  // Just in, PostPane yet to act on it: no round to come.
+  const fresh = handoff({
+    phase: "replied",
+    phaseAt: T + 11 * minute,
+    steps: [...handoff().steps!, pass],
+  });
+  assert.ok(!again(fresh));
+  // Passed by the gate: none either.
+  assert.ok(!again({ ...stale, notice: "passed" }));
 });

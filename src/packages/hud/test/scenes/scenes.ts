@@ -2,6 +2,15 @@
 // acceptance case needs, shared by the contract tests and the scene preview.
 import type { HermesCronJob, Snapshot } from "@agent-hud/protocol";
 import { approval, at, relay, reply, session, snapshot } from "./build.ts";
+import {
+  relayIdleStopped,
+  relayStaleBack,
+  relayStaleIdle,
+  relayStopOtherKind,
+  relayPassed,
+  relayPaused,
+  relayStopped,
+} from "./relay-gate.ts";
 
 export interface Scene {
   key: string;
@@ -471,6 +480,13 @@ export const SCENES: readonly Scene[] = [
   claudeBusy,
   claudeManyAsks,
   hermesDesks,
+  relayStopped,
+  relayPassed,
+  relayPaused,
+  relayIdleStopped,
+  relayStaleBack,
+  relayStaleIdle,
+  relayStopOtherKind,
 ];
 
 export function scene(key: string): Scene {

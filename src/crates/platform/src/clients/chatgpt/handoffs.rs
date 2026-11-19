@@ -432,12 +432,23 @@ impl Handoff {
             .rev()
             .find(|step| step.kind == StepKind::Reply)
     }
-    /// As the snapshot shows it: no brief, excerpts only.
+    /// As the snapshot shows it: no brief, excerpts only, and not the words
+    /// of a review or an ask to mend on their way (#409).
     pub fn shown(&self) -> Self {
         let mut shown = self.clone();
         shown.brief = None;
+        for pending in [&mut shown.gate.pending, &mut shown.gate.mending]
+            .into_iter()
+            .flatten()
+        {
+            (pending.words, pending.key) = (None, String::new());
+        }
         for step in &mut shown.steps {
-            step.key = None;
+            // An answer's key is its ChatGPT message id, which its receipt
+            // names too (#411 L2 P2-01); the others are what was sent, hashed.
+            if step.kind != StepKind::Reply {
+                step.key = None;
+            }
             if let Some(text) = &mut step.text {
                 if text.chars().count() > EXCERPT {
                     *text = excerpt(text, EXCERPT);
@@ -1720,8 +1731,40 @@ mod tests {
             kept.steps[0].text.as_deref(),
             Some("改了 6 个文件 · 测试全过")
         );
-        // The snapshot carries neither the brief nor what was sent hashed.
-        assert!(kept.shown().steps.iter().all(|step| step.key.is_none()));
+        // The snapshot carries neither the brief nor what was sent hashed;
+        // an answer keeps its ChatGPT message id, which its receipt names
+        // too (#411 L2 P2-01).
+        let shown = kept.shown();
+        assert!(shown
+            .steps
+            .iter()
+            .all(|step| step.kind == StepKind::Reply || step.key.is_none()));
+        let answer = shown
+            .steps
+            .iter()
+            .find(|step| step.kind == StepKind::Reply)
+            .unwrap();
+        assert_eq!(answer.key.as_deref(), Some("m1"));
+        // Nor the words of a review on its way, or of an ask to mend (#409).
+        let mut sending = kept.clone();
+        let words = || unsure::Pending {
+            request: "r1".into(),
+            words: Some("送审原文".into()),
+            key: "k1".into(),
+            ..unsure::Pending::default()
+        };
+        (sending.gate.pending, sending.gate.mending) = (Some(words()), Some(words()));
+        let shown = sending.shown().gate;
+        for pending in [shown.pending.unwrap(), shown.mending.unwrap()] {
+            assert_eq!(
+                (
+                    pending.request.as_str(),
+                    pending.words,
+                    pending.key.as_str()
+                ),
+                ("r1", None, "")
+            );
+        }
         assert!(book.end(&handoff.id, 7));
         let ended = book.get(&handoff.id).unwrap();
         assert_eq!((ended.status, ended.phase), (Status::Closed, Phase::Ended));

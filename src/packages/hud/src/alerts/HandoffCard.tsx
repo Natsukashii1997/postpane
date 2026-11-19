@@ -13,8 +13,8 @@ import { HandoffTitleRow } from "./HandoffTitleRow";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
+import * as foot from "./handoff-actions";
 import {
-  actions,
   chatgptSession,
   doerSession,
   clock,
@@ -138,6 +138,7 @@ export function HandoffCard({
     setError(null);
     if (action === "close") return onClose();
     if (action === "open") return void go(chatgpt);
+    if (action === "session") return void go(claude);
     if (!services?.handoffAct) return;
     setBusy(action);
     try {
@@ -261,6 +262,7 @@ export function HandoffCard({
         }
         busy={busy}
         zh={zh}
+        reachable={Boolean(claude)}
         act={(action) => void act(action)}
       />
       {error && (
@@ -517,6 +519,7 @@ function Foot({
   paperColor,
   busy,
   zh,
+  reachable,
   act,
 }: {
   handoff: Handoff;
@@ -524,33 +527,26 @@ function Foot({
   paperColor: string;
   busy: Action | null;
   zh: boolean;
+  /** The doer's session is there for 「去会话里说一句」 (#411 L2 P2-04). */
+  reachable: boolean;
   act: (action: Action) => void;
 }) {
-  const list = actions(handoff);
+  const list = foot.actions(handoff);
   const D = doerName(handoff);
-  const label: Record<Action, string> = {
-    end: zh ? "结束接力" : "End handoff",
-    open: zh ? "查看 ChatGPT 对话" : "Open ChatGPT",
-    back: zh ? `转回 ${D}` : `Send back to ${D}`,
-    again: zh ? "再审一轮" : "Review again",
-    retry: zh ? "重试" : "Retry",
-    close: zh ? "知道了" : "Got it",
-    pause: zh ? "暂停自动" : "Pause auto",
-    resume: zh ? "继续自动" : "Resume auto",
-  };
+  const label = foot.actionLabels(zh, D, reachable);
   const main = list.length > 1 ? list[list.length - 1] : null;
-  const { at, of } = round(handoff);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       {list.includes("close") && (
         <span style={{ fontSize: 12, color: inks.dim }}>
-          {zh ? "接力已结束" : "This handoff has ended"}
+          {foot.endedNote(handoff, zh)}
         </span>
       )}
       {list.map((action, index) => {
         const ghost =
           action === "end" || action === "pause" || action === "resume";
         const primary = action === main && action !== "open";
+        const off = foot.actionOff(action, reachable);
         return (
           <span key={action} style={{ display: "contents" }}>
             {(index === 1 || action === "close") && (
@@ -560,16 +556,10 @@ function Foot({
               type="button"
               // The jump to ChatGPT gives under the pointer as every ↗ does
               // (#200); global.css.
-              className={action === "open" ? "hud-press" : undefined}
-              disabled={busy !== null}
-              aria-disabled={busy !== null}
-              title={
-                action === "again"
-                  ? zh
-                    ? `${D} 改完后送 ChatGPT，第 ${at + 1} / ${Math.max(of, at + 1)} 轮`
-                    : `${D} hands its changes to ChatGPT, round ${at + 1}`
-                  : undefined
-              }
+              className={foot.jumps(action) ? "hud-press" : undefined}
+              disabled={busy !== null || off}
+              aria-disabled={busy !== null || off}
+              title={foot.actionTitle(action, zh, D, round(handoff), reachable)}
               onClick={() => act(action)}
               style={{
                 ...buttonFace,
@@ -580,12 +570,12 @@ function Foot({
                 color: primary ? paperColor : ghost ? inks.dim : inks.ink,
                 fontWeight: primary ? 600 : 400,
                 ...(ghost ? { padding: "0 6px", marginLeft: -6 } : {}),
-                opacity: busy && busy !== action ? 0.5 : 1,
-                cursor: busy ? "default" : "pointer",
+                opacity: off || (busy && busy !== action) ? 0.5 : 1,
+                cursor: busy || off ? "default" : "pointer",
               }}
             >
               {busy === action ? (zh ? "处理中…" : "Working…") : label[action]}
-              {action === "open" && (
+              {foot.jumps(action) && !off && (
                 <ArrowUpRight size={12} strokeWidth={2.4} />
               )}
             </button>

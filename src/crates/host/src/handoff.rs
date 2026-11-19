@@ -41,6 +41,7 @@ mod guard;
 mod lines;
 mod notice;
 mod reread;
+pub mod settings;
 mod texts;
 use back::back_text;
 use lines::AppLines;
@@ -353,6 +354,7 @@ impl Desk {
             .collect::<Vec<_>>();
         let mut ended = false;
         for id in &passed_ids {
+            book.note(id, Notice::Passed, now);
             ended |= book.passed(id, &passed(chinese), now);
         }
         if interrupted | woke | ended | adopted | unconfirmed {
@@ -413,12 +415,7 @@ impl Desk {
         let shown = book
             .list
             .iter()
-            .filter(|handoff| {
-                handoff.live()
-                    || (matches!(handoff.phase, Phase::Failed | Phase::Ended)
-                        && handoff.status != Status::Open
-                        && now - handoff.updated_at < FAILED_SHOWN_MS)
-            })
+            .filter(|handoff| book.in_sight(handoff, now, FAILED_SHOWN_MS))
             .map(Handoff::shown)
             .collect::<Vec<_>>();
         json!(shown)
@@ -1376,11 +1373,14 @@ impl Desk {
             // Set right by the current commit sent again: it goes on.
             (_, Some(held)) if held.resend => true,
             (_, Some(held)) => book.stop(id, &named(gate::stale(&held.why, how)), true, now),
-            (Next::Pass, _) => {
+            (Next::Pass | Next::Close, _) => {
                 book.note(id, Notice::Passed, now);
-                book.passed(id, &named(passed_back(how)), now)
+                let pass = next == Next::Pass;
+                let words = pass
+                    .then(|| passed_back(how))
+                    .unwrap_or_else(thinking_closed);
+                book.passed(id, &named(words), now)
             }
-            (Next::Close, _) => book.passed(id, &named(thinking_closed()), now),
             // Another commit than the one sent: the current one sent again
             // goes on (Fable review #8).
             (Next::Stale, _) => true,
@@ -1901,7 +1901,7 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         .and_then(|id| app.try_state::<Desk>()?.lock().get(id)?.gate.chain.clone());
     answer["chain"] = json!(chain);
     let gate = l10n::text(
-        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在 chatgpt/config.json 的 reviewLimit 改）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
+        "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在驿窗设置「智能体插件」的「审核轮数上限」里调，1–9 轮）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
         "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, sent back and ended; the cap, an escalation or last lines PostPane cannot read, left to the person.",
     );
     answer["message"] = json!(if answer["status"] == "repeated" {
@@ -1977,24 +1977,6 @@ pub async fn relay_launch(
     })
     .await
     .map_err(|error| error.to_string())?
-}
-
-/// Settings' 「新会话放进项目」: the project page, read (no `project`) or set.
-#[tauri::command]
-pub fn chatgpt_project(
-    window: tauri::WebviewWindow,
-    app: tauri::AppHandle,
-    project: Option<String>,
-) -> Result<Value, String> {
-    if window.label() != "main" {
-        return Err("The ChatGPT project is set in Settings".into());
-    }
-    let desk = app.try_state::<Desk>().ok_or_else(demo)?;
-    let project = match project {
-        Some(text) => desk.set_project(&text)?,
-        None => desk.project(),
-    };
-    Ok(json!({ "project": project }))
 }
 
 #[cfg(test)]
@@ -3187,6 +3169,17 @@ mod tests {
 
     // T1
     #[test]
+    fn the_review_cap_is_set_from_one_to_nine_five_unless_set() {
+        let temp = tempfile::tempdir().unwrap();
+        let desk = Desk::new(Some(temp.path().join("data")));
+        assert_eq!(desk.review_limit(), 5);
+        assert_eq!(desk.set_review_limit(9), Ok(9));
+        assert_eq!(desk.review_limit(), 9);
+        assert!(desk.set_review_limit(10).is_err() && desk.set_review_limit(0).is_err());
+        assert_eq!(desk.review_limit(), 9, "a refused cap leaves the one set");
+    }
+
+    #[test]
     fn a_thinking_review_that_settles_goes_back_to_claude_once_then_ends() {
         let reply = "1. 论证完整\n评审出口：成熟退出\n结论：通过";
         let (_temp, desk) = desk();
@@ -3206,6 +3199,8 @@ mod tests {
             shown[0]["steps"].as_array().unwrap().last().unwrap()["text"],
             thinking_closed()
         );
+        // A settled 思维评审 tells the person it passed, as a review's pass does (#409).
+        assert_eq!(shown[0]["notice"], "passed");
         let steps = kinds(&desk, 5);
         assert_eq!(
             steps[steps.len() - 2..],
@@ -3551,6 +3546,8 @@ mod tests {
         let shown = desk.projection(5);
         assert_eq!(shown[0]["status"], "closed");
         assert_eq!(shown[0]["phase"], "ended");
+        // A pass as any other: the person is told, and its chain starts over (#411 L2 P2-03).
+        assert_eq!(shown[0]["notice"], "passed");
     }
 
     #[test]
@@ -5429,6 +5426,16 @@ mod tests {
             idle + 1,
         );
         assert_eq!(again.err(), Some(guard::top_unsettled(title)));
+        // Past the day an ended one is shown, it stays in the snapshot while
+        // it holds reviews back, so its 「停」 stays in sight (#411 L2 P2-02).
+        let shown = |now| {
+            desk.projection(now)
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|h| h["id"] == first.id.as_str())
+        };
+        assert!(shown(idle + 2 * FAILED_SHOWN_MS));
         // The person's word lets it go on, counted from one.
         *lines.opener.borrow_mut() = Some((Opener::Person, idle + 2));
         let Started::Opening { handoff, .. } = desk
@@ -5447,6 +5454,8 @@ mod tests {
             panic!()
         };
         assert_ne!(handoff.id, first.id);
+        // Settled by that review, it leaves after the day as any ended one.
+        assert!(!shown(idle + 2 * FAILED_SHOWN_MS));
     }
 
     /// L3 P1-10 C: PostPane's ask to mend the last lines, never known to

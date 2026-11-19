@@ -5,7 +5,7 @@
 //   ?panel        also open the hover panel beside the sidebar
 //   ?light        light paper
 //   ?still        report reduced motion, so a capture is never mid-animation (L-29)
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./preview.css";
 import { FormatProvider } from "@agent-hud/ui/format-context";
@@ -70,6 +70,24 @@ function Preview() {
   const light = params.has("light");
   const panel = params.has("panel");
   const [height] = useState(() => window.innerHeight - 56);
+  // The scene's notices arrive just after the sidebar is up, as they would
+  // live: the sidebar shows only news that comes after it first looked, so
+  // handed in at once they would never show (#409, the receipts).
+  const [arrived, setArrived] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setArrived(true), 400);
+    return () => clearTimeout(timer);
+  }, []);
+  const events = current.snapshot.islandEvents;
+  const shown = arrived
+    ? {
+        ...current.snapshot,
+        islandEvents: {
+          revision: (events?.revision ?? 0) + 1,
+          items: events?.items ?? [],
+        },
+      }
+    : { ...current.snapshot, islandEvents: { revision: 0, items: [] } };
   const config = {
     ...defaultHUDConfig,
     mode: "logos",
@@ -167,7 +185,7 @@ function Preview() {
             </div>
           )}
           <HUDScene
-            snapshot={current.snapshot}
+            snapshot={shown}
             config={config}
             height={height}
             onRequestDecision={() => {}}

@@ -7,6 +7,7 @@ import {
   toolsSwitch,
   type McpInput,
 } from "../src/lib/agent-plugins.ts";
+import { reviewLimitOptions } from "../src/lib/review-limit.ts";
 
 const plugin = {
   installed: false,
@@ -316,4 +317,13 @@ test("the ChatGPT row registers Chrome's manifest, then says whether the extensi
     [connected.tone, connected.status[1], connected.menu[0]?.id],
     ["working", "已连接", "remove"],
   );
+});
+
+test("the review cap offers 1 to 9 rounds with five marked as the default (#409)", () => {
+  const zh = reviewLimitOptions(9, 5, true);
+  assert.equal(zh.length, 9);
+  assert.deepEqual(zh[0], ["1", "1 轮"]);
+  assert.deepEqual(zh[4], ["5", "5 轮（默认）"]);
+  assert.deepEqual(zh[8], ["9", "9 轮"]);
+  assert.deepEqual(reviewLimitOptions(9, 5, false)[4], ["5", "5 (default)"]);
 });

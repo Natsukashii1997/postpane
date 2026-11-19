@@ -99,6 +99,19 @@ export const nativeChatGptProject: ChatGptProjectService = async (project) => {
   });
 };
 
+/** chatgpt_review_limit: the relay's review cap (#409), read (no argument)
+ * or set, with the range it takes and its default. */
+export type ChatGptReviewLimitService = (
+  limit?: number,
+) => Promise<{ limit: number; max: number; default: number }>;
+
+export const nativeChatGptReviewLimit: ChatGptReviewLimitService = async (
+  limit,
+) => {
+  if (!isTauri()) return { limit: 5, max: 9, default: 5 };
+  return invoke("chatgpt_review_limit", { limit: limit ?? null });
+};
+
 /** The clients the host can give HUD tools to (hud_tools::CLIENTS), in page
  * order. `plugin`: the client has an Agent HUD plugin of its own; `live`:
  * it loads the plugin into open sessions by itself. */

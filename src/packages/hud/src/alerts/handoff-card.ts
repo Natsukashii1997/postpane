@@ -1,7 +1,7 @@
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
-import { paperOf, type Paper } from "../paper.ts";
 import { doerName, doerOf } from "./handoff-doer.ts";
+import { endWords, stopped } from "./relay-stop.ts";
 export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
@@ -28,11 +28,18 @@ export interface Row {
 }
 
 export type Action =
-  "end" | "open" | "back" | "again" | "retry" | "close" | "pause" | "resume";
+  | "end"
+  | "open"
+  | "back"
+  | "again"
+  | "retry"
+  | "close"
+  | "pause"
+  | "resume"
+  | "session";
 
-const live = (handoff: Handoff) =>
+export const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
-
 /** Answers since its rounds last began (#258), but those only mending the
  * last lines of the one before (#347, gate.rs `reviewed`). */
 export function reviews(handoff: Handoff): number {
@@ -66,7 +73,7 @@ export function round(handoff: Handoff): { at: number; of: number } {
   return { at, of: Math.max(budget(handoff), at) };
 }
 
-const phaseOf = (handoff: Handoff) =>
+export const phaseOf = (handoff: Handoff) =>
   handoff.phase ??
   (handoff.status === "failed"
     ? "failed"
@@ -93,7 +100,7 @@ export function since(from: number, now: number, zh: boolean): string {
   return zh ? `已 ${hours} 小时` : `${hours} h`;
 }
 
-const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
+export const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
   verdict === "pass"
     ? zh
       ? "通过"
@@ -110,41 +117,12 @@ const verdictWord = (verdict: HandoffStep["verdict"], zh: boolean) =>
 export const lastReply = (handoff: Handoff) =>
   [...(handoff.steps ?? [])].reverse().find((step) => step.kind === "reply");
 
-/** What the frame round a relay's reply says (owner, 2026-11-07, 甲 ·
- * 航空虚线框): the round it is in and ChatGPT's verdict, once there is one. */
-export function relayLegend(
-  handoff: Handoff,
-  zh: boolean,
-): { trip: string; verdict?: string; missing: boolean } {
-  const D = doerName(handoff);
-  const { at, of } = round(handoff);
-  const reply = lastReply(handoff);
-  return {
-    trip: zh
-      ? `${D} ⇄ ChatGPT · 第 ${at} / ${of} 轮`
-      : `${D} ⇄ ChatGPT · round ${at} / ${of}`,
-    verdict: reply ? verdictWord(reply.verdict, zh) : undefined,
-    missing: !!reply && reply.verdict !== "pass" && reply.verdict !== "revise",
-  };
-}
-
-/** The legend's inks: the paper's own, and where there is none (the notch,
- * #190) the paper's of that appearance, not plain ink. Words written out take
- * the word ink; a missing verdict, something gone wrong, stays red (#308). */
-export function relayLegendInks(
-  paper: Paper | null,
-  light: boolean,
-  missing = false,
-): { relay: string; verdict: string } {
-  const inks = paper ?? paperOf(light);
-  return { relay: inks.word, verdict: missing ? inks.red : inks.word };
-}
-
 /** The stamp in the card's corner, by where it stands. */
 export function stamp(
   handoff: Handoff,
   zh: boolean,
 ): { text: string; tone: "blue" | "red" | "green" | "dim" } {
+  if (stopped(handoff)) return { text: zh ? "停" : "STOP", tone: "red" };
   switch (phaseOf(handoff)) {
     case "ended":
       return { text: zh ? "已结束" : "ENDED", tone: "dim" };
@@ -166,15 +144,20 @@ export function stamp(
 export function autoLabel(handoff: Handoff, zh: boolean): string | null {
   if (!live(handoff)) return null;
   if (handoff.auto) return zh ? "自动往返" : "AUTO";
-  if (handoff.halt) return zh ? "自动已停" : "AUTO OFF";
+  // At its cap the 「停」 stamp says it; else 「未完暂停」 (owner 2026-11-19).
+  if (handoff.halt) return stopped(handoff) ? null : zh ? "未完暂停" : "PAUSED";
   return null;
 }
 
 /** One line for 「正在进行」, after the 「接力 1/2」 tag. */
 export function progressLine(handoff: Handoff, now: number, zh: boolean) {
+  if (stopped(handoff))
+    return zh
+      ? `已停 · 审满 ${budget(handoff)} 轮 · 等你决定`
+      : `Stopped · ${budget(handoff)} rounds · your call`;
   const line = progress(handoff, now, zh);
   return handoff.halt && live(handoff)
-    ? `${line} · ${zh ? "自动已停" : "auto off"}`
+    ? `${line} · ${zh ? "未完暂停" : "paused"}`
     : line;
 }
 function progress(handoff: Handoff, now: number, zh: boolean) {
@@ -397,13 +380,7 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
         rows.push({
           who: "post",
           time,
-          title: step.auto
-            ? zh
-              ? "审核通过，自动结束接力"
-              : "Passed: the handoff ended by itself"
-            : zh
-              ? "结束接力"
-              : "Handoff ended",
+          ...endWords(handoff, step, zh),
           state: "done",
         });
         break;
@@ -477,7 +454,12 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
       : `At most ${budget(handoff)} rounds; stops at a pass`,
     state: "todo",
   };
-  const passed = lastReply(handoff)?.verdict === "pass";
+  // A pass is the gate's (`notice: "passed"`); an answer saying pass counts
+  // only while PostPane has yet to act on it. Sent back, as on another
+  // commit than the one under review, a round more is to come (#411 L2 P2-06).
+  const passed =
+    handoff.notice === "passed" ||
+    (phaseOf(handoff) === "replied" && lastReply(handoff)?.verdict === "pass");
   const more = next <= budget(handoff) && !passed;
   const todoBack: Row = {
     who: "post",
@@ -491,7 +473,22 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
     title: zh ? `${D} 按意见修改` : `${D} works on it`,
     state: "todo",
   };
-  switch (phaseOf(handoff)) {
+  const phase = phaseOf(handoff);
+  if (stopped(handoff) && ["returned", "replied", "ended"].includes(phase)) {
+    rows.push({
+      who: "post",
+      time: clock(handoff.topAt ?? at),
+      title: zh
+        ? `已停：审满 ${budget(handoff)} 轮`
+        : `Stopped: ${budget(handoff)} rounds reached`,
+      sub: zh
+        ? "等你决定：在会话里说一句再续审，或结束接力"
+        : "Your call: say a word in the session to review on, or end",
+      state: "await",
+    });
+    return rows;
+  }
+  switch (phase) {
     case "sending":
       rows.push({
         who: "chatgpt",
@@ -567,46 +564,4 @@ export function timeline(handoff: Handoff, now: number, zh: boolean): Row[] {
   }
   if (more) rows.push(again);
   return rows;
-}
-
-/** The buttons along the card's foot, the main one last. */
-export function actions(handoff: Handoff): Action[] {
-  const phase = phaseOf(handoff);
-  // The auto round trip's switch, after 「结束接力」: pause it while on,
-  // turn it back on once it stopped and a round is left for it (#194).
-  const toggle: Action[] = !live(handoff)
-    ? []
-    : handoff.auto
-      ? ["pause"]
-      : handoff.halt && counted(handoff) < budget(handoff)
-        ? ["resume"]
-        : [];
-  const open: Action[] = [
-    ...toggle,
-    ...(handoff.chatgptConversation ? (["open"] as const) : []),
-  ];
-  switch (phase) {
-    case "ended":
-      return ["close"];
-    case "failed":
-      return ["end", "retry"];
-    case "replied":
-      return ["end", ...open, "back"];
-    case "returned":
-      return [
-        "end",
-        ...open,
-        ...(counted(handoff) < budget(handoff) ? (["again"] as const) : []),
-      ];
-    default:
-      return ["end", ...open];
-  }
-}
-
-/** The width of the review points' number column: 16px holds 「9.」, and
- * each further digit takes one tabular figure more, so 「10.」 no longer
- * presses into its point (#336). */
-export function pointMarkColumn(count: number): string {
-  const more = String(Math.max(1, count)).length - 1;
-  return more > 0 ? `calc(16px + ${more}ch)` : "16px";
 }

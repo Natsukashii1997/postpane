@@ -60,6 +60,7 @@ test("ChatGPT's stub is stamped 「审」 while it has the words, rippling while
   assert.deepEqual(delivered, {
     review: true,
     answering: false,
+    stopped: false,
     replied: false,
     since: 20,
     overdue: false,
@@ -99,6 +100,7 @@ test("Claude's stub takes the 「回」 seal while an answer waits for the perso
   assert.deepEqual(replied, {
     review: false,
     answering: false,
+    stopped: false,
     replied: true,
     since: 30,
     overdue: false,
@@ -242,4 +244,141 @@ test("「回」 is inked apart from 「审」, and 「未审」 stays wax red", 
   assert.equal(stampInk({ overdue: false, reply: true }), "#99591a");
   assert.notEqual(STAMP_INK.reply, STAMP_INK.review);
   assert.equal(stampInk({ overdue: true, reply: false }), STAMP_INK.overdue);
+});
+
+test("a relay stopped at its cap stamps ChatGPT's stub 「停」 in wax red until it is settled (#409, owner 甲)", () => {
+  const stopped: Handoff = {
+    ...relay("returned"),
+    id: "h-stop",
+    notice: "top",
+    topAt: 60,
+    auto: false,
+    halt: "已审满 5 轮仍需修改",
+  };
+  const stamps = relayStamps({ handoffs: [stopped] }, "chatgpt", NOW);
+  assert.equal(stamps?.stopped, true);
+  assert.equal(stamps?.review, true, "the stub prints a stamp");
+  assert.equal(stamps?.answering, false, "it does not ripple");
+  assert.equal(stamps?.since, 60);
+  assert.equal(stamps?.until, null);
+  assert.equal(
+    stampInk({ overdue: false, reply: false, stopped: true }),
+    STAMP_INK.overdue,
+  );
+  // Still there long after, while another relay is with ChatGPT, and even
+  // when the desk has something more pressing to say.
+  const working = { ...relay("working"), id: "h-work" };
+  assert.equal(
+    relayStamps(
+      { handoffs: [stopped, working] },
+      "chatgpt",
+      NOW + 10 * REPLY_WAIT_MS,
+      true,
+    )?.stopped,
+    true,
+  );
+  // Settled: ended, or reviewed on (a new leave clears the notice).
+  assert.equal(
+    relayStamps(
+      { handoffs: [{ ...stopped, status: "closed", phase: "ended" }] },
+      "chatgpt",
+      NOW,
+    ),
+    undefined,
+  );
+  assert.equal(
+    relayStamps(
+      { handoffs: [{ ...stopped, notice: undefined }] },
+      "chatgpt",
+      NOW,
+    ),
+    undefined,
+  );
+  // Only ChatGPT's stub: Claude's stays as it was.
+  assert.equal(relayStamps({ handoffs: [stopped] }, "claude", NOW), undefined);
+  // Others' stamps say they are not stopped.
+  assert.equal(
+    relayStamps({ handoffs: [working] }, "chatgpt", NOW)?.stopped,
+    false,
+  );
+});
+
+test("an idle-ended relay still at its cap keeps 「停」 until a review begins there since (#411 L2 P2-02)", () => {
+  const idled: Handoff = {
+    ...relay(
+      "ended",
+      [
+        { at: 50, kind: "stop", auto: true },
+        { at: 90, kind: "end", auto: true },
+      ],
+      "closed",
+    ),
+    id: "h-idle",
+    notice: "top",
+    topAt: 50,
+    auto: false,
+  };
+  assert.equal(
+    relayStamps({ handoffs: [idled] }, "chatgpt", NOW)?.stopped,
+    true,
+  );
+  // Ended by the person: settled.
+  const byHand = {
+    ...idled,
+    steps: [
+      { at: 50, kind: "stop" as const },
+      { at: 90, kind: "end" as const },
+    ],
+  };
+  assert.equal(relayStamps({ handoffs: [byHand] }, "chatgpt", NOW), undefined);
+  // A review begun since in the same session settles it, as the gate does.
+  const since = { ...relay("working"), id: "h-new", createdAt: 95 };
+  assert.equal(
+    relayStamps({ handoffs: [idled, since] }, "chatgpt", NOW)?.stopped,
+    false,
+  );
+  // One begun elsewhere does not.
+  const elsewhere = { ...since, claudeSession: "s2", cwd: "/other" };
+  assert.equal(
+    relayStamps({ handoffs: [idled, elsewhere] }, "chatgpt", NOW)?.stopped,
+    true,
+  );
+});
+
+test("only a review of its kind begun since settles a stop: 思维评审 and engineering count apart, as the gate does (#411 L2 P2-02)", () => {
+  const engineering: Handoff = {
+    ...relay("returned"),
+    id: "h-eng",
+    cwd: "/w",
+    notice: "top",
+    topAt: 60,
+    auto: false,
+  };
+  const review: Handoff = {
+    ...engineering,
+    id: "h-think",
+    title: "思维评审｜驿窗｜方向",
+  };
+  const later = (title: string, id: string): Handoff => ({
+    ...relay("working"),
+    id,
+    title,
+    claudeSession: "s2",
+    cwd: "/w",
+    createdAt: 95,
+  });
+  const cases: [Handoff, Handoff, boolean][] = [
+    // A 思维评审 begun since settles no engineering stop, nor the reverse.
+    [engineering, later("思维评审｜驿窗｜方向", "h-t2"), true],
+    [review, later("驿窗｜接力", "h-e2"), true],
+    // One of its kind does, ASCII bar and leading space too.
+    [engineering, later("驿窗｜接力第 2 单", "h-e3"), false],
+    [review, later(" 思维评审|驿窗｜再想", "h-t3"), false],
+  ];
+  for (const [top, next, stopped] of cases)
+    assert.equal(
+      relayStamps({ handoffs: [top, next] }, "chatgpt", NOW)?.stopped,
+      stopped,
+      `${top.title} then ${next.title}`,
+    );
 });
