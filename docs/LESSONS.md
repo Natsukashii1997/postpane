@@ -89,7 +89,7 @@
 
 - 现象：#128 装机后用电脑控制复验左滑托盘。悬停能打开面板，两指左划（scroll right）能拉开托盘，鼠标停在色块上说明浮条也会出来；但点「审核」「移除」只会让托盘收起，色块的动作没执行：行内没有提示，行也没被移除。后台点击（app_click）、全屏点击（left_click）、先停半秒再按下松开都一样。点面板底部「统计」时，点击穿到了下面的 Claude 窗口（菜单栏变成 Claude），统计窗口没开；从侧栏拖动会选中面板里的文字，打不开托盘。浏览器预览里同样的组件点击正常。
 - 根因：未核实。面板窗口平时让鼠标穿透，只有上报的区域收点击（`host/src/hud/mod.rs` 的 `set_ignore_cursor`），指针靠原生轮询；电脑控制瞬移光标后马上按下，推测与穿透区域、窗口激活或面板重挂载有关。
-- 正确做法：侧栏悬停面板里要点的东西（托盘色块、按钮、链接）不靠电脑控制实机验证；逻辑在浏览器预览里用真实组件点，实机这一步请常浩用鼠标或触控板点一次，交接里写明哪些是常浩点的。展开卡、设置窗口这类普通窗口不受影响（#121–#123 在展开卡上点「转回 Claude」「结束接力」都成功了）。
+- 正确做法：侧栏悬停面板里要点的东西（托盘色块、按钮、链接）不靠电脑控制实机验证；逻辑在浏览器预览里用真实组件点（2026-11-19 起只用常设场景预览台 `pnpm --filter @agent-hud/hud run scenes`，E-18），实机这一步请常浩用鼠标或触控板点一次，交接里写明哪些是常浩点的。展开卡、设置窗口这类普通窗口不受影响（#121–#123 在展开卡上点「转回 Claude」「结束接力」都成功了）。
 - 证据：2026-11-06 09:37–09:43 本会话电脑控制记录；截图 `~/Library/Application Support/postpane/evidence/2026-11-06-merge-all/screens/`。
 - 升级：〔提醒〕未升级。（2026-11-19 补层级；积压清单组 9 已批：与 L-11 合并提升为全局 G-37，见下方「提升」）
 - 提升：已提升为全局 G-37（2026-11-19，agent-kit#83），与 L-11 合成一条。
@@ -124,9 +124,9 @@
 
 - 现象：#171 收尾跑 `pnpm run check` 退出 1，只报 `src/apps/desktop/relay-real/main.tsx`、`vite.config.ts` 两个文件格式不对；这两个是不提交的真实组件自查页，本 PR 的改动全都格式化过。
 - 根因：`format:check` 跑的是 `prettier --check "src/**/*.{ts,tsx,mjs,css}"`，按路径扫，不管文件是否被 git 跟踪；自查时临时改了自查页又没格式化，就把整条 check 拦下。E-07 的「先格式化」只格式化了改动文件，覆盖不到未跟踪的。
-- 正确做法：跑全量前先 `git status --short` 看 `src/` 下有没有未跟踪的文件；自查页用完先备份到证据目录再删，或在跑测试前对它也 `prettier --write`。
+- 正确做法（2026-11-19 改，E-18）：自查、预览不在 `src/` 下另搭页面，一律用常设场景预览台（`pnpm --filter @agent-hud/hud run scenes`，缺场景在 `src/packages/hud/test/scenes/scenes.ts` 补）；一次性的自查页、截图脚本放 `src/` 外（证据目录）。`pnpm run check` 第一步会查 `src/` 下没提交的文件，有就停下并说这些。原来写的「对自查页也 `prettier --write`」作废：它让自查页留在 `src/` 里，L-43 的包边界检查照样会拦。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-relay-toss/check-2.log`（删页后重跑的那次覆盖了失败那次，失败输出见本条现象）；自查页备份在同目录 `relay-real-page/`。
-- 升级：〔提醒〕未升级。（2026-11-19 补层级；待批：积压清单组 12，与 L-43 合并做成〔机检〕）
+- 升级：〔机检〕已升级（2026-11-19，积压清单组 12，#417）：`pnpm run check` 第一步 `pnpm run check:untracked`（`src/tooling/check-untracked.mjs`）查 `src/` 下没提交、也没被忽略的文件，有就列出来、写明正确做法并退出 1，后面的格式、类型、构建、边界检查都不跑；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/relay-real/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。与 L-43 合并。不覆盖：单独跑 `pnpm run format:check`、`check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12）。
 
 ## L-14 自动转回 Claude 时，会话一轮做完就被桌面版结束了，直接送话必败（2026-11-07）
 
@@ -424,9 +424,9 @@
 
 - 现象：#328 一边后台跑 `pnpm run check`，一边在 `src/apps/desktop/preview-328/` 搭真实 `HUDScene` 预览；`check:package-boundary` 扫到 `main.tsx`、`vite.config.ts` 里的 `../../../packages/hud/src/...` 相对引用，报 4 处越界，`check exit 1`。代码本身没问题。
 - 根因：预览脚手架为了直接引组件源码，必须跨包相对引用；它不提交，但只要还在工作区里就会被边界检查扫到。
-- 正确做法：预览截完图先 `preview_stop`，把脚手架挪到证据目录（`evidence/<日期>-<短名>/preview-<号>/`），再跑 `pnpm run check`；或者先跑完三条全量再搭预览。报告里如实写第一次失败的原因，日志另存。
+- 正确做法（2026-11-19 改，E-18）：不再搭预览脚手架，预览只用常设场景预览台（`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480）；它在包里面，不跨包引用。原来写的「截完图挪到证据目录再跑 check」作废。报告里如实写第一次失败的原因，日志另存。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-328-newest-open/check-1-preview-in-tree.log`。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 12，与 L-13 合并做成〔机检〕）。
+- 升级：〔机检〕已升级（2026-11-19，积压清单组 12，#417）：同 L-13，`pnpm run check` 第一步 `src/tooling/check-untracked.mjs` 拦 `src/` 下没提交的文件；测试 `tests/check-untracked.test.mjs` 用这次的 `src/apps/desktop/preview-328/` 当样本，旧代码上红、新代码报错（`~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`）。预览统一用常设场景预览台（E-18，〔结构〕）。不覆盖：单独跑 `check:packages` 等子步骤。上一版：〔提醒〕未升级（待批：积压清单组 12，与 L-13 合并做成〔机检〕）。
 
 ## L-44 装机前查自动往返接力，查出有也照装了：查和装写在同一条命令里，中间没停（2026-11-14）
 
