@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { cardFolds, foldStore } from "../src/panel/fold-store.ts";
+import { closesWith } from "../src/scene/close-with-sidebar.ts";
 
 // #430: the sidebar draws a panel twice, the one in view and a hidden copy
 // that measures it. 「展开其余 n 条」 opened only in the copy in view left the
@@ -53,11 +54,25 @@ test("the cards' lists use the shared store; the sidebar closing folds them", ()
     "alerts/CompletionAlertView.tsx",
   ])
     assert.doesNotMatch(read(file), /\[unfolded, setUnfolded\] = useState/);
-  assert.match(read("HUDScene.tsx"), /useCloseWithSidebar\(sidebarShown\);/);
+  assert.match(
+    read("HUDScene.tsx"),
+    /useCloseWithSidebar\(open, Boolean\(event \|\| request\)\);/,
+  );
   const close = read("scene/close-with-sidebar.ts");
   assert.match(close, /openHandoffCard\(null\);/);
   assert.match(close, /cardFolds\.reset\(\);/);
   // Each section of a card has a key of its own place.
   assert.match(read("panel/SourceSessions.tsx"), /place=\{focusVendor\}/);
   assert.equal(typeof cardFolds.reset, "function");
+});
+
+// #448: with a tag still out (a request waiting, a reply unseen) the sidebar
+// never counted as folded, so a list opened on the card stayed open the next
+// time it came out. Lists fold back once the card closes, tag or no tag; the
+// handoff card still waits for the sidebar to fold away.
+test("lists fold back when the card closes, even with a tag still out", () => {
+  assert.deepEqual(closesWith(true, false), { handoff: false, folds: false });
+  assert.deepEqual(closesWith(true, true), { handoff: false, folds: false });
+  assert.deepEqual(closesWith(false, true), { handoff: false, folds: true });
+  assert.deepEqual(closesWith(false, false), { handoff: true, folds: true });
 });
