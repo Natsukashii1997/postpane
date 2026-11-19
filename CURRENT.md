@@ -27,7 +27,7 @@
   - 顺手改的：`AGENTS.md`「运行」里 `pnpm test` 那行注释补「五套都跑完再汇总」。
   - **改变了已有行为的**：① `pnpm test` 原来 `&&` 串联、一套失败后面不跑；现在五套都跑，最后打印汇总，任何一套失败整体退出码 1（以前是失败那一套自己的退出码，如 cargo 的 101）。② `install.sh check` 不给产物路径时，原来拿当前目录下的产物比；现在按归属记录比：功能 worktree 只认自己装的，主目录还认已合进 main 的，没有记录就让带产物路径；带产物路径的用法不变。③ MCP 测试每个替身多启动一次（每次零点几秒）。
 - 测试：改动前（origin/main `a342c1c`）`node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（cargo 合计 `1001 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 28/0）。改动后见下一行。每项改前都在旧代码上红过一次：L-12、L-17 注入「机器忙」的延时，旧代码两条都失败、新代码同样注入两条都过；L-47 注入「替身第一次启动停 50 秒」，旧代码 45 秒后 `Cannot read properties of undefined (reading 'description')`、新代码通过；L-49 把 TS 的 failed 提示改成 limit-hit，原有前端 462 条全绿、新回放测试变红；E-15/E-20、备环境脚本、汇总脚本的新测试先在旧代码上跑出红。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/`（`red/` 是验红，`*-baseline.log`、`*-final.log` 是全量）。
-- 改动后全量：FINAL_RESULTS
+- 改动后全量：`node --test tests/*.test.mjs` `ℹ pass 50` / `ℹ fail 0`（+7：装机守卫 2、备环境 3、汇总 2）；`pnpm run check` exit 0；`pnpm test` exit 0，汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`（改的是现有测试，条数不变），前端 `ℹ pass 463` / `ℹ fail 0`（+1 回放），MCP 9/0，插件 14/0，Chrome 插件 28/0。前两次改动后全量没过、已修：第一次 EVOLUTION 编号少写「#」，跑到生成资源就按进程号停了（`aborted-*`）；第二次 `check:file-size`（`snapshot.rs` 注释多一行，超了棘轮基线）和 `check:packages`（回放测试用 `new URL("..")` 算越出包，记进 L-53）失败，`node --test` 也因棘轮挂 1 条（`run2-failed-*`）；修好后第三次即上面的结果。
 - 验证：全在测试里；`install.sh` 只在 `tests/install-guard.test.mjs` 的临时目录和替身里跑，没有对 `/Applications` 装机。
 - 截图：无（没有界面改动）。
 - 发布与回读：无需发布（测试、脚本和文档）。

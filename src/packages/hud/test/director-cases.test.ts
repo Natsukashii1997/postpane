@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { createServer } from "vite";
 import type { MarkDirector as Director } from "../src/bots/mark-director.ts";
 
@@ -13,7 +13,7 @@ import type { MarkDirector as Director } from "../src/bots/mark-director.ts";
 // Vite reads them, so plain node cannot load it: Vite loads it here.
 const vite = await createServer({
   configFile: false,
-  root: fileURLToPath(new URL("..", import.meta.url)),
+  root: join(import.meta.dirname, ".."),
   appType: "custom",
   logLevel: "silent",
   server: { middlewareMode: true, hmr: false, watch: null },
@@ -33,9 +33,9 @@ interface Step {
 }
 const cases: { name: string; startedAt: number; steps: Step[] }[] = JSON.parse(
   readFileSync(
-    new URL(
+    join(
+      import.meta.dirname,
       "../../../crates/hud/src/bots/director-cases.json",
-      import.meta.url,
     ),
     "utf8",
   ),

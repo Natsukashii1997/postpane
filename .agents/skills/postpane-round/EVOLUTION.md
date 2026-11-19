@@ -123,7 +123,7 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：#260 的 worktree 先跑 `package-resources` 后导出变量，生成了 387 MB 的自己的 `target`（L-34）。
 - 建议：第 1 步「新 worktree 先备环境」那句改成：要共用构建目录时，先 `export CARGO_TARGET_DIR=…`，再 `pnpm install`、`package-resources`；`pnpm install` 统一写 `--frozen-lockfile`（#261 报 skill 与批量规矩写法不一致）。
 - 证据：L-34；#261 子 agent 报告。
-- 状态：已采纳（本 PR，#PR_NUM）
+- 状态：已采纳（本 PR，#415）
 - 批准：常浩批了跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 5，主会话 2026-11-19 转达：与 L-34 合并，改做〔结构〕。落地：不是只改 SKILL.md 的一句话，而是新增 `scripts/setup-worktree.sh`，顺序写死（先定构建目录，再 `pnpm install --frozen-lockfile`、`package-resources`）；SKILL.md 第 1 步和 AGENTS.md「运行」改为调用它，`steps.json` 的 start 痕迹加 `setup-worktree.sh`。
 
 ## E-14 第 2 步测试：先写测试、跑出红，再写实现；性能测量不在隐藏面板里做（2026-11-09）
@@ -140,7 +140,7 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：#321 合并后先 `git worktree remove`，再在主目录跑 `install.sh check`，脚本默认拿当前目录的 `target/release/bundle/macos/PostPane.app` 比（主目录那份是 11-09 的旧产物 `3600980d505d`），报「不一致：已被别的会话覆盖」，其实已装的就是本轮的 `f67b71c33021`。
 - 建议：第 5 步「合并后马上清」前加一句：删 worktree 之前先在这个 worktree 里跑一次 `install.sh check`；已经删了的，用 `install.sh check <证据目录>/…` 不行（证据里只有旧版备份），改为核对 `shasum /Applications/PostPane.app/Contents/MacOS/PostPane` 与装机时打印的「已装」值。
 - 证据：本轮会话；`evidence/2026-11-14-321-running-grid/`；PR #322。
-- 状态：已采纳（本 PR，#PR_NUM）
+- 状态：已采纳（本 PR，#415）
 - 批准：常浩批了积压清单组 4，主会话 2026-11-19 转达：与 E-20 合并，改做〔机检〕。落地：不改 SKILL.md 的先后顺序，改 `install.sh check`：不给产物路径时按 #405 的归属记录比，不再拿当前目录（常是主目录的旧产物）比；功能 worktree 只认自己装的，主目录还认已合进 main 的，测试 `tests/install-guard.test.mjs` 两条。
 
 ## E-16 第 2、3 步之间：预览脚手架先截完图挪走，再跑全量测试（2026-11-14）
@@ -181,7 +181,7 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：#384 合并后先 `git worktree remove`，再跑 `install.sh check`，报「产物 3600980d505d / 已装 9fa6402761e2，不一致」。已装的就是本轮打的包；不一致是因为 check 默认取当前目录（主目录）下 11 月 9 日的旧产物去比，不是被别的会话覆盖。SKILL.md 第 3 步第 6 条说「请常浩看实物前再跑 check」，第 5 步又说「合并后马上清」，两步先后没写，照第 5 步做就会误报。
 - 建议：第 5 步「合并后马上清」前加一句：先在本 worktree 跑一次 `install.sh check`（或删后带产物路径跑；产物已随 worktree 删掉时，只比对已装的 `shasum` 和交接里记的产物值）。
 - 证据：PR #385、合并提交 `f553425`，本轮交接「发布与回读」。
-- 状态：已采纳（本 PR，#PR_NUM）
+- 状态：已采纳（本 PR，#415）
 - 批准：同 E-15（积压清单组 4，与 E-15 合并改做〔机检〕）；落地见 E-15。
 
 ## E-21 「不做」里的「范围外不顺手修」改成和全局第 3 节一致（2026-11-18）
