@@ -465,5 +465,6 @@
   2. 提问的显示有两种：有的会话把代码块画成代码框，```` ```python ```` 那一行整行没了；有的原样显示、换行全丢。比对只去了反引号，语言名还在，开头 600 字里带代码块的送审全对不上。
   3. 输入框里留着上一轮整段送审（ChatGPT 恢复的草稿），粘贴后发出去的是「旧送审 + 新送审」一条，开头是旧的。
 - 正确做法：查接力「超时」先看 `turns.jsonl` 的 outcome，`unmatched` 就是认领问题，不是 ChatGPT 慢。插件按单元键（`data-chatgpt-search-unit-key`）第一次出现的顺序定最新一轮，读它最后一份（显示的那份）；只在隐藏那份里时不报、重读时滚到底让它画出来。比对两种归一都试（去代码块标记行 / 只去反引号）。发送前输入框有字先清空、等发送键灭了再粘贴，点发送前核对没多出旧字。
-- 证据：`src/apps/chrome-extension/test/page.test.mjs` 三条 #410 测试、`content.test.mjs`「an answer held only in the hidden copy…」、`src/crates/host/src/handoff.rs`「a_prompt_drawn_without_its_code_fences_is_still_the_review」，均先在旧代码上失败；真实页面核对记录在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。
+- 补充（同日装机实测）：新插件在后台标签页里滚到底也画不出回信。ChatGPT 不在后台标签页渲染新内容，常浩把那个标签页切到前台后，下一次重读（10:16:51）立刻认领。重读遇到「已答但没画出来」时，把标签页在自己窗口里短暂切到前台再问，问完切回。另外，Chrome 开发者模式加载的插件目录要核对：本机有 6 份插件副本，重新加载了另一份等于没更新（这次常浩移除后重新加载主目录那份才生效）。
+- 证据：`src/apps/chrome-extension/test/page.test.mjs` 三条 #410 测试、`background.test.mjs`「an answer not drawn in a background tab…」、`content.test.mjs`「an answer held only in the hidden copy…」、`src/crates/host/src/handoff.rs`「a_prompt_drawn_without_its_code_fences_is_still_the_review」，均先在旧代码上失败；真实页面核对记录在 `~/Library/Application Support/postpane/evidence/2026-11-19-410-relay-unmatched/`。
 - 升级：未升级。

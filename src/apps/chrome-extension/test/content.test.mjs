@@ -532,6 +532,7 @@ test("an answer held only in the hidden copy is not told, and the page scrolls t
     streaming: false,
     told: false,
     loaded: true,
+    undrawn: true,
   });
   assert.ok(
     await page.evaluate(() => document.querySelector("main").scrollTop > 0),
