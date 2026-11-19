@@ -12,6 +12,29 @@
 
 
 
+## 积压清单第二批（坑记录与 SKILL）：提升行补全局编号、组 15 关闭、组 16 不升级、E 条目采纳（2026-11-19，Claude 子 agent，常浩 11-19 回「全部按推荐」批了积压清单组 3、7～17；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 11:37`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）第二批里驿窗不改代码的部分。组 12 的代码改动（`pnpm run check` 查 `src/` 下没提交的文件、E-18）在同批另一个 PR，那边要等本 PR 合并后变基。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `docs/LESSONS.md`「提升」行，编号照主会话定死的表：L-10 → G-33（L-35 并入 G-33，是同类第二例）、L-30 → G-34、L-23 → G-35、L-18 → G-36、L-09 与 L-11 → G-37、L-32 → G-40；组 13：L-29 并入 G-11、L-38 并入 G-26。PR 号先写「agent-kit 第二批」，主会话合并时统一替换。这几条的升级行把「待批：…提升为全局坑」改成「已批：…见下方『提升』」，层级不变。
+    - 组 15 关闭（每条核过证据，见 PR）：L-02、L-03、L-06、L-45 →「〔结构〕已升级，关闭」；L-44 →「〔机检〕已升级，关闭」；L-46 →「〔提醒〕部分升级，关闭」，写明靠测试 `claude::background::tests` 守住、未接进必经检查。
+    - 组 16「〔提醒〕不升级」并写理由：L-07、L-08、L-31、L-40、L-42、L-50。L-07 照积压清单第 4 节第 2 点选了不升级，理由里写了「也可以从结构上消除，改动面没评估」。
+    - `.agents/skills/postpane-round/SKILL.md`：组 17 采纳 E-19（第 1 步：要改的文件正被别的分支改着时从那支接）、E-14（第 2 步：先写测试跑出红；性能不在隐藏面板里量）、E-10（第 3 步第 2 条：变基一次后不再追）、E-12（第 4 步：多张并行时子 agent 不写 CURRENT、不占坑编号、不装机）。
+    - `.agents/skills/postpane-round/EVOLUTION.md`：E-10、E-12、E-14、E-19 改「已采纳（本 PR，#416）」并加「批准」行；E-16 改「已否（被 E-18 取代…）」（组 12）。
+  - 顺手改的：`docs/LESSONS.md`「怎么升级」加一句「关闭」「不升级」怎么写。
+  - **改变了已有行为的**：无（只改文档和 skill 文字）。`steps.json` 没改：四条 E 加的都是判断和顺序，没有新的命令痕迹（E-19 的 `git worktree list` 开工、清理都用，算进开工会把清理也数成开工）。
+- 测试：改动前（origin/main `0e5083c`）`node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（汇总「5 套，失败 0 套」：cargo 合计 `1001 passed; 0 failed`，前端 `ℹ pass 463` / `ℹ fail 0`，MCP 9/0，插件 14/0，Chrome 插件 28/0）。改动后 `node --test tests/*.test.mjs` `ℹ pass 51` / `ℹ fail 0`（`postpane-round.test.mjs` 查 EVOLUTION 状态写法、SKILL 与 `steps.json` 对应，`check-rules` 的 lessons 规则查新升级行，都过），`pnpm run check` exit 0，`pnpm test` exit 0，各项与改动前相同。两个 PR 共用构建目录 `~/Sandbox/worktrees/postpane-b2-target`（两边 Rust 代码相同）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b2-batch/`（`baseline-*`、`pr1-final-*`）。
+- 验证：只改文档，没有界面与应用改动。组 15 每条关闭前都对着当前代码核了证据（文件、行号见 LESSONS 各条），没有对不上的。
+- 截图：无。
+- 发布与回读：无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - E-12 写的「子 agent 不写 CURRENT」和这次的做法对不上：这次主会话让子 agent 各自写交接，两个 PR 都写了 CURRENT 顶部，合并时 CURRENT 会冲突，两节都留即可。
+  - L-45 关闭的「不覆盖」：主目录本机的 `.claude/launch.json`（不进仓库）还留着 `preview-243`～`preview-341` 等十几项旧脚手架的启动配置，有几项写着「用前放回 src/apps/desktop/」；按规矩不动主目录，建议常浩或下一个在主目录干活的会话删掉，只留 `scenes`。
+  - 本项目没有 `docs/DECIDED.md`；本 PR 不碰界面。
+  - skill 进化：E-10、E-12、E-14、E-19 已采纳，E-16 已否（本 PR）；无新 E 条目。
+- 本轮新坑：无
+
 ## 积压清单 B 批：时间敏感测试固定时钟、MCP 替身预热、全量测试跑完再汇总、TS 小人导演对拍、check 按归属记录比、备环境脚本（2026-11-19，Claude 子 agent，常浩批了积压清单组 1、2、4、5；已提交、无需发布）
 
 - 时间：开工 `2026-11-19 11:01`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 1（L-12、L-17、L-47）、组 2（L-49）、组 4（E-15、E-20）、组 5（L-34、E-13）的项目内改动。依赖 PR #414（LESSONS 补层级词）：#414 合并后本 PR 要变基，LESSONS 同几行会冲突，以本 PR 的为准。

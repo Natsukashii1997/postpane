@@ -16,6 +16,7 @@
 - 条目超过约 30 条时整理一次：已升级、且之后没再犯的，归档到 `docs/history/`。
 - 「升级」一行每条都要有，开头写层级词〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，再写状态（未升级 / 不升级 / 部分升级 / 已升级）、日期、编号和去处；还没升级的写「〔提醒〕未升级。」。层级变了就改标签，原来的记录保留。层级的含义和怎么选，以全局 LESSONS「怎么升级」为准。`scripts/check-rules.mjs` 的 `lessons` 规则会查。
 - 本项目没有提交前钩子，也没有 CI（GitHub Actions 已停用），`tauri build` 的 `beforeBuildCommand` 只生成资源、构建前端，不跑测试（2026-11-19 核实）：只写成测试的条目标〔提醒〕部分升级，不算〔机检〕。算〔机检〕的只有每次都必经、自动报错的检查：装机脚本 `install.sh` 里的步骤（装机锁、归属检查、接力检查、装后冒烟），以及本机 Claude Code 的 Bash 预检钩子（agent-kit `hooks/bash-precheck.mjs`）。
+- 坑本身已被代码消除的，状态后加「关闭」并写证据，如「〔结构〕已升级，关闭（…）」；靠测试守住的写明测试名和「未接进必经检查」。确认不升级的写「〔提醒〕不升级（理由）」。（2026-11-19，积压清单组 15、16）
 
 ---
 
@@ -33,7 +34,7 @@
 - 根因：`bun build --compile` 产出的程序签名无效（`codesign -v` 报 `invalid signature`），macOS 启动即杀，退出码 137。测试里的替身程序起不来，中转程序就拿不到工具列表。
 - 正确做法：凡是 bun 编译出的程序，在 macOS 上编译后立刻 `codesign --force --sign - <文件>`。已在 `src/tooling/package-resources.mjs` 和 `src/apps/mcp/test/host-tools.test.mjs` 补上。
 - 证据：2026-11-04 实测，未签名的 bun 程序退出码 137，补签后正常输出；补签后 `test:mcp` 由 `ℹ fail 6` 变为 `ℹ pass 6` / `ℹ fail 0`。
-- 升级：〔结构〕已升级（2026-11-19 补层级：本仓库唯一的 bun 编译在 `src/tooling/package-resources.mjs`，编完即补签，测试替身在 `src/apps/mcp/test/host-tools.test.mjs` 里同样补签；不覆盖：以后在别处新加的 bun 编译；待批：积压清单组 15，关闭）。原记录：未升级。换个项目也成立，可提议提升为全局坑。
+- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：本仓库只有两处 bun 编译，都编完立即补签：打包 `src/tooling/package-resources.mjs` 第 54～68 行（`--compile` 后在 macOS 上 `codesign --force --sign -`），MCP 测试替身 `src/apps/mcp/test/host-tools.test.mjs` 第 54～60 行；2026-11-19 `git grep -- --compile` 核实没有第三处。本机只有驿窗用 bun 编译，暂不提升。不覆盖：以后在别处新加的 bun 编译。 原记录：未升级。换个项目也成立，可提议提升为全局坑。
 
 ## L-03 安装时先删旧版，打包路径读错导致应用被删（2026-11-04）
 
@@ -41,7 +42,7 @@
 - 根因：那一行末尾带了大小「(106.23 MiB)」，路径不对；删旧版放在复制成功之前。另外 `pgrep -f "/Applications/PostPane.app/Contents/MacOS"` 会匹配到各会话起的 `agent-hud-mcp`、`agent-hud-engine`，不能用来判断应用本体是否已退出。
 - 正确做法：打包产物用固定路径 `target/release/bundle/macos/PostPane.app`（在 worktree 根目录下）；不先删，直接 `ditto <新版> /Applications/PostPane.app` 覆盖；判断本体是否退出用 `pgrep -f "Contents/MacOS/PostPane$"`。
 - 证据：2026-11-04 本轮安装，补跑 `ditto` 后成功，应用 22:25:58 重新启动；旧版备份在 `evidence/2026-11-04-receipt-quota/PostPane-before.app`。
-- 升级：〔结构〕已升级（2026-11-19 补层级：装机只留 `.agents/skills/postpane-round/scripts/install.sh` 一种做法，固定产物路径、`ditto` 直接覆盖、只认主程序本体（E-02 `1093b08`）；不覆盖：不走脚本手敲命令；待批：积压清单组 15，关闭）。原记录：未升级。
+- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：装机只留 `.agents/skills/postpane-round/scripts/install.sh` 一种做法：产物用固定路径 `target/release/bundle/macos/PostPane.app`（第 33 行），`ditto` 直接覆盖、不先删（第 104 行），退出判断只认主程序本体 `Contents/MacOS/PostPane$`（第 18、97 行）（E-02）。不覆盖：不走脚本手敲命令。 原记录：未升级。
 
 ## L-04 云端会话列表里也有本机会话，不过滤会重复（2026-11-05）
 
@@ -66,7 +67,7 @@
 - 正确做法：装完新包先截屏看有没有这个权限弹窗，有就请常浩点「允许」（隐私权限只能本人点）；不要误判成改动把数据读取弄坏了，也不要反复重装。
 - 根治（2026-11-06，#134）：`tauri.macos.conf.json` 改用登录钥匙串里的本机自用证书 `PostPane Local Signing` 签名，系统改按「标识 `app.postpane.mac` + 证书」认应用（`codesign -d -r- /Applications/PostPane.app` 应显示 `certificate leaf = H"b773068e…"`，不再是 `cdhash`）。换签名后第一次装还要点一次「允许」，之后重装不再弹。证书没信任设置，`security find-identity -v` 不列它属正常，签名照样可用。换电脑或证书丢了打包会报找不到身份：用 openssl 生成带 `extendedKeyUsage = critical,codeSigning` 的自签证书，`security import <p12> -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign` 导入，名字仍叫 `PostPane Local Signing`；证书一换，要再点一次「允许」。
 - 证据：2026-11-05 19:32 截屏 `~/Library/Application Support/postpane/evidence/2026-11-05-scroll-gap/d1s.png`，采样 `sample.txt` 同目录。
-- 升级：〔结构〕已升级（2026-11-19 补层级：`src/apps/desktop/src-tauri/tauri.macos.conf.json` 固定用 `PostPane Local Signing` 签名（E-05 `9f9d7a5`），`install.sh` 装后回读证书；待批：积压清单组 15，关闭）。原记录：未升级。
+- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/apps/desktop/src-tauri/tauri.macos.conf.json` 第 5 行固定用 `PostPane Local Signing` 签名（E-05 `9f9d7a5`），重装不再换签名、不再重弹文稿权限；`install.sh` 第 109 行装后回读证书。 原记录：未升级。
 
 ## L-07 读取层去掉一个 Claude 额度窗口，旧行还会在侧栏挂 30 天（2026-11-05）
 
@@ -74,7 +75,7 @@
 - 根因：Claude 的 `Provider.keeps_unreported_windows` 为真，`platform/src/accounts/mod.rs` 的 `retain_windows` 让「这次没报的窗口」沿用上次读数最多 30 天，重启副本（`restart_copy`）也会带回来；读取层的测试只看新读数，看不到这条路。
 - 正确做法：要让某个窗口彻底不出，除了在读取层不产出，还要在 `Provider.dropped_windows` 里列出它的键，由 `projection()` 出口统一过滤（#96）；改完以实机快照（MCP `hud_snapshot`）里没有这行为准，不只看单测。
 - 证据：2026-11-05 21:23 与 21:38 两次 `hud_snapshot`，结果文件在本会话 tool-results；PR #94、#96。
-- 升级：〔提醒〕未升级。（2026-11-19 补层级；待批：积压清单组 16）
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：已有统一过滤出口 `Provider.dropped_windows`（`src/crates/agents/src/account.rs` 第 216 行），只碰到一次。也可以从结构上消除：把「沿用上次读数」改成只对登记过的窗口生效，改动面没评估，这次没做（积压清单第 4 节第 2 点）。
 
 ## L-08 云端 Linux 容器跑 check / test，失败的原因是环境不是代码（2026-11-05）
 
@@ -82,7 +83,7 @@
 - 根因：容器默认没装 Tauri 在 Linux 上要的 GTK/WebKit 开发库；默认 Node 是 v22，项目要求 24+（docs/development.md「Run the workspace」），插件测试在 Node 22 下被取消。未改动的 main 上结果相同。
 - 正确做法：云端 Linux 先 `apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libgtk-layer-shell-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libxdo-dev`；Node 不是 24 时在临时目录 `npm i node@24`，把它的 `node_modules/node/bin` 放到 PATH 最前再跑。
 - 证据：PR #57 会话，装库后 `pnpm run check` 退出 0；Node 24.22.2 下插件测试 `ℹ pass 14` / `ℹ fail 0`，`pnpm test` 退出 0。
-- 升级：〔提醒〕未升级。（2026-11-19 补层级；待批：积压清单组 16）
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：只在云端 Linux 容器里成立，本机 macOS 用不上；正确做法留在条目里备查。
 
 ## L-09 电脑控制在侧栏悬停面板里点按钮，点击不生效（2026-11-06）
 
@@ -90,7 +91,8 @@
 - 根因：未核实。面板窗口平时让鼠标穿透，只有上报的区域收点击（`host/src/hud/mod.rs` 的 `set_ignore_cursor`），指针靠原生轮询；电脑控制瞬移光标后马上按下，推测与穿透区域、窗口激活或面板重挂载有关。
 - 正确做法：侧栏悬停面板里要点的东西（托盘色块、按钮、链接）不靠电脑控制实机验证；逻辑在浏览器预览里用真实组件点，实机这一步请常浩用鼠标或触控板点一次，交接里写明哪些是常浩点的。展开卡、设置窗口这类普通窗口不受影响（#121–#123 在展开卡上点「转回 Claude」「结束接力」都成功了）。
 - 证据：2026-11-06 09:37–09:43 本会话电脑控制记录；截图 `~/Library/Application Support/postpane/evidence/2026-11-06-merge-all/screens/`。
-- 升级：〔提醒〕未升级。（2026-11-19 补层级；待批：积压清单组 9，与 L-11 合并提升为全局坑）
+- 升级：〔提醒〕未升级。（2026-11-19 补层级；积压清单组 9 已批：与 L-11 合并提升为全局 G-37，见下方「提升」）
+- 提升：已提升为全局 G-37（2026-11-19，agent-kit 第二批），与 L-11 合成一条。
 
 ## L-10 往别人的页面注入脚本：浏览器里测过，驿窗的 WebKit 窗口里卡死或空白（2026-11-06）
 
@@ -98,7 +100,8 @@
 - 根因：两处，都靠标题通道诊断（页面把状态写进 `document.title`，壳用 `on_document_title_changed` 落盘）和 `sample` 网页进程查实。一、WebKit 把 MutationObserver 的记录一轮轮投递到没有新记录才去跑别的微任务；回调里点按钮、改标题这类会改 DOM 的事，会让回调无限重入，React 排在微任务里的重绘永远轮不到（Chromium 是普通微任务排队，测不出来）。二、页面的收起页和面板是同一个 `<main>`，React 只换类名和子节点；脚本写在元素上的 `visibility:hidden` 留到了面板上，面板在、但看不见，无障碍树也是空的。
 - 正确做法：注入脚本只观察、不在 MutationObserver 回调里改 DOM（也不改 `document.title`）；要藏页面元素用按类名生效的样式表（`document.adoptedStyleSheets`），不写元素的行内样式；需要页面做事时由壳在回调之外 `eval` 页面自带的接口。验证顺序：先用 `swiftc` 写个最小 WKWebView 探针跑一遍（同一套 WebKit，几秒出结果），再打包装机；装机诊断用标题通道，页面有 `connect-src 'self'` 时往本机端口上报会被拦。
 - 证据：2026-11-06 14:41–15:16 本会话；诊断日志 `~/Library/Application Support/postpane/evidence/2026-11-06-notes-collapse/diag.log`、`diag2.log`。
-- 升级：〔提醒〕未升级（跨项目也成立，可提议提升为全局坑）。（2026-11-19 补层级；待批：积压清单组 3，提升为全局坑）
+- 升级：〔提醒〕未升级（跨项目也成立，可提议提升为全局坑）。（2026-11-19 补层级；积压清单组 3 已批：提升为全局 G-33，见下方「提升」；L-35 是同类第二例）
+- 提升：已提升为全局 G-33（2026-11-19，agent-kit 第二批）。
 
 ## L-11 真屏点击测试中途锁屏或换了显示器，坐标点到别的应用（2026-11-06）
 
@@ -106,7 +109,8 @@
 - 根因：坐标和截图区域是按开测前那块屏写死的；常浩远程控制、人不在电脑前，屏幕会自动锁，也可能随时插拔显示器。CGEvent 不管屏幕状态，照样发到当时光标下的应用。
 - 正确做法：每一组真实点击前回读两件事，任一不符就停：锁屏 `Quartz.CGSessionCopyCurrentDictionary().get('CGSSessionScreenIsLocked')` 为空；显示器 `CGGetActiveDisplayList` 的尺寸和窗口位置（`CGWindowListCopyWindowInfo`）与写坐标时一致。「面板外」的点击点到菜单栏空白处（如 `(1100, 10)`），不点别的应用窗口；动鼠标前先问常浩能否接管约 1 分钟。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-06-disk-pendant/`（`screens/`、`windows.swift`、`click.swift`）；本会话 2026-11-06 16:0x–16:45。
-- 升级：〔提醒〕未升级（与 disk-slim L-11 同属「真屏点击」一类，可一起提议提升为全局坑）。（2026-11-19 补层级；待批：积压清单组 9，与 L-09 合并提升为全局坑）
+- 升级：〔提醒〕未升级（与 disk-slim L-11 同属「真屏点击」一类，可一起提议提升为全局坑）。（2026-11-19 补层级；积压清单组 9 已批：与 L-09 合并提升为全局 G-37，见下方「提升」）
+- 提升：已提升为全局 G-37（2026-11-19，agent-kit 第二批），与 L-09 合成一条。
 
 ## L-12 全量测试偶发一条 core 演示测试失败，不是本次改动造成的（2026-11-07）
 
@@ -171,7 +175,8 @@
 - 根因：ChatGPT 先出一个空的回复占位块，答案随后写进同一个块、同一个 `messageId`。插件发完话后 `expecting` 为真，采样时没看到停止按钮（回复短、后台标签页采样慢，整段生成落在两次采样之间），就把空占位块当成新回复，600 毫秒后报了空的 `turn complete`，同时把这个 `messageId` 记为已报、`expecting` 清掉。宿主拿到空回复不算回信；真回复写进来后，插件因为 `messageId` 相同（或 `expecting` 已清）不再报。
 - 正确做法：插件只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`（`content.js` 的 `settle`）。查「回信丢了」先看 `<数据目录>/chatgpt/turns.jsonl`，再看 `hooks/inbox` 里该会话的 completion 记录（`message` 为空就是这一类）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`inbox-completion-empty.json`：01:54:19.827 收到的空回复，turnId `e6c1acb9…`；`dom-probe.md`：页面上真回复的 messageId 也是 `e6c1acb9…`）；复现测试 `src/apps/chrome-extension/test/content.test.mjs`「an empty placeholder is not the reply that fills it later」修复前报 `[['m5', '']]`。
-- 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」）。原记录：已写成测试（上面那条，以及「a reply still being written without a stop button waits until it stops changing」）。
+- 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」；积压清单组 8：同类问题已提升为全局 G-36，见下方「提升」）。原记录：已写成测试（上面那条，以及「a reply still being written without a stop button waits until it stops changing」）。
+- 提升：已提升为全局 G-36（2026-11-19，agent-kit 第二批），和牛马之家 L-17、剪藏插件 L-04 同类：第三方聊天页先出容器、内容后到。
 
 ## L-19 「一直等」没生效：同一个允许值列表抄了三份，漏改了每次请求都跑的那份（2026-11-07）
 
@@ -213,7 +218,8 @@
 - 根因：Chrome 装上、更新或重新加载插件时，不给已经开着的标签页装新的内容脚本，旧脚本跟插件断开，`chrome.runtime.sendMessage` 同步抛错，被吞掉。ChatGPT 是单页应用，在同一个标签页里新建对话也不会重装脚本，于是这个标签页永远不报。接力会话每次由插件新开标签页，脚本是新的，所以只有接力能收到，看起来像「只读得到名单里的会话」。
 - 正确做法：插件后台在 `runtime.onInstalled` 里用 `chrome.scripting.executeScript` 给已开的目标标签页补装脚本；内容脚本要能被重复装（旧的一份让位）、断开后自己停下。查「插件那边没报」先比两组：插件自己开的标签页能报、用户自己的标签页不能报，就是这一类；让用户刷新标签页再试一句，能报就坐实。
 - 证据：`<数据目录>/hooks/inbox` 里 ChatGPT 的 17 条回复全在 `chatgpt/watched.json` 名单内，`chatgpt/turns.jsonl` 最后一行 14:29；常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来。修复见 #206。
-- 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」）。原记录：已写成测试 `injected again into an open tab, the page reports each turn once`、`a copy cut off by an extension reload stops instead of throwing on every change`、`installing or reloading the extension puts the scripts into chatgpt.com tabs already open`。
+- 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」；积压清单组 7：同类问题已提升为全局 G-35，见下方「提升」）。原记录：已写成测试 `injected again into an open tab, the page reports each turn once`、`a copy cut off by an extension reload stops instead of throwing on every change`、`installing or reloading the extension puts the scripts into chatgpt.com tabs already open`。
+- 提升：已提升为全局 G-35（2026-11-19，agent-kit 第二批），和剪藏插件 L-10、L-13 同类：插件重载后已开标签页里的旧脚本断开。
 
 ## L-24 ChatGPT「在答」从没显示过：开始回合的记录被收件箱拒收（2026-11-07）
 
@@ -270,7 +276,8 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-08-narrow-tag/`（预览脚手架 `preview-243/`）。；#247 的记录在 `evidence/2026-11-08-go-start/preview-check.md`。
 - 补充（2026-11-09）：面板隐藏时 `requestAnimationFrame` 完全暂停。脚本里等 rAF 会让 `javascript_tool` 45 秒超时（#259）；`PerformanceObserver` 的 longtask 也不报，测到的性能数不算（#264）。读几何不等帧，`getBoundingClientRect` 本身会强制排版，要等用 `setTimeout`。性能测量改用无头 Chrome（独立临时配置目录、调试协议发真实鼠标、每轮重新加载），并固定好指针历史（测量副本会停在最后悬停的那家）。注意它是 Chromium，不是驿窗的 WKWebView（`evidence/2026-11-09-264-deferred-measure/measure.md`）。
 - 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 13，并入全局 G-11）。
+- 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 13 已批：并入全局 G-11，见下方「提升」）。
+- 提升：并入全局 G-11（2026-11-19，agent-kit 第二批）：G-11 放宽到无头 Chrome、隐藏的内置浏览器面板，截到的都不一定是最终状态。
 
 ## L-30 测试替身比真实实现宽松，兜底路径一直是绿的却从没生效过（2026-11-09）
 
@@ -279,7 +286,8 @@
 - 正确做法：给兜底、重试这类「第一条路失败后走的路」写测试时，先列出真实实现在这个场景下每一步会做的检查，替身逐条照做（同一个开关同时影响 `reaches`、`reply`、`leave`）；模拟场景用真实的失败原因（会话不在线），不用一个方便的替代原因（写入失败）。再加一条用真实组件（临时目录里的 `ClaudeChannel`）的测试，确认兜底那一步在该场景下真的能成。
 - 证据：`handoff::tests::words_back_to_a_claude_session_that_ended_wait_in_its_queue`、`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 在替身改成照真实规则拒收后先红（前者 `left: 0, right: 1`，即一句也没排进去；红色输出只在本轮会话记录里，没另存文件），改走 `queue` 后变绿（全量日志 `evidence/2026-11-09-queue-back/test.log`）；`claude_plugin::tests::words_queued_for_a_session_that_ended_wait_for_it_to_open` 用真实通道验证。
 - 可提议提升为全局坑：换个项目也成立（测试替身比真实实现宽松，掩盖兜底失效）。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 3，提升为全局坑）。
+- 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 3 已批：提升为全局 G-34，见下方「提升」）。
+- 提升：已提升为全局 G-34（2026-11-19，agent-kit 第二批）。
 
 ## L-31 照搬上游的 CSS 修复，去掉 `position: fixed` 后小票打印槽横跨整个窗口（2026-11-09）
 
@@ -287,7 +295,7 @@
 - 根因：fixed 的侧栏原本是打印槽这类 `position: absolute` 子元素的定位容器。上游没有小票样式，所以去掉 fixed 没出问题。驿窗分叉后加的视觉依赖它。
 - 正确做法：移植上游的样式改动前，先查被改元素里有没有依赖它定位的 absolute 子元素；改完在预览里逐页比对每个元素的位置尺寸（#259 比对 5 个设置页，差异为 0）。这次保留 `position: relative` 当定位容器。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-259-upstream-fixes/a4-preview-check.md`。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 16）。
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：只在移植上游样式时碰到，只一次；驿窗已不再与上游同步（AGENTS.md 开头）。
 
 ## L-32 「临时改源码 → 跑测试 → 还原」写在一条前台命令里，被超时打断后文件留在改过的状态（2026-11-09）
 
@@ -297,7 +305,8 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-257-relay-receipts/red-host.log`。
 
 - 补充（2026-11-09，#251）：验红时先 `cp` 了改前副本，还原却用了 `git checkout -- <文件>`，把这个文件里本轮还没提交的改动也一起丢了，靠副本才找回。临时改源码验红，要么先提交，要么只用自己留的副本还原，不用 `git checkout`。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 14，提升为全局坑）。
+- 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 14 已批：提升为全局 G-40，见下方「提升」）。
+- 提升：已提升为全局 G-40（2026-11-19，agent-kit 第二批）。
 
 ## L-33 并行子 agent 共用一台机器，宽泛的 `pkill -f` 把别人正在跑的测试也杀了（2026-11-09）
 
@@ -328,6 +337,7 @@
   - 已加守护测试 `hud/test/measuring-copy-sync.test.ts`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-bots-static/`：`now-side.png` 坏、`old-70ad-side.png`、`b768-side.png`、`bff6-side.png`、`b285-side.png` 好、`fix-side.png` 修好；`motion-1/2-side.png` 两张不同，说明小人在动。
 - 升级：〔机检〕部分升级（2026-11-19 补写升级行；#405 `a342c1c`：装后冒烟 `smoke.mjs` 是 `install.sh` 每次装机必走的一步，侧栏隔 2 秒截图看不出在动就 exit 6，并和装前截图对比，测试 `tests/smoke-diff.test.mjs`。算〔机检〕的理由：它接在装机脚本里自动跑、自动报错，不靠人记得截图。缺口：在包已经装上之后才查，拦的是「常浩看到坏包之前」而不是「装上之前」（回滚命令已打印）；比的是整个侧栏窗口，别的动画会把静态小人「带过」；还没在真实装机上跑过；守护测试 `hud/test/measuring-copy-sync.test.ts` 只能手动跑。积压清单组 4）。
+- 提升：并入全局 G-33（2026-11-19，agent-kit 第二批），是 L-10 之外第二例：只在 Chromium（无头 Chrome）里验过，进驿窗的 WKWebView 才坏。
 
 ## L-36 Claude 进程被直接杀掉，驿窗的审批钩子被 launchd 收养继续等，审批卡挂满 10 分钟（2026-11-09）
 
@@ -362,7 +372,8 @@
   - `codex exec` 没有交互批准，同一个工具不论设成什么都直接执行，所以拿它做对照没有意义。
 - 正确做法：改了 Codex 的 MCP 或批准配置后，在新开的线程里实测（驿窗 `start_session` 开一个就行）。对照组也要在同类线程里做，不要用 `codex exec`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/`：老线程 rollout 第 347～399 行（13:22 调用、13:23:12 终止），`~/.codex/logs_2.sqlite` 13:22:01.147 `hook/started` 之后没有 `hook/completed`；新线程 `rollout-2026-11-09T13-28-36-01a1bec7-a276-…` 第 19～21 行；`exec-test/exec.jsonl`、`exec-test/control.jsonl`。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 13，并入全局 G-26）。
+- 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 13 已批：并入全局 G-26，见下方「提升」）。
+- 提升：并入全局 G-26（2026-11-19，agent-kit 第二批）：G-26 放宽为「改了 AI 工具的配置或人设，已开会话照旧用旧的」，补 Codex 这一例。
 
 ## L-39 驿窗重启后接力转回 Codex 报「Unknown or child session target」，失败两次后自动往返停下（2026-11-09）
 
@@ -379,7 +390,7 @@
 - 根因：只读了一次，说明文件变化的事件没送到等待循环。在 macOS 上用 FSEvents 盯单个文件，同一进程的追加写不一定能及时报出来，具体为什么没查清。驿窗 Claude 那一路的 `hooks/transcript.rs` 也靠 `notify`，它在实机上靠得住，但不能保证别的地方也一样。
 - 正确做法：等待循环本来就有短间隔（钩子是 0.1 秒）时，每一圈直接读文件新增的部分（`read_to_end` 从上次的位置往后读），不要依赖文件监听；测试里先把 `Requests` 的等待期限调短（`set_hold_ms`），失败时几秒就能看到，不要干等 10 分钟。
 - 证据：`src/crates/platform/src/hooks/turn_end.rs`（改成每圈直接读）；测试 `hooks::transport::tests::a_codex_request_whose_turn_ended_is_declined_and_leaves_the_sidebar`。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 16）。
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：只碰到一次，根因没查清；出事那处已改成每圈直接读（`src/crates/platform/src/hooks/turn_end.rs`）。
 
 ## L-41 bypass 模式下 Bash 仍要批准，批准卡只挂在驿窗侧栏，没人点，16 分钟后桌面版判「Claude Code stopped responding」（2026-11-09）
 
@@ -407,7 +418,7 @@
 - 根因：`useBoardInks` 有纸张时取纸张的墨（深色纸配浅墨），不看传进去的 `light`；审核纸条本身永远是浅色纸（`relayPaperOf(true)`），两者对不上。
 - 正确做法：画在审核纸条上的字一律用 `relayPaperOf(true)` 自己的 `ink`、`dim`、`blue`，和悬停小收据（`DeskLines`）一样，不用面板墨。验收界面时至少换一种外观再看一次，不能只看 `get_hud_screenshot` 的一张。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-288-open-relays/preview-paper-ink-before-fix.png`；修正在 `src/packages/hud/src/panel/ReviewSlip.tsx`。同一纸条上 `LiveRow` 的审核会话行仍用面板墨，是否也有这个问题未核实，记为范围外发现。
-- 升级：〔提醒〕未升级（2026-11-19 补写升级行；待批：积压清单组 16）。
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：界面配色的判断，机器判不了，只一次；出事那处已改（`src/packages/hud/src/panel/ReviewSlip.tsx`）。
 
 ## L-43 预览脚手架放在 worktree 的 `src/apps/desktop/` 下时跑 `pnpm run check`，包边界检查报「leaves the package」失败（2026-11-14）
 
@@ -424,7 +435,7 @@
 - 正确做法：`install.sh` 在备份、退出旧应用之前调 `live-auto-relays.mjs`，有这样的接力就列出来并 `exit 3`，什么都不动；先问常浩，等它们结束再装，或他同意后加 `--force` 照装。别为了绕开它自己加 `--force`。
 - 2026-11-14 收窄（常浩选甲）：同一天驿窗改成重启后自动往返接着跑，重启不再暂停，上面的根因只剩「回信刚到、正在转回」这一刻（`phase` 为 `replied`）；`live-auto-relays.mjs` 只查这一种，平时开着自动往返也照装。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-336-point-numbers/install.log`（照装那次）、`2026-11-14-install-auto-guard/guard-run.log`（加保护后拒装）。
-- 升级：〔机检〕已升级（2026-11-19 补写升级行；`install.sh` 每次装机必经，在备份、退出旧应用之前调 `live-auto-relays.mjs`，有正在转回的接力就 exit 3；待批：积压清单组 15，关闭）。
+- 升级：〔机检〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`install.sh` 每次装机必经，第 71～79 行在备份（第 90 行）、退出旧应用之前调 `live-auto-relays.mjs`，有回信正在转回的接力就 exit 3、什么都不动，问过常浩才加 `--force`；脚本的判断由 `tests/postpane-round.test.mjs`「live-auto-relays 只列…」两条守住，`install.sh` 里 exit 3 这条路没有端到端测试。不覆盖：不走 `install.sh` 手动装。上一版：〔机检〕已升级（2026-11-19 补写升级行）。
 
 ## L-45 预览脚手架的 `?still` 用展开复制伪造 `matchMedia`，小人全退成静态图（2026-11-14）
 
@@ -432,7 +443,7 @@
 - 根因：`{ ...real(q), matches: true }` 只复制自有属性，`MediaQueryList` 的 `addEventListener` 等方法在原型上，展开后就没了；`BotMark.tsx` 订阅减少动效变化时抛错，被兜底成静态图。
 - 正确做法：用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`，方法照原对象绑定（`src/packages/hud/preview/main.tsx`）。以后预览一律用常设的场景预览台（`pnpm --filter @agent-hud/hud run scenes`），不再另抄脚手架；截图前用 `document.querySelectorAll("canvas").length` 确认小人画布在。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-14-349-workplace-scenes/`。
-- 升级：〔提醒〕未升级。（2026-11-19 补层级：常设场景预览台已改用 `Proxy`（`src/packages/hud/preview/main.tsx`），但仍可另抄脚手架；待批：积压清单组 15，关闭）
+- 升级：〔结构〕已升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：常设场景预览台 `src/packages/hud/preview/main.tsx` 第 36～49 行的 `?still` 用 `Proxy` 包住真实的 `MediaQueryList`，只改 `matches`；仓库里已没有 `{ ...real(q) }` 那种展开复制（2026-11-19 `git grep` 核实），旧脚手架只留在证据目录里。不覆盖：从证据目录把旧脚手架抄回来用（组 12 另在 `pnpm run check` 开头拦 `src/` 下没提交的文件）。上一版：〔提醒〕未升级（2026-11-19 补层级：常设场景预览台已改用 `Proxy`，但仍可另抄脚手架）。
 
 ## L-46 Claude 会话挂着后台命令等通知，侧栏却出 REPLY（2026-11-14）
 
@@ -440,7 +451,7 @@
 - 根因：`claude/transcript.rs` 看到 `stop_reason: end_turn` 就把回合记为 completed。一轮结束不等于会话停下：Claude Code 会在后台命令结束（完成、失败、被杀、停止）时送一条 `<task-notification>`（空闲时是 `origin.kind = task-notification` 的用户消息，忙时是 `queued_command` 附件）唤醒它。原来只有「子 agent 还在写记录」会压住 completed，后台 Bash 不算。
 - 正确做法：判断 Claude 会话「做完了没有」，除了回合结束，还要看有没有没收到通知的后台命令（`toolUseResult.backgroundTaskId` 记入，通知里的 `<task-id>` 或 `TaskStop` 移除），在 `src/crates/agents/src/claude/background.rs`；兜底同子 agent，启动 30 分钟（`ABANDONED_MS`）仍没通知就照常算完成。
 - 证据：`claude::background::tests` 4 项；去掉修复后其中 2 项变红。
-- 升级：〔提醒〕部分升级（2026-11-19 补层级：代码已改（`src/crates/agents/src/claude/background.rs`），它的测试未接进必经检查；待批：积压清单组 15，关闭）。原记录：未升级。
+- 升级：〔提醒〕部分升级，关闭（2026-11-19，积压清单组 15：坑本身已被代码消除）：`src/crates/agents/src/claude/background.rs` 记下没收到通知的后台命令，`src/crates/agents/src/transcript/live.rs` 第 524、567、625 行判断「做完没有」时都经 `with_background`；靠测试 `claude::background::tests` 4 条守住（去掉修复后其中 2 条变红，见上方证据），测试未接进必经检查。 原记录：未升级。
 
 ## L-47 本机负载高时 MCP 测试偶发约 45 秒超时，每次挂的不是同一条（2026-11-14）
 
@@ -475,7 +486,7 @@
 - 根因：`agentArtworkKey` 把 ChatGPT 的标记名归到 `openai`（和 Codex 共用过 OpenAI 小人），而 `relaysOf` 认的是来源 id `chatgpt`。标记名、图标键、来源 id 是三样东西，名字相近容易混用。
 - 正确做法：按家找数据（接力、会话、审批）用来源 id：单家面板里取 `sessionScope(...).sources` 或 `sourcesForMark(snapshot, 标记)`，不要拿 `vendorKey(标记名)` 当来源；`BoardHeading` 的 `place` 参数就是为此加的。
 - 证据：`src/packages/hud/test/relay-toggle.test.ts`「every agent's card carries one plane in its head」断言 `place={selectedSources?.[0]}`。
-- 升级：〔提醒〕部分升级（2026-11-19 补层级：已写测试 `src/packages/hud/test/relay-toggle.test.ts`，未接进必经检查；待批：积压清单组 16，不升级）。原记录：未升级。
+- 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：已有测试守住这一处（`src/packages/hud/test/relay-toggle.test.ts`，未接进必经检查）；改成按类型区分标记名、图标键、来源 id 改动面太大，再犯再做。 原记录：未升级。
 
 ## L-51 「ChatGPT 30 分钟没回信」多半是回信到了、没认出来：页面存两份对话、提问显示会变、输入框会留旧稿（2026-11-19）
 
