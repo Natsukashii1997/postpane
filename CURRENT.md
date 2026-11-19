@@ -26,7 +26,7 @@
 - 本轮新坑：L-59
 - skill 进化：无。
 
-## 接力根治第 0 批：插件消息在读线程上只记账，推进和通知侧栏都交给另一条线程；附全链路梳理报告（#440）（2026-11-19，Claude，常浩要求深度核查接力卡住，看完梳理结论后回「做第 0 批」；已提交、L2 审查第 2 轮通过、PR 见下、发布见下）
+## 接力根治第 0 批：插件消息在读线程上只记账，推进和通知侧栏都交给另一条线程；附全链路梳理报告（#440）（2026-11-19，Claude，常浩要求深度核查接力卡住，看完梳理结论后回「做第 0 批」；已提交、L2 审查第 2 轮通过、PR #441 已 squash 合并、已打包未装机：装机位被 #442 的实机占着）
 
 - 时间：开工 `2026-11-19 23:12`（`date '+%F %H:%M'` 记录；梳理本身 22:43 起，只读）。来由：全链路梳理（93 单、153 次送审对账，三段代码通读）发现审核门 11-19 上线的「补格式」必然等满 30 秒超时：发送在插件连接唯一的读线程上发出并等确认，确认只能由这条线程读出来。本机还没有一封回信走到这条路。
 - 改了哪些文件：
@@ -47,7 +47,7 @@
 - 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1064 passed` / `0 failed`（原 1058，新增 6），前端 `ℹ pass 486` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 32`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（返修后重跑，`check-2.log`、`test-2.log`、`collab-2.log`、`summary-2.txt`）。先红两次：把监听回调原样挪成 `hearing`（仍在读线程上同步推进）后，`an_ask_to_mend_hears_that_it_went_in` 失败「word that it went in was heard while it waited」（`red-before.txt`）；第一版修复上，`the_sidebar_is_not_refreshed_on_the_reading_thread` 和 `a_refresh_that_waits_for_the_data_thread_does_not_hold_the_reading_thread` 同样失败（`red-round2.txt`）；第二版 6 条都过（`green-round2.txt`）。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-440-format-thread/`。
 - 验证：只有单元测试。实机要等一封末尾不合规的真实回信才走得到补格式，未做。
 - 截图：无界面改动。
-- 发布与回读：未发布。L2 审查通过后合并、从 main 打包装机。
+- 发布与回读：PR #441 合并为 main `2e83a3e`。主目录 main 上三条全量重跑通过：`pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，cargo 合计 `1064 passed` / `0 failed`，前端 `ℹ pass 486` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（`evidence/2026-11-19-440-format-thread/main-*.log`）。`tauri build --bundles app` 退出码 0，产物在主目录 `target/release/bundle/macos/PostPane.app`。**没装机**：`install.sh check` 报现在装着的是 `.claude/worktrees/439-relay-end`（分支 `claude/439-relay-end`，PR #442 未合并）2026-11-20 00:11 装的 `ad07ec632cf5`，那个会话正在对自己的 PR 做实机，按 L-05、E-10 不顶它的包（没加 `--takeover`）。它的包不含 #441，所以实机上补格式的超时缺陷还在。#442 合并后从 main 重打重装会带上 #441；或常浩说可以顶掉，就从主目录现有产物装。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 第 0 批另两项没做，碰到「送达未确认」这条定过的规则（L3 P1-10 至 P1-17、MA-02 第 4 节），已向常浩单独发改动确认，还没回：① 插件明确说没送成的发送不算「送达未知」（要插件报「有没有点过发送」，排在 #435 之后）；② 补格式的确认迟到、回信还没到时也认。
   - 第 0 批里「#435 合并后装机、重载插件、核对两单卡单」由 #435、#437 的会话做了：`h1a1f38f8b6200` 23:04 认领并转回，`h1a1f3f3d38d00` 22:52 已被结束。
