@@ -7,6 +7,7 @@ use super::{folder, write_private};
 use agent_hud_agents::chatgpt as agent;
 use agent_hud_core::l10n;
 use serde::{Deserialize, Serialize};
+mod asked;
 mod held;
 mod idle;
 mod wake;
@@ -188,6 +189,9 @@ pub struct Step {
     /// Trouble before any answer, for the session to be told of (#318).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Cause>,
+    /// ChatGPT's id of the prompt words went in as (`ask`, `format`, #410).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asked_id: Option<String>,
 }
 
 /// How words back to Claude stand with its session's plugin (#257).
@@ -228,6 +232,7 @@ impl Step {
             prompt: None,
             delivery: None,
             cause: None,
+            asked_id: None,
         }
     }
     fn by_auto(mut self) -> Self {

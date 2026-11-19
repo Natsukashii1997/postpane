@@ -52,7 +52,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert_eq!(open["text"], "帮我写周报");
     write_frame(
         &mut extension,
-        &json!({"type":"opened","requestId":open["requestId"],"ok":true,"conversation":"68a1","title":"周报"}),
+        &json!({"type":"opened","requestId":open["requestId"],"ok":true,"conversation":"68a1","title":"周报","promptId":"p1"}),
         OUTBOUND_LIMIT,
     )
     .unwrap();
@@ -62,7 +62,8 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     );
     assert_eq!(
         opening.join().unwrap().unwrap(),
-        json!({"conversation":"68a1","title":"周报"})
+        json!({"conversation":"68a1","title":"周报","promptId":"p1"}),
+        "the prompt the words went in as comes back with it (#410)"
     );
     assert_eq!(load_watched(&data)[0].id, "68a1");
 
@@ -165,11 +166,11 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert_eq!(send["requestId"], "h1~send4");
     write_frame(
         &mut extension,
-        &json!({"type":"sent","requestId":"h1~send4","ok":true}),
+        &json!({"type":"sent","requestId":"h1~send4","ok":true,"promptId":"p2"}),
         OUTBOUND_LIMIT,
     )
     .unwrap();
-    sending.join().unwrap().unwrap();
+    assert_eq!(sending.join().unwrap().unwrap()["promptId"], "p2", "#410");
     wait_for(|| sent_heard.lock().unwrap().len() == 1);
     // One no one waits for any more is heard too; a refused one is not.
     for (request, ok) in [("h1~send5", false), ("h1~send6", true)] {

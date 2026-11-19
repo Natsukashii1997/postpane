@@ -176,3 +176,90 @@ test("a newest prompt not answered yet leaves the older answer before it", async
   );
   await two.close();
 });
+
+// #410 (2026-11-19): ChatGPT turned a long brief into an attachment, so the
+// prompt had no bubble, only the file; the answer was never told and the
+// handoff waited 30 minutes. The prompt is its turn, known by ChatGPT's id.
+const attached = (turn, id) =>
+  unit(
+    turn,
+    0,
+    "user",
+    '<div><span><button aria-label="粘贴的文本 (1).txt"></button><span><svg></svg><span>粘贴的文本 (1).txt</span><span>文档</span></span></span></div>',
+    id,
+  );
+
+test("a prompt ChatGPT made an attachment is still the newest prompt, known by its id", async () => {
+  const two = await twice(
+    attached("A", "p1") + answer("A", "a1"),
+    attached("A", "p1") + answer("A", "a1", "复核结论"),
+  );
+  assert.equal(
+    await two.evaluate(() => PostPanePage.lastPrompt(document)),
+    "粘贴的文本 (1).txt文档",
+  );
+  assert.equal(
+    await two.evaluate(() => PostPanePage.lastPromptId(document)),
+    "p1",
+  );
+  assert.equal(await two.evaluate(() => PostPanePage.answered(document)), true);
+  await two.close();
+});
+
+test("the newest prompt's id is its own, not an older one's", async () => {
+  const two = await twice(
+    unit(
+      "A",
+      0,
+      "user",
+      '<div data-user-message-bubble="true">第 1 轮</div>',
+      "p1",
+    ) +
+      answer("A", "a1") +
+      attached("B", "p2"),
+    unit(
+      "A",
+      0,
+      "user",
+      '<div data-user-message-bubble="true">第 1 轮</div>',
+      "p1",
+    ) + answer("A", "a1", "第 1 轮的回信"),
+  );
+  assert.equal(
+    await two.evaluate(() => PostPanePage.lastPromptId(document)),
+    "p2",
+  );
+  assert.equal(
+    await two.evaluate(() => PostPanePage.answered(document)),
+    false,
+  );
+  await two.close();
+});
+
+test("submit reports the id of the prompt it sent", async () => {
+  const fresh = await browser.newPage();
+  await fresh.setContent(fixture);
+  await fresh.addScriptTag({ path: script });
+  // The page draws the sent prompt with its id a moment after the click.
+  await fresh.evaluate(
+    (html) => {
+      document
+        .getElementById("slot")
+        .addEventListener("click", () =>
+          setTimeout(
+            () =>
+              document
+                .querySelector("main")
+                .insertAdjacentHTML("beforeend", html),
+            300,
+          ),
+        );
+    },
+    attached("N", "p9"),
+  );
+  const result = await fresh.evaluate(() =>
+    PostPanePage.submit(document, "很长的送审"),
+  );
+  assert.deepEqual(result, { ok: true, promptId: "p9" });
+  await fresh.close();
+});
