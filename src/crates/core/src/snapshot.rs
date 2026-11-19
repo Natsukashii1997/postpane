@@ -8,9 +8,10 @@ use super::*;
 /// Until every clock-driven change has a deadline, one is due this often.
 pub(crate) const SAFETY_REFRESH_MS: i64 = 30_000;
 
-/// The wall clock a snapshot is rendered at, in milliseconds. Tests pin it,
-/// so two renders compare at moments they choose rather than whenever the
-/// test thread happens to run.
+/// The wall clock a snapshot is rendered at, and the Grok bot roster is
+/// polled by, in milliseconds. Tests pin it, so two renders or two looks
+/// compare at moments they choose rather than whenever the test thread
+/// happens to run on a busy machine (L-12, L-17).
 pub(crate) fn wall_clock_ms() -> i64 {
     #[cfg(test)]
     if let Some(pinned) = PINNED_CLOCK.get() {

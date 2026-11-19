@@ -40,10 +40,9 @@
 先 `source ~/.cargo/env`，并把 `~/.bun/bin` 放进 PATH。
 
 ```sh
-pnpm install
-node src/tooling/package-resources.mjs   # 生成打包资源目录（不进仓库）；新目录跑 cargo test 前必须先跑
+bash scripts/setup-worktree.sh           # 新目录备环境：先定构建目录，再 pnpm install、生成打包资源目录（不进仓库），顺序写死（L-01、L-34）；共用构建目录时把绝对路径当参数
 pnpm run check                           # 格式、类型、构建、边界检查、cargo check
-pnpm test                                # Rust + 前端 + MCP + 插件测试
+pnpm test                                # Rust + 前端 + MCP + 插件测试：五套都跑完再汇总，任何一套失败整体非零（L-47）
 pnpm --filter @agent-hud/desktop exec tauri build --bundles app   # 打包；不要用 --bundle（生成 DMG 时会自动启动应用）
 node --test tests/*.test.mjs             # 交接格式 + 通用规则（含自测）
 node scripts/check-rules.mjs             # 只跑通用规则检查
@@ -74,6 +73,7 @@ docs/
   其余               上游技术文档（开发、接入约定、钩子、会话数据、平台构建等）
 scripts/
   check-rules.mjs    通用规则检查（只查机器能判定的）
+  setup-worktree.sh  新 worktree 备环境（见「运行」）
 tests/               node:test 测试（协作骨架）
 ```
 

@@ -62,6 +62,20 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
     });
     assert.equal(signed.status, 0, signed.error?.message ?? signed.stderr);
   }
+  // A program just written starts slowly the first time on a busy machine,
+  // seconds to tens of seconds. Start it once here, with time to spare, so the
+  // relay's own wait on the engine (45 s) measures only the request (L-47, L-48).
+  const started = spawnSync(file, [], {
+    input: "",
+    encoding: "utf8",
+    timeout: 120_000,
+  });
+  assert.equal(
+    started.status,
+    0,
+    started.error?.message ??
+      `the stand-in engine did not start: ${started.stderr}`,
+  );
   return {
     file,
     requests: () =>

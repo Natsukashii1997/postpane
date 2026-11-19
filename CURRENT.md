@@ -12,6 +12,32 @@
 
 
 
+## 积压清单 B 批：时间敏感测试固定时钟、MCP 替身预热、全量测试跑完再汇总、TS 小人导演对拍、check 按归属记录比、备环境脚本（2026-11-19，Claude 子 agent，常浩批了积压清单组 1、2、4、5；已提交、无需发布）
+
+- 时间：开工 `2026-11-19 11:01`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 1（L-12、L-17、L-47）、组 2（L-49）、组 4（E-15、E-20）、组 5（L-34、E-13）的项目内改动。依赖 PR #414（LESSONS 补层级词）：#414 合并后本 PR 要变基，LESSONS 同几行会冲突，以本 PR 的为准。
+- 改了哪些文件：
+  - 常浩要求的：
+    - L-12：`src/crates/core/src/demo/mod.rs` 的 `a_pass_with_nothing_new_renders_nothing_until_something_changes` 改用固定时钟 `snapshot::PINNED_CLOCK`，末尾补一句「到时限照样重画」。
+    - L-17：`src/crates/core/src/lib.rs`（`look`）、`source_db.rs`（记下次轮询时间）改读 `snapshot::wall_clock_ms()`（正式运行就是真实时间）；`source_db/tests.rs` 的 Grok 测试固定时钟，验「差 1 毫秒不到点、满 10 秒到点」，去掉原来把到点时间改成 0 的写法；`snapshot.rs` 注释同步。
+    - L-47：`src/apps/mcp/test/host-tools.test.mjs` 替身引擎编完先单独启动一次（给 120 秒），中转等引擎的 45 秒只算请求；新增 `src/tooling/test-all.mjs`，`package.json` 的 `test` 改成它：五套依次跑完再汇总；测试 `tests/test-all.test.mjs`。
+    - L-49：新增 `src/packages/hud/test/director-cases.test.ts`，TS 导演回放 `src/crates/hud/src/bots/director-cases.json`，和 Rust 那条回放同一份用例；`mark-director.ts` 经 Vite 加载（L-53）。
+    - E-15、E-20：`.agents/skills/postpane-round/scripts/install-guard.sh` 加 `check_record`、`main_worktree`，`install.sh check` 不给产物路径时调它；`tests/install-guard.test.mjs` 加两条。
+    - L-34、E-13：新增 `scripts/setup-worktree.sh`，测试 `tests/setup-worktree.test.mjs`；`AGENTS.md`「运行」、「结构」和 `SKILL.md` 第 1 步指向它，`steps.json` 的 start 痕迹加它。
+    - `docs/LESSONS.md`：L-05、L-12、L-17、L-34、L-47、L-49 的升级行改成实际结果；`EVOLUTION.md`：E-13、E-15、E-20 改「已采纳」并写批准与落地。
+  - 顺手改的：`AGENTS.md`「运行」里 `pnpm test` 那行注释补「五套都跑完再汇总」。
+  - **改变了已有行为的**：① `pnpm test` 原来 `&&` 串联、一套失败后面不跑；现在五套都跑，最后打印汇总，任何一套失败整体退出码 1（以前是失败那一套自己的退出码，如 cargo 的 101）。② `install.sh check` 不给产物路径时，原来拿当前目录下的产物比；现在按归属记录比：功能 worktree 只认自己装的，主目录还认已合进 main 的，没有记录就让带产物路径；带产物路径的用法不变。③ MCP 测试每个替身多启动一次（每次零点几秒）。
+- 测试：改动前（origin/main `a342c1c`）`node --test tests/*.test.mjs` `ℹ pass 43` / `ℹ fail 0`，`pnpm run check` exit 0，`pnpm test` exit 0（cargo 合计 `1001 passed; 0 failed`，前端 462/0，MCP 9/0，插件 14/0，Chrome 插件 28/0）。改动后见下一行。每项改前都在旧代码上红过一次：L-12、L-17 注入「机器忙」的延时，旧代码两条都失败、新代码同样注入两条都过；L-47 注入「替身第一次启动停 50 秒」，旧代码 45 秒后 `Cannot read properties of undefined (reading 'description')`、新代码通过；L-49 把 TS 的 failed 提示改成 limit-hit，原有前端 462 条全绿、新回放测试变红；E-15/E-20、备环境脚本、汇总脚本的新测试先在旧代码上跑出红。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-b-batch/`（`red/` 是验红，`*-baseline.log`、`*-final.log` 是全量）。
+- 改动后全量：FINAL_RESULTS
+- 验证：全在测试里；`install.sh` 只在 `tests/install-guard.test.mjs` 的临时目录和替身里跑，没有对 `/Applications` 装机。
+- 截图：无（没有界面改动）。
+- 发布与回读：无需发布（测试、脚本和文档）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - L-49 积压清单目标是〔机检〕，驿窗没有必经检查，只能标〔提醒〕部分升级；`model.ts` ↔ `vendors.rs`、`stale.ts` ↔ `stale.rs` 两对没有对拍。
+  - SKILL.md 第 1 步按组 5 已批改了（E-13 落地）；E-15/E-20 改做〔机检〕，SKILL.md 不用改。
+  - 本项目没有 `docs/DECIDED.md`，本 PR 不碰界面。
+  - skill 进化：E-13、E-15、E-20 已采纳（本 PR）。
+- 本轮新坑：L-53
+
 ## LESSONS 升级行补层级词，规则检查加 lessons 规则（2026-11-19，Claude 子 agent，常浩批了积压清单组 1、2、4、5 和「LESSONS 升级行一次补齐」；已提交、无需发布）
 
 - 时间：开工 `2026-11-19 10:47`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）第 4 节：项目 LESSONS 的升级行不带〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕层级词，L-29 之后 13 条干脆没有升级行。

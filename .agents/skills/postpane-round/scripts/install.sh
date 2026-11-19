@@ -3,7 +3,8 @@
 # 由 2026-11-04 至 11-06 十来轮手敲的同一串命令收成脚本；每一步对应的坑见 SKILL.md「3. 装机回读」。
 #
 #   bash install.sh <证据目录短名> [产物 .app 路径]   装机，证据放 evidence/<今天>-<短名>/（短名不带日期，如 341-relay-toggle）
-#   bash install.sh check [产物 .app 路径]            只比对：/Applications 里的是不是自己打的这份（L-05），并说现在装的是谁的
+#   bash install.sh check [产物 .app 路径]            只比对：/Applications 里的是不是自己打的这份（L-05），并说现在装的是谁的；
+#                                                    不给产物路径就按归属记录比（E-15、E-20），见 install-guard.sh 的 check_record
 #   加 --force（放在哪都行）：有回信正在转回的接力也照装（L-44，先问过常浩才加）
 #   加 --takeover（放在哪都行）：现在装着的是别的会话的包也照装（L-05，先确认对方的包不再需要才加）
 #
@@ -38,6 +39,9 @@ source "$HERE/install-guard.sh"
 if [ -z "$MODE" ]; then
   echo "用法：bash install.sh <证据目录短名> [产物路径] | bash install.sh check [产物路径]" >&2
   exit 2
+fi
+if [ "$MODE" = check ] && [ ${#ARGS[@]} -lt 2 ]; then
+  check_record
 fi
 # E-17：脚本自己加日期；短名再带日期，备份会落进日期重复的目录、回滚命令也跟着错。
 if [[ "$MODE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}- ]]; then

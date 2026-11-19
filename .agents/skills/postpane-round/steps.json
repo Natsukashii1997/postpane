@@ -86,6 +86,7 @@
         "git worktree add",
         "^EnterWorktree",
         "package-resources\\.mjs",
+        "setup-worktree\\.sh",
         "gh issue create",
         "^Skill project-starter",
         "pnpm install",

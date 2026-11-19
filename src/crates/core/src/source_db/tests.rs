@@ -571,6 +571,9 @@ fn grok_bot_session_works_while_a_message_has_no_reply_and_idles_once_answered()
         .unwrap();
     };
     let now = chrono::Utc::now().timestamp_millis();
+    // The poll runs on the pinned clock: a refresh that takes longer than the
+    // 10 seconds on a busy machine must not make the next look due (L-17).
+    crate::snapshot::PINNED_CLOCK.set(Some(now));
     let user = json!({"kind":"message","role":"user","id":"t1u","requestId":"r1","timestampMs":now - 700_000,"isStreaming":false});
     let reply =
         json!({"kind":"send-message","id":"t1s1","requestId":"r1","timestampMs":now - 600_000});
@@ -605,8 +608,9 @@ fn grok_bot_session_works_while_a_message_has_no_reply_and_idles_once_answered()
     assert_eq!(state(&mut backend), "running");
     // While it works the roster is looked at again, every 10 seconds.
     assert!(backend.reads.bot_poll.is_some());
+    crate::snapshot::PINNED_CLOCK.set(Some(now + crate::BOT_POLL_MS - 1));
     assert!(!backend.look());
-    backend.reads.bot_poll.as_mut().unwrap().0 = 0;
+    crate::snapshot::PINNED_CLOCK.set(Some(now + crate::BOT_POLL_MS));
     assert!(backend.look());
     assert!(backend.reads.bot_poll.is_none());
     write(
