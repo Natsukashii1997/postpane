@@ -109,19 +109,21 @@ test("submit empties a draft left in the composer before sending", async () => {
 // becomes an attachment beside the box that lights send. `leftover` puts one
 // there before the words come, as a failed earlier try would leave it;
 // `draft` leaves words in the box; `keep` takes in only that share of each
-// paste, as a page cutting it short would.
+// paste, as a page cutting it short would; `alter` takes each paste in with
+// its first character changed, as many characters but not the words.
 const composer = async ({
   limit = 9000,
   attachFrom = Infinity,
   leftover = false,
   draft = "",
   keep = 1,
+  alter = false,
 } = {}) => {
   const fresh = await browser.newPage();
   await fresh.setContent(fixture);
   await fresh.addScriptTag({ path: script });
   await fresh.evaluate(
-    ({ limit, attachFrom, leftover, draft, keep }) => {
+    ({ limit, attachFrom, leftover, draft, keep, alter }) => {
       window.pastes = [];
       const box = document.querySelector(".ProseMirror");
       box.textContent = draft;
@@ -143,7 +145,8 @@ const composer = async ({
         const text = event.clipboardData.getData("text/plain");
         window.pastes.push(text);
         if (text.length <= limit && window.pastes.length <= attachFrom) {
-          const kept = text.slice(0, Math.ceil(text.length * keep));
+          let kept = text.slice(0, Math.ceil(text.length * keep));
+          if (alter) kept = "某" + kept.slice(1);
           document.execCommand("insertText", false, kept);
         } else attach();
       });
@@ -154,6 +157,7 @@ const composer = async ({
       leftover,
       draft,
       keep,
+      alter,
     },
   );
   return fresh;
@@ -273,6 +277,16 @@ test("a blank line at a cut still goes in", async () => {
 test("a piece that went in short stops the sending", async () => {
   const fresh = await composer({ keep: 0.9 });
   assert.deepEqual(await send(fresh, brief(800)), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+test("words the page changed, as many characters, are not sent", async () => {
+  const fresh = await composer({ alter: true });
+  assert.deepEqual(await send(fresh, brief(20)), {
     ok: false,
     reason: "composer-mismatch",
   });

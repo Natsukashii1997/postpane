@@ -243,9 +243,8 @@
   /** Whether the composer holds `text`, spaces aside, give or take a few
    * characters: a code block's label more, a Markdown mark the box drew
    * fewer. Words left from before show as far more; words that went into an
-   * attachment, or a paste the page cut short, as fewer (#429). Pasted words
-   * are held to each piece in full (`paste`); this is what `insertText`,
-   * when paste is not taken, is held to. */
+   * attachment as fewer (#429). Only words typed in with `insertText`, when
+   * paste is not taken, are held to this; pasted ones must be the same. */
   function holds(box, text) {
     return Math.abs(bare(box.textContent).length - bare(text).length) <= 40;
   }
@@ -316,8 +315,12 @@
     // the box, which emptying it does not reach, would go out with these
     // words and be reviewed in their place (#429).
     if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+    // Pasted, the box holds the words as typed: spaces aside, the very same
+    // ones (#435 review P1-01). Typed in when paste is not taken, a few
+    // characters either way (`holds`).
+    let held = () => bare(box.textContent) === bare(text);
     const pasted = await paste(doc, box, text);
-    let button = pasted ? await waitFor(() => holds(box, text) && sendReady(doc), 3000) : null;
+    let button = pasted ? await waitFor(() => held() && sendReady(doc), 3000) : null;
     if (!button) {
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
@@ -325,10 +328,11 @@
       if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
+      held = () => holds(box, text);
       button = await waitFor(() => sendReady(doc), 5000);
     }
     if (!button) return { ok: false, reason: "send-failed" };
-    if (!holds(box, text)) return { ok: false, reason: "composer-mismatch" };
+    if (!held()) return { ok: false, reason: "composer-mismatch" };
     const before = lastPromptId(doc);
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
