@@ -523,3 +523,11 @@
 - 正确做法：还原后马上 `touch` 还原的文件（或改用 `git checkout -- <文件>` / `git stash` 一类会写新修改时间的方式），再跑全量；撤修复验证的结论照常有效，因为每一次撤改都写了新修改时间、触发了重编。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-18-347-review-gate/revert-checks.log`；`touch` 后全量 `cargo test -p agent-hud-host` 135/0。
 - 升级：〔提醒〕未升级。可提议并进全局 G-23（同一根因）。
+
+## L-55 用 `ditto` 备份驿窗数据目录里的 `chatgpt/`，碰到 `extension.sock` 报错退出，后面的命令全没跑（2026-11-19）
+
+- 现象：接力审核门生效切换前按生效门备份 `<数据目录>/chatgpt/`，`ditto <数据目录>/chatgpt <证据目录>/chatgpt-before && … && install.sh …` 第一步就报 `extension.sock: Operation not supported on socket`、退出码 1，后面的装机没跑。
+- 根因：`chatgpt/` 里有 Chrome 插件转接用的 Unix 套接字 `extension.sock`（驿窗运行时一直在），`ditto` 不能复制套接字，遇到就整体失败。
+- 正确做法：备份这个目录用 `rsync -a --no-specials --no-devices <数据目录>/chatgpt/ <证据目录>/chatgpt-before/`（跳过套接字，其余照抄），再 `cmp` 核一遍 `handoffs.json`；套接字不用备份，驿窗启动时会重建。还原时同样只拷普通文件。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-19-review-gate-golive/chatgpt-before/`（1.7 MB，`handoffs.json` 与原件 `cmp` 一致）。
+- 升级：〔提醒〕未升级（2026-11-19：只在生效切换这类手动备份时碰到；install.sh 不备份数据目录，要备份时照这条做）。

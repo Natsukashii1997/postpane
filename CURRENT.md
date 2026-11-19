@@ -7,6 +7,28 @@
 
 
 
+## 接力审核门生效上线：四处规则、#348、#411 合并，从 main 打包装机，MA-02 v0.3 生效（2026-11-19，Claude，常浩回「三件都按推荐」、旧接力已在侧栏结束，此前授权「按推荐开工」含合并装机；已提交、已发布 `d074d92e787e` 回读通过）
+
+- 时间：开工 `2026-11-19 17:20`（会话记录推算，未用 `date` 记）。来由：常浩 11-19「抓紧把任务完成上线，运行新的规则」；生效门合并前四项（第 2 批 L3、第 3 批、第 4 批模拟台账、四处规则复核）齐了。
+- 改了哪些文件：
+  - 常浩要求的：
+    - 合并：multi-agent#7 `2cc1f34`、agent-kit#71 `587de56`、digital-twin#185 `8fccc17`、my-skills#97 `f11e44d`（四个本机主目录已 `pull`）→ postpane #348 `360eedb`（PR 上写「解冲突未复审」）→ #411 `3d97f61`（基线改 main 后显示冲突：#411 叠在 #348 上、#348 squash 合并后的假冲突；核过 main 上 #348 的树与 #411 所含的完全一致，`-s ours` 并入，内容不变）。
+    - MA-02 第 7 节写 v0.3 生效记录与切换时开着的接力轮数，`runs/runs.jsonl` 补 R-20261119-01～03：multi-agent#10 `2628966`。
+    - 本节交接；`docs/LESSONS.md` L-55。
+  - 我顺手改的：无。
+- 测试：主目录 main `3d97f61` 三条全量：`pnpm run check` 退出码 0；`pnpm test` 退出码 0（cargo 合计 `1043 passed`，前端 `ℹ pass 475` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，扩展 `ℹ pass 28`，另一组 `ℹ pass 11`）；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-golive/main-*.log`。multi-agent `node --test tests/*.test.mjs` `ℹ pass 19` / `ℹ fail 0`。
+- 验证：装后新版读旧账本（89 张）没生成 `unreadable` 备份；开着的 6 张工程审查各记一步「按审核门续审：本次授权周期已审 N 轮」并分到审查链，思维评审那张不挂链；`config.json` 没写上限，即默认 5。装后侧栏截图正常、无系统弹窗。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-review-gate-golive/`（`smoke-before-*`、`smoke-after-*`、`smoke-motion-1.png`、`smoke-before-after-1.png`）。
+- 发布与回读：`install.sh review-gate-golive --takeover`（原装的是 #419 worktree 的包，#420 已合并、内容在 main 里）：产物 `d074d92e787e` / 已装 `d074d92e787e`，签名证书一致；`install.sh check` 一致，已装来自主目录 main `3d97f61a7ec4`。装前备份 `chatgpt/` 在同目录 `chatgpt-before/`（`handoffs.json` 与原件 `cmp` 一致）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-19-review-gate-golive/PostPane-25b994117bc8.app" /Applications/PostPane.app; open /Applications/PostPane.app`，回退前先把 `chatgpt-before/` 的普通文件拷回数据目录（旧版读不懂新账本会清空，MA-02 第 5.6 节）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 常浩回「已结束」时账本里 #411 的两张（`h1a1f09f8a3f02`、`h1a1f265307d01`）仍开着；没人再往里送审，放 24 小时会被驿窗自动结束。冒烟接力改从新会话发起，不续进它们。
+  - 迁移给每张旧接力单独开审查链，「审查链总轮数」只数本张的回信（#411 链上记 1 轮、实际共 3 轮；授权周期轮数是对的），只影响展示与运行记录，已写进 MA-02 第 7 节。
+  - 第 4 批报告的旧版现象：决策升级后续送的回信不自动转回（旧版自动往返停下后没再打开，属预期）；轮数多记一轮，留新版冒烟复验。
+  - Fable 5.2 评估提的后续：闲置自动结束的到顶接力常浩无法手动了结（`end()` 只认还开着的），发起目录已删时会一直留在快照里——另开单；`docs/DECIDED.md` 还没建，11-19 定的停章甲、上限 1–9、「过」章没登记。
+  - 已在用的会话要重开或重连 MCP，旧 MCP 进程的工具说明还是旧规则。
+  - skill 进化：`postpane-round` 装机一步可补「生效切换类手动备份数据目录照 L-55」，未改，待常浩点头。
+- 本轮新坑：L-55
+
 ## #411 L2 第 2、3 轮返修：停章按审查类型了结、到顶未了结的不受一天限制、「审核通过」和下一轮预告看后台放行（2026-11-19，Claude，常浩回「按推荐开工」：补做第 4 批、授权第 3 轮复审、四份草稿送一轮合并复核、别项目开着的接力只备份不动；第 3 轮后回「修，补改未复审」；已提交、未发布）
 
 - 时间：开工 `2026-11-19 13:50`（会话记录推算，未用 `date` 记）。来由：L2 第 2 轮（驿窗 `h1a1f09f8a3f02`，审 `b520036`）返修，剩 P2-02a、P2-02b、P2-05。
