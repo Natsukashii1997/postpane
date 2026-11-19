@@ -98,14 +98,13 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
         // handoff carries on: not told there will be no answer (P2-01).
         Trouble::NotOpened(error) => format!("驿窗没能确认 ChatGPT 审核会话已打开（{error}），这次送审目前记为失败，先别等它的回信。Chrome 插件之后若报来打开成功，驿窗会接回这次接力，回信照常转回这里。先不要再调用 relay_to_chatgpt：常浩可以在驿窗接力卡上点「重试」，重试成功后回信也照常转回这里；常浩让你重送时再调用。请向常浩说明送审目前没发出去。"),
         Trouble::NoAnswer => {
-            // A 思维评审's pass waits for the person too (#209).
+            // The answer goes back all the same (#410 S1); what comes next
+            // is the person's, but for a pass, which ends the handoff.
             let later = if handoff.thinking() {
-                "要常浩在接力卡上点「转回 Claude」或「继续自动」才会转过来"
+                "回信会照样转回这里，收口以外的结论会写明下一步等常浩决定"
             } else {
-                "写「通过」会自动转回这里，其他结论要常浩在接力卡上点「转回 Claude」或「继续自动」才会转过来"
+                "回信会照样转回这里；写「通过」的驿窗结束接力，其他结论会写明下一步等常浩决定"
             };
-            // The card's button names the doer (「转回 Codex」).
-            let later = by_doer(later, handoff.doer.as_deref());
             format!(
                 "ChatGPT {} 分钟没回信，驿窗的自动往返已经停下，这次接力交常浩处理。ChatGPT 之后回信，驿窗仍会收下：{later}。先不要再调用 relay_to_chatgpt 重送，请向常浩说明还在等 ChatGPT 回信。",
                 handoffs::REPLY_WAIT_MS / 60_000

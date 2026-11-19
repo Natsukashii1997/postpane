@@ -6889,7 +6889,9 @@ mod tests {
         assert_eq!(told.len(), 1);
         assert!(
             told[0].1.contains("ChatGPT 30 分钟没回信")
-                && told[0].1.contains("写「通过」会自动转回这里")
+                && told[0].1.contains("回信会照样转回这里")
+                && !told[0].1.contains("才会转过来"),
+            "every answer goes back now (#410 S1)"
         );
         let shown = desk.projection(late);
         assert_eq!(shown[0]["auto"], false);
@@ -6905,14 +6907,14 @@ mod tests {
         assert_eq!(desk.projection(late + 3)[0]["status"], "closed");
         let _ = handoff;
 
-        // A 思维评审's pass waits for the person, so it says so.
+        // A 思维评审 has no pass that ends it by itself, so it says none.
         let (_temp, desk) = self::desk();
         let lines = Fake::default();
         thinking(&desk, &lines);
         assert!(desk.tell(&lines, late));
         let text = last_sent(&lines).2;
-        assert!(!text.contains("写「通过」会自动转回"), "{text}");
-        assert!(text.contains("要常浩在接力卡上点「转回 Claude」"));
+        assert!(!text.contains("写「通过」"), "{text}");
+        assert!(text.contains("收口以外的结论会写明下一步等常浩决定"), "{text}");
     }
 
     /// #318: a session that cannot take it now finds it in its queue; one
@@ -6948,7 +6950,7 @@ mod tests {
         assert!(desk.tell(&lines, late));
         let told = sent_as(&lines, "codex");
         assert_eq!(told.len(), 1);
-        assert!(told[0].1.contains("点「转回 Codex」"), "{}", told[0].1);
+        assert!(told[0].1.contains("回信会照样转回这里"), "{}", told[0].1);
         assert!(
             last_step_text(&desk, late).ends_with("已发到 Codex 会话")
                 || last_step_text(&desk, late).ends_with("sent to the Codex session")
