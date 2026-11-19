@@ -205,12 +205,59 @@
 
   const bare = (text) => text.replace(/\s/g, "");
 
-  /** Whether the composer holds no more than `text`: words left from before
-   * show as more. The box may draw Markdown (fewer characters) or turn a long
-   * paste into an attachment (none), so only more counts; a few characters
-   * more (a code block's label) are allowed, a left brief is far more. */
+  /** Whether the composer holds `text` and nothing more. Words left from
+   * before show as more: a few characters more (a code block's label) are
+   * allowed, a left brief is far more. The box may draw Markdown (a few
+   * characters fewer), but words it holds a fifth short of did not go in as
+   * text: in an attachment the page shows none of them (#429). */
   function holds(box, text) {
-    return bare(box.textContent).length <= bare(text).length + 40;
+    const held = bare(box.textContent).length;
+    const words = bare(text).length;
+    return held <= words + 40 && held >= words * 0.8;
+  }
+
+  /** chatgpt.com turns one paste of somewhere between 8000 and 10000
+   * characters into an attachment (#429, 2026-11-19: 8000 stayed text, 10000
+   * did not). */
+  const PIECE = 6000;
+
+  /** `text` in pieces of at most `max` characters, cut after a line where it
+   * can be: a line longer than `max` is cut within, never inside a character
+   * of two UTF-16 units (an emoji). */
+  function pieces(text, max = PIECE) {
+    const out = [];
+    let piece = "";
+    for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+      for (let at = 0, end; at < line.length; at = end) {
+        end = Math.min(at + max, line.length);
+        if (end < line.length && /[\uD800-\uDBFF]/.test(line[end - 1])) end -= 1;
+        const part = line.slice(at, end);
+        if (piece.length + part.length > max) {
+          out.push(piece);
+          piece = "";
+        }
+        piece += part;
+      }
+    }
+    if (piece) out.push(piece);
+    return out;
+  }
+
+  /** Pastes `text` at the end of the box a piece at a time; paste keeps its
+   * paragraphs. Whether each piece went in (the box grew). */
+  async function paste(doc, box, text) {
+    for (const piece of pieces(text)) {
+      if (!bare(piece)) continue;
+      const before = bare(box.textContent).length;
+      const selection = doc.getSelection();
+      selection.selectAllChildren(box);
+      selection.collapseToEnd();
+      const data = new DataTransfer();
+      data.setData("text/plain", piece);
+      box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+      if (!(await waitFor(() => bare(box.textContent).length > before, 3000))) return false;
+    }
+    return true;
   }
 
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`. */
@@ -227,12 +274,17 @@
       doc.execCommand("delete", false);
       await waitFor(() => !sendReady(doc), 2000);
     }
-    // Paste keeps paragraphs and lets ChatGPT turn a very long text into an attachment.
-    const data = new DataTransfer();
-    data.setData("text/plain", text);
-    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    let button = await waitFor(() => holds(box, text) && sendReady(doc), 3000);
+    // Send lit with the box empty: an attachment an earlier try left beside
+    // the box, which emptying it does not reach, would go out with these
+    // words and be reviewed in their place (#429).
+    if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+    const pasted = await paste(doc, box, text);
+    let button = pasted ? await waitFor(() => holds(box, text) && sendReady(doc), 3000) : null;
     if (!button) {
+      // Send lit with the words not in the box: something else is in the
+      // composer, such as a paste ChatGPT made an attachment (#429). Sent,
+      // the page would show no words to know the answer by.
+      if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
       button = await waitFor(() => sendReady(doc), 5000);

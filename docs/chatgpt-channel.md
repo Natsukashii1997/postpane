@@ -45,7 +45,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 | `focus` | `conversation`                      | 把这个会话的标签页切到前台（没开就打开）                                                                                                                |
 | `reread` | `conversation`                     | 重读名单里的会话（#356）：标签页先核对自己显示的是这个会话；最新一条回复已写完（600 毫秒内正文不变，和正常上报同一标准）、而且排在最新一条用户消息之后，就按 `turn complete` 再报一次（带 `reread: true`）；正在写或还没回就不报。不回应驿窗。标签页没开就在后台打开；内容脚本断了（插件重新加载过）先补注入再问；页面还没画出最新提问之后的回复、也不在生成（历史还没加载完，`loaded: false`）就每 2 秒再问，最多再问 5 次。「最新一轮」按页面里各条消息单元键第一次出现的顺序定（页面把对话放两份：隐藏的一份各轮齐全、回信不画，显示的一份只画屏幕附近几轮，#410）；最新一轮已答、回信只在隐藏那份里时不报，先把对话滚到底；标签页在后台（ChatGPT 不在后台标签页画新内容），就把它在自己窗口里短暂切到前台再问，最多 3 次、每次隔 1.5 秒，问完切回原来在前台的标签页（这期间常浩自己换过标签就不动），不把 Chrome 窗口提到最前 |
 
-`reason` 取值：`not-watched`、`no-composer`、`busy`（正在生成）、`send-failed`、`timeout`、`tab-closed`。
+`reason` 取值：`not-watched`、`no-composer`、`busy`（正在生成）、`send-failed`、`composer-mismatch`（输入框里的字和要送的话对不上：多出旧稿，或少了一截、发送键却亮着，比如长文被转成附件，#429）、`timeout`、`tab-closed`。插件收到 `send-failed`、`composer-mismatch` 会把标签页切到前台、清空输入框再试一次；输入框外的附件块清不掉，留着附件时两次都报 `composer-mismatch`，交常浩到页面上移除。
 
 ## 驿窗这一端
 
@@ -142,5 +142,6 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 正文组件 `data-d-component`：text / title / list / list-item / code / table / table-row / table-cell；加粗 `[data-d-default-strong]`。
 - 代码块两种画法：CodeMirror `.cm-content[data-language]`（行是 `.cm-line`），或 `pre > code`（语言在块头文字里）。
 - 输入框 `.ProseMirror[contenteditable=true]`；发送 `form button[type=submit]`；生成中同位置是「停止」按钮。
+- 送话用粘贴（保留段落），按行切成每段不超过 6000 字依次贴到末尾，每段等输入框确实变长再贴下一段。ChatGPT 会把单次粘贴超过某个长度（在 8000 到 1 万字之间）的文字转成附件「粘贴的文本.txt」（2026-11-19 实测按字符数算：8000 字仍是正文，1 万字成附件；切点落在代码围栏里也照原样逐行保留，输入框不画代码块）：转了附件，页面上没有用户消息气泡、也没有原文。会话第一轮插件不报 `turn complete`；已有旧气泡时（推断，未实测）插件拿上一轮的提问上报，驿窗判对不上本轮（#429，L-58）。贴之前输入框已空、发送键却亮着（上次留下的附件），或贴完装不下八成原文、发送键却亮着，都不发，报 `composer-mismatch`。
 - 新回复先出一个空的占位块，答案随后写进同一个块、同一个 `messageId`。插件只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`；否则占位块会被当成答完，同一 `messageId` 的真回复随后被当成已报过而丢掉（2026-11-07 接力 `h1a1b1fed89e00`，L-18）。
 - 页面选择器只写在 `src/apps/chrome-extension/page.js` 一处；改版失效时插件报 `no-composer` 等原因，驿窗退回半自动。
