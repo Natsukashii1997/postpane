@@ -20,7 +20,8 @@ import { usePaper } from "../paper";
 import type { DeskChat } from "../chatgpt-desk";
 import { replyTime } from "../scene/hermes-peek";
 import { dateFormat } from "@agent-hud/ui/format";
-import { progressLine, round } from "../alerts/handoff-card";
+import { progressLine } from "../alerts/handoff-card";
+import { RelayTag } from "./RelayTag";
 import type { Handoff, RelayLaunch } from "@agent-hud/protocol";
 import {
   alreadyQueuedText,
@@ -665,38 +666,12 @@ export function LiveRow({
                 color: inks.secondary,
               }}
             >
-              <button
-                type="button"
-                title={zh ? "打开接力卡" : "Open the handoff card"}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (open) return onOpen(false);
-                  card.open(handoff.id);
-                }}
-                style={{
-                  ...noButtonChrome,
-                  flex: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  height: 17,
-                  padding: "0 5px",
-                  boxSizing: "border-box",
-                  border: "1.5px dashed currentColor",
-                  borderRadius: 2,
-                  color: paper?.blue ?? inks.secondary,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                  cursor: "pointer",
-                }}
-              >
-                {zh
-                  ? `接力 ${round(handoff).at}/${round(handoff).of}`
-                  : `Relay ${round(handoff).at}/${round(handoff).of}`}
-              </button>
+              <RelayTag
+                handoff={handoff}
+                zh={zh}
+                color={paper?.blue ?? inks.secondary}
+                onClick={() => (open ? onOpen(false) : card.open(handoff.id))}
+              />
               <span
                 style={{
                   overflow: "hidden",

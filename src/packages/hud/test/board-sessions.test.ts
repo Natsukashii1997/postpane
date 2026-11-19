@@ -99,11 +99,23 @@ test("小收据：等你 · 在跑 · 接力的计数来自本家工作区，Her
   const work = (mark: string) => peekWork(snapshot, mark);
   assert.deepEqual(work("claude"), { waiting: 0, running: 1, relays: 1 });
   assert.deepEqual(work("codex"), { waiting: 1, running: 1, relays: 1 });
+  // ChatGPT counts its relays by group, not its review conversations
+  // (#427): both are under way, the auto round trip on.
   assert.deepEqual(work(agentArtworkKey("chatgpt")), {
     waiting: 0,
-    running: 1,
+    running: 2,
     relays: 2,
   });
+  // Nine open (#427): 要你管 count as waiting on you, 在动 as running, 静着
+  // only in the total.
+  assert.deepEqual(
+    peekWork(scene("chatgpt-nine-relays").snapshot, agentArtworkKey("chatgpt")),
+    {
+      waiting: 5,
+      running: 3,
+      relays: 9,
+    },
+  );
   assert.deepEqual(work("deepseek"), { waiting: 1, running: 1, relays: 0 });
   assert.equal(work("hermes"), undefined);
   // 「待核对」 is not counted as waiting on you.

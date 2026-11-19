@@ -36,7 +36,10 @@ export function deskHeight(
     desk.chats.length * DESK_CHAT +
     (desk.chats.length === 0 || desk.more > 0 ? DESK_NOTE : 0);
   const lower = desk.reviews.length
-    ? DESK_SLIP_PAD * 2 + DESK_LABEL + desk.reviews.length * DESK_REVIEW
+    ? DESK_SLIP_PAD * 2 +
+      DESK_LABEL +
+      desk.reviews.length * DESK_REVIEW +
+      (desk.reviewsMore > 0 ? DESK_NOTE : 0)
     : 0;
   return (upper + lower) * scale;
 }

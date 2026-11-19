@@ -10,12 +10,13 @@ import { Avatar } from "./HandoffAvatar";
 import { HandoffPoints } from "./HandoffPoints";
 import { HandoffHead } from "./HandoffHead";
 import { HandoffTitleRow } from "./HandoffTitleRow";
+import { RelaySwitch } from "./RelaySwitch";
 import { doerName, doerOf } from "./handoff-doer";
 import { ListTear, cardInks, type Inks } from "../permissions/ListCard";
 import { buttonFace } from "./button-face";
 import * as foot from "./handoff-actions";
 import {
-  chatgptSession,
+  chatgptTarget,
   doerSession,
   clock,
   round,
@@ -27,6 +28,8 @@ import {
 /** The handoff card opened in the sidebar (HUDScene shows it): from a reply,
  * or from 「正在进行」's 「接力 1/2」 tag. One per window, as card-hold's. */
 let opened: string | null = null;
+/** The relays it was opened among, which 上一单 / 下一单 step through. */
+let among: readonly string[] | null = null;
 let hosts = 0;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());
@@ -36,18 +39,26 @@ const subscribe = (listener: () => void) => {
 };
 const openedNow = () => opened;
 const hostedNow = () => hosts > 0;
-const opener = { open: (id: string) => openHandoffCard(id) };
+const opener = {
+  open: (id: string, list?: readonly string[]) => openHandoffCard(id, list),
+};
 
-/** Opens `id`'s card, or closes it (null). */
-export function openHandoffCard(id: string | null) {
+/** Opens `id`'s card among `list` (#427), or closes it (null). */
+export function openHandoffCard(id: string | null, list?: readonly string[]) {
+  among = id ? (list ?? null) : null;
   if (opened === id) return;
   opened = id;
   changed();
 }
 
+/** The relays the open card was opened among, if a list was given. */
+export const openedAmong = () => among;
+
 /** A way to open a handoff's card, where a sidebar shows it (none in a
  * preview without one). */
-export function useHandoffCard(): { open(id: string): void } | null {
+export function useHandoffCard(): {
+  open(id: string, among?: readonly string[]): void;
+} | null {
   return useSyncExternalStore(subscribe, hostedNow, hostedNow) ? opener : null;
 }
 
@@ -112,18 +123,7 @@ export function HandoffCard({
   const rows = timeline(handoff, now, zh);
   const claude = doerSession(handoff, snapshot.sessions);
   const D = doerName(handoff);
-  const chatgpt: Session | undefined =
-    chatgptSession(handoff, snapshot.sessions) ??
-    (handoff.chatgptConversation
-      ? ({
-          id: `chatgpt:${handoff.chatgptConversation}`,
-          source: "chatgpt",
-          navigationTarget: {
-            kind: "chatgpt-conversation",
-            id: handoff.chatgptConversation,
-          },
-        } as unknown as Session)
-      : undefined);
+  const chatgpt = chatgptTarget(handoff, snapshot.sessions);
 
   const go = async (session: Session | undefined) => {
     if (!session || !services?.openSession) return;
@@ -163,6 +163,13 @@ export function HandoffCard({
         tones={tones}
         zh={zh}
         onLeave={onClose}
+      />
+      <RelaySwitch
+        handoff={handoff}
+        snapshot={snapshot}
+        now={now}
+        inks={inks}
+        zh={zh}
       />
       <ListTear paper={paper} inks={inks} />
       {/* The task and ↗ back to the doer's session */}

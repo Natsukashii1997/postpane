@@ -73,3 +73,22 @@ export function chatgptSession(
   const id = `${CHATGPT_PREFIX}${conversation}`;
   return sessions.find((session) => session.id === id);
 }
+
+/** Where the card's 「查看 ChatGPT 对话」 goes: the review conversation's
+ * session when listed, else a way to its chatgpt.com page. Moved out of
+ * HandoffCard.tsx for the 300-line ratchet (#427). */
+export function chatgptTarget(
+  handoff: Handoff,
+  sessions: readonly Session[],
+): Session | undefined {
+  const listed = chatgptSession(handoff, sessions);
+  if (listed || !handoff.chatgptConversation) return listed;
+  return {
+    id: `${CHATGPT_PREFIX}${handoff.chatgptConversation}`,
+    source: "chatgpt",
+    navigationTarget: {
+      kind: "chatgpt-conversation",
+      id: handoff.chatgptConversation,
+    },
+  } as unknown as Session;
+}

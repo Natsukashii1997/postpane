@@ -467,6 +467,129 @@ const hermesDesks: Scene = {
   }),
 };
 
+// #427 (owner chose 甲): nine open relays, five the person's, three under
+// way, one quiet, and ChatGPT's own two chats replied; for the peek's
+// 「审核」, the card's 「等待处理 / 正在进行」 and the handoff card's
+// 上一单 / 下一单.
+const nineRelays: Scene = {
+  key: "chatgpt-nine-relays",
+  title: "ChatGPT 开着 9 单接力：要你管 5、在动 3、静着 1，外加两条已回对话",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "chatgpt",
+        id: "chatgpt:g-a",
+        title: "生成工作台首页预览图",
+        state: "idle",
+        lastAgo: 30,
+      }),
+      session({
+        place: "chatgpt",
+        id: "chatgpt:g-b",
+        title: "生成工作台首页预览",
+        state: "idle",
+        lastAgo: 31,
+      }),
+    ],
+    handoffs: [
+      relay({
+        id: "n-silent",
+        title: "数字分身｜0B-4c-2 秘书侧巡视",
+        doer: "claude",
+        session: "c-n1",
+        chatgpt: "g-n1",
+        phase: "working",
+        minutesAgo: 125,
+        auto: false,
+        halt: "30 分钟没回信",
+      }),
+      relay({
+        id: "n-top",
+        title: "数字分身｜#131 托管状态底座",
+        doer: "claude",
+        session: "c-n2",
+        chatgpt: "g-n2",
+        phase: "replied",
+        minutesAgo: 350,
+        reviews: 5,
+        auto: false,
+        notice: "top",
+      }),
+      relay({
+        id: "n-paused",
+        title: "驿窗｜S1 回信送回发起会话",
+        doer: "claude",
+        session: "c-n3",
+        chatgpt: "g-n3",
+        phase: "returned",
+        minutesAgo: 378,
+        reviews: 2,
+        auto: false,
+        halt: "你暂停了自动往返",
+      }),
+      relay({
+        id: "n-replied",
+        title: "数码世界｜知识库可靠接入",
+        doer: "codex",
+        session: "x-n4",
+        chatgpt: "g-n4",
+        phase: "replied",
+        minutesAgo: 450,
+        reviews: 2,
+        auto: false,
+      }),
+      relay({
+        id: "n-unsent",
+        title: "数字分身｜0B-4c-1 控制面",
+        doer: "claude",
+        session: "c-n5",
+        chatgpt: "g-n5",
+        phase: "failed",
+        minutesAgo: 492,
+      }),
+      relay({
+        id: "n-working",
+        title: "驿窗｜#348 解冲突定向复核",
+        doer: "claude",
+        session: "c-n6",
+        chatgpt: "g-n6",
+        phase: "working",
+        minutesAgo: 25,
+      }),
+      relay({
+        id: "n-fix-a",
+        title: "数字分身｜0B-4b 秘书开关",
+        doer: "claude",
+        session: "c-n7",
+        chatgpt: "g-n7",
+        phase: "returned",
+        minutesAgo: 92,
+        reviews: 3,
+      }),
+      relay({
+        id: "n-fix-b",
+        title: "驿窗｜接力审核门第 3 批",
+        doer: "codex",
+        session: "x-n8",
+        chatgpt: "g-n8",
+        phase: "returned",
+        minutesAgo: 93,
+        reviews: 2,
+      }),
+      relay({
+        id: "n-quiet",
+        title: "驿窗｜#424 Hermes 跳回飞书",
+        doer: "claude",
+        session: "c-n9",
+        chatgpt: "g-n9",
+        phase: "returned",
+        minutesAgo: 300,
+        reviews: 3,
+      }),
+    ],
+  }),
+};
+
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
@@ -489,6 +612,7 @@ export const SCENES: readonly Scene[] = [
   relayStaleBack,
   relayStaleIdle,
   relayStopOtherKind,
+  nineRelays,
 ];
 
 export function scene(key: string): Scene {

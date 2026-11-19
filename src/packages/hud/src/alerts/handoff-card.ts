@@ -2,7 +2,12 @@ import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 import { dateFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { doerName, doerOf } from "./handoff-doer.ts";
 import { endWords, stopped } from "./relay-stop.ts";
-export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
+export {
+  chatgptSession,
+  chatgptTarget,
+  doerSession,
+  handoffFor,
+} from "./handoff-doer.ts";
 
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */

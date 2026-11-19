@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Handoff, Session } from "@agent-hud/protocol";
-import { chatgptDesk, isReview, quietRelays } from "../src/chatgpt-desk.ts";
+import { chatgptDesk, isReview } from "../src/chatgpt-desk.ts";
 
 const now = Date.parse("2026-11-06T04:00:00Z"); // 12:00 in Beijing
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -32,9 +32,6 @@ const relay = (over: Partial<Handoff>): Handoff => ({
   steps: [{ at: now - 50 * min, kind: "ask" }],
   ...over,
 });
-
-const claude = (id: string, state: string) =>
-  ({ id, source: "claude", title: id, state }) as unknown as Session;
 
 test("the owner's own chats go on top, reviews below, each once", () => {
   const desk = chatgptDesk(
@@ -113,19 +110,55 @@ test("the stub says what matters most", () => {
   );
 });
 
-test("an old open relay nobody is on any more is left out", () => {
+test("every open relay is listed, the person's first and the quiet last; the stub skips the quiet", () => {
+  // #427 (owner chose 甲): the receipt counts what the paper plane counts.
   const desk = (handoffs: Handoff[], sessions: Session[] = []) =>
-    chatgptDesk({ sessions, handoffs }, now, true).reviews.map((r) => r.id);
-  const stale = relay({ phase: "replied", phaseAt: now - 3 * 60 * min });
-  // Over two hours still and its Claude session not running: gone.
-  assert.deepEqual(desk([stale]), []);
-  // Its Claude session still working keeps it.
-  assert.deepEqual(desk([stale], [claude("s1", "running")]), ["h1"]);
+    chatgptDesk({ sessions, handoffs }, now, true);
+  const quiet = relay({
+    id: "q",
+    phase: "replied",
+    auto: true,
+    phaseAt: now - 3 * 60 * min,
+  });
+  const working = relay({ id: "w", phase: "working", phaseAt: now - 5 * min });
+  const unsent = relay({ id: "u", phase: "failed", phaseAt: now - 20 * min });
+  const listed = desk([quiet, working, unsent]);
+  assert.deepEqual(
+    listed.reviews.map((r) => [r.id, r.group]),
+    [
+      ["u", "need"],
+      ["w", "move"],
+      ["q", "quiet"],
+    ],
+  );
+  assert.equal(listed.open, 3);
+  assert.equal(listed.need, 1);
+  assert.equal(listed.reviewsMore, 0);
+  // Over two hours still and its Claude session not running: listed, but
+  // its 「回信」 no longer turns the stub to 「待你看」 (#213 unchanged).
+  assert.equal(desk([quiet]).stub.text, "--");
   // Ended and closed relays are never listed.
   assert.deepEqual(
-    desk([relay({ status: "closed", phase: "ended", phaseAt: now })]),
+    desk([relay({ status: "closed", phase: "ended", phaseAt: now })]).reviews,
     [],
   );
+});
+
+test("the receipt lists four relays and counts the rest", () => {
+  const many = Array.from({ length: 6 }, (_, index) =>
+    relay({
+      id: `h${index}`,
+      chatgptConversation: `r${index}`,
+      phaseAt: now - index * min,
+    }),
+  );
+  const desk = chatgptDesk({ sessions: [], handoffs: many }, now, true);
+  assert.deepEqual(
+    desk.reviews.map((r) => r.id),
+    ["h0", "h1", "h2", "h3"],
+  );
+  assert.equal(desk.open, 6);
+  assert.equal(desk.reviewsMore, 2);
 });
 
 test("answering or a reply to read is more pressing than an overdue review", () => {
@@ -179,38 +212,4 @@ test("the panel lists every chat of today, as many as the stub counts", () => {
     true,
   );
   assert.equal(quiet.stub.text, `${quiet.day.length} 对话`);
-});
-
-test("open handoffs ChatGPT is not answering are listed, however old (#288)", () => {
-  const old = relay({
-    id: "old",
-    chatgptConversation: "r-old",
-    phaseAt: now - 64 * 60 * min,
-    halt: "常浩停了",
-  });
-  const newer = relay({
-    id: "newer",
-    chatgptConversation: "r-new",
-    doer: "codex",
-    phaseAt: now - 3 * 60 * min,
-  });
-  const answering = relay({ id: "answering", chatgptConversation: "r-live" });
-  const ended = relay({
-    id: "ended",
-    chatgptConversation: "r-end",
-    status: "closed",
-  });
-  const listed = quietRelays(
-    [old, answering, ended, newer],
-    ["chatgpt:r-live"],
-  );
-  // Newest first; the one with its own review row and the ended one are not.
-  assert.deepEqual(
-    listed.map((h) => h.id),
-    ["newer", "old"],
-  );
-  assert.deepEqual(
-    quietRelays([old, answering], []).map((h) => h.id),
-    ["answering", "old"],
-  );
 });

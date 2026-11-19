@@ -3,7 +3,9 @@
 // is at work. Where the card holds the agent's requests and replies, they are
 // what waits on you, in place of the sessions waiting. On one agent's card
 // both sections always stand, saying so when empty, and each lists its first
-// few with the rest behind 「还有 n 条」 (owner, 2026-11-15).
+// few with the rest behind 「还有 n 条」 (owner, 2026-11-15). On ChatGPT's
+// card its relays come first in each (#427, the owner chose 甲 on
+// 2026-11-19): the person's in 「等待处理」, the rest in 「正在进行」.
 import { useState, type ReactNode } from "react";
 import type { Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
@@ -11,7 +13,9 @@ import { usePaper } from "../paper";
 import { SHOWN_ENTRIES } from "../permissions/approval-list";
 import { FoldButton } from "../permissions/FoldButton";
 import { cardInks } from "../permissions/ListCard";
+import type { GroupedRelay } from "../relay-groups";
 import type { LiveSession } from "./agent-board";
+import { RelayRows } from "./RelayRows";
 import { useBoardInks } from "./AgentBoard";
 import { PlaceRows, SessionsHeading } from "./PlaceRows";
 import { RUNNING_SHOWN, splitWork } from "./place-sessions";
@@ -26,6 +30,7 @@ export function WorkSections({
   fold,
   card = false,
   news,
+  relays,
 }: {
   snapshot: Snapshot;
   entries: readonly LiveSession[];
@@ -38,10 +43,21 @@ export function WorkSections({
   card?: boolean;
   /** The agent's requests and replies, and how many: they wait on you. */
   news?: { count: number; content: ReactNode };
+  /** ChatGPT's relays by section, and all of them in the order its handoff
+   * card steps through (#427). */
+  relays?: {
+    waiting: readonly GroupedRelay[];
+    running: readonly GroupedRelay[];
+    among: readonly string[];
+  };
 }) {
   const zh = useFormat().language === "zh";
   const { waiting, running } = splitWork(entries);
-  const waitingCount = news ? news.count : waiting.length;
+  const relaysWaiting = relays?.waiting ?? [];
+  const relaysRunning = relays?.running ?? [];
+  const waitingCount =
+    relaysWaiting.length + (news ? news.count : waiting.length);
+  const runningCount = relaysRunning.length + running.length;
   const rows = (list: readonly LiveSession[], folds?: string) => (
     <PlaceRows
       snapshot={snapshot}
@@ -52,6 +68,45 @@ export function WorkSections({
       fold={folds}
     />
   );
+  // A section's relays, then its own rows: folded together on a card.
+  const section = <T,>(
+    before: readonly GroupedRelay[],
+    after: readonly T[],
+    shown: number,
+    render: (list: readonly T[]) => ReactNode,
+  ) => {
+    const items: ({ relay: GroupedRelay } | { item: T })[] = [
+      ...before.map((relay) => ({ relay })),
+      ...after.map((item) => ({ item })),
+    ];
+    const draw = (list: readonly (typeof items)[number][]) => {
+      const own = list.flatMap((entry) =>
+        "item" in entry ? [entry.item] : [],
+      );
+      const shownRelays = list.flatMap((entry) =>
+        "relay" in entry ? [entry.relay] : [],
+      );
+      return (
+        <>
+          {shownRelays.length > 0 && (
+            <RelayRows
+              relays={shownRelays}
+              among={relays?.among ?? []}
+              now={now}
+              light={light}
+              ruleAfter={own.length > 0}
+            />
+          )}
+          {own.length > 0 && render(own)}
+        </>
+      );
+    };
+    return card ? (
+      <Folded items={items} shown={shown} light={light} render={draw} />
+    ) : (
+      draw(items)
+    );
+  };
   return (
     <>
       {(card || waitingCount > 0) && (
@@ -62,46 +117,42 @@ export function WorkSections({
       {news ? (
         // A list of its own folds itself; the replied chats fold here.
         Array.isArray(news.content) && card ? (
-          <Folded
-            items={news.content as ReactNode[]}
-            shown={SHOWN_ENTRIES}
-            light={light}
-            render={(items) => items}
-          />
+          section(
+            relaysWaiting,
+            news.content as ReactNode[],
+            SHOWN_ENTRIES,
+            (items) => items,
+          )
         ) : (
-          news.content
+          <>
+            {relaysWaiting.length > 0 &&
+              section(relaysWaiting, [], Infinity, () => null)}
+            {news.content}
+          </>
         )
-      ) : card ? (
-        <Folded
-          items={waiting}
-          shown={SHOWN_ENTRIES}
-          light={light}
-          render={(list) => list.length > 0 && rows(list)}
-        />
       ) : (
-        waiting.length > 0 && rows(waiting)
+        section(relaysWaiting, waiting, SHOWN_ENTRIES, (list) => rows(list))
       )}
       {card && !waitingCount && (
         <Empty light={light}>
           {zh ? "暂无等待处理的事" : "Nothing waiting on you"}
         </Empty>
       )}
-      {(card || running.length > 0) && (
+      {(card || runningCount > 0) && (
         <div style={{ paddingTop: card || waitingCount > 0 ? 8 : 0 }}>
-          <SessionsHeading light={light} count={running.length}>
+          <SessionsHeading light={light} count={runningCount}>
             {zh ? "正在进行" : "IN PROGRESS"}
           </SessionsHeading>
           {card ? (
-            <Folded
-              items={running}
-              shown={RUNNING_SHOWN}
-              light={light}
-              render={(list) => list.length > 0 && rows(list)}
-            />
+            section(relaysRunning, running, RUNNING_SHOWN, (list) => rows(list))
           ) : (
-            rows(running, fold)
+            <>
+              {relaysRunning.length > 0 &&
+                section(relaysRunning, [], Infinity, () => null)}
+              {rows(running, fold)}
+            </>
           )}
-          {card && !running.length && (
+          {card && !runningCount && (
             <Empty light={light}>
               {zh ? "暂无在跑的会话" : "Nothing running"}
             </Empty>

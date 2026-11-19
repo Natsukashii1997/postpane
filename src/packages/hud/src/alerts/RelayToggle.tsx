@@ -3,7 +3,8 @@
 // square, left of the stamp in the card's head. On the waiting card it opens
 // the handoff that moved last, with how many are open on its corner when
 // more than one; on the handoff card the same square, held down, goes back
-// to what the sidebar showed. It replaces #334's × beside the ↗.
+// to what the sidebar showed. It replaces #334's × beside the ↗. The card
+// it opens steps through the relays the plane counts (#427).
 import type { Handoff } from "@agent-hud/protocol";
 import { GoButton } from "../GoButton";
 import type { Paper } from "../paper";
@@ -64,7 +65,12 @@ export function EnterRelay({
           ? { text: String(live.length), fill: red, ink: ground }
           : undefined
       }
-      onClick={() => card.open(live[0].id)}
+      onClick={() =>
+        card.open(
+          live[0].id,
+          live.map((handoff) => handoff.id),
+        )
+      }
     />
   );
 }

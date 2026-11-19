@@ -48,6 +48,18 @@ export function reviewPhase(
   }
 }
 
+/** A listed relay's word (#427): 「停」 and 「未完暂停」 over its phase; a
+ * quiet one's in grey. */
+export function reviewWord(
+  review: DeskReview,
+  zh: boolean,
+): ReturnType<typeof reviewPhase> {
+  if (review.stopped) return { text: zh ? "停" : "Stopped", tone: "red" };
+  if (review.paused) return { text: zh ? "未完暂停" : "Paused", tone: "amber" };
+  const word = reviewPhase(review.phase, zh);
+  return review.group === "quiet" ? { ...word, tone: "dim" } : word;
+}
+
 export function DeskLines({
   desk,
   scale,
@@ -217,11 +229,17 @@ export function DeskLines({
             paper.word,
             paper.line,
             zh
-              ? `开着 ${desk.reviews.length} 条`
-              : `${desk.reviews.length} open`,
+              ? `开着 ${desk.open} 条${desk.need ? ` · 要你管 ${desk.need}` : ""}`
+              : `${desk.open} open${desk.need ? ` · ${desk.need} yours` : ""}`,
           )}
           {desk.reviews.map((review) => {
-            const phase = reviewPhase(review.phase, zh);
+            const phase = reviewWord(review, zh);
+            const ring =
+              review.group === "need"
+                ? paper.red
+                : review.group === "quiet"
+                  ? paper.dim
+                  : paper.blue;
             return (
               <div
                 key={review.id}
@@ -244,8 +262,8 @@ export function DeskLines({
                   <span
                     style={{
                       flex: "none",
-                      border: `${1.2 * scale}px solid ${paper.blue}`,
-                      color: paper.blue,
+                      border: `${1.2 * scale}px solid ${ring}`,
+                      color: ring,
                       borderRadius: 8 * scale,
                       padding: `0 ${4 * scale}px`,
                       fontSize: 10 * scale,
@@ -281,6 +299,20 @@ export function DeskLines({
               </div>
             );
           })}
+          {desk.reviewsMore > 0 && (
+            <div
+              style={{
+                height: DESK_NOTE * scale,
+                lineHeight: `${DESK_NOTE * scale}px`,
+                fontSize: 10.5 * scale,
+                color: paper.dim,
+              }}
+            >
+              {zh
+                ? `另 ${desk.reviewsMore} 条，展开看全`
+                : `${desk.reviewsMore} more on the card`}
+            </div>
+          )}
         </div>
       )}
     </>
