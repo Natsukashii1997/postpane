@@ -128,9 +128,11 @@
       const loaded = page.answered(document) || page.streaming(document);
       if (!ready() || !seen?.markdown.trim()) {
         // Answered, but the answer is only in the hidden copy (#410): scroll
-        // to it, so it is drawn by the next ask.
-        if (ready()) page.reveal(document);
-        reply({ ok: true, streaming: page.streaming(document), told: false, loaded });
+        // to it, so it is drawn by the next ask. A tab in the background is
+        // not drawn at all: `undrawn` asks for it to be put in front.
+        const undrawn = ready();
+        if (undrawn) page.reveal(document);
+        reply({ ok: true, streaming: page.streaming(document), told: false, loaded, ...(undrawn && { undrawn }) });
         return false;
       }
       setTimeout(() => {
