@@ -532,3 +532,19 @@
 - 正确做法：备份这个目录用 `rsync -a --no-specials --no-devices <数据目录>/chatgpt/ <证据目录>/chatgpt-before/`（跳过套接字，其余照抄），再 `cmp` 核一遍 `handoffs.json`；套接字不用备份，驿窗启动时会重建。还原时同样只拷普通文件。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-19-review-gate-golive/chatgpt-before/`（1.7 MB，`handoffs.json` 与原件 `cmp` 一致）。
 - 升级：〔提醒〕未升级（2026-11-19：只在生效切换这类手动备份时碰到；install.sh 不备份数据目录，要备份时照这条做）。
+
+## L-56 有待处理时藏掉额度区块，连带藏掉了 Hermes 唯一能跳飞书的「最近被问」（2026-11-19）
+
+- 现象：常浩截图说 Hermes 侧栏「又无法跳转到飞书会话了，之前是可以实现的」。卡上只剩「等待处理 · 4」，各行 ↗ 是暗的。
+- 根因：#196 只给 Hermes 卡里的「最近被问」接了飞书跳转，待处理 / 正在进行 / 回执里的 Hermes 会话 `navigationTarget` 一直为空（#196 交接写了「本轮未做」）。#371 起有待处理时展开卡不画额度区块，而 Hermes 的「最近被问」就画在额度区块的位置（`QuotaSection` → `HermesBoard`），于是一有待处理，唯一能跳的地方就不见了。#371 验证只看了 Claude、Codex、DeepSeek 的场景，没看 Hermes。
+- 正确做法：藏掉或挪走一整块区域前，先列出它里面有哪些别处没有的功能（跳转、按钮、开关），一并确认去处；各家的「回到会话」都放在会话行自己的 `navigationTarget` 上，不只放在某个区块里。#424 起 Hermes 会话行按飞书聊天或定时任务的投递对象给出跳转目标。
+- 证据：#371 交接（`CURRENT.md` 2026-11-15 一节，验证场景 `mixed`、`claude-many-asks`、`all-running`）；#196 交接遗留第 3 条；实机快照 2026-11-19 18:1x Hermes 会话 `navigationTarget` 全为 `null`；#424 测试 `a_hermes_session_goes_back_to_its_feishu_chat`。
+- 升级：〔提醒〕部分升级（2026-11-19：Hermes 这一处写成测试，未接进必经检查；「藏区块前列独有功能」只是这条提醒）。
+
+## L-57 Hermes 记下的飞书用户 id 换了格式，只比用户 id 认本人，本人私聊被当成同事私聊（2026-11-19）
+
+- 现象：亚古兽 11-19 11:10 的私聊在「最近被问」里没有 `chatId`，点不了；以前的私聊都能点。
+- 根因：Hermes 这条会话的 `user_id` 记成 `e9cgcf77`，不是以前的 `ou_…`（open id），和 `config.yaml` 的 `home_channel.user_id` 对不上；驿窗只靠这一个字段判断「是不是常浩本人的私聊」。这条私聊的 `chat_id` 其实正是配置里常浩那个私聊。为什么 Hermes 换了格式未核实。
+- 正确做法：认本人私聊时，用户 id 相同，或聊天 id 就是 `home_channel.chat_id`，满足一条即可（`hermes/chats.rs` 的 `HomeChannel::opens`）；读外部程序写的 id 不假定格式永远不变。
+- 证据：`~/.hermes/profiles/agumon/state.db` 只读查询：`dm|e9cgcf77|1|2026-11-19 11:10:45`，同库其余私聊 `ou_6fac…`；#424 测试 `an_ask_opens_its_group_or_the_owners_own_private_chat` 的 `alias` 行（改前 `None`，见 `evidence/2026-11-19-424-hermes-jump/red-agents.log`）。
+- 升级：〔提醒〕部分升级（2026-11-19：写成测试，未接进必经检查）。
