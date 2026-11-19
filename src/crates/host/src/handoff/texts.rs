@@ -273,6 +273,13 @@ pub(super) fn no_verdict(how: Sent) -> String {
         &format!("The answer has no verdict; {en}, left to you"),
     )
 }
+/// An answer in while the auto round trip was off could not go back (#410).
+pub(super) fn held_back_failed(error: &str) -> String {
+    l10n::text(
+        &format!("回信没能转回 Claude 会话（{error}），请在接力卡上点「转回」"),
+        &format!("The answer could not go back to the Claude session ({error}); send it back from the card"),
+    )
+}
 pub(super) fn back_failed() -> String {
     l10n::text(
         "转回 Claude 失败两次，自动往返停下，交还常浩",

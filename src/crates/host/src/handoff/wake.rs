@@ -41,7 +41,7 @@ impl Desk {
                     .find(|s| s.prompt.as_deref() == Some(prompt.as_str()))
                     .and_then(|s| s.text.clone());
                 let reply = handoff.last_reply()?.text.clone()?;
-                Some(queued.unwrap_or_else(|| back_text(handoff, &reply)))
+                Some(queued.unwrap_or_else(|| back_text(handoff, &reply, !handoff.auto)))
             }) else {
                 continue;
             };

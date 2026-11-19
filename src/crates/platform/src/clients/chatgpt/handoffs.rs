@@ -474,6 +474,34 @@ impl Handoff {
         let outcome = self.outcome();
         (self.auto || (outcome == Next::Pass && !self.thinking())).then_some(outcome)
     }
+    /// An answer in while the auto round trip is off (#410): it goes back to
+    /// the session all the same, once, saying the person decides what comes
+    /// next — it used to wait on the sidebar for their 「转回」 while the
+    /// session that asked waited on unaware. What `next` acts on goes as
+    /// before; a try that could not reach the session is not repeated by
+    /// itself (the person's 「转回」 still can).
+    pub fn held_answer(&self) -> bool {
+        let since = self
+            .steps
+            .iter()
+            .rposition(|step| step.kind == StepKind::Reply)
+            .map_or(0, |at| at + 1);
+        self.live()
+            && self.phase == Phase::Replied
+            && !self.auto
+            && self.next().is_none()
+            && !self.steps[since..]
+                .iter()
+                .any(|step| step.kind == StepKind::Fail)
+    }
+    /// The auto round trip stopped itself last, not paused by the person.
+    fn stopped_by_itself(&self) -> bool {
+        self.steps
+            .iter()
+            .rev()
+            .find(|step| matches!(step.kind, StepKind::Stop | StepKind::Resume))
+            .is_some_and(|step| step.kind == StepKind::Stop && step.auto)
+    }
     /// What the newest answer comes to, on or off: what the auto round trip
     /// does with it, and what words back to Claude say of it, by hand too
     /// (#316: the same words either way, so they go once). The review gate
@@ -497,12 +525,7 @@ impl Handoff {
             && !self.auto
             && self.phase == Phase::Returned
             && reply.is_some_and(paused)
-            && self
-                .steps
-                .iter()
-                .rev()
-                .find(|step| matches!(step.kind, StepKind::Stop | StepKind::Resume))
-                .is_some_and(|step| step.kind == StepKind::Stop && step.auto)
+            && self.stopped_by_itself()
     }
     /// A 思维评审 handoff (#209): its title begins 「思维评审｜」.
     pub fn thinking(&self) -> bool {
@@ -809,6 +832,17 @@ impl Book {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
+        // Taken after the auto round trip stopped itself (#410): that stop
+        // was about the round before, and this answer would wait on the
+        // sidebar while the session that asked waits too. Not after the
+        // person paused it: that holds until they turn it on.
+        if !handoff.auto && handoff.stopped_by_itself() {
+            handoff.auto = true;
+            handoff.halt = None;
+            handoff
+                .steps
+                .push(Step::new(now, StepKind::Resume, None).by_auto());
+        }
         if let Some(summary) = summary {
             handoff
                 .steps

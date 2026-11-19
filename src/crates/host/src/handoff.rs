@@ -944,8 +944,13 @@ impl Desk {
             }
             book.confirm_pending(id, request);
             asking.anchor.set(book, id);
-            book.asked(id, asking.summary.as_deref(), &asking.brief, now)
-                && (!asking.evidence || book.evidence_in(id, now))
+            // Taken words turn a self-stopped round trip on again (#410),
+            // evidence paused for among them; `evidence_in` is left the rest.
+            let asked = book.asked(id, asking.summary.as_deref(), &asking.brief, now);
+            if asking.evidence {
+                book.evidence_in(id, now);
+            }
+            asked
         })
     }
 
@@ -1146,7 +1151,10 @@ impl Desk {
                         .ok_or_else(|| {
                             l10n::text("ChatGPT 还没回信", "ChatGPT has not answered yet")
                         })?;
-                    (StepKind::Back, self.back_words(lines, &handoff, &reply).0)
+                    (
+                        StepKind::Back,
+                        self.back_words(lines, &handoff, &reply, false).0,
+                    )
                 } else {
                     let round = handoff.counted() + 1;
                     let text = if handoff.thinking() {
@@ -1156,36 +1164,7 @@ impl Desk {
                     };
                     (StepKind::Again, text)
                 };
-                let _sending = self.claim(id)?;
-                if self.lock().returned_already(id, &text) {
-                    return Ok(Acted::Done);
-                }
-                // The step's own id (#257): words left under it before went
-                // already, and are not left twice.
-                let prompt = self
-                    .lock()
-                    .get(id)
-                    .map_or_else(|| handoff.prompt_for(kind), |h| h.prompt_for(kind));
-                let (doer, session) = (
-                    handoff.doer.as_deref().unwrap_or(CLAUDE),
-                    &handoff.claude_session,
-                );
-                if let Err(Unsent::Failed(error)) = lines
-                    .reaches(doer, session)
-                    .map_err(Unsent::Failed)
-                    .and_then(|()| lines.reply(doer, session, &prompt, &text))
-                {
-                    // As the auto round trip's (#223): they wait in the
-                    // session's queue and go in once it is opened.
-                    if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, &text) {
-                        return Err(error);
-                    }
-                    self.change(|book| {
-                        book.returned(id, kind, &text, &prompt, false, now) && book.queued(id, now)
-                    });
-                    return Ok(Acted::Done);
-                }
-                self.change(|book| book.returned(id, kind, &text, &prompt, false, now));
+                self.hand_back(lines, &handoff, kind, &text, false, now)?;
                 Ok(Acted::Done)
             }
             "pause" => {
@@ -1238,6 +1217,69 @@ impl Desk {
 }
 
 impl Desk {
+    /// Words back to the session (`kind`: its answer or the ask to hand over
+    /// again), under the step's own id (#257): words left under it before
+    /// went already, and are not left twice. Not reached: they wait in the
+    /// session's queue and go in once it is opened (#223). `auto` when the
+    /// round trip sent them, not the person. Whether they went.
+    fn hand_back(
+        &self,
+        lines: &dyn Lines,
+        handoff: &Handoff,
+        kind: StepKind,
+        text: &str,
+        auto: bool,
+        now: i64,
+    ) -> Result<bool, String> {
+        let id = handoff.id.as_str();
+        let _sending = self.claim(id)?;
+        if self.lock().returned_already(id, text) {
+            return Ok(false);
+        }
+        let prompt = self
+            .lock()
+            .get(id)
+            .map_or_else(|| handoff.prompt_for(kind), |h| h.prompt_for(kind));
+        let (doer, session) = (
+            handoff.doer.as_deref().unwrap_or(CLAUDE),
+            &handoff.claude_session,
+        );
+        if let Err(Unsent::Failed(error)) = lines
+            .reaches(doer, session)
+            .map_err(Unsent::Failed)
+            .and_then(|()| lines.reply(doer, session, &prompt, text))
+        {
+            if let Err(Unsent::Failed(_)) = lines.queue(doer, session, &prompt, text) {
+                return Err(error);
+            }
+            self.change(|book| {
+                book.returned(id, kind, text, &prompt, auto, now) && book.queued(id, now)
+            });
+            return Ok(true);
+        }
+        self.change(|book| book.returned(id, kind, text, &prompt, auto, now));
+        Ok(true)
+    }
+    /// An answer in while the auto round trip is off goes back all the same
+    /// (#410), saying the person decides what comes next; the round trip
+    /// stays off. Neither reached nor queued: the card says so, and it is
+    /// not tried again by itself (the person's 「转回」 still can).
+    fn hand_held(&self, lines: &dyn Lines, id: &str, now: i64) -> bool {
+        let Some(handoff) = self.lock().get(id).cloned().filter(Handoff::held_answer) else {
+            return false;
+        };
+        let Some(reply) = handoff.last_reply().and_then(|step| step.text.clone()) else {
+            return false;
+        };
+        let (text, _) = self.back_words(lines, &handoff, &reply, true);
+        match self.hand_back(lines, &handoff, StepKind::Back, &text, true, now) {
+            Ok(went) => went,
+            Err(error) => {
+                let why = by_doer(&held_back_failed(&error), handoff.doer.as_deref());
+                self.change(|book| book.trouble(id, &why, now))
+            }
+        }
+    }
     /// The auto round trip (#72): answers that came in while it is on are
     /// acted on, and every one goes back to Claude (tried twice) before
     /// anything else (#316: ends used to stay on the sidebar, and the
@@ -1262,6 +1304,16 @@ impl Desk {
                 self.auto_back(lines, &id, next, now)
             };
         }
+        let held = self
+            .lock()
+            .list
+            .iter()
+            .filter(|h| h.held_answer())
+            .map(|h| h.id.clone())
+            .collect::<Vec<_>>();
+        for id in held {
+            changed |= self.hand_held(lines, &id, now);
+        }
         changed
     }
     /// Drives the answers that wait to go on (#72) when nothing else did:
@@ -1269,7 +1321,11 @@ impl Desk {
     /// extension followed. Only when there is one, so the sidebar's refresh
     /// can call it every time. Whether anything changed.
     pub(crate) fn catch_up(&self, lines: &dyn Lines, now: i64) -> bool {
-        let waiting = self.lock().list.iter().any(|h| h.next().is_some());
+        let waiting = self
+            .lock()
+            .list
+            .iter()
+            .any(|h| h.next().is_some() || h.held_answer());
         waiting && self.drive(lines, now)
     }
     /// Follows the newest words back to Claude in each handoff shown, as its
@@ -1358,7 +1414,7 @@ impl Desk {
         };
         // A pass holds only while the commit reviewed is the pull
         // request's still (#347): else it goes back and stops.
-        let (text, blocked) = self.back_words(lines, &handoff, &reply);
+        let (text, blocked) = self.back_words(lines, &handoff, &reply, false);
         if self.lock().returned_already(id, &text) {
             return false;
         }
@@ -1900,10 +1956,23 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         .as_str()
         .and_then(|id| app.try_state::<Desk>()?.lock().get(id)?.gate.chain.clone());
     answer["chain"] = json!(chain);
-    let gate = l10n::text(
+    // Off still after these words (the person paused it): its answer comes
+    // back all the same, saying the person decides (#410).
+    let paused = answer["handoffId"]
+        .as_str()
+        .and_then(|id| Some(!app.try_state::<Desk>()?.lock().get(id)?.auto))
+        .unwrap_or(false);
+    let gate = if paused {
+        l10n::text(
+            "常浩暂停了这张接力的自动往返：回信到了照样转回这个会话，但会写明下一步等常浩决定。",
+            "The person paused this handoff's auto round trip: the answer still comes back here, saying the person decides what comes next.",
+        )
+    } else {
+        l10n::text(
         "回信由驿窗自动转回这个会话：返修转回让你改完再送（本次授权周期默认最多 5 轮，常浩可在驿窗设置「智能体插件」的「审核轮数上限」里调，1–9 轮）；通过也转回、驿窗结束接力；到顶、决策升级或末尾几行认不出时转回并交常浩决定。",
         "The answer comes back here by itself: a fix to make, to send again (at most the review cap of rounds per leave of the person's); a pass, sent back and ended; the cap, an escalation or last lines PostPane cannot read, left to the person.",
-    );
+        )
+    };
     answer["message"] = json!(if answer["status"] == "repeated" {
         l10n::text(
             "这段内容刚才已经送到 ChatGPT，还没回信，没有再送一次；回信会出现在驿窗侧栏。",
@@ -3354,10 +3423,10 @@ mod tests {
         let shown = desk.projection(6);
         assert_eq!(shown[0]["auto"], true, "on again");
         assert!(shown[0]["halt"].is_null());
-        assert_eq!(
-            kinds(&desk, 6).last().unwrap(),
-            &("resume".to_owned(), true)
-        );
+        // Turned on as the words were taken (#410): just before them.
+        let steps = kinds(&desk, 6);
+        assert_eq!(steps.last().unwrap().0, "ask");
+        assert!(steps.contains(&("resume".to_owned(), true)));
         let reply = "证据够了\n评审出口：成熟退出\n结论：通过";
         desk.observe(
             &json!({"type":"turn","phase":"complete","conversation":"c-new","reply":reply,"messageId":"m2","prompt":asked()}),
@@ -3520,12 +3589,25 @@ mod tests {
         desk.act(&lines, &handoff.id, "pause", 3).unwrap();
         assert_eq!(desk.projection(3)[0]["halt"], paused());
         desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
-        assert!(!desk.drive(&lines, 5), "paused: left to the person");
-        assert_eq!(replies(&lines), 0);
-        // Turned back on, the waiting answer goes back at once.
+        // Paused, the answer goes back all the same (#410), saying the
+        // person decides; the round trip stays off.
+        desk.drive(&lines, 5);
+        assert_eq!(replies(&lines), 1);
+        let shown = desk.projection(5);
+        assert_eq!(shown[0]["phase"], "returned");
+        assert_eq!(shown[0]["auto"], false);
+        assert_eq!(shown[0]["halt"], paused());
+        assert!(lines
+            .sent
+            .borrow()
+            .last()
+            .unwrap()
+            .2
+            .contains("下一步交常浩决定"));
+        // Turned back on, nothing goes twice.
         desk.act(&lines, &handoff.id, "resume", 6).unwrap();
         assert_eq!(replies(&lines), 1);
-        assert_eq!(desk.projection(6)[0]["phase"], "returned");
+        assert_eq!(desk.projection(6)[0]["auto"], true);
         assert!(
             desk.act(&lines, &handoff.id, "resume", 7).is_err(),
             "already on"
@@ -5367,14 +5449,18 @@ mod tests {
             .join("handoffs.json");
         std::fs::remove_file(&file).unwrap();
         std::fs::create_dir_all(file.join("in-the-way")).unwrap();
-        let sends = lines.sent.borrow().len();
+        let to_chatgpt =
+            |lines: &Fake| lines.sent.borrow().iter().filter(|s| s.0 == "send").count();
+        let sends = to_chatgpt(&lines);
         desk.drive(&lines, 4);
         std::fs::remove_dir_all(&file).unwrap();
-        assert_eq!(lines.sent.borrow().len(), sends);
+        assert_eq!(to_chatgpt(&lines), sends);
         let kept = desk.lock().get(&handoff.id).cloned().unwrap();
         assert!(kept.steps.iter().all(|s| s.kind != StepKind::Format));
-        assert_eq!(kept.phase, Phase::Replied);
         assert!(kept.gate.mending.is_none());
+        // Stopped for it, the answer still went back to Claude (#410).
+        assert!(!kept.auto);
+        assert_eq!(kept.phase, Phase::Returned);
     }
 
     /// Review round 4 P1-13: a 思维评审 at its cap goes on only with the
