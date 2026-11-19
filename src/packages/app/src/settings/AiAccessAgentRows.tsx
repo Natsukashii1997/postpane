@@ -1,6 +1,6 @@
-// Settings → AI access → Open to other AI: the two ways other AI reach
-// sessions through PostPane besides HUD tools — Claude Code handing work to
-// ChatGPT, and agents messaging each other (#278, upstream b1217c3). Kept
+// Settings → AI access → Open to other AI: the ways other AI reach sessions
+// through PostPane besides HUD tools — Claude Code handing work to ChatGPT,
+// listing and ending those relays (#439), and agents messaging each other (#278, upstream b1217c3). Kept
 // apart from AiAccessPane.tsx, which the 300-line ratchet holds.
 import type { Snapshot } from "@agent-hud/protocol";
 import { Pill, Row, type Text } from "./SettingsPrimitives";
@@ -31,6 +31,22 @@ export function AgentReachRows({
         subtitle={t(
           "Claude Code and Codex sessions: start or continue one review. The switch above does not cover it; remove the ChatGPT extension's registration in Agent plugins to turn it off.",
           "接 Claude Code 和 Codex 会话，能新开或续接一次审核。不受上面开关管；要关就在「智能体插件」移除 ChatGPT 插件登记。",
+        )}
+      >
+        <Pill tone={registered ? "green" : "gray"} dot>
+          {registered
+            ? t("On · registered", "开 · 插件已登记")
+            : t("Off · not registered", "关 · 插件未登记")}
+        </Pill>
+      </Row>
+      <Row
+        title={t(
+          "List and end relays (relay_list, relay_end)",
+          "列出与结束接力（relay_list、relay_end）",
+        )}
+        subtitle={t(
+          "Claude Code and Codex sessions: list the relays still open and the session that began each; end them as the card's “End relay” does, only when you began that session's current turn (your own words, or words the plugin brought in with no agent's label). Each end goes on the card with who ended it and why. Same switch as starting a relay.",
+          "接 Claude Code 和 Codex 会话：列出还没结束的接力和各自的发起会话；结束接力和卡片上点「结束接力」一样，但只在调用的那一轮是你开的头时才收（你在会话里打的字，或经插件送进来、不带智能体来源标签的话），卡上记谁、为什么结束。开关同「发起接力」。",
         )}
       >
         <Pill tone={registered ? "green" : "gray"} dot>
