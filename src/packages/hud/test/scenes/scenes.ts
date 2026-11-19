@@ -9,6 +9,7 @@ import {
   relayStopOtherKind,
   relayPassed,
   relayPaused,
+  relayHeldBack,
   relayStopped,
 } from "./relay-gate.ts";
 
@@ -483,6 +484,7 @@ export const SCENES: readonly Scene[] = [
   relayStopped,
   relayPassed,
   relayPaused,
+  relayHeldBack,
   relayIdleStopped,
   relayStaleBack,
   relayStaleIdle,

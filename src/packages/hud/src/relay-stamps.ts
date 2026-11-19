@@ -136,8 +136,18 @@ export function relayStamps(
     };
   }
   if (end) {
+    // An answer back with the doer while the auto round trip is stopped
+    // waits for the person as one held on the sidebar did (#410 S1: those
+    // go back all the same now), so it keeps the same 「回」. Not one at its
+    // cap: that is ChatGPT's 「停」, and Claude's stub stays as it was (#409).
+    const waitsForPerson = (handoff: Handoff) =>
+      handoff.phase === "replied" ||
+      (handoff.phase === "returned" &&
+        !handoff.auto &&
+        !!handoff.halt &&
+        !atCap(handoff));
     const replied = open.filter(
-      (handoff) => handoff.phase === "replied" && doerOf(handoff) === end,
+      (handoff) => waitsForPerson(handoff) && doerOf(handoff) === end,
     );
     if (!replied.length) return undefined;
     return {
