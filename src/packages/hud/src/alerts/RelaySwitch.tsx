@@ -5,7 +5,7 @@ import type { Snapshot, Handoff } from "@agent-hud/protocol";
 import type { Inks } from "../permissions/ListCard";
 import { relaySiblings, type RelayGroup } from "../relay-groups";
 import { noButtonChrome } from "../panel/theme";
-import { openedAmong, openHandoffCard } from "./HandoffCard";
+import { openedAmong, openHandoffCard } from "./handoff-store";
 
 const WORD: Record<RelayGroup, [string, string]> = {
   need: ["要你管", "Yours"],
