@@ -12,6 +12,31 @@
 
 
 
+## 随手记：数码世界换版后，再打开驿窗侧边随手记自动换成新版（#419）（2026-11-19，Claude，常浩回「按推荐开工」批了分批计划；已提交、已发布 `25b994117bc8` 回读通过）
+
+- 时间：开工 `2026-11-19 16:16`（`date '+%F %H:%M'` 记录）。来由：数码世界 11-19 11:59 发布 `wb-20261119-pr89`（随手记待办行距收紧），驿窗 05:49 启动后随手记窗口从没重新加载，侧边随手记一直是旧样式，常浩只能重启驿窗。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/crates/host/src/float_notes_refresh.js`（新）：每次打开随手记时在页面里跑。用 `fetch("/", { cache: "no-store" })` 拿 5178 最新首页，取里面的 `/assets/index-*.js`、`/assets/index-*.css`，有一个不在当前页面的 `script[src]` / `link[href]` 里就算换版（只改样式的发版 JS 名不一定变，所以两种都比；运行中页面自己插进来的文件不算）。换版时：有便签在编辑（`.sn.is-edit` 或 `[contenteditable="true"]`）就这次不重载；否则先调页面自己的 `window.floatingNotesHost.prepareCollapse()` 把草稿落本机，返回 `ok:false` 或抛错就不重载，成了再查一遍没在编辑才 `location.reload()`。取不到首页、首页里看不出版本都不重载。只读页面、不改 DOM（L-10）。
+    - `src/crates/host/src/float_notes.rs`：`include_str!` 引入上面的脚本；窗口已存在、显示的是数码世界页面时，打开就 `eval` 它；away 页（数码世界没启动）不跑。补 Rust 测试一条。
+    - `src/crates/host/src/float_notes_refresh.test.mjs`（新）：node:test 在 `vm` 替身页面里跑真脚本，11 条：没换版不重载、每次 `no-store`、只换 CSS 重载、换 JS 重载、完整地址也认得出、在编辑不重载也不碰草稿、`prepareCollapse` 返回失败 / 抛错不重载、页面没收尾接口直接重载、取不到首页不重载、首页看不出版本不重载。
+    - `package.json` 新增 `test:host`；`src/tooling/test-all.mjs` 加第六套「注入脚本」；`tests/test-all.test.mjs` 跟着改。
+  - 顺手改的：`AGENTS.md`「运行」里 `pnpm test` 那行注释改成「六套都跑完再汇总」。
+  - **改变了已有行为的**：① 驿窗侧边随手记：原来只在第一次打开时加载页面，之后只显示 / 隐藏；现在每次打开都向 5178 要一次首页（本机、`no-store`），发现换版且没有便签在编辑时重载一次，换版后的第一次打开会先闪一下旧页再换新页。② `pnpm test` 从五套变六套。
+- 测试：先跑红：脚本挪走时 `node --test src/crates/host/src/float_notes_refresh.test.mjs` `ℹ pass 0` / `ℹ fail 1`（ENOENT，`red/no-script.log`）。最终：`pnpm run check` 退出码 0（`check.log`）；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」，Rust 合计 `1002 passed; 0 failed`（含 `float_notes::tests::reopening_checks_for_a_new_build_without_touching_a_note_being_written ... ok`），前端 `ℹ pass 463` / `ℹ fail 0`，MCP `ℹ pass 9` / `ℹ fail 0`，插件 `ℹ pass 14` / `ℹ fail 0`，Chrome 插件 `ℹ pass 28` / `ℹ fail 0`，注入脚本 `ℹ pass 11` / `ℹ fail 0`（`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（`rules.log`）。
+- 验证：
+  - WKWebView 探针（L-10，`probe/probe.swift`、`probe/run.log`）：同一套 WebKit 加载真实 `http://127.0.0.1:5178/?floatingNotes=1#/float`，跑真脚本。没换版 → `current`、加载 1 次；把页面的 CSS 入口改成旧文件名（等于页面旧、服务新）→ `reloaded`、加载 2 次；重载后再跑 → `current`、仍 2 次，不会反复重载。
+  - 真实驿窗（装 `25b994117bc8` 后）：点猫球打开随手记，展开第一张便签全文做记号；点猫球收起（`app_list_windows` 里随手记窗口消失，确认真的隐藏了），再打开，便签仍是展开的，页面没重载。截图 `real-1-opened.jpg`、`real-2-expanded.jpg`、`real-3-reopened-still-expanded.jpg`。
+  - **未做**：真实驿窗里的「数码世界换版后再打开就是新版」。不能动数码世界的文件，5178 本轮没有新发版；换版路径由上面的 WKWebView 探针和 11 条脚本测试覆盖，等数码世界下次发版后打开随手记回看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-19-419-notes-refresh/`（`real-*.jpg`、`smoke-*.png`）。
+- 发布与回读：`install.sh 419-notes-refresh`：装前 `08256f49a34b` 已备份到证据目录，16:33:50 退出并启动，产物 `25b994117bc8` / 已装 `25b994117bc8`，冒烟：侧栏在动。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-19-419-notes-refresh/PostPane-08256f49a34b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。装的包基于 main `b9c8b7f`，开工后 main 没有新提交。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 无不一致。遗留：真实换版的回看（见上）。
+  - 范围外发现：装机重启后设置窗口会自己弹出来（装前它是最小化的），本轮没查原因，也没改。
+  - 草稿保护的边界：重载前用的是数码世界页面自带的 `prepareCollapse`，它在驿窗里把草稿写进页面的 localStorage，重载后由页面自己恢复；在编辑的便签一律不重载，所以不会丢光标或正在打的字。
+  - skill 进化：无。
+- 本轮新坑：无
+
 ## 积压清单第二批（组 12）：`pnpm run check` 第一步查 `src/` 下没提交的文件，预览只用场景预览台（2026-11-19，Claude 子 agent，常浩 11-19 回「全部按推荐」批了积压清单组 12；已提交、无需发布）
 
 - 时间：开工 `2026-11-19 11:37`（`date '+%F %H:%M'` 记录）。来由：跨项目复盘积压清单（`~/session-retro/2026-10-18_2026-11-18/积压清单-2026-11-18.md`）组 12：L-13、L-43 两次都是 `src/` 下没提交的自查页 / 预览脚手架把 `pnpm run check` 拦在格式或包边界检查上；E-18 预览统一用场景预览台。同批的 #416（坑记录与 SKILL）先合，本 PR 合并前要变基。
