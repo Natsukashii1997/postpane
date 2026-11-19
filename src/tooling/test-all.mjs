@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `pnpm test`：Rust、前端、MCP、插件、Chrome 插件五套依次全跑完再汇总，任何一套失败整体非零退出（L-47）。
+// `pnpm test`：Rust、前端、MCP、插件、Chrome 插件、注入页面的脚本六套依次全跑完再汇总，任何一套失败整体非零退出（L-47）。
 // 原来用 `&&` 串起来，前面一套一挂后面的根本不跑，报告里容易当成「只挂了这一套」。
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,7 @@ export const SUITES = [
   ["MCP", "pnpm", ["run", "test:mcp"]],
   ["插件", "pnpm", ["run", "test:plugins"]],
   ["Chrome 插件", "pnpm", ["run", "test:extension"]],
+  ["注入脚本", "pnpm", ["run", "test:host"]],
 ];
 
 /** 依次跑每一套，前面失败不影响后面；返回各套的退出码（被信号杀掉、起不来的算 1）。 */
