@@ -556,6 +556,7 @@
 - 根因：`HUDScene.tsx` 每个面板画两份：看得见的一份和隐藏的测高副本（`data-hud-measurement`），框高取测高副本的高度（最多屏幕高 - 80）。「展开其余 n 条」的开合是各组件自己的 `useState`，两份各有一份状态，点的是看得见的那份，测高副本一直折着。预览台实测：展开后 ChatGPT 卡测高仍 665、Claude 提问卡仍 790。
 - 正确做法：凡是会改变面板内容高度的界面状态（展开 / 折叠、切页、选中某条），不放组件本地 `useState`，放两份共读的外部状态（#430 起是 `panel/fold-store.ts` 的 `cardFolds`，键按卡和段区分），侧栏收起时由 `useCloseWithSidebar` 统一复位；验证时同时看测高副本和可见框的高度，不只看内容有没有出来。
 - 证据：`evidence/2026-11-19-430-fold-measure/`：`red.txt`（`fold-store.test.ts` 改前失败）、`before-chatgpt-expanded.jpg` / `after-chatgpt-expanded.jpg`、`preview-measure.md`（改后 ChatGPT 666 → 849、Claude 790 → 1089）。
+- 补（2026-11-20，#448）：#430 把复位挂在「侧栏收起」上，可侧栏顶上挂着提醒条或待处理请求时永远不算收起，实机上展开后移开再悬停仍是展开的（「人机协作」会话代验发现）。复位要挂在「这张卡关上」（`HUDScene.tsx` 的 `open`）上，不挂在更粗的「侧栏收起」上；`closesWith` 把两者分开，接力卡仍等侧栏收起。验证「下次打开回到默认」时要在有提醒挂着的场景（如 `claude-many-asks`）里真的移开、等收起、再打开。
 - 升级：〔提醒〕部分升级（2026-11-19：`fold-store.test.ts` 守住几处已知的折叠，未接进必经检查；`CompletionAlertView` 里「点开的那条回复」`chosen` 仍是本地状态，未核实是否同类）。
 
 ## L-59 长 brief 一次粘贴进 ChatGPT 被转成附件，回信早到了，驿窗却报「30 分钟没回信」（2026-11-19）
