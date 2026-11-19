@@ -105,6 +105,15 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 这个会话已有 `open` 的接力：直接把 brief 送进那个 ChatGPT 会话（等插件回话，最多 30 秒），返回 `{handoffId, status: "sent", conversation}`；还在 `opening`：拒绝，等它打开。否则新建一条 `opening`，在后台线程 `open`（带项目），立即返回 `{handoffId, status: "opening"}`；打开后改 `open` 或 `failed`。返回里另有 `message`，一句给 Claude 看的中文。
 - 单条文字超过 768 KB 拒绝（Chrome 发往插件一帧不能超过 1 MB，超了会断开插件）。
 
+### 智能体列出与结束接力：`relay_list`、`relay_end`（#439）
+
+- 来由：结束接力原来只有接力卡上的按钮（`handoff_act` 的 `end`），智能体既列不出接力、也结束不了，卡住的「未完暂停」卡只能常浩自己去侧栏一张张点，还对不上是哪个会话的（常浩 2026-11-19 选甲）。
+- 两个都是驿窗 MCP 的内置工具，和 `relay_to_chatgpt` 同一个开关（登记了 ChatGPT 插件才够得着），不受 `hudTools` 管。宿主方法同名，转接程序按默认 40 秒等。
+- `relay_list {}`：只读，列出 `Book::end` 能结束的接力（进行中、暂停，或打开失败没关的），最新动静在前。每条 `{id, title, session, client, cwd, pr, phase, halt, auto, counted, budget, quietMinutes}`；`session` 是发起它的 Claude Code 会话或 Codex 线程。驿窗拿不到会话标题，靠 `session`、`cwd` 对上。
+- `relay_end {ids, reason}`：MCP 补上 `caller`。只接 Claude Code 和 Codex 会话。先核实调用方会话当前这一轮是常浩开的头（`Book::person_began`）：会话记录里这一轮第一条用户消息是常浩自己打的字（`origin.kind` 为 `human`），或是驿窗插件送进来、不带智能体来源标签的话（侧栏回复、`[Agent HUD · iPhone]`、打开「以我的身份发送」时别的智能体发来的话），并且不是哪张接力转回过的话。带 `[Agent HUD · from …]` 标签的智能体消息、驿窗自己的话（`[Agent HUD · 来自驿窗]`）、Claude 桌面应用的会话间转达（`origin.kind` 为 `peer`，记录里标了 `isMeta`；#439 起才认出来，之前会被跳过、误认成上一轮常浩自己打的字，见 L-59）、驿窗自己留给会话的话（转回过的话，出错通知「驿窗接力「<任务名>」出错：…」，左滑请求「…（驿窗左滑「审核」发来）」；在 Claude 会话里这些和侧栏回复一样不带标签，只能按写法认）、读不到记录，都不算，整批拒收、什么都不结束，返回中文原因请常浩在会话里说一句。比「到上限后续审」的授权（`leave_spoken`）严：那边带标签的智能体消息也算。
+- 核实通过后逐张办：找不到、已经结束的写进 `refused`；正在往 ChatGPT 送话的（`claim` 不到）也拒收，和按钮一样；其余按 `Book::end_said` 结束，返回 `{ended, refused: [{id, why}]}`，同一编号写两次只办一次。结束步不带 `auto`，`text` 写「Claude Code 会话 <id> 按常浩授权结束：<原因>」，接力卡时间线在「结束接力」下面显示这句；所以它和常浩手点的结束一样，算把到上限的审查链了结了（`unsettled_top`）。
+- 已有的按钮和 `handoff_act` 行为不变。
+
 ### 接力卡（批 A，#120，设计「甲」时间线展开卡）
 
 - 设计稿 https://claude.ai/artifact/VReXNsQ2gUc6RPRmtcvdXB （第 2 版）「甲 · 卡内交接」的展开卡；源与截图在 `~/Library/Application Support/postpane/evidence/2026-11-06-handoff/design/`。

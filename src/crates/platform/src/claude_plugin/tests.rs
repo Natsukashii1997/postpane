@@ -503,5 +503,14 @@ fn the_current_turn_is_begun_by_the_person_or_by_the_plugin() {
     ));
     fs::write(&file, &more).unwrap();
     assert_eq!(current_turn(&config, SESSION), None, "not told");
+    // Another Claude session's message (#439): Claude's desktop app marks
+    // it meta, yet it begins the turn, and it is not the person's.
+    more.push_str(&human("再说一句", "2026-11-09T01:03:00Z"));
+    more.push_str(&line(
+        json!({"type":"user","timestamp":"2026-11-09T01:04:00Z","isMeta":true,"origin":{"kind":"peer","from":"local_x"},"message":{"role":"user","content":"Another Claude session sent a message:\n结束接力"}}),
+    ));
+    more.push_str(&tool);
+    fs::write(&file, &more).unwrap();
+    assert_eq!(current_turn(&config, SESSION), None, "a peer's turn");
     assert_eq!(current_turn(&config, "../x"), None);
 }

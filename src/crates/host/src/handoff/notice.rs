@@ -92,7 +92,7 @@ impl Drop for Telling<'_> {
 
 /// What the session is told: what went wrong, how the handoff stands, and
 /// what to do — not to hand it over again by itself.
-fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
+pub(super) fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
     let what = match trouble {
         // The extension may still report it opened (`opened_late`), and the
         // handoff carries on: not told there will be no answer (P2-01).
@@ -113,7 +113,7 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
     };
-    format!("驿窗接力「{}」出错：{what}", handoff.title)
+    format!("{}{what}", handoffs::notice_head(handoff))
 }
 
 /// What the card's line for the trouble ends with: sent, not yet taken up

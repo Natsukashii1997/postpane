@@ -61,7 +61,12 @@ export function endWords(
   step: HandoffStep,
   zh: boolean,
 ): { title: string; sub?: string } {
-  if (!step.auto) return { title: zh ? "结束接力" : "Handoff ended" };
+  // Ended by an agent at the person's word (#439): who and why.
+  if (!step.auto)
+    return {
+      title: zh ? "结束接力" : "Handoff ended",
+      sub: step.text ?? undefined,
+    };
   if (handoff.notice === "passed")
     return thinking(handoff)
       ? {

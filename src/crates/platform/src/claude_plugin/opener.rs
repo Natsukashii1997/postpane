@@ -29,7 +29,7 @@ pub enum Opener {
 /// Who began `session`'s current turn and when (milliseconds), from the
 /// transcript under `claude_config`; None when it cannot be told: no
 /// transcript, no first words within reach, or words of someone else (a
-/// task notification, a system line).
+/// task notification, a system line, another Claude session's message).
 pub fn current_turn(claude_config: &Path, session: &str) -> Option<(Opener, i64)> {
     if !valid_name(session) {
         return None;
@@ -41,7 +41,11 @@ pub fn current_turn(claude_config: &Path, session: &str) -> Option<(Opener, i64)
         .rev()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .find(|value| {
-            value["isSidechain"] != true && claude_prompt(value) && !interrupted(value)
+            // A line Claude Code says began a turn (`origin`) does, though
+            // meta: another Claude session's message (#439).
+            let begins = claude_prompt(value)
+                || (value["type"] == "user" && value["origin"]["kind"].is_string());
+            value["isSidechain"] != true && begins && !interrupted(value)
         })?;
     let at = prompt["timestamp"].as_str().and_then(date_ms)?;
     let origin = &prompt["origin"];

@@ -1,8 +1,11 @@
-// The relay_to_chatgpt tool's words and fields (#347, the review gate of
-// multi-agent MA-02 v0.3), moved out of index.ts for the 300-line ratchet.
+// The handoff tools (#347, the review gate of multi-agent MA-02 v0.3):
+// relay_to_chatgpt, and relay_list / relay_end (#439), moved out of index.ts
+// for the 300-line ratchet. None is a HUD tool: the hudTools switch does not
+// hold them back.
+import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 
-export const relayDescription = [
+const relayDescription = [
   "把这次的工作交给 ChatGPT 审核：驿窗经 Chrome 插件把 brief 送进 chatgpt.com。同一个 Claude Code 或 Codex 会话第一次调用会新开一个 ChatGPT 审核会话（放进驿窗设置里的项目），之后再调用就接着发进同一个会话。调用后立即返回；回信出现在驿窗侧栏，并由驿窗自动转回这个会话：返修转回让你改完再送；通过也转回（写明是终局、不用再送审），驿窗结束接力；PR 送审后又有新提交时，转回请你用当前提交重送；到顶、决策升级、认不出末尾几行时转回并写明交常浩决定；新会话打不开或 ChatGPT 30 分钟没回信，也会通知这个会话一次。同样的 brief 刚送到、还没回信时不会再送一次。",
   "审几轮由 ChatGPT 按问题台账判断，驿窗只执行硬规则：本次授权周期默认最多 5 轮（常浩可在驿窗设置「智能体插件」的「审核轮数上限」里调，1–9 轮），常浩插话或授权后从第 1 轮重计；审查链总轮数和台账按验收目标累计，换会话、换 PR、拆单都不清零；ChatGPT 实质回过一次就算一轮（证据不足暂停也算），驿窗请它补写末尾格式那一次不算；到上限仍不通过就停下请常浩介入。驿窗把上一轮回信里的「问题台账」原样附在下一轮 brief 后面。L0 只做机械检查，不送审。",
   "ChatGPT 读不到本机文件，brief 要自己写全：",
@@ -14,7 +17,7 @@ export const relayDescription = [
   "6. 请 ChatGPT 按严重程度列问题并给出问题台账（「## 问题台账」一节，每个问题永久编号、状态六选一：待修复 / 待复核 / 已验证关闭 / 判定不成立 / 待决策 / 范围外转单），P0/P1 写失败路径或违反的约束；回信最后四行依次写「受审版本：<SHA>」「未决：P0 n，P1 n」「审查出口：通过 / 返修 / 证据不足暂停 / 决策升级」「结论：通过 / 需修改」（通过配通过，其余配需修改）。",
 ].join("\n");
 
-export const relayInput = {
+const relayInput = {
   title: z
     .string()
     .min(1)
@@ -65,3 +68,133 @@ export const relayInput = {
       "驿窗左滑发来的请求里写的编号（「L」开头）；照填，驿窗靠它认出这次左滑已经办了。不是左滑发来的就不填。",
     ),
 };
+
+const listDescription =
+  "列出驿窗里还没结束的 ChatGPT 接力（进行中、暂停、打开失败的），最新动静的在前。每条有编号 id、任务名 title、发起它的会话 session（client 是 claude 或 codex）、工作目录 cwd、PR、阶段 phase、自动往返停下的原因 halt、已审轮数 counted / 上限 budget、多久没动静 quietMinutes。常浩让你处理卡住的接力时，先用它对上是哪几张、各属哪个会话，再按情况办；只是不想要了的，用 relay_end 结束。";
+
+const endDescription =
+  "结束驿窗里的 ChatGPT 接力，效果和常浩在侧栏点「结束接力」一样：一次可结束多张，逐张返回结果（ended 结束了的，refused 没结束的和原因）。只在常浩明确要你结束时调用：驿窗会核实调用的这一轮是常浩开的头（他在会话里打的字，或经驿窗插件送进来、不带智能体来源标签的话：侧栏回复、手机上说的、以他身份发来的智能体消息），核实不到就整批拒收，什么都不结束；这时请常浩在会话里说一句要结束哪几张，再调用。别的智能体转达的话不算。结束后接力卡时间线记一步「〈你的会话〉按常浩授权结束：原因」；到上限还没了结的审查链也算常浩了结了。正在往 ChatGPT 送话的那张会拒收，稍后再试。";
+
+const endInput = {
+  ids: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(20)
+    .describe("要结束的接力编号（relay_list 里的 id）。"),
+  reason: z
+    .string()
+    .min(1)
+    .max(200)
+    .describe(
+      "一句话写为什么结束，显示在接力卡时间线上，例如「PR #211 已合并，常浩让收掉」。",
+    ),
+};
+
+/** The calling session as its client names it (index.ts `caller`). */
+type Caller = {
+  client: string;
+  sessionId: string;
+  turnId: string | null;
+} | null;
+type Deps = {
+  request: (
+    method: string,
+    params: Record<string, unknown>,
+    options?: { timeoutMs?: number },
+  ) => Promise<unknown>;
+  result: (data: unknown) => {
+    content: (
+      | { type: "text"; text: string }
+      | { type: "image"; data: string; mimeType: string }
+    )[];
+    structuredContent: Record<string, unknown>;
+  };
+  caller: (meta: Record<string, unknown> | undefined) => Caller;
+  launchedBy: number;
+};
+const readOnly = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+export function registerRelayTools(
+  server: McpServer,
+  { request, result, caller, launchedBy }: Deps,
+) {
+  const ask = async (
+    method: string,
+    params: Record<string, unknown>,
+    options?: { timeoutMs?: number },
+  ) => {
+    try {
+      return result(await request(method, params, options));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Engine operation failed.";
+      // The app's own refusals are in Chinese; a transport failure is not.
+      const text = /[\u4e00-\u9fff]/.test(message)
+        ? message
+        : `连不上驿窗的本机工具通道：请确认驿窗在运行，并在设置 → 智能体插件里登记「ChatGPT（Chrome 插件）」。（${message}）`;
+      return { isError: true, content: [{ type: "text" as const, text }] };
+    }
+  };
+  const callerOf = (context: { mcpReq: { _meta?: unknown } }) =>
+    caller(context.mcpReq._meta as Record<string, unknown> | undefined);
+  server.registerTool(
+    "relay_to_chatgpt",
+    {
+      description: relayDescription,
+      inputSchema: z.object(relayInput).strict(),
+      annotations: {
+        ...readOnly,
+        readOnlyHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    ({ title, summary, brief, risk, head, chain, extra, launch }, context) =>
+      ask(
+        "relay_to_chatgpt",
+        {
+          title,
+          summary,
+          brief,
+          risk,
+          head,
+          chain,
+          extra,
+          launch,
+          caller: callerOf(context),
+          cwd: process.cwd(),
+          parent: launchedBy,
+        },
+        // Continuing a review waits for the extension to send (≤ 30 s).
+        { timeoutMs: 55_000 },
+      ),
+  );
+  server.registerTool(
+    "relay_list",
+    {
+      description: listDescription,
+      inputSchema: z.object({}).strict(),
+      annotations: readOnly,
+    },
+    () => ask("relay_list", {}),
+  );
+  server.registerTool(
+    "relay_end",
+    {
+      description: endDescription,
+      inputSchema: z.object(endInput).strict(),
+      annotations: {
+        ...readOnly,
+        readOnlyHint: false,
+        destructiveHint: true,
+      },
+    },
+    ({ ids, reason }, context) =>
+      ask("relay_end", { ids, reason, caller: callerOf(context) }),
+  );
+}

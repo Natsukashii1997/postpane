@@ -189,6 +189,25 @@ test("failed and ended handoffs offer what is left", () => {
   });
   assert.deepEqual(actions(ended), ["close"]);
   assert.equal(timeline(ended, T, true).at(-1)?.title, "结束接力");
+  assert.equal(timeline(ended, T, true).at(-1)?.sub, undefined);
+  // Ended by an agent at the person's word (#439): who and why, under it.
+  const byAgent = handoff({
+    status: "closed",
+    phase: "ended",
+    steps: [
+      ...handoff().steps!,
+      step("end", T + 3 * minute, {
+        text: "Claude Code 会话 s9 按常浩授权结束：PR 已合并",
+      }),
+    ],
+  });
+  assert.deepEqual(
+    [
+      timeline(byAgent, T, true).at(-1)?.title,
+      timeline(byAgent, T, true).at(-1)?.sub,
+    ],
+    ["结束接力", "Claude Code 会话 s9 按常浩授权结束：PR 已合并"],
+  );
   // Before phases were kept: an open handoff reads as delivered.
   assert.deepEqual(round(handoff({ phase: undefined, steps: undefined })), {
     at: 1,
