@@ -37,6 +37,7 @@
     - P2-02 闲置 24 小时自动结束（`idle.rs`，末步 `End` 且 auto）后台 `unsettled_top` 仍算到顶未了结，前端 `stopped()` 要求 live、`relayStamps` 只看 open，「停」消失、卡只剩「知道了」；快照对已结束接力只留 24 小时（`FAILED_SHOWN_MS`）。要区分本人结束与闲置自动结束。
     - P2-03 `Desk::new` 重启恢复里自动通过的分支（`handoff.rs` 约 346–357 行 `book.passed(id, &passed(chinese), now)`）没先 `book.note(id, Notice::Passed, now)`。
     - P2-04 停卡的「去会话里说一句」在 `doerSession()` 找不到会话时仍可点、点了无反应（`go()` 静默返回）；标题行已用 `canGo` 处理，底部按钮要同步置灰并说明。
+  - L2 第 1 轮返修（`ec2afe9`，常浩选「就在这里做」）：P2-01「过」章改按 ChatGPT 消息 id 对应（`shown()` 保留回信步骤的 `key`，回执 `turnId` 一一对应，无 id 时前后 2 分钟）；P2-02 闲置一天被驿窗自动结束、仍在上限的接力继续显示「停」（卡底「知道了」「去会话里说一句」，票根「停」章，同一会话或目录之后开了新审核才收），判定搬到 `alerts/relay-stop.ts`；P2-03 `Desk::new` 重启恢复的自动通过先记 `Notice::Passed`；P2-04 原会话不在时按钮置灰、写「原会话已不在」。顺手改（**改变了行为**）：时间线里驿窗自动结束不再一律写「审核通过，自动结束接力」，前一封回信是通过才这样写，否则写「驿窗自动结束接力」并附原因；「停」时票根下半也用航空纸。新增场景 `relay-idle-stopped`，截图两轮 `l2r1-idle-stopped-round{1,2}.jpg`。测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，cargo `1041 passed; 0 failed`，前端 `ℹ pass 472` / `ℹ fail 0`，MCP 9、插件 14、扩展 23 全过；`node --test tests/*.test.mjs` `ℹ pass 22` / `ℹ fail 0`（证据目录 `*-3.log`）。
   - skill 进化：无。
 - 本轮新坑：无
 
