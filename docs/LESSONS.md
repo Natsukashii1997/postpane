@@ -92,7 +92,7 @@
 - 正确做法：侧栏悬停面板里要点的东西（托盘色块、按钮、链接）不靠电脑控制实机验证；逻辑在浏览器预览里用真实组件点，实机这一步请常浩用鼠标或触控板点一次，交接里写明哪些是常浩点的。展开卡、设置窗口这类普通窗口不受影响（#121–#123 在展开卡上点「转回 Claude」「结束接力」都成功了）。
 - 证据：2026-11-06 09:37–09:43 本会话电脑控制记录；截图 `~/Library/Application Support/postpane/evidence/2026-11-06-merge-all/screens/`。
 - 升级：〔提醒〕未升级。（2026-11-19 补层级；积压清单组 9 已批：与 L-11 合并提升为全局 G-37，见下方「提升」）
-- 提升：已提升为全局 G-37（2026-11-19，agent-kit 第二批），与 L-11 合成一条。
+- 提升：已提升为全局 G-37（2026-11-19，agent-kit#83），与 L-11 合成一条。
 
 ## L-10 往别人的页面注入脚本：浏览器里测过，驿窗的 WebKit 窗口里卡死或空白（2026-11-06）
 
@@ -101,7 +101,7 @@
 - 正确做法：注入脚本只观察、不在 MutationObserver 回调里改 DOM（也不改 `document.title`）；要藏页面元素用按类名生效的样式表（`document.adoptedStyleSheets`），不写元素的行内样式；需要页面做事时由壳在回调之外 `eval` 页面自带的接口。验证顺序：先用 `swiftc` 写个最小 WKWebView 探针跑一遍（同一套 WebKit，几秒出结果），再打包装机；装机诊断用标题通道，页面有 `connect-src 'self'` 时往本机端口上报会被拦。
 - 证据：2026-11-06 14:41–15:16 本会话；诊断日志 `~/Library/Application Support/postpane/evidence/2026-11-06-notes-collapse/diag.log`、`diag2.log`。
 - 升级：〔提醒〕未升级（跨项目也成立，可提议提升为全局坑）。（2026-11-19 补层级；积压清单组 3 已批：提升为全局 G-33，见下方「提升」；L-35 是同类第二例）
-- 提升：已提升为全局 G-33（2026-11-19，agent-kit 第二批）。
+- 提升：已提升为全局 G-33（2026-11-19，agent-kit#83）。
 
 ## L-11 真屏点击测试中途锁屏或换了显示器，坐标点到别的应用（2026-11-06）
 
@@ -110,7 +110,7 @@
 - 正确做法：每一组真实点击前回读两件事，任一不符就停：锁屏 `Quartz.CGSessionCopyCurrentDictionary().get('CGSSessionScreenIsLocked')` 为空；显示器 `CGGetActiveDisplayList` 的尺寸和窗口位置（`CGWindowListCopyWindowInfo`）与写坐标时一致。「面板外」的点击点到菜单栏空白处（如 `(1100, 10)`），不点别的应用窗口；动鼠标前先问常浩能否接管约 1 分钟。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-06-disk-pendant/`（`screens/`、`windows.swift`、`click.swift`）；本会话 2026-11-06 16:0x–16:45。
 - 升级：〔提醒〕未升级（与 disk-slim L-11 同属「真屏点击」一类，可一起提议提升为全局坑）。（2026-11-19 补层级；积压清单组 9 已批：与 L-09 合并提升为全局 G-37，见下方「提升」）
-- 提升：已提升为全局 G-37（2026-11-19，agent-kit 第二批），与 L-09 合成一条。
+- 提升：已提升为全局 G-37（2026-11-19，agent-kit#83），与 L-09 合成一条。
 
 ## L-12 全量测试偶发一条 core 演示测试失败，不是本次改动造成的（2026-11-07）
 
@@ -176,7 +176,7 @@
 - 正确做法：插件只在回复不为空、而且 600 毫秒内没再变化时才报 `turn complete`（`content.js` 的 `settle`）。查「回信丢了」先看 `<数据目录>/chatgpt/turns.jsonl`，再看 `hooks/inbox` 里该会话的 completion 记录（`message` 为空就是这一类）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-07-chatgpt-reply-lost/`（`inbox-completion-empty.json`：01:54:19.827 收到的空回复，turnId `e6c1acb9…`；`dom-probe.md`：页面上真回复的 messageId 也是 `e6c1acb9…`）；复现测试 `src/apps/chrome-extension/test/content.test.mjs`「an empty placeholder is not the reply that fills it later」修复前报 `[['m5', '']]`。
 - 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」；积压清单组 8：同类问题已提升为全局 G-36，见下方「提升」）。原记录：已写成测试（上面那条，以及「a reply still being written without a stop button waits until it stops changing」）。
-- 提升：已提升为全局 G-36（2026-11-19，agent-kit 第二批），和牛马之家 L-17、剪藏插件 L-04 同类：第三方聊天页先出容器、内容后到。
+- 提升：已提升为全局 G-36（2026-11-19，agent-kit#83），和牛马之家 L-17、剪藏插件 L-04 同类：第三方聊天页先出容器、内容后到。
 
 ## L-19 「一直等」没生效：同一个允许值列表抄了三份，漏改了每次请求都跑的那份（2026-11-07）
 
@@ -219,7 +219,7 @@
 - 正确做法：插件后台在 `runtime.onInstalled` 里用 `chrome.scripting.executeScript` 给已开的目标标签页补装脚本；内容脚本要能被重复装（旧的一份让位）、断开后自己停下。查「插件那边没报」先比两组：插件自己开的标签页能报、用户自己的标签页不能报，就是这一类；让用户刷新标签页再试一句，能报就坐实。
 - 证据：`<数据目录>/hooks/inbox` 里 ChatGPT 的 17 条回复全在 `chatgpt/watched.json` 名单内，`chatgpt/turns.jsonl` 最后一行 14:29；常浩刷新标签页后发「测试」，19:05:08 start、19:05:12 complete 立即进来。修复见 #206。
 - 升级：〔提醒〕部分升级（2026-11-19 补层级：只写成测试，未接进必经检查，见上方「怎么升级」；积压清单组 7：同类问题已提升为全局 G-35，见下方「提升」）。原记录：已写成测试 `injected again into an open tab, the page reports each turn once`、`a copy cut off by an extension reload stops instead of throwing on every change`、`installing or reloading the extension puts the scripts into chatgpt.com tabs already open`。
-- 提升：已提升为全局 G-35（2026-11-19，agent-kit 第二批），和剪藏插件 L-10、L-13 同类：插件重载后已开标签页里的旧脚本断开。
+- 提升：已提升为全局 G-35（2026-11-19，agent-kit#83），和剪藏插件 L-10、L-13 同类：插件重载后已开标签页里的旧脚本断开。
 
 ## L-24 ChatGPT「在答」从没显示过：开始回合的记录被收件箱拒收（2026-11-07）
 
@@ -277,7 +277,7 @@
 - 补充（2026-11-09）：面板隐藏时 `requestAnimationFrame` 完全暂停。脚本里等 rAF 会让 `javascript_tool` 45 秒超时（#259）；`PerformanceObserver` 的 longtask 也不报，测到的性能数不算（#264）。读几何不等帧，`getBoundingClientRect` 本身会强制排版，要等用 `setTimeout`。性能测量改用无头 Chrome（独立临时配置目录、调试协议发真实鼠标、每轮重新加载），并固定好指针历史（测量副本会停在最后悬停的那家）。注意它是 Chromium，不是驿窗的 WKWebView（`evidence/2026-11-09-264-deferred-measure/measure.md`）。
 - 可提议提升为全局坑（和 G-11「截图要等画完」同一类：截图拍到的不一定是最终状态）。
 - 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 13 已批：并入全局 G-11，见下方「提升」）。
-- 提升：并入全局 G-11（2026-11-19，agent-kit 第二批）：G-11 放宽到无头 Chrome、隐藏的内置浏览器面板，截到的都不一定是最终状态。
+- 提升：并入全局 G-11（2026-11-19，agent-kit#83）：G-11 放宽到无头 Chrome、隐藏的内置浏览器面板，截到的都不一定是最终状态。
 
 ## L-30 测试替身比真实实现宽松，兜底路径一直是绿的却从没生效过（2026-11-09）
 
@@ -287,7 +287,7 @@
 - 证据：`handoff::tests::words_back_to_a_claude_session_that_ended_wait_in_its_queue`、`words_back_by_hand_that_cannot_go_in_wait_in_the_queue` 在替身改成照真实规则拒收后先红（前者 `left: 0, right: 1`，即一句也没排进去；红色输出只在本轮会话记录里，没另存文件），改走 `queue` 后变绿（全量日志 `evidence/2026-11-09-queue-back/test.log`）；`claude_plugin::tests::words_queued_for_a_session_that_ended_wait_for_it_to_open` 用真实通道验证。
 - 可提议提升为全局坑：换个项目也成立（测试替身比真实实现宽松，掩盖兜底失效）。
 - 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 3 已批：提升为全局 G-34，见下方「提升」）。
-- 提升：已提升为全局 G-34（2026-11-19，agent-kit 第二批）。
+- 提升：已提升为全局 G-34（2026-11-19，agent-kit#83）。
 
 ## L-31 照搬上游的 CSS 修复，去掉 `position: fixed` 后小票打印槽横跨整个窗口（2026-11-09）
 
@@ -306,7 +306,7 @@
 
 - 补充（2026-11-09，#251）：验红时先 `cp` 了改前副本，还原却用了 `git checkout -- <文件>`，把这个文件里本轮还没提交的改动也一起丢了，靠副本才找回。临时改源码验红，要么先提交，要么只用自己留的副本还原，不用 `git checkout`。
 - 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 14 已批：提升为全局 G-40，见下方「提升」）。
-- 提升：已提升为全局 G-40（2026-11-19，agent-kit 第二批）。
+- 提升：已提升为全局 G-40（2026-11-19，agent-kit#83）。
 
 ## L-33 并行子 agent 共用一台机器，宽泛的 `pkill -f` 把别人正在跑的测试也杀了（2026-11-09）
 
@@ -337,7 +337,7 @@
   - 已加守护测试 `hud/test/measuring-copy-sync.test.ts`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-bots-static/`：`now-side.png` 坏、`old-70ad-side.png`、`b768-side.png`、`bff6-side.png`、`b285-side.png` 好、`fix-side.png` 修好；`motion-1/2-side.png` 两张不同，说明小人在动。
 - 升级：〔机检〕部分升级（2026-11-19 补写升级行；#405 `a342c1c`：装后冒烟 `smoke.mjs` 是 `install.sh` 每次装机必走的一步，侧栏隔 2 秒截图看不出在动就 exit 6，并和装前截图对比，测试 `tests/smoke-diff.test.mjs`。算〔机检〕的理由：它接在装机脚本里自动跑、自动报错，不靠人记得截图。缺口：在包已经装上之后才查，拦的是「常浩看到坏包之前」而不是「装上之前」（回滚命令已打印）；比的是整个侧栏窗口，别的动画会把静态小人「带过」；还没在真实装机上跑过；守护测试 `hud/test/measuring-copy-sync.test.ts` 只能手动跑。积压清单组 4）。
-- 提升：并入全局 G-33（2026-11-19，agent-kit 第二批），是 L-10 之外第二例：只在 Chromium（无头 Chrome）里验过，进驿窗的 WKWebView 才坏。
+- 提升：并入全局 G-33（2026-11-19，agent-kit#83），是 L-10 之外第二例：只在 Chromium（无头 Chrome）里验过，进驿窗的 WKWebView 才坏。
 
 ## L-36 Claude 进程被直接杀掉，驿窗的审批钩子被 launchd 收养继续等，审批卡挂满 10 分钟（2026-11-09）
 
@@ -373,7 +373,7 @@
 - 正确做法：改了 Codex 的 MCP 或批准配置后，在新开的线程里实测（驿窗 `start_session` 开一个就行）。对照组也要在同类线程里做，不要用 `codex exec`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-codex-relay-approval/`：老线程 rollout 第 347～399 行（13:22 调用、13:23:12 终止），`~/.codex/logs_2.sqlite` 13:22:01.147 `hook/started` 之后没有 `hook/completed`；新线程 `rollout-2026-11-09T13-28-36-01a1bec7-a276-…` 第 19～21 行；`exec-test/exec.jsonl`、`exec-test/control.jsonl`。
 - 升级：〔提醒〕未升级（2026-11-19 补写升级行；积压清单组 13 已批：并入全局 G-26，见下方「提升」）。
-- 提升：并入全局 G-26（2026-11-19，agent-kit 第二批）：G-26 放宽为「改了 AI 工具的配置或人设，已开会话照旧用旧的」，补 Codex 这一例。
+- 提升：并入全局 G-26（2026-11-19，agent-kit#83）：G-26 放宽为「改了 AI 工具的配置或人设，已开会话照旧用旧的」，补 Codex 这一例。
 
 ## L-39 驿窗重启后接力转回 Codex 报「Unknown or child session target」，失败两次后自动往返停下（2026-11-09）
 
