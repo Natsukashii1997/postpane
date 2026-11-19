@@ -141,6 +141,7 @@ export function SourceSessions({
           now={now}
           onStats={onStats}
           card
+          place={focusVendor}
           relays={desk ? splitRelays(relays) : undefined}
           news={
             news ??

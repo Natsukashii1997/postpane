@@ -548,3 +548,11 @@
 - 正确做法：认本人私聊时，用户 id 相同，或聊天 id 就是 `home_channel.chat_id`，满足一条即可（`hermes/chats.rs` 的 `HomeChannel::opens`）；读外部程序写的 id 不假定格式永远不变。
 - 证据：`~/.hermes/profiles/agumon/state.db` 只读查询：`dm|e9cgcf77|1|2026-11-19 11:10:45`，同库其余私聊 `ou_6fac…`；#424 测试 `an_ask_opens_its_group_or_the_owners_own_private_chat` 的 `alias` 行（改前 `None`，见 `evidence/2026-11-19-424-hermes-jump/red-agents.log`）。
 - 升级：〔提醒〕部分升级（2026-11-19：写成测试，未接进必经检查）。
+
+## L-58 侧栏面板画两份，「展开其余 n 条」只展开了看得见的那份，框按没展开的测高副本定高（2026-11-19）
+
+- 现象：常浩截图说 ChatGPT 卡点「展开其余 n 条」后快 10 条内容，框还是很短，只能在里面滚；Claude 提问卡同样。
+- 根因：`HUDScene.tsx` 每个面板画两份：看得见的一份和隐藏的测高副本（`data-hud-measurement`），框高取测高副本的高度（最多屏幕高 - 80）。「展开其余 n 条」的开合是各组件自己的 `useState`，两份各有一份状态，点的是看得见的那份，测高副本一直折着。预览台实测：展开后 ChatGPT 卡测高仍 665、Claude 提问卡仍 790。
+- 正确做法：凡是会改变面板内容高度的界面状态（展开 / 折叠、切页、选中某条），不放组件本地 `useState`，放两份共读的外部状态（#430 起是 `panel/fold-store.ts` 的 `cardFolds`，键按卡和段区分），侧栏收起时由 `useCloseWithSidebar` 统一复位；验证时同时看测高副本和可见框的高度，不只看内容有没有出来。
+- 证据：`evidence/2026-11-19-430-fold-measure/`：`red.txt`（`fold-store.test.ts` 改前失败）、`before-chatgpt-expanded.jpg` / `after-chatgpt-expanded.jpg`、`preview-measure.md`（改后 ChatGPT 666 → 849、Claude 790 → 1089）。
+- 升级：〔提醒〕部分升级（2026-11-19：`fold-store.test.ts` 守住几处已知的折叠，未接进必经检查；`CompletionAlertView` 里「点开的那条回复」`chosen` 仍是本地状态，未核实是否同类）。
