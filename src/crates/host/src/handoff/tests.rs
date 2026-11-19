@@ -7,6 +7,7 @@ mod background_run;
 mod book_states;
 mod codex;
 mod driver;
+mod end_asked;
 mod ended_tabs;
 mod find_tell;
 mod finding;

@@ -140,6 +140,33 @@ mod tests {
         assert_eq!(book.get(&top.id).unwrap().pr.as_deref(), Some("o/r#9"));
     }
 
+    /// #439: an agent ending it at the person's word settles a cap as the
+    /// person's own end does, and its card says who ended it and why.
+    #[test]
+    fn an_end_an_agent_made_at_the_persons_word_settles_the_cap() {
+        let mut book = Book::default();
+        let top = book.begin("s1", Some("/w"), "修登录", None, "改动", 1);
+        book.opened(&top.id, "c1", 1);
+        book.replied("c1", "还差\n审查出口：返修\n结论：需修改", Some("m1"), 2);
+        book.note(&top.id, Notice::Top, 2);
+        assert!(book.unsettled_top("s1", None, false).is_some());
+        assert!(book.end_said(
+            &top.id,
+            Some("Claude Code 会话 s2 按常浩授权结束：已合并"),
+            3
+        ));
+        assert!(book.unsettled_top("s1", None, false).is_none());
+        let ended = book.get(&top.id).unwrap();
+        let last = ended.steps.last().unwrap();
+        assert_eq!((last.kind, last.auto), (StepKind::End, false));
+        assert_eq!(
+            last.text.as_deref(),
+            Some("Claude Code 会话 s2 按常浩授权结束：已合并")
+        );
+        // Ended already: nothing more.
+        assert!(!book.end_said(&top.id, Some("再结束一次"), 4));
+    }
+
     /// P2-05: an ended handoff's answer is cut only once it is kept whole
     /// in `replies/`; one from before the gate is kept first, and one that
     /// cannot be kept stays whole.

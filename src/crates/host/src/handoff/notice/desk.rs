@@ -92,7 +92,7 @@ impl Drop for Telling<'_> {
 
 /// What the session is told: what went wrong, how the handoff stands, and
 /// what to do — not to hand it over again by itself.
-fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
+pub(super) fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
     let what = match trouble {
         // The extension may still report it opened (`opened_late`), and the
         // handoff carries on: not told there will be no answer (P2-01).
@@ -129,7 +129,7 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
             book::FIND_MOST
         ),
     };
-    format!("驿窗接力「{}」出错：{what}", handoff.title)
+    format!("{}{what}", book::notice_head(handoff))
 }
 
 /// What becomes of an answer that comes after the stop: it goes back all
