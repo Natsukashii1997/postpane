@@ -557,3 +557,11 @@
 - 正确做法：凡是会改变面板内容高度的界面状态（展开 / 折叠、切页、选中某条），不放组件本地 `useState`，放两份共读的外部状态（#430 起是 `panel/fold-store.ts` 的 `cardFolds`，键按卡和段区分），侧栏收起时由 `useCloseWithSidebar` 统一复位；验证时同时看测高副本和可见框的高度，不只看内容有没有出来。
 - 证据：`evidence/2026-11-19-430-fold-measure/`：`red.txt`（`fold-store.test.ts` 改前失败）、`before-chatgpt-expanded.jpg` / `after-chatgpt-expanded.jpg`、`preview-measure.md`（改后 ChatGPT 666 → 849、Claude 790 → 1089）。
 - 升级：〔提醒〕部分升级（2026-11-19：`fold-store.test.ts` 守住几处已知的折叠，未接进必经检查；`CompletionAlertView` 里「点开的那条回复」`chosen` 仍是本地状态，未核实是否同类）。
+
+## L-60 在通道唯一的读线程上发送并等确认，确认永远读不出来：补格式每次都等满 30 秒超时（2026-11-19）
+
+- 现象：还没在实机出现，是全链路梳理时读代码发现的（#440）。回信末尾几行不合规时驿窗请 ChatGPT 补写格式，这次发送必然等满 30 秒，卡上会记「请 ChatGPT 补写末尾几行没确认送到：…timeout」，自动往返停下，发起会话收到「送达状态未知」；这 30 秒里别的接力的发送确认也读不出来。补格式随审核门 11-19 上线，本机还没有一封回信走到这条路。
+- 根因：插件的每句话由连接唯一的读线程读出（`platform/.../chatgpt/unix.rs`），监听回调在这条线程上同步执行。回调里 `Desk::drive` 遇到要补格式就调 `ask_format` → `Lines::send` → `Shared::ask_as`，在读线程上 `recv_timeout` 等 `sent` 确认，而确认只能由这条线程读出来。测试没拦住，是因为测试用的替身 `Fake::send` 立刻返回，比真实通道宽松（全局坑 G-34）。
+- 正确做法：读线程上的回调只记账，不做会经同一条通道等回应的事；推进交给另一条线程（`handoff/driver.rs` 的 `Driver`）。给会「发出去再等回应」的接口写测试时，替身要带上真实约束：回应只能由读线程带回（`handoff/tests/driver.rs` 的 `Wired`）。
+- 证据：`src/crates/host/src/handoff/tests/driver.rs` 的 `an_ask_to_mend_hears_that_it_went_in`，在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`：「word that it went in was heard while it waited」），改后通过（`green-after.txt`）。
+- 升级：〔提醒〕部分升级（2026-11-19：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。

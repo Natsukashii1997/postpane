@@ -37,6 +37,7 @@ use tauri::Manager;
 mod asking;
 mod back;
 mod belongs;
+mod driver;
 mod gate;
 mod guard;
 mod held;
@@ -1807,20 +1808,19 @@ pub(crate) fn listen(app: &tauri::AppHandle) {
     let Ok(channel) = chatgpt.channel() else {
         return;
     };
-    let app = app.clone();
-    channel.listen(std::sync::Arc::new(move |message: &Value| {
-        let changed = app.try_state::<Desk>().is_some_and(|desk| {
-            let now = now_ms();
-            // An answer that came in goes on by itself (#72).
-            desk.observe(message, now) && {
-                desk.drive(&AppLines(&app), now);
-                true
-            }
-        });
-        if changed {
-            republish(&app);
-        }
-    }));
+    let (heard, driven, shown) = (app.clone(), app.clone(), app.clone());
+    channel.listen(std::sync::Arc::new(driver::hearing(
+        move |message| {
+            let desk = heard.try_state::<Desk>();
+            desk.is_some_and(|desk| desk.observe(message, now_ms()))
+        },
+        // An answer that came in goes on by itself (#72).
+        move || {
+            let desk = driven.try_state::<Desk>();
+            desk.is_some_and(|desk| desk.drive(&AppLines(&driven), now_ms()))
+        },
+        move || republish(&shown),
+    )));
 }
 
 /// `relay_to_chatgpt`: Claude Code or Codex (#280) hands its work to
@@ -1955,6 +1955,7 @@ pub async fn relay_launch(
 #[cfg(test)]
 mod tests {
     mod asked_id;
+    mod driver;
     mod held_back;
     use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
