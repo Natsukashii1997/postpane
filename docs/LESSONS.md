@@ -558,6 +558,14 @@
 - 证据：`evidence/2026-11-19-430-fold-measure/`：`red.txt`（`fold-store.test.ts` 改前失败）、`before-chatgpt-expanded.jpg` / `after-chatgpt-expanded.jpg`、`preview-measure.md`（改后 ChatGPT 666 → 849、Claude 790 → 1089）。
 - 升级：〔提醒〕部分升级（2026-11-19：`fold-store.test.ts` 守住几处已知的折叠，未接进必经检查；`CompletionAlertView` 里「点开的那条回复」`chosen` 仍是本地状态，未核实是否同类）。
 
+## L-59 长 brief 一次粘贴进 ChatGPT 被转成附件，回信早到了，驿窗却报「30 分钟没回信」（2026-11-19）
+
+- 现象：新规则冒烟（#348 解冲突 L1 复核，接力 `h1a1f38f8b6200`），11516 个字符的 brief（13724 字节）送出后，ChatGPT 9 分 22 秒就写完回信（审查出口「通过」），驿窗一直没收下，30 分钟后报「ChatGPT 30 分钟没回信」停了自动往返。
+- 根因：插件把整份 brief 一次粘贴，ChatGPT 把单次超过某个长度（按字符数，在 8000 到 1 万字之间）的粘贴转成附件「粘贴的文本.txt」。附件消息没有 `[data-user-message-bubble]`，页面上也只有文件名、没有原文：会话第一轮时 `answered()` 恒为 false，插件不报 `turn complete`，重读也不报；已有旧气泡的会话里（推断，未实测）插件会拿上一轮的气泡当最新提问上报，`belongs.rs` 判对不上。`holds()` 只防「输入框比原文多」，输入框空着（字在附件里）也放行发送。代码注释早写着「让 ChatGPT 把很长的文字转成附件」，从 #99 起一直如此，只是之前的 brief 都没到阈值（有记录的最长 6887 字）。
+- 正确做法：送话按行切成每段不超过 6000 字分次粘贴（`page.js` 的 `pieces`、`paste`）；每段要等输入框（去空白）净增长到这段的全部可见字才算贴进（只看「变长」会放过只贴进半段的情况，只看总长八成会放过丢两成；只有空白的一段不能单独切出、也不能跳过，#435 审查 P1-01），贴完再核对输入框去空白后和原文是同样的字（只比字数会放过页面换了字的情况）；没贴全或字不同而发送键亮着就报 `composer-mismatch`、不发；贴之前输入框空着而发送键亮着（上次留下的附件，清空输入框清不到它）也不发。往第三方页面送长文时，先实测页面对单次输入的长度处理，不假定原样进输入框。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-19-golive-smoke/`（`root-cause-attachment.md`：页面 `[data-user-message-bubble]` 为 0、用户单元正文只有文件名；`turns-6afedd1d.jsonl` 只有两条 `start`）；阈值与分段实测记录在 #429；测试 `a long brief goes in as text, pasted a piece at a time`、`words that did not go in as text are not sent`（改前红：`evidence/2026-11-19-429-long-brief/red-before.txt`），`a long line is not cut inside a character`、`an attachment already in the composer is not sent along`（改前红：同目录 `red-round2.txt`）；真实页面只粘贴不发送、切点落在 ```` ```diff ```` 块内，逐行一致、无附件（2026-11-19 21:3x，记在 #429）。
+- 升级：〔提醒〕部分升级（2026-11-19：写成插件测试，阈值随 ChatGPT 改版可能变化，没有接进必经检查）。
+
 ## L-60 在通道唯一的读线程上发送并等确认，确认永远读不出来：补格式每次都等满 30 秒超时（2026-11-19）
 
 - 现象：还没在实机出现，是全链路梳理时读代码发现的（#440）。回信末尾几行不合规时驿窗请 ChatGPT 补写格式，这次发送必然等满 30 秒，卡上会记「请 ChatGPT 补写末尾几行没确认送到：…timeout」，自动往返停下，发起会话收到「送达状态未知」；这 30 秒里别的接力的发送确认也读不出来。补格式随审核门 11-19 上线，本机还没有一封回信走到这条路。
