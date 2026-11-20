@@ -13,7 +13,7 @@
 - 与授权不一致之处、遗留问题、范围外发现：在 12:12 到本 PR 合并之间从 main 拉过代码的分支（如 `claude/466-not-pressed`）检出的仍是旧钩子；`core.hooksPath` 是相对路径，各 worktree 用自己检出的那份。这些分支合进新的 main 之前，本仓库不装回钩子。
 - 本轮新坑：无（跨项目的坑，已向常浩提全局坑提案，未写入）。
 
-## Claude 额度第三行换回 Fable 周额度，去掉云端额度（#464）（2026-11-20，Claude，常浩「云端这条还是改成Fable额度吧」「不是改名，是claude有fable额度，我看这个不看云端额度了」；已 squash 合并（PR #467），常浩 11-20 说「现在就装机吧」，已从 main `22616b7` 装机、回读通过；Fable 行取消隐藏的草稿等常浩保存）
+## Claude 额度第三行换回 Fable 周额度，去掉云端额度（#464）（2026-11-20，Claude，常浩「云端这条还是改成Fable额度吧」「不是改名，是claude有fable额度，我看这个不看云端额度了」；已 squash 合并（PR #467），常浩 11-20 说「现在就装机吧」，已从 main `22616b7` 装机、回读通过；Fable 行取消隐藏已由常浩保存）
 
 - 时间：开工 `2026-11-20 11:04`。来由：常浩截图对比 claude.ai 用量（Current session 44%、This week 41%、Fable 49%「Up to 50% of your weekly limit」）与驿窗 Claude 卡（第三行「云端额度 97%　等待更新」）。查实：那行是 claude.ai 的 $250 云端赠额（Cloud session credits），11-05 07:59 到期后接口不再返回，驿窗沿用 11-05 的最后读数（`observedAt` 2026-11-05T07:56，状态 stale）挂了 15 天；Fable 周额度自 11-05 #92 起在读取层被丢掉。
 - 改了哪些文件：
@@ -31,7 +31,7 @@
 - 截图：`evidence/2026-11-20-464-fable-quota/scene-panel-fable.jpg`、`scene-peek-fable.jpg`（预览台，不是实机）。
 - 发布与回读：常浩 11-20 回「现在就装机吧」，不再等 #442。主目录 main `22616b7` 打包，`install.sh 464-fable-quota --takeover` 接管（装前是 #439 worktree、PR #442 未合并的包 `ad07ec632cf5`，已备份到 `evidence/2026-11-20-464-fable-quota/PostPane-ad07ec632cf5.app`），12:37:00 退出并启动；产物 `464024cd7ffe` / 已装 `464024cd7ffe` / 签名证书 leaf `H"b773068e`；冒烟：侧栏在动（隔 2 秒 517 像素不同）；装前装后差 45.85%，是装前截图里悬停面板开着，装后没开；`install.sh check`「一致」。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-20-464-fable-quota/PostPane-ad07ec632cf5.app" /Applications/PostPane.app; open /Applications/PostPane.app`。这次装机一并带上 main 上已合并、未装的 #441、#448、#457（#459）。
 - 实机回读：`get_hud` 里 Claude 三行「Current session 14%」「Weekly limit · All models 47%」「Weekly limit · Fable 56%」，没有云端行；`draft_hud` 给屏幕 `22763505-…` 放草稿，`blocks.claude.hiddenRows` 清空、`hud.agents` 照旧，`get_hud_screenshot` 面板显示「5 小时 14%」「每周 47%」「Fable 额度 56%」，判词「三个额度在重置前都用不完」，截图 `evidence/2026-11-20-464-fable-quota/panel-real-fable.png`（账户打码）。草稿未保存，重启会丢。
-- **待常浩**：悬停侧栏打开面板，点「保存」，让 Fable 行取消隐藏生效（不保存，下次重启 Fable 又被隐藏）。
+- 常浩 11-20 回「已保存」：`get_hud` 回读 revision 3，屏幕 `22763505-…` 的布局只剩 `hud.agents`，`hiddenRows` 已无，没有未保存草稿。
 - **#442 受影响**：实机现在是 main 的包，#442 新加的 `relay_list` / `relay_end` 暂时不在实机上；#442 合并后从 main 重打重装即可恢复。#441、#448、#457 的装机待办已随这次装上：#448 的实机验证仍待常浩做；#457 要常浩在 Chrome 扩展程序页重新加载主目录那份插件（0.2.4）。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 已登记 DECIDED.md：新加 11-20 一行；11-05「所有额度都不考虑 Fable」那行、11-05「侧栏 Cloud 改叫云端」那项备注写明已被取代。
