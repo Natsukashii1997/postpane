@@ -4,6 +4,7 @@ import {
   cardAgent,
   inlineAlertAllowed,
   peekExpandWait,
+  peekGrowing,
   PEEK_GROWS_INTO,
 } from "../src/peek-expand.ts";
 
@@ -31,6 +32,25 @@ test("a peek grows into its panel 1.5 s after it shows, 1.9 s after the mark", (
 
 test("moving to another mark counts the whole 1.9 s again from there", () => {
   assert.equal(peekExpandWait(400, 5000, 5000), 1900);
+});
+
+test("a peek grows into its panel only while the pointer stays on the sidebar (#480)", () => {
+  const base = {
+    peek: true,
+    pinned: false,
+    expanded: false,
+    hovered: "deepseek",
+    focused: "deepseek",
+    pointerInside: true,
+  };
+  assert.equal(peekGrowing(base), "deepseek");
+  // Gone to a pendant, or out of the window, while the peek closes.
+  assert.equal(peekGrowing({ ...base, pointerInside: false }), null);
+  assert.equal(peekGrowing({ ...base, peek: false }), null);
+  assert.equal(peekGrowing({ ...base, pinned: true }), null);
+  assert.equal(peekGrowing({ ...base, expanded: true }), null);
+  assert.equal(peekGrowing({ ...base, hovered: null }), null);
+  assert.equal(peekGrowing({ ...base, focused: "claude" }), null);
 });
 
 test("a longer hover delay keeps the 1.5 s between peek and board", () => {

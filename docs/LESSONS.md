@@ -588,3 +588,11 @@
 - 正确做法：重读必须回报结果和标签页状态（`outcome`、`hidden`、`active`、`minimized`、`fronted`），记进 `turns.jsonl`（#457）；「已答完、没画出」连续两次就停下交给常浩，并说清点开那个 ChatGPT 标签页就能收回，不再干等 30 分钟。凡是「请对方再做一次、做没做成不回话」的补救，都要让它回话，否则补救失灵时没人知道。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-439第2轮漏报.md`；`evidence/2026-11-20-457-reread-undrawn/` 下 `red-background.txt`、`red-host.txt`、`red-platform.txt`（改前红）。测试：插件 `reading again tells PostPane what it found and how the tab stood`、`a read again says whether it was told, …`；驿窗 `handoff::tests::undrawn` 三条；平台 `the_extension_opens_a_conversation_and_reports_its_reply` 里 #457 那段。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试；「窗口不在屏幕上就不画」还没有实测，等第 1 批记录攒到证据，再定第 3 批的自动救回）。
+
+## L-62 侧栏有两条指针路径，「挂件不算侧栏」只在网页路径生效：实机悬停挂件时 DeepSeek 小人跟着动、小收据长成面板（2026-11-20）
+
+- 现象：常浩把鼠标放到侧栏下方的随手记猫球、磁盘瘦身球上，最下面一格 DeepSeek 的小人做悬停动作，有时还弹出 DeepSeek 的单家面板（#480）。场景预览台里同样操作没有这个问题。
+- 根因：侧栏悬停有两条路径。实机走原生指针（`hud:pointer`，`useHUDInteraction.ts` 里 `nativePointer` 那个 effect）；场景预览台没有原生指针，走网页的 `pointerenter` / `pointerleave`。挂件在侧栏窗口的命中区里，原生指针报 `inside: true`：effect 先 `setPointerInside(true)`，`hovered` 停在最后经过的一格（往下移正好经过 DeepSeek），`BotMark` 按 `hovered === key && pointerInside` 做悬停动作；小收据已出时 `entered()` 跳过了挂件判断，「停久看全」的计时照走，1.9 秒后长成面板。网页路径离开票条就触发 `pointerleave`，挂件不在保留名单里，按离开处理，所以没事。#133 加「猫球不弹面板」时只在打开判断里挡了一下，没让原生路径把挂件当成离开。
+- 正确做法：改侧栏悬停、离开、展开的逻辑时，原生路径和网页路径各过一遍；判定写成两边共用的纯函数（这次是 `request-hover.ts` 的 `onSidebar`、`peek-expand.ts` 的 `peekGrowing`），测试覆盖。场景预览台只走网页路径，原生路径的结果只能装机看。
+- 证据：issue #480；`~/Library/Application Support/postpane/evidence/2026-11-20-480-pendant-hover/`（`red.log` 改前红，`check2.log`、`test2.log`、`node2.log`）。测试：`request-hover.test.ts`「a pendant hangs outside the sidebar…」、`peek-expand.test.ts`「a peek grows into its panel only while the pointer stays on the sidebar」。
+- 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查）。

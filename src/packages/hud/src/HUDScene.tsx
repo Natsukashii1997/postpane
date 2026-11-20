@@ -65,6 +65,7 @@ import { InlineEventRow } from "./alerts/InlineEventRow";
 import {
   inlineAlertAllowed,
   peekExpandWait,
+  peekGrowing,
   PEEK_GROWS_INTO,
 } from "./peek-expand";
 import { snapshotLanguage } from "@agent-hud/ui/format";
@@ -598,14 +599,16 @@ export function HUDScene({
     key: string;
     ms: number;
   } | null>(null);
+  const growing = peekGrowing({
+    peek,
+    pinned,
+    expanded,
+    hovered,
+    focused: focusedVendor?.key,
+    pointerInside,
+  });
   useEffect(() => {
-    if (
-      !peek ||
-      pinned ||
-      expanded ||
-      !hovered ||
-      focusedVendor?.key !== hovered
-    ) {
+    if (!growing) {
       setExpandMeter(null);
       return;
     }
@@ -614,20 +617,13 @@ export function HUDScene({
       markSince.current,
       performance.now(),
     );
-    setExpandMeter({ key: `${hovered}:${markSince.current}`, ms });
+    setExpandMeter({ key: `${growing}:${markSince.current}`, ms });
     const timer = setTimeout(() => {
       setExpanded(PEEK_GROWS_INTO.expanded);
       setPinned(PEEK_GROWS_INTO.pinned);
     }, ms);
     return () => clearTimeout(timer);
-  }, [
-    peek,
-    pinned,
-    expanded,
-    hovered,
-    focusedVendor?.key,
-    config.hoverDelayMs,
-  ]);
+  }, [growing, config.hoverDelayMs]);
 
   // A request beside the dock is printed on paper, its tag and its card, and
   // so are a notice's and the usage panel, as receipts; in the notch they

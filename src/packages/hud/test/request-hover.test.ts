@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clickMayPin, hoverMayOpen } from "../src/request-hover.ts";
+import { clickMayPin, hoverMayOpen, onSidebar } from "../src/request-hover.ts";
 
 const marks = ["claude", "codex", "hermes"];
 
@@ -63,17 +63,12 @@ test("a hover from outside the strip (the request's own chip) still opens", () =
   );
 });
 
-test("the notes pendant is not a mark: hovering it never opens the panel", () => {
-  const on = (requestKey: string | null) =>
-    hoverMayOpen({
-      requestKey,
-      markKeys: marks,
-      pointerKey: null,
-      notch: false,
-      onPendant: true,
-    });
-  assert.equal(on(null), false);
-  assert.equal(on("claude"), false);
+test("a pendant hangs outside the sidebar: the native pointer on it is off the sidebar (#480)", () => {
+  // Off the strip, on the notes or disk-slim ball: no mark reacts, no peek
+  // stays or grows, as the browser's pointerleave already has it.
+  assert.equal(onSidebar(true, true), false);
+  assert.equal(onSidebar(true, false), true);
+  assert.equal(onSidebar(false, false), false);
 });
 
 test("a click on another agent's mark pins its own card; on the front news's own mark or in the notch it does not (#359)", () => {

@@ -16,7 +16,7 @@ import {
   type HUDEdge,
   type HUDVendor,
 } from "../model";
-import { clickMayPin, hoverMayOpen } from "../request-hover";
+import { clickMayPin, hoverMayOpen, onSidebar } from "../request-hover";
 import type { HUDDragPreview } from "./useHUDDrag";
 
 /** Native input is authoritative while a transparent host toggles mouse passthrough. */
@@ -242,7 +242,6 @@ export function useHUDInteraction({
         markKeys: vendors.map((vendor) => vendor.key),
         pointerKey: point ? vendorUnderPointer(point) : undefined,
         notch: config.mode === "notch",
-        onPendant: point ? onPendant(point) : false,
       })
     ) {
       // Off the waiting agent's mark: a hover that began opening stops.
@@ -268,17 +267,17 @@ export function useHUDInteraction({
 
   useEffect(() => {
     if (!nativePointer) return;
-    if (!nativePointer.inside || !nativePointer.point) {
+    const bounds = scene.current?.getBoundingClientRect();
+    const point = nativePointer.point;
+    const at = point && {
+      clientX: point.x + (bounds?.left ?? 0),
+      clientY: point.y + (bounds?.top ?? 0),
+    };
+    if (!at || !onSidebar(nativePointer.inside, onPendant(at))) {
       exited();
       return;
     }
     if (dragVisual || dragCandidate.current) return;
-    const bounds = scene.current?.getBoundingClientRect();
-    const point = nativePointer.point;
-    const at = {
-      clientX: point.x + (bounds?.left ?? 0),
-      clientY: point.y + (bounds?.top ?? 0),
-    };
     followMark(at);
     entered(nativePointer.altKey === true, at);
     if (
