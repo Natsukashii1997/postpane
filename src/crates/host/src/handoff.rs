@@ -2085,14 +2085,15 @@ mod tests {
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
             self.requests.borrow_mut().push(request.into());
-            if let Some(during) = &self.on_send {
-                during();
-            }
+            // Send never pressed: the words are not on the page.
             if self.send_unpressed.get() {
                 let error = "ChatGPT 插件没能完成：busy".to_owned();
                 return Err(SendFailed::NotPressed(error));
             }
             shown(text);
+            if let Some(during) = &self.on_send {
+                during();
+            }
             if self.send_fails.get() {
                 let error = "ChatGPT 插件没能完成：timeout".to_owned();
                 return Err(SendFailed::Unsure(error));
