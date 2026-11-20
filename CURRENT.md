@@ -39,7 +39,16 @@
   - skill 进化：无。
 - 本轮新坑：无
 
-## Claude 额度第三行换回 Fable 周额度，去掉云端额度（#464）（2026-11-20，Claude，常浩「云端这条还是改成Fable额度吧」「不是改名，是claude有fable额度，我看这个不看云端额度了」；已 squash 合并（PR #467）、未发布，装机排在 #442 之后）
+## 推送前钩子：从 worktree 推送不再把测试的 git 操作落到本仓库（2026-11-20，Claude，常浩回「开工，全部可合并」；已提交、PR 见下、无需发布）
+
+- 时间：开工 `2026-11-20 12:25`。★ 来由：#465 装的推送前钩子（骨架 0.4.0）从 worktree 推送时，git 把本仓库的位置（`GIT_DIR`）带进钩子，钩子跑的 `tests/hooks.test.mjs` 在临时目录建仓库、提交、推送都继承了它：推送的分支多出测试提交，主目录变成裸仓库，测试却全过。#465 合并时没带修复；12:14 被装上后，12:17 已停用，检查时没中招（`core.bare=false`，无测试提交）。
+- 改了哪些文件：`scripts/hooks/pre-push`（`cd` 之后 `unset $(git rev-parse --local-env-vars)`；本项目定制的 `TESTS` 不动）、`tests/hooks.test.mjs`（换成骨架 0.4.1 版本：自己的 git 调用不继承这些变量，新增一条从 worktree 真推的用例）。和 my-skills#116 一致。
+- 测试：本 worktree 里 `sh scripts/hooks/pre-push` 退出码 0（`通用规则检查通过`，`ℹ pass 59` / `ℹ fail 0`）；`node --test tests/hooks.test.mjs` `ℹ pass 4` / `ℹ fail 0`；全量 `node src/tooling/package-resources.mjs && pnpm run check && pnpm test` 退出码 0，`全量测试汇总：6 套，失败 0 套`。证据：`~/Library/Application Support/agent-kit/evidence/2026-11-20-pre-push-hook-gitdir/`。
+- 验证环境：本机真实 worktree。新 worktree 先跑 `node src/tooling/package-resources.mjs` 才能过 `cargo check`（L-01）。
+- 与授权不一致之处、遗留问题、范围外发现：在 12:12 到本 PR 合并之间从 main 拉过代码的分支（如 `claude/466-not-pressed`）检出的仍是旧钩子；`core.hooksPath` 是相对路径，各 worktree 用自己检出的那份。这些分支合进新的 main 之前，本仓库不装回钩子。
+- 本轮新坑：无（跨项目的坑，已向常浩提全局坑提案，未写入）。
+
+## Claude 额度第三行换回 Fable 周额度，去掉云端额度（#464）（2026-11-20，Claude，常浩「云端这条还是改成Fable额度吧」「不是改名，是claude有fable额度，我看这个不看云端额度了」；已 squash 合并（PR #467），常浩 11-20 说「现在就装机吧」，已从 main `22616b7` 装机、回读通过；Fable 行取消隐藏已由常浩保存）
 
 - 时间：开工 `2026-11-20 11:04`。来由：常浩截图对比 claude.ai 用量（Current session 44%、This week 41%、Fable 49%「Up to 50% of your weekly limit」）与驿窗 Claude 卡（第三行「云端额度 97%　等待更新」）。查实：那行是 claude.ai 的 $250 云端赠额（Cloud session credits），11-05 07:59 到期后接口不再返回，驿窗沿用 11-05 的最后读数（`observedAt` 2026-11-05T07:56，状态 stale）挂了 15 天；Fable 周额度自 11-05 #92 起在读取层被丢掉。
 - 改了哪些文件：
@@ -55,8 +64,10 @@
 - 测试：先跑红（证据 `red-rust.log`：4 failed；`red-frontend.log`：`ℹ fail 1`）。变基到 `5ce46fb` 后：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 1076 passed / 0 failed；前端 `ℹ pass 487` / `ℹ fail 0`，其余四套 `ℹ pass 9`、`14`、`46`、`11` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。第一轮全量有 2 项失败（提醒文案测试期望旧名；我恢复演示数据 Fable 行让 `demo/data.rs`、`demo/mod.rs` 超 300 行棘轮），改为不动演示数据后重跑全过。合并前又变基到 `09b5850`（#465 只改 `scripts/hooks/`、`tests/hooks.test.mjs`，`src/` 无差异），只重跑 `node --test tests/*.test.mjs` `ℹ pass 58` / `ℹ fail 0`、`node scripts/check-rules.mjs` 退出 0，`pnpm run check` 与 `pnpm test` 沿用上一次结果。日志 `~/Library/Application Support/postpane/evidence/2026-11-20-464-fable-quota/`（`check3.log`、`test3.log`、`node3.log`）。
 - 验证：场景预览台（`scenes-464`，127.0.0.1:1480，场景 `all-running`）用真实组件看：面板 Claude 块三行「5 小时 20%」「Current week 35%」「Fable 额度 49%」；悬停 Claude 票签的小卡「5h / 7d / Fable 49%」（「Current week」「7d」是场景假数据的名字，实机是「每周」「Weekly」）。未在实机验证。
 - 截图：`evidence/2026-11-20-464-fable-quota/scene-panel-fable.jpg`、`scene-peek-fable.jpg`（预览台，不是实机）。
-- 发布与回读：未发布。现装的是 #439 worktree（PR #442，未合并）的包，常浩 11-20 定了等 #442 合并后从 main 一起装，本 PR 跟着那次装。
-- **装机待办**：装完后常浩已存的面板布局里还隐藏着 Fable 行（`blocks.claude.hiddenRows` 含 `…/claude-weekly-fable`，11-05 #58 放的），Fable 不会出来。装机的人用 HUD 工具 `draft_hud` 把这条从 `hiddenRows` 去掉，请常浩在面板点「保存」；再实机截一张补进 DECIDED.md 那行的基线截图。
+- 发布与回读：常浩 11-20 回「现在就装机吧」，不再等 #442。主目录 main `22616b7` 打包，`install.sh 464-fable-quota --takeover` 接管（装前是 #439 worktree、PR #442 未合并的包 `ad07ec632cf5`，已备份到 `evidence/2026-11-20-464-fable-quota/PostPane-ad07ec632cf5.app`），12:37:00 退出并启动；产物 `464024cd7ffe` / 已装 `464024cd7ffe` / 签名证书 leaf `H"b773068e`；冒烟：侧栏在动（隔 2 秒 517 像素不同）；装前装后差 45.85%，是装前截图里悬停面板开着，装后没开；`install.sh check`「一致」。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-20-464-fable-quota/PostPane-ad07ec632cf5.app" /Applications/PostPane.app; open /Applications/PostPane.app`。这次装机一并带上 main 上已合并、未装的 #441、#448、#457（#459）。
+- 实机回读：`get_hud` 里 Claude 三行「Current session 14%」「Weekly limit · All models 47%」「Weekly limit · Fable 56%」，没有云端行；`draft_hud` 给屏幕 `22763505-…` 放草稿，`blocks.claude.hiddenRows` 清空、`hud.agents` 照旧，`get_hud_screenshot` 面板显示「5 小时 14%」「每周 47%」「Fable 额度 56%」，判词「三个额度在重置前都用不完」，截图 `evidence/2026-11-20-464-fable-quota/panel-real-fable.png`（账户打码）。草稿未保存，重启会丢。
+- 常浩 11-20 回「已保存」：`get_hud` 回读 revision 3，屏幕 `22763505-…` 的布局只剩 `hud.agents`，`hiddenRows` 已无，没有未保存草稿。
+- **#442 受影响**：实机现在是 main 的包，#442 新加的 `relay_list` / `relay_end` 暂时不在实机上；#442 合并后从 main 重打重装即可恢复。#441、#448、#457 的装机待办已随这次装上：#448 的实机验证仍待常浩做；#457 要常浩在 Chrome 扩展程序页重新加载主目录那份插件（0.2.4）。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 已登记 DECIDED.md：新加 11-20 一行；11-05「所有额度都不考虑 Fable」那行、11-05「侧栏 Cloud 改叫云端」那项备注写明已被取代。
   - claude.ai 写 Fable「Up to 50% of your weekly limit」，驿窗只显示接口给的百分比（49%），没有把「占每周一半」这层关系画出来。
