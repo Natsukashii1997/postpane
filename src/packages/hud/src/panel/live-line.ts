@@ -1,10 +1,8 @@
 import type { Language } from "@agent-hud/ui/format";
+import { say } from "../say.ts";
 import type { LiveSession } from "./agent-board.ts";
 
 // The line under a session the panel lists (issue #52, 「待核对」 #354).
-
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 
 /** The line under a listed session: what it waits on, or what it does. */
 export function liveSessionLine(

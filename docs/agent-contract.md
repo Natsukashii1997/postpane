@@ -8,6 +8,8 @@ that contract.
 
 ## One shape for every agent
 
+> 驿窗说明（2026-11-20）：下面的结构体是上游定的目标形状，还没走完。现在的 `Agent`（`src/crates/agents/src/agent.rs`）没有 `transcript`、`account`、`requests` 这三项：转录解析按客户端 id 在 `agents/src/transcript/mod.rs` 的 `parse_source` 里分派，账户读取登记在 `agent.rs` 的 `ACCOUNTS`。新增一家以代码为准。
+
 Each client is an `Agent`, and every behaviour is an optional section. A
 missing section means the client lacks that behaviour; the engine and the UI
 read that from the descriptor rather than from special cases.
@@ -103,12 +105,11 @@ reading records which one answered.
 **Tests cover every OS on every machine.**
 - `agents` is pure, so its fixture tests run each OS's table on every runner against a fake `Host` per OS. For example, they cover Windows paths with drive letters, CRLF logs, `.cmd` shims, and a missing credential store.
 - OS-specific samples live in `tests/fixtures/<id>/<os>/`.
-- The native CI matrix still runs platform's real adapters on each OS.
+- PostPane has no CI and runs only on macOS, so platform's Windows and Linux adapters are not exercised.
 
 **Checks.** `check:clients` also refuses `cfg`, `target_os` and
-`std::env::consts::OS` inside `agents`. It generates the agent × OS × behaviour
-support table from the descriptors. Docs, the capability report and the UI
-read that one table.
+`std::env::consts::OS` inside `agents`. (The agent × OS × behaviour support
+table this section once promised is not generated.)
 
 ## Changes are events
 

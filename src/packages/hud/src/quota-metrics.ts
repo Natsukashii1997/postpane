@@ -16,6 +16,7 @@ import {
   type FormatSettings,
   type Language,
 } from "@agent-hud/ui/format";
+import { say } from "./say.ts";
 
 export interface QuotaMetricReading {
   value: string;
@@ -41,9 +42,6 @@ const englishUTC: FormatSettings = {
   language: "en",
   calendar: { timeZone: "UTC", firstWeekday: 1 },
 };
-
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 
 /** Why a measure has no value, where Core gave no reason of its own. */
 function missing(measure: QuotaMeasure, language: Language) {

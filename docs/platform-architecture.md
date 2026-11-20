@@ -79,7 +79,6 @@ stubs are the list of open work for that operating system.
 | ChatGPT extension channel | `crates/platform/src/clients/chatgpt/mod.rs` | `unix.rs` (same-user socket kept open both ways, and the relay Chrome starts), `windows.rs` (stub: no named pipe or registry entry yet) | `Server`, `relay`; where Chrome reads native host manifests is agent data (`agents::chatgpt::NATIVE_HOSTS`) |
 | Local MCP channel | `crates/platform/src/local_tools/mod.rs` | `local_tools/unix.rs`, `local_tools/windows.rs` | `Server`, `request` |
 | One running copy | `crates/platform/src/instance/mod.rs` (the lock itself is portable) | `instance/unix.rs` (socket beside the lock), `instance/windows.rs` (named pipe) | `Endpoint`, `listen`, `hand_over` |
-| Phone sharing | `crates/share/src/share/os/mod.rs` | `os/macos.rs`, `os/windows.rs`, `os/linux.rs` | `computer_name`, `secrets` (Linux has no grant store yet, so sharing stays off there) |
 | HUD windows | `crates/host/src/hud/mod.rs` | `hud/macos.rs`, `hud/windows.rs`, `hud/linux.rs`; `hud/generic.rs` holds Tauri-only pieces a host may re-export | listed at the selector |
 | App shell | `crates/host/src/shell/mod.rs` | `shell/macos.rs`, `shell/windows.rs`, `shell/linux.rs` | `install`, `window_opened`, `windows_changed`, `reopened`, `statistics_chrome`, `system_prefers_chinese`, `alert` (Linux prints to standard error until a dialog exists before Tauri starts) |
 | System settings | `crates/host/src/system/mod.rs` | `system/macos.rs`, `system/windows.rs`, `system/linux.rs` | login item, `cli_candidates`, `private_output` |
@@ -91,7 +90,7 @@ stubs are the list of open work for that operating system.
 `pnpm run check:platform` (`src/tooling/check-platform-boundary.mjs`) enforces
 the rule. Outside files and folders named `macos`, `windows`, `linux` or
 `unix`, a platform `#[cfg]` may only select a `mod` or `use` line, and
-`cfg!()` on the operating system is refused. CI runs it on every change.
+`cfg!()` on the operating system is refused. `pnpm run check` runs it (PostPane has no CI).
 
 Tests in shared files therefore run on every host, Windows included.
 `pnpm run check:test-paths` (`src/tooling/check-test-paths.mjs`) refuses the
@@ -105,7 +104,7 @@ a `tempdir()` handed over itself (pass a path inside it, such as
 `temp.path().join("data")`, so the code makes the folder). Mark a folder that
 need not be private with `// plain directory`. Older lines are counted in
 `test-path-literals.json`, so only new ones fail; it runs on the Mac before a
-push and in CI. CI runs every crate's tests even after one fails.
+push (PostPane has no CI). `pnpm test` runs every suite even after one fails.
 
 To work on one operating system, change only its host files. A new capability
 gets a selector, one file per host, and a row in this table. If the shared

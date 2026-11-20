@@ -5,8 +5,8 @@ The service uses the current official TypeScript MCP SDK v2 (`@modelcontextproto
 Build the Rust engine from the monorepo root first:
 
 ```sh
-npm run engine:build
-npm --silent run mcp
+pnpm run engine:build
+pnpm --silent --filter @agent-hud/mcp run start
 ```
 
 Use a direct executable in a client configuration so npm's status messages do not enter protocol stdout:
@@ -15,8 +15,8 @@ Use a direct executable in a client configuration so npm's status messages do no
 {
   "mcpServers": {
     "agent-hud": {
-      "command": "/absolute/path/to/agent-hud-open/node_modules/.bin/tsx",
-      "args": ["/absolute/path/to/agent-hud-open/src/apps/mcp/src/index.ts"]
+      "command": "/absolute/path/to/postpane/node_modules/.bin/tsx",
+      "args": ["/absolute/path/to/postpane/src/apps/mcp/src/index.ts"]
     }
   }
 }
