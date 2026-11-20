@@ -80,9 +80,118 @@ fn the_watched_list_is_kept_between_runs() {
     assert_eq!(read[0].title, "方案");
     assert_eq!(read[0].opened_at, 1);
     assert_eq!(
-        watch_message(&read),
+        watch_message(&read, false),
         json!({"type":"watch","conversations":["68a1","68b2"]})
     );
+    // The shadow switch (#488) rides with the list, only when it is on.
+    assert_eq!(
+        watch_message(&read, true),
+        json!({"type":"watch","conversations":["68a1","68b2"],"shadow":true})
+    );
+}
+
+// #488: what the extension read from ChatGPT's own data is kept beside what
+// the page gave, only while the switch is on and for watched conversations.
+#[test]
+fn a_shadow_read_is_kept_as_a_line_while_the_switch_is_on() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let told = json!({"type":"shadow","conversation":"68a1","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"m1","chars":12,"sha":"0123456789abcdef"}});
+    // Off unless set: nothing is written.
+    assert!(!shadow::on(&data));
+    assert_eq!(shadow::keep(&data, true, &told, 9), Ok(false));
+    assert!(!shadow::path(&data).exists());
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(
+        folder(&data).join("config.json"),
+        r#"{"project":null,"dataShadow":true}"#,
+    )
+    .unwrap();
+    assert!(shadow::on(&data));
+    // One PostPane does not watch is not kept.
+    assert_eq!(shadow::keep(&data, false, &told, 9), Ok(false));
+    assert_eq!(shadow::keep(&data, true, &told, 9), Ok(true));
+    assert_eq!(
+        shadow::keep(
+            &data,
+            true,
+            &json!({"type":"shadow","conversation":"68a1","why":"reread","outcome":"http","status":429}),
+            10
+        ),
+        Ok(true)
+    );
+    let kept = std::fs::read_to_string(shadow::path(&data)).unwrap();
+    let lines: Vec<Value> = kept
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines[0],
+        json!({"conversation":"68a1","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"m1","chars":12,"sha":"0123456789abcdef"},"heardAt":9})
+    );
+    assert_eq!(lines[1]["status"], 429);
+    // A summary is short: anything long (a reply's words would be) is refused.
+    let long = json!({"type":"shadow","conversation":"68a1","text":"答".repeat(3000)});
+    assert!(shadow::keep(&data, true, &long, 11).is_err());
+    assert_eq!(
+        std::fs::read_to_string(shadow::path(&data))
+            .unwrap()
+            .lines()
+            .count(),
+        2
+    );
+}
+
+/// The extension's end of a connection, for a test: what it was sent.
+struct Sent(Arc<Mutex<Vec<u8>>>);
+impl Write for Sent {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+impl Peer for Sent {
+    fn close(&self) {}
+}
+
+/// #488: with the shadow switch on, the extension is told so with the list,
+/// and what its shadow reads found is kept: of watched conversations only.
+#[test]
+fn a_shadow_read_told_by_the_extension_is_kept_for_watched_conversations() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let mut list = vec![];
+    add_watched(&mut list, "68a1", "审核", true, 1);
+    save_watched(&data, &list).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    let shared = Shared::new(data.clone());
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let id = shared.attach(Box::new(Sent(sent.clone())));
+    let first = sent.lock().unwrap().clone();
+    assert_eq!(
+        read_frame(&mut first.as_slice(), INBOUND_LIMIT).unwrap(),
+        Some(json!({"type":"watch","conversations":["68a1"],"shadow":true}))
+    );
+    for conversation in ["other", "68a1"] {
+        shared.inbound(
+            id,
+            json!({"type":"shadow","conversation":conversation,"why":"complete","at":7,"outcome":"read","written":true}),
+        );
+    }
+    let kept = std::fs::read_to_string(shadow::path(&data)).unwrap();
+    let lines: Vec<Value> = kept
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["conversation"], "68a1");
+    assert_eq!(lines[0]["why"], "complete");
+    assert!(lines[0]["heardAt"].is_i64());
+    assert!(lines[0].get("type").is_none());
 }
 
 #[test]

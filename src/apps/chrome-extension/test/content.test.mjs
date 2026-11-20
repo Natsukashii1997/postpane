@@ -570,3 +570,59 @@ test("an answer held only in the hidden copy is not told, and the page scrolls t
     0,
   );
 });
+
+// #488: the shadow read. data.js lives in the page's own world; here a page
+// script stands in for it.
+test("a shadow read asks the page's own world and passes its answer on", async () => {
+  const page = await open();
+  const answer = await page.evaluate(async () => {
+    window.asks = [];
+    window.addEventListener("message", (event) => {
+      if (event.data?.postpane !== "data-read") return;
+      window.asks.push(event.data);
+      window.postMessage(
+        {
+          postpane: "data-answer",
+          id: "someone-else",
+          answer: { outcome: "wrong" },
+        },
+        "/",
+      );
+      window.postMessage(
+        {
+          postpane: "data-answer",
+          id: event.data.id,
+          answer: { outcome: "read", written: true },
+        },
+        "/",
+      );
+    });
+    return new Promise((resolve) =>
+      window.listener({ op: "data", promptId: "p1" }, {}, resolve),
+    );
+  });
+  assert.deepEqual(answer, { outcome: "read", written: true });
+  const asks = await page.evaluate(() => window.asks);
+  assert.equal(asks.length, 1);
+  assert.equal(asks[0].promptId, "p1");
+});
+
+test("a shadow read of a page without data.js, or showing another conversation, says so", async () => {
+  const page = await open();
+  const answers = await page.evaluate(async () => [
+    await new Promise((resolve) =>
+      window.listener({ op: "data", wait: 30 }, {}, resolve),
+    ),
+    await new Promise((resolve) =>
+      window.listener(
+        { op: "data", conversation: "6af7ec47-c0f4-83ee-9b9e-bf518660767e" },
+        {},
+        resolve,
+      ),
+    ),
+  ]);
+  assert.deepEqual(answers, [
+    { outcome: "no-script" },
+    { outcome: "other-conversation" },
+  ]);
+});

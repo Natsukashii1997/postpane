@@ -596,3 +596,11 @@
 - 正确做法：改侧栏悬停、离开、展开的逻辑时，原生路径和网页路径各过一遍；判定写成两边共用的纯函数（这次是 `request-hover.ts` 的 `onSidebar`、`peek-expand.ts` 的 `peekGrowing`），测试覆盖。场景预览台只走网页路径，原生路径的结果只能装机看。
 - 证据：issue #480；`~/Library/Application Support/postpane/evidence/2026-11-20-480-pendant-hover/`（`red.log` 改前红，`check2.log`、`test2.log`、`node2.log`）。测试：`request-hover.test.ts`「a pendant hangs outside the sidebar…」、`peek-expand.test.ts`「a peek grows into its panel only while the pointer stays on the sidebar」。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查）。
+
+## L-63 测试里多起一个 `Channel::start`，和别的测试抢同一个全局通道：`focus()` 断言偶发失败（2026-11-21）
+
+- 现象：给 ChatGPT 通道加了第二条走真实 socket 的测试（`tests_unix.rs`，#488），单独跑通过；和现有的 `the_extension_opens_a_conversation_and_reports_its_reply` 一起跑，后者的 `assert!(focus("68a1"))` 有时失败，有时通过。
+- 根因：`Channel::start` 把自己登记进进程级的 `CURRENT`（`focus()`、`reread()` 这些不带通道参数的函数都从它取）。`cargo test` 同一进程里并行跑测试，第二个 `Channel::start` 顶掉了第一个，`focus()` 问到的是另一条测试的通道。
+- 正确做法：一个测试进程里只留一条起 `Channel` 的测试。别的测试直接用 `Shared::new` + `attach`（传一个只收字节的假对端）+ `inbound`，不碰 `CURRENT`（这次的 `a_shadow_read_told_by_the_extension_is_kept_for_watched_conversations`）。只测落盘的，直接调那个函数。
+- 证据：issue #488；`~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/`（`test.log`）。
+- 升级：〔提醒〕未升级（2026-11-21：只写了这条，没有检查拦）。

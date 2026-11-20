@@ -5,7 +5,6 @@
 //! turns, which become completion events, and answers `open` and `send`.
 use agent_hud_agents::{chatgpt as agent, HookEvent};
 use agent_hud_core::l10n;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -21,12 +20,16 @@ pub(crate) use commands::focus;
 pub mod handoffs;
 mod manifest;
 mod sending;
+pub mod shadow;
+mod watched;
 pub use manifest::{
     install_manifest, manifest, manifest_directory, manifest_path, manifest_state, remove_manifest,
     transient,
 };
 pub use sending::SendFailed;
 use sending::Unasked;
+use watched::{add_watched, watch_message, watched_entry};
+pub use watched::{load_watched, save_watched, Watched};
 
 // A Unix socket; Windows has no transport yet.
 #[cfg(unix)]
@@ -51,9 +54,6 @@ pub fn folder(data: &Path) -> PathBuf {
 }
 pub fn socket_path(data: &Path) -> PathBuf {
     folder(data).join("extension.sock")
-}
-fn watched_path(data: &Path) -> PathBuf {
-    folder(data).join("watched.json")
 }
 
 /// One frame: a 4-byte little-endian length, then UTF-8 JSON. None when the
@@ -114,44 +114,6 @@ pub fn bridge(arguments: &[String], data: &Path) -> Option<i32> {
     })
 }
 
-/// A conversation the extension reports on: one PostPane opened.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Watched {
-    pub id: String,
-    #[serde(default)]
-    pub title: String,
-    pub opened_at: i64,
-    /// Whether PostPane named it (a handoff's title): that name comes before
-    /// the tab's on its replies.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub named: bool,
-}
-/// The watched list; empty when there is none or it cannot be read.
-pub fn load_watched(data: &Path) -> Vec<Watched> {
-    let path = watched_path(data);
-    let Ok(metadata) = fs::symlink_metadata(&path) else {
-        return vec![];
-    };
-    if !metadata.is_file() || metadata.len() > 4 * 1024 * 1024 {
-        return vec![];
-    }
-    fs::read(&path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Vec<Watched>>(&bytes).ok())
-        .map(|list| {
-            list.into_iter()
-                .filter(|entry| agent::conversation_id(&entry.id))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-/// Replaces the watched list, privately and at once.
-pub fn save_watched(data: &Path, list: &[Watched]) -> Result<(), String> {
-    let bytes = serde_json::to_vec_pretty(list).map_err(|_| "Watched list unavailable")?;
-    write_private(data, "watched", &bytes, &watched_path(data))
-        .map_err(|_| "The watched list could not be saved".into())
-}
 /// Replaces `path` in the channel's private folder with `bytes`, at once:
 /// written beside it under a name made from `stem`, then moved over it.
 fn write_private(data: &Path, stem: &str, bytes: &[u8], path: &Path) -> Result<(), String> {
@@ -238,7 +200,7 @@ impl Shared {
         state.pending.clear();
         state.connection = Some(Connection { id, peer });
         state.last_seen = Some(now_ms());
-        let watch = watch_message(&state.watched);
+        let watch = watch_message(&state.watched, shadow::on(&self.data));
         post_locked(&mut state, &watch);
         id
     }
@@ -308,7 +270,7 @@ impl Shared {
                                 eprintln!("{error}");
                             }
                         }
-                        let watch = watch_message(&state.watched);
+                        let watch = watch_message(&state.watched, shadow::on(&self.data));
                         post_locked(&mut state, &watch);
                     }
                 }
@@ -318,6 +280,12 @@ impl Shared {
                 if ok {
                     self.tell(&message);
                 }
+            }
+            // What a shadow read found (#488): kept, and nothing else.
+            Some("shadow") => {
+                let watched = watched_entry(&state.watched, &message).is_some();
+                drop(state);
+                shadow::heard(&self.data, watched, &message, now_ms());
             }
             // Heard as well, so words that arrive after the wait for them
             // gave up still count (#223); what a read again found (#457).
@@ -402,28 +370,6 @@ fn answer(state: &mut State, message: Value) {
         let _ = sender.send(message);
     }
 }
-fn watch_message(list: &[Watched]) -> Value {
-    json!({"type":"watch","conversations":list.iter().map(|w| &w.id).collect::<Vec<_>>()})
-}
-/// Adds a conversation to the list, or names it again; whether it changed.
-/// A name PostPane gave is not replaced by the tab's.
-fn add_watched(list: &mut Vec<Watched>, id: &str, title: &str, named: bool, at: i64) -> bool {
-    if let Some(entry) = list.iter_mut().find(|entry| entry.id == id) {
-        if title.is_empty() || entry.title == title || (entry.named && !named) {
-            return false;
-        }
-        entry.title = title.to_owned();
-        entry.named = named;
-        return true;
-    }
-    list.push(Watched {
-        id: id.to_owned(),
-        title: title.to_owned(),
-        opened_at: at,
-        named,
-    });
-    true
-}
 fn request_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -448,11 +394,6 @@ fn refused(reason: &str) -> String {
 }
 
 /// The watched entry a turn's conversation is, if PostPane opened it.
-fn watched_entry(list: &[Watched], message: &Value) -> Option<Watched> {
-    list.iter()
-        .find(|w| Some(w.id.as_str()) == message["conversation"].as_str())
-        .cloned()
-}
 
 /// A turn's conversation, and when it happened (never later than now).
 fn turn_at(message: &Value, now: i64) -> Option<(&str, i64)> {

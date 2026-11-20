@@ -19,6 +19,8 @@
     }
   };
 
+  // How long data.js has to answer a shadow read: two reads at most.
+  const DATA_WAIT = 20000;
   let conversation = page.conversationId(location.href);
   let wasStreaming = page.streaming(document);
   // Replies that render without a turn here (the history loading after the
@@ -144,6 +146,30 @@
         if (told) tellComplete(now, { reread: true });
         reply({ ok: true, streaming: page.streaming(document), told, loaded });
       }, 600);
+      return true;
+    }
+    // The shadow read (#488): data.js, in the page's own world, reads this
+    // conversation from ChatGPT's data and answers with a summary. No answer
+    // in time: it is not in this page (the page loaded before the switch
+    // went on). Only the tab showing the conversation is asked, as its
+    // requests are signed for the project it shows.
+    if (command.op === "data") {
+      if (command.conversation && page.conversationId(location.href) !== command.conversation) {
+        reply({ outcome: "other-conversation" });
+        return false;
+      }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const done = (answer) => {
+        clearTimeout(waiting);
+        window.removeEventListener("message", heard);
+        reply(answer);
+      };
+      const heard = (event) => {
+        if (event.source === window && event.data?.postpane === "data-answer" && event.data.id === id) done(event.data.answer);
+      };
+      const waiting = setTimeout(() => done({ outcome: "no-script" }), command.wait ?? DATA_WAIT);
+      window.addEventListener("message", heard);
+      window.postMessage({ postpane: "data-read", id, conversation: command.conversation, promptId: command.promptId ?? null }, "/");
       return true;
     }
     if (command.op === "state") {

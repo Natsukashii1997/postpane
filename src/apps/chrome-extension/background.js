@@ -53,22 +53,21 @@ async function onHost(message) {
     case "watch":
       watched = new Set(message.conversations || []);
       await chrome.storage.local.set({ watched: [...watched] });
+      await setShadow(message.shadow === true);
       statusSoon();
       break;
-    case "open":
-      post({
-        type: "opened",
-        requestId: message.requestId,
-        ...(await open(message.text, message.project)),
-      });
+    case "open": {
+      const result = await open(message.text, message.project);
+      post({ type: "opened", requestId: message.requestId, ...result });
+      wrote(result.conversation, result);
       break;
-    case "send":
-      post({
-        type: "sent",
-        requestId: message.requestId,
-        ...(await send(message.conversation, message.text)),
-      });
+    }
+    case "send": {
+      const result = await send(message.conversation, message.text);
+      post({ type: "sent", requestId: message.requestId, ...result });
+      wrote(message.conversation, result);
       break;
+    }
     case "focus":
       await focus(message.conversation);
       break;
@@ -267,7 +266,9 @@ async function tabShowing(conversation) {
 // read found, and how the tab stood, goes back to PostPane (#457).
 async function reread(conversation) {
   if (!watched.has(conversation)) return;
-  post({ type: "reread", conversation, ...(await readAgain(conversation)) });
+  const found = await readAgain(conversation);
+  post({ type: "reread", conversation, ...found });
+  shadowRead(conversation, "reread", { pageOutcome: found.outcome });
 }
 
 /** What reading `conversation` again found (`outcome`) and how its tab stood. */
@@ -392,6 +393,101 @@ function statusSoon() {
   }, 1000);
 }
 
+// --- Shadow read of ChatGPT's own data (#488) --------------------------------
+
+// While PostPane's shadow switch is on, a reply is also read from the data
+// chatgpt.com loads for itself (data.js, in the page's own world), and what
+// that found is told beside what the page drew: recorded, never acted on.
+// Each prompt is read at most three times, each on something that happened:
+// the page reported its reply, PostPane had it read again, 20 s after it was
+// sent. Only watched conversations, only while PostPane is connected.
+const DATA_SCRIPT = {
+  id: "postpane-data",
+  js: ["data.js"],
+  matches: [`${HOME}*`],
+  runAt: "document_start",
+  world: "MAIN",
+};
+const WRITING_AFTER = 20000;
+// A read these answer ends every read: signed out, refused, too many.
+const HALT = [401, 403, 429];
+let shadow = false;
+let halted = false;
+const unread = new Set(); // conversations a read failed on: not read again
+const prompts = new Map(); // conversation -> the prompt PostPane's words became
+const reads = new Map(); // conversation -> {promptId, whys} read for it so far
+
+/** Switches the shadow read, as PostPane says with each list: data.js goes
+ * into chatgpt.com pages as they load, or no longer does. What was switched
+ * is what this extension kept, not what a restarted worker remembers: on
+ * since before, the stops met still hold; switched, they start over. */
+async function setShadow(on) {
+  const kept = await chrome.storage.local.get(["shadow", "shadowStops"]);
+  const was = kept.shadow === true;
+  shadow = on;
+  const held = on && was ? kept.shadowStops : null;
+  halted = !!held?.halted;
+  unread.clear();
+  for (const id of held?.unread ?? []) unread.add(id);
+  if (on !== was)
+    await chrome.storage.local.set({ shadow, shadowStops: stops() });
+  try {
+    // Registered again each time it is on: an updated extension has lost it.
+    if (on) await chrome.scripting.registerContentScripts([DATA_SCRIPT]);
+    else if (was)
+      await chrome.scripting.unregisterContentScripts({
+        ids: [DATA_SCRIPT.id],
+      });
+  } catch {
+    // Already in, or already out.
+  }
+}
+
+const stops = () => ({ halted, unread: [...unread] });
+
+/** Words went out to `conversation`: the prompt they became is the one its
+ * reads look for, and the data is read once while the answer is written. */
+function wrote(conversation, result) {
+  if (!result.ok || !conversation) return;
+  if (result.promptId) prompts.set(conversation, result.promptId);
+  else prompts.delete(conversation);
+  if (shadow)
+    setTimeout(() => shadowRead(conversation, "writing"), WRITING_AFTER);
+}
+
+/** Reads `conversation` from the data, once per prompt for each `why`, and
+ * tells PostPane what that found, with `beside` (what the page made of it).
+ * A read that failed ends the reads of that conversation; one refused or
+ * over a limit ends them all, until the switch goes off and on. */
+async function shadowRead(conversation, why, beside = {}) {
+  if (!shadow || !port || halted) return;
+  if (!watched.has(conversation) || unread.has(conversation)) return;
+  const tabId = await tabShowing(conversation);
+  if (tabId === null) return;
+  // The prompt a reply answers is the one the page says; with nothing from
+  // the page (read again, being written), the one PostPane's words became.
+  const promptId = beside.pagePromptId ?? prompts.get(conversation) ?? null;
+  const round = reads.get(conversation);
+  const whys = round?.promptId === promptId ? round.whys : new Set();
+  if (whys.has(why)) return;
+  reads.set(conversation, { promptId, whys: whys.add(why) });
+  const answer = (await chrome.tabs
+    .sendMessage(tabId, { op: "data", conversation, promptId })
+    .catch(() => null)) ?? { outcome: "unreachable" };
+  // A page open since before the switch went on: data.js is put in now, and
+  // hears the page's sign-in on its next request.
+  if (answer.outcome === "no-script")
+    await chrome.scripting
+      .executeScript({ target: { tabId }, files: DATA_SCRIPT.js, world: "MAIN" })
+      .catch(() => {});
+  if (answer.outcome === "http" || answer.outcome === "error") {
+    if (HALT.includes(answer.status)) halted = true;
+    else unread.add(conversation);
+    await chrome.storage.local.set({ shadowStops: stops() });
+  }
+  post({ type: "shadow", conversation, why, at: Date.now(), ...beside, ...answer });
+}
+
 // --- Content scripts ---------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, sender) => {
@@ -408,7 +504,14 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     statusSoon();
   } else if (message.type === "turn") {
     // A new chat's first start, before it has an address, says nothing yet.
-    if (message.conversation) post(message);
+    if (!message.conversation) return;
+    post(message);
+    if (message.phase === "complete")
+      shadowRead(message.conversation, "complete", {
+        pagePromptId: message.promptId ?? null,
+        pageMessageId: message.messageId ?? null,
+        pageChars: (message.reply ?? "").length,
+      });
   }
 });
 

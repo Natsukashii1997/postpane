@@ -268,3 +268,20 @@ fn a_send_that_did_not_go_says_whether_send_was_pressed() {
         assert!(failed.text().contains(said["reason"].as_str().unwrap()));
     }
 }
+
+/// #488: what a shadow read found is kept for this user alone.
+#[test]
+fn what_a_shadow_read_found_is_kept_privately() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    let told = json!({"type":"shadow","conversation":"68a1","why":"complete","outcome":"read"});
+    assert_eq!(shadow::keep(&data, true, &told, 1), Ok(true));
+    let mode = std::fs::metadata(shadow::path(&data))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+}
