@@ -381,7 +381,7 @@ const sending = async (
     if (message.op === "submit") submits.push(message);
     return sendMessage(tabId, message);
   };
-  rig?.(chrome);
+  rig?.(chrome, listeners);
   await new Promise((resolve) => setImmediate(resolve));
   if (tab)
     listeners.message(
@@ -516,6 +516,18 @@ test("what the first try said of send stands while the second is not begun", asy
   // Pressed the first time: that stands as well.
   const pressed = await sending([unsent("send-failed", true)], { rig: closed });
   assert.deepEqual([pressed.reason, pressed.pressed], ["send-failed", true]);
+  // The browser refuses outright, not by a promise.
+  const refused = (chrome) => {
+    chrome.tabs.update = () => {
+      throw new Error("Tabs cannot be edited right now.");
+    };
+  };
+  submits = [];
+  assert.deepEqual(
+    await sending([notPressed], { rig: refused, submits }),
+    stands,
+  );
+  assert.equal(submits.length, 1);
   // Bringing it to the front takes longer than the sending has.
   const hung = (chrome) => {
     chrome.tabs.update = never;
@@ -568,8 +580,26 @@ test("a tab that is not made, or not put in its group, in time is told as not pr
       (chrome.tabs.create = async () => {
         throw new Error("Tabs cannot be edited right now.");
       }),
+    (chrome) =>
+      (chrome.tabs.create = () => {
+        throw new Error("Tabs cannot be edited right now.");
+      }),
     // Grouping asks for the tab first.
     (chrome) => (chrome.tabs.get = never),
+    // Not grouped in time, with the page there by then: still not asked.
+    (chrome, listeners) => {
+      chrome.tabs.get = never;
+      const { create } = chrome.tabs;
+      chrome.tabs.create = async (options) => {
+        const made = await create(options);
+        const conversation = options.url.split("/c/")[1];
+        listeners.message(
+          { type: "page", conversation, hidden: true, streaming: false },
+          { tab: { id: made.id } },
+        );
+        return made;
+      };
+    },
   ]) {
     const submits = [];
     const waits = [];
@@ -580,4 +610,39 @@ test("a tab that is not made, or not put in its group, in time is told as not pr
     assert.deepEqual(submits, [], "the page was never asked to send");
     assert.ok(Math.max(...waits) <= hostWait() - 5000, `${waits}`);
   }
+});
+
+// #466 review P1-03: what two failed tries say of send is put together.
+// Not pressed only when both say so; a try that does not say (the page threw,
+// or no word came back) may have pressed, and one "not pressed" beside it
+// would let the same words go a second time.
+test("two failed tries say not pressed only when both do", async () => {
+  const threw = { ok: false, reason: "send-failed", detail: "Error: x" };
+  const unknownFirst = await sending([threw, unsent("busy", false)]);
+  assert.equal(unknownFirst.reason, "busy");
+  assert.equal("pressed" in unknownFirst, false);
+  const unknownSecond = await sending([notPressed, threw]);
+  assert.equal(unknownSecond.reason, "send-failed");
+  assert.equal("pressed" in unknownSecond, false);
+  const both = await sending([notPressed, unsent("busy", false)]);
+  assert.equal(both.pressed, false);
+  // Pressed the first time, no word back of the second: pressed all the same.
+  const lost = (chrome) => {
+    const { sendMessage } = chrome.tabs;
+    let submits = 0;
+    chrome.tabs.sendMessage = async (tabId, message) => {
+      if (message.op === "submit" && ++submits === 2)
+        throw new Error(
+          "The message port closed before a response was received.",
+        );
+      return sendMessage(tabId, message);
+    };
+  };
+  const pressedThenLost = await sending([unsent("send-failed", true)], {
+    rig: lost,
+  });
+  assert.deepEqual(
+    [pressedThenLost.reason, pressedThenLost.pressed],
+    ["tab-closed", true],
+  );
 });

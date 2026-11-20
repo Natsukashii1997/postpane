@@ -295,6 +295,13 @@ test("out of time before send is pressed, it is not pressed", async () => {
   );
   assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // Nor is the box touched (#466 review P1-02).
+  const box = () =>
+    fresh.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+    ]);
+  assert.deepEqual(await box(), [0, ""]);
   // In time, the same words go.
   const inTime = await fresh.evaluate(
     (text) => PostPanePage.submit(document, text, Date.now() + 20000),
@@ -302,6 +309,31 @@ test("out of time before send is pressed, it is not pressed", async () => {
   );
   assert.equal(inTime.ok, true);
   assert.equal(await fresh.evaluate(() => window.sent), "P1-05 专项复核");
+  await fresh.close();
+});
+
+test("out of time between pieces, no more is put in the box", async () => {
+  const fresh = await composer();
+  const text = brief(800);
+  const late = await fresh.evaluate((text) => {
+    // The first piece in, the time is up.
+    const now = Date.now.bind(Date);
+    document.addEventListener(
+      "paste",
+      () => (Date.now = () => now() + 3600000),
+      { once: true },
+    );
+    return PostPanePage.submit(document, text, now() + 20000);
+  }, text);
+  assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
+  const [pastes, held] = await fresh.evaluate(() => [
+    window.pastes,
+    document.querySelector(".ProseMirror").textContent,
+  ]);
+  assert.equal(pastes.length, 1, `pasted ${pastes.length} times`);
+  const bare = (words) => words.replace(/\s/g, "");
+  assert.ok(bare(held) === bare(pastes[0]), "nor typed in instead");
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
 });
 

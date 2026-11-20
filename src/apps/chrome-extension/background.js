@@ -132,40 +132,67 @@ async function group(tabId) {
  * back; a test holds the two apart. */
 const PRESS_BY = 25000;
 
-/** What `step` comes to, true when to nothing. With `until`, null when it
- * fails or is not there by then: nothing on the way to pressing send may
- * outlast the time a sending has (#466 review P1-02). */
+/** What `step` comes to, true when to nothing. With `until`, null when
+ * there is no time left to begin it, when it fails (thrown, too), or when it
+ * is not done by then: nothing on the way to pressing send may outlast the
+ * time a sending has, and what is late is not gone on from (#466 review
+ * P1-02). Late, the step itself is not undone. */
 function by(until, step) {
-  const came = step.then((value) => value ?? true);
-  if (!until) return came;
+  if (!until) return step().then((value) => value ?? true);
   return new Promise((done) => {
-    const left = Math.max(0, until - Date.now());
+    const left = until - Date.now();
+    if (left <= 0) return done(null);
     const timer = setTimeout(() => done(null), left);
-    came.then(done, () => done(null)).finally(() => clearTimeout(timer));
+    new Promise((came) => came(step()))
+      .then(
+        (value) => done(Date.now() >= until ? null : (value ?? true)),
+        () => done(null),
+      )
+      .finally(() => clearTimeout(timer));
   });
+}
+
+/** What a second failed try says, with what the two say of send together
+ * (#466 review P1-03): pressed when either was; not pressed only when both
+ * say so; else left out. A try that does not say (the page threw) may have
+ * pressed, and "not pressed" lets the same words go again. */
+function both(first, second) {
+  const { pressed, ...told } = second;
+  if (first.pressed === true || pressed === true)
+    return { ...told, pressed: true };
+  if (first.pressed === false && pressed === false)
+    return { ...told, pressed: false };
+  return told;
 }
 
 /** Has the page put `text` in and press send, by `until` when given. Not
  * ok, `pressed` is what the page says of send (#466): false when it was
- * pressed on neither try, true when on either; left out when a try went out
- * and the tab went away meanwhile, so it is not known. */
+ * pressed on neither try, true when on either; left out when it is not
+ * known: a try did not say, or went out and the tab went away meanwhile. */
 async function submit(tabId, text, until) {
+  const closed = { ok: false, reason: "tab-closed" };
+  const ask = { op: "submit", text, ...(until && { until }) };
+  let first;
   try {
-    const ask = { op: "submit", text, ...(until && { until }) };
-    const first = await chrome.tabs.sendMessage(tabId, ask);
+    first = await chrome.tabs.sendMessage(tabId, ask);
     const again =
       !first.ok && ["send-failed", "composer-mismatch"].includes(first.reason);
-    if (!again || Date.now() >= until) return first;
+    if (!again) return first;
     // Some pages only accept input while the tab is in front; a draft that
     // came back in the box (#410) is emptied again on the second try. Not in
     // front by `until`, the second try is not begun, and what the first said
     // of send stands (#466 review P1-02).
-    const front = await by(until, chrome.tabs.update(tabId, { active: true }));
-    if (!front || Date.now() >= until) return first;
-    const second = await chrome.tabs.sendMessage(tabId, ask);
-    return !second.ok && first.pressed ? { ...second, pressed: true } : second;
+    const front = () => chrome.tabs.update(tabId, { active: true });
+    if (!(await by(until, front))) return first;
   } catch {
-    return { ok: false, reason: "tab-closed" };
+    return closed;
+  }
+  try {
+    const second = await chrome.tabs.sendMessage(tabId, ask);
+    return second.ok ? second : both(first, second);
+  } catch {
+    // No word back of the second try: it may have pressed.
+    return first.pressed === true ? { ...closed, pressed: true } : closed;
   }
 }
 
@@ -207,17 +234,19 @@ async function send(conversation, text) {
   const until = Date.now() + PRESS_BY;
   let tabId = tabFor(conversation);
   if (tabId === null) {
-    const tab = await by(
-      until,
-      chrome.tabs.create({ url: `${HOME}c/${conversation}`, active: false }),
+    // No tab made, grouped and loaded in time: the page is not asked, so
+    // send was not pressed (a page there all the same is not asked late).
+    const late = { ok: false, reason: "timeout", pressed: false };
+    const url = `${HOME}c/${conversation}`;
+    const tab = await by(until, () =>
+      chrome.tabs.create({ url, active: false }),
     );
-    // No tab to ask: send was not pressed.
-    if (!tab) return { ok: false, reason: "timeout", pressed: false };
+    if (!tab) return late;
     tabId = tab.id;
-    await by(until, group(tabId));
+    if (!(await by(until, () => group(tabId)))) return late;
     const loaded = (p) => p.conversation === conversation;
-    if (!(await ready(tabId, until - Date.now(), loaded)))
-      return { ok: false, reason: "timeout", pressed: false };
+    if (!(await ready(tabId, until - Date.now(), loaded))) return late;
+    if (Date.now() >= until) return late;
   }
   return submit(tabId, text, until);
 }

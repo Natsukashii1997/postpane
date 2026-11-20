@@ -302,15 +302,35 @@
    * the conversation, and PostPane lets them go again (#466). */
   const unsent = (reason) => ({ ok: false, reason, pressed: false });
 
+  /** Thrown by a wait that ends out of the time a sending has. */
+  const LATE = Symbol("late");
+
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
    * not ok, `pressed` says whether send was pressed (then they may have
    * gone all the same); ok, `promptId`, ChatGPT's id of the prompt it
    * became, once the page shows it (#410). Send is pressed by `until` or not
    * at all (#466 review P1-01): PostPane stops waiting for word, and what is
    * said after of words not pressed is not heard, so the waits before the
-   * press end by then, and out of time nothing is pressed. */
+   * press end by then, and out of time nothing is pressed. Nor is the box
+   * touched again (#466 review P1-02): asked out of time nothing is done,
+   * and a wait that ends out of it ends the try there. */
   async function submit(doc, text, until = Infinity) {
-    const wait = (check, ms) => waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
+    const late = () => Date.now() > until;
+    const wait = async (check, ms) => {
+      const got = await waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
+      if (late()) throw LATE;
+      return got;
+    };
+    if (late()) return unsent("timeout");
+    try {
+      return await press(doc, text, wait, late);
+    } catch (error) {
+      if (error !== LATE) throw error;
+      return unsent("timeout");
+    }
+  }
+
+  async function press(doc, text, wait, late) {
     if (streaming(doc)) return unsent("busy");
     const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
@@ -343,7 +363,7 @@
       held = () => holds(box, text);
       button = await wait(() => sendReady(doc), 5000);
     }
-    if (Date.now() > until) return unsent("timeout");
+    if (late()) return unsent("timeout");
     if (!button) return unsent("send-failed");
     if (!held()) return unsent("composer-mismatch");
     const before = lastPromptId(doc);
