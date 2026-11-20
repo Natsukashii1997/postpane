@@ -20,6 +20,30 @@ export function peekExpandWait(
   return Math.max(0, since + hoverDelayMs + PEEK_EXPAND_AFTER_MS - now);
 }
 
+/** The mark whose peek grows into its agent's panel now, if any: the peek
+ * shown on its own mark, nothing pinned or out yet, and the pointer still on
+ * the sidebar. A pointer gone to a pendant or out of the window leaves the
+ * peek closing, not growing (#480). */
+export function peekGrowing({
+  peek,
+  pinned,
+  expanded,
+  hovered,
+  focused,
+  pointerInside,
+}: {
+  peek: boolean;
+  pinned: boolean;
+  expanded: boolean;
+  hovered: string | null;
+  focused: string | undefined;
+  pointerInside: boolean;
+}): string | null {
+  return peek && !pinned && !expanded && focused === hovered && pointerInside
+    ? hovered
+    : null;
+}
+
 /** The agent the open sidebar is about; none means the whole board. An
  * alert's sender comes first; then the hovered mark's peek or panel, unless
  * the board is out (menu, edit hold). The notch only ever shows the board. */

@@ -15,22 +15,25 @@ export function hoverMayOpen({
   markKeys,
   pointerKey,
   notch,
-  onPendant = false,
 }: {
   requestKey: string | null;
   markKeys: readonly string[];
   pointerKey: string | null | undefined;
   notch: boolean;
-  /** The pointer is on the notes pendant: not a mark, so it never opens the
-   * panel (owner, 2026-11-06). */
-  onPendant?: boolean;
 }): boolean {
-  if (onPendant) return false;
   if (!requestKey || notch || pointerKey === undefined) return true;
   if (!markKeys.includes(requestKey)) return true;
   // Another agent's mark opens that agent's own peek, never the waiting
   // card (owner, 2026-11-08, #243): every mark answers for its own agent.
   return pointerKey !== null;
+}
+
+/** Whether the native pointer is on the sidebar. A pendant (随手记,
+ * 磁盘瘦身) hangs inside the window but outside the sidebar: on it no mark
+ * reacts and no peek stays or grows, as the browser's pointerleave already
+ * has it; it never opens the panel (owner, 2026-11-06, #133; #480). */
+export function onSidebar(inside: boolean, onPendant: boolean): boolean {
+  return inside && !onPendant;
 }
 
 /** Whether a click on a mark pins the sidebar open on it (#359): not in the

@@ -104,7 +104,7 @@
   "src/packages/app/src/statistics/UsageChart.tsx": 542,
   "src/packages/hud/src/BotMark.tsx": 416,
   "src/packages/hud/src/HUDGlow.tsx": 830,
-  "src/packages/hud/src/HUDScene.tsx": 1436,
+  "src/packages/hud/src/HUDScene.tsx": 1432,
   "src/packages/hud/src/HoverPanel.tsx": 552,
   "src/packages/hud/src/IslandNews.tsx": 373,
   "src/packages/hud/src/alerts/CompactAlertView.tsx": 628,
@@ -139,7 +139,7 @@
   "src/packages/hud/src/scene/HUDExpandedSurface.tsx": 635,
   "src/packages/hud/src/scene/HUDMarkStrip.tsx": 608,
   "src/packages/hud/src/scene/flight-plan.ts": 834,
-  "src/packages/hud/src/scene/useHUDInteraction.ts": 386,
+  "src/packages/hud/src/scene/useHUDInteraction.ts": 385,
   "src/packages/hud/src/scene/useHUDLayout.ts": 385,
   "src/packages/ui/src/format.ts": 682
 }
