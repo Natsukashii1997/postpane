@@ -103,9 +103,13 @@ impl Desk {
                 true
             }
             // Never known to have gone in: the session is told (P1-14).
+            // Not when word of it was heard as the send gave up (#446).
             Err(error) => self.change(|book| {
-                book.trouble(id, &format_failed(&error), now);
-                book.unconfirmed(id, &super::guard::send_unconfirmed(), true, now)
+                if book.mending_gave_up(id, &request) {
+                    book.trouble(id, &format_failed(&error), now);
+                    book.unconfirmed(id, &super::guard::send_unconfirmed(), true, now);
+                }
+                true
             }),
         };
         // Gone in or not known to have, ChatGPT may have answered before the

@@ -141,6 +141,14 @@ pub(super) fn confirmed_late() -> String {
         "The extension later said this review went in; its answer came first, and still cannot pass",
     )
 }
+/// Word that PostPane's ask to mend the last lines went in, come after its
+/// send gave up waiting and before the mended answer (#446).
+pub(super) fn mending_confirmed_late() -> String {
+    l10n::text(
+        "插件随后确认补格式的话已送到；回信还没到，这次补格式算已送达",
+        "The extension later said the ask to mend the last lines went in; its answer is not in yet, so it counts as gone in",
+    )
+}
 /// Words that must be on disk before they go could not be kept.
 pub(super) fn not_kept(error: &str) -> String {
     l10n::text(
