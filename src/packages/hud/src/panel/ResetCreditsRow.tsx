@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Info, RotateCcw } from "lucide-react";
 import type { ResetCredits } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
-import { expiryLabel, nextExpiryLabel, say } from "./account-labels";
+import { say } from "../say.ts";
+import { expiryLabel, nextExpiryLabel } from "./account-labels";
 import { usePanelPalette } from "./theme";
 
 /** Codex's earned usage resets, once beneath the signed-in account's windows:

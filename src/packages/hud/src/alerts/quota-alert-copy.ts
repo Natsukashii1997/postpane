@@ -13,10 +13,8 @@ import {
   type Language,
   type WeekCalendar,
 } from "@agent-hud/ui/format";
+import { say } from "../say.ts";
 import { quotaWindowLabel } from "../panel/window-labels.ts";
-
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 
 /** Remaining % at or below which a window is empty (Open's AlertPolicy.exhaustedRemaining). */
 const exhaustedRemaining = 0.5;

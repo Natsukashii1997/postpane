@@ -5,7 +5,9 @@
 - 路线与已拍板的决定：[docs/ROADMAP.md](docs/ROADMAP.md)
 - 当前状态与下一步：[CURRENT.md](CURRENT.md)
 - 协作约定（Claude / Codex 必读）：[AGENTS.md](AGENTS.md)
-- 开发与构建：[docs/development.md](docs/development.md)
+- 从零装起来、跑起来：[docs/安装与使用.md](docs/安装与使用.md)；日常命令见 [AGENTS.md](AGENTS.md)「运行」
+- 名字对照（界面上的东西、文档叫法、代码名；一个词几个意思；编号怎么查）：[GLOSSARY.md](GLOSSARY.md)
+- 上游留下的架构参考（英文）：[docs/development.md](docs/development.md)
 
 ## 来源
 

@@ -2,9 +2,8 @@
 // its cron expression or Hermes' own `every 5m`. Kept free of the UI so the
 // tests can run it.
 import type { Language } from "@agent-hud/ui/format";
+import { say } from "../say.ts";
 
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const two = (n: number) => String(n).padStart(2, "0");

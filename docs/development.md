@@ -1,6 +1,8 @@
 # Development
 
-An independent monorepo for migrating Agent HUD to Tauri 2, React and a portable Rust runtime. **This is an implementation in progress, not full feature parity with the Swift app.** It uses its own settings and database. It reads legacy preferences once when its own settings are absent, and never writes the original usage database. Client hooks require explicit enablement and a delegated canonical executable.
+> 驿窗说明（2026-11-20）：本文是上游 Agent HUD 留下的架构参考，结构和接口部分大体仍准；怎么装、怎么跑以 [安装与使用.md](安装与使用.md) 和 [AGENTS.md](../AGENTS.md)「运行」为准。本文没覆盖驿窗后加的接力与 ChatGPT 通道（见 [chatgpt-channel.md](chatgpt-channel.md)）、智能体互发消息、挂件、Hermes。文中的 Swift 原版（Open）不在本仓库。
+
+A monorepo built on Tauri 2, React and a portable Rust runtime. It uses its own settings and database. It reads legacy preferences once when its own settings are absent, and never writes the original usage database. Client hooks require explicit enablement and a delegated canonical executable.
 
 All implementation code lives under `src/`:
 
@@ -9,6 +11,7 @@ src/
   apps/
     desktop/             React workspace + Tauri shell
     mcp/                 MCP server (stdio) for agents
+    chrome-extension/    The Chrome extension that connects chatgpt.com (docs/chatgpt-channel.md)
   crates/
     agents/              One folder per client: descriptors, transcript parsers, account readers, hook formats
     core/                Portable ingestion, SQLite ledger, accounting, sessions and the snapshot
@@ -16,6 +19,7 @@ src/
     platform/            OS environment, source discovery, native actions, per-OS adapters
     host/                The Tauri host: windows, HUD panels, menu bar, collection thread, MCP tools
     hud/                 HUD presentation shared by the host: layout plans and the bot director
+    messaging/           Agents messaging each other: list, send, start, get (#278)
     l10n/                Chinese and English strings
     engine/              JSON-lines CLI using that runtime
   packages/
@@ -93,7 +97,6 @@ Settings, Statistics and the floating HUD run as separate windows of the single 
   - While a session calls one of Agent HUD's MCP tools, the plugin leaves a note of the call. Harness runs one relay per host, so the relay sends its parent process with a call no client names, and the app matches the note (`host_tool`'s `caller`).
   - The questions and approvals a session waits on go to the HUD beside Harness's own cards, through the waterfalls `user-questions/request` and `approval/request`. Whichever is answered first wins and the other card goes away. A host with no window can be answered on the HUD while the app runs.
   - Every listener, timer and promise in the module catches its own errors: one throw out of a timer stops the whole Harness host, and the Desktop app loads the module again at every launch.
-- A product build that finds a newer version tells the host (`HostContext::update`, an `UpdateNotice` with the version and a Settings page id; None takes it away). As Open's updater showed it, the menu bar's menu gets New Version… between Settings and Quit, and every HUD panel's footer an arrow beside Statistics in the system blue, titled "Update to <version>", which grows in (fades in with reduced motion). Either opens Settings on that page (`show_settings_page`; a product page that replaces it answers). HUD pages get the notice as `hud:update` and read it when they start (`hud_update_notice`); Settings takes a pending page the same way (`settings:page`, `take_settings_page`).
 - A product build may ask every HUD to show a message flying between two agents' marks (`HostContext::fly`, sent to the windows as `hud:flight`). The layer (`packages/hud/src/scene/FlightLayer.tsx`, routes and keyframes in `flight-plan.ts`) exists only while a flight is under way and animates with Web Animations.
 
 ## Still to migrate

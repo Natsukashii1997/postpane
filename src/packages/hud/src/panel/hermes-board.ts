@@ -6,12 +6,10 @@
 // tests can run it.
 import type { HermesBotStatus } from "@agent-hud/protocol";
 import { dateFormat, type Language } from "@agent-hud/ui/format";
+import { say } from "../say.ts";
 import { cadence } from "./hermes-cadence.ts";
 
 export { cadence };
-
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 
 /** What each bot is for, under its name. */
 export function deskRole(id: string, language: Language): string | null {

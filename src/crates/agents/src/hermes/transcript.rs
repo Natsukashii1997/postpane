@@ -361,7 +361,7 @@ pub fn recent_asks(db: &Connection, now: i64, limit: usize) -> rusqlite::Result<
             })
         })
         .collect::<Vec<_>>();
-    asks.sort_by(|a, b| b.at.cmp(&a.at));
+    asks.sort_by_key(|a| std::cmp::Reverse(a.at));
     asks.truncate(limit);
     Ok(asks)
 }

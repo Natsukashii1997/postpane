@@ -49,7 +49,7 @@ pub const REPLY_WAIT_MS: i64 = 30 * 60 * 1000;
 pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
 /// How long words queued for a paused Claude session wait to be taken up
 /// (the plugin's own lifetime for words left).
-pub const QUEUE_WAIT_MS: i64 = 60 * 60 * 1000;
+pub const QUEUE_WAIT_MS: i64 = crate::claude_plugin::PROMPT_LIFETIME.as_millis() as i64;
 /// The longest excerpt a step keeps of what was said.
 pub const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.

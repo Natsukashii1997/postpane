@@ -11,6 +11,7 @@ import {
   type QuotaDisplay,
   type WeekCalendar,
 } from "@agent-hud/ui/format";
+import { say } from "../say.ts";
 import { quotaCredits } from "../quota-rows.ts";
 import { quotaWindowLabel } from "./window-labels.ts";
 import { isStale } from "../stale.ts";
@@ -18,8 +19,6 @@ import { isStale } from "../stale.ts";
 const finite = (value: number | null | undefined): value is number =>
   value != null && Number.isFinite(value);
 const clamp = (value: number) => Math.max(0, Math.min(100, value));
-const say = (language: Language, zh: string, en: string) =>
-  language === "zh" ? zh : en;
 
 /** What one quota bar draws: the used share, where the current pace takes
  * it by the reset (hatched) and where a steady pace would have it now (the

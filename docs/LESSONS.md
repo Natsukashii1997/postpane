@@ -15,7 +15,7 @@
 - 换个项目也成立的（不依赖本项目的业务、页面、发布脚本）：提议提升到全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md`，写成 G-xx；原条目保留，末尾加一行「提升：已提升为全局 G-xx（日期）」。只出提案，用户批准才写。
 - 条目超过约 30 条时整理一次：已升级、且之后没再犯的，归档到 `docs/history/`。
 - 「升级」一行每条都要有，开头写层级词〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，再写状态（未升级 / 不升级 / 部分升级 / 已升级 / 关闭）、日期、编号和去处；还没升级的写「〔提醒〕未升级。」。层级变了就改标签，原来的记录保留。层级的含义和怎么选，以全局 LESSONS「怎么升级」为准。`scripts/check-rules.mjs` 的 `lessons` 规则会查。
-- 本项目没有提交前钩子，也没有 CI（GitHub Actions 已停用），`tauri build` 的 `beforeBuildCommand` 只生成资源、构建前端，不跑测试（2026-11-19 核实）：只写成测试的条目标〔提醒〕部分升级，不算〔机检〕。算〔机检〕的只有每次都必经、自动报错的检查：装机脚本 `install.sh` 里的步骤（装机锁、归属检查、接力检查、装后冒烟），以及本机 Claude Code 的 Bash 预检钩子（agent-kit `hooks/bash-precheck.mjs`）。
+- 本项目没有 CI（GitHub Actions 已停用）；提交、推送前钩子 2026-11-20 起有了（`scripts/hooks/`，每个克隆要自己 `git config core.hooksPath scripts/hooks` 装一次），只查修复类提交有没有「同类：」一行，推送前跑 `check-rules` 和根目录 `tests/`，不跑 `pnpm run check` 和 `pnpm test`；`tauri build` 的 `beforeBuildCommand` 只生成资源、构建前端，不跑测试（2026-11-19 核实）：只写成测试的条目标〔提醒〕部分升级，不算〔机检〕。算〔机检〕的只有每次都必经、自动报错的检查：装机脚本 `install.sh` 里的步骤（装机锁、归属检查、接力检查、装后冒烟），以及本机 Claude Code 的 Bash 预检钩子（agent-kit `hooks/bash-precheck.mjs`）。
 - 坑本身已被代码消除、不再需要升级的，状态写「关闭」：「〔层级〕关闭（日期，依据）：证据」，层级写现在靠什么守住，不和其他状态叠写（不写「已升级，关闭」）；靠测试守住、测试未接进必经检查的标〔提醒〕，写明测试名和「未接进必经检查」（2026-11-19 统一写法，同全局 LESSONS「怎么升级」，agent-kit#84）。确认不升级的写「〔提醒〕不升级（理由）」。（2026-11-19，积压清单组 15、16）
 
 ---
