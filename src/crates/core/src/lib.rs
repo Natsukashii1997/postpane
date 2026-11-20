@@ -12,6 +12,7 @@ use std::{
 };
 
 mod accounts;
+pub mod app_log;
 mod billing_metrics;
 mod clients;
 mod compressed;
@@ -50,10 +51,9 @@ mod window_shares;
 
 pub use accounts::AccountProjection;
 pub(crate) use agent_hud_agents::claude::jobs as claude_jobs;
-pub use agent_hud_agents::grok::cache as grok_cache;
 #[cfg(test)]
 pub(crate) use agent_hud_agents::transcript::live as live_facts;
-pub use agent_hud_agents::{naming, protobuf};
+pub use agent_hud_agents::{grok::cache as grok_cache, naming, protobuf};
 pub(crate) use agent_hud_agents::{
     LiveLog, Log, TimelineBucket, Usage, DATA_VERSION, PARSER_VERSION,
 };
