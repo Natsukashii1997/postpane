@@ -18,6 +18,8 @@ function load(
     answers = [],
     now = false,
     fronted = [],
+    posted = [],
+    windows = {},
   } = {},
 ) {
   const listeners = {};
@@ -30,7 +32,8 @@ function load(
       connectNative: () => ({
         onMessage: event("port"),
         onDisconnect: event("gone"),
-        postMessage() {},
+        postMessage: (message) =>
+          posted.push(JSON.parse(JSON.stringify(message))),
       }),
       onInstalled: event("installed"),
       onMessage: event("message"),
@@ -54,6 +57,7 @@ function load(
       onRemoved: event("removed"),
       onUpdated: event("updated"),
     },
+    windows: { get: async (id) => windows[id] ?? { state: "normal" } },
     scripting: {
       executeScript: async ({ target, files }) => {
         // Copied out of the sandbox's realm, so deepEqual compares values.
@@ -182,4 +186,143 @@ test("an answer not drawn in a background tab is read with the tab in front, the
   await new Promise((resolve) => setImmediate(resolve));
   await again.listeners.port({ type: "reread", conversation });
   assert.deepEqual(still, []);
+});
+
+// #457: #439's answer stayed undrawn in a tab whose window was not on screen,
+// and nothing said so. Each read again tells PostPane what it found and how
+// the tab stood: hidden, in front of its window, its window minimized, put
+// in front for the read.
+const readsOf = (posted) => posted.filter((m) => m.type === "reread");
+
+test("reading again tells PostPane what it found and how the tab stood", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${conversation}`,
+      active: true,
+      windowId: 9,
+    },
+  ];
+  const undrawn = {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: true,
+    undrawn: true,
+  };
+  const posted = [];
+  const { listeners } = load(tabs, {
+    posted,
+    watched: [conversation],
+    answers: [undrawn],
+    windows: { 9: { state: "minimized" } },
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await listeners.message(
+    { type: "page", conversation, hidden: true, streaming: false },
+    { tab: { id: 2 } },
+  );
+  await listeners.port({ type: "reread", conversation });
+  assert.deepEqual(readsOf(posted), [
+    {
+      type: "reread",
+      conversation,
+      outcome: "undrawn",
+      hidden: true,
+      active: true,
+      minimized: true,
+      fronted: false,
+    },
+  ]);
+});
+
+test("a read again says whether it was told, in front or not, still written, or found nothing yet", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const tabs = () => [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${conversation}`,
+      active: false,
+      windowId: 9,
+    },
+    { id: 5, url: "https://chatgpt.com/c/other", active: true, windowId: 9 },
+  ];
+  const undrawn = {
+    ok: true,
+    streaming: false,
+    told: false,
+    loaded: true,
+    undrawn: true,
+  };
+  const told = { ok: true, streaming: false, told: true, loaded: true };
+  const cases = [
+    [[told], "told", false],
+    [[undrawn, undrawn, told], "told", true],
+    [[undrawn, undrawn, undrawn, undrawn], "undrawn", true],
+    [
+      [{ ok: true, streaming: true, told: false, loaded: true }],
+      "streaming",
+      false,
+    ],
+    [
+      [{ ok: true, streaming: false, told: false, loaded: true }],
+      "waiting",
+      false,
+    ],
+    [
+      Array(10).fill({
+        ok: true,
+        streaming: false,
+        told: false,
+        loaded: false,
+      }),
+      "unloaded",
+      false,
+    ],
+  ];
+  for (const [answers, outcome, fronted] of cases) {
+    const posted = [];
+    const { listeners } = load(tabs(), {
+      posted,
+      watched: [conversation],
+      answers: [...answers],
+      now: true,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    await listeners.port({ type: "reread", conversation });
+    const [read] = readsOf(posted);
+    assert.equal(read?.outcome, outcome, JSON.stringify(answers[0]));
+    assert.equal(read.fronted, fronted, outcome);
+    assert.equal(read.active, false);
+    assert.equal(read.minimized, false);
+  }
+  // A tab that cannot be reached even with a script put in (the stub
+  // refuses tab 1 one).
+  const posted = [];
+  const { listeners } = load(
+    [
+      {
+        id: 1,
+        url: `https://chatgpt.com/c/${conversation}`,
+        active: true,
+        windowId: 9,
+      },
+    ],
+    { posted, watched: [conversation], dead: new Set([1]), now: true },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(readsOf(posted)[0]?.outcome, "unreachable");
+  // One not on the watch list says nothing.
+  const none = [];
+  const other = load(tabs(), {
+    posted: none,
+    watched: [conversation],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await other.listeners.port({ type: "reread", conversation: "other" });
+  assert.deepEqual(readsOf(none), []);
 });

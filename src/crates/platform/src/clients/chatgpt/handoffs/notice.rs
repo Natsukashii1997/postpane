@@ -3,7 +3,7 @@
 //! waits on, unaware, unless it is told — once for each, never for trouble
 //! from before the notices began, so an upgrade tells no old session.
 use super::super::{folder, write_private};
-use super::{read_small, Book, Handoff, Status, Step, StepKind};
+use super::{read_small, Book, Handoff, Phase, Status, Step, StepKind};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -35,6 +35,9 @@ pub enum Trouble {
     /// Words were sent and never known to have gone in; the auto round
     /// trip stopped (#347 round 4 P1-14).
     Unconfirmed,
+    /// ChatGPT answered, and the tab it answered in drew nothing; the auto
+    /// round trip stopped (#457).
+    Undrawn,
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -48,6 +51,8 @@ pub enum Cause {
     NoAnswer,
     /// `unconfirmed`: words sent were never known to have gone in.
     Unconfirmed,
+    /// `stop_undrawn`: the answer is there, not drawn (#457).
+    Undrawn,
 }
 
 impl Step {
@@ -77,6 +82,7 @@ impl Handoff {
                 Trouble::NotOpened(self.error.clone().unwrap_or_default())
             }
             Cause::NoAnswer if self.live() && !self.auto => Trouble::NoAnswer,
+            Cause::Undrawn if self.live() && !self.auto => Trouble::Undrawn,
             // Its answer, come since, moved it on; so did word it went in.
             Cause::Unconfirmed if self.live() && self.unanswered().is_some() => {
                 Trouble::Unconfirmed
@@ -106,6 +112,21 @@ impl Book {
             return None;
         }
         self.get(id)?.untold(since)
+    }
+    /// ChatGPT answered `id`'s words, and the tab drew nothing (#457): an
+    /// auto round trip still waiting on it stops, for `reason`, as one not
+    /// answered in time would. Whether it stopped.
+    pub fn stop_undrawn(&mut self, id: &str, reason: &str, now: i64) -> bool {
+        let waits = self.get(id).is_some_and(|h| {
+            h.auto
+                && h.status == Status::Open
+                && matches!(h.phase, Phase::Delivered | Phase::Working)
+        });
+        if !waits || !self.stop(id, reason, true, now) {
+            return false;
+        }
+        self.caused_last(id, Cause::Undrawn);
+        true
     }
     /// The step `overdue` just put down for `id` is of trouble `cause`.
     pub(super) fn caused_last(&mut self, id: &str, cause: Cause) {

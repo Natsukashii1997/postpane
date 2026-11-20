@@ -32,6 +32,102 @@
   - #442 与 main 有冲突（#441、#445 合并后出现），要那个会话变基；没碰它的分支。
   - 主线：接力根治｜完成 3/10：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ▶ 第 0 批止血（#441 已合并未装机；② 本 PR；#435 另一会话在做）⏳ 第 0 批 ①（等 #435）❓ 第 1 批回信改读对话数据 ❓ 第 2 批回执与重拉（并 #431、#433、#443、#444）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退；#432 排查单另算。
   - skill 进化：无。
+## 接力重读回报结果，回信在 ChatGPT 里没画出时提早交给常浩（#457）（2026-11-20，Claude，常浩经 agent-hud 插件回「先做第 1、2 批」「合并，装机排队」；已 squash 合并、未发布，排队等 #442）
+
+- 时间：开工 `2026-11-20 06:42`。来由：#439 第 2 轮 05:31 送审，ChatGPT 14 分钟就答完（返修），插件一直没报答完，驿窗等满 30 分钟才停；06:15 前台打开对话，回信已在页面上，06:16:46 被重读收下转回（证据 `evidence/2026-11-20-439第2轮漏报.md`）。推断是原标签页所在窗口不在屏幕上，ChatGPT 不画，#413 的切前台救不回；插件重读不回报，没人看得出卡在哪。
+- 改了哪些文件：
+  - 常浩要求的（第 1 批，不改行为）：
+    - `src/apps/chrome-extension/background.js`：重读后回一条 `reread`（`outcome` 取 `told` / `undrawn` / `streaming` / `waiting` / `unloaded` / `unreachable` / `unopened`，另带 `hidden`、`active`、`minimized`、`fronted`）；`drawnInFront` 返回切前台后有没有读到。`manifest.json` 版本 0.2.3 → 0.2.4。
+    - `src/crates/platform/src/clients/chatgpt/mod.rs`：插件的 `reread` 回报和 `sent` 一样转给驿窗（行数不变，守 300 行棘轮基线）。
+    - `src/crates/host/src/handoff.rs`：`observe` 收 `reread`；`note_turn` 写文件那段抽成 `append_turn`，两处共用。
+  - 常浩要求的（第 2 批，**改变已有行为**）：
+    - 原来：没收到「答完」一律等满 30 分钟才停，停止原因「ChatGPT 30 分钟没回信」。现在：自动往返中的接力连续两次重读（相隔 2 分钟）都是 `undrawn`，就停下交还常浩，原因写「ChatGPT 已答完，但标签页没画出回信……点开那个 ChatGPT 标签页就能收回」，通知发起会话一次。中间有别的结果就重新数；计数只在内存，重启重数。30 分钟规则不动，没加按钮。
+    - `src/crates/host/src/handoff/undrawn.rs`（新）：记账、计数、停下；`handoff/notice.rs`：会话收到的话加「没画出」一种，转回之后怎么办那句抽成 `later()` 和「没回信」共用。
+    - `src/crates/platform/src/clients/chatgpt/handoffs/notice.rs`：`Cause::Undrawn`、`Trouble::Undrawn`、`Book::stop_undrawn`。
+  - 我顺手改的：无（`later()`、`append_turn()` 是为复用而抽出，行为不变）。
+  - 文档：`docs/chatgpt-channel.md` 消息表加 `reread` 回报、`reread` 命令说明改「问完回一条」、漏报补救后加「回信在、没画出」一条、出错通知加 `undrawn`；`docs/LESSONS.md` L-61。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1068 passed` / `0 failed`（main 1065 + 新增 3），前端 `ℹ pass 487` / `ℹ fail 0`，MCP 9、插件 14、Chrome 插件 46、注入脚本 11，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。新测试改前红：`evidence/2026-11-20-457-reread-undrawn/` 的 `red-background.txt`（插件 2 条失败）、`red-host.txt`（驿窗 2 条失败）、`red-platform.txt`（平台转发失败）。
+- 验证：只在测试里验证；后台标签页 / 窗口不在屏幕上时 ChatGPT 画不画，用 Claude in Chrome 试了两次都没能让标签页进入后台，未实测，交给第 1 批的记录来证实。
+- 截图：无界面改动。
+- 发布与回读：PR #459 已 squash 合并为 main `2de34ac`，未发布。
+- **装机待办（常浩 11-20 回「合并，装机排队」）**：和 #448 同一批，等 #442 合并后由装机的人从最新 main 打包（会带上 #459）；装完请常浩在 Chrome 扩展程序页重新加载主目录那份插件（0.2.4），之后看 `turns.jsonl` 里有没有 `phase: "reread"` 的行。验完在本节补「发布与回读」。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 第 3 批（自动救回：后台刷新 / 小窗口 / 读页面数据）没做，等第 1 批记录攒到证据再定；读页面数据碰到 11-19 定的「S3 这次不做」。
+  - 交接里写「不做重读时把后台标签页切到前台，相关分支已删」，但 main 已有 #413（`8fd86f0`）的切前台，随 0.2.3 装着。本轮先保留，未改；去留等第 3 批一起定。
+  - #439 第 2 轮转回的消息写「第 1 轮」，实际是第 2 轮送审，未查。
+  - 补格式那步没记提问编号，PR #451（#446）能覆盖，等它合并。
+- 本轮新坑：L-61
+- skill 进化：无
+
+## 已定内容登记表补登 20 项：DeepSeek 鲸鱼和 19 项现行定稿；AGENTS.md 指向登记表（2026-11-20，Claude，常浩回「建登记表」，看格式样例和候选后回「甲表格，补登乙」（经 agent-hud 插件转进，和所问对得上）；已提交、PR 见下、无需发布）
+
+- 时间：开工 `2026-11-20 06:15`。来由：鲸鱼动作库验收后，常浩同意建 `docs/DECIDED.md`。开工时发现另一会话已在 main 建好这张表（PR #454，表格写法，先登了「AI 接入」页甲版），本轮改为在同一张表上补登，不重建。
+- 改了哪些文件：`docs/DECIDED.md`（加「2026-11-20 补登一批」说明；补 20 行：鲸鱼 + 常浩选「补登乙」的 19 项现行定稿，覆盖小人（Hermes 头像、Codex 云朵、ChatGPT 小花、鲸鱼、亚古兽紫藤印章）、侧栏外观（票根变矮和顺序、标记配色乙版、在跑 3×3 方点、白色纸飞机、接力的纸、挂件串挂和扫帚颜色、额度暗印）、卡片版式（展开卡统一、一套左对齐线、折叠按钮乙版、待审批最新在上）、行为和文案（别家回复 4 秒收起、按钮用常规说法、Hermes 定时任务表、ChatGPT 面板接力并进）；PR #454 那行「AI 接入」挪到按日期的位置，两张表头合成一张，内容没改）；`AGENTS.md`（「做什么事之前读哪份」那行指向登记表；「已定内容要改，先单独确认」两条改成先查这张表、定了当轮加一行并在交接写「已登记 DECIDED.md」，删掉「还没有这个文件的提一句要不要建」）；`CURRENT.md`（本节）。
+- 测试：`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`；`node scripts/check-rules.mjs` 通过。只改文档，未跑 `pnpm run check`、`pnpm test`。
+- 验证：每行的提交号用 `git log origin/main --grep` 逐个查过；接力纸色、航空斜纹位置、航空虚线框对照了现在的代码（`paper.ts`、`alerts/RelayFrame.tsx`），确认仍有效；其余以交接和记忆为准，没逐项装机看。
+- 截图：本轮没截新图。鲸鱼验收的 4 张（`07-` 开头）和折叠按钮验收的 6 张（`01-`、`04-` 开头）从 `~/Sandbox/2026-11-19-inbox-verify/全屏重验-11-20/` 复制到证据目录 `2026-11-20-deepseek-accepted/`、`2026-11-20-fold-accepted/`（G-01）。其余补登行的基线截图写的是当轮证据目录，不全是实机图，表里已注明。
+- 发布与回读：无需发布（只改文档）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 只登了常浩批的乙那 19 项。还有交接里写着常浩选过、没登的候选，照样算已定：11-19 停章甲、审核上限 1–9、「过」章（#409）；停久看全乙（#141）；小收据等待线中间展开（#149）；各挂全签甲（#163）；阶段 4 票根、票签、收据、小收据、回执系列（#27–#35）等。以后碰到就补登。
+  - 已登记 DECIDED.md。上一节「DeepSeek 鲸鱼动作库验收通过」的遗留「还没有登记表」到此了结。
+- 本轮新坑：无
+
+## 展开的列表在展开卡关上时折回，有提醒挂着也一样（#448）（2026-11-20，Claude，「人机协作｜减轻认知负担方案」会话经常浩同意转来 #430 实机代验结果：展开长高通过、移开再悬停仍是展开的；常浩看原因后回「你来修」，看完 PR #455 后回「合并装机」；已提交、已 squash 合并、未发布：装机位被 #442 占着，见下）
+
+- 时间：开工 `2026-11-20 06:09`（`date '+%F %H:%M'` 记录）。来由：#448。#430 把展开状态的复位挂在「侧栏收起」上（`sidebarShown = open || Boolean(event || request)`），侧栏顶上挂着提醒条或待处理请求时永远不算收起，复位不执行；代验那次 Claude 票根正好有一个提问在等（L-58 补记）。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `hud/src/scene/close-with-sidebar.ts`：新 `closesWith(open, news)` 把两件事分开：列表在展开卡关上（`!open`）时折回；接力卡仍等侧栏收起、没有提醒挂着（`!open && !news`）才关，和 #430 前一样。`useCloseWithSidebar(open, news)` 各用一个 effect。
+    - `hud/src/HUDScene.tsx`：去掉 `sidebarShown`，改成 `useCloseWithSidebar(open, Boolean(event || request))`。
+  - 我顺手改的：
+    - `close-with-sidebar.ts` 的两个相对导入加 `.ts` 后缀，让测试能直接加载它（项目里已有这种写法）。
+    - `test/relay-toggle.test.ts` 的 #334 那条原本逐字匹配 `sidebarShown` 那行，改成断言新写法和 `handoff: !open && !news`，守的意思不变（接力卡等侧栏收起才关）。
+    - `src/tooling/file-size-baseline.json`：`HUDScene.tsx` 变短，收紧基线。`docs/LESSONS.md` L-58 补一条。
+  - **改变了已有行为的**：无新行为，修回 #374、#382 定的「下次打开仍默认 4 / 6 条」：展开卡关上后，展开过的列表折回，不论侧栏顶上有没有提醒挂着。接力卡什么时候关不变。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1065 passed` / `0 failed`，前端 `ℹ pass 487` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 32`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（交接写好前那次）。第一次跑 Rust 因新目录没有 `src-tauri/resources` 编译失败（已知坑，见 LESSONS 第 25 行那条），跑 `node src/tooling/package-resources.mjs` 后重跑全过。新测试 `fold-store.test.ts`「lists fold back when the card closes, even with a tag still out」实现前先红（`red.txt`：`does not provide an export named 'closesWith'`）。变基到 main `39bb4a7` 后三套重跑：`pnpm run check` 退出码 0；`pnpm test` 「6 套，失败 0 套」，cargo `1065 passed`、前端 `ℹ pass 487`、Chrome 插件 `ℹ pass 44`（main 新进 #435 的测试），其余同上，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。日志在 `~/Library/Application Support/postpane/evidence/2026-11-20-448-fold-reset/`（`check.txt`、`pnpm-test.txt`、`node-tests.txt`，变基后的带 `-rebased`）。
+- 验证：场景预览台，视口 1440×1600，`?still`，操作：点票根开卡 → 点「展开其余 n 条」→ 鼠标移到左下等 4 秒卡收起 → 再点票根。改前（主目录 main `70a94df`，127.0.0.1:1492）`claude-many-asks`（Claude 有提问挂着）：再打开仍是「收起」、框 1089，复现 #448。改后（本 worktree，127.0.0.1:1491）`claude-many-asks`：再打开回到「展开其余 4 条」、790；`chatgpt-nine-relays`：展开 849，再打开回到「展开其余 3 条」、666；鼠标停在卡上时展开保持。记录见 `preview-check.md`。**未验证**：实机侧栏里移开再悬停（L-09），装机后留给常浩。
+- 截图：同一证据目录 `before-reopen-still-open.jpg`、`after-reopen-folded.jpg`；代验截图在 `~/Sandbox/2026-11-19-inbox-verify/全屏重验-11-20/` 的 `01-` 三张（「人机协作」会话拍的）。
+- 发布与回读：未发布。常浩回「合并装机」后查 `install.sh check`：已装 `ad07ec632cf5`，是 #439 worktree（PR #442，未合并）2026-11-20 00:11 装的；#442 交接写着还剩 4 张接力等常浩说一句后用它新加的 `relay_end` 结束、补通过路径的实机，装 #455 会把 `relay_list` / `relay_end` 一起盖掉，所以只合并、不接管（L-05），装机等常浩定：推荐等 #442 合并后从 main 一起装。
+- **装机待办（常浩 11-20 选「等 #442 合并再装」）**：#442 合并后，装机的人从最新 main 打包（会同时带上 #442 和本节 #448），装完请常浩在实机上验 #448：侧栏有提醒挂着时，在卡上点「展开其余 n 条」→ 鼠标移开等卡收起 → 再悬停打开，应回到默认 4 条（等待处理）/ 6 条（正在进行）。验完在本节补「发布与回读」。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - GitHub 开工时连不上，从本机 main `70a94df` 开的分支；开 PR 前已同步，main 新进 4 个提交（`39bb4a7`），变基时 `CURRENT.md` 两节都在顶部，保留两节、本节在前。
+  - 上一节 #440 写「装机位被 #442 的实机占着」：装机前要先看清现在装的是谁的包（L-05）。
+  - 范围外仍未核实：`CompletionAlertView` 里「点开的那条回复」`chosen` 是本地状态（#430 交接已报）。
+- 本轮新坑：无（补在 L-58）
+- skill 进化：无。
+
+## 长 brief 不再被 ChatGPT 转成附件，回信能收回（#429）（2026-11-19，Claude，新规则冒烟中发现；常浩回「开 issue 并修」「按方案改」，看 Fable 5.2 评估清单后回「按清单做」（经上级会话转达）；已提交、PR 见下、未发布）
+
+- 时间：开工 `2026-11-19 20:41`（`date '+%F %H:%M'` 记录）。来由：#429。#348 解冲突 L1 复核（接力 `h1a1f38f8b6200`）的 brief 11516 个字符，被 ChatGPT 转成附件「粘贴的文本.txt」：页面上没有用户消息气泡、也没有原文，插件不报 `turn complete`，回信 9 分钟就到了，驿窗却报「30 分钟没回信」（L-59）。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/apps/chrome-extension/page.js`：`pieces()` 按行切成每段不超过 6000 字（单行超长在行内切，不切开 emoji 这类双码元字符）；`paste()` 逐段贴到末尾，每段等输入框（去空白）净增长到这段的全部可见字才贴下一段（只有空白的一段并进下一段、连续空白超出 1000 字才单独切开，不在 `\r\n` 中间切，#435 审查 P1-01、P2-02）；贴完要求输入框去空白后与原文是同样的字；`holds()` 加下限，退回整段 `insertText` 时输入框与原文（去空白）相差超过 40 字就不算装下；`submit()` 在贴之前输入框空着、发送键却亮着（上次留下的附件）就报 `composer-mismatch` 不发，贴完没装下而发送键亮着也报 `composer-mismatch` 不发。
+    - `src/apps/chrome-extension/test/page.test.mjs`：仿 ChatGPT 的输入框替身（单次超上限或第 n 段起转附件、可预置残留附件），新增 5 条：长文分段（拼回等于原文、除末段外在换行处切开、每段不超 6000、无附件）、单行超长行内切、不切开 emoji、第 2 段才转附件不发、已有残留附件不发；原「装不下不发」1 条。
+    - 文档：`docs/chatgpt-channel.md` 原因码加 `composer-mismatch` 及重试清不掉附件、「驿窗这一端」加分段粘贴与阈值；`docs/LESSONS.md` 新增 L-59。
+  - 我顺手改的：无（Fable 评估里建议进本 PR 的几项都经常浩「按清单做」确认，算要求的）。
+  - **改变了已有行为的**：① 送话超过 6000 字时分几次粘贴（原来一次贴完、超过阈值由 ChatGPT 转成附件，#99 起的注释写着这是有意的；没找到常浩定过它的记录）；② 有一段没贴全、贴完字不同（或兜底时相差超过 40 字）、发送键却亮着时不发，报 `composer-mismatch`（原来照样发出）；③ 贴之前输入框空着、发送键却亮着时不发（原来会带着残留附件一起发出）。插件收到 `composer-mismatch` 仍按原逻辑切前台重试一次，留着附件时两次都失败，交常浩到页面上移除。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」：cargo 合计 `1058 passed` / `0 failed`，前端 `ℹ pass 486` / `ℹ fail 0`，MCP `ℹ pass 9`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 44`（main 32 + 本 PR 新增 12）、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。以上是 ChatGPT 第 1 轮审查返修后、合并 main（含 #430、#437）的结果（`check-7.txt`、`test-7.txt`、`skeleton-7.txt`）；之前几次（cargo 1051 / 1058，Chrome 插件 34 / 38）同样全过。返修新增 6 条，其中 5 条先红：`red-round3.txt`、`red-round3b.txt`、`red-round4.txt`（另 1 条「旧稿 + 残留附件」在返修前已成立）。实现前先红：`red-before.txt`（长文分段、装不下不发 2 条）、`red-round2.txt`（不切开 emoji、残留附件 2 条；另 2 条在第一版实现下已成立）。日志在 `~/Library/Application Support/postpane/evidence/2026-11-19-429-long-brief/`（`check-2.txt`、`test-2.txt`、`skeleton-2.txt`）。
+- 验证：Chrome 里 ChatGPT 临时对话，只粘贴不发送：① 单次粘贴 2000 / 4000 / 6000 / 8000 字留为正文，10000 字转附件；② 分两次各 7000 字，输入框 13534 字符、无附件；③ 用修复同款切分粘贴约 1.46 万字合成 brief（5999 / 5993 / 4681 三段，第一个切点落在 ```` ```diff ```` 块里），无附件、输入框原样保留（`data-prompt-literal-paste`，不画代码块）、去空白后与原文相等、逐行 369 / 369 一致。④ 返修后（#435 审查 P2-01）：19007 字文本含一条 13000 字的单行（中文 + emoji + ZWJ 组合 emoji，emoji 正好跨第 6000 字）、`\r\n` 和切点处的空行，切成 6000 / 6000 / 1002 / 6000 / 5 五段，每段都净增长到全部可见字，去空白后与原文相等，emoji 930 / 930、ZWJ 组合 928 / 928、替换字符 0、无附件。只在前台标签页验证。根因证据：页面 `[data-user-message-bubble]` 为 0，用户单元正文只有文件名（`evidence/2026-11-19-golive-smoke/root-cause-attachment.md`）。Fable 5.2 High 只读评估过整体方案（结论：方向对，补真实页面验证和两处小改，均已做）。ChatGPT L1 审查（接力 `h1a1f45adbcf00`）第 1 轮返修：P1-01 分段粘贴不能保证内容完整（空白段被跳过、逐段只看变长、八成下限偏松）已修；P2-01 超长单行与 CRLF 真实页面验证已补（上面 ④）。第 2 轮（`c187d21`）审查出口「通过」，P1-01、P2-01 已验证关闭；非阻断的 P2-02（大段连续空白一直往后并、突破分段上限，又被转成附件而拒发）合并前已修：空白并入下一段加 1000 字上限，新测试 `a long run of spaces or blank lines still goes in pieces`。同条里「最终输入框空白保真」没加替身测试：替身用 `textContent` 取发送内容、本来看不到换行，空白保真靠真实页面逐行比对（上面 ③ 369/369）验证；去空白比对查不出页面改动空白，是已知限制。**未验证**：装机后用超过 1 万字的真实 brief 走一张接力、回信自动转回（插件要常浩在 Chrome 扩展程序页重新加载才生效）；后台标签页里的分段粘贴。
+- 截图：无界面改动，无。
+- 发布与回读：未发布。Chrome 插件改动不经驿窗安装包生效，合并后要在 Chrome「扩展程序」页重新加载驿窗插件。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 审核门新规则冒烟（接力 `h1a1f38f8b6200`，#348 解冲突 L1 复核）结果：送出跑通（工具说明是新规则，账本 `limit` 5、`risk` L1、`head` 5ad81cb、审查链 `r1a1f38f8b6200` 都对，30 分钟没回信按规则停下并通知到发起会话），ChatGPT 判通过（受审版本 5ad81cb7a56fa94b2869e948ee0a944e64161bc4，未决 P0 0、P1 0，审查出口「通过」，台账只有 P2-01「Format 正向归属缺直接测试」范围外转单 → #434），但回信当时没被驿窗收到：brief 以附件形式进了页面，插件没报 `turn complete`（`turns.jsonl` 这个会话只有两条 `start`），19:57 被判「30 分钟没回信」。#437（按提问编号认领，含附件兜底）装机、插件重新加载后，23:04:48 驿窗自动认领（`turns.jsonl` `taken`），记第 1 轮、`verdict: pass`，自动转回发起会话（`back` 带 `auto`），回读 PR #348 head 仍是 5ad81cb 后按通过自动结束（`closed`），回信全文存 `replies/h1a1f38f8b6200-01-7b876d5c.md`。至此新规则冒烟各项都实机验到（卡上「第 1 轮 / 上限 5」的显示没截图看）。PR #348 先后两条评论：手动读到时写「复核通过」，认领后补更正。
+  - 旧接力 `h1a1ed39518503` 第 2 轮回信被判 `unmatched` 约 470 次，11-19 20:49 被自动结束，digital-twin PR #210 第 2 轮回信没转回发起会话（#432）。
+  - 与 #437 的关系：#437 从接收侧认附件形式的提问、按提问编号认领，本 PR 从发送侧让送审保持正文（ChatGPT 审的是正文，页面上也看得到原文）；两者互补，合并 main 时 `submit()` 两边都保留（先分段粘贴和拒发，送出后取提问编号）。#431 的「提问读不到」一部分已由 #437 覆盖，剩下的范围要在 #431 里重新核对。
+  - 另开：#431 接收侧「提问读不到」提示与提问指纹、#433 插件等待按真实时间计与重读退避、#434 原因码人话与 Format 正向归属测试（#348 复核 P2-01）。
+- 本轮新坑：L-59
+- skill 进化：无。
+
+## DeepSeek 鲸鱼动作库验收通过（2026-11-20，Claude，常浩经侧栏回「验收通过」；已提交、PR 见下、无需发布）
+
+- 时间：开工 `2026-11-20 06:09`。来由：PR #303（`0dea821`，装机 `147ce0068f0b`）合并装机后留了两件事等常浩：实机看鲸鱼动作、在面板里保存五家顺序。原交接已归档在 `docs/history/CURRENT-2026-11-04至2026-11-12.md`。
+- 验收：「人机协作｜减轻认知负担方案」会话 11-20 05:45 用全屏控制实机代验：静止时闭眼，悬停后睁眼、右鳍抬起、头顶冒泡泡圈，判为通过（截图 `~/Sandbox/2026-11-19-inbox-verify/全屏重验-11-20/` 下 `07-` 开头四张）。代验只看了打招呼一个动作。随后常浩经侧栏回「验收通过」，DeepSeek 鲸鱼 9 个动作和常驻小人记为常浩已验收的内容；以后要改，按 AGENTS.md「已定内容要改，先单独确认」走。
+- 侧栏顺序：本会话只读核对，正式布局 `hud.agents = [claude, codex, chatgpt, hermes, deepseek]`，没有未保存草稿，原「待保存」一事已了结；归档节里那句同步补注。
+- 改了哪些文件：`CURRENT.md`（本节）；`docs/history/CURRENT-2026-11-04至2026-11-12.md`（原「仍未保存」那句后补注已保存）。
+- 测试：只改文档，跑 `node --test tests/*.test.mjs`，结果见 PR；未跑 `pnpm run check`、`pnpm test`。
+- 截图：沿用代验会话的四张（路径见上），本会话未截。
+- 发布与回读：无需发布（只改文档）。
+- 遗留：项目还没有已定内容登记表 `docs/DECIDED.md`，要不要建由常浩定。
 - 本轮新坑：无
 
 ## 接力根治第 0 批：插件消息在读线程上只记账，推进和通知侧栏都交给另一条线程；附全链路梳理报告（#440）（2026-11-19，Claude，常浩要求深度核查接力卡住，看完梳理结论后回「做第 0 批」；已提交、L2 审查第 2 轮通过、PR #441 已 squash 合并、已打包未装机：装机位被 #442 的实机占着）
@@ -695,6 +791,17 @@
 - 发布与回读：打包前 main 仍是 `11de767`，没有别的提交。`tauri build --bundles app` 退出码 0；`install.sh 384-hermes-jobs`：装前 `7eec140627cc`，产物 `9fa6402761e2` / 已装 `9fa6402761e2`，签名照常（`H"b773068e`）。实机截屏看过：无文稿权限弹窗，侧栏在右边运行；截屏里有常浩的私人内容，看完已删。实机点开 Hermes 卡未做（L-09），留给常浩。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-18-384-hermes-jobs/PostPane-7eec140627cc.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：「暂停时写了原因才算明确暂停」是我的推断（Hermes 只有暂停一种关闭状态），预览页上写明了，常浩没提异议；以后想留着显示某个暂停任务，让 Hermes 暂停时带原因。悬停小收据（AgentPeek）不显示任务，没动。定时任务失败的细条（`island_events`）仍按所有任务判断，暂停的任务不会再跑，不影响。
 - 本轮新坑：无
+
+## 安全审计 PR #315 刷新（2026-11-17，Codex，常浩授权变基、验证、推送；待合并）
+
+- 时间：开工 `2026-11-17 18:01`。
+- 改了哪些文件：本节；`.agents/skills/postpane-round/scripts/install.sh` 只补 `${MODE}` 变量边界，修正日期短名拒绝提示的未定义变量错误。原审计代码保留在 `handoffs.rs`。
+- 测试：`pnpm run check` 退出 0；选择本机已有 Chrome 的仅扩展测试适配器下完整 `pnpm test` 退出 0，Rust 988/988，前端原样 `ℹ pass 462` / `ℹ fail 0`，MCP 9/9，插件 14/14，扩展 23/23；根测试 `ℹ pass 22` / `ℹ fail 0`，规则检查通过。
+- 验证：变基至 `11de767`，仅 CURRENT 冲突，保留 main 最新状态及原审计记录，代码自动合并后核对。首次历史红灯沿用 11-12，当前 main 的 load 实现逐字一致，本轮大历史回归通过。默认测试缺 Chromium；宽范围适配器重跑曾有 engine-client 超时，限定扩展进程后完整重跑通过。全部原样日志在 `~/Library/Application Support/postpane/evidence/2026-11-17-refresh/`。
+- 截图：无界面改动。
+- 发布与回读：本轮仅刷新审计分支和 PR #315，目标使用环境尚未采用。
+- 遗留问题：锁定 Chromium 缓存缺失，已使用现有 Chrome 完成验证；没有合并阻断项。
+- 本轮新坑：无。
 
 ## 卡片「还有 n 条」改成贴着列表的一行小字「展开其余 n 条 ⌄」（#382）（2026-11-15，Claude，常浩说「还有 n 条」那一行（上面点线 + 下面大块留白）突兀，看三版预览 https://claude.ai/artifact/8eBxUJbGCj3zfajbRLKKQw 后回「按乙开工」；PR 已 squash 合并、已发布 `7eec140627cc` 回读通过）
 

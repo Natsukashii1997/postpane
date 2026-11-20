@@ -240,12 +240,62 @@
 
   const bare = (text) => text.replace(/\s/g, "");
 
-  /** Whether the composer holds no more than `text`: words left from before
-   * show as more. The box may draw Markdown (fewer characters) or turn a long
-   * paste into an attachment (none), so only more counts; a few characters
-   * more (a code block's label) are allowed, a left brief is far more. */
+  /** Whether the composer holds `text`, spaces aside, give or take a few
+   * characters: a code block's label more, a Markdown mark the box drew
+   * fewer. Words left from before show as far more; words that went into an
+   * attachment as fewer (#429). Only words typed in with `insertText`, when
+   * paste is not taken, are held to this; pasted ones must be the same. */
   function holds(box, text) {
-    return bare(box.textContent).length <= bare(text).length + 40;
+    return Math.abs(bare(box.textContent).length - bare(text).length) <= 40;
+  }
+
+  /** chatgpt.com turns one paste of somewhere between 8000 and 10000
+   * characters into an attachment (#429, 2026-11-19: 8000 stayed text, 10000
+   * did not). */
+  const PIECE = 6000;
+  const GLUE = 1000;
+
+  /** `text` in pieces of at most `max` characters, cut after a line where it
+   * can be: a line longer than `max` is cut within, never inside a character
+   * of two UTF-16 units (an emoji) nor between a CR and its LF. A piece of
+   * only spaces and line breaks is not cut off: it goes with the next words,
+   * a few characters over `max`, so every piece shows it went in; only a run
+   * of them longer than `GLUE` more is cut off by itself (#435 review P2-02),
+   * so no piece nears the attachment length. */
+  function pieces(text, max = PIECE) {
+    const out = [];
+    let piece = "";
+    for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+      for (let at = 0, end; at < line.length; at = end) {
+        end = Math.min(at + max, line.length);
+        if (end < line.length && /[\uD800-\uDBFF\r]/.test(line[end - 1])) end -= 1;
+        const part = line.slice(at, end);
+        if (piece.length + part.length > max && (bare(piece) || piece.length + part.length > max + GLUE)) {
+          out.push(piece);
+          piece = "";
+        }
+        piece += part;
+      }
+    }
+    if (piece) out.push(piece);
+    return out;
+  }
+
+  /** Pastes `text` at the end of the box a piece at a time; paste keeps its
+   * paragraphs. Whether each piece went in whole: the box grew by all of its
+   * characters, spaces aside (the page takes a paste as typed, #429). */
+  async function paste(doc, box, text) {
+    for (const piece of pieces(text)) {
+      const want = bare(box.textContent).length + bare(piece).length;
+      const selection = doc.getSelection();
+      selection.selectAllChildren(box);
+      selection.collapseToEnd();
+      const data = new DataTransfer();
+      data.setData("text/plain", piece);
+      box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+      if (!(await waitFor(() => bare(box.textContent).length >= want, 3000))) return false;
+    }
+    return true;
   }
 
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`,
@@ -264,18 +314,28 @@
       doc.execCommand("delete", false);
       await waitFor(() => !sendReady(doc), 2000);
     }
-    // Paste keeps paragraphs and lets ChatGPT turn a very long text into an attachment.
-    const data = new DataTransfer();
-    data.setData("text/plain", text);
-    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    let button = await waitFor(() => holds(box, text) && sendReady(doc), 3000);
+    // Send lit with the box empty: an attachment an earlier try left beside
+    // the box, which emptying it does not reach, would go out with these
+    // words and be reviewed in their place (#429).
+    if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+    // Pasted, the box holds the words as typed: spaces aside, the very same
+    // ones (#435 review P1-01). Typed in when paste is not taken, a few
+    // characters either way (`holds`).
+    let held = () => bare(box.textContent) === bare(text);
+    const pasted = await paste(doc, box, text);
+    let button = pasted ? await waitFor(() => held() && sendReady(doc), 3000) : null;
     if (!button) {
+      // Send lit with the words not in the box: something else is in the
+      // composer, such as a paste ChatGPT made an attachment (#429). Sent,
+      // the page would show no words to know the answer by.
+      if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
+      held = () => holds(box, text);
       button = await waitFor(() => sendReady(doc), 5000);
     }
     if (!button) return { ok: false, reason: "send-failed" };
-    if (!holds(box, text)) return { ok: false, reason: "composer-mismatch" };
+    if (!held()) return { ok: false, reason: "composer-mismatch" };
     const before = lastPromptId(doc);
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);

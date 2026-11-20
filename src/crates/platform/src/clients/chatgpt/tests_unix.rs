@@ -204,6 +204,16 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
         json!({"type":"reread","conversation":"68a1"})
     );
     assert!(channel.reread("../x").is_err());
+    // What the read found is heard (#457).
+    let reads = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let read_log = reads.clone();
+    channel.listen(Arc::new(move |message: &Value| {
+        read_log.lock().unwrap().push(message.clone())
+    }));
+    let found = json!({"type":"reread","conversation":"68a1","outcome":"undrawn","hidden":true});
+    write_frame(&mut extension, &found, OUTBOUND_LIMIT).unwrap();
+    wait_for(|| reads.lock().unwrap().len() == 1);
+    assert_eq!(reads.lock().unwrap()[0], found);
 
     // A newer connection wins; the old one is closed.
     let mut newer = connect(&data);

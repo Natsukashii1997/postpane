@@ -46,6 +46,7 @@ mod notice;
 mod reread;
 pub mod settings;
 mod texts;
+mod undrawn;
 use back::back_text;
 use lines::AppLines;
 mod wake;
@@ -238,6 +239,8 @@ pub(crate) struct Desk {
     /// When the extension was last asked to read each quiet handoff's
     /// conversation again (#356).
     reread_at: Mutex<HashMap<String, i64>>,
+    /// How many reads in a row found each handoff's answer undrawn (#457).
+    undrawn: Mutex<HashMap<String, u32>>,
     /// When the notices began (`notices_since`): trouble from before is not
     /// told of (#318), so an upgrade tells no session of an old one.
     since: i64,
@@ -335,6 +338,7 @@ impl Desk {
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
             reread_at: Mutex::new(HashMap::new()),
+            undrawn: Mutex::new(HashMap::new()),
             telling: Mutex::new(0),
             told_out: Condvar::new(),
         };
@@ -468,22 +472,26 @@ impl Desk {
     /// its conversation, phase, message id, how long the reply was and what
     /// the desk made of it (`taken`, `unused`, `early`, `caught-up`,
     /// `evicted`). Never the words themselves. A lost reply is then traced to
-    /// the extension (no line) or to the desk (a line that says why).
+    /// the extension (no line) or to the desk (a line that says why); what
+    /// each read again found is there too (`heard_reread`, #457).
     fn note_turn(&self, message: &Value, at: i64, outcome: &str) {
-        use std::io::Write;
-        let Some(data) = &self.data else { return };
-        let path = turns_path(data);
-        if std::fs::metadata(&path).is_ok_and(|m| m.len() > TURNS_KEPT) {
-            let _ = std::fs::rename(&path, path.with_extension("old.jsonl"));
-        }
-        let line = json!({
+        self.append_turn(&json!({
             "at": at,
             "conversation": message["conversation"],
             "phase": message["phase"],
             "messageId": message["messageId"],
             "replyChars": message["reply"].as_str().map(|r| r.chars().count()),
             "outcome": outcome,
-        });
+        }));
+    }
+    /// Adds `line` to `chatgpt/turns.jsonl`, moved aside once it grew too big.
+    fn append_turn(&self, line: &Value) {
+        use std::io::Write;
+        let Some(data) = &self.data else { return };
+        let path = turns_path(data);
+        if std::fs::metadata(&path).is_ok_and(|m| m.len() > TURNS_KEPT) {
+            let _ = std::fs::rename(&path, path.with_extension("old.jsonl"));
+        }
         let written = std::fs::create_dir_all(agent_hud_runtime::chatgpt::folder(data))
             .and_then(|()| {
                 std::fs::OpenOptions::new()
@@ -1086,6 +1094,7 @@ impl Desk {
                 }
                 bound
             }
+            (Some("reread"), _) => self.heard_reread(message, now),
             _ => false,
         }
     }
@@ -1959,6 +1968,7 @@ mod tests {
     mod driver;
     mod held_back;
     mod mend_late;
+    mod undrawn;
     use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
     use super::*;

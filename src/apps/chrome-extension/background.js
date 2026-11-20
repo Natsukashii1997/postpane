@@ -128,7 +128,10 @@ async function group(tabId) {
 async function submit(tabId, text) {
   try {
     let result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
-    if (!result.ok && ["send-failed", "composer-mismatch"].includes(result.reason)) {
+    if (
+      !result.ok &&
+      ["send-failed", "composer-mismatch"].includes(result.reason)
+    ) {
       // Some pages only accept input while the tab is in front; a draft that
       // came back in the box (#410) is emptied again on the second try.
       await chrome.tabs.update(tabId, { active: true });
@@ -154,11 +157,18 @@ async function open(text, project) {
     await chrome.storage.local.set({ watched: [...watched] });
     statusSoon();
     const state =
-      (await chrome.tabs.sendMessage(tab.id, { op: "state" }).catch(() => null)) ?? {};
+      (await chrome.tabs
+        .sendMessage(tab.id, { op: "state" })
+        .catch(() => null)) ?? {};
     // The prompt's id ties its answer to it (#410); a new conversation's
     // page may only show it once it has its address.
     const promptId = result.promptId ?? state.promptId ?? null;
-    return { ok: true, conversation: page.conversation, title: state.title || "", ...(promptId && { promptId }) };
+    return {
+      ok: true,
+      conversation: page.conversation,
+      title: state.title || "",
+      ...(promptId && { promptId }),
+    };
   } finally {
     opening.delete(tab.id);
   }
@@ -185,14 +195,22 @@ async function tabShowing(conversation) {
   const known = tabFor(conversation);
   if (known !== null) return known;
   const tabs = await chrome.tabs.query({ url: `${HOME}*` });
-  return tabs.find((tab) => tab.url?.includes(`/c/${conversation}`))?.id ?? null;
+  return (
+    tabs.find((tab) => tab.url?.includes(`/c/${conversation}`))?.id ?? null
+  );
 }
 
 // PostPane heard nothing of a turn it waits on (#356): the tab tells its
 // newest reply again. A tab whose script was cut off (the extension
-// reloaded) gets one first; a closed one is opened, as for sending.
+// reloaded) gets one first; a closed one is opened, as for sending. What the
+// read found, and how the tab stood, goes back to PostPane (#457).
 async function reread(conversation) {
   if (!watched.has(conversation)) return;
+  post({ type: "reread", conversation, ...(await readAgain(conversation)) });
+}
+
+/** What reading `conversation` again found (`outcome`) and how its tab stood. */
+async function readAgain(conversation) {
   let tabId = await tabShowing(conversation);
   if (tabId === null) {
     const tab = await chrome.tabs.create({
@@ -202,8 +220,9 @@ async function reread(conversation) {
     tabId = tab.id;
     await group(tabId);
     if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
-      return;
+      return { outcome: "unopened" };
   }
+  const stood = await standing(tabId);
   // The tab checks it shows this conversation. One that has not drawn its
   // history yet (just opened) is asked again shortly, a few times.
   const ask = () =>
@@ -217,11 +236,43 @@ async function reread(conversation) {
       .catch(() => {});
     answer = await ask().catch(() => null);
   }
-  for (let tries = 0; answer?.loaded === false && tries < REREAD_TRIES; tries++) {
+  for (
+    let tries = 0;
+    answer?.loaded === false && tries < REREAD_TRIES;
+    tries++
+  ) {
     await new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
     answer = await ask().catch(() => null);
   }
-  if (answer?.undrawn) await drawnInFront(tabId, ask);
+  const fronted = !!answer?.undrawn && !stood.active;
+  const told = answer?.undrawn
+    ? await drawnInFront(tabId, ask)
+    : !!answer?.told;
+  return { outcome: outcomeOf(answer, told), ...stood, fronted };
+}
+
+/** What a read's answer comes to: told, or why not. */
+function outcomeOf(answer, told) {
+  if (!answer) return "unreachable";
+  if (told) return "told";
+  if (answer.undrawn) return "undrawn";
+  if (answer.streaming) return "streaming";
+  if (answer.loaded === false) return "unloaded";
+  // Not answered yet, or the answer still changing.
+  return "waiting";
+}
+
+/** How `tabId` stood: hidden as its page last said, in front of its window,
+ * its window minimized. */
+async function standing(tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const window =
+    tab && (await chrome.windows.get(tab.windowId).catch(() => null));
+  return {
+    hidden: !!pages.get(tabId)?.hidden,
+    active: !!tab?.active,
+    minimized: window?.state === "minimized",
+  };
 }
 const REREAD_TRIES = 5;
 const REREAD_PAUSE = 2000;
@@ -230,18 +281,24 @@ const REREAD_PAUSE = 2000;
 // answer stayed undrawn until the tab was shown). One answered but not drawn
 // is put in front of its window for a moment and asked again; the tab that
 // was in front comes back, unless the person moved on meanwhile. The window
-// itself is not raised.
+// itself is not raised: one off screen still draws nothing (#457). Whether
+// the answer was told.
 async function drawnInFront(tabId, ask) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (!tab || tab.active) return;
-  const front = (await chrome.tabs.query({ active: true, windowId: tab.windowId })).find((t) => t.active);
+  if (!tab || tab.active) return false;
+  const front = (
+    await chrome.tabs.query({ active: true, windowId: tab.windowId })
+  ).find((t) => t.active);
   await chrome.tabs.update(tabId, { active: true });
-  for (let tries = 0; tries < FRONT_TRIES; tries++) {
+  let told = false;
+  for (let tries = 0; tries < FRONT_TRIES && !told; tries++) {
     await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
-    if ((await ask().catch(() => null))?.told) break;
+    told = !!(await ask().catch(() => null))?.told;
   }
   const now = await chrome.tabs.get(tabId).catch(() => null);
-  if (front && now?.active) await chrome.tabs.update(front.id, { active: true }).catch(() => {});
+  if (front && now?.active)
+    await chrome.tabs.update(front.id, { active: true }).catch(() => {});
+  return told;
 }
 const FRONT_TRIES = 3;
 const FRONT_PAUSE = 1500;

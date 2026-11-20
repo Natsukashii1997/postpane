@@ -101,6 +101,242 @@ test("submit empties a draft left in the composer before sending", async () => {
   await fresh.close();
 });
 
+// #429: chatgpt.com turns one paste of between 8000 and 10000 characters into
+// an attachment (2026-11-19: 8000 stayed text, 10000 became 「粘贴的文本.txt」).
+// The page then shows no prompt bubble and the words are not on it, so the
+// answer was never read back. A stand-in for that composer: a paste up to
+// `limit` goes in as text, a longer one (or any from paste `attachFrom` on)
+// becomes an attachment beside the box that lights send. `leftover` puts one
+// there before the words come, as a failed earlier try would leave it;
+// `draft` leaves words in the box; `keep` takes in only that share of each
+// paste, as a page cutting it short would; `alter` takes each paste in with
+// its first character changed, as many characters but not the words.
+const composer = async ({
+  limit = 9000,
+  attachFrom = Infinity,
+  leftover = false,
+  draft = "",
+  keep = 1,
+  alter = false,
+} = {}) => {
+  const fresh = await browser.newPage();
+  await fresh.setContent(fixture);
+  await fresh.addScriptTag({ path: script });
+  await fresh.evaluate(
+    ({ limit, attachFrom, leftover, draft, keep, alter }) => {
+      window.pastes = [];
+      const box = document.querySelector(".ProseMirror");
+      box.textContent = draft;
+      const attach = () => {
+        const tile = document.createElement("div");
+        tile.className = "attachment";
+        tile.textContent = "粘贴的文本.txt";
+        box.before(tile);
+        document.getElementById("slot").disabled = false;
+      };
+      // An attachment keeps send lit with the box empty, as on the page.
+      new MutationObserver(() => {
+        if (document.querySelector(".attachment"))
+          document.getElementById("slot").disabled = false;
+      }).observe(box, { childList: true, subtree: true, characterData: true });
+      if (leftover) attach();
+      box.addEventListener("paste", (event) => {
+        event.preventDefault();
+        const text = event.clipboardData.getData("text/plain");
+        window.pastes.push(text);
+        if (text.length <= limit && window.pastes.length <= attachFrom) {
+          let kept = text.slice(0, Math.ceil(text.length * keep));
+          if (alter) kept = "某" + kept.slice(1);
+          document.execCommand("insertText", false, kept);
+        } else attach();
+      });
+    },
+    {
+      limit,
+      attachFrom: Number.isFinite(attachFrom) ? attachFrom : 1e9,
+      leftover,
+      draft,
+      keep,
+      alter,
+    },
+  );
+  return fresh;
+};
+const brief = (lines) =>
+  Array.from(
+    { length: lines },
+    (_, n) => `第 ${n} 行：送审说明，改了什么、为什么这样改。`,
+  ).join("\n");
+const send = (page, text) =>
+  page.evaluate((text) => PostPanePage.submit(document, text), text);
+const attachments = (page) =>
+  page.evaluate(() => document.querySelectorAll(".attachment").length);
+
+test("a long brief goes in as text, pasted a piece at a time", async () => {
+  const fresh = await composer();
+  const text = brief(800);
+  assert.ok(text.length > 20000);
+  assert.deepEqual(await send(fresh, text), { ok: true });
+  const bare = (words) => words.replace(/\s/g, "");
+  const sent = bare(await fresh.evaluate(() => window.sent));
+  assert.ok(
+    sent === bare(text),
+    `sent ${sent.length} of ${bare(text).length} characters`,
+  );
+  const pastes = await fresh.evaluate(() => window.pastes);
+  assert.ok(pastes.length > 1, `pasted ${pastes.length} times`);
+  assert.ok(pastes.join("") === text, "the pieces make up the words");
+  assert.ok(
+    pastes.slice(0, -1).every((piece) => piece.endsWith("\n")),
+    "each piece but the last ends with its line",
+  );
+  const largest = Math.max(...pastes.map((piece) => piece.length));
+  assert.ok(largest <= 6000, `largest piece ${largest}`);
+  assert.equal(await attachments(fresh), 0);
+  await fresh.close();
+});
+
+test("one line longer than a piece is cut within", async () => {
+  const fresh = await composer();
+  const text = "长".repeat(13000);
+  assert.deepEqual(await send(fresh, text), { ok: true });
+  assert.equal(await fresh.evaluate(() => window.sent), text);
+  assert.deepEqual(
+    await fresh.evaluate(() => window.pastes.map((piece) => piece.length)),
+    [6000, 6000, 1000],
+  );
+  await fresh.close();
+});
+
+// A character outside the BMP (an emoji) is two UTF-16 units: a cut between
+// them would paste half a character at each end.
+test("a long line is not cut inside a character", async () => {
+  const fresh = await composer();
+  const text = "a" + "😀".repeat(4000);
+  assert.deepEqual(await send(fresh, text), { ok: true });
+  const pastes = await fresh.evaluate(() => window.pastes);
+  assert.ok(pastes.join("") === text, "the pieces make up the words");
+  assert.ok(
+    pastes.every((piece) => piece.isWellFormed()),
+    `pieces ${pastes.map((piece) => piece.length)}`,
+  );
+  await fresh.close();
+});
+
+test("words that did not go in as text are not sent", async () => {
+  const fresh = await composer({ limit: 1000 });
+  assert.deepEqual(await send(fresh, brief(100)), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+test("a later piece turned attachment stops the sending", async () => {
+  const fresh = await composer({ attachFrom: 1 });
+  assert.deepEqual(await send(fresh, brief(800)), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.pastes.length), 2);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+// An attachment left from an earlier try sits beside the box, where emptying
+// the box does not reach: short words sent now would take it along, and
+// ChatGPT would review the old words.
+test("an attachment already in the composer is not sent along", async () => {
+  const fresh = await composer({ leftover: true });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+// #435 review P1-01: a cut right before a blank line left a piece of only a
+// line break, and it was skipped: the words went out a line short, and
+// counting them without spaces could not tell.
+test("a blank line at a cut still goes in", async () => {
+  const fresh = await composer();
+  const text = "a".repeat(5999) + "\n\n" + "b".repeat(6000);
+  assert.deepEqual(await send(fresh, text), { ok: true });
+  const pastes = await fresh.evaluate(() => window.pastes);
+  assert.ok(pastes.join("") === text, "the pieces make up the words");
+  assert.ok(
+    pastes.every((piece) => piece.trim()),
+    `pieces ${JSON.stringify(pastes.map((piece) => piece.length))}`,
+  );
+  await fresh.close();
+});
+
+// #435 review round 2 P2-02: spaces glued to the next words without end made
+// one piece of 10001 characters, an attachment again.
+test("a long run of spaces or blank lines still goes in pieces", async () => {
+  for (const run of [" ".repeat(10000), "\n".repeat(10000)]) {
+    const fresh = await composer();
+    const text = run + "x";
+    assert.deepEqual(await send(fresh, text), { ok: true });
+    const pastes = await fresh.evaluate(() => window.pastes);
+    assert.ok(pastes.join("") === text, "the pieces make up the words");
+    const largest = Math.max(...pastes.map((piece) => piece.length));
+    assert.ok(largest <= 7000, `largest piece ${largest}`);
+    assert.equal(await attachments(fresh), 0);
+    await fresh.close();
+  }
+});
+
+test("a piece that went in short stops the sending", async () => {
+  const fresh = await composer({ keep: 0.9 });
+  assert.deepEqual(await send(fresh, brief(800)), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+test("words the page changed, as many characters, are not sent", async () => {
+  const fresh = await composer({ alter: true });
+  assert.deepEqual(await send(fresh, brief(20)), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+test("a long line is not cut between its CR and LF", async () => {
+  const fresh = await composer();
+  const text = "x".repeat(5999) + "\r\n" + "y".repeat(100);
+  assert.deepEqual(await send(fresh, text), { ok: true });
+  const pastes = await fresh.evaluate(() => window.pastes);
+  assert.ok(pastes.join("") === text, "the pieces make up the words");
+  assert.ok(
+    pastes.every((piece) => !piece.endsWith("\r")),
+    `pieces ${JSON.stringify(pastes.map((piece) => piece.length))}`,
+  );
+  await fresh.close();
+});
+
+test("a draft with an attachment left beside it is not sent along", async () => {
+  const fresh = await composer({
+    draft: "上一轮的送审：第 2 轮复审",
+    leftover: true,
+  });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "composer-mismatch",
+  });
+  assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
 // #410: chatgpt.com holds the conversation twice: a hidden copy with every
 // turn in order (answers not drawn), then the drawn one with only the turns
 // near the view. The newest turn is read by conversation order, from its

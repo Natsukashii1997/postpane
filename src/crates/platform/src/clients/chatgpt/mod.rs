@@ -316,10 +316,10 @@ impl Shared {
                     self.tell(&message);
                 }
             }
-            Some("sent") => {
-                // Heard as well, so words that arrive after the wait for
-                // them gave up still count (#223).
-                let ok = message["ok"] == true;
+            // Heard as well, so words that arrive after the wait for them
+            // gave up still count (#223); what a read again found (#457).
+            Some(kind @ ("sent" | "reread")) => {
+                let ok = kind == "reread" || message["ok"] == true;
                 answer(&mut state, message.clone());
                 drop(state);
                 if ok {

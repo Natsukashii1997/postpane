@@ -556,7 +556,16 @@
 - 根因：`HUDScene.tsx` 每个面板画两份：看得见的一份和隐藏的测高副本（`data-hud-measurement`），框高取测高副本的高度（最多屏幕高 - 80）。「展开其余 n 条」的开合是各组件自己的 `useState`，两份各有一份状态，点的是看得见的那份，测高副本一直折着。预览台实测：展开后 ChatGPT 卡测高仍 665、Claude 提问卡仍 790。
 - 正确做法：凡是会改变面板内容高度的界面状态（展开 / 折叠、切页、选中某条），不放组件本地 `useState`，放两份共读的外部状态（#430 起是 `panel/fold-store.ts` 的 `cardFolds`，键按卡和段区分），侧栏收起时由 `useCloseWithSidebar` 统一复位；验证时同时看测高副本和可见框的高度，不只看内容有没有出来。
 - 证据：`evidence/2026-11-19-430-fold-measure/`：`red.txt`（`fold-store.test.ts` 改前失败）、`before-chatgpt-expanded.jpg` / `after-chatgpt-expanded.jpg`、`preview-measure.md`（改后 ChatGPT 666 → 849、Claude 790 → 1089）。
+- 补（2026-11-20，#448）：#430 把复位挂在「侧栏收起」上，可侧栏顶上挂着提醒条或待处理请求时永远不算收起，实机上展开后移开再悬停仍是展开的（「人机协作」会话代验发现）。复位要挂在「这张卡关上」（`HUDScene.tsx` 的 `open`）上，不挂在更粗的「侧栏收起」上；`closesWith` 把两者分开，接力卡仍等侧栏收起。验证「下次打开回到默认」时要在有提醒挂着的场景（如 `claude-many-asks`）里真的移开、等收起、再打开。
 - 升级：〔提醒〕部分升级（2026-11-19：`fold-store.test.ts` 守住几处已知的折叠，未接进必经检查；`CompletionAlertView` 里「点开的那条回复」`chosen` 仍是本地状态，未核实是否同类）。
+
+## L-59 长 brief 一次粘贴进 ChatGPT 被转成附件，回信早到了，驿窗却报「30 分钟没回信」（2026-11-19）
+
+- 现象：新规则冒烟（#348 解冲突 L1 复核，接力 `h1a1f38f8b6200`），11516 个字符的 brief（13724 字节）送出后，ChatGPT 9 分 22 秒就写完回信（审查出口「通过」），驿窗一直没收下，30 分钟后报「ChatGPT 30 分钟没回信」停了自动往返。
+- 根因：插件把整份 brief 一次粘贴，ChatGPT 把单次超过某个长度（按字符数，在 8000 到 1 万字之间）的粘贴转成附件「粘贴的文本.txt」。附件消息没有 `[data-user-message-bubble]`，页面上也只有文件名、没有原文：会话第一轮时 `answered()` 恒为 false，插件不报 `turn complete`，重读也不报；已有旧气泡的会话里（推断，未实测）插件会拿上一轮的气泡当最新提问上报，`belongs.rs` 判对不上。`holds()` 只防「输入框比原文多」，输入框空着（字在附件里）也放行发送。代码注释早写着「让 ChatGPT 把很长的文字转成附件」，从 #99 起一直如此，只是之前的 brief 都没到阈值（有记录的最长 6887 字）。
+- 正确做法：送话按行切成每段不超过 6000 字分次粘贴（`page.js` 的 `pieces`、`paste`）；每段要等输入框（去空白）净增长到这段的全部可见字才算贴进（只看「变长」会放过只贴进半段的情况，只看总长八成会放过丢两成；只有空白的一段不能单独切出、也不能跳过，#435 审查 P1-01），贴完再核对输入框去空白后和原文是同样的字（只比字数会放过页面换了字的情况）；没贴全或字不同而发送键亮着就报 `composer-mismatch`、不发；贴之前输入框空着而发送键亮着（上次留下的附件，清空输入框清不到它）也不发。往第三方页面送长文时，先实测页面对单次输入的长度处理，不假定原样进输入框。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-19-golive-smoke/`（`root-cause-attachment.md`：页面 `[data-user-message-bubble]` 为 0、用户单元正文只有文件名；`turns-6afedd1d.jsonl` 只有两条 `start`）；阈值与分段实测记录在 #429；测试 `a long brief goes in as text, pasted a piece at a time`、`words that did not go in as text are not sent`（改前红：`evidence/2026-11-19-429-long-brief/red-before.txt`），`a long line is not cut inside a character`、`an attachment already in the composer is not sent along`（改前红：同目录 `red-round2.txt`）；真实页面只粘贴不发送、切点落在 ```` ```diff ```` 块内，逐行一致、无附件（2026-11-19 21:3x，记在 #429）。
+- 升级：〔提醒〕部分升级（2026-11-19：写成插件测试，阈值随 ChatGPT 改版可能变化，没有接进必经检查）。
 
 ## L-60 在通道唯一的读线程上发送并等确认，确认永远读不出来：补格式每次都等满 30 秒超时（2026-11-19）
 
@@ -569,3 +578,11 @@
 - 正确做法：读线程上的回调只记账（`observe`），推进和通知侧栏都交给另一条线程（`handoff/driver.rs` 的 `Driver`）。看一个函数能不能放在读线程上，要顺着调用链看到底，名字像「通知」「刷新」的不等于没有副作用。给会「发出去再等回应」的接口写测试时，替身要带上真实约束（回应只能由读线程带回，`handoff/tests/driver.rs` 的 `Wired`），回调的每个参数都要用和实机等价的实现测一遍（`Rig::refresh` 带后台锁、会推进）。
 - 证据：`src/crates/host/src/handoff/tests/driver.rs`。`an_ask_to_mend_hears_that_it_went_in` 在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`）；`the_sidebar_is_not_refreshed_on_the_reading_thread`、`a_refresh_that_waits_for_the_data_thread_does_not_hold_the_reading_thread` 在第一版修复上失败（`red-round2.txt`），第二版 6 条都过（`green-round2.txt`）。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。
+
+## L-61 回信在 ChatGPT 页面里，窗口不在屏幕上就不画，重读也读不到，又等满 30 分钟（2026-11-20）
+
+- 现象：#439 第 2 轮（接力 `h1a1f4958c4300`）05:31 送审，提问编号已记上。插件 05:31:18 报了「开始答」，之后没报答完，也没有 `unmatched`；06:01 驿窗按「ChatGPT 30 分钟没回信」停下。06:15 在 Claude in Chrome 新开前台标签页只读打开这个对话：回信早已答完（思考 14 分 19 秒，8054 字，结论「返修」）；页面里这一轮隐藏的那份只有 17 字（没画出），前台画出的一份是全文。打开约 1 分钟后，驿窗的定时重读读到它并收下（06:16:46 `complete taken`）。
+- 根因（推断，原标签页当时的样子没看到，插件状态不落盘）：ChatGPT 只在看得见的页面里画新内容。原标签页所在的 Chrome 窗口不在屏幕上（最小化、被挡住或在别的桌面），页面一直算在后台；#413 的「切到前台再问」只在窗口里切标签、不抬窗口，救不回来。驿窗每 2 分钟让插件重读，插件不回报结果，所以这 30 分钟里驿窗和事后的人都看不出卡在哪。
+- 正确做法：重读必须回报结果和标签页状态（`outcome`、`hidden`、`active`、`minimized`、`fronted`），记进 `turns.jsonl`（#457）；「已答完、没画出」连续两次就停下交给常浩，并说清点开那个 ChatGPT 标签页就能收回，不再干等 30 分钟。凡是「请对方再做一次、做没做成不回话」的补救，都要让它回话，否则补救失灵时没人知道。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-439第2轮漏报.md`；`evidence/2026-11-20-457-reread-undrawn/` 下 `red-background.txt`、`red-host.txt`、`red-platform.txt`（改前红）。测试：插件 `reading again tells PostPane what it found and how the tab stood`、`a read again says whether it was told, …`；驿窗 `handoff::tests::undrawn` 三条；平台 `the_extension_opens_a_conversation_and_reports_its_reply` 里 #457 那段。
+- 升级：〔提醒〕部分升级（2026-11-20：写成测试；「窗口不在屏幕上就不画」还没有实测，等第 1 批记录攒到证据，再定第 3 批的自动救回）。

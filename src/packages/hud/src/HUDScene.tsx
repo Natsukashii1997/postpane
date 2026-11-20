@@ -440,9 +440,8 @@ export function HUDScene({
     ? snapshot.handoffs?.find((handoff) => handoff.id === cardId)
     : undefined;
   const weekly = weeklyFor(snapshot, config, cardHandoff, frontOf);
-  // It closes with the sidebar, as do lists opened past their few.
-  const sidebarShown = open || Boolean(event || request);
-  useCloseWithSidebar(sidebarShown);
+  // It closes with the sidebar; lists opened past their few, with the card.
+  useCloseWithSidebar(open, Boolean(event || request));
   // The replies' folded tag: the newest reply's session and the count.
   const reply = replyChip(news.replies, snapshot.sessions, (each) =>
     clientDisplayName(each.source),
