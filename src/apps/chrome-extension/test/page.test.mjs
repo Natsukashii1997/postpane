@@ -393,6 +393,64 @@ test("at the moment the time is up nothing is put in the box or pressed", async 
   await lit.close();
 });
 
+// #466 review P2-03, round 5: the look comes right before what changes the
+// box, not a few steps ahead of it.
+test("the time up as the box is about to be changed, it is not changed", async () => {
+  const untouched = { ok: false, reason: "timeout", pressed: false };
+  const state = (page) =>
+    page.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+      window.sent,
+    ]);
+  // Sends with the time up once `step` of getting ready is taken.
+  const upAt = (page, step) =>
+    page.evaluate(
+      ([text, step]) => {
+        const until = Date.now() + 20000;
+        const up = () => (Date.now = () => until);
+        if (step === "selection") {
+          // Up once the place to paste is set, before the paste goes out.
+          const selection = document.getSelection.bind(document);
+          document.getSelection = () => {
+            const found = selection();
+            const collapse = found.collapseToEnd.bind(found);
+            found.collapseToEnd = () => {
+              collapse();
+              up();
+            };
+            return found;
+          };
+        } else {
+          const command = document.execCommand.bind(document);
+          document.execCommand = (name, ...rest) => {
+            const done = command(name, ...rest);
+            if (name === "selectAll") up();
+            return done;
+          };
+        }
+        return PostPanePage.submit(document, text, until);
+      },
+      ["P2-03 定向复核", step],
+    );
+  // As the place to paste is set: no paste goes out.
+  const pasting = await composer();
+  assert.deepEqual(await upAt(pasting, "selection"), untouched);
+  assert.deepEqual(await state(pasting), [0, "", undefined]);
+  await pasting.close();
+  // As a draft is selected to be taken out: it stays.
+  const drafted = await composer({ draft: "上一轮留下的草稿" });
+  assert.deepEqual(await upAt(drafted, "selectAll"), untouched);
+  assert.deepEqual(await state(drafted), [0, "上一轮留下的草稿", undefined]);
+  await drafted.close();
+  // Paste not taken, as all is selected to type over: nothing is typed.
+  const typed = await composer({ keep: 0 });
+  assert.deepEqual(await upAt(typed, "selectAll"), untouched);
+  const [pastes, held, sent] = await state(typed);
+  assert.deepEqual([pastes, held, sent], [1, "", undefined]);
+  await typed.close();
+});
+
 test("send that never lights is told as not pressed", async () => {
   const fresh = await composer();
   await fresh.evaluate(() => {

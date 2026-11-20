@@ -286,14 +286,16 @@
    * characters, spaces aside (the page takes a paste as typed, #429). */
   async function paste(doc, box, text, wait = waitFor, timely = () => {}) {
     for (const piece of pieces(text)) {
-      timely();
       const want = bare(box.textContent).length + bare(piece).length;
-      const selection = doc.getSelection();
-      selection.selectAllChildren(box);
-      selection.collapseToEnd();
       const data = new DataTransfer();
       data.setData("text/plain", piece);
-      box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+      const selection = doc.getSelection();
+      timely();
+      selection.selectAllChildren(box);
+      selection.collapseToEnd();
+      timely();
+      box.dispatchEvent(event);
       if (!(await wait(() => bare(box.textContent).length >= want, 3000))) return false;
     }
     return true;
@@ -314,8 +316,8 @@
    * said after of words not pressed is not heard, so the waits before the
    * press end by then, and out of time nothing is pressed. Nor is the box
    * touched again (#466 review P1-02): `timely` ends the try out of time,
-   * looked to when asked, after each wait, and before each thing done to
-   * the box. The moment the time is up is out of it, as the extension
+   * looked to when asked, after each wait, and right before each thing
+   * done to the box. The moment the time is up is out of it, as the extension
    * counts (#466 review P2-03). */
   async function submit(doc, text, until = Infinity) {
     const timely = () => {
@@ -347,6 +349,7 @@
     if (bare(box.textContent)) {
       timely();
       doc.execCommand("selectAll", false);
+      timely();
       doc.execCommand("delete", false);
       await wait(() => !sendReady(doc), 2000);
     }
@@ -367,6 +370,7 @@
       if (sendReady(doc)) return unsent("composer-mismatch");
       timely();
       doc.execCommand("selectAll", false);
+      timely();
       doc.execCommand("insertText", false, text);
       held = () => holds(box, text);
       button = await wait(() => sendReady(doc), 5000);
