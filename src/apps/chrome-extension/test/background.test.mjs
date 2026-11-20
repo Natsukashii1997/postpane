@@ -21,6 +21,7 @@ function load(
     posted = [],
     windows = {},
     waits = [],
+    clock = null,
   } = {},
 ) {
   const listeners = {};
@@ -75,13 +76,16 @@ function load(
   };
   vm.runInNewContext(source, {
     chrome,
-    // `now`: a pause ends at once, so waits that are counted run through.
+    // `now`: a pause ends at once, so waits that are counted run through;
+    // as a timer does, after what is already on its way.
     setTimeout: (fn, ms) => {
       waits.push(ms);
-      if (now) Promise.resolve().then(fn);
+      if (now) setImmediate(fn);
       return 0;
     },
     clearTimeout() {},
+    // `clock`: the time the script reads, moved by the test.
+    ...(clock && { Date: { now: () => clock.now } }),
   });
   return { listeners, injected, chrome };
 }
@@ -340,27 +344,51 @@ test("a read again says whether it was told, in front or not, still written, or 
 // #466: words send was never pressed for did not go, and PostPane lets them
 // go again; pressed on either try, or the tab gone meanwhile, it cannot
 // know, and stays unsure of them. What the extension tells of each sending.
-const sending = async (answers, { watched = true, dead = false } = {}) => {
+/** What PostPane is told of a sending to a tab that is there (`tab: false`:
+ * to none). `rig` changes the browser first; `submits` takes what the page
+ * was asked, `waits` the pauses of the sending alone. */
+const sending = async (
+  answers,
+  {
+    watched = true,
+    dead = false,
+    tab = true,
+    rig,
+    clock = null,
+    submits = [],
+    waits = [],
+  } = {},
+) => {
   const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
   const posted = [];
-  const tab = {
+  const there = {
     id: 7,
     url: `https://chatgpt.com/c/${conversation}`,
     active: false,
     windowId: 1,
   };
-  const { listeners } = load([tab], {
+  const { listeners, chrome } = load(tab ? [there] : [], {
     posted,
+    waits,
+    clock,
     watched: watched ? [conversation] : [],
     answers: [...answers],
     dead: new Set(dead ? [7] : []),
     now: true,
   });
+  const { sendMessage } = chrome.tabs;
+  chrome.tabs.sendMessage = (tabId, message) => {
+    if (message.op === "submit") submits.push(message);
+    return sendMessage(tabId, message);
+  };
+  rig?.(chrome);
   await new Promise((resolve) => setImmediate(resolve));
-  listeners.message(
-    { type: "page", conversation, hidden: true, streaming: false },
-    { tab: { id: 7 } },
-  );
+  if (tab)
+    listeners.message(
+      { type: "page", conversation, hidden: true, streaming: false },
+      { tab: { id: 7 } },
+    );
+  waits.length = 0;
   await listeners.port({
     type: "send",
     requestId: "r1",
@@ -432,69 +460,124 @@ test("a sending gives up getting to send before PostPane stops waiting for word"
 });
 
 test("a tab that does not load in time is told as not pressed, before PostPane stops waiting", async () => {
-  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
-  const posted = [];
+  const submits = [];
   const waits = [];
-  const asked = [];
-  const { listeners } = load([], {
-    posted,
-    waits,
-    asked,
-    watched: [conversation],
-    now: true,
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  waits.length = 0;
-  await listeners.port({
-    type: "send",
-    requestId: "r1",
-    conversation,
-    text: "下一轮",
-  });
-  const [sent] = posted.filter((m) => m.type === "sent");
-  assert.deepEqual(sent, {
+  assert.deepEqual(await sending([], { tab: false, submits, waits }), {
     type: "sent",
     requestId: "r1",
     ...unsent("timeout", false),
   });
-  assert.deepEqual(asked, [], "the page was never asked to send");
+  assert.deepEqual(submits, [], "the page was never asked to send");
   assert.ok(Math.max(...waits) <= hostWait() - 5000, `${waits}`);
 });
 
+const never = () => new Promise(() => {});
+const notPressed = unsent("composer-mismatch", false);
+const stands = { type: "sent", requestId: "r1", ...notPressed };
+
 test("a sending tells the page by when send must be pressed, and tries no second time past it", async () => {
-  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
-  const asked = [];
-  const tab = {
-    id: 7,
-    url: `https://chatgpt.com/c/${conversation}`,
-    active: false,
-    windowId: 1,
+  // The first try comes back not pressed, out of time: no second one.
+  const clock = { now: 1000 };
+  const submits = [];
+  let fronted = 0;
+  const slow = (chrome) => {
+    const { sendMessage } = chrome.tabs;
+    chrome.tabs.sendMessage = async (tabId, message) => {
+      if (message.op === "submit") clock.now += hostWait();
+      return sendMessage(tabId, message);
+    };
+    chrome.tabs.update = async () => void fronted++;
   };
-  const messages = [];
-  const { listeners, chrome } = load([tab], {
-    asked,
-    watched: [conversation],
-    answers: [unsent("timeout", false)],
-    now: true,
-  });
-  const sendMessage = chrome.tabs.sendMessage;
-  chrome.tabs.sendMessage = (tabId, message) => {
-    if (message.op === "submit") messages.push(message);
-    return sendMessage(tabId, message);
+  const sent = await sending([notPressed], { rig: slow, clock, submits });
+  assert.deepEqual(sent, stands);
+  assert.equal(submits.length, 1);
+  assert.equal(fronted, 0, "nor is the tab brought to the front for one");
+  const [{ until }] = submits;
+  assert.ok(until > 1000 && until <= 1000 + hostWait() - 5000, until);
+});
+
+// #466 review P1-02: between the two tries the tab is brought to the front.
+// That failing, or taking the time left, the second try is not begun, and
+// what the first said of send stands: said as a tab gone, words known not
+// to be pressed were kept as not known to have gone.
+test("what the first try said of send stands while the second is not begun", async () => {
+  // The tab cannot be brought to the front: closed meanwhile.
+  const closed = (chrome) => {
+    chrome.tabs.update = async () => {
+      throw new Error("No tab with id: 7.");
+    };
   };
-  await new Promise((resolve) => setImmediate(resolve));
-  listeners.message(
-    { type: "page", conversation, hidden: true, streaming: false },
-    { tab: { id: 7 } },
+  let submits = [];
+  assert.deepEqual(
+    await sending([notPressed], { rig: closed, submits }),
+    stands,
   );
-  const before = Date.now();
-  await listeners.port({
-    type: "send",
-    requestId: "r1",
-    conversation,
-    text: "下一轮",
-  });
-  assert.equal(messages.length, 1);
-  const until = messages[0].until;
-  assert.ok(until > before && until <= Date.now() + hostWait() - 5000, until);
+  assert.equal(submits.length, 1);
+  // Pressed the first time: that stands as well.
+  const pressed = await sending([unsent("send-failed", true)], { rig: closed });
+  assert.deepEqual([pressed.reason, pressed.pressed], ["send-failed", true]);
+  // Bringing it to the front takes longer than the sending has.
+  const hung = (chrome) => {
+    chrome.tabs.update = never;
+  };
+  submits = [];
+  const waits = [];
+  assert.deepEqual(
+    await sending([notPressed], { rig: hung, submits, waits }),
+    stands,
+  );
+  assert.equal(submits.length, 1);
+  assert.ok(Math.max(...waits) <= hostWait() - 5000, `${waits}`);
+  // In front, but out of time by then.
+  const clock = { now: 1000 };
+  const slow = (chrome) => {
+    chrome.tabs.update = async () => {
+      clock.now += hostWait();
+    };
+  };
+  submits = [];
+  assert.deepEqual(
+    await sending([notPressed], { rig: slow, clock, submits }),
+    stands,
+  );
+  assert.equal(submits.length, 1);
+});
+
+test("a second try gone out with no word back is not known to have pressed", async () => {
+  const lost = (chrome) => {
+    const { sendMessage } = chrome.tabs;
+    let submits = 0;
+    chrome.tabs.sendMessage = async (tabId, message) => {
+      if (message.op === "submit" && ++submits === 2)
+        throw new Error(
+          "The message port closed before a response was received.",
+        );
+      return sendMessage(tabId, message);
+    };
+  };
+  const sent = await sending([notPressed], { rig: lost });
+  assert.equal(sent.reason, "tab-closed");
+  assert.equal("pressed" in sent, false);
+});
+
+test("a tab that is not made, or not put in its group, in time is told as not pressed", async () => {
+  const none = { type: "sent", requestId: "r1", ...unsent("timeout", false) };
+  for (const rig of [
+    (chrome) => (chrome.tabs.create = never),
+    (chrome) =>
+      (chrome.tabs.create = async () => {
+        throw new Error("Tabs cannot be edited right now.");
+      }),
+    // Grouping asks for the tab first.
+    (chrome) => (chrome.tabs.get = never),
+  ]) {
+    const submits = [];
+    const waits = [];
+    assert.deepEqual(
+      await sending([], { tab: false, rig, submits, waits }),
+      none,
+    );
+    assert.deepEqual(submits, [], "the page was never asked to send");
+    assert.ok(Math.max(...waits) <= hostWait() - 5000, `${waits}`);
+  }
 });

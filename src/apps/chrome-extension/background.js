@@ -132,27 +132,38 @@ async function group(tabId) {
  * back; a test holds the two apart. */
 const PRESS_BY = 25000;
 
+/** What `step` comes to, true when to nothing. With `until`, null when it
+ * fails or is not there by then: nothing on the way to pressing send may
+ * outlast the time a sending has (#466 review P1-02). */
+function by(until, step) {
+  const came = step.then((value) => value ?? true);
+  if (!until) return came;
+  return new Promise((done) => {
+    const left = Math.max(0, until - Date.now());
+    const timer = setTimeout(() => done(null), left);
+    came.then(done, () => done(null)).finally(() => clearTimeout(timer));
+  });
+}
+
 /** Has the page put `text` in and press send, by `until` when given. Not
  * ok, `pressed` is what the page says of send (#466): false when it was
- * pressed on neither try, true when on either; left out when the tab went
- * away meanwhile, so it is not known. */
+ * pressed on neither try, true when on either; left out when a try went out
+ * and the tab went away meanwhile, so it is not known. */
 async function submit(tabId, text, until) {
   try {
     const ask = { op: "submit", text, ...(until && { until }) };
-    let result = await chrome.tabs.sendMessage(tabId, ask);
-    if (
-      !result.ok &&
-      ["send-failed", "composer-mismatch"].includes(result.reason) &&
-      !(Date.now() >= until)
-    ) {
-      // Some pages only accept input while the tab is in front; a draft that
-      // came back in the box (#410) is emptied again on the second try.
-      await chrome.tabs.update(tabId, { active: true });
-      const first = result;
-      result = await chrome.tabs.sendMessage(tabId, ask);
-      if (!result.ok && first.pressed) result = { ...result, pressed: true };
-    }
-    return result;
+    const first = await chrome.tabs.sendMessage(tabId, ask);
+    const again =
+      !first.ok && ["send-failed", "composer-mismatch"].includes(first.reason);
+    if (!again || Date.now() >= until) return first;
+    // Some pages only accept input while the tab is in front; a draft that
+    // came back in the box (#410) is emptied again on the second try. Not in
+    // front by `until`, the second try is not begun, and what the first said
+    // of send stands (#466 review P1-02).
+    const front = await by(until, chrome.tabs.update(tabId, { active: true }));
+    if (!front || Date.now() >= until) return first;
+    const second = await chrome.tabs.sendMessage(tabId, ask);
+    return !second.ok && first.pressed ? { ...second, pressed: true } : second;
   } catch {
     return { ok: false, reason: "tab-closed" };
   }
@@ -196,12 +207,14 @@ async function send(conversation, text) {
   const until = Date.now() + PRESS_BY;
   let tabId = tabFor(conversation);
   if (tabId === null) {
-    const tab = await chrome.tabs.create({
-      url: `${HOME}c/${conversation}`,
-      active: false,
-    });
+    const tab = await by(
+      until,
+      chrome.tabs.create({ url: `${HOME}c/${conversation}`, active: false }),
+    );
+    // No tab to ask: send was not pressed.
+    if (!tab) return { ok: false, reason: "timeout", pressed: false };
     tabId = tab.id;
-    await group(tabId);
+    await by(until, group(tabId));
     const loaded = (p) => p.conversation === conversation;
     if (!(await ready(tabId, until - Date.now(), loaded)))
       return { ok: false, reason: "timeout", pressed: false };
