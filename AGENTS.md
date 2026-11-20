@@ -46,6 +46,7 @@ pnpm test                                # Rust + 前端 + MCP + 插件 + Chrome
 pnpm --filter @agent-hud/desktop exec tauri build --bundles app   # 打包；不要用 --bundle（生成 DMG 时会自动启动应用）
 node --test tests/*.test.mjs             # 交接格式 + 通用规则（含自测）
 node scripts/check-rules.mjs             # 只跑通用规则检查
+git config core.hooksPath scripts/hooks   # 装提交、推送前的必经检查（每个克隆、每台电脑各一次；不用 --no-verify 绕过）
 ```
 
 安装：先退出正在运行的应用，再用 `ditto` 把打出的 `.app` 复制到 `/Applications`。
