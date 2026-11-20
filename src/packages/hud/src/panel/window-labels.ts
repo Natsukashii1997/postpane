@@ -2,7 +2,8 @@
 // the vendor's English words in every language, and other places (alerts,
 // settings, saved layouts) match on those words, so the panel translates
 // them only where it shows them: "Current session" → "5 小时",
-// "Weekly limit · Fable" → "每周 · Fable". An English panel keeps Core's name.
+// "Weekly limit · Opus" → "每周 · Opus", and Claude's Fable week as claude.ai
+// names it, "Fable 额度". An English panel keeps Core's name.
 import type { Language } from "@agent-hud/ui/format";
 
 const PERIODS: [RegExp, string][] = [
@@ -13,7 +14,6 @@ const PERIODS: [RegExp, string][] = [
   [/^(annual|annual (usage )?limit|annual quota)$/i, "每年"],
   [/^(usage limit|quota)$/i, "额度"],
   [/^secondary usage limit$/i, "第二额度"],
-  [/^cloud session credits$/i, "云端额度"],
 ];
 
 const UNITS: [RegExp, string][] = [
@@ -39,6 +39,7 @@ export function quotaWindowLabel(
   language: Language,
 ): string {
   if (language !== "zh") return row.name;
+  if (/^weekly limit · fable$/i.test(row.name.trim())) return "Fable 额度";
   const parts = row.name
     .split(" · ")
     .map(part)
@@ -47,12 +48,10 @@ export function quotaWindowLabel(
 }
 
 /** A window's short name in the agent's peek: Core's short name, as the peek
- * has always written it, with Claude's cloud session credits ("Cloud") as
- * 「云端」 in a Chinese interface. */
-export function peekWindowName(
-  row: { name: string; shortLabel?: string },
-  language: Language,
-): string {
-  const short = row.shortLabel || row.name;
-  return language === "zh" && short === "Cloud" ? "云端" : short;
+ * has always written it, in every language. */
+export function peekWindowName(row: {
+  name: string;
+  shortLabel?: string;
+}): string {
+  return row.shortLabel || row.name;
 }

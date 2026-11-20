@@ -62,7 +62,8 @@ test("window names read in Chinese in a Chinese panel and stay English otherwise
   const zh = (name: string) => quotaWindowLabel({ name }, "zh");
   assert.equal(zh("Current session"), "5 小时");
   assert.equal(zh("Weekly limit · All models"), "每周");
-  assert.equal(zh("Weekly limit · Fable"), "每周 · Fable");
+  assert.equal(zh("Weekly limit · Fable"), "Fable 额度");
+  assert.equal(zh("Weekly limit · Opus"), "每周 · Opus");
   assert.equal(zh("Weekly"), "每周");
   assert.equal(zh("5h limit"), "5 小时");
   assert.equal(zh("Daily limit"), "每天");
@@ -382,8 +383,8 @@ test("a stale reading is coloured by how much it has used", () => {
   assert.equal(quotaLevel(quota("5h", 8)), "normal");
 });
 
-/** Cloud session credits as Core hands them over: dollars in `consumed`, no
- * cycle, `resetAt` the expiry. */
+/** A credit grant as Core hands it over: dollars in `consumed`, no cycle,
+ * `resetAt` the expiry. */
 function credits(used: number, capacity = 250): Quota {
   const row = quota("Cloud session credits", (used / capacity) * 100, {
     kind: "no-estimate",
@@ -393,11 +394,7 @@ function credits(used: number, capacity = 250): Quota {
   return row;
 }
 
-test("cloud credits show their dollars and expiry, outside the pace count", () => {
-  assert.equal(
-    quotaWindowLabel({ name: "Cloud session credits" }, "zh"),
-    "云端额度",
-  );
+test("credit grants show their dollars and expiry, outside the pace count", () => {
   assert.equal(
     quotaNote(credits(109.05), now, "zh", "remaining")?.text,
     "剩 $141 / $250",

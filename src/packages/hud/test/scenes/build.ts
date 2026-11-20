@@ -328,6 +328,15 @@ export function snapshot(parts: SceneParts): Snapshot {
     quotas: [
       quota("claude", "5h", 20),
       quota("claude", "7d", 35),
+      // Claude's Fable week, as claude.ai shows it beside the other two (#464).
+      {
+        ...quota("claude", "7d", 49),
+        id: "claude:scene:fable",
+        name: "Weekly limit · Fable",
+        shortLabel: "Fable",
+        allModels: false,
+        modelFamilies: ["fable"],
+      } as Quota,
       quota("codex", "5h", 5),
       quota("codex", "7d", 40),
     ],

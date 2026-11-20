@@ -139,7 +139,7 @@ test("a strip at the threshold without a speed says how much is used and the res
   const zhCopy = quotaAlertCopy(reading, beijing);
   assert.deepEqual(
     [zhCopy.tone, zhCopy.status, zhCopy.when],
-    ["warning", "每周 · Fable 已用到 90%", "17:45 重置（还要 3 小时 40 分）"],
+    ["warning", "Fable 额度 已用到 90%", "17:45 重置（还要 3 小时 40 分）"],
   );
   const enCopy = quotaAlertCopy(reading, english);
   assert.deepEqual(

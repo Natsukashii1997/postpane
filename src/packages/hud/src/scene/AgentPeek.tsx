@@ -28,14 +28,14 @@ export function peekItems(
   const seen = new Set<string>();
   const items: PeekItem[] = vendor.quotas
     .filter((q) => {
-      const label = peekWindowName(q, zh ? "zh" : "en");
+      const label = peekWindowName(q);
       if (seen.has(label)) return false;
       seen.add(label);
       return true;
     })
     .map((q) => ({
       id: q.id,
-      label: peekWindowName(q, zh ? "zh" : "en"),
+      label: peekWindowName(q),
       value:
         q.usedPercent == null
           ? "--"
@@ -197,9 +197,7 @@ export function AgentPeek({
             alignItems: "center",
           }}
         >
-          <span style={{ opacity: 0.55 }}>
-            {peekWindowName(q, zh ? "zh" : "en")}
-          </span>
+          <span style={{ opacity: 0.55 }}>{peekWindowName(q)}</span>
           <strong
             style={{
               color: q.usedPercent == null ? undefined : color(q.status),
@@ -305,7 +303,7 @@ function ReceiptPeek({
   const rows: { id: string; label: string; value: string; color?: string }[] =
     vendor.quotas.map((q) => ({
       id: q.id,
-      label: peekWindowName(q, zh ? "zh" : "en"),
+      label: peekWindowName(q),
       value:
         q.usedPercent == null
           ? "--"
