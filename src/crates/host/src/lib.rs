@@ -708,7 +708,7 @@ fn show(app: &tauri::AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = show_settings(&app) {
-            eprintln!("Agent HUD Settings: {error}");
+            agent_hud_runtime::note!("Agent HUD Settings: {error}");
         }
     });
 }
@@ -726,7 +726,7 @@ fn show_settings_page(app: &tauri::AppHandle, page: String) {
             use tauri::Emitter;
             let _ = app.emit_to("main", "settings:page", page);
         }
-        Err(error) => eprintln!("Agent HUD Settings: {error}"),
+        Err(error) => agent_hud_runtime::note!("Agent HUD Settings: {error}"),
     });
 }
 
@@ -969,7 +969,7 @@ pub fn run_with_options(
                 None
             } else {
                 agent_hud_runtime::legacy_preferences().unwrap_or_else(|error| {
-                    eprintln!("Legacy preferences could not be imported: {error}");
+                    agent_hud_runtime::note!("Legacy preferences could not be imported: {error}");
                     None
                 })
             };
@@ -1004,7 +1004,7 @@ pub fn run_with_options(
                 // Client hooks add to the app; it starts without them, and Settings says what is missing (Open #16).
                 if let Some(path) = &options.canonical_executable {
                     if let Err(error) = runtime.delegate_hook_owner(path.clone()) {
-                        eprintln!("Agent HUD client hooks: {error}");
+                        agent_hud_runtime::note!("Agent HUD client hooks: {error}");
                     }
                 }
                 let launch_at_login = runtime.launch_at_login_enabled();

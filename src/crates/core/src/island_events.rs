@@ -360,7 +360,7 @@ impl Tracker {
                 let saved = std::fs::write(&temporary, json!(keys).to_string())
                     .and_then(|_| std::fs::rename(&temporary, path));
                 if let Err(error) = &saved {
-                    eprintln!("Hermes cron told {}: {error}", path.display());
+                    crate::note!("Hermes cron told {}: {error}", path.display());
                 }
                 self.cron_unsaved = saved.is_err();
             }

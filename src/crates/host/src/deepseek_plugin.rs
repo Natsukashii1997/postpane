@@ -86,7 +86,9 @@ pub(crate) fn repair_on_launch(app: &tauri::AppHandle) {
         };
         let places = Places::current(&home);
         if let Err(error) = repair(&state.channel, &state.folder, &places) {
-            eprintln!("The DeepSeek Harness plugin could not be brought up to date: {error}");
+            agent_hud_runtime::note!(
+                "The DeepSeek Harness plugin could not be brought up to date: {error}"
+            );
         }
     });
 }

@@ -183,10 +183,10 @@ fn reconcile(app: &tauri::AppHandle, connected: &HashSet<String>) {
                 let _ = release_text_focus(&window, &mut state);
                 let _ = apply_ignore_cursor(&window, &mut state, true, true);
                 if let Err(error) = window.hide() {
-                    eprintln!("Agent HUD hide on disconnect: {error}");
+                    agent_hud_runtime::note!("Agent HUD hide on disconnect: {error}");
                 }
                 if let Err(error) = window.destroy() {
-                    eprintln!("Agent HUD destroy on disconnect: {error}");
+                    agent_hud_runtime::note!("Agent HUD destroy on disconnect: {error}");
                 }
             }
             cancelled
@@ -264,7 +264,7 @@ fn configure_display(
     let was_dragging = state.drag.is_some();
     if was_dragging {
         if let Err(error) = restore_drag(app, &mut state, &shared) {
-            eprintln!("Agent HUD drag rollback: {error}");
+            agent_hud_runtime::note!("Agent HUD drag rollback: {error}");
         }
     }
     let result = configure(app, config, &mut state, &shared, display, false);
@@ -447,6 +447,6 @@ fn configure(
 
 pub(super) fn emit_geometry(app: &tauri::AppHandle, geometry: &HudGeometry) {
     if let Err(error) = app.emit("hud:geometry", geometry) {
-        eprintln!("Agent HUD geometry event: {error}");
+        agent_hud_runtime::note!("Agent HUD geometry event: {error}");
     }
 }

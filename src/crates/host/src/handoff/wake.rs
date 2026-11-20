@@ -106,7 +106,7 @@ pub(super) fn wake(
         let result =
             crate::mcp_clients::run_client_in(&executable, &arguments, &home, &folder, run);
         if let Err(error) = &result {
-            eprintln!("Background Claude run for {handoff}: {error}");
+            agent_hud_runtime::note!("Background Claude run for {handoff}: {error}");
         }
         if app
             .try_state::<Desk>()

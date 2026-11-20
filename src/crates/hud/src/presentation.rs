@@ -356,7 +356,7 @@ impl Presentation {
             });
         match written {
             Ok(()) => s.revision = s.revision.wrapping_add(1),
-            Err(error) => eprintln!("Live status defaults could not be saved: {error}"),
+            Err(error) => agent_hud_core::note!("Live status defaults could not be saved: {error}"),
         }
     }
     /// The clients in `DETECTED_LATE` already seen detected once.
@@ -376,7 +376,7 @@ impl Presentation {
             fs::write(folder.join(LATE_DETECTED_FILE), bytes)
         });
         if let Err(error) = written {
-            eprintln!("Late detections could not be saved: {error}");
+            agent_hud_core::note!("Late detections could not be saved: {error}");
         }
     }
     /// Shows or hides the notch glow.
