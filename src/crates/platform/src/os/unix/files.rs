@@ -2,6 +2,7 @@
 use std::{
     fs,
     io::{self, Read},
+    os::fd::{AsRawFd, RawFd},
     os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt},
     path::Path,
     time::{Duration, Instant},
@@ -122,4 +123,38 @@ pub(crate) fn hook_configuration(
         )
     });
     agent_hud_agents::patch_configuration(source, flag, current, command.as_deref())
+}
+
+/// Standard error from here on is `file` (#486): what the app, its panics and
+/// the libraries under it write there lands in the file instead.
+pub(crate) fn capture_stderr(file: &fs::File) -> io::Result<()> {
+    point(libc::STDERR_FILENO, file)
+}
+
+/// Makes `descriptor` another name for `file`.
+fn point(descriptor: RawFd, file: &fs::File) -> io::Result<()> {
+    if unsafe { libc::dup2(file.as_raw_fd(), descriptor) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::Write, os::fd::FromRawFd};
+
+    #[test]
+    fn a_descriptor_pointed_at_a_file_writes_into_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let (first, log) = (folder.path().join("first"), folder.path().join("log"));
+        // A stand-in for standard error: a descriptor open on another file.
+        let stand_in = fs::File::create(&first).unwrap();
+        let kept = private_append(&log).unwrap();
+        point(stand_in.as_raw_fd(), &kept).unwrap();
+        let mut writer = unsafe { fs::File::from_raw_fd(libc::dup(stand_in.as_raw_fd())) };
+        writer.write_all(b"went wrong\n").unwrap();
+        assert_eq!(fs::read_to_string(&log).unwrap(), "went wrong\n");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "");
+    }
 }

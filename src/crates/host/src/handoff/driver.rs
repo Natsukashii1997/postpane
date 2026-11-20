@@ -52,14 +52,14 @@ impl Driver {
                 // Work that panics is over, not the thread: the next asking
                 // works again.
                 if catch_unwind(AssertUnwindSafe(|| work())).is_err() {
-                    eprintln!("The handoff driver's work panicked");
+                    agent_hud_runtime::note!("The handoff driver's work panicked");
                 }
             }
         });
         match started {
             Ok(_) => Some(ask),
             Err(error) => {
-                eprintln!("The handoff driver could not start: {error}");
+                agent_hud_runtime::note!("The handoff driver could not start: {error}");
                 None
             }
         }

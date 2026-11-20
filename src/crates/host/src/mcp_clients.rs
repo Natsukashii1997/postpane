@@ -224,7 +224,7 @@ pub(crate) fn repair_on_launch(app: &tauri::AppHandle) {
                 SkillState::Current | SkillState::Foreign => {}
                 SkillState::Missing | SkillState::Older => {
                     if let Err(error) = client.add_skill(&places) {
-                        eprintln!(
+                        agent_hud_runtime::note!(
                             "The HUD tools skill for {} could not be written: {error}",
                             client.name()
                         );

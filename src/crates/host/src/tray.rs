@@ -106,7 +106,7 @@ fn statistics(app: &tauri::AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = super::show_statistics(&app) {
-            eprintln!("Agent HUD Statistics: {error}");
+            agent_hud_runtime::note!("Agent HUD Statistics: {error}");
         }
     });
 }

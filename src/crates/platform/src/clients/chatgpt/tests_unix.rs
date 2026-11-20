@@ -2,6 +2,13 @@
 use super::super::*;
 use std::os::unix::net::UnixStream;
 
+/// `Channel::start` makes itself the one channel `focus` and `reread` ask
+/// (`CURRENT`): tests that start one run one at a time, or the later takes
+/// the earlier's place under it (L-63).
+fn one_channel() -> std::sync::MutexGuard<'static, ()> {
+    static ONE: Mutex<()> = Mutex::new(());
+    ONE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 fn connect(data: &Path) -> UnixStream {
     let stream = UnixStream::connect(socket_path(data)).unwrap();
     stream
@@ -27,6 +34,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     // Leave room for the socket under macOS's long temporary path.
     let temp = tempfile::Builder::new().prefix("").tempdir().unwrap();
     let data = temp.path().join("d");
+    let _one = one_channel();
     let channel = Arc::new(Channel::start(data.clone()).unwrap());
     assert_eq!(channel.status()["connected"], false);
     assert!(channel.open("你好", None).is_err());
@@ -235,6 +243,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
 fn a_send_that_did_not_go_says_whether_send_was_pressed() {
     let temp = tempfile::Builder::new().prefix("").tempdir().unwrap();
     let data = temp.path().join("d");
+    let _one = one_channel();
     let channel = Arc::new(Channel::start(data.clone()).unwrap());
     // No extension: the words never left PostPane.
     let unposted = channel.send_as("68a1", "第 2 轮", Some("h1~send1"));

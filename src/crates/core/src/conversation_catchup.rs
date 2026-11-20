@@ -86,7 +86,7 @@ impl AgentHudCore {
             slot @ None => match sink.positions() {
                 Ok(positions) => slot.insert(positions),
                 Err(error) => {
-                    eprintln!("Conversation store positions unavailable: {error}");
+                    crate::note!("Conversation store positions unavailable: {error}");
                     return;
                 }
             },
@@ -147,10 +147,10 @@ impl AgentHudCore {
                                 *known = (*known).max(to);
                             }
                         }
-                        Err(error) => eprintln!("Conversation store: {error}"),
+                        Err(error) => crate::note!("Conversation store: {error}"),
                     }
                 }
-                Err(error) => eprintln!("Conversation catch-up of {}: {error}", path.display()),
+                Err(error) => crate::note!("Conversation catch-up of {}: {error}", path.display()),
             }
         }
     }

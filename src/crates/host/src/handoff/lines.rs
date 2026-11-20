@@ -104,7 +104,7 @@ impl Lines for AppLines<'_> {
             .channel()
             .hand(session, text, std::time::SystemTime::now())
             .map_err(|refusal| {
-                eprintln!("左滑发起 could not leave words: {refusal}");
+                agent_hud_runtime::note!("左滑发起 could not leave words: {refusal}");
                 l10n::text(
                     "没能交给这个会话的 Agent HUD 插件。",
                     "The words could not be left for this session's Agent HUD plugin.",
@@ -126,7 +126,7 @@ impl Lines for AppLines<'_> {
             .map_err(|refusal| match refusal {
                 Refusal::IdentityConflict => Unsent::Again,
                 refusal => {
-                    eprintln!("转回 Claude could not queue words: {refusal}");
+                    agent_hud_runtime::note!("转回 Claude could not queue words: {refusal}");
                     Unsent::Failed(l10n::text(
                         "没能排进这个会话的待发送队列。",
                         "The words could not be queued for this session.",

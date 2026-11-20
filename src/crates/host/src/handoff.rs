@@ -403,7 +403,7 @@ impl Desk {
         if let Some(data) = &self.data {
             handoffs::slim_kept(data, &mut book);
             if let Err(error) = handoffs::save(data, &book) {
-                eprintln!("{error}");
+                agent_hud_runtime::note!("{error}");
             }
         }
         result
@@ -508,7 +508,7 @@ impl Desk {
             })
             .and_then(|mut file| writeln!(file, "{line}"));
         if let Err(error) = written {
-            eprintln!("ChatGPT turn log {}: {error}", path.display());
+            agent_hud_runtime::note!("ChatGPT turn log {}: {error}", path.display());
         }
     }
 
@@ -525,7 +525,7 @@ impl Desk {
                     .map_err(|e| e.to_string())
             });
         if let Err(error) = saved {
-            eprintln!("Relay launches {}: {error}", path.display());
+            agent_hud_runtime::note!("Relay launches {}: {error}", path.display());
         }
     }
     /// `relay_to_chatgpt` came from `session` naming swipe `code`: that

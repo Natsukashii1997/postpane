@@ -237,7 +237,7 @@ impl Shared {
                 drop(state);
                 if let Some(event) = started(&message, watched.as_ref(), now_ms()) {
                     if let Err(error) = crate::hooks::record_event(&self.data, &event) {
-                        eprintln!("ChatGPT turn start could not be recorded: {error}");
+                        agent_hud_core::note!("ChatGPT turn start could not be recorded: {error}");
                     }
                 }
                 self.tell(&message);
@@ -247,7 +247,7 @@ impl Shared {
                 drop(state);
                 if let Some(event) = completion(&message, watched.as_ref(), now_ms()) {
                     if let Err(error) = crate::hooks::record_event(&self.data, &event) {
-                        eprintln!("ChatGPT reply could not be recorded: {error}");
+                        agent_hud_core::note!("ChatGPT reply could not be recorded: {error}");
                     }
                 }
                 self.tell(&message);
@@ -267,7 +267,7 @@ impl Shared {
                         };
                         if add_watched(&mut state.watched, conversation, &title, named, now_ms()) {
                             if let Err(error) = save_watched(&self.data, &state.watched) {
-                                eprintln!("{error}");
+                                agent_hud_core::note!("{error}");
                             }
                         }
                         let watch = watch_message(&state.watched, shadow::on(&self.data));

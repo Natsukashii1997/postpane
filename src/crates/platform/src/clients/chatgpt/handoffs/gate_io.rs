@@ -160,10 +160,12 @@ pub(super) fn set_aside(path: &Path) {
         .map_or(0, |d| d.as_secs());
     let aside = path.with_file_name(format!("handoffs.unreadable-{stamp}.json"));
     match std::fs::rename(path, &aside) {
-        Ok(()) => eprintln!(
+        Ok(()) => agent_hud_core::note!(
             "handoffs.json could not be read; kept as {}",
             aside.display()
         ),
-        Err(error) => eprintln!("handoffs.json could not be read nor set aside: {error}"),
+        Err(error) => {
+            agent_hud_core::note!("handoffs.json could not be read nor set aside: {error}")
+        }
     }
 }

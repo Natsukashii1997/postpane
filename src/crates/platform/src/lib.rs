@@ -7,6 +7,7 @@ mod file_changes;
 pub mod instance;
 pub use file_changes::FileChanges;
 mod accounts;
+pub mod app_log;
 pub mod claude_plugin;
 pub mod clients;
 mod data_folder;

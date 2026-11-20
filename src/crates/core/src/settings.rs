@@ -271,7 +271,7 @@ impl crate::AgentHudCore {
             )
         );
         if self.settings_issue.as_ref() != Some(&issue) {
-            eprintln!("{issue}");
+            crate::note!("{issue}");
         }
         self.settings_issue = Some(issue);
     }

@@ -116,3 +116,9 @@ mod tests {
         assert!(!complete_json(b"{\"text\":\"a } inside\""));
     }
 }
+
+/// Standard error is not pointed at a file here yet (#486 covers macOS; a
+/// Windows app has none to redirect until it is given a console).
+pub(crate) fn capture_stderr(_file: &fs::File) -> io::Result<()> {
+    Err(io::ErrorKind::Unsupported.into())
+}

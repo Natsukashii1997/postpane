@@ -125,7 +125,7 @@ impl InstanceLock {
     pub fn listen(self, on_show: OnShow) -> Running {
         let endpoint = endpoint::listen(&self.path, on_show)
             .inspect_err(|error| {
-                eprintln!(
+                agent_hud_core::note!(
                     "No hand-over endpoint beside {}: {error}",
                     self.path.display()
                 )

@@ -315,7 +315,7 @@ impl Planner {
                 Ok(()) => {
                     self.configured.insert(id, signature);
                 }
-                Err(error) => eprintln!("Agent HUD window: {error}"),
+                Err(error) => agent_hud_runtime::note!("Agent HUD window: {error}"),
             }
         }
     }

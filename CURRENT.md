@@ -19,20 +19,50 @@
     - `docs/chatgpt-channel.md`（消息表两处 +「影子读取」一节）、`AGENTS.md`「AI 接入」、`src/packages/app/src/settings/AiAccessPane.tsx`（「读」「写到」两行补文字，版式不动）、`docs/DECIDED.md`（已登记 DECIDED.md）。
   - 我顺手改的：
     - `src/crates/platform/src/clients/chatgpt/watched.rs`（新）：名单的结构、读写、增补、名单消息从 `mod.rs` 原样搬过来（`mod.rs` 612 → 554 行，行数棘轮不许它变长），对外的名字不变。`src/tooling/file-size-baseline.json` 跟着收紧。
-    - `docs/LESSONS.md`：新增 L-63。
+    - `docs/LESSONS.md`：给 L-63（主分支 #490 刚记的同一条测试偶发失败）补了一条，原因坐实；`tests_unix.rs` 里起 `Channel` 的测试加了同一把测试锁 `one_channel()`，一次只跑一个。
   - 改变了已有行为：开关关着（默认）时没有；`watch` 消息只在开关开着时多一项 `shadow`。开关开着时，每条提问多出最多三次只读请求、插件多发一种消息、驿窗多写一个文件，接力的认领、转回、停下都不变。
-- 测试：`pnpm run check` 退出 0；`pnpm test` 原样结果 `全量测试汇总：6 套，失败 0 套`（前端 `ℹ pass 488` / `ℹ fail 0`，Chrome 插件 `ℹ pass 83` / `ℹ fail 0`，其余 `ℹ pass 9`、`14`、`11` / `ℹ fail 0`；cargo 各套合计 1083 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 63` / `ℹ fail 0`；`node scripts/check-rules.mjs` `通用规则检查通过`。先红：`data.js`、后台脚本、驿窗三处都先跑红再写实现（`red-data.log`、`red-background.log`、`red-rust.log`）；内容脚本那两条测试是和实现一起写的，没有先红。中途失败过三次：格式检查（三个测试文件）、平台检查（共用测试里一处 `#[cfg(unix)]`）、行数棘轮和 L-63，都修掉后重跑全过。
+- 测试：`pnpm run check` 退出 0；`pnpm test` 原样结果 `全量测试汇总：6 套，失败 0 套`（前端 `ℹ pass 488` / `ℹ fail 0`，Chrome 插件 `ℹ pass 83` / `ℹ fail 0`，其余 `ℹ pass 9`、`14`、`11` / `ℹ fail 0`；cargo 各套合计 1083 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 63` / `ℹ fail 0`；`node scripts/check-rules.mjs` `通用规则检查通过`。先红：`data.js`、后台脚本、驿窗三处都先跑红再写实现（`red-data.log`、`red-background.log`、`red-rust.log`）；内容脚本那两条测试是和实现一起写的，没有先红。中途失败过三次：格式检查（三个测试文件）、平台检查（共用测试里一处 `#[cfg(unix)]`）、行数棘轮和 L-63 那条偶发失败，都修掉后重跑全过。之后变基到 `e6ccc5c`（#489、#490），`CURRENT.md`、`docs/LESSONS.md` 有冲突已解，变基后重跑的结果写在 PR。
 - 验证：只在测试里验证（替身：假页面、假扩展接口、无头 Chromium）。**未在真实环境验证**：没装机、没在真实 Chrome 里加载 0.2.6、没打开开关、没对真实 chatgpt.com 读过；差的是「页面别的请求带的登录信息够不够用」「`data.js` 包一层 `fetch` 后页面是否一切照常」「生成中数据长什么样」，都要打开开关后由影子记录回答。
 - 截图：无（设置页只改了两行文字，没截图；版式没动）。
-- 发布与回读：未发布。装机要排在 #442 之后，装完要常浩在 Chrome 里重新加载插件；开关要他另行点头才打开。
+- 发布与回读：未发布。装机会顶掉现在装着的包，要常浩另行点头；装完要他在 Chrome 里重新加载插件；开关也要他另行点头才打开。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 授权不包括、都没做：打开开关、装机、切换成正式读法。
   - 开关改了要重启驿窗才生效（驿窗只在插件连上和新开会话时发名单）；设置里没有这个开关的界面（常浩选的）。
   - 证据在 `~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/`（`check.log`、`test.log`、`root-tests.log`、三份先红）。
   - 和 #442（未合并）有两处文档挨着：`AGENTS.md`、`docs/chatgpt-channel.md`，各改不同的段，合并时可能要手工对一下。
-  - 主线：接力根治｜完成 6/13：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批装机与实机验证（等 #442 合并）✅ 另外三处规则文字 ✅ 第 1 批只读探测（#487）▶ 第 1 批影子运行（本节：代码已写、L3 送审中；之后装机、打开开关、攒够门槛都要常浩点头）❓ 补格式没送成怎么处理 ❓ #470 点过发送后要不要取消自动再试 ❓ 第 2 批回执与重拉 ❓ 第 3 批分级恢复 ❓ 第 4 批体检与防回退；#432 排查单另算。
-- 本轮新坑：L-63。
+  - 主线：接力根治｜完成 6/14：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批实机验证（代码已装上：11-20 17:02 别的会话从 `claude/480-pendant-hover` `7e65af9` 装的包里有 #441、#451、#468，不用再等 #442；等常浩重载插件 0.2.5，装机后还没走到要验的两条路径）✅ 另外三处规则文字 ✅ 第 1 批只读探测（#487）▶ 第 1 批影子运行（本节：代码已写、PR #491、L3 送审中；合并后装机、重载插件、打开开关、攒够门槛、切换成正式读法都另等常浩定）❓ 补格式没送成怎么处理 ❓ #470 点过发送后要不要取消自动再试 ❓ 第 2 批回执与重拉（并 #431、#433、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退 ❓ 规则与现状对不上两处（梳理报告第六节）；#432 排查单另算。
+- 本轮新坑：无（给 L-63 补了一条）。
 - skill 进化：无。
+
+## 应用报错落盘：标准错误写进数据目录的日志文件，加 panic 钩子（#486）（2026-11-20，Claude，常浩先回「先出计划」、看过计划后回「按推荐开工」；已提交、PR 见 PR 描述、已装机回读通过）
+
+- 时间：开工 `2026-11-20 21:51`（`date '+%F %H:%M'` 记录）；中途用量额度用完停过一次，23:11 接着做。来由：接手成本评估的第二批第一项。从访达启动的驿窗标准错误指向 `/dev/null`（开工前对运行中的应用 `lsof` 实测），67 处 `eprintln!`、任何线程的 panic、Tauri 和 WebKit 的输出都留不下；全库 54 处起线程，只有接力推进线程接住了 panic。
+- 改变的行为（动手前在计划里列过）：从访达或 `open` 启动的应用，报错原来丢弃，现在写进 `<数据目录>/logs/postpane.log`；数据目录多一个 `logs/`，最多约 6 MB。从终端启动的不变。界面没有变化。
+- 改了哪些文件：
+  - `src/crates/platform/src/app_log.rs`（新）：`start(demo)` 装 panic 钩子（时间、线程名、位置、报错、调用栈），标准错误不是终端时接到 `logs/postpane.log`（目录 0700、文件 0600，启动时超过 2 MB 就改名成 `postpane.1.log`，最多留 2 份旧的），写一行启动开头；环境变量 `POSTPANE_SELFTEST_PANIC=1` 时让一个临时线程 panic 一次，供实机自检。测试在 `app_log/tests.rs`。
+  - `src/crates/core/src/app_log.rs`（新）：`stamp_of` / `stamp` 时间戳和 `note!` 宏（先写时间再写内容）。
+  - `src/crates/platform/src/os/unix/files.rs`：`capture_stderr`（`dup2`）和它的测试；`os/windows/files.rs` 放一个返回「不支持」的空实现；`os/macos`、`os/linux`、`os/unix`、`os/windows` 的 `mod.rs` 各转出一个名字。
+  - `src/crates/host/src/lib.rs`：认领实例之后调一行 `agent_hud_runtime::app_log::start(demo)`。`--mcp`、钩子方式在这之前就退出，走不到；演示模式不接管。`src/crates/runtime/src/lib.rs` 转出 `app_log` 和 `note`。
+  - 50 处 `eprintln!` 换成 `note!`（core 5、hud 2、platform 8、host 35），内容不变，只在前面多了时间。逐条看过，都是错误原因和文件路径，没有会话正文。
+  - 有意没换的 8 处：`host/src/cli.rs`、`cli/unix.rs`（`--mcp` 转接，输出给调用方）、`platform/src/clients/chatgpt/mod.rs` 的桥接进程 2 处、`host/src/shell/macos.rs`（启动前弹窗的兜底）、`host/src/demo.rs`、`host/src/lib.rs` 演示脚本读不出那一处、`platform/src/instance/mod.rs` 认领锁时那一处；另有 Windows、Linux 专属文件里的没动（本机编译不到，没法验）。
+  - `src/crates/core/src/lib.rs`：加 `pub mod app_log;` 一行，并把两条 `pub use agent_hud_agents::…` 合成一条，行数不变（这个文件在 300 行棘轮的基线里，只许变短）。
+  - 文档：`.agents/skills/postpane-round/SKILL.md`「实机出问题怎么查」、`AGENTS.md` 导航表、`docs/安装与使用.md` 排障表，都改成看这个文件（计划里列过，常浩同意）。
+- 测试：`pnpm run check` 退出码 0；`pnpm test` 原样结果 `全量测试汇总：6 套，失败 0 套`（cargo 各套合计 1087 通过 0 失败，比上一轮多 7 条；前端 `ℹ pass 488` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 60` / `ℹ fail 0`；`node scripts/check-rules.mjs` `通用规则检查通过`。这是变基到 `c826f12` 之后、23:47 起跑的那一次。7 条新测试先红后绿：`red-core.txt`（`0 passed; 1 failed`）、`red-platform.txt`（`0 passed; 6 failed`）。中间单跑 platform 时 `the_extension_opens_a_conversation_and_reports_its_reply` 挂过，查了不是本次改动引起的（L-63）。`pnpm run lint`（clippy）在 main 上本来就不过；绕开那一条后，新代码没有 clippy 报错。
+- 验证（都是打好的真应用，环境见每条）：
+  - 常浩的实机（`install.sh` 装到 `/Applications`）：`lsof` 回读进程 5954 的标准错误指向 `logs/postpane.log`；文件第一行 `2026-11-20 23:42:45.352 +0800 ==== PostPane 0.1.0 started, pid 5954, /Applications/PostPane.app/Contents/MacOS/PostPane built 2026-11-20 23:29:57.887 +0800`；目录 `drwx------`、文件 `-rw-------`。
+  - 隔离主目录（`env -i HOME=<证据目录>/iso-home …`，同一份包，不碰真数据和登记，做法见 L-64）：带 `POSTPANE_SELFTEST_PANIC=1` 启动，日志里出现 `PANIC on thread postpane-selftest at src/crates/platform/src/app_log.rs:140:45: self-test: …` 和 11 行带函数名的调用栈；把日志撑到 2201307 字节再启动，它变成 `postpane.1.log`，新文件从启动行开始；接伪终端启动，终端收到 14 行，数据目录里没有 `logs` 目录。验证前后 `~/.claude/plugins/installed_plugins.json` 的校验值都是 `8c45e265e598`，常浩的应用一直只有 1 个进程。
+  - 没在实机上验的：实机上没有触发过 panic（自检只在隔离实例里做）；实机日志文件目前只有启动一行，还没有等到一条真实报错写进去。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/`：`smoke-before-1.png`、装机脚本的冒烟差异图、`after-install-screen.png`（查权限弹窗用）。没有界面改动。
+- 发布与回读：`install.sh 486-app-log --takeover`，原样输出在证据目录 `install.log`：`产物 dba8c904f9eb / 已装 dba8c904f9eb`；`冒烟：侧栏在动`。接管的是 17:02 装的 `claude/480-pendant-hover`（提交 `7e65af9`），它在 `src/` 上和已合并的 #484 没有差异，本分支包含 #484。装的包出自变基前的 `e530dc5f` 之后的工作区；之后只变基进了 #487 等两个纯文档提交，代码相同。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/PostPane-6dcbce442766.app" /Applications/PostPane.app; open /Applications/PostPane.app`。没有看到「想访问文稿」弹窗。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 启动行里没有提交号：没有构建脚本把它注入进去，改记可执行文件路径和它的修改时间。
+  - 装机脚本的冒烟截图和我查弹窗的那次截图，触发了系统的「"Claude" 正在请求绕过系统无痕浏览窗口选择器，直接访问屏幕和音频」弹窗，留给常浩处理，没有替他点。
+  - 截图里驿窗的设置窗口开着（显示页），不确定是装机启动带出来的还是原本就开着；本次改动不碰窗口。
+  - 设置里的「打开日志文件夹」入口没做（常浩选了这次不加）。
+  - panic 之后那条线程就没了，侧栏不会提示；要不要在界面上提示是另一件事，没做。
+  - `pnpm run lint` 在 main 上不过（`core/src/clients/claude_desktop.rs:29`、`platform/src/clients/chatgpt/handoffs/gate.rs:297` 等），没修。
+- 本轮新坑：L-63、L-64。L-64（隔离起一份应用要连主目录一起换）换个项目也可能成立，可提议提升为全局坑，等常浩批。
+- skill 进化：E-24 待批。SKILL.md 第 53 行的排障说明是按常浩同意的计划直接改的，不走 E-xx。
 
 ## 接力第 1 批只读探测：回信能改读 ChatGPT 对话数据，后台也读得到（2026-11-20，Claude，常浩在父会话回「开第 1 批」、对探测计划回「按计划开工」，额度中断后回「继续探测」；已提交、PR 见 PR 描述、无需发布）
 
@@ -56,7 +86,8 @@
   - 主动读取复用的是页面自己那次请求的请求头，值全程没出页面；证据里只有结构、条数、编号和指纹，没有登录信息和正文。
   - 没验的：生成中的数据、取 2 轮和往前翻页、窗口最小化或被挡住时、带图片或画布的回信、频率上限。
   - 影子运行要先定一处：插件怎么在页面里拿到登录信息（设计要点第 2 条）。
-  - 主线：接力根治｜完成 6/13：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批装机与实机验证（等 #442 合并，装完常浩重载插件 0.2.5）✅ 另外三处规则文字 ✅ 第 1 批只读探测（本节）❓ 第 1 批影子运行（设计要点已写，等常浩定）❓ 补格式没送成怎么处理 ❓ #470 点过发送后要不要取消自动再试 ❓ 第 2 批回执与重拉（并 #431、#433、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退；#432 排查单另算。
+  - 统筹核对（2026-11-20 23:40，接手统筹的会话，只读）：影子运行按 #488 所记，常浩 11-20 回「做影子运行」「按推荐开工」（三处按推荐，授权 L3 开工和送审，不含打开开关），issue #488 23:35 已开，worktree `488-relay-shadow` 核对时还没有改动、没有 PR、没有送审接力。装机位 `install.sh check`：已装 `6dcbce442766`，是 `claude/480-pendant-hover` `7e65af9` 11-20 17:02 装的，`git merge-base --is-ancestor` 核过 `2e83a3e`、`5ce46fb`、`bfa11f8` 都在里面；main 比它多 #484 的合并提交和 #485 的整理。插件版本没能回读：Chrome 数据目录这个会话读不了，驿窗的记录里不存插件版本。装机后 `handoffs.json` 里补格式发过 3 次（17:57、18:18、18:24），都在 30 秒内收到回信；没有「发送没有点下去」和「插件随后确认补格式的话已送到」的步骤，这两条路径没验到。#442 仍和 main 冲突，11-19 之后没有更新。
+  - 主线：接力根治｜完成 6/14：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批实机验证（代码已装上：11-20 17:02 别的会话从 `claude/480-pendant-hover` `7e65af9` 装的包里有 #441、#451、#468，不用再等 #442；等常浩重载插件 0.2.5，装机后还没走到要验的两条路径）✅ 另外三处规则文字 ✅ 第 1 批只读探测（本节）▶ 第 1 批影子运行（#488，另一会话在 `488-relay-shadow` 实现中；打开开关、装机、切换成正式读法都另等常浩定）❓ 补格式没送成怎么处理 ❓ #470 点过发送后要不要取消自动再试 ❓ 第 2 批回执与重拉（并 #431、#433、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退 ❓ 规则与现状对不上两处（梳理报告第六节）；#432 排查单另算。
 - 本轮新坑：无。
 - skill 进化：无。
 

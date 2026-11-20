@@ -20,6 +20,7 @@
 | 改动会碰到常浩定过的内容（含批量授权里的单项）；常浩选定或验收了什么要登记 | [docs/DECIDED.md](docs/DECIDED.md)（已定内容登记表，先查这张表）；下面「已定内容要改，先单独确认」 |
 | 写交接、验收别人的交接 | [docs/templates/handoff.md](docs/templates/handoff.md) 骨架；[OPERATIONS](docs/OPERATIONS.md)「交接写法」「报告与验收」 |
 | 一轮从开工到收尾：worktree、测试、装机回读、交接、合并清理、复盘进化 | [.agents/skills/postpane-round/SKILL.md](.agents/skills/postpane-round/SKILL.md)（Claude `/postpane-round`，Codex `$postpane-round`） |
+| 查应用自己报了什么错（保存失败、送不出去、panic） | `<数据目录>/logs/postpane.log`（#486）：每行带时间，每次启动先写一行开头；怎么读见 [postpane-round](.agents/skills/postpane-round/SKILL.md)「实机出问题怎么查」。新加的报错用 `note!`（host 里 `agent_hud_runtime::note!`，其余 `agent_hud_core::note!`），不直接写 `eprintln!`；写给调用方看的（`--mcp`、钩子、桥接进程）除外 |
 | 给别人装驿窗、第二人复现 | [docs/安装与使用.md](docs/安装与使用.md) |
 | 查 AI 使用六级 L4–L6 的证据 | `docs/evidence/`（L4 Skill 与使用记录、L5 运行记录、L6 前后对比） |
 
