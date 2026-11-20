@@ -9,6 +9,7 @@ use crate::extension::Flight;
 use agent_hud_runtime::chatgpt::handoffs::{
     self, by_doer, Book, Delivery, Handoff, Next, Notice, Phase, Risk, Status, Step, StepKind,
 };
+use agent_hud_runtime::chatgpt::SendFailed;
 use agent_hud_runtime::claude_plugin::Opener;
 
 /// What Claude said about a review besides its words (#217).
@@ -81,8 +82,12 @@ pub(crate) trait Lines {
     /// Sends `text` into `conversation`, asked as `request`: the prompt it
     /// went in as, as for `open`. The extension may still say it went in
     /// after the wait gave up (`Desk::observe`).
-    fn send(&self, conversation: &str, text: &str, request: &str)
-        -> Result<Option<String>, String>;
+    fn send(
+        &self,
+        conversation: &str,
+        text: &str,
+        request: &str,
+    ) -> Result<Option<String>, SendFailed>;
     /// Asks the extension to tell `conversation`'s newest reply again, once
     /// written (#356); it comes back, if at all, as a turn (`observe`).
     fn reread(&self, conversation: &str) -> Result<(), String>;
@@ -914,10 +919,14 @@ impl Desk {
         );
         let asked_id = match lines.send(conversation, sent, &request) {
             Ok(asked_id) => asked_id,
+            // Send never pressed (#466): they are not there, and may go again.
+            Err(SendFailed::NotPressed(error)) => {
+                return Err(self.not_sent(&handoff.id, &request, &error, now));
+            }
             // Never known to have gone in: the round trip stops on it, and
             // its answer, if one comes, cannot pass (L3 P1-10). The caller
             // hears it now, so no notice besides.
-            Err(error) => {
+            Err(SendFailed::Unsure(error)) => {
                 self.change(|book| {
                     book.unconfirmed(&handoff.id, &guard::send_unconfirmed(), false, now)
                 });
@@ -1968,6 +1977,7 @@ mod tests {
     mod driver;
     mod held_back;
     mod mend_late;
+    mod not_pressed;
     mod undrawn;
     use super::notice::{not_told, told as told_back, told_queued};
     use super::wake::{wake_arguments, woke_without_handover};
@@ -1990,6 +2000,8 @@ mod tests {
         on_opener: Option<Box<dyn Fn()>>,
         /// Sending gives up waiting for the extension.
         send_fails: std::cell::Cell<bool>,
+        /// The extension says send was never pressed (#466).
+        send_unpressed: std::cell::Cell<bool>,
         /// The prompt id the page shows words went in as (#410); none by default.
         asked_as: RefCell<Option<String>>,
         /// The request each sending was asked as.
@@ -2068,17 +2080,23 @@ mod tests {
             conversation: &str,
             text: &str,
             request: &str,
-        ) -> Result<Option<String>, String> {
+        ) -> Result<Option<String>, SendFailed> {
             self.sent
                 .borrow_mut()
                 .push(("send".into(), conversation.into(), text.into()));
             self.requests.borrow_mut().push(request.into());
+            // Send never pressed: the words are not on the page.
+            if self.send_unpressed.get() {
+                let error = "ChatGPT 插件没能完成：busy".to_owned();
+                return Err(SendFailed::NotPressed(error));
+            }
             shown(text);
             if let Some(during) = &self.on_send {
                 during();
             }
             if self.send_fails.get() {
-                return Err("ChatGPT 插件没能完成：timeout".into());
+                let error = "ChatGPT 插件没能完成：timeout".to_owned();
+                return Err(SendFailed::Unsure(error));
             }
             Ok(self.asked_as.borrow().clone())
         }
@@ -6734,8 +6752,8 @@ mod tests {
         ) -> Result<(String, Option<String>), String> {
             Err("not here".into())
         }
-        fn send(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, String> {
-            Err("not here".into())
+        fn send(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, SendFailed> {
+            Err(SendFailed::Unsure("not here".into()))
         }
         fn reread(&self, _: &str) -> Result<(), String> {
             Ok(())

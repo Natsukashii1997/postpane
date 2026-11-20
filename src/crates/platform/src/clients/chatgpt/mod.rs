@@ -20,10 +20,13 @@ mod commands;
 pub(crate) use commands::focus;
 pub mod handoffs;
 mod manifest;
+mod sending;
 pub use manifest::{
     install_manifest, manifest, manifest_directory, manifest_path, manifest_state, remove_manifest,
     transient,
 };
+pub use sending::SendFailed;
+use sending::Unasked;
 
 // A Unix socket; Windows has no transport yet.
 #[cfg(unix)]
@@ -342,27 +345,27 @@ impl Shared {
     }
     /// Sends `message` under the caller's request id, which a late answer
     /// still carries, and waits for its answer.
-    fn ask_as(&self, id: String, mut message: Value, timeout: Duration) -> Result<Value, String> {
+    fn ask_as(&self, id: String, mut message: Value, timeout: Duration) -> Result<Value, Unasked> {
         message["requestId"] = json!(id);
         let (sender, receiver) = mpsc::channel();
         {
             let mut state = self.lock();
             if state.connection.is_none() {
-                return Err(not_connected());
+                return Err(Unasked::Unposted(not_connected()));
             }
             state.pending.insert(id.clone(), sender);
             if !post_locked(&mut state, &message) {
                 state.pending.remove(&id);
-                return Err(not_connected());
+                return Err(Unasked::Unposted(not_connected()));
             }
         }
         let reply = receiver.recv_timeout(timeout);
         self.lock().pending.remove(&id);
         match reply {
             Ok(reply) if reply["ok"] == true => Ok(reply),
-            Ok(reply) => Err(refused(reply["reason"].as_str().unwrap_or("send-failed"))),
-            Err(mpsc::RecvTimeoutError::Timeout) => Err(refused("timeout")),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(not_connected()),
+            Ok(reply) => Err(Unasked::Refused(reply)),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(Unasked::Silent(refused("timeout"))),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(Unasked::Silent(not_connected())),
         }
     }
     fn status(&self) -> Value {
@@ -584,32 +587,6 @@ impl Channel {
             .filter(|id| agent::conversation_id(id))
             .ok_or_else(|| refused("send-failed"))?;
         Ok(json!({"conversation":conversation,"title":reply["title"],"promptId":reply["promptId"]}))
-    }
-    /// Sends `text` to a watched conversation.
-    pub fn send(&self, conversation: &str, text: &str) -> Result<Value, String> {
-        self.send_as(conversation, text, None)
-    }
-    /// `send`, asked as `request`: an answer that comes after the wait still
-    /// reaches the listener under that id.
-    pub fn send_as(
-        &self,
-        conversation: &str,
-        text: &str,
-        request: Option<&str>,
-    ) -> Result<Value, String> {
-        if !agent::conversation_id(conversation) {
-            return Err(l10n::text("会话 id 不对", "Invalid conversation id"));
-        }
-        if text.trim().is_empty() {
-            return Err(l10n::text("缺少要发出的文字", "Text is required"));
-        }
-        let id = request.map(str::to_owned).unwrap_or_else(request_id);
-        let reply = self.shared.ask_as(
-            id,
-            json!({"type":"send","conversation":conversation,"text":text}),
-            SEND_TIME,
-        )?;
-        Ok(json!({"sent":true,"promptId":reply["promptId"]}))
     }
     /// Tells `listener` of turns and openings from now on.
     pub fn listen(&self, listener: Listener) {

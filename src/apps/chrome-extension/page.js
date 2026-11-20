@@ -284,62 +284,104 @@
   /** Pastes `text` at the end of the box a piece at a time; paste keeps its
    * paragraphs. Whether each piece went in whole: the box grew by all of its
    * characters, spaces aside (the page takes a paste as typed, #429). */
-  async function paste(doc, box, text) {
+  async function paste(doc, box, text, wait = waitFor, timely = () => {}) {
     for (const piece of pieces(text)) {
       const want = bare(box.textContent).length + bare(piece).length;
-      const selection = doc.getSelection();
-      selection.selectAllChildren(box);
-      selection.collapseToEnd();
       const data = new DataTransfer();
       data.setData("text/plain", piece);
-      box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-      if (!(await waitFor(() => bare(box.textContent).length >= want, 3000))) return false;
+      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+      const selection = doc.getSelection();
+      timely();
+      selection.selectAllChildren(box);
+      selection.collapseToEnd();
+      timely();
+      box.dispatchEvent(event);
+      if (!(await wait(() => bare(box.textContent).length >= want, 3000))) return false;
     }
     return true;
   }
 
-  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`,
-   * and `promptId`, ChatGPT's id of the prompt it became, once the page
-   * shows it (#410). */
-  async function submit(doc, text) {
-    if (streaming(doc)) return { ok: false, reason: "busy" };
-    const box = await waitFor(() => doc.querySelector(SEL.composer), 15000);
-    if (!box) return { ok: false, reason: "no-composer" };
+  /** Words that did not go, send never pressed for them: they are not in
+   * the conversation, and PostPane lets them go again (#466). */
+  const unsent = (reason) => ({ ok: false, reason, pressed: false });
+
+  /** Thrown by a wait that ends out of the time a sending has. */
+  const LATE = Symbol("late");
+
+  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
+   * not ok, `pressed` says whether send was pressed (then they may have
+   * gone all the same); ok, `promptId`, ChatGPT's id of the prompt it
+   * became, once the page shows it (#410). Send is pressed by `until` or not
+   * at all (#466 review P1-01): PostPane stops waiting for word, and what is
+   * said after of words not pressed is not heard, so the waits before the
+   * press end by then, and out of time nothing is pressed. Nor is the box
+   * touched again (#466 review P1-02): `timely` ends the try out of time,
+   * looked to when asked, after each wait, and right before each thing
+   * done to the box. The moment the time is up is out of it, as the extension
+   * counts (#466 review P2-03). */
+  async function submit(doc, text, until = Infinity) {
+    const timely = () => {
+      if (Date.now() >= until) throw LATE;
+    };
+    const wait = async (check, ms) => {
+      const got = await waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
+      timely();
+      return got;
+    };
+    try {
+      timely();
+      return await press(doc, text, wait, timely);
+    } catch (error) {
+      if (error !== LATE) throw error;
+      return unsent("timeout");
+    }
+  }
+
+  async function press(doc, text, wait, timely) {
+    if (streaming(doc)) return unsent("busy");
+    const box = await wait(() => doc.querySelector(SEL.composer), 15000);
+    if (!box) return unsent("no-composer");
+    timely();
     box.focus();
     // A draft ChatGPT kept (an earlier turn's words) would go out in front of
     // these (#410): the box is emptied first, and send is waited off, so the
     // button the draft lit is not taken for these words'.
     if (bare(box.textContent)) {
+      timely();
       doc.execCommand("selectAll", false);
+      timely();
       doc.execCommand("delete", false);
-      await waitFor(() => !sendReady(doc), 2000);
+      await wait(() => !sendReady(doc), 2000);
     }
     // Send lit with the box empty: an attachment an earlier try left beside
     // the box, which emptying it does not reach, would go out with these
     // words and be reviewed in their place (#429).
-    if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+    if (sendReady(doc)) return unsent("composer-mismatch");
     // Pasted, the box holds the words as typed: spaces aside, the very same
     // ones (#435 review P1-01). Typed in when paste is not taken, a few
     // characters either way (`holds`).
     let held = () => bare(box.textContent) === bare(text);
-    const pasted = await paste(doc, box, text);
-    let button = pasted ? await waitFor(() => held() && sendReady(doc), 3000) : null;
+    const pasted = await paste(doc, box, text, wait, timely);
+    let button = pasted ? await wait(() => held() && sendReady(doc), 3000) : null;
     if (!button) {
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
       // the page would show no words to know the answer by.
-      if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+      if (sendReady(doc)) return unsent("composer-mismatch");
+      timely();
       doc.execCommand("selectAll", false);
+      timely();
       doc.execCommand("insertText", false, text);
       held = () => holds(box, text);
-      button = await waitFor(() => sendReady(doc), 5000);
+      button = await wait(() => sendReady(doc), 5000);
     }
-    if (!button) return { ok: false, reason: "send-failed" };
-    if (!held()) return { ok: false, reason: "composer-mismatch" };
+    if (!button) return unsent("send-failed");
+    if (!held()) return unsent("composer-mismatch");
     const before = lastPromptId(doc);
+    timely();
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
-    if (!started) return { ok: false, reason: "send-failed" };
+    if (!started) return { ok: false, reason: "send-failed", pressed: true };
     const promptId = await waitFor(() => {
       const id = lastPromptId(doc);
       return id && id !== before ? id : null;

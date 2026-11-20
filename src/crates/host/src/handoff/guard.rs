@@ -149,6 +149,21 @@ pub(super) fn mending_confirmed_late() -> String {
         "The extension later said the ask to mend the last lines went in; its answer is not in yet, so it counts as gone in",
     )
 }
+/// What the session hears when send was never pressed for its words
+/// (#466): they are not in the conversation, and may go again.
+pub(super) fn not_sent(error: &str) -> String {
+    l10n::text(
+        &format!("这段话没送进 ChatGPT（{error}）：发送没有点下去，接力和发送前一样，自动往返没有停。可以直接再调用一次重送；连着几次都这样，请常浩看一眼 ChatGPT 那个标签页。"),
+        &format!("These words did not go in to ChatGPT ({error}): send was never pressed, the handoff is as it was, and the auto round trip goes on. Call again to send them; if it keeps happening, ask the person to look at the ChatGPT tab."),
+    )
+}
+/// What the card says of them.
+pub(super) fn not_sent_note(error: &str) -> String {
+    l10n::text(
+        &format!("这一段没送成（{error}）：发送没有点下去，等会话重送"),
+        &format!("These words did not go ({error}): send was never pressed; the session may send them again"),
+    )
+}
 /// Words that must be on disk before they go could not be kept.
 pub(super) fn not_kept(error: &str) -> String {
     l10n::text(

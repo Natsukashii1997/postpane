@@ -79,7 +79,7 @@ test("submit fills the composer, sends, and sees streaming start", async () => {
   );
   assert.deepEqual(
     await page.evaluate(() => PostPanePage.submit(document, "again")),
-    { ok: false, reason: "busy" },
+    { ok: false, reason: "busy", pressed: false },
   );
 });
 
@@ -228,6 +228,7 @@ test("words that did not go in as text are not sent", async () => {
   assert.deepEqual(await send(fresh, brief(100)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -238,6 +239,7 @@ test("a later piece turned attachment stops the sending", async () => {
   assert.deepEqual(await send(fresh, brief(800)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 2);
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
@@ -252,8 +254,218 @@ test("an attachment already in the composer is not sent along", async () => {
   assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+// #466: PostPane takes words send was never pressed for as not sent, and
+// lets them go again; pressed with nothing seen to start, they may have
+// gone, so it stays unsure of them.
+test("a press that starts nothing is told as pressed", async () => {
+  const fresh = await composer();
+  await fresh.evaluate(() => {
+    document.getElementById("slot").addEventListener(
+      "click",
+      (event) => {
+        window.pressed = true;
+        event.stopImmediatePropagation();
+      },
+      true,
+    );
+  });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "send-failed",
+    pressed: true,
+  });
+  assert.equal(await fresh.evaluate(() => window.pressed), true);
+  await fresh.close();
+});
+
+// #466 review P1-01: past the time PostPane waits for word, send is not
+// pressed: said after that, "not pressed" would not be heard.
+test("out of time before send is pressed, it is not pressed", async () => {
+  const fresh = await composer();
+  const late = await fresh.evaluate(
+    (text) => PostPanePage.submit(document, text, Date.now() - 1),
+    "P1-05 专项复核",
+  );
+  assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // Nor is the box touched (#466 review P1-02).
+  const box = () =>
+    fresh.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+    ]);
+  assert.deepEqual(await box(), [0, ""]);
+  // In time, the same words go.
+  const inTime = await fresh.evaluate(
+    (text) => PostPanePage.submit(document, text, Date.now() + 20000),
+    "P1-05 专项复核",
+  );
+  assert.equal(inTime.ok, true);
+  assert.equal(await fresh.evaluate(() => window.sent), "P1-05 专项复核");
+  await fresh.close();
+});
+
+test("out of time between pieces, no more is put in the box", async () => {
+  const fresh = await composer();
+  const text = brief(800);
+  const late = await fresh.evaluate((text) => {
+    // The first piece in, the time is up, to the millisecond: the same
+    // moment the extension counts as none left (#466 review P2-03).
+    const until = Date.now() + 20000;
+    document.addEventListener("paste", () => (Date.now = () => until), {
+      once: true,
+    });
+    return PostPanePage.submit(document, text, until);
+  }, text);
+  assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
+  const [pastes, held] = await fresh.evaluate(() => [
+    window.pastes,
+    document.querySelector(".ProseMirror").textContent,
+  ]);
+  assert.equal(pastes.length, 1, `pasted ${pastes.length} times`);
+  const bare = (words) => words.replace(/\s/g, "");
+  assert.ok(bare(held) === bare(pastes[0]), "nor typed in instead");
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+// #466 review P2-03: the extension counts the moment the time is up as none
+// left; so does the page, and it looks before each thing it does to the box.
+test("at the moment the time is up nothing is put in the box or pressed", async () => {
+  const untouched = { ok: false, reason: "timeout", pressed: false };
+  const state = (page) =>
+    page.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+      window.sent,
+    ]);
+  // Asked at that moment.
+  const asked = await composer();
+  const atOnce = await asked.evaluate((text) => {
+    const until = Date.now();
+    Date.now = () => until;
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(atOnce, untouched);
+  assert.deepEqual(await state(asked), [0, "", undefined]);
+  await asked.close();
+  // Up as the box is taken hold of: nothing is pasted after.
+  const focused = await composer();
+  const onFocus = await focused.evaluate((text) => {
+    const until = Date.now() + 20000;
+    const box = document.querySelector(".ProseMirror");
+    const focus = box.focus.bind(box);
+    box.focus = () => {
+      focus();
+      Date.now = () => until;
+    };
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(onFocus, untouched);
+  assert.deepEqual(await state(focused), [0, "", undefined]);
+  await focused.close();
+  // Up after the last wait, as the page is read before the press: not
+  // pressed.
+  const lit = await composer();
+  const onPress = await lit.evaluate((text) => {
+    const until = Date.now() + 20000;
+    const box = document.querySelector(".ProseMirror");
+    let pasted = false;
+    box.addEventListener("paste", () => (pasted = true));
+    // The newest prompt's id is read just before the press, and only then.
+    const all = document.querySelectorAll.bind(document);
+    document.querySelectorAll = (selector) => {
+      if (pasted) Date.now = () => until;
+      return all(selector);
+    };
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(onPress, untouched);
+  const [pastes, , sent] = await state(lit);
+  assert.deepEqual([pastes, sent], [1, undefined]);
+  await lit.close();
+});
+
+// #466 review P2-03, round 5: the look comes right before what changes the
+// box, not a few steps ahead of it.
+test("the time up as the box is about to be changed, it is not changed", async () => {
+  const untouched = { ok: false, reason: "timeout", pressed: false };
+  const state = (page) =>
+    page.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+      window.sent,
+    ]);
+  // Sends with the time up once `step` of getting ready is taken.
+  const upAt = (page, step) =>
+    page.evaluate(
+      ([text, step]) => {
+        const until = Date.now() + 20000;
+        const up = () => (Date.now = () => until);
+        if (step === "selection") {
+          // Up once the place to paste is set, before the paste goes out.
+          const selection = document.getSelection.bind(document);
+          document.getSelection = () => {
+            const found = selection();
+            const collapse = found.collapseToEnd.bind(found);
+            found.collapseToEnd = () => {
+              collapse();
+              up();
+            };
+            return found;
+          };
+        } else {
+          const command = document.execCommand.bind(document);
+          document.execCommand = (name, ...rest) => {
+            const done = command(name, ...rest);
+            if (name === "selectAll") up();
+            return done;
+          };
+        }
+        return PostPanePage.submit(document, text, until);
+      },
+      ["P2-03 定向复核", step],
+    );
+  // As the place to paste is set: no paste goes out.
+  const pasting = await composer();
+  assert.deepEqual(await upAt(pasting, "selection"), untouched);
+  assert.deepEqual(await state(pasting), [0, "", undefined]);
+  await pasting.close();
+  // As a draft is selected to be taken out: it stays.
+  const drafted = await composer({ draft: "上一轮留下的草稿" });
+  assert.deepEqual(await upAt(drafted, "selectAll"), untouched);
+  assert.deepEqual(await state(drafted), [0, "上一轮留下的草稿", undefined]);
+  await drafted.close();
+  // Paste not taken, as all is selected to type over: nothing is typed.
+  const typed = await composer({ keep: 0 });
+  assert.deepEqual(await upAt(typed, "selectAll"), untouched);
+  const [pastes, held, sent] = await state(typed);
+  assert.deepEqual([pastes, held, sent], [1, "", undefined]);
+  await typed.close();
+});
+
+test("send that never lights is told as not pressed", async () => {
+  const fresh = await composer();
+  await fresh.evaluate(() => {
+    const slot = document.getElementById("slot");
+    // Whatever lights it, it is put out again (once: the same value set
+    // again would call the observer again).
+    new MutationObserver(() => {
+      if (!slot.disabled) slot.disabled = true;
+    }).observe(slot, { attributes: true });
+  });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "send-failed",
+    pressed: false,
+  });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
 });
@@ -295,6 +507,7 @@ test("a piece that went in short stops the sending", async () => {
   assert.deepEqual(await send(fresh, brief(800)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -305,6 +518,7 @@ test("words the page changed, as many characters, are not sent", async () => {
   assert.deepEqual(await send(fresh, brief(20)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -331,6 +545,7 @@ test("a draft with an attachment left beside it is not sent along", async () => 
   assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
