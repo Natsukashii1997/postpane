@@ -316,14 +316,13 @@ test("out of time between pieces, no more is put in the box", async () => {
   const fresh = await composer();
   const text = brief(800);
   const late = await fresh.evaluate((text) => {
-    // The first piece in, the time is up.
-    const now = Date.now.bind(Date);
-    document.addEventListener(
-      "paste",
-      () => (Date.now = () => now() + 3600000),
-      { once: true },
-    );
-    return PostPanePage.submit(document, text, now() + 20000);
+    // The first piece in, the time is up, to the millisecond: the same
+    // moment the extension counts as none left (#466 review P2-03).
+    const until = Date.now() + 20000;
+    document.addEventListener("paste", () => (Date.now = () => until), {
+      once: true,
+    });
+    return PostPanePage.submit(document, text, until);
   }, text);
   assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
   const [pastes, held] = await fresh.evaluate(() => [
@@ -335,6 +334,63 @@ test("out of time between pieces, no more is put in the box", async () => {
   assert.ok(bare(held) === bare(pastes[0]), "nor typed in instead");
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
+});
+
+// #466 review P2-03: the extension counts the moment the time is up as none
+// left; so does the page, and it looks before each thing it does to the box.
+test("at the moment the time is up nothing is put in the box or pressed", async () => {
+  const untouched = { ok: false, reason: "timeout", pressed: false };
+  const state = (page) =>
+    page.evaluate(() => [
+      window.pastes.length,
+      document.querySelector(".ProseMirror").textContent,
+      window.sent,
+    ]);
+  // Asked at that moment.
+  const asked = await composer();
+  const atOnce = await asked.evaluate((text) => {
+    const until = Date.now();
+    Date.now = () => until;
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(atOnce, untouched);
+  assert.deepEqual(await state(asked), [0, "", undefined]);
+  await asked.close();
+  // Up as the box is taken hold of: nothing is pasted after.
+  const focused = await composer();
+  const onFocus = await focused.evaluate((text) => {
+    const until = Date.now() + 20000;
+    const box = document.querySelector(".ProseMirror");
+    const focus = box.focus.bind(box);
+    box.focus = () => {
+      focus();
+      Date.now = () => until;
+    };
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(onFocus, untouched);
+  assert.deepEqual(await state(focused), [0, "", undefined]);
+  await focused.close();
+  // Up after the last wait, as the page is read before the press: not
+  // pressed.
+  const lit = await composer();
+  const onPress = await lit.evaluate((text) => {
+    const until = Date.now() + 20000;
+    const box = document.querySelector(".ProseMirror");
+    let pasted = false;
+    box.addEventListener("paste", () => (pasted = true));
+    // The newest prompt's id is read just before the press, and only then.
+    const all = document.querySelectorAll.bind(document);
+    document.querySelectorAll = (selector) => {
+      if (pasted) Date.now = () => until;
+      return all(selector);
+    };
+    return PostPanePage.submit(document, text, until);
+  }, "P2-03 定向复核");
+  assert.deepEqual(onPress, untouched);
+  const [pastes, , sent] = await state(lit);
+  assert.deepEqual([pastes, sent], [1, undefined]);
+  await lit.close();
 });
 
 test("send that never lights is told as not pressed", async () => {

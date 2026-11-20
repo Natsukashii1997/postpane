@@ -284,8 +284,9 @@
   /** Pastes `text` at the end of the box a piece at a time; paste keeps its
    * paragraphs. Whether each piece went in whole: the box grew by all of its
    * characters, spaces aside (the page takes a paste as typed, #429). */
-  async function paste(doc, box, text, wait = waitFor) {
+  async function paste(doc, box, text, wait = waitFor, timely = () => {}) {
     for (const piece of pieces(text)) {
+      timely();
       const want = bare(box.textContent).length + bare(piece).length;
       const selection = doc.getSelection();
       selection.selectAllChildren(box);
@@ -312,33 +313,39 @@
    * at all (#466 review P1-01): PostPane stops waiting for word, and what is
    * said after of words not pressed is not heard, so the waits before the
    * press end by then, and out of time nothing is pressed. Nor is the box
-   * touched again (#466 review P1-02): asked out of time nothing is done,
-   * and a wait that ends out of it ends the try there. */
+   * touched again (#466 review P1-02): `timely` ends the try out of time,
+   * looked to when asked, after each wait, and before each thing done to
+   * the box. The moment the time is up is out of it, as the extension
+   * counts (#466 review P2-03). */
   async function submit(doc, text, until = Infinity) {
-    const late = () => Date.now() > until;
+    const timely = () => {
+      if (Date.now() >= until) throw LATE;
+    };
     const wait = async (check, ms) => {
       const got = await waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
-      if (late()) throw LATE;
+      timely();
       return got;
     };
-    if (late()) return unsent("timeout");
     try {
-      return await press(doc, text, wait, late);
+      timely();
+      return await press(doc, text, wait, timely);
     } catch (error) {
       if (error !== LATE) throw error;
       return unsent("timeout");
     }
   }
 
-  async function press(doc, text, wait, late) {
+  async function press(doc, text, wait, timely) {
     if (streaming(doc)) return unsent("busy");
     const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
+    timely();
     box.focus();
     // A draft ChatGPT kept (an earlier turn's words) would go out in front of
     // these (#410): the box is emptied first, and send is waited off, so the
     // button the draft lit is not taken for these words'.
     if (bare(box.textContent)) {
+      timely();
       doc.execCommand("selectAll", false);
       doc.execCommand("delete", false);
       await wait(() => !sendReady(doc), 2000);
@@ -351,22 +358,23 @@
     // ones (#435 review P1-01). Typed in when paste is not taken, a few
     // characters either way (`holds`).
     let held = () => bare(box.textContent) === bare(text);
-    const pasted = await paste(doc, box, text, wait);
+    const pasted = await paste(doc, box, text, wait, timely);
     let button = pasted ? await wait(() => held() && sendReady(doc), 3000) : null;
     if (!button) {
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
       // the page would show no words to know the answer by.
       if (sendReady(doc)) return unsent("composer-mismatch");
+      timely();
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
       held = () => holds(box, text);
       button = await wait(() => sendReady(doc), 5000);
     }
-    if (late()) return unsent("timeout");
     if (!button) return unsent("send-failed");
     if (!held()) return unsent("composer-mismatch");
     const before = lastPromptId(doc);
+    timely();
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
     if (!started) return { ok: false, reason: "send-failed", pressed: true };

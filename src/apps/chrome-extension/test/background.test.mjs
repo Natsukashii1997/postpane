@@ -453,10 +453,12 @@ const hostWait = () => {
   return seconds * 1000;
 };
 
+// The time a sending has to press send. Moved on by just that, the clock
+// stands at the very moment it is up: none left (#466 review P2-03).
+const pressBy = () => Number(source.match(/const PRESS_BY = (\d+);/)[1]);
+
 test("a sending gives up getting to send before PostPane stops waiting for word", async () => {
-  const [, pressBy] = source.match(/const PRESS_BY = (\d+);/) ?? [];
-  assert.ok(pressBy, "the time a sending has to press send");
-  assert.ok(Number(pressBy) <= hostWait() - 5000, `${pressBy} ms`);
+  assert.ok(pressBy() <= hostWait() - 5000, `${pressBy()} ms`);
 });
 
 test("a tab that does not load in time is told as not pressed, before PostPane stops waiting", async () => {
@@ -483,7 +485,7 @@ test("a sending tells the page by when send must be pressed, and tries no second
   const slow = (chrome) => {
     const { sendMessage } = chrome.tabs;
     chrome.tabs.sendMessage = async (tabId, message) => {
-      if (message.op === "submit") clock.now += hostWait();
+      if (message.op === "submit") clock.now += pressBy();
       return sendMessage(tabId, message);
     };
     chrome.tabs.update = async () => void fronted++;
@@ -544,7 +546,7 @@ test("what the first try said of send stands while the second is not begun", asy
   const clock = { now: 1000 };
   const slow = (chrome) => {
     chrome.tabs.update = async () => {
-      clock.now += hostWait();
+      clock.now += pressBy();
     };
   };
   submits = [];
@@ -626,6 +628,11 @@ test("two failed tries say not pressed only when both do", async () => {
   assert.equal("pressed" in unknownSecond, false);
   const both = await sending([notPressed, unsent("busy", false)]);
   assert.equal(both.pressed, false);
+  // Pressed on the second: pressed, whatever the first said.
+  for (const first of [notPressed, threw]) {
+    const pressedSecond = await sending([first, unsent("send-failed", true)]);
+    assert.equal(pressedSecond.pressed, true);
+  }
   // Pressed the first time, no word back of the second: pressed all the same.
   const lost = (chrome) => {
     const { sendMessage } = chrome.tabs;
