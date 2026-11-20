@@ -13,7 +13,7 @@ pub(crate) struct Reading {
     pub duration: i64,
 }
 
-pub(crate) const READINGS: [Reading; 5] = [
+pub(crate) const READINGS: [Reading; 6] = [
     Reading {
         key: "claude-session",
         used: 12.0,
@@ -23,6 +23,12 @@ pub(crate) const READINGS: [Reading; 5] = [
     Reading {
         key: "claude-weekly",
         used: 79.0,
+        reset_in: 5 * 86400,
+        duration: 7 * 86400,
+    },
+    Reading {
+        key: "claude-weekly-fable",
+        used: 60.0,
         reset_in: 5 * 86400,
         duration: 7 * 86400,
     },

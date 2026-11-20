@@ -791,6 +791,14 @@ pub fn demo_projection(now: i64, used: &BTreeMap<String, f64>) -> AccountProject
             true,
         ),
         window(
+            "claude",
+            "claude:demo",
+            "claude-weekly-fable",
+            "Weekly limit · Fable".into(),
+            "Fable".into(),
+            false,
+        ),
+        window(
             "codex",
             "codex:demo",
             "codex",
@@ -971,7 +979,7 @@ mod tests {
                 .any(|session| session["id"].as_str().unwrap_or("").starts_with("history")),
             "history logs stay hidden"
         );
-        assert!(snapshot["quotas"].as_array().unwrap().len() >= 19);
+        assert!(snapshot["quotas"].as_array().unwrap().len() >= 20);
         // Each account carries what its section header shows.
         let account = |id: &str| {
             snapshot["accounts"]
