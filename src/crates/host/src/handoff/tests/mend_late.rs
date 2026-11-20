@@ -4,6 +4,7 @@
 //! trip that stopped for it goes on. Only for a mending sent in this run,
 //! and only its own request.
 use super::*;
+use agent_hud_runtime::chatgpt::handoffs::REPLY_WAIT_MS;
 
 const PASS: &str = "全部关闭\n受审版本：0123456\n未决：P0 0，P1 0\n审查出口：通过\n结论：通过";
 const FIX: &str = "1. 还差\n受审版本：0123456\n审查出口：返修\n结论：需修改";
@@ -59,6 +60,47 @@ fn late_word_of_a_mending_before_its_answer_lets_the_mended_pass() {
     desk.observe(&reply_as(asked(), PASS, "m2"), 7);
     desk.drive(&lines, 8);
     assert_eq!(status(&desk, 8).0, "closed");
+}
+
+/// Review of #446, P2-03: word of another request, of the same handoff,
+/// is not this mending's.
+#[test]
+fn word_of_another_request_leaves_the_mending_unsure() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let (handoff, request) = mending_unsure(&desk, &lines);
+    let before = kept(&desk, &handoff);
+    assert!(!desk.observe(&word(&format!("{request}9")), 5));
+    assert!(!desk.observe(&word(&format!("{}~format1", handoff.id)), 6));
+    let after = kept(&desk, &handoff);
+    assert!(after.unsure() && !after.auto);
+    assert_eq!(after.steps.len(), before.steps.len());
+    desk.observe(&reply_as(asked(), PASS, "m2"), 7);
+    desk.drive(&lines, 8);
+    assert_eq!(status(&desk, 8).0, "open");
+}
+
+/// Review of #446, P2-01: turned on again by the person, then stopped for
+/// an answer that did not come in time: late word clears the mending, and
+/// that later stop stays.
+#[test]
+fn late_word_of_a_mending_leaves_a_later_stop_as_it_is() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let (handoff, request) = mending_unsure(&desk, &lines);
+    desk.act(&lines, &handoff.id, "resume", 5).unwrap();
+    assert!(desk.late(5 + REPLY_WAIT_MS + 1));
+    let stopped = kept(&desk, &handoff);
+    assert!(!stopped.auto && stopped.unsure());
+    assert!(desk.observe(&word(&request), 5 + REPLY_WAIT_MS + 2));
+    let after = kept(&desk, &handoff);
+    assert!(!after.unsure(), "known to have gone in");
+    assert!(!after.auto, "stopped since for another reason: it stays");
+    assert_eq!(notes(&after, &guard::mending_confirmed_late()), 1);
+    assert!(after
+        .steps
+        .iter()
+        .all(|s| s.kind != StepKind::Resume || !s.auto));
 }
 
 #[test]

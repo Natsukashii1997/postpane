@@ -3,7 +3,7 @@
 //! waiting, and before the mended answer, is taken as a review's is (#446):
 //! only in the run that sent it (`Word`), and only its own request. After
 //! the answer, or after a restart, it only goes on the card, as before.
-use super::super::{Book, Step, StepKind};
+use super::super::{notice::Cause, Book, Handoff, Step, StepKind};
 use super::Pending;
 
 /// How word of a mending stands in the run that sent it (#446). Never kept:
@@ -19,6 +19,22 @@ pub enum Word {
     Heard,
     /// Its send gave up waiting.
     GaveUp,
+}
+
+impl Handoff {
+    /// The auto round trip is off by the stop that words never known to
+    /// have gone in made (`unconfirmed`), and nothing stopped it or turned
+    /// it on since (review of #446, P2-01): a stop made after, for an
+    /// answer that did not come, is not this one.
+    fn stopped_as_unconfirmed(&self) -> bool {
+        self.steps
+            .iter()
+            .rev()
+            .find(|step| matches!(step.kind, StepKind::Stop | StepKind::Resume))
+            .is_some_and(|step| {
+                step.kind == StepKind::Stop && step.auto && step.cause == Some(Cause::Unconfirmed)
+            })
+    }
 }
 
 impl Book {
@@ -46,8 +62,9 @@ impl Book {
     /// While its send waits, that is only marked. After the send gave up
     /// it is known to have gone in, as a review's late word makes it:
     /// the mending alone clears, `note` goes on the card, and the round
-    /// trip that stopped for it goes on, unless a review is unsure
-    /// still. Whether the card changed.
+    /// trip goes on when it was this that stopped it and no review is
+    /// unsure still; its wait for the answer runs on from when the
+    /// mending was asked. Whether the card changed.
     pub fn mending_heard(&mut self, id: &str, request: &str, note: &str, now: i64) -> Option<bool> {
         let handoff = self.live_mut(id)?;
         let mending = handoff.gate.mending.as_mut()?;
@@ -62,7 +79,7 @@ impl Book {
                 handoff
                     .steps
                     .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
-                if !handoff.unsure() {
+                if !handoff.unsure() && handoff.stopped_as_unconfirmed() {
                     handoff.resume_for_ask(now);
                 }
                 handoff.updated_at = now;
