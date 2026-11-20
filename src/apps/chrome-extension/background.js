@@ -125,22 +125,31 @@ async function group(tabId) {
   }
 }
 
-/** Has the page put `text` in and press send. Not ok, `pressed` is what the
- * page says of send (#466): false when it was pressed on neither try, true
- * when on either; left out when the tab went away meanwhile, so it is not
- * known. */
-async function submit(tabId, text) {
+/** How long a sending has to get to pressing send. PostPane waits
+ * `SEND_TIME` (30 s) for word of it, and what is said after that of words
+ * never pressed is not heard: they would be kept as not known to have gone
+ * (#466 review P1-01). So less than that, with room for the answer to get
+ * back; a test holds the two apart. */
+const PRESS_BY = 25000;
+
+/** Has the page put `text` in and press send, by `until` when given. Not
+ * ok, `pressed` is what the page says of send (#466): false when it was
+ * pressed on neither try, true when on either; left out when the tab went
+ * away meanwhile, so it is not known. */
+async function submit(tabId, text, until) {
   try {
-    let result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
+    const ask = { op: "submit", text, ...(until && { until }) };
+    let result = await chrome.tabs.sendMessage(tabId, ask);
     if (
       !result.ok &&
-      ["send-failed", "composer-mismatch"].includes(result.reason)
+      ["send-failed", "composer-mismatch"].includes(result.reason) &&
+      !(Date.now() >= until)
     ) {
       // Some pages only accept input while the tab is in front; a draft that
       // came back in the box (#410) is emptied again on the second try.
       await chrome.tabs.update(tabId, { active: true });
       const first = result;
-      result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
+      result = await chrome.tabs.sendMessage(tabId, ask);
       if (!result.ok && first.pressed) result = { ...result, pressed: true };
     }
     return result;
@@ -184,6 +193,7 @@ async function send(conversation, text) {
   // Not begun: send was not pressed (#466).
   if (!watched.has(conversation))
     return { ok: false, reason: "not-watched", pressed: false };
+  const until = Date.now() + PRESS_BY;
   let tabId = tabFor(conversation);
   if (tabId === null) {
     const tab = await chrome.tabs.create({
@@ -192,10 +202,11 @@ async function send(conversation, text) {
     });
     tabId = tab.id;
     await group(tabId);
-    if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
+    const loaded = (p) => p.conversation === conversation;
+    if (!(await ready(tabId, until - Date.now(), loaded)))
       return { ok: false, reason: "timeout", pressed: false };
   }
-  return submit(tabId, text);
+  return submit(tabId, text, until);
 }
 
 /** The tab showing `conversation`: as reported, else by its address. */

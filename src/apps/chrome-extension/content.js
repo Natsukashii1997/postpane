@@ -108,7 +108,7 @@
 
   function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
-      page.submit(document, command.text).then((result) => {
+      page.submit(document, command.text, command.until).then((result) => {
         if (result.ok) expecting = true;
         reply(result);
       }, (error) => reply({ ok: false, reason: "send-failed", detail: String(error) }));

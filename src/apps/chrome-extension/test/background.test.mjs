@@ -20,6 +20,7 @@ function load(
     fronted = [],
     posted = [],
     windows = {},
+    waits = [],
   } = {},
 ) {
   const listeners = {};
@@ -44,6 +45,11 @@ function load(
     tabs: {
       query: async () => tabs,
       get: async (tabId) => tabs.find((tab) => tab.id === tabId),
+      create: async ({ url }) => {
+        const tab = { id: 99, url, active: false, windowId: 1 };
+        tabs.push(tab);
+        return tab;
+      },
       update: async (tabId, { active }) => {
         fronted.push(tabId);
         for (const tab of tabs) tab.active = tab.id === tabId ? active : false;
@@ -70,10 +76,14 @@ function load(
   vm.runInNewContext(source, {
     chrome,
     // `now`: a pause ends at once, so waits that are counted run through.
-    setTimeout: now ? (fn) => (Promise.resolve().then(fn), 0) : () => 0,
+    setTimeout: (fn, ms) => {
+      waits.push(ms);
+      if (now) Promise.resolve().then(fn);
+      return 0;
+    },
     clearTimeout() {},
   });
-  return { listeners, injected };
+  return { listeners, injected, chrome };
 }
 
 test("installing or reloading the extension puts the scripts into chatgpt.com tabs already open", async () => {
@@ -395,4 +405,96 @@ test("a sending never begun is told as not pressed, a tab gone meanwhile as not 
   const gone = await sending([], { dead: true });
   assert.equal(gone.reason, "tab-closed");
   assert.equal("pressed" in gone, false);
+});
+
+// #466 review P1-01: PostPane waits `SEND_TIME` for word of a sending, and
+// what the extension says after that of words never pressed is not heard:
+// they would be kept as not known to have gone. So a sending has less than
+// that to get to pressing send; out of it, it says so and does not press.
+const hostWait = () => {
+  const host = readFileSync(
+    new URL(
+      "../../../crates/platform/src/clients/chatgpt/mod.rs",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const [, seconds] = host.match(
+    /pub const SEND_TIME: Duration = Duration::from_secs\((\d+)\);/,
+  );
+  return seconds * 1000;
+};
+
+test("a sending gives up getting to send before PostPane stops waiting for word", async () => {
+  const [, pressBy] = source.match(/const PRESS_BY = (\d+);/) ?? [];
+  assert.ok(pressBy, "the time a sending has to press send");
+  assert.ok(Number(pressBy) <= hostWait() - 5000, `${pressBy} ms`);
+});
+
+test("a tab that does not load in time is told as not pressed, before PostPane stops waiting", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const posted = [];
+  const waits = [];
+  const asked = [];
+  const { listeners } = load([], {
+    posted,
+    waits,
+    asked,
+    watched: [conversation],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  waits.length = 0;
+  await listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation,
+    text: "下一轮",
+  });
+  const [sent] = posted.filter((m) => m.type === "sent");
+  assert.deepEqual(sent, {
+    type: "sent",
+    requestId: "r1",
+    ...unsent("timeout", false),
+  });
+  assert.deepEqual(asked, [], "the page was never asked to send");
+  assert.ok(Math.max(...waits) <= hostWait() - 5000, `${waits}`);
+});
+
+test("a sending tells the page by when send must be pressed, and tries no second time past it", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const asked = [];
+  const tab = {
+    id: 7,
+    url: `https://chatgpt.com/c/${conversation}`,
+    active: false,
+    windowId: 1,
+  };
+  const messages = [];
+  const { listeners, chrome } = load([tab], {
+    asked,
+    watched: [conversation],
+    answers: [unsent("timeout", false)],
+    now: true,
+  });
+  const sendMessage = chrome.tabs.sendMessage;
+  chrome.tabs.sendMessage = (tabId, message) => {
+    if (message.op === "submit") messages.push(message);
+    return sendMessage(tabId, message);
+  };
+  await new Promise((resolve) => setImmediate(resolve));
+  listeners.message(
+    { type: "page", conversation, hidden: true, streaming: false },
+    { tab: { id: 7 } },
+  );
+  const before = Date.now();
+  await listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation,
+    text: "下一轮",
+  });
+  assert.equal(messages.length, 1);
+  const until = messages[0].until;
+  assert.ok(until > before && until <= Date.now() + hostWait() - 5000, until);
 });

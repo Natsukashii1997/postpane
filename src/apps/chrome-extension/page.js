@@ -284,7 +284,7 @@
   /** Pastes `text` at the end of the box a piece at a time; paste keeps its
    * paragraphs. Whether each piece went in whole: the box grew by all of its
    * characters, spaces aside (the page takes a paste as typed, #429). */
-  async function paste(doc, box, text) {
+  async function paste(doc, box, text, wait = waitFor) {
     for (const piece of pieces(text)) {
       const want = bare(box.textContent).length + bare(piece).length;
       const selection = doc.getSelection();
@@ -293,7 +293,7 @@
       const data = new DataTransfer();
       data.setData("text/plain", piece);
       box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-      if (!(await waitFor(() => bare(box.textContent).length >= want, 3000))) return false;
+      if (!(await wait(() => bare(box.textContent).length >= want, 3000))) return false;
     }
     return true;
   }
@@ -305,10 +305,14 @@
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
    * not ok, `pressed` says whether send was pressed (then they may have
    * gone all the same); ok, `promptId`, ChatGPT's id of the prompt it
-   * became, once the page shows it (#410). */
-  async function submit(doc, text) {
+   * became, once the page shows it (#410). Send is pressed by `until` or not
+   * at all (#466 review P1-01): PostPane stops waiting for word, and what is
+   * said after of words not pressed is not heard, so the waits before the
+   * press end by then, and out of time nothing is pressed. */
+  async function submit(doc, text, until = Infinity) {
+    const wait = (check, ms) => waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
     if (streaming(doc)) return unsent("busy");
-    const box = await waitFor(() => doc.querySelector(SEL.composer), 15000);
+    const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
     box.focus();
     // A draft ChatGPT kept (an earlier turn's words) would go out in front of
@@ -317,7 +321,7 @@
     if (bare(box.textContent)) {
       doc.execCommand("selectAll", false);
       doc.execCommand("delete", false);
-      await waitFor(() => !sendReady(doc), 2000);
+      await wait(() => !sendReady(doc), 2000);
     }
     // Send lit with the box empty: an attachment an earlier try left beside
     // the box, which emptying it does not reach, would go out with these
@@ -327,8 +331,8 @@
     // ones (#435 review P1-01). Typed in when paste is not taken, a few
     // characters either way (`holds`).
     let held = () => bare(box.textContent) === bare(text);
-    const pasted = await paste(doc, box, text);
-    let button = pasted ? await waitFor(() => held() && sendReady(doc), 3000) : null;
+    const pasted = await paste(doc, box, text, wait);
+    let button = pasted ? await wait(() => held() && sendReady(doc), 3000) : null;
     if (!button) {
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
@@ -337,8 +341,9 @@
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
       held = () => holds(box, text);
-      button = await waitFor(() => sendReady(doc), 5000);
+      button = await wait(() => sendReady(doc), 5000);
     }
+    if (Date.now() > until) return unsent("timeout");
     if (!button) return unsent("send-failed");
     if (!held()) return unsent("composer-mismatch");
     const before = lastPromptId(doc);

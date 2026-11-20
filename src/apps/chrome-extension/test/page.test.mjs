@@ -285,6 +285,26 @@ test("a press that starts nothing is told as pressed", async () => {
   await fresh.close();
 });
 
+// #466 review P1-01: past the time PostPane waits for word, send is not
+// pressed: said after that, "not pressed" would not be heard.
+test("out of time before send is pressed, it is not pressed", async () => {
+  const fresh = await composer();
+  const late = await fresh.evaluate(
+    (text) => PostPanePage.submit(document, text, Date.now() - 1),
+    "P1-05 专项复核",
+  );
+  assert.deepEqual(late, { ok: false, reason: "timeout", pressed: false });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // In time, the same words go.
+  const inTime = await fresh.evaluate(
+    (text) => PostPanePage.submit(document, text, Date.now() + 20000),
+    "P1-05 专项复核",
+  );
+  assert.equal(inTime.ok, true);
+  assert.equal(await fresh.evaluate(() => window.sent), "P1-05 专项复核");
+  await fresh.close();
+});
+
 test("send that never lights is told as not pressed", async () => {
   const fresh = await composer();
   await fresh.evaluate(() => {
