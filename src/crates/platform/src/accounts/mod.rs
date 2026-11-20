@@ -1137,7 +1137,7 @@ mod tests {
     }
 
     #[test]
-    fn a_kept_or_restored_fable_week_never_reaches_the_projection() {
+    fn kept_or_restored_cloud_credits_never_reach_the_projection_and_fable_does() {
         let directory = tempfile::tempdir().unwrap();
         let data = directory.path().join("data");
         let service = AccountService::with_readers(
@@ -1149,13 +1149,15 @@ mod tests {
         )
         .unwrap();
         let now = chrono::Utc::now().to_rfc3339();
-        // A Fable row read before it was left out, kept or restored since.
+        // A cloud credits row read before it was dropped, kept or restored
+        // since, beside Fable's week.
         let mut reading = AccountReading::empty("claude");
         reading.account = Some(json!({"id":"acct-a"}));
         reading.quotas = vec![
             json!({"id":"claude:acct-a:claude-session","usedPercent":23}),
             json!({"id":"claude:acct-a:claude-weekly","usedPercent":61}),
-            json!({"id":"claude:acct-a:claude-weekly-fable","usedPercent":0}),
+            json!({"id":"claude:acct-a:claude-weekly-fable","usedPercent":49}),
+            json!({"id":"claude:acct-a:claude-cloud-credits","usedPercent":96.7}),
         ];
         {
             let mut state = service.shared.state.lock().unwrap();
@@ -1174,13 +1176,14 @@ mod tests {
             ids,
             [
                 "claude:acct-a:claude-session",
-                "claude:acct-a:claude-weekly"
+                "claude:acct-a:claude-weekly",
+                "claude:acct-a:claude-weekly-fable"
             ]
         );
         let provider = &agents::claude::account::PROVIDER;
-        assert!(provider.drops(&json!({"id":"claude:x:claude-weekly-fable"})));
-        assert!(!provider.drops(&json!({"id":"claude:x:claude-weekly"})));
-        assert!(!provider.drops(&json!({"id":"claude:x:not-claude-weekly-fable"})));
+        assert!(provider.drops(&json!({"id":"claude:x:claude-cloud-credits"})));
+        assert!(!provider.drops(&json!({"id":"claude:x:claude-weekly-fable"})));
+        assert!(!provider.drops(&json!({"id":"claude:x:not-claude-cloud-credits"})));
     }
 
     #[test]

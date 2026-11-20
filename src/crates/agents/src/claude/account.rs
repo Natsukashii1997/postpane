@@ -127,8 +127,9 @@ pub static PROVIDER: Provider = Provider {
     // Claude reports only the windows in use; one it leaves out keeps its last reading.
     keeps_unreported_windows: true,
     status: Some(&STATUS),
-    // Fable's week from before it was left out (see `IGNORED_FAMILY`).
-    dropped_windows: &["claude-weekly-fable"],
+    // Cloud session credits, read until 2026-11-20 and no longer followed:
+    // their last reading, kept or restored, does not come back.
+    dropped_windows: &["claude-cloud-credits"],
     kept: Some(kept),
     ..Provider::new("claude", read)
 };
@@ -460,21 +461,14 @@ fn plan_reading(
             percent,
             reset,
             family,
-            dollars,
         } = window;
         // "5h", "Weekly", and a family's weekly window by the family alone.
         let short = match family.as_deref() {
             Some(_) => window_names::leading(name.trim_start_matches("Weekly limit · ")),
             None if key == "claude-session" => window_names::Period::FiveHours.short_name(),
-            None if dollars.is_some() => "Cloud".into(),
             None => window_names::Period::Week.short_name(),
         };
-        let mut row = json!({"id":format!("{id}:{key}"),"vendor":"claude","name":name,"shortLabel":short,"usedPercent":percent,"resetAt":reset,"status":status(percent),"account":label,"accountId":account_identity,"legacyWindowId":format!("{account_identity}/{key}"),"consumerSource":"claude","windowDurationSeconds":if key=="claude-session"{5*3600}else{7*86400},"allModels":family.is_none(),"modelFamilies":family.map(|family|vec![family])});
-        // Credits have no fixed cycle: `resetAt` is when they expire.
-        if let Some((used, limit)) = dollars {
-            row["windowDurationSeconds"] = Value::Null;
-            row["nativeUsage"] = json!({"used":used,"capacity":limit,"unit":"USD"});
-        }
+        let row = json!({"id":format!("{id}:{key}"),"vendor":"claude","name":name,"shortLabel":short,"usedPercent":percent,"resetAt":reset,"status":status(percent),"account":label,"accountId":account_identity,"legacyWindowId":format!("{account_identity}/{key}"),"consumerSource":"claude","windowDurationSeconds":if key=="claude-session"{5*3600}else{7*86400},"allModels":family.is_none(),"modelFamilies":family.map(|family|vec![family])});
         reading.quotas.push(row);
     }
     reading
@@ -487,17 +481,10 @@ struct Window {
     percent: f64,
     reset: Option<String>,
     family: Option<String>,
-    /// Dollars used and the limit, for a credit grant such as cloud session
-    /// credits; None for a plan window.
-    dollars: Option<(f64, f64)>,
 }
 
 /// The model families Claude names (agent-hud-native-open ClaudeModelInfo.families).
 const FAMILIES: [&str; 5] = ["opus", "sonnet", "haiku", "fable", "mythos"];
-
-/// A family whose week the owner does not follow: it is read as any other, then
-/// dropped, so no panel row, summary, verdict, strip, alert or history counts it.
-const IGNORED_FAMILY: &str = "fable";
 
 /// A model id's or name's family, lowercased: the first of its words that
 /// names one (agent-hud-native-open ClaudeModelInfo.parse).
@@ -512,9 +499,9 @@ fn family(model: &str) -> Option<&'static str> {
 /// /usage screen shows them: the session, the week across models, then each
 /// model family's week, families in alphabetical order (agent-hud-native-open
 /// ClaudeUsage.rows). A family's week comes from `seven_day_<family>` or a
-/// `limits[]` entry of kind `weekly_scoped`, which wins; Fable's is left out
-/// (`IGNORED_FAMILY`). None when the
-/// object has neither the session nor the weekly window, as Open reads it.
+/// `limits[]` entry of kind `weekly_scoped`, which wins. Credit grants beside
+/// them (cloud session credits) are not read. None when the object has
+/// neither the session nor the weekly window, as Open reads it.
 fn windows(limits: &Value) -> Option<Vec<Window>> {
     let window = |object: &Value, value_key: &str| {
         let percent = object[value_key]
@@ -575,11 +562,9 @@ fn windows(limits: &Value) -> Option<Vec<Window>> {
                 percent,
                 reset,
                 family: None,
-                dollars: None,
             });
         }
     }
-    families.remove(IGNORED_FAMILY);
     for (family, (percent, reset)) in families {
         let mut letters = family.chars();
         let capitalized = letters
@@ -592,33 +577,6 @@ fn windows(limits: &Value) -> Option<Vec<Window>> {
             percent,
             reset,
             family: Some(family),
-            dollars: None,
-        });
-    }
-    // Cloud session credits: the service names the entry with a code word
-    // (`iguana_necktie` in November 2026), so it is found by its dollar
-    // fields, not its name. The first such grant is the one claude.ai shows.
-    let grant = limits
-        .as_object()
-        .into_iter()
-        .flatten()
-        .find_map(|(_, entry)| {
-            let limit = entry["limit_dollars"]
-                .as_f64()
-                .filter(|limit| *limit > 0.0)?;
-            let used = entry["used_dollars"]
-                .as_f64()
-                .filter(|used| used.is_finite())?;
-            Some((used.max(0.0), limit, window(entry, "utilization")?.1))
-        });
-    if let Some((used, limit, reset)) = grant {
-        rows.push(Window {
-            key: "claude-cloud-credits".into(),
-            name: "Cloud session credits".into(),
-            percent: (used / limit * 100.0).clamp(0.0, 100.0),
-            reset,
-            family: None,
-            dollars: Some((used, limit)),
         });
     }
     Some(rows)
@@ -842,20 +800,23 @@ mod tests {
             [
                 "claude-session",
                 "claude-weekly",
+                "claude-weekly-fable",
                 "claude-weekly-opus",
                 "claude-weekly-sonnet"
             ]
         );
-        assert_eq!(rows[2].name, "Weekly limit · Opus");
+        assert_eq!(rows[2].name, "Weekly limit · Fable");
+        assert_eq!(rows[2].percent, 55.0);
+        assert_eq!(rows[3].name, "Weekly limit · Opus");
         assert_eq!(
-            rows[2].percent, 31.0,
+            rows[3].percent, 31.0,
             "a weekly_scoped entry wins over seven_day_<family>"
         );
         assert_eq!(rows[0].reset.as_deref(), Some("2026-10-21T15:00:00Z"));
     }
 
     #[test]
-    fn cloud_session_credits_follow_the_plan_windows_with_their_dollars() {
+    fn fables_week_is_a_row_and_a_dollar_grant_is_not() {
         let usage = json!({"subtype": "success", "response": {
             "rate_limits_available": true, "subscription_type": "max",
             "rate_limits": {
@@ -864,31 +825,39 @@ mod tests {
                 "iguana_necktie": {"utilization": 43.6, "resets_at": "2026-11-05T07:59:00+00:00",
                     "limit_dollars": 250, "used_dollars": 109.05, "remaining_dollars": 140.95},
                 "extra_usage": {"is_enabled": false, "used_credits": 0},
-                "limits": [{"kind": "weekly_scoped", "percent": 0.0, "scope": {"model": {"display_name": "Fable"}}}]
+                "limits": [{"kind": "weekly_scoped", "percent": 49.0,
+                    "resets_at": "2026-11-21T18:00:00Z",
+                    "scope": {"model": {"display_name": "Fable"}}}]
             },
         }});
         let reading = read(&installed(usage)).unwrap();
         let id = account_id("claude", &["user-1", "org-1"]);
-        assert_eq!(reading.quotas.len(), 3, "Fable's week is left out");
-        let credits = &reading.quotas[2];
-        assert_eq!(credits["id"], format!("{id}:claude-cloud-credits"));
-        assert_eq!(credits["name"], "Cloud session credits");
-        assert_eq!(credits["shortLabel"], "Cloud");
-        assert_eq!(credits["usedPercent"], 43.62);
-        assert_eq!(credits["resetAt"], "2026-11-05T07:59:00+00:00");
-        assert_eq!(credits["windowDurationSeconds"], Value::Null);
-        assert_eq!(credits["allModels"], true);
+        let ids = reading
+            .quotas
+            .iter()
+            .map(|row| row["id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
         assert_eq!(
-            credits["nativeUsage"],
-            json!({"used": 109.05, "capacity": 250.0, "unit": "USD"})
+            ids,
+            [
+                format!("{id}:claude-session"),
+                format!("{id}:claude-weekly"),
+                format!("{id}:claude-weekly-fable"),
+            ],
+            "the cloud session credits grant is not read"
         );
-        // Without a grant there is no credits row.
-        assert_eq!(read(&installed(limits())).unwrap().quotas.len(), 2);
+        let fable = &reading.quotas[2];
+        assert_eq!(fable["name"], "Weekly limit · Fable");
+        assert_eq!(fable["shortLabel"], "Fable");
+        assert_eq!(fable["usedPercent"], 49.0);
+        assert_eq!(fable["windowDurationSeconds"], 7 * 86400);
+        assert_eq!(fable["allModels"], false);
+        assert_eq!(fable["modelFamilies"], json!(["fable"]));
     }
 
     #[test]
-    fn fables_week_never_becomes_a_row() {
-        // Both ways the service names it: its own key and a weekly_scoped entry.
+    fn fables_week_is_read_however_the_service_names_it() {
+        // Its own key and a weekly_scoped entry, by display name or by id.
         for limits in [
             json!({
                 "five_hour": {"utilization": 12.0},
@@ -908,12 +877,14 @@ mod tests {
                     "scope": {"model": {"id": "claude-fable-5-1"}}}],
             }),
         ] {
-            let keys = windows(&limits)
-                .unwrap()
-                .into_iter()
-                .map(|row| row.key)
-                .collect::<Vec<_>>();
-            assert_eq!(keys, ["claude-session", "claude-weekly"], "{limits}");
+            let rows = windows(&limits).unwrap();
+            let keys = rows.iter().map(|row| row.key.as_str()).collect::<Vec<_>>();
+            assert_eq!(
+                keys,
+                ["claude-session", "claude-weekly", "claude-weekly-fable"],
+                "{limits}"
+            );
+            assert_eq!(rows[2].percent, 95.0, "{limits}");
         }
     }
 
@@ -977,7 +948,7 @@ mod tests {
         assert_eq!(reading.quotas[0]["id"], format!("{id}:claude-session"));
         assert_eq!(reading.quotas[0]["usedPercent"], 18.0);
         assert_eq!(reading.quotas[1]["usedPercent"], 79.0);
-        assert_eq!(reading.quotas.len(), 2, "Fable's week is left out");
+        assert_eq!(reading.quotas.len(), 3, "Fable's week is read too");
         let account = reading.account.unwrap();
         assert_eq!(account["label"], "me@example.com");
         assert_eq!(account["plan"], "max_20x");

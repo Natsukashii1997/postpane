@@ -62,27 +62,27 @@ test("showing a row hidden by its window alone keeps the other account's row hid
   assert.ok(quotaRowHidden(otherFable, hidden));
 });
 
-// Claude's readings as the sidebar gets them, the panel hiding Fable.
+// Claude's readings as the sidebar gets them, the panel hiding Opus.
 const reading = (window: string, usedPercent: number, extra: object = {}) =>
   ({ ...row(window), usedPercent, ...extra }) as Quota;
 const claude = [
   reading("claude-session", 14, { shortLabel: "5h" }),
   reading("claude-weekly", 47, { shortLabel: "Weekly" }),
-  reading("claude-weekly-fable", 92, { shortLabel: "Fable" }),
-  reading("claude-cloud", 68, {
-    shortLabel: "Cloud",
+  reading("claude-weekly-opus", 92, { shortLabel: "Opus" }),
+  reading("claude-credits", 68, {
+    shortLabel: "Credits",
     metrics: { consumed: { used: 34, capacity: 50, unit: "USD" } },
   }),
 ];
-const hidingFable = {
-  blocks: { claude: { hiddenRows: [`${account}/claude-weekly-fable`] } },
+const hidingOpus = {
+  blocks: { claude: { hiddenRows: [`${account}/claude-weekly-opus`] } },
 } as unknown as PanelLayout;
 
 test("the peek lists only the windows the hover panel shows", () => {
-  const shown = claude.filter((q) => quotaRowShown(q, hidingFable));
+  const shown = claude.filter((q) => quotaRowShown(q, hidingOpus));
   assert.deepEqual(
-    shown.map((q) => peekWindowName(q, "zh")),
-    ["5h", "Weekly", "云端"],
+    shown.map((q) => peekWindowName(q)),
+    ["5h", "Weekly", "Credits"],
   );
   assert.equal(claude.filter((q) => quotaRowShown(q, undefined)).length, 4);
   // A hidden account hides its rows the same way.
@@ -95,7 +95,7 @@ test("the peek lists only the windows the hover panel shows", () => {
 test("without a weekly window the figure leads with the tightest shown window, never credits", () => {
   assert.equal(leadingWindow(claude)?.usedPercent, 92);
   assert.equal(
-    leadingWindow(claude.filter((q) => quotaRowShown(q, hidingFable)))
+    leadingWindow(claude.filter((q) => quotaRowShown(q, hidingOpus)))
       ?.usedPercent,
     47,
   );
@@ -141,16 +141,8 @@ test("the resting strip's figure leads with the weekly window, however full the 
   assert.equal(leadingWindow(weeklyStale)?.usedPercent, 11);
 });
 
-test("the peek writes Claude's cloud credits as 云端 in Chinese only", () => {
-  const cloud = { name: "Cloud session credits", shortLabel: "Cloud" };
-  assert.equal(peekWindowName(cloud, "zh"), "云端");
-  assert.equal(peekWindowName(cloud, "en"), "Cloud");
-  assert.equal(
-    peekWindowName({ name: "Weekly", shortLabel: "Weekly" }, "zh"),
-    "Weekly",
-  );
-  assert.equal(
-    peekWindowName({ name: "Current session" }, "zh"),
-    "Current session",
-  );
+test("the peek writes a window by its short name, else its name", () => {
+  const fable = { name: "Weekly limit · Fable", shortLabel: "Fable" };
+  assert.equal(peekWindowName(fable), "Fable");
+  assert.equal(peekWindowName({ name: "Current session" }), "Current session");
 });

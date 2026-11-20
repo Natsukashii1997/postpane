@@ -34,6 +34,30 @@
   - skill 进化：无。
 - 本轮新坑：无
 
+## Claude 额度第三行换回 Fable 周额度，去掉云端额度（#464）（2026-11-20，Claude，常浩「云端这条还是改成Fable额度吧」「不是改名，是claude有fable额度，我看这个不看云端额度了」；已 squash 合并（PR #467）、未发布，装机排在 #442 之后）
+
+- 时间：开工 `2026-11-20 11:04`。来由：常浩截图对比 claude.ai 用量（Current session 44%、This week 41%、Fable 49%「Up to 50% of your weekly limit」）与驿窗 Claude 卡（第三行「云端额度 97%　等待更新」）。查实：那行是 claude.ai 的 $250 云端赠额（Cloud session credits），11-05 07:59 到期后接口不再返回，驿窗沿用 11-05 的最后读数（`observedAt` 2026-11-05T07:56，状态 stale）挂了 15 天；Fable 周额度自 11-05 #92 起在读取层被丢掉。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `src/crates/agents/src/claude/account.rs`：去掉 `IGNORED_FAMILY`，Fable 周额度照其他模型族出行（`claude-weekly-fable`，短名 Fable）；不再读带 `limit_dollars` 的赠额，`Window.dollars` 与「Cloud」短名一并删掉；`dropped_windows` 从 `claude-weekly-fable` 换成 `claude-cloud-credits`，保留或重启恢复的旧云端行在投影出口滤掉（L-07）。
+    - `src/packages/hud/src/panel/window-labels.ts`：中文面板把 `Weekly limit · Fable` 叫「Fable 额度」（其他模型族仍是「每周 · Opus」这种）；删掉「云端额度」翻译。
+  - 我顺手改的：
+    - `window-labels.ts` 的 `peekWindowName` 去掉只为「Cloud → 云端」存在的语言参数，`src/packages/hud/src/scene/AgentPeek.tsx` 四处调用跟着改。
+    - `src/packages/hud/test/scenes/build.ts`：场景预览台的 Claude 补一行 Fable 49%，和实机读数一致。
+    - `src/tooling/file-size-baseline.json`：`account.rs`、`AgentPeek.tsx` 变短，收紧基线。
+    - 测试：`account.rs`（Fable 三种来源都出行、赠额不出行、网页读数含 Fable）、`platform/src/accounts/mod.rs`（旧云端行不进投影、Fable 行进）、`agent-board.test.ts`、`quota-rows.test.ts`、`quota-alert-copy.test.ts`（提醒写「Fable 额度 已用到 90%」）。
+  - 改变了已有行为（动手前已在会话里列出）：Fable 周额度从「各处不显示、不计入」变成普通周额度，显示在 Claude 看板与侧栏小卡，计入判词、预测、静止条最紧额度（只在没有全模型周额度时才可能领头）和额度提醒；云端额度行不再显示。
+- 测试：先跑红（证据 `red-rust.log`：4 failed；`red-frontend.log`：`ℹ fail 1`）。变基到 `5ce46fb` 后：`pnpm run check` 退出 0；`pnpm test` 退出 0（Rust 合计 1076 passed / 0 failed；前端 `ℹ pass 487` / `ℹ fail 0`，其余四套 `ℹ pass 9`、`14`、`46`、`11` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`。第一轮全量有 2 项失败（提醒文案测试期望旧名；我恢复演示数据 Fable 行让 `demo/data.rs`、`demo/mod.rs` 超 300 行棘轮），改为不动演示数据后重跑全过。合并前又变基到 `09b5850`（#465 只改 `scripts/hooks/`、`tests/hooks.test.mjs`，`src/` 无差异），只重跑 `node --test tests/*.test.mjs` `ℹ pass 58` / `ℹ fail 0`、`node scripts/check-rules.mjs` 退出 0，`pnpm run check` 与 `pnpm test` 沿用上一次结果。日志 `~/Library/Application Support/postpane/evidence/2026-11-20-464-fable-quota/`（`check3.log`、`test3.log`、`node3.log`）。
+- 验证：场景预览台（`scenes-464`，127.0.0.1:1480，场景 `all-running`）用真实组件看：面板 Claude 块三行「5 小时 20%」「Current week 35%」「Fable 额度 49%」；悬停 Claude 票签的小卡「5h / 7d / Fable 49%」（「Current week」「7d」是场景假数据的名字，实机是「每周」「Weekly」）。未在实机验证。
+- 截图：`evidence/2026-11-20-464-fable-quota/scene-panel-fable.jpg`、`scene-peek-fable.jpg`（预览台，不是实机）。
+- 发布与回读：未发布。现装的是 #439 worktree（PR #442，未合并）的包，常浩 11-20 定了等 #442 合并后从 main 一起装，本 PR 跟着那次装。
+- **装机待办**：装完后常浩已存的面板布局里还隐藏着 Fable 行（`blocks.claude.hiddenRows` 含 `…/claude-weekly-fable`，11-05 #58 放的），Fable 不会出来。装机的人用 HUD 工具 `draft_hud` 把这条从 `hiddenRows` 去掉，请常浩在面板点「保存」；再实机截一张补进 DECIDED.md 那行的基线截图。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 已登记 DECIDED.md：新加 11-20 一行；11-05「所有额度都不考虑 Fable」那行、11-05「侧栏 Cloud 改叫云端」那项备注写明已被取代。
+  - claude.ai 写 Fable「Up to 50% of your weekly limit」，驿窗只显示接口给的百分比（49%），没有把「占每周一半」这层关系画出来。
+  - 以后若 claude.ai 再发云端赠额，驿窗不会显示（常浩说不看）。
+- skill 进化：无。
+- 本轮新坑：L-07（补充：服务端不再返回的窗口也会挂到 30 天）。
 ## 装提交、推送前的必经检查钩子（2026-11-20，Claude，常浩批复盘 P4、P6「批（按改过的）」；已提交、PR 待合并，无需发布）
 
 - 时间：开工 `2026-11-20 11:02`。★ 来由：跨项目复盘 P6「检查脚本接进必经环节」：没有 CI 的仓库装 pre-push 钩子；P4 的 commit-msg 钩子一起装。钩子来自起步骨架 0.4.0（my-skills#112）。
@@ -43,6 +67,7 @@
 - 外部前提与实测：依赖 git 的 `core.hooksPath` 和钩子退出码，已在临时仓库实测。
 - 与授权不一致之处、遗留问题、范围外发现：无。
 - 本轮新坑：无。
+
 
 ## 「送达未确认」②：补格式的确认迟到、回信还没到时也认（#446）（2026-11-20，Claude，常浩对「送达未确认」两处改动确认回「都改」，本节是 ②；已提交、PR #451、L2 审查第 1 轮通过、未发布）
 

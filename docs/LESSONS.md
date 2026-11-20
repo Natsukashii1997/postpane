@@ -77,6 +77,8 @@
 - 证据：2026-11-05 21:23 与 21:38 两次 `hud_snapshot`，结果文件在本会话 tool-results；PR #94、#96。
 - 升级：〔提醒〕不升级（2026-11-19，积压清单组 16）：已有统一过滤出口 `Provider.dropped_windows`（`src/crates/agents/src/account.rs` 第 216 行），只碰到一次。也可以从结构上消除：把「沿用上次读数」改成只对登记过的窗口生效，改动面没评估，这次没做（积压清单第 4 节第 2 点）。
 
+- 补充（2026-11-20，#464）：服务端自己不再返回的窗口也一样。claude.ai 的云端赠额（Cloud session credits）11-05 07:59 到期后接口不再给，驿窗沿用最后读数挂了 15 天，侧栏一直「云端 97%」「等待更新」，没人察觉是过期数。看到某行长期「等待更新」，先查它的 `observedAt` 是不是早就停了；不再跟的窗口照本条进 `dropped_windows`。
+
 ## L-08 云端 Linux 容器跑 check / test，失败的原因是环境不是代码（2026-11-05）
 
 - 现象：云端会话里 `pnpm run check` 在最后的 `cargo check --workspace` 报 `failed to run custom build command for gdk-sys`（缺 `gdk-3.0`），装上后又缺 `gtk-layer-shell-0`；`pnpm test` 的 DeepSeek 插件测试 `ℹ pass 6` / `ℹ cancelled 8`，报 `Promise resolution is still pending but the event loop has already resolved`。
