@@ -52,7 +52,7 @@ impl Lines for Wired {
         conversation: &str,
         text: &str,
         request: &str,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<String>, SendFailed> {
         let (word, heard) = channel();
         *self.waiting.lock().unwrap() = Some(word);
         // The extension puts the words in and says so.
@@ -67,7 +67,7 @@ impl Lines for Wired {
         if came {
             Ok(None)
         } else {
-            Err("ChatGPT 插件没能完成：timeout".into())
+            Err(SendFailed::Unsure("ChatGPT 插件没能完成：timeout".into()))
         }
     }
     fn reread(&self, _: &str) -> Result<(), String> {

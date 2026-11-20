@@ -125,6 +125,10 @@ async function group(tabId) {
   }
 }
 
+/** Has the page put `text` in and press send. Not ok, `pressed` is what the
+ * page says of send (#466): false when it was pressed on neither try, true
+ * when on either; left out when the tab went away meanwhile, so it is not
+ * known. */
 async function submit(tabId, text) {
   try {
     let result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
@@ -135,7 +139,9 @@ async function submit(tabId, text) {
       // Some pages only accept input while the tab is in front; a draft that
       // came back in the box (#410) is emptied again on the second try.
       await chrome.tabs.update(tabId, { active: true });
+      const first = result;
       result = await chrome.tabs.sendMessage(tabId, { op: "submit", text });
+      if (!result.ok && first.pressed) result = { ...result, pressed: true };
     }
     return result;
   } catch {
@@ -175,7 +181,9 @@ async function open(text, project) {
 }
 
 async function send(conversation, text) {
-  if (!watched.has(conversation)) return { ok: false, reason: "not-watched" };
+  // Not begun: send was not pressed (#466).
+  if (!watched.has(conversation))
+    return { ok: false, reason: "not-watched", pressed: false };
   let tabId = tabFor(conversation);
   if (tabId === null) {
     const tab = await chrome.tabs.create({
@@ -185,7 +193,7 @@ async function send(conversation, text) {
     tabId = tab.id;
     await group(tabId);
     if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
-      return { ok: false, reason: "timeout" };
+      return { ok: false, reason: "timeout", pressed: false };
   }
   return submit(tabId, text);
 }

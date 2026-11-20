@@ -104,9 +104,11 @@ impl Desk {
             }
             // Never known to have gone in: the session is told (P1-14).
             // Not when word of it was heard as the send gave up (#446).
-            Err(error) => self.change(|book| {
+            // Left as it is when send was never pressed for it (#466 is
+            // of what a session sends).
+            Err(failed) => self.change(|book| {
                 if book.mending_gave_up(id, &request) {
-                    book.trouble(id, &format_failed(&error), now);
+                    book.trouble(id, &format_failed(failed.text()), now);
                     book.unconfirmed(id, &super::guard::send_unconfirmed(), true, now);
                 }
                 true

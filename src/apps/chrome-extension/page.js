@@ -298,13 +298,18 @@
     return true;
   }
 
-  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`,
-   * and `promptId`, ChatGPT's id of the prompt it became, once the page
-   * shows it (#410). */
+  /** Words that did not go, send never pressed for them: they are not in
+   * the conversation, and PostPane lets them go again (#466). */
+  const unsent = (reason) => ({ ok: false, reason, pressed: false });
+
+  /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
+   * not ok, `pressed` says whether send was pressed (then they may have
+   * gone all the same); ok, `promptId`, ChatGPT's id of the prompt it
+   * became, once the page shows it (#410). */
   async function submit(doc, text) {
-    if (streaming(doc)) return { ok: false, reason: "busy" };
+    if (streaming(doc)) return unsent("busy");
     const box = await waitFor(() => doc.querySelector(SEL.composer), 15000);
-    if (!box) return { ok: false, reason: "no-composer" };
+    if (!box) return unsent("no-composer");
     box.focus();
     // A draft ChatGPT kept (an earlier turn's words) would go out in front of
     // these (#410): the box is emptied first, and send is waited off, so the
@@ -317,7 +322,7 @@
     // Send lit with the box empty: an attachment an earlier try left beside
     // the box, which emptying it does not reach, would go out with these
     // words and be reviewed in their place (#429).
-    if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+    if (sendReady(doc)) return unsent("composer-mismatch");
     // Pasted, the box holds the words as typed: spaces aside, the very same
     // ones (#435 review P1-01). Typed in when paste is not taken, a few
     // characters either way (`holds`).
@@ -328,18 +333,18 @@
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
       // the page would show no words to know the answer by.
-      if (sendReady(doc)) return { ok: false, reason: "composer-mismatch" };
+      if (sendReady(doc)) return unsent("composer-mismatch");
       doc.execCommand("selectAll", false);
       doc.execCommand("insertText", false, text);
       held = () => holds(box, text);
       button = await waitFor(() => sendReady(doc), 5000);
     }
-    if (!button) return { ok: false, reason: "send-failed" };
-    if (!held()) return { ok: false, reason: "composer-mismatch" };
+    if (!button) return unsent("send-failed");
+    if (!held()) return unsent("composer-mismatch");
     const before = lastPromptId(doc);
     button.click();
     const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
-    if (!started) return { ok: false, reason: "send-failed" };
+    if (!started) return { ok: false, reason: "send-failed", pressed: true };
     const promptId = await waitFor(() => {
       const id = lastPromptId(doc);
       return id && id !== before ? id : null;

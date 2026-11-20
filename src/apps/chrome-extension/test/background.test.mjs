@@ -326,3 +326,73 @@ test("a read again says whether it was told, in front or not, still written, or 
   await other.listeners.port({ type: "reread", conversation: "other" });
   assert.deepEqual(readsOf(none), []);
 });
+
+// #466: words send was never pressed for did not go, and PostPane lets them
+// go again; pressed on either try, or the tab gone meanwhile, it cannot
+// know, and stays unsure of them. What the extension tells of each sending.
+const sending = async (answers, { watched = true, dead = false } = {}) => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const posted = [];
+  const tab = {
+    id: 7,
+    url: `https://chatgpt.com/c/${conversation}`,
+    active: false,
+    windowId: 1,
+  };
+  const { listeners } = load([tab], {
+    posted,
+    watched: watched ? [conversation] : [],
+    answers: [...answers],
+    dead: new Set(dead ? [7] : []),
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  listeners.message(
+    { type: "page", conversation, hidden: true, streaming: false },
+    { tab: { id: 7 } },
+  );
+  await listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation,
+    text: "下一轮",
+  });
+  const [sent] = posted.filter((m) => m.type === "sent");
+  return sent;
+};
+const unsent = (reason, pressed) => ({ ok: false, reason, pressed });
+
+test("a sending says whether send was pressed, on either try", async () => {
+  assert.deepEqual(await sending([unsent("busy", false)]), {
+    type: "sent",
+    requestId: "r1",
+    ...unsent("busy", false),
+  });
+  const twice = [
+    unsent("composer-mismatch", false),
+    unsent("composer-mismatch", false),
+  ];
+  assert.equal((await sending(twice)).pressed, false);
+  // Pressed the first time: whatever the second try says, it may have gone.
+  const pressedFirst = await sending([
+    unsent("send-failed", true),
+    unsent("busy", false),
+  ]);
+  assert.deepEqual(
+    [pressedFirst.ok, pressedFirst.reason, pressedFirst.pressed],
+    [false, "busy", true],
+  );
+  const wentSecond = await sending([unsent("send-failed", true), { ok: true }]);
+  assert.equal(wentSecond.ok, true);
+});
+
+test("a sending never begun is told as not pressed, a tab gone meanwhile as not known", async () => {
+  assert.deepEqual(await sending([], { watched: false }), {
+    type: "sent",
+    requestId: "r1",
+    ...unsent("not-watched", false),
+  });
+  const gone = await sending([], { dead: true });
+  assert.equal(gone.reason, "tab-closed");
+  assert.equal("pressed" in gone, false);
+});

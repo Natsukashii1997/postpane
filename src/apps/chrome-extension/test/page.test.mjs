@@ -79,7 +79,7 @@ test("submit fills the composer, sends, and sees streaming start", async () => {
   );
   assert.deepEqual(
     await page.evaluate(() => PostPanePage.submit(document, "again")),
-    { ok: false, reason: "busy" },
+    { ok: false, reason: "busy", pressed: false },
   );
 });
 
@@ -228,6 +228,7 @@ test("words that did not go in as text are not sent", async () => {
   assert.deepEqual(await send(fresh, brief(100)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -238,6 +239,7 @@ test("a later piece turned attachment stops the sending", async () => {
   assert.deepEqual(await send(fresh, brief(800)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 2);
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
@@ -252,8 +254,52 @@ test("an attachment already in the composer is not sent along", async () => {
   assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
+// #466: PostPane takes words send was never pressed for as not sent, and
+// lets them go again; pressed with nothing seen to start, they may have
+// gone, so it stays unsure of them.
+test("a press that starts nothing is told as pressed", async () => {
+  const fresh = await composer();
+  await fresh.evaluate(() => {
+    document.getElementById("slot").addEventListener(
+      "click",
+      (event) => {
+        window.pressed = true;
+        event.stopImmediatePropagation();
+      },
+      true,
+    );
+  });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "send-failed",
+    pressed: true,
+  });
+  assert.equal(await fresh.evaluate(() => window.pressed), true);
+  await fresh.close();
+});
+
+test("send that never lights is told as not pressed", async () => {
+  const fresh = await composer();
+  await fresh.evaluate(() => {
+    const slot = document.getElementById("slot");
+    // Whatever lights it, it is put out again (once: the same value set
+    // again would call the observer again).
+    new MutationObserver(() => {
+      if (!slot.disabled) slot.disabled = true;
+    }).observe(slot, { attributes: true });
+  });
+  assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
+    ok: false,
+    reason: "send-failed",
+    pressed: false,
+  });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
 });
@@ -295,6 +341,7 @@ test("a piece that went in short stops the sending", async () => {
   assert.deepEqual(await send(fresh, brief(800)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -305,6 +352,7 @@ test("words the page changed, as many characters, are not sent", async () => {
   assert.deepEqual(await send(fresh, brief(20)), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
   await fresh.close();
@@ -331,6 +379,7 @@ test("a draft with an attachment left beside it is not sent along", async () => 
   assert.deepEqual(await send(fresh, "P1-05 专项复核"), {
     ok: false,
     reason: "composer-mismatch",
+    pressed: false,
   });
   assert.equal(await fresh.evaluate(() => window.pastes.length), 0);
   assert.equal(await fresh.evaluate(() => window.sent), undefined);

@@ -8,6 +8,19 @@ impl Desk {
     pub(super) fn asking(&self) -> MutexGuard<'_, HashMap<String, Asking>> {
         self.asking.lock().unwrap_or_else(|p| p.into_inner())
     }
+    /// Send was never pressed for the words asked as `request` (#466): the
+    /// handoff is as before they were asked, and they may go again. What
+    /// the session that asked hears.
+    pub(super) fn not_sent(&self, id: &str, request: &str, error: &str, now: i64) -> String {
+        let mut asking = self.asking();
+        if asking.get(id).is_some_and(|a| a.request == request) {
+            asking.remove(id);
+        }
+        drop(asking);
+        let note = super::guard::not_sent_note(error);
+        self.change(|book| book.not_sent(id, request, &note, now));
+        super::guard::not_sent(error)
+    }
     /// Words asked as `request` went into ChatGPT (as prompt `asked_id`,
     /// #410): into the book once, whichever of `ask` and the extension's
     /// late word comes first.

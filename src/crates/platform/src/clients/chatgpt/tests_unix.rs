@@ -228,3 +228,43 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     assert!(!focus("68a1"));
     assert!(channel.reread("68a1").is_err(), "no extension to ask");
 }
+
+/// #466: of words that did not go, the channel says whether send was never
+/// pressed (they are not in the conversation) or it is not known.
+#[test]
+fn a_send_that_did_not_go_says_whether_send_was_pressed() {
+    let temp = tempfile::Builder::new().prefix("").tempdir().unwrap();
+    let data = temp.path().join("d");
+    let channel = Arc::new(Channel::start(data.clone()).unwrap());
+    // No extension: the words never left PostPane.
+    let unposted = channel.send_as("68a1", "第 2 轮", Some("h1~send1"));
+    assert!(matches!(unposted, Err(SendFailed::NotPressed(_))));
+
+    let mut extension = connect(&data);
+    assert_eq!(next(&mut extension)["type"], "watch");
+    for (said, not_pressed) in [
+        (json!({"ok":false,"reason":"busy","pressed":false}), true),
+        (
+            json!({"ok":false,"reason":"send-failed","pressed":true}),
+            false,
+        ),
+        // An older extension, or a tab closed meanwhile: it does not say.
+        (json!({"ok":false,"reason":"tab-closed"}), false),
+    ] {
+        let sender = channel.clone();
+        let sending =
+            std::thread::spawn(move || sender.send_as("68a1", "第 2 轮", Some("h1~send2")));
+        let send = next(&mut extension);
+        let mut answer = said.clone();
+        answer["type"] = json!("sent");
+        answer["requestId"] = send["requestId"].clone();
+        write_frame(&mut extension, &answer, OUTBOUND_LIMIT).unwrap();
+        let failed = sending.join().unwrap().unwrap_err();
+        assert_eq!(
+            matches!(failed, SendFailed::NotPressed(_)),
+            not_pressed,
+            "{said}"
+        );
+        assert!(failed.text().contains(said["reason"].as_str().unwrap()));
+    }
+}

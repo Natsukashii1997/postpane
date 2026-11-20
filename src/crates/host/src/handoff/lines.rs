@@ -4,6 +4,7 @@
 //! through Codex's own queue, as agent messages send (#278).
 use super::{no_plugin, Lines, Unsent, CLAUDE, CODEX};
 use crate::messages::DeliveryClients;
+use agent_hud_runtime::chatgpt::SendFailed;
 use agent_hud_runtime::claude_plugin::Opener;
 use agent_hud_runtime::delivery::{
     DeliveryState, LocalClients, Operation, PromptForm, Provider, SendRequest, SessionTarget,
@@ -46,14 +47,13 @@ impl Lines for AppLines<'_> {
         conversation: &str,
         text: &str,
         request: &str,
-    ) -> Result<Option<String>, String> {
-        let state = self
-            .0
-            .try_state::<crate::chatgpt::ChatGpt>()
-            .ok_or("The ChatGPT channel is unavailable")?;
-        let sent = state
-            .channel()?
-            .send_as(conversation, text, Some(request))?;
+    ) -> Result<Option<String>, SendFailed> {
+        // No channel: the words never left PostPane.
+        let unsent = |error: &str| SendFailed::NotPressed(error.to_owned());
+        let state = self.0.try_state::<crate::chatgpt::ChatGpt>();
+        let state = state.ok_or_else(|| unsent("The ChatGPT channel is unavailable"))?;
+        let channel = state.channel().map_err(|error| unsent(&error))?;
+        let sent = channel.send_as(conversation, text, Some(request))?;
         Ok(sent["promptId"].as_str().map(str::to_owned))
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {

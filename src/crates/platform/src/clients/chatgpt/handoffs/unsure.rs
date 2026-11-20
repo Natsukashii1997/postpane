@@ -73,6 +73,10 @@ pub struct Pending {
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
+    /// What was unsure before these were asked: put back when send was
+    /// never pressed for them (#466). Not kept.
+    #[serde(skip)]
+    pub before: Option<Box<Pending>>,
 }
 
 impl Pending {
@@ -145,7 +149,31 @@ impl Book {
         let Some(handoff) = self.live_mut(id) else {
             return false;
         };
-        handoff.gate.pending = Some(pending.kept());
+        let before = handoff.gate.pending.take().map(Box::new);
+        handoff.gate.pending = Some(Pending {
+            before,
+            ..pending.kept()
+        });
+        true
+    }
+    /// Send was never pressed for the review asked as `request` (#466): it
+    /// is not in the conversation. The handoff is unsure of what it was
+    /// before these words were asked, and of no more; `note` goes on the
+    /// card, and the round trip is left as it is.
+    pub fn not_sent(&mut self, id: &str, request: &str, note: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        let asked = |p: &Pending| p.request == request && !p.answered;
+        if !handoff.gate.pending.as_ref().is_some_and(asked) {
+            return false;
+        }
+        let before = handoff.gate.pending.take().and_then(|p| p.before);
+        handoff.gate.pending = before.map(|before| *before);
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
+        handoff.updated_at = now;
         true
     }
     /// Word that `request` went in came after its answer (P1-12): it goes on
