@@ -20,7 +20,7 @@ pub fn notices_since(data: &Path, now: i64) -> i64 {
     }
     let bytes = serde_json::json!({ "since": now }).to_string();
     if let Err(error) = write_private(data, "notices", bytes.as_bytes(), &path) {
-        eprintln!("{error}");
+        agent_hud_core::note!("{error}");
     }
     now
 }

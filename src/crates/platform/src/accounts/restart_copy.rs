@@ -126,6 +126,6 @@ pub(super) fn save(data_dir: &Path, copy: &Value) {
         written.map_err(|error| error.to_string())
     })();
     if let Err(error) = result {
-        eprintln!("The restart copy of account readings could not be saved: {error}");
+        agent_hud_core::note!("The restart copy of account readings could not be saved: {error}");
     }
 }

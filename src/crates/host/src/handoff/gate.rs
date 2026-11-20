@@ -55,7 +55,7 @@ impl Desk {
         });
         // As it came, before the handoff cuts it to its own length (#347).
         if let Err(error) = handoffs::archive(data, id, n, reply.trim()) {
-            eprintln!("{error}");
+            agent_hud_runtime::note!("{error}");
         }
     }
     /// What PostPane adds to the next review of handoff `id` (#347), the

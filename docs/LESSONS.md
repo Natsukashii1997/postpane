@@ -596,3 +596,19 @@
 - 正确做法：改侧栏悬停、离开、展开的逻辑时，原生路径和网页路径各过一遍；判定写成两边共用的纯函数（这次是 `request-hover.ts` 的 `onSidebar`、`peek-expand.ts` 的 `peekGrowing`），测试覆盖。场景预览台只走网页路径，原生路径的结果只能装机看。
 - 证据：issue #480；`~/Library/Application Support/postpane/evidence/2026-11-20-480-pendant-hover/`（`red.log` 改前红，`check2.log`、`test2.log`、`node2.log`）。测试：`request-hover.test.ts`「a pendant hangs outside the sidebar…」、`peek-expand.test.ts`「a peek grows into its panel only while the pointer stays on the sidebar」。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查）。
+
+## L-63 整套 platform 测试并行跑时，`the_extension_opens_a_conversation_and_reports_its_reply` 偶发失败，main 上也一样（2026-11-20）
+
+- 现象：#486 改动后 `cargo test -p agent-hud-platform --lib` 三次里挂了两次，都是这一条，断言是 `tests_unix.rs:195` 的 `assert!(focus("68a1"))`。当时机器负载均值 20–80（别的会话在编译）。
+- 根因：没查到底。能确定的两点：这条测试跑的时候走不到 #486 改过的代码（`--nocapture` 下没有任何输出）；main 上同样会挂。单跑这一条，main 和 #486 分支交替各 80 次都过；整套并行交替各 15 次，main 挂 2 次、分支挂 2 次，都是这一条。`focus` 读的是进程里共用的一个全局通道（`commands.rs` 的 `CURRENT`），同一进程里并行的别的测试也会换它，像是测试之间抢这个全局量（推断，没证实）。
+- 正确做法：这条失败先别归到自己的改动上，也别直接当偶发放过：在 main 和自己的分支上交替各跑同样多次，比失败率；一样就写进交接，按范围外发现报，不为它改代码。全量里它挂了，等负载降下来重跑。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/flake-compare.txt`（整套并行交替各 15 次，记了每次挂的是哪条）、`platform-rerun-2.log`。
+- 升级：〔提醒〕未升级。
+
+## L-64 隔离起一份打好的应用做验证，只换数据目录不够：它启动时会把 Claude Code 插件改装到自己的目录下（2026-11-20）
+
+- 现象：没有发生，动手前读代码拦下的。#486 要在真应用里验日志落盘，原打算 `AGENTHUD_DATA_DIR=<临时目录>` 另起一份打好的包。
+- 根因：应用启动时会修各家登记（`claude_plugin::repair_on_launch`）：Claude Code 里的驿窗插件如果是从「别的目录」装的，就从自己的数据目录重装一遍。隔离实例眼里，常浩正在用的那份就是「别的目录」；它一启动，正在用的插件会被指到临时目录，之后的转回、左滑都送不到真应用。只换数据目录时，它读的仍是真的 `~/.claude`。
+- 正确做法：隔离验证连主目录一起换。应用的主目录只认 `$HOME`（`os/macos/mod.rs` 的 `home_dir`），数据目录、Claude 配置、各家登记都从它推出来：`env -i HOME=<证据目录下的空文件夹> PATH=/usr/bin:/bin:/usr/sbin:/sbin <包里的主程序>`。不在 `/Applications` 里的副本不认领客户端钩子，也不抢共用锁。启动前后各记一次 `shasum ~/.claude/plugins/installed_plugins.json`，确认没变；停它只按自己记下的进程号 `kill`，不用 `pkill -f`（G-32）。屏幕上会多出一条侧栏，验完就关。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/iso-run1-postpane.log`（隔离实例写出的启动行和 panic 一段）；验证前后插件登记的校验值都是 `8c45e265e598`。
+- 升级：〔提醒〕未升级。

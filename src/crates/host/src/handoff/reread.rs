@@ -43,7 +43,7 @@ impl Desk {
             // Passed on, it waits its two minutes; not, it is tried again
             // after `RETRY_MS` (counted as if asked that much earlier).
             if let Err(error) = lines.reread(&conversation) {
-                eprintln!("{error}");
+                agent_hud_runtime::note!("{error}");
                 asked.insert(id, now - AGAIN_MS + RETRY_MS);
                 continue;
             }

@@ -50,7 +50,8 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 
 装完不对劲时，先查实再改代码；诊断循环照全局 `diagnosing-bugs` 走，这里只列驿窗现成的手段：
 
-- 应用日志：`log show --last 5m --predicate 'process == "PostPane"' --style compact`。
+- 应用自己报的错（保存失败、送不出去、任何线程的 panic）：`tail -n 80 ~/Library/Application\ Support/app.postpane.mac/logs/postpane.log`（#486）。每次启动先写一行 `==== PostPane … started`，panic 是 `PANIC on thread …` 开头的一段，带调用栈；超过 2 MB 的旧内容在同目录 `postpane.1.log`、`postpane.2.log`。从终端启动的那份不写文件，报错直接在终端。
+- 系统框架的日志（WebKit、窗口服务，看不到上面那些）：`log show --last 5m --predicate 'process == "PostPane"' --style compact`。
 - 卡住、不响应：`sample <pid> 1 -file <证据目录>/sample.txt`，看哪个线程停在哪；L-06 就是这样查到数据线程卡在文稿权限上的。
 - 本机服务是否在听、端口对不对：`lsof -iTCP:<端口> -sTCP:LISTEN`，再用 `curl` 打 `127.0.0.1` 看返回。
 - 注入到 WebKit 窗口里的脚本：让页面把状态写进 `document.title`，壳落盘后读（L-10 的标题通道）。

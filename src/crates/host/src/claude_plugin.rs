@@ -168,7 +168,9 @@ pub(crate) fn repair_on_launch(app: &tauri::AppHandle) {
             )
         });
         if let Err(error) = result {
-            eprintln!("The Claude Code plugin could not be installed from this app: {error}");
+            agent_hud_runtime::note!(
+                "The Claude Code plugin could not be installed from this app: {error}"
+            );
         }
     });
 }
