@@ -34,10 +34,13 @@ function load(
     installs = {},
     gate = null,
     faults = {},
-    // When each tab's page began loading; by default an hour from now, long
-    // after anything was registered.
-    born = {},
+    // Whether mark.js went into a document as it loaded, by document: by
+    // default only into one loaded again since the test began (`doc-2-…`),
+    // not into the first one of each tab, open from before.
+    marks = {},
     sendGates = [],
+    // The reads due 20 s after words went out, held for the test to run.
+    held = null,
   } = {},
 ) {
   const listeners = {};
@@ -61,10 +64,17 @@ function load(
         get: async (keys) => {
           if (faults.restore && [keys].flat().includes("shadowLedger"))
             throw new Error("storage unavailable");
+          // What a switching reads of the switch, held back by the test.
+          if (faults.switchGate && [keys].flat().includes("shadowArm"))
+            await faults.switchGate();
           return { watched, ...stored };
         },
-        set: async (values) =>
-          void Object.assign(stored, JSON.parse(JSON.stringify(values))),
+        set: async (values) => {
+          // What a switching writes of the switch, held back by the test.
+          if (faults.writeGate && "shadowStops" in values)
+            await faults.writeGate();
+          Object.assign(stored, JSON.parse(JSON.stringify(values)));
+        },
       },
     },
     tabs: {
@@ -104,30 +114,30 @@ function load(
         registered.push(["on", JSON.parse(JSON.stringify(scripts))]);
       },
       unregisterContentScripts: async ({ ids }) => {
+        if (faults.unregister) throw new Error("Could not unregister");
         if (!stored.registered) throw new Error("Nonexistent script ID");
         stored.registered = false;
         registered.push(["off", [...ids]]);
       },
       getRegisteredContentScripts: async () =>
-        stored.registered ? [{ id: "postpane-data" }] : [],
+        stored.registered
+          ? [{ id: "postpane-data" }, { id: "postpane-mark" }]
+          : [],
       executeScript: async ({ target, files, world, func, args }) => {
         // A function run in the page (#488): what the page in that tab
         // answers. `unreachable` tabs take no script at all.
         if (unreachable.has(target.tabId)) throw new Error("Cannot access");
         const documentId = docs[target.tabId] ?? `doc-${target.tabId}`;
-        if (func?.name === "bornAt") {
+        if (func?.name === "loadedWithData") {
           called.push([
             target.tabId,
-            "bornAt",
-            [...(target.documentIds ?? [])],
+            "loadedWithData",
+            [...(target.documentIds ?? []), world ?? "ISOLATED"],
           ]);
-          if (faults.noDocumentId) return [{ result: born[target.tabId] }];
-          return [
-            {
-              documentId,
-              result: born[target.tabId] ?? Date.now() + 3600e3,
-            },
-          ];
+          const marked =
+            marks[documentId] ?? documentId !== `doc-${target.tabId}`;
+          if (faults.noDocumentId) return [{ result: marked }];
+          return [{ documentId, result: marked }];
         }
         if (faults.noDocumentId && func?.name === "readInPage") {
           called.push([target.tabId, func.name, [...args]]);
@@ -164,6 +174,7 @@ function load(
     // as a timer does, after what is already on its way.
     setTimeout: (fn, ms) => {
       waits.push(ms);
+      if (held && ms === 20000) return held.push(fn);
       if (now) setImmediate(fn);
       return 0;
     },
@@ -768,8 +779,9 @@ async function shadowed(options = {}) {
     unreachable: new Set(),
     docs: {},
     faults: {},
-    born: {},
+    marks: {},
     sendGates: [],
+    held: null,
     ...options,
   };
   delete kit.more;
@@ -857,6 +869,14 @@ test("the shadow switch puts data.js in chatgpt.com pages' own world, the ones o
           runAt: "document_start",
           world: "MAIN",
         },
+        // Its mark, in the same call (review round 4, P1-01).
+        {
+          id: "postpane-mark",
+          js: ["mark.js"],
+          matches: ["https://chatgpt.com/*"],
+          runAt: "document_start",
+          world: "ISOLATED",
+        },
       ],
     ],
   ]);
@@ -874,7 +894,10 @@ test("switched off, data.js is taken out of the pages it is in, and said so", as
   const kit = await shadowed();
   await kit.watch(true);
   await kit.watch();
-  assert.deepEqual(kit.registered[1], ["off", ["postpane-data"]]);
+  assert.deepEqual(kit.registered[1], [
+    "off",
+    ["postpane-data", "postpane-mark"],
+  ]);
   // Stopped, then once what was on its way has ended, stopped again.
   assert.deepEqual(kit.stopsAsked(), [2, 3, 2, 3]);
   assert.equal(kit.stored.shadow, false);
@@ -1040,7 +1063,9 @@ test("a restarted worker goes by what the extension kept: stops still hold, and 
   };
   const off = await shadowed({ stored: { ...kept } });
   await off.watch();
-  assert.deepEqual(off.registered, [["off", ["postpane-data"]]]);
+  assert.deepEqual(off.registered, [
+    ["off", ["postpane-data", "postpane-mark"]],
+  ]);
   assert.equal(off.stored.shadow, false);
   assert.deepEqual(off.stopsAsked(), [2, 3, 2, 3]);
   const kit = await shadowed({ stored: { ...kept } });
@@ -1401,20 +1426,20 @@ test("a summary takes UUIDs, data.js's words for a message's kinds, and only the
   );
 });
 
-// #488 review round 3, P1-01: trusted takes evidence that data.js went in as
-// the page loaded; a page with no such evidence is not trusted, whatever was
-// or was not kept of it.
-test("a page is trusted only on evidence: begun after data.js was registered, its document known", async () => {
+// #488 review round 3 and 4, P1-01: trusted takes evidence that data.js
+// went in as the page loaded: mark.js's mark in that very document, asked
+// for in the extension's own world. No mark, or no document named: not
+// trusted, whatever was or was not kept of the page, whatever the clocks.
+test("a page is trusted only on evidence: mark.js's mark in that very document", async () => {
   const kit = await shadowed({
     answers: [{ outcome: "read" }, { outcome: "read" }, { outcome: "read" }],
   });
   await kit.watch(true);
   // What was kept of the pages put in is gone (as when the oldest are let
-  // go): the page in tab 2 began before data.js was registered.
+  // go): the page in tab 2, open from before, has no mark.
   kit.stored.shadowDocs = {};
   const again = await shadowed({
     stored: { ...kit.stored },
-    born: { 2: 0 },
     answers: [{ outcome: "read" }, { outcome: "read" }, { outcome: "read" }],
   });
   await again.watch(true);
@@ -1422,12 +1447,11 @@ test("a page is trusted only on evidence: begun after data.js was registered, it
   await settle();
   // Asked of that very document, in the extension's own world.
   assert.deepEqual(
-    again.called.filter(([, name]) => name === "bornAt").at(-1),
-    [2, "bornAt", ["doc-2"]],
+    again.called.filter(([, name]) => name === "loadedWithData").at(-1),
+    [2, "loadedWithData", ["doc-2", "ISOLATED"]],
   );
-  // A page loaded since: trusted.
+  // A page loaded since data.js was registered: marked, trusted.
   again.docs[2] = "doc-2-new";
-  again.born[2] = Date.now() + 60e3;
   again.complete(2, SHADOWED, { promptId: P(2) });
   await settle();
   // No document named: not trusted.
@@ -1460,7 +1484,6 @@ test("switched off while data.js is being registered: it ends unregistered", asy
     ["on", "off"],
   );
   assert.equal(kit.stored.shadowDisarm.pending, false);
-  assert.equal(kit.stored.shadowRegisteredAt, null);
   assert.equal(kit.shadows().at(-1).outcome, "disarmed");
   // Switched on and off at once: nothing is left put in either.
   const quick = await shadowed();
@@ -1483,7 +1506,9 @@ test("what was read cannot be restored: data.js is not registered, and one regis
     stored: { registered: true, shadow: true },
   });
   await kit.watch(true);
-  assert.deepEqual(kit.registered, [["off", ["postpane-data"]]]);
+  assert.deepEqual(kit.registered, [
+    ["off", ["postpane-data", "postpane-mark"]],
+  ]);
   assert.equal(kit.stored.registered, false);
   assert.deepEqual(kit.injected, []);
   assert.deepEqual(kit.stopsAsked(), [2, 3]);
@@ -1569,4 +1594,101 @@ test("words sent twice that come back out of order: the later words' prompt stay
       .sort(),
     [P(1), P(2)],
   );
+});
+
+// #488 review round 4, P1-02: switched off while a switching on still reads
+// or writes what was kept of the switch, it ends with nothing registered.
+test("switched off while the switch-on reads or writes what was kept: nothing is left registered", async () => {
+  for (const gate of ["switchGate", "writeGate"]) {
+    let letGo;
+    const held = new Promise((resolve) => (letGo = resolve));
+    const kit = await shadowed({ faults: { [gate]: () => held } });
+    const on = kit.watch(true);
+    await settle();
+    kit.faults[gate] = null;
+    const off = kit.watch();
+    await settle();
+    letGo();
+    await on;
+    await off;
+    await settle();
+    assert.ok(!kit.stored.registered, `${gate}: left registered`);
+    assert.notEqual(kit.stored.shadow, true, gate);
+    assert.deepEqual(kit.injected, [], `${gate}: put into pages`);
+  }
+});
+
+test("switched off with data.js registered though nothing kept says so: it is taken out", async () => {
+  const kit = await shadowed({ stored: { registered: true } });
+  await kit.watch(false);
+  assert.equal(kit.stored.registered, false);
+  assert.equal(kit.shadows().at(-1).outcome, "disarmed");
+});
+
+// #488 review round 4, P1-03: what was read not known, taking data.js out
+// that fails is kept as not done, with the tabs, and tried again.
+test("what was read not known: taking data.js out that fails stays pending, and is tried again", async () => {
+  const kit = await shadowed({
+    faults: { restore: true, unregister: true },
+    stored: { registered: true, shadow: true },
+  });
+  kit.unreachable.add(3);
+  await kit.watch(true);
+  assert.deepEqual(kit.stored.shadowArm, {
+    pending: true,
+    ledger: false,
+    unregistered: false,
+    failed: [3],
+    at: kit.stored.shadowArm.at,
+  });
+  assert.equal(kit.stored.registered, true);
+  kit.faults.unregister = false;
+  kit.unreachable.delete(3);
+  await kit.watch(true);
+  assert.equal(kit.stored.registered, false);
+  assert.deepEqual(
+    [kit.stored.shadowArm.unregistered, kit.stored.shadowArm.failed],
+    [true, []],
+  );
+  assert.equal(kit.stored.shadowArm.pending, true, "still not read");
+  assert.deepEqual(kit.stopsAsked(), [2, 2, 3]);
+});
+
+// #488 review round 4, P2-08: a read due 20 s after words went out does not
+// outlive the switch going off and on again.
+test("a read due 20 s after words went out is not made once the switch went off, even on again", async () => {
+  const held = [];
+  const kit = await shadowed({
+    held,
+    answers: [
+      { ok: true, promptId: P(1) },
+      { ok: true, promptId: P(2) },
+    ],
+  });
+  await kit.watch(true);
+  await kit.listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation: SHADOWED,
+    text: "words",
+  });
+  await settle();
+  assert.equal(held.length, 1);
+  await kit.watch();
+  await kit.watch(true);
+  held[0]();
+  await settle();
+  assert.deepEqual(kit.reads(), []);
+  assert.ok(!kit.shadows().some((told) => told.why === "writing"));
+  // Words sent since are read 20 s on, as before.
+  await kit.listeners.port({
+    type: "send",
+    requestId: "r2",
+    conversation: SHADOWED,
+    text: "words",
+  });
+  await settle();
+  held[1]();
+  await settle();
+  assert.deepEqual(kit.reads(), [[2, SHADOWED, P(2)]]);
 });

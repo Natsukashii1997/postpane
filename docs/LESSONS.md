@@ -619,6 +619,6 @@
 - 现象：#488 第 2 轮审查指出，`data.js` 放在页面上的句柄带一个公开的 `start()`，页面自己就能调它重新开始旁听；再装一份时直接调已有句柄的 `start()`，页面先放一个假句柄就能顶替。原拟「用闭包里的私有 Symbol 认出自己的句柄、文件再次执行时重新启用」，动手时发现做不到。
 - 根因：每次执行都是一个新闭包，第一次执行的私有 Symbol 第二次拿不到；写死在文件里的常量，页面用 `Function.prototype.toString` 就能从句柄的函数里读出来。另外，`registerContentScripts` 登记的那份跑出的结果插件后台看不到，只有 `executeScript` 的结果带 `documentId` 和脚本的返回值。
 - 正确做法：主世界里的句柄只给停用这种收得回的能力，停用是永久的，没有重新启用的入口（关掉再打开要刷新页面）。脚本发现句柄已经在了一律让开，返回 `present`；可信与否由插件后台按「谁装的」判断：后台用 `executeScript` 补装过的页面按 `documentId` 记下来（`installed` 记晚装、`present` 记冲突），不信页面说的。
-- 补充（同日，第 3 轮审查）：可信要靠正面证据，「不在不可信名单里」不算（名单一淘汰、或补装时没拿到 `documentId`，补装页就被当成可信了）。做法：后台记下登记时间，读完再用 `executeScript` 在插件的隔离环境（不写 `world`，页面脚本碰不到）按同一个 `documentId` 取 `performance.timeOrigin`，页面开始加载比登记晚才算可信。句柄按固定的属性名取，不经 `Symbol.for`：页面能换掉 `Symbol.for`，换不掉已经放上的不可配置属性。
+- 补充（同日，第 3 轮审查）：可信要靠正面证据，「不在不可信名单里」不算（名单一淘汰、或补装时没拿到 `documentId`，补装页就被当成可信了）。做法：和 `data.js` 同一次登记一份跑在插件隔离环境里的 `mark.js`，它在那里留一个标记；读完再用 `executeScript`（不写 `world`，就是插件的隔离环境，页面和别的扩展都碰不到）按同一个 `documentId` 查标记，有才算可信。第 4 轮审查否掉了先前「比较页面 `performance.timeOrigin` 和后台 `Date.now()`」的做法：前者走单调时钟，后者会随系统校时跳，两者不能当安全边界比较。句柄按固定的属性名取，不经 `Symbol.for`：页面能换掉 `Symbol.for`，换不掉已经放上的不可配置属性。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/round3-red.log`（新测试放到第 2 轮受审版本上跑的结果）及同目录 `round3-red-说明.txt`；第 3 轮审查那部分见 `round4-red.log`、`round4-red-说明.txt`。
 - 升级：〔提醒〕未升级。
