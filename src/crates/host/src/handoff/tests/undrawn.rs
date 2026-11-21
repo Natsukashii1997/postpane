@@ -62,7 +62,7 @@ fn two_reads_in_a_row_finding_the_answer_undrawn_leave_it_to_the_person() {
     desk.observe(&turn("complete", "1. 少一项\n结论：需修改"), 9);
     assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
     // No second stop: the 30 minutes no longer apply to it.
-    assert!(!desk.late(2 + handoffs::REPLY_WAIT_MS + 1));
+    assert!(!desk.late(2 + book::REPLY_WAIT_MS + 1));
 }
 
 #[test]

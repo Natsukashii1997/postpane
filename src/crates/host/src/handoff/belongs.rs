@@ -27,7 +27,7 @@
 //! whose prompt is only that attachment counts for words long enough to
 //! have been made one.
 use super::Desk;
-use agent_hud_runtime::chatgpt::handoffs::{Book, Handoff, StepKind, EXCERPT};
+use crate::handoff::book::{Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
 
 /// The words without their spaces and inline-code marks, and without

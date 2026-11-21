@@ -1,10 +1,10 @@
 //! Who does a handoff's work (#280, #282): Claude Code unless the record
 //! says Codex. Texts name the doer as Claude; `by_doer` gives a Codex
-//! one's as Codex. Moved out of handoffs.rs for the 300-line ratchet.
+//! one's as Codex. Moved out of book.rs (then handoffs.rs) for the 300-line ratchet.
 
 use super::Book;
-use crate::claude_plugin::Opener;
-use crate::clients::codex::{data_directory, turns};
+use agent_hud_runtime::claude_plugin::Opener;
+use agent_hud_runtime::codex::{data_directory, turns};
 
 /// The doer's name as texts give it.
 pub fn doer_name(doer: Option<&str>) -> &'static str {

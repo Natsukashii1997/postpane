@@ -17,7 +17,7 @@ use std::{
 
 mod commands;
 pub(crate) use commands::focus;
-pub mod handoffs;
+pub mod files;
 mod manifest;
 mod sending;
 pub mod shadow;
@@ -117,7 +117,7 @@ pub fn bridge(arguments: &[String], data: &Path) -> Option<i32> {
 
 /// Replaces `path` in the channel's private folder with `bytes`, at once:
 /// written beside it under a name made from `stem`, then moved over it.
-fn write_private(data: &Path, stem: &str, bytes: &[u8], path: &Path) -> Result<(), String> {
+pub fn write_private(data: &Path, stem: &str, bytes: &[u8], path: &Path) -> Result<(), String> {
     let directory = folder(data);
     crate::os::private_directory(&directory)?;
     let temporary = directory.join(format!(".{stem}.{}.tmp", std::process::id()));

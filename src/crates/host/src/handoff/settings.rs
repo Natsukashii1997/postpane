@@ -2,7 +2,7 @@
 //! page: where new review conversations open, and how many reviews one
 //! leave of the person's gives (#409).
 use super::{demo, Desk};
-use agent_hud_runtime::chatgpt::handoffs;
+use crate::handoff::book;
 use serde_json::{json, Value};
 use tauri::Manager;
 
@@ -11,7 +11,7 @@ impl Desk {
     /// counts against it, the ones under way keep theirs.
     pub(crate) fn set_review_limit(&self, limit: u32) -> Result<u32, String> {
         let data = self.data.as_deref().ok_or_else(demo)?;
-        handoffs::set_review_limit(data, limit)
+        book::set_review_limit(data, limit)
     }
 }
 
@@ -54,5 +54,5 @@ pub fn chatgpt_review_limit(
         Some(limit) => desk.set_review_limit(limit)?,
         None => desk.review_limit(),
     };
-    Ok(json!({ "limit": limit, "max": handoffs::LIMIT_MAX, "default": handoffs::LIMIT }))
+    Ok(json!({ "limit": limit, "max": book::LIMIT_MAX, "default": book::LIMIT }))
 }

@@ -1,7 +1,7 @@
 //! Words sent into a watched conversation, and what is known of them when
 //! they did not go (#466): send never pressed, they are not there, and may
 //! go again; no word of them, or send pressed with nothing seen to start,
-//! it is not known whether they went (`handoffs/unsure.rs`).
+//! it is not known whether they went (the host's `handoff/book/unsure.rs`).
 use super::{agent, l10n, refused, request_id, Channel, SEND_TIME};
 use serde_json::{json, Value};
 

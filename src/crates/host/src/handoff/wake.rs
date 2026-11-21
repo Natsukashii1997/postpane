@@ -3,7 +3,7 @@
 //! opening one does not run it again, so words back to it would wait.
 use super::now_ms;
 use super::{back_failed, back_text, republish, Desk, Lines, CLAUDE};
-use agent_hud_runtime::chatgpt::handoffs::{self, Delivery};
+use crate::handoff::book::{self, Delivery};
 use agent_hud_runtime::l10n;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -66,7 +66,7 @@ impl Desk {
             }
             let waiting = book
                 .get(id)
-                .is_some_and(|h| h.live() && h.phase == handoffs::Phase::Returned);
+                .is_some_and(|h| h.live() && h.phase == book::Phase::Returned);
             if waiting {
                 book.trouble(id, &woke_without_handover(result.err().as_deref()), now);
                 book.stop(id, &back_failed(), true, now);
@@ -82,7 +82,7 @@ pub(super) fn stopped(app: &tauri::AppHandle, session: &str) -> bool {
             plugin.channel().stopped(
                 session,
                 std::time::SystemTime::now(),
-                std::time::Duration::from_millis(handoffs::WAKE_AFTER_MS as u64),
+                std::time::Duration::from_millis(book::WAKE_AFTER_MS as u64),
             )
         })
 }
@@ -102,7 +102,7 @@ pub(super) fn wake(
     let app = app.clone();
     let handoff = handoff.to_owned();
     std::thread::spawn(move || {
-        let run = std::time::Duration::from_millis(handoffs::FIX_WAIT_MS as u64);
+        let run = std::time::Duration::from_millis(book::FIX_WAIT_MS as u64);
         let result =
             crate::mcp_clients::run_client_in(&executable, &arguments, &home, &folder, run);
         if let Err(error) = &result {
@@ -188,7 +188,7 @@ pub(super) fn woke_queued() -> String {
     l10n::text(
         &format!(
             "意见排队 {} 分钟没被领走，会话一直没运行；驿窗撤回排队，改在后台续接 Claude，按意见修改",
-            handoffs::WAKE_AFTER_MS / 60_000
+            book::WAKE_AFTER_MS / 60_000
         ),
         "The queued answer was not taken up and the session stayed quiet; PostPane took it back and runs the session in the background to work on it",
     )

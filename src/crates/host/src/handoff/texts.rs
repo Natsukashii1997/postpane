@@ -2,7 +2,7 @@
 //! handoff.rs for the 300-line ratchet (#282). They name the doer as
 //! Claude; `by_doer` gives a Codex handoff's as Codex.
 
-use agent_hud_runtime::chatgpt::handoffs::{self, Flaw};
+use crate::handoff::book::{self, Flaw};
 use agent_hud_runtime::l10n;
 
 pub(super) fn passed(chinese: bool) -> String {
@@ -162,7 +162,7 @@ pub(super) fn no_wake() -> String {
     l10n::text(
         &format!(
             "转回的意见排队 {} 分钟没被会话领走，自动往返停下，交还常浩",
-            handoffs::QUEUE_WAIT_MS / 60_000
+            book::QUEUE_WAIT_MS / 60_000
         ),
         "The queued answer was not taken up within an hour; left to you",
     )
@@ -171,7 +171,7 @@ pub(super) fn idle_end() -> String {
     l10n::text(
         &format!(
             "等常浩处理 {} 小时没动静，驿窗自动结束接力",
-            handoffs::IDLE_END_MS / 3_600_000
+            book::IDLE_END_MS / 3_600_000
         ),
         "Untouched for a day after it was left to you; PostPane ended it",
     )
@@ -180,7 +180,7 @@ pub(super) fn no_answer() -> String {
     l10n::text(
         &format!(
             "ChatGPT {} 分钟没回信，自动往返停下，交还常浩",
-            handoffs::REPLY_WAIT_MS / 60_000
+            book::REPLY_WAIT_MS / 60_000
         ),
         "ChatGPT has not answered in 30 minutes; left to you",
     )
@@ -189,7 +189,7 @@ pub(super) fn no_handover() -> String {
     l10n::text(
         &format!(
             "Claude {} 小时没交回复审，自动往返停下，交还常浩",
-            handoffs::FIX_WAIT_MS / 3_600_000
+            book::FIX_WAIT_MS / 3_600_000
         ),
         "Claude has not handed it over again in 2 hours; left to you",
     )

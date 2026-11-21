@@ -163,7 +163,7 @@ impl Lines for AppLines<'_> {
     fn opener(&self, doer: &str, session: &str) -> Option<(Opener, i64)> {
         // A Codex thread's from its rollout (#283).
         if doer == CODEX {
-            return agent_hud_runtime::chatgpt::handoffs::codex_turn(session);
+            return crate::handoff::book::codex_turn(session);
         }
         let home = crate::mcp_clients::home().ok()?;
         agent_hud_runtime::claude_plugin::current_turn(
@@ -247,7 +247,7 @@ fn codex_left(
         .ok()??;
     let state = match receipt.state {
         DeliveryState::Waiting | DeliveryState::Queued | DeliveryState::Uncertain => {
-            if agent_hud_runtime::chatgpt::handoffs::codex_began(thread, words) {
+            if crate::handoff::book::codex_began(thread, words) {
                 "started"
             } else {
                 "waiting"

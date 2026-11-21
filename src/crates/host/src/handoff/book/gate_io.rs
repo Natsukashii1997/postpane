@@ -2,7 +2,8 @@
 //! and the commit it says it reviewed, the brief's commit, the review cap
 //! set in `<data>/chatgpt/config.json`, and every answer kept in full.
 use super::gate::{LIMIT, LIMIT_MAX};
-use super::{config_path, folder, key, read_small, write_private};
+use super::{folder, key, write_private};
+use agent_hud_runtime::chatgpt::files::{config, set_config};
 use std::path::Path;
 
 /// The longest problem ledger carried into the next review.
@@ -92,28 +93,11 @@ pub fn set_review_limit(data: &Path, limit: u32) -> Result<u32, String> {
     set_config(data, "reviewLimit", serde_json::json!(limit))?;
     Ok(limit)
 }
-/// Whether the shadow read (#488) is switched on (`dataShadow: true`).
-pub fn data_shadow(data: &Path) -> bool {
-    config(data)["dataShadow"] == true
-}
-pub(super) fn config(data: &Path) -> serde_json::Value {
-    read_small(&config_path(data))
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .filter(serde_json::Value::is_object)
-        .unwrap_or_else(|| serde_json::json!({}))
-}
-/// Sets one key of the config, keeping the others.
-pub(super) fn set_config(data: &Path, name: &str, value: serde_json::Value) -> Result<(), String> {
-    let mut config = config(data);
-    config[name] = value;
-    let bytes = serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?;
-    write_private(data, "config", &bytes, &config_path(data))
-}
 
 /// Keeps answer `n` of handoff `id` in full, in `<data>/chatgpt/replies/`.
 pub fn archive(data: &Path, id: &str, n: usize, reply: &str) -> Result<(), String> {
     let directory = folder(data).join("replies");
-    crate::os::private_directory(&directory)?;
+    agent_hud_runtime::chatgpt::files::private_directory(&directory)?;
     let name = format!("{id}-{n:02}-{}.md", &key(reply)[..8]);
     write_private(data, "reply", reply.as_bytes(), &directory.join(name))
 }
@@ -160,12 +144,12 @@ pub(super) fn set_aside(path: &Path) {
         .map_or(0, |d| d.as_secs());
     let aside = path.with_file_name(format!("handoffs.unreadable-{stamp}.json"));
     match std::fs::rename(path, &aside) {
-        Ok(()) => agent_hud_core::note!(
+        Ok(()) => agent_hud_runtime::note!(
             "handoffs.json could not be read; kept as {}",
             aside.display()
         ),
         Err(error) => {
-            agent_hud_core::note!("handoffs.json could not be read nor set aside: {error}")
+            agent_hud_runtime::note!("handoffs.json could not be read nor set aside: {error}")
         }
     }
 }

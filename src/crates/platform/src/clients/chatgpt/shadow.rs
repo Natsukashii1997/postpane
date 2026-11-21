@@ -23,7 +23,7 @@ pub fn path(data: &Path) -> PathBuf {
 
 /// Whether the switch is on; off unless set.
 pub fn on(data: &Path) -> bool {
-    super::handoffs::data_shadow(data)
+    super::files::data_shadow(data)
 }
 
 /// The kinds a field may be.

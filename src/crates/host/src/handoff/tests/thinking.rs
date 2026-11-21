@@ -117,7 +117,7 @@ fn a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again() {
     assert_eq!(shown[0]["auto"], false, "not waiting for a re-review");
     assert_eq!(shown[0]["halt"], evidence_paused());
     // No re-review clock runs: hours on, it still says why it paused.
-    let later = 5 + handoffs::FIX_WAIT_MS + handoffs::QUEUE_WAIT_MS;
+    let later = 5 + book::FIX_WAIT_MS + book::QUEUE_WAIT_MS;
     assert_eq!(desk.projection(later)[0]["halt"], evidence_paused());
     // Claude comes back with evidence: into the same handoff and conversation.
     let Started::Sent {
@@ -143,7 +143,7 @@ fn a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again() {
     let (kind, to, text) = last_sent(&lines);
     assert_eq!((kind.as_str(), to.as_str()), ("send", "c-new"));
     assert!(
-        handoffs::untagged(&text).starts_with("新证据如下") && text.contains("【驿窗附注】"),
+        book::untagged(&text).starts_with("新证据如下") && text.contains("【驿窗附注】"),
         "{text}"
     );
     assert_eq!(desk.projection(later + 1)[0]["phase"], "delivered");
@@ -154,7 +154,7 @@ fn a_thinking_review_short_of_evidence_pauses_for_it_then_goes_again() {
 #[test]
 fn a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence() {
     let (_temp, desk) = desk();
-    handoffs::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
+    book::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
     let lines = Fake::default();
     let handoff = thinking(&desk, &lines);
     desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
@@ -196,7 +196,7 @@ fn a_thinking_review_goes_on_by_itself_once_claude_brings_the_evidence() {
     // Two asks, one paused for evidence: 继续深化 still goes back by
     // itself under the cap, and the card can still turn it back on.
     let (_temp, desk) = self::desk();
-    handoffs::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
+    book::set_review_limit(desk.data.as_deref().unwrap(), 5).unwrap();
     let lines = Fake::default();
     let handoff = thinking(&desk, &lines);
     desk.observe(&turn("complete", "评审出口：证据不足暂停\n结论：需修改"), 4);
@@ -315,11 +315,11 @@ fn a_thinking_review_whose_last_two_lines_do_not_hold_goes_back_and_stops() {
 fn a_thinking_review_that_settled_with_nothing_driving_it_reaches_claude_after_start() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
-    let mut book = handoffs::Book::default();
+    let mut book = book::Book::default();
     let handoff = book.begin("s1", None, "思维评审|方案 A", None, "请评审", 1);
     book.opened(&handoff.id, "c1", 2);
     book.replied("c1", "评审出口：成熟退出\n结论：通过", Some("m1"), 4);
-    handoffs::save(&data, &book).unwrap();
+    book::save(&data, &book).unwrap();
     let desk = Desk::new(Some(data));
     let shown = desk.projection(5);
     assert_eq!(shown[0]["status"], "open");
@@ -432,7 +432,7 @@ fn a_thinking_review_past_its_cap_needs_the_persons_word() {
     *lines.opener.borrow_mut() = None;
     assert_eq!(leave(8).err(), Some(leave_unheard()));
     // Ended by itself after a day: begun again here, still not settled.
-    let idle = 9 + handoffs::IDLE_END_MS + 1;
+    let idle = 9 + book::IDLE_END_MS + 1;
     assert!(desk.change(|book| book.idle(idle, "闲置结束")));
     let again = desk.start(
         &lines,

@@ -37,7 +37,7 @@ export interface RelayStamps {
 }
 
 /** How long ChatGPT has to answer before the review counts as overdue; the
- * host hands the relay back at the same mark (REPLY_WAIT_MS in handoffs.rs). */
+ * host hands the relay back at the same mark (REPLY_WAIT_MS in host/src/handoff/book.rs). */
 export const REPLY_WAIT_MS = 30 * 60 * 1000;
 
 /** How long an overdue review sits before its 「未审」 ripples (owner,

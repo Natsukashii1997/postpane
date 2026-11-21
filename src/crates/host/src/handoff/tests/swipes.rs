@@ -6,7 +6,7 @@ use super::*;
 fn a_swipe_is_done_only_by_the_handoff_that_names_it() {
     let (temp, desk) = desk();
     // Three rounds go in here (the answers between them, L3 P1-10).
-    handoffs::set_review_limit(&temp.path().join("data"), 5).unwrap();
+    book::set_review_limit(&temp.path().join("data"), 5).unwrap();
     let lines = Fake::default();
     // The session already has a review open: its next round goes into it.
     opened(&desk, &lines);
