@@ -61,6 +61,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 新会话在首页发出，ChatGPT 开始回答时地址里还没有会话 id，那次 `turn start` 不带 `conversation`；地址变成 `/c/<id>` 时若仍在生成，插件带上新 id 再报一次 `turn start`，接力才会进入 `working`。
 - 名单 = 驿窗经 `open` 新开过的会话，存 `<数据目录>/chatgpt/watched.json`（1c 的接力会话也在其中，见下）。
 - 设置 · 智能体插件页有「ChatGPT（Chrome 插件）」一行：登记 host manifest、显示是否连上。
+- 插件版本校验（#493）：驿窗打包时把同一仓库 `src/apps/chrome-extension/manifest.json` 的版本编进去（`platform/src/clients/chatgpt/version.rs`），插件 `hello` 报的版本和它比。一样时设置行写「已连接 · <版本>」；插件旧了，设置行「需要重新加载插件」、「AI 接入」状态章橙色「可用 · 插件要重新加载」；插件新了（驿窗没重装），分别是「需要重装驿窗」「可用 · 驿窗要重装」。这时会话调 `relay_to_chatgpt` 照常发出，回复的 `message` 末尾多一句提醒；连上时日志（`<数据目录>/logs/postpane.log`）写一行。版本是点分数字逐段比，末尾的 0 不算（0.2 等于 0.2.0）；没报版本或认不出的不提示。
 - 两条线程（#440）：插件说的每句话都由这条连接唯一的读线程读出来，回调在读线程上只记账（`Desk::observe`），别的都不做；接着要做的事（转回发起会话、请 ChatGPT 补写末尾格式、核对 PR 当前提交，`Desk::drive`）和通知侧栏（`republish`）都交给另一条线程 `postpane-handoff-driver`，它做事期间又被叫到的合并成再做一次；线程没起来或没了，下次被叫到时重新起，做事时出错不会让线程退出，它不在时由数据线程每次完整快照兜底推进（最迟 30 秒一次）。两条约束：`send` / `open` 要等插件的确认，确认只能由读线程带回，所以读线程不能自己经这条通道发送并等确认；通知侧栏（`Backend::refresh_handoffs` → `projection`）自己也会推进，还要等后台锁，而数据线程可能正拿着这把锁等插件的确认，所以读线程也不能通知侧栏。
 
 ## 1c 接力（#71）

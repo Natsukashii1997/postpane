@@ -480,3 +480,38 @@ fn the_manifest_names_the_relay_and_only_the_extension() {
 #[cfg(unix)]
 #[path = "tests_unix.rs"]
 mod unix;
+
+/// Stands in for the extension's end of a connection; what is written goes nowhere.
+struct Sink;
+impl std::io::Write for Sink {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+impl Peer for Sink {
+    fn close(&self) {}
+}
+
+#[test]
+fn a_new_connection_has_no_version_until_it_says_hello() {
+    let temp = tempfile::tempdir().unwrap();
+    let shared = Shared::new(temp.path().join("data"));
+    let first = shared.attach(Box::new(Sink));
+    shared.inbound(
+        first,
+        json!({"type":"hello","version":"0.2.4","extensionId":"abc"}),
+    );
+    assert_eq!(shared.status()["extensionVersion"], "0.2.4");
+    // The next connection may be another extension: the old version is not its (#493).
+    let second = shared.attach(Box::new(Sink));
+    assert_eq!(shared.status()["connected"], true);
+    assert!(shared.status()["extensionVersion"].is_null());
+    shared.inbound(
+        second,
+        json!({"type":"hello","version":"0.2.5","extensionId":"abc"}),
+    );
+    assert_eq!(shared.status()["extensionVersion"], "0.2.5");
+}

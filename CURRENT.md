@@ -99,6 +99,36 @@
   - **未在真实环境验证**。
 - 本轮新坑：L-65（第 1 轮另给 L-63 补了一条，第 3、4 轮审查给 L-65 补了一条）。
 
+## 插件版本校验：比对 Chrome 插件报的版本，不一致时在设置两处和接力回复里提示（#493）（2026-11-21，Claude，常浩看过计划后回「按推荐开工」；已提交、PR 见 PR 描述；接手会话补出错提醒后重装、按授权 squash 合并，设置页实机显示等常浩看）
+
+- 时间：开工 `2026-11-21 09:28`（`date '+%F %H:%M'` 记录）。来由：接手成本评估第二批第二项。插件连上时 `hello` 带版本，驿窗只存不比；装了新驿窗、忘了在 Chrome 里重新加载插件时没有任何提示。中途从 Fable 切到 Opus 5.5 继续（常浩让「额度不足切 Opus 5.5 high」）。
+- 改变的行为（计划里列过，常浩同意）：设置「智能体插件」ChatGPT 行，连着时原来只写「已连接」，现在版本一致写「已连接 · 0.2.5」，插件旧了写黄色「需要重新加载插件」，插件新了写「需要重装驿窗」，下面一行写两边版本和怎么做；「AI 接入」执行方状态章在不一致时由绿色「可用 · 插件已连上」改成橙色「可用 · 插件要重新加载」或「可用 · 驿窗要重装」；`relay_to_chatgpt` 版本不一致时照常发出，回复 `message` 末尾多一句提醒；连上时版本不一致日志写一行。没报版本或认不出的不提示。侧栏不变。
+- 改了哪些文件：
+  - `src/crates/platform/src/clients/chatgpt/version.rs`（新）：`include_str!` 同一仓库插件 manifest 取期望版本；`fit` 点分数字逐段比（末尾的 0 不算）；`note` 出提醒文字；`hello` 记版本并在不一致时写日志。`mod.rs` 加 `pub mod version;`，`hello` 两行换成一行，行数不变（在 300 行基线上）。
+  - `src/crates/host/src/chatgpt.rs`：设置状态加 `expectedVersion`、`versionFit`；新 `version_note`。`src/crates/host/src/handoff.rs` 的 `relay` 末尾加 4 行把提醒接到回复里（白名单上限 1986，现在 1984）。
+  - `src/packages/app/src/lib/chatgpt-row.ts`（新）：ChatGPT 行的判定从 `agent-plugins.ts` 挪过来（我顺手改的：原文件在行数基线上只许变短，挪完降到 300 行以下、移出基线），加版本三种状态和 `chatgptInput`（`ClientCards.tsx` 改用它，短了 11 行）。`lib/ai-access.ts` 的 `executorState` 加两种橙色状态；`settings/agent-plugins/services.ts` 类型加两项。
+  - 测试：`version.rs` 4 条、host 设置状态 1 条（扩写）、`agent-plugins.test.ts` 1 条、`ai-access.test.ts` 1 条。
+  - 文档：`AGENTS.md`「AI 接入」、`docs/chatgpt-channel.md` 加「插件版本校验」一条。`src/tooling/file-size-baseline.json` 收紧。
+- 测试：7 条新测试先红后绿（`red-app.txt` `ℹ fail 2`、`red-platform.txt` `0 passed; 4 failed`、`red-host.txt` `0 passed; 1 failed`）。第一次全量（09:40，负载均值 42–63）：`pnpm run check` 退出码 0；`pnpm test` `全量测试汇总：6 套，失败 2 套`，挂的是 L-63 那条 platform 测试和 Chrome 插件 `a script put in mid-reply reports that reply when it ends`（本分支没改 `src/apps`），单独重跑 platform `299 passed; 0 failed`、Chrome 插件连跑 3 次都 `ℹ pass 61` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 60` / `ℹ fail 0`。负载降下来后重跑（09:57）：`全量测试汇总：6 套，失败 0 套`（cargo 合计 1091 通过 0 失败，前端 `ℹ pass 490` / `ℹ fail 0`）。clippy 报 `handoff.rs:1371`，是 11-19 `3d97f61` 留下的，不是本次改动。
+- 验证：
+  - 实机（`install.sh` 装到 `/Applications`）：插件转接进程（`agent-hud-engine chrome-extension://fjjb…`）在新应用启动后连上；日志 `logs/postpane.log` 里没有「ChatGPT extension connected as」一行，说明后端判定插件版本和期望版本一致（Chrome 里的插件是 0.2.5）。
+  - 没验的：设置页两处的实机显示。我申请后台控制驿窗窗口去看，常浩拒绝了；「已连接 · 0.2.5」只有前端测试和后端数据核对，是替身通过。不一致时的三种显示和接力提醒实机造不出来（要改常浩正在用的插件），只有测试。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-21-493-extension-version/`：`smoke-before-1.png`、`smoke-before-after-1.png`（装前侧栏正展开着 Claude 的卡、装后收起，差 48.81% 是这个，票根一致）。
+- 发布与回读：`install.sh 493-extension-version --takeover`（接管的是本会话 #486 装的包，内容已合并），原样输出在证据目录 `install.log`：`产物 a638a2229b0a / 已装 a638a2229b0a`；`冒烟：侧栏在动`。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-21-493-extension-version/PostPane-dba8c904f9eb.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - PR 未合并：上下文到 53% 收尾，合并留给接手会话（全量已绿，可按「绿 PR 直接合并」授权合）。
+  - 设置页实机显示等常浩自己看一眼，或同意后台控制驿窗后再回读。
+  - `pnpm run lint` 在 main 上本来就不过，新增一处范围外记录：`host/src/handoff.rs:1371`（`then(..).unwrap_or_else(..)` 可写成 if/else）。
+- 接手续做（交接卡会话，开工 `2026-11-21 16:45`，`date` 记录；常浩 11-21 在拍板清单回「A 组都按推荐」，推荐原文「开始；接手会话先补出错时的版本提醒和测试，再合 #494」，并在原会话亲自回「开始」）：
+  - 你要求的：`relay` 里 `start(...)` 出错时，报错末尾也带版本提醒（原来只有发出成功的回复带）。出错和成功都走新的 `host/src/chatgpt.rs` `noted`；参数校验类的早期报错（不是 Claude/Codex 会话、没有会话 id）不加。`handoff.rs` 净短 1 行（1983）。
+  - 我顺手改的（改变了行为，动手前在会话里列过）：`platform/.../chatgpt/mod.rs` 新连接时清空上一条连接的 `hello`，收到新 `hello` 前设置页写「已连接」不带版本、不误报不一致；`hello` 分支三行并一行，行数不变（612）。另补 `chatgptInput` 映射测试（`agent-plugins.test.ts`）。
+  - 测试：两条新 Rust 测试先红后绿（`red-relay-error-note.txt` `0 passed; 1 failed`；`red-hello-reset.txt` `0 passed; 1 failed`，验红时临时去掉修复、同一条命令里还原）。变基到 `b1796a5`（含 #497）后：`pnpm run check` 退出码 0（第一次被 `check-test-paths` 拦下：测试把 `tempdir()` 根目录交给 `Shared::new`，改成 `temp.path().join("data")`）；`pnpm test` `全量测试汇总：6 套，失败 0 套`（cargo 合计 1097 通过 0 失败，前端 `ℹ pass 504` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 61` / `ℹ fail 0`。
+  - 发布与回读：`install.sh 493-extension-version --takeover`（接管 `359-494-combo` 的合装包 `59301ee8eaa1`，#359 已合进 main、新包含它），`产物 dcb99bd83d56 / 已装 dcb99bd83d56`，`冒烟：侧栏在动`；插件转接进程 `agent-hud-engine chrome-extension://fjjb…` 在 16:59 启动后连上，`logs/postpane.log` 没有版本不一致那一行。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-21-493-extension-version/PostPane-59301ee8eaa1.app" /Applications/PostPane.app; open /Applications/PostPane.app`。证据在同一证据目录 `r2-*`。
+  - 没验的：出错路径带提醒只有 `noted` 的单元测试和代码走读，`relay` 本身要 `AppHandle`、没有测试桩；实机造不出版本不一致。设置页「已连接 · 0.2.5」仍等常浩看。
+  - 主线：接手成本与方案评估｜✅3 ▶1 📌2 ❓1：✅ 评估、第一批（#485）、日志落盘（#490）▶ #493（本节）📌 第二批 7a 接力两侧并进一个模块树、补状态转移表和不变量测试 📌 第二批 7b 命令名、事件名集中到 protocol 包 ❓ 待常浩定：接力拓扑对照试验、交接改写在 PR 里并给 CURRENT 瘦身、ROADMAP 重写为现状、上游残留冻结还是删、简约形态渲染代码删不删、开发桥白名单放不放开、E-24 批不批、L-64 要不要提升为全局坑。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 出错回执：一轮失败或被限流时，那一家的卡上弹「出错」回执（#359 第 3 批之三，ADR-0001 C6）（2026-11-21，Claude，常浩 11-14 选甲，11-21 对分批计划回「都按推荐开工」、装机回「合在一起装」；已提交、PR 见 PR 描述、已装机回读通过）
 
 - 时间：开工 `2026-11-21 12:00`（按会话第一条记录的时间记，没用 `date`）。来由：工作场所契约第 3 批最后一项。原来一轮失败或被限流，侧栏什么都不显示，要自己进会话才知道。

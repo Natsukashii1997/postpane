@@ -30,6 +30,17 @@ export function executorState(status: ChatGptStatus | null): AccessState {
       tone: "orange",
       words: ["Unavailable · open Chrome", "不可用 · 插件没连上"],
     };
+  // Still serving, but not the extension this app was built with (#493).
+  if (status.versionFit === "older")
+    return {
+      tone: "orange",
+      words: ["Available · reload the extension", "可用 · 插件要重新加载"],
+    };
+  if (status.versionFit === "newer")
+    return {
+      tone: "orange",
+      words: ["Available · reinstall PostPane", "可用 · 驿窗要重装"],
+    };
   return {
     tone: "green",
     words: ["Available · extension connected", "可用 · 插件已连上"],
