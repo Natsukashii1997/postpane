@@ -745,25 +745,48 @@ function readInPage(conversation, promptId) {
   return there ? there.read(conversation, promptId) : { outcome: "no-script" };
 }
 // Run in the extension's own world in the page, out of the page's reach:
-// whether mark.js went in as this page loaded.
+// the token of data.js's sign mark.js kept as this page loaded, if any.
 function loadedWithData() {
-  return globalThis.postpaneLoadedWithData === true;
+  const token = globalThis.postpaneDataToken;
+  return typeof token === "string" ? token : null;
 }
+// Run in the page's own world: the handle's proof for `nonce`.
+function proveInPage(nonce) {
+  return window.__postpaneData?.prove?.(nonce) ?? null;
+}
+const TOKEN = /^[0-9a-f]{32}$/;
+const hex = (bytes) =>
+  [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 
 /** Whether what the page in `tabId`, document `documentId`, said can be
- * trusted: mark.js, registered with data.js, left its mark in that very
- * document as it loaded, and data.js was not put in after (review P1-01,
- * round 4: evidence in one place, no clocks to compare). Not known, not
- * trusted. */
+ * trusted (review P1-01, new cycle round 2): mark.js kept the token of
+ * data.js's sign in that very document as it loaded, data.js was not put in
+ * after, and the page's handle proves it knows that token, for a nonce made
+ * now. A sign another extension put in comes with no token a handle of the
+ * page could prove. Not known, not trusted. */
 async function trustedPage(tabId, documentId) {
   if (!documentId || docs[documentId]) return false;
-  const ran = await chrome.scripting
-    .executeScript({
-      target: { tabId, documentIds: [documentId] },
-      func: loadedWithData,
-    })
+  const target = { tabId, documentIds: [documentId] };
+  const marked = await chrome.scripting
+    .executeScript({ target, func: loadedWithData })
     .catch(() => null);
-  return ran?.[0]?.documentId === documentId && ran[0].result === true;
+  const token =
+    marked?.[0]?.documentId === documentId ? marked[0].result : null;
+  if (typeof token !== "string" || !TOKEN.test(token)) return false;
+  const nonce = hex(crypto.getRandomValues(new Uint8Array(16)));
+  const proved = await chrome.scripting
+    .executeScript({ target, world: "MAIN", func: proveInPage, args: [nonce] })
+    .catch(() => null);
+  if (proved?.[0]?.documentId !== documentId) return false;
+  const expected = hex(
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${token}:${nonce}`),
+    ),
+  );
+  return proved[0].result === expected;
 }
 
 const stops = () => ({ halted, unread: [...unread] });

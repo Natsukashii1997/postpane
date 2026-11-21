@@ -166,10 +166,12 @@
   const KEY = "__postpaneData";
   if (KEY in window) return "present";
   let readNow = async () => ({ outcome: "failed" });
+  let proveNow = async () => null;
   try {
     Object.defineProperty(window, KEY, {
       value: Object.freeze({
         read: (conversation, promptId) => readNow(conversation, promptId),
+        prove: (nonce) => proveNow(nonce),
         stop: () => {
           readNow = async () => ({ outcome: "stopped" });
           try {
@@ -187,15 +189,21 @@
     return "unavailable";
   }
   // The handle is in: as the page loads, leave mark.js the sign of it, an
-  // element of its own in the document. At document_start nothing of the
-  // page is there yet, no markup and no script, so only a script of an
-  // extension could have put it; mark.js, in the extension's own world,
-  // takes it away and marks the page as loaded with data.js. mark.js running
-  // before this, or this not running, leaves no mark (review P1-01).
-  if (document.readyState === "loading")
-    document.documentElement?.appendChild(
-      document.createElement("postpane-installed"),
-    );
+  // element in the document holding a token made now, at random, known only
+  // to this handle. At document_start nothing of the page is there yet, no
+  // markup and no script. mark.js, in the extension's own world, keeps the
+  // token there and takes the sign away; the extension then has this handle
+  // prove it knows the token (`prove`). A sign another extension put in has
+  // no token any handle of the page could prove (new cycle round 2, P1-01).
+  // mark.js running before this, or this not running: no token, no trust.
+  const token = [...crypto.getRandomValues(new Uint8Array(16))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  if (document.readyState === "loading") {
+    const sign = document.createElement("postpane-installed");
+    sign.setAttribute("data-token", token);
+    document.documentElement?.appendChild(sign);
+  }
 
   // What reading uses of the page's world, taken now: put in as the page
   // loads (document_start), before any script of the page runs, so what
@@ -224,6 +232,21 @@
   const abort = AbortController.prototype.abort;
   const bytesOf = (text) =>
     apply(byteLength, apply(encode, encoder, [text]), []);
+  const hexOf = (bytes) =>
+    [...new Uint8Array(bytes)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  // That this is the handle that put the sign in: SHA-256 of the token and
+  // the extension's nonce, which only this handle can make.
+  proveNow = async (nonce) =>
+    typeof nonce === "string" && /^[0-9a-f]{32}$/.test(nonce)
+      ? hexOf(
+          await apply(digest, subtle, [
+            "SHA-256",
+            apply(encode, encoder, [`${token}:${nonce}`]),
+          ]),
+        )
+      : null;
 
   const API = "/backend-api/";
   const CONVERSATION = /^\/backend-api\/conversations\/[0-9a-f-]{36}$/;

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
+import { createHash } from "node:crypto";
 
 const source = readFileSync(new URL("../data.js", import.meta.url), "utf8");
 const CONVERSATION = "6affe42f-aeb8-83ec-91b5-928f5f8228f6";
@@ -343,7 +344,7 @@ test("the page gets one handle, fixed in place, and no listener", () => {
   assert.equal(descriptor.writable, false);
   assert.equal(descriptor.configurable, false);
   assert.ok(Object.isFrozen(handle()));
-  assert.deepEqual(Object.keys(handle()).sort(), ["read", "stop"]);
+  assert.deepEqual(Object.keys(handle()).sort(), ["prove", "read", "stop"]);
 });
 
 test("nothing is read before the page's own sign-in was heard", async () => {
@@ -799,9 +800,10 @@ test("set up failing after the handle went in, a read only says it failed, and t
   });
 });
 
-// #488 review, new cycle round 1, P1-01: mark.js marks a page as loaded with
-// data.js only on data.js's own sign, left once its handle is in. data.js not
-// running, its handle not going in, or mark.js running first: no mark.
+// #488 review, new cycle rounds 1-2, P1-01: mark.js keeps a token only from
+// data.js's sign, left once its handle is in, and only that handle can prove
+// it knows the token. data.js not running, its handle not going in, mark.js
+// running first, or a sign another extension put in: nothing to prove.
 const markSource = readFileSync(new URL("../mark.js", import.meta.url), "utf8");
 
 /** A page as it loads: an empty document, its page world and the
@@ -812,16 +814,19 @@ function loading({ taken = false } = {}) {
     readyState: "loading",
     visibilityState: "visible",
     createElement: (localName) => {
+      const attributes = {};
       const element = {
         localName,
+        setAttribute: (name, value) => (attributes[name] = String(value)),
+        getAttribute: (name) => attributes[name] ?? null,
         remove: () => children.splice(children.indexOf(element), 1),
       };
       return element;
     },
     documentElement: {
       appendChild: (element) => children.push(element),
-      querySelector: (name) =>
-        children.find((element) => element.localName === name) ?? null,
+      querySelectorAll: (name) =>
+        children.filter((element) => element.localName === name),
     },
   };
   const window = { fetch: async () => new Response("{}") };
@@ -851,41 +856,70 @@ function loading({ taken = false } = {}) {
     data: () => vm.runInContext(source, main),
     mark: () => {
       vm.runInContext(markSource, isolated);
-      return isolated.postpaneLoadedWithData;
+      return isolated.postpaneDataToken;
     },
-    // The page, after both: its own handle, if it can put one in.
+    // Another extension, at document_start: a sign of its own.
+    otherSign: (token) => {
+      const sign = document.createElement("postpane-installed");
+      if (token) sign.setAttribute("data-token", token);
+      document.documentElement.appendChild(sign);
+    },
+    // The page, after: its own handle, if it can put one in.
     forge: () =>
       vm.runInContext(
-        `window.${KEY} = { read: () => ({ outcome: "read", written: true }) };`,
+        `window.${KEY} = { read: () => ({ outcome: "read", written: true }), prove: async () => "${"f".repeat(64)}" };`,
         main,
       ),
   };
 }
 
-test("mark.js marks a page only on data.js's sign, left once its handle is in, and takes the sign away", () => {
+const NONCE = "fedcba9876543210fedcba9876543210";
+const proofOf = (token) =>
+  createHash("sha256").update(`${token}:${NONCE}`).digest("hex");
+
+test("mark.js keeps the token of data.js's sign, and only data.js's handle proves it", async () => {
   const both = loading();
   assert.equal(both.data(), "installed");
-  assert.equal(both.mark(), true);
+  const token = both.mark();
+  assert.match(token, /^[0-9a-f]{32}$/);
   assert.deepEqual(both.children, [], "the sign is taken away");
-  // data.js never ran: no mark, whatever the page puts in after.
+  assert.equal(await both.window[KEY].prove(NONCE), proofOf(token));
+  assert.equal(await both.window[KEY].prove("not a nonce"), null);
+  // data.js never ran: no token.
   const alone = loading();
-  assert.equal(alone.mark(), false);
-  alone.forge();
-  assert.ok(alone.window[KEY]);
-  // mark.js ran first: no mark either.
+  assert.equal(alone.mark(), null);
+  // mark.js ran first: no token either.
   const early = loading();
-  assert.equal(early.mark(), false);
+  assert.equal(early.mark(), null);
   assert.equal(early.data(), "installed");
-  // data.js's handle could not go in: it says so, and leaves no sign.
+  // data.js's handle could not go in: no sign.
   const taken = loading({ taken: true });
   assert.equal(taken.data(), "present");
-  assert.equal(taken.mark(), false);
+  assert.equal(taken.mark(), null);
+});
+
+test("a sign another extension put in proves nothing: the page's handle cannot answer for its token", async () => {
+  // data.js absent; another extension's sign, with a token of its own.
+  const page = loading();
+  page.otherSign("0123456789abcdef0123456789abcdef");
+  const token = page.mark();
+  page.forge();
+  assert.notEqual(await page.window[KEY].prove(NONCE), proofOf(token));
+  // Without a token, or beside data.js's own: none kept.
+  const bare = loading();
+  bare.otherSign();
+  assert.equal(bare.mark(), null);
+  const two = loading();
+  two.otherSign("0123456789abcdef0123456789abcdef");
+  assert.equal(two.data(), "installed");
+  assert.equal(two.mark(), null);
+  assert.deepEqual(two.children, [], "every sign is taken away");
 });
 
 test("a handle that cannot be put in is not taken for one there already, and leaves no sign", () => {
   const page = loading();
   Object.preventExtensions(page.window);
   assert.equal(page.data(), "unavailable");
-  assert.equal(page.mark(), false);
+  assert.equal(page.mark(), null);
   assert.deepEqual(page.children, []);
 });

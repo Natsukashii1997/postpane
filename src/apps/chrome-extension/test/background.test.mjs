@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
+import { createHash } from "node:crypto";
 
 const source = readFileSync(
   new URL("../background.js", import.meta.url),
   "utf8",
 );
+
+// A token as data.js makes one.
+const TOKEN = "0123456789abcdef0123456789abcdef";
 
 function load(
   tabs,
@@ -34,10 +38,12 @@ function load(
     installs = {},
     gate = null,
     faults = {},
-    // Whether mark.js went into a document as it loaded, by document: by
-    // default only into one loaded again since the test began (`doc-2-…`),
-    // not into the first one of each tab, open from before.
+    // The token mark.js kept in a document as it loaded, by document: by
+    // default one only in a document loaded again since the test began
+    // (`doc-2-…`), none in the first one of each tab, open from before; and
+    // what a page's handle answers to prove it (by default, rightly).
     marks = {},
+    proofs = {},
     sendGates = [],
     // The reads due 20 s after words went out, held for the test to run.
     held = null,
@@ -132,16 +138,33 @@ function load(
         // answers. `unreachable` tabs take no script at all.
         if (unreachable.has(target.tabId)) throw new Error("Cannot access");
         const documentId = docs[target.tabId] ?? `doc-${target.tabId}`;
+        const tokenOf = (documentId) =>
+          documentId in marks
+            ? marks[documentId]
+            : documentId !== `doc-${target.tabId}`
+              ? TOKEN
+              : null;
         if (func?.name === "loadedWithData") {
           called.push([
             target.tabId,
             "loadedWithData",
             [...(target.documentIds ?? []), world ?? "ISOLATED"],
           ]);
-          const marked =
-            marks[documentId] ?? documentId !== `doc-${target.tabId}`;
+          const marked = tokenOf(documentId);
           if (faults.noDocumentId) return [{ result: marked }];
           return [{ documentId, result: marked }];
+        }
+        if (func?.name === "proveInPage") {
+          called.push([target.tabId, "proveInPage", [world]]);
+          const token = tokenOf(documentId);
+          const proof =
+            documentId in proofs
+              ? proofs[documentId]
+              : token &&
+                createHash("sha256")
+                  .update(`${token}:${args[0]}`)
+                  .digest("hex");
+          return [{ documentId, result: proof }];
         }
         if (faults.noDocumentId && func?.name === "readInPage") {
           called.push([target.tabId, func.name, [...args]]);
@@ -183,6 +206,8 @@ function load(
       return 0;
     },
     clearTimeout() {},
+    crypto: globalThis.crypto,
+    TextEncoder,
     // `clock`: the time the script reads, moved by the test.
     ...(clock && { Date: { now: () => clock.now } }),
   });
@@ -784,6 +809,7 @@ async function shadowed(options = {}) {
     docs: {},
     faults: {},
     marks: {},
+    proofs: {},
     sendGates: [],
     held: null,
     ...options,
@@ -1732,4 +1758,39 @@ test("a switch-off that cannot list the tabs stays pending, and is tried again",
   await kit.watch(false);
   assert.equal(kit.stored.shadowDisarm.pending, false);
   assert.equal(kit.shadows().at(-1).outcome, "disarmed");
+});
+
+// #488 review, new cycle round 2, P1-01: a sign another extension put in
+// carries no token a handle of the page can prove: not trusted.
+test("a page whose handle cannot prove the sign's token is not trusted", async () => {
+  const kit = await shadowed({
+    answers: [{ outcome: "read" }, { outcome: "read" }, { outcome: "read" }],
+  });
+  await kit.watch(true);
+  kit.docs[2] = "doc-2-new";
+  // Another extension's sign; data.js absent; the page's own handle.
+  kit.proofs["doc-2-new"] = "f".repeat(64);
+  kit.complete(2, SHADOWED, { promptId: P(1) });
+  await settle();
+  // No handle at all to prove it.
+  kit.proofs["doc-2-new"] = null;
+  kit.complete(2, SHADOWED, { promptId: P(2) });
+  await settle();
+  // A sign with a token of another form.
+  delete kit.proofs["doc-2-new"];
+  kit.marks["doc-2-new"] = "not a token";
+  kit.complete(2, SHADOWED, { promptId: P(3) });
+  await settle();
+  // data.js's own sign and handle: trusted.
+  kit.marks["doc-2-new"] = TOKEN;
+  kit.complete(2, SHADOWED, { promptId: P(4) });
+  await settle();
+  assert.deepEqual(
+    kit.shadows().map((told) => told.trusted),
+    [false, false, false, true],
+  );
+  assert.deepEqual(
+    kit.called.filter(([, name]) => name === "proveInPage").at(-1),
+    [2, "proveInPage", ["MAIN"]],
+  );
 });
