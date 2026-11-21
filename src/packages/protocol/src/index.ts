@@ -761,8 +761,16 @@ export interface IslandEvent {
     | "cron-failed"
     /** The agent skips PostPane's hooks until the user allows them in the
      * agent itself; `message` is what that costs, `step` where to allow. */
-    | "hooks-review-needed";
+    | "hooks-review-needed"
+    /** A session's turn failed or hit a limit (#359, ADR-0001 C6): its own
+     * receipt, one line per source, session and `failure`. */
+    | "turn-failed";
   at: string;
+  /** For `turn-failed`: how the turn failed, until when a limit holds (null
+   * when unknown), and how many turns in a row failed so. */
+  failure?: "failed" | "limited";
+  limitedUntil?: string | null;
+  count?: number;
   /** For `hooks-review-needed`: where to allow the hooks, and the events
    * whose hook waits, as the agent names them. */
   step?: string | null;

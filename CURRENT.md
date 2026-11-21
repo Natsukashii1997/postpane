@@ -84,6 +84,48 @@
   - 先红：新测试放到 `5c6c2c9` 上跑，本轮对应的 3 条都失败（`round6-red.log`、`round6-red-说明.txt`）。
   - 验证仍只在替身上；**未在真实环境验证**。
 - 本轮新坑：L-65（第 1 轮另给 L-63 补了一条，第 3、4 轮审查给 L-65 补了一条）。
+
+## 出错回执：一轮失败或被限流时，那一家的卡上弹「出错」回执（#359 第 3 批之三，ADR-0001 C6）（2026-11-21，Claude，常浩 11-14 选甲，11-21 对分批计划回「都按推荐开工」、装机回「合在一起装」；已提交、PR 见 PR 描述、已装机回读通过）
+
+- 时间：开工 `2026-11-21 12:00`（按会话第一条记录的时间记，没用 `date`）。来由：工作场所契约第 3 批最后一项。原来一轮失败或被限流，侧栏什么都不显示，要自己进会话才知道。
+- 改变的行为（动手前在分批计划里列过，常浩回「都按推荐开工」）：
+  - 新增：会话一轮失败或被限流时，那一家的卡上加一行出错回执，盖红色「出错」印章，小签写「出错」或「限流至 15:00」（过了午夜写日期），按警示闪（橙色）。
+  - 同一来源、同一会话、同一种错只留一行，再出错就换成新的，显示「失败 ×2」。这个会话下一轮正常做完，计数清零。
+  - 偶发失败一直留着，直到点「知道了」，或这个会话开始下一轮；限流挂到恢复时间，恢复时间不知道的也能点「知道了」收起。
+  - 出错小签和等你小签一样：整张挂满 5 秒后收成窄条，窄条上的数字用红色。
+  - 队列满了要挤掉一条时，先挤会自己收的通知，出错回执和看过才收的回复都留着（原来挤的是不会自己收之外最早的那条，出错回执是新加的，原有几种通知的挤法不变）。
+  - 不变：新回复照旧 4 秒收起，Hermes 和 ChatGPT 的回复照旧看过才收；同一家后到的新回复排到出错卡前面，照常 4 秒收，收完出错卡回到前面。
+- 你要求的：
+  - `src/crates/core/src/island_events/failures.rs`（新）：从会话的 liveFacts 里找出这一轮以 failed / limited 结束的，按来源 + 会话 + 错误类型计数，发 `turn-failed` 事件；这一轮正常结束就清掉计数。附 4 条测试。
+  - `src/crates/core/src/island_events/turns.rs`（新）：取「这一轮结束了」的逻辑，新回复和出错共用。`island_events.rs` 改成调这两处。
+  - `src/packages/protocol/src/index.ts`：事件加 `turn-failed` 种类和 `failure`、`limitedUntil`、`count` 三个字段。
+  - `src/packages/hud/src/alerts/failure-list.ts`（新）：一行的合并键、「知道了」能不能收、这一行还在不在、标签、正文、小签文字。
+  - `src/packages/hud/src/alerts/FailureAlertView.tsx`（新）：出错回执卡的内容。
+  - `src/packages/hud/src/scene/news-seal.ts`（新）、`scene/NewsCard.tsx`：卡头盖红色「出错」印章，数这一家有几行出错。
+  - `src/packages/hud/src/alerts/news-lanes.ts`：`reconcileIslandCards` 从 `IslandNews.tsx` 挪进来，新事件替换同一行；出错事件不被自家的等你挡住；挤位置时先挤会自己收的。
+  - `src/packages/hud/src/alerts/reply-stays.ts`：加 `foldsByItself`；新回复插到同一家出错卡前面。
+  - `src/packages/hud/src/IslandNews.tsx`：会话下一轮开始或限流到点时，从队列里拿掉那一行；出错卡走 `FailureAlertView`；标题「出错」。
+  - `src/packages/hud/src/alerts/ReminderMark.tsx`（失败、限流角标）、`glow-alert.ts`（出错按警示闪）。
+  - `src/packages/hud/src/scene/tag-fold.ts`、`alerts/CompactAlertView.tsx`：出错小签 5 秒后收成窄条，文字和窄条数字用红色（审查时补改，`f35b5fd`）。
+  - 测试：`test/failure-alert.test.ts`（新，12 条），`workplace-contract.test.ts`、`reply-queue-keep.test.ts` 跟着改；场景预览台加「出错」场景，「混合」场景加一张出错卡（`test/scenes/build.ts`、`scenes.ts`）。
+- 我顺手改的：
+  - `src/packages/hud/src/alerts/quota-chip.ts`（新）：把额度小签的文字逻辑从 `CompactAlertView.tsx` 挪出来，不改行为。原因是那个文件超过 300 行棘轮。
+  - `src/tooling/file-size-baseline.json`：`CompactAlertView.tsx`、`island_events.rs` 变短后收紧基线。
+- 改变了已有行为的：只有上面「新增」的那几条，原有几种通知怎么排、怎么收都没变。
+- 测试：变基到 `890665a` 之后跑的。`pnpm run check` 退出码 0；`pnpm test` 原样结果 `全量测试汇总：6 套，失败 0 套`（Rust 1091 passed / 0 failed，前端 `ℹ pass 501` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 60` / `ℹ fail 0`。日志在证据目录：`check-r2.log`、`test-r2.log`、`node-r2.log`。新测试先红后绿：`red-rust.log`、`red-ts.log`、`green-ts.log`。
+- 验证：
+  - 场景预览台（替身，127.0.0.1:1491）：「出错」场景里 Codex 卡显示红色「出错」印章和「失败 ×2」，点「知道了」能收掉；收掉后出 Claude 限流卡，上面没有「知道了」；小签挂满 5 秒后收成红色数字的窄条；「刚回复」场景和改前对照，新回复照旧 4 秒收起。结论：替身通过。
+  - 实机（常浩的 `/Applications/PostPane.app`）：装机后读快照（`real-snapshot-after-install.txt`），事件里没有 `turn-failed`。有 3 个 Claude 会话的上一轮是限流，结束和恢复时间都在今天 04:10 以前，按设计只记作基线、不重复弹出。这一点通过。
+  - 没在实机上验的：实机上还没有遇到新的失败或限流，从 Rust 发事件到侧栏弹卡这一段没在真实会话里看到过。等下一次真的失败或限流，看侧栏有没有弹出、点「知道了」能不能收。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-21-359-failure-alert/`：预览台 `scene-failed-*.jpg`、`review-*.jpg/png`；装机 `smoke-before-1.png`、`smoke-motion-1.png`、`smoke-before-after-1.png`、`after-install-screen.png`（查权限弹窗用）。
+- 发布与回读：`install.sh 359-failure-alert --takeover`，原样输出在证据目录 `install.log`：`产物 59301ee8eaa1 / 已装 59301ee8eaa1`，`冒烟：侧栏在动`；再跑 `install.sh check` 结果「一致」。装前装后对比：变了的地方是 Codex、Hermes 小人旁的未读条数（11、8）重启后清空，Claude 由 3 变 4，其余只有小人在动。没有「想访问文稿」弹窗。
+  - 这份包是合装包：常浩选「合在一起装」，所以在临时 worktree `359-494-combo` 里，以本分支 `f35b5fd` 为底叠上 #494 的 `3a3b9a5`（插件版本校验，PR 还开着、等常浩看设置页），没提交，打一个包装上。接管的是 #494 那个会话 10:12 装的 `a638a2229b0a`，备份在证据目录。两边的功能都在。#494 合并后从 main 重新打包装机。
+  - 回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-21-359-failure-alert/PostPane-a638a2229b0a.app" /Applications/PostPane.app; open /Applications/PostPane.app`
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 没出三版预览：常浩 11-14 已在三版里选了甲，11-21 定「照甲做，不再出三版」。
+  - 装机截图里驿窗的设置窗口开着（显示页），#486 那轮也看到过，本次改动不碰窗口。
+  - 第 4 批（Hermes 边界与整体验收）下一步先只读梳理、出清单；B10/B11/B20/B21 要不要并进接力根治主线，等常浩定；AGENTS.md 导航表「改小人」那一行要不要补 `src/crates/hud/src/bots.rs`，等常浩定。
+- 本轮新坑：无。
 - skill 进化：无。
 
 ## 应用报错落盘验收，登记 DECIDED.md（#486）（2026-11-21，Claude，常浩经 agent-hud 插件回「验收」；已提交、PR 见 PR 描述、无需发布）
@@ -152,7 +194,8 @@
   - 没验的：生成中的数据、取 2 轮和往前翻页、窗口最小化或被挡住时、带图片或画布的回信、频率上限。
   - 影子运行要先定一处：插件怎么在页面里拿到登录信息（设计要点第 2 条）。
   - 统筹核对（2026-11-20 23:40，接手统筹的会话，只读）：影子运行按 #488 所记，常浩 11-20 回「做影子运行」「按推荐开工」（三处按推荐，授权 L3 开工和送审，不含打开开关），issue #488 23:35 已开，worktree `488-relay-shadow` 核对时还没有改动、没有 PR、没有送审接力。装机位 `install.sh check`：已装 `6dcbce442766`，是 `claude/480-pendant-hover` `7e65af9` 11-20 17:02 装的，`git merge-base --is-ancestor` 核过 `2e83a3e`、`5ce46fb`、`bfa11f8` 都在里面；main 比它多 #484 的合并提交和 #485 的整理。插件版本没能回读：Chrome 数据目录这个会话读不了，驿窗的记录里不存插件版本。装机后 `handoffs.json` 里补格式发过 3 次（17:57、18:18、18:24），都在 30 秒内收到回信；没有「发送没有点下去」和「插件随后确认补格式的话已送到」的步骤，这两条路径没验到。#442 仍和 main 冲突，11-19 之后没有更新。
-  - 主线：接力根治｜完成 6/14：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批实机验证（代码已装上：11-20 17:02 别的会话从 `claude/480-pendant-hover` `7e65af9` 装的包里有 #441、#451、#468，不用再等 #442；等常浩重载插件 0.2.5，装机后还没走到要验的两条路径）✅ 另外三处规则文字 ✅ 第 1 批只读探测（本节）▶ 第 1 批影子运行（#488，另一会话在 `488-relay-shadow` 实现中；打开开关、装机、切换成正式读法都另等常浩定）❓ 补格式没送成怎么处理 ❓ #470 点过发送后要不要取消自动再试 ❓ 第 2 批回执与重拉（并 #431、#433、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退 ❓ 规则与现状对不上两处（梳理报告第六节）；#432 排查单另算。
+  - 统筹核对（2026-11-21 12:10，同一统筹会话）：常浩 11-20 23:47 前后回「已重载」，经本机通道问 `chatgpt_status` 回读到插件已连上、版本 0.2.5；到 11-21 11:42 `handoffs.json` 里「发送没有点下去」「插件随后确认补格式的话已送到」两种步骤仍是 0 条。装机位之后又被别的会话换过两次（11-20 23:42 `claude/486-app-log`、11-21 10:12 `claude/493-extension-version` `ab9a3db`），#441、#451、#468 都在里面。影子运行：PR #491，接力 `h1a1fbaef0ca01` 两轮都是返修（09:39、10:21），分支头 `ec0dabf`，第 3 轮返修由「【交接】驿窗接力｜影子运行 L3 第 3 轮返修」会话在做。常浩 11-21 经驿窗侧栏回「都按推荐」（核对过：设置 `claudeAnswers` 开着，`messaging/messages.json` 自 11-19 22:47 没变）：补格式没送成、#470、#463 三件并进第 2 批；L-51 改措辞（`docs/LESSONS.md`，写明留着的是 #413 那一版切前台）；终局回信以 `docs/chatgpt-channel.md` 为准不做后台续接，现状 `src/crates/host/src/handoff.rs` 直送那一路在会话已停时不看是不是终局就续接，改代码并进第 3 批，已登记 DECIDED.md。
+  - 主线：接力根治｜完成 7/12（2026-11-21 12:10 更新）：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）⏳ 第 0 批实机验证（代码已装上，插件 0.2.5 已连上；「没点发送按没送成」「补格式确认迟到」两条路径还没自然出现，没验到）✅ 另外三处规则文字 ✅ 第 1 批只读探测（本节）▶ 第 1 批影子运行（#488，PR #491，L3 审了 2 轮都是返修，另一会话在做第 3 轮返修；合并后装机、重载插件 0.2.6、打开开关、切换成正式读法都另等常浩定）✅ 规则与现状对不上两处（常浩 11-21 回「都按推荐」：L-51 措辞已改；终局回信以文档为准，改代码并进第 3 批）❓ 第 2 批回执与重拉（并 #431、#433、#443、#444、#463、#470、补格式没送成怎么处理；常浩 11-21 定这三件并进来，等影子运行有结论再定开不开工）❓ 第 3 批分级恢复（并 #434、终局回信不做后台续接）❓ 第 4 批体检与防回退；#432 排查单另算。
 - 本轮新坑：无。
 - skill 进化：无。
 

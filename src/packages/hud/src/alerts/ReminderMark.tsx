@@ -46,6 +46,21 @@ export function ReminderMark({
     );
   }
   if (!event) return null;
+  // A failed turn's mark wears the failure's sign (#359).
+  if (event.kind === "turn-failed")
+    return (
+      <BotMark
+        source={event.source}
+        size={size}
+        light={light}
+        enabled={botLogos}
+        staysBot
+        awake
+        state={botState({
+          badge: event.failure === "limited" ? "limited" : "failed",
+        })}
+      />
+    );
   if (event.kind === "completion") {
     const startSec = event.startedAt
       ? Date.parse(event.startedAt) / 1000
