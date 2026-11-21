@@ -6,7 +6,7 @@ import { clientDisplayName, projectName } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
 import { cronShortName, hooksReviewCopy } from "./quota-alert-copy";
 import { compactQuotaStatus, quotaChipLabels } from "./quota-chip";
-import { failureChip } from "./failure-list";
+import { failureChip, isFailure } from "./failure-list";
 import { systemCalendar, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { alertInk, alertText } from "../tokens";
@@ -81,30 +81,26 @@ export function compactAlertLabels(
       status: zh ? "有新回复" : "New reply",
     };
   }
-  if (event.kind === "turn-failed") {
+  if (isFailure(event)) {
+    // A turn by its session; a Hermes bot by itself or its task (#498).
+    const who = event.title?.trim() || clientDisplayName(event.source);
     return {
       who:
-        findSession(sessions, event.sessionId, event.source)?.title?.trim() ||
-        event.title?.trim() ||
-        clientDisplayName(event.source),
+        event.kind === "turn-failed"
+          ? findSession(
+              sessions,
+              event.sessionId,
+              event.source,
+            )?.title?.trim() || who
+          : event.kind === "cron-failed"
+            ? cronShortName(who)
+            : who,
       status: failureChip(
         event,
         Date.now(),
         systemCalendar(navigator.language),
         zh,
       ),
-    };
-  }
-  if (event.kind === "bot-offline") {
-    return {
-      who: event.title ?? agentVendorName(event.source),
-      status: event.message ?? (zh ? "断线" : "Offline"),
-    };
-  }
-  if (event.kind === "cron-failed") {
-    return {
-      who: cronShortName(event.title ?? agentVendorName(event.source)),
-      status: zh ? "失败" : "Failed",
     };
   }
   if (event.kind === "sign-in-needed") {
@@ -305,7 +301,7 @@ export function CompactAlertView({
   const warnAccent = paper
     ? paperLevel("warning", paper)
     : alertText("warning", ground);
-  const failed = event?.kind === "turn-failed";
+  const failed = isFailure(event);
   const failedInk = failed ? (paper?.red ?? tagColor("ask", light)) : null;
   const dimInk = paper ? paper.dim : alertInk(0.55, ground);
   const secondary = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)";

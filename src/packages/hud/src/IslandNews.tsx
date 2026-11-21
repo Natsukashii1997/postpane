@@ -15,6 +15,7 @@ import { isFailure, standingQueue } from "./alerts/failure-list";
 import { frontFolds, seenFirst } from "./alerts/reply-stays";
 import {
   laneEvents,
+  laneFailures,
   liveQueue,
   newsLanes,
   askedInFront,
@@ -68,7 +69,7 @@ export function useIslandNews(
     heldAsk = useRef(false); // asked while held: in front once let go (#328)
   const [queue, setQueue] = useState<IslandCard[]>([]);
   const standing = (cards: IslandCard[]) =>
-    standingQueue(cards, snapshot.sessions, Date.now());
+    standingQueue(cards, snapshot.sessions, Date.now(), snapshot.hermesBots);
   const items = snapshot.islandEvents?.items ?? [];
   const requestIDs = requests.map((request) => request.id).join("\0");
   useEffect(() => {
@@ -97,15 +98,14 @@ export function useIslandNews(
             (event) =>
               event.islandAlert !== false &&
               shown.includes(vendorKey(event.source)) &&
-              // A reply or a failure is a session's news: its live switch.
-              ((event.kind !== "completion" && !isFailure(event)) ||
+              // A reply or a failed turn is a session's news: its live switch.
+              ((event.kind !== "completion" && event.kind !== "turn-failed") ||
                 (services?.sources?.[sourceID(snapshot, event.source)]?.live !==
                   false &&
                   services?.sources?.[sourceID(snapshot, event.source)]
                     ?.reminders !== false)),
           );
-    // Held, a reply that waits to be seen comes in front once let go (#221),
-    // and a notice goes ahead of its agent's failures (#359).
+    // Held, a reply waiting to be seen comes ahead once let go (#221, #359).
     if (held)
       heldArrivals.current.push(...visible.filter((e) => !isFailure(e)));
     setQueue((old) => {
@@ -180,7 +180,7 @@ export function useIslandNews(
     laneQueue: lanes[0]?.cards ?? [],
     requests: laneRequests(lanes[0], requests),
     replies: laneEvents(lanes[0], "completion"),
-    failures: laneEvents(lanes[0], "turn-failed"),
+    failures: laneFailures(lanes[0]),
     quotas: queuedQuotas(lanes[0]?.cards ?? []),
     // The other agents' tags, each by its own mark.
     sides: sides.map(({ lane, mark }) => ({
@@ -324,7 +324,7 @@ export function NewsContent({
   botLogos?: boolean;
 }) {
   const zh = snapshotLanguage(snapshot) === "zh";
-  if (event.kind === "turn-failed")
+  if (isFailure(event))
     return (
       <FailureAlertView
         failures={failures}

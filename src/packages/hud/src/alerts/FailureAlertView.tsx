@@ -3,9 +3,15 @@
 // replies. Each line: the agent's mark (a Hermes bot's seal), the session,
 // a red 失败 / 限流 tag (×n once it failed so again), the time and ↗ back to
 // the session; under it what happened. 「知道了」 puts away the passing
-// failures; a limit hangs until it lifts (owner, 2026-11-21).
+// failures; a limit hangs until it lifts (owner, 2026-11-21). A Hermes bot
+// down or its task not run is a line here too (#498): the bot's seal, the
+// bot or the task, 断线 / 没跑成, no ↗ since there is no session to go to.
 import type { IslandEvent, Snapshot } from "@agent-hud/protocol";
-import { dateFormat, snapshotLanguage } from "@agent-hud/ui/format";
+import {
+  dateFormat,
+  snapshotLanguage,
+  systemCalendar,
+} from "@agent-hud/ui/format";
 import { GoButton } from "../GoButton";
 import { HUDArtwork } from "../HUDArtwork";
 import { usePanelServices } from "../PanelContext";
@@ -46,6 +52,7 @@ export function FailureAlertView({
   const { failure, fail } = useOpenFailures();
   const entries = newestFirst(replyEntries(failures, snapshot.sessions));
   const now = Date.now();
+  const calendar = systemCalendar(navigator.language);
   const red = paper?.red ?? tagColor("ask", light);
   const passing = entries.flatMap((entry) =>
     entry.kind === "reply" && dismissable(entry.event) ? [entry.id] : [],
@@ -66,7 +73,8 @@ export function FailureAlertView({
       {entries.map((entry, index) => {
         if (entry.kind !== "reply") return null;
         const { event } = entry;
-        const bot = entry.session?.bot;
+        const bot = entry.session?.bot ?? event.bot;
+        const hasSession = Boolean(event.sessionId);
         const canOpen =
           Boolean(sessionToOpen(entry) && services?.openSession) &&
           !failure(entry.id);
@@ -123,28 +131,32 @@ export function FailureAlertView({
                 minute: "2-digit",
               }).format(new Date(event.at))}
             </span>
-            <GoButton
-              label={
-                canOpen
-                  ? zh
-                    ? "回到会话"
-                    : "Return to session"
-                  : zh
-                    ? "暂时无法回到原会话"
-                    : "Session return unavailable"
-              }
-              enabled={canOpen}
-              inks={{
-                line: inks.line,
-                ink: inks.mid,
-                faint: inks.faint,
-                strong: inks.ink,
-              }}
-              onClick={(click) => {
-                click.stopPropagation();
-                if (canOpen) void goBack(entry);
-              }}
-            />
+            {!hasSession ? (
+              <span />
+            ) : (
+              <GoButton
+                label={
+                  canOpen
+                    ? zh
+                      ? "回到会话"
+                      : "Return to session"
+                    : zh
+                      ? "暂时无法回到原会话"
+                      : "Session return unavailable"
+                }
+                enabled={canOpen}
+                inks={{
+                  line: inks.line,
+                  ink: inks.mid,
+                  faint: inks.faint,
+                  strong: inks.ink,
+                }}
+                onClick={(click) => {
+                  click.stopPropagation();
+                  if (canOpen) void goBack(entry);
+                }}
+              />
+            )}
             <div style={{ gridColumn: "2 / 6", minWidth: 0 }}>
               <p
                 style={{
@@ -154,7 +166,7 @@ export function FailureAlertView({
                   color: inks.mid,
                 }}
               >
-                {failureBody(event, now, zh)}
+                {failureBody(event, now, zh, calendar)}
               </p>
               {failed && <OpenNotice text={failed} light={light} />}
             </div>
