@@ -10,9 +10,28 @@ const chatgpt = {
   helperFound: true,
   connected: true,
   extensionVersion: "0.2.2",
+  expectedVersion: "0.2.2",
+  versionFit: "same" as const,
   lastSeen: 1,
   watched: [],
 };
+
+test("an extension that is not this app's version still serves, and says so (#493)", () => {
+  const older = executorState({ ...chatgpt, versionFit: "older" });
+  assert.deepEqual(
+    [older.tone, older.words[1]],
+    ["orange", "可用 · 插件要重新加载"],
+  );
+  const newer = executorState({ ...chatgpt, versionFit: "newer" });
+  assert.deepEqual(
+    [newer.tone, newer.words[1]],
+    ["orange", "可用 · 驿窗要重装"],
+  );
+  assert.equal(
+    executorState({ ...chatgpt, versionFit: "unknown" }).tone,
+    "green",
+  );
+});
 
 test("the executor reads available only while the extension is connected", () => {
   assert.equal(executorState(null).words[1], "正在检查…");

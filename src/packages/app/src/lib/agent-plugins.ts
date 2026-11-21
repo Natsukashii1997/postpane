@@ -30,7 +30,7 @@ export interface RowState {
   next: { words: Words; command?: string } | null;
 }
 
-const checking: Words = ["Checking…", "正在检查…"];
+export const checking: Words = ["Checking…", "正在检查…"];
 
 export function sessionCount(count: number): Words {
   return [
@@ -281,77 +281,4 @@ export function toolsSwitch(input: ToolsSwitchInput): {
         ? unavailable
         : null;
   return { unavailable, problem };
-}
-
-export interface ChatGptInput {
-  /** null while it is being read. */
-  manifestInstalled: boolean | null;
-  /** The manifest names this app's relay. */
-  manifestCurrent: boolean;
-  /** This is the installed app, with a relay Chrome may start. */
-  helperFound: boolean;
-  /** This system has a place for Chrome's native host manifests. */
-  supported: boolean;
-  /** The extension is connected now. */
-  connected: boolean;
-  running: "register" | "remove" | null;
-}
-
-/** The ChatGPT Chrome extension: Chrome's manifest for PostPane's relay,
- * registered from here, and whether the extension is connected. */
-export function chatgptRow(input: ChatGptInput): RowState {
-  const busy: Words | null =
-    input.running === "register"
-      ? ["Registering…", "正在登记…"]
-      : input.running === "remove"
-        ? ["Removing…", "正在移除…"]
-        : null;
-  if (input.manifestInstalled === null && !busy)
-    return {
-      tone: "off",
-      status: checking,
-      action: null,
-      busy: null,
-      menu: [],
-      next: null,
-    };
-  const unavailable: Words | undefined = !input.supported
-    ? ["This system can't register it yet.", "这个系统暂时不能登记。"]
-    : !input.helperFound
-      ? [
-          "Registering needs PostPane at its approved installation location.",
-          "需要从指定安装位置运行驿窗才能登记。",
-        ]
-      : undefined;
-  if (!input.manifestInstalled)
-    return {
-      tone: "off",
-      status: ["Not registered", "未登记"],
-      action: { id: "register", label: ["Register", "登记"], unavailable },
-      busy,
-      menu: [],
-      next: null,
-    };
-  const menu: RowState["menu"] = [
-    { id: "remove", label: ["Remove", "移除"], destructive: true },
-  ];
-  if (!input.manifestCurrent)
-    return {
-      tone: "attention",
-      status: ["Register again", "需要重新登记"],
-      action: { id: "register", label: ["Register", "登记"], unavailable },
-      busy,
-      menu,
-      next: null,
-    };
-  return {
-    tone: input.connected ? "working" : "installed",
-    status: input.connected
-      ? ["Connected", "已连接"]
-      : ["Not connected", "未连接"],
-    action: null,
-    busy,
-    menu,
-    next: null,
-  };
 }

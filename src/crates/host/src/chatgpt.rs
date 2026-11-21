@@ -109,6 +109,25 @@ pub(crate) fn tool(app: &tauri::AppHandle, method: &str, params: &Value) -> Resu
     }
 }
 
+/// What to tell a session handing work to ChatGPT while the connected
+/// extension is not the one this app was built with (#493); None otherwise.
+pub(crate) fn version_note(app: &tauri::AppHandle) -> Option<String> {
+    let status = app.try_state::<ChatGpt>()?.status();
+    (status["connected"] == true)
+        .then(|| channel::version::note(status["extensionVersion"].as_str()))
+        .flatten()
+}
+
+/// A relay's words, sent or refused alike, with the version note after them
+/// while the extension is not the one this app was built with (#493): a
+/// mismatch is what may have kept it from going out.
+pub(crate) fn noted(words: &str, note: Option<&str>) -> String {
+    match note {
+        Some(note) => format!("{words} {note}"),
+        None => words.to_owned(),
+    }
+}
+
 /// The relay packaged in this app, when this is the fixed installed app:
 /// only that copy may be named in Chrome's manifest.
 fn helper(app: &tauri::AppHandle) -> Option<PathBuf> {
@@ -136,6 +155,8 @@ fn settings_status(directory: Option<&Path>, helper: Option<&Path>, connection: 
         "helperFound": helper.is_some(),
         "connected": connection["connected"],
         "extensionVersion": connection["extensionVersion"],
+        "expectedVersion": channel::version::expected(),
+        "versionFit": channel::version::fit(connection["extensionVersion"].as_str()),
         "lastSeen": connection["lastSeen"],
         "watched": connection["watched"],
     })
@@ -237,8 +258,12 @@ mod tests {
         let before = settings_status(Some(&directory), Some(&engine), connection.clone());
         assert_eq!(
             before,
-            json!({"supported":true,"manifestInstalled":false,"manifestCurrent":false,"helperFound":true,"connected":true,"extensionVersion":"0.1.0","lastSeen":5,"watched":[]})
+            json!({"supported":true,"manifestInstalled":false,"manifestCurrent":false,"helperFound":true,"connected":true,"extensionVersion":"0.1.0","expectedVersion":channel::version::expected(),"versionFit":"older","lastSeen":5,"watched":[]})
         );
+        // The extension this app was built with (#493).
+        let current = json!({"connected":true,"extensionVersion":channel::version::expected()});
+        let same = settings_status(Some(&directory), Some(&engine), current);
+        assert_eq!(same["versionFit"], "same");
         channel::install_manifest(&directory, &engine).unwrap();
         let after = settings_status(Some(&directory), Some(&engine), connection.clone());
         assert_eq!(after["manifestInstalled"], true);
@@ -250,6 +275,21 @@ mod tests {
         let unsupported = settings_status(None, None, connection);
         assert_eq!(unsupported["supported"], false);
         assert_eq!(unsupported["manifestInstalled"], false);
+    }
+
+    #[test]
+    fn a_relay_sent_or_refused_carries_the_version_note() {
+        let note = "提醒：Chrome 里的驿窗插件是 0.2.4，这版驿窗要的是 0.2.5。";
+        let refused = noted("ChatGPT 插件没连上，没有送出。", Some(note));
+        assert!(
+            refused.starts_with("ChatGPT 插件没连上，没有送出。"),
+            "{refused}"
+        );
+        assert!(refused.ends_with(note), "{refused}");
+        assert_eq!(
+            noted("已交给 ChatGPT 审核。", None),
+            "已交给 ChatGPT 审核。"
+        );
     }
 
     #[test]

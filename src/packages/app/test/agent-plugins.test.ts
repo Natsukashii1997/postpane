@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { chatgptInput, chatgptRow } from "../src/lib/chatgpt-row.ts";
 import {
-  chatgptRow,
   mcpRow,
   pluginRow,
   toolsSwitch,
@@ -317,6 +317,102 @@ test("the ChatGPT row registers Chrome's manifest, then says whether the extensi
     [connected.tone, connected.status[1], connected.menu[0]?.id],
     ["working", "已连接", "remove"],
   );
+});
+
+test("a connected extension says its version, and which side to bring up to date when it is not this app's (#493)", () => {
+  const input = {
+    manifestInstalled: true,
+    manifestCurrent: true,
+    helperFound: true,
+    supported: true,
+    connected: true,
+    running: null,
+    extensionVersion: "0.2.5",
+    expectedVersion: "0.2.5",
+    versionFit: "same",
+  } as const;
+  const same = chatgptRow(input);
+  assert.deepEqual(
+    [same.tone, same.status[1], same.action, same.next],
+    ["working", "已连接 · 0.2.5", null, null],
+  );
+  const older = chatgptRow({
+    ...input,
+    extensionVersion: "0.2.4",
+    versionFit: "older",
+  });
+  assert.deepEqual(
+    [older.tone, older.status[1], older.menu[0]?.id],
+    ["attention", "需要重新加载插件", "remove"],
+  );
+  assert.match(older.next?.words[1] ?? "", /0\.2\.4.*0\.2\.5/);
+  assert.match(older.next?.words[1] ?? "", /chrome:\/\/extensions/);
+  const newer = chatgptRow({
+    ...input,
+    extensionVersion: "0.2.6",
+    versionFit: "newer",
+  });
+  assert.deepEqual(
+    [newer.tone, newer.status[1]],
+    ["attention", "需要重装驿窗"],
+  );
+  assert.match(newer.next?.words[1] ?? "", /0\.2\.6.*0\.2\.5/);
+  // Away, the version it last said does not matter.
+  assert.equal(
+    chatgptRow({ ...input, connected: false, versionFit: "older" }).status[1],
+    "未连接",
+  );
+  // A version it did not say is not held against it.
+  assert.equal(
+    chatgptRow({ ...input, extensionVersion: null, versionFit: "unknown" })
+      .status[1],
+    "已连接",
+  );
+});
+
+test("the ChatGPT row's input reads the status, and nothing yet while it is being read (#493)", () => {
+  const reading = chatgptInput(null, null);
+  assert.equal(reading.manifestInstalled, null);
+  assert.equal(reading.connected, false);
+  assert.equal(reading.extensionVersion, null);
+  assert.equal(reading.versionFit, "unknown");
+  assert.equal(chatgptRow(reading).status[1], "正在检查…");
+  const status = {
+    supported: true,
+    manifestInstalled: true,
+    manifestCurrent: true,
+    helperFound: true,
+    connected: true,
+    extensionVersion: "0.2.5",
+    expectedVersion: "0.2.5",
+    versionFit: "same" as const,
+    lastSeen: 5,
+    watched: [],
+  };
+  const read = chatgptInput(status, "remove");
+  assert.deepEqual(read, {
+    manifestInstalled: true,
+    manifestCurrent: true,
+    helperFound: true,
+    supported: true,
+    connected: true,
+    running: "remove",
+    extensionVersion: "0.2.5",
+    expectedVersion: "0.2.5",
+    versionFit: "same",
+  });
+  assert.equal(
+    chatgptRow({ ...read, running: null }).status[1],
+    "已连接 · 0.2.5",
+  );
+  // An app older than #493 names no expected version and no fit.
+  const older = chatgptInput(
+    { ...status, expectedVersion: undefined, versionFit: undefined },
+    null,
+  );
+  assert.equal(older.expectedVersion, null);
+  assert.equal(older.versionFit, "unknown");
+  assert.equal(chatgptRow(older).status[1], "已连接");
 });
 
 test("the review cap offers 1 to 9 rounds with five marked as the default (#409)", () => {

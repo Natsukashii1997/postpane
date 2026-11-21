@@ -7,12 +7,8 @@ import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
 import type { Snapshot } from "@agent-hud/protocol";
-import {
-  chatgptRow,
-  mcpRow,
-  pluginRow,
-  type RowState,
-} from "../../lib/agent-plugins";
+import { mcpRow, pluginRow, type RowState } from "../../lib/agent-plugins";
+import { chatgptInput, chatgptRow } from "../../lib/chatgpt-row";
 import {
   Collapsible,
   Pill,
@@ -356,14 +352,7 @@ export function ChatGptCard({
   t: Text;
 }) {
   const { status } = chatgpt;
-  const state = chatgptRow({
-    manifestInstalled: status ? status.manifestInstalled : null,
-    manifestCurrent: Boolean(status?.manifestCurrent),
-    helperFound: Boolean(status?.helperFound),
-    supported: Boolean(status?.supported),
-    connected: Boolean(status?.connected),
-    running: chatgpt.running,
-  });
+  const state = chatgptRow(chatgptInput(status, chatgpt.running));
   return (
     <ClientCard
       key={status ? "loaded" : "reading"}

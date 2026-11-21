@@ -64,6 +64,10 @@ export interface ChatGptStatus {
   helperFound: boolean;
   connected: boolean;
   extensionVersion: string | null;
+  /** The extension version this app was built with (#493). */
+  expectedVersion?: string | null;
+  /** The connected extension against it: older, reload the extension; newer, reinstall the app. */
+  versionFit?: "same" | "older" | "newer" | "unknown";
   lastSeen: number | null;
   watched: { id: string; title: string; openedAt: number }[];
 }
