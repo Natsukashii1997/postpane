@@ -34,6 +34,39 @@
 - 本轮新坑：无。
 - skill 进化：无。
 
+## Hermes 断线、定时任务没跑成改用出错回执；回执停留改成每家一项配置（#498 工作场所契约第 4 批）（2026-11-21，Claude，常浩对改动确认回「改」；已提交、PR 见 PR 描述、已装机回读通过）
+
+- 时间：开工 `2026-11-21 16:45`（按 #498 创建时间记）。来由：第 4 批只读梳理出清单后，第 4 项会改到已定的 Hermes 细条，单独发了改动确认，常浩回「改」。
+- 改变的行为（改动确认里列过，常浩回「改」）：
+  - Hermes 机器人断线：原来是一张额度细条，没人指着 4 秒收起；现在是 Hermes 卡上一行红色「出错」回执，小签写「断线」，断线期间一直挂着，重新连上自动收起，没有「知道了」。
+  - Hermes 定时任务没跑成：原来也是 4 秒收起的细条；现在是同样的出错回执，小签写「没跑成」，留到点「知道了」。正文写「定时任务没跑成：<失败时间> 失败 · 下次 <时间>。」（原细条那一行字）。
+  - 同一个机器人同一种异常只留一行，再报一次显示「断线 ×2」「没跑成 ×2」（计数在前端做，Hermes 后端不计数）。
+  - 出错小签 5 秒后收成窄条，挤位置时不被挤掉，和四家的出错回执一样。
+  - 不变：Hermes 卡内部（看板、断线圆章、定时任务表）；Hermes 新回复看过才收；四家的出错回执；Hermes 异常不受「提醒」开关管，这一点也和原来一样。
+- 你要求的：
+  - `src/packages/hud/src/alerts/failure-list.ts`：`isFailure` 认 `bot-offline`、`cron-failed`；按机器人 + 类型合并；断线挂到 `hermesBots` 里这个机器人不再 `down`（读不到这个机器人就收起）；没跑成只能点「知道了」收；`takeLine` 替换同一行时给 Hermes 计数；标签、小签、正文三处文字。
+  - `alerts/news-lanes.ts`（`laneFailures`、合并计数、出错不被自家等你挡住）、`IslandNews.tsx`（去留看 `hermesBots`、出错卡走出错回执）、`scene/news-seal.ts`（红「出错」印章认 Hermes）、`alerts/CompactAlertView.tsx`（小签文字和红色）、`alerts/FailureAlertView.tsx`（Hermes 行用机器人印章、没有回会话的箭头）。
+  - `alerts/reply-stays.ts`：回执停留改成每家一项的表 `REPLY_STAY`（Claude、Codex、DeepSeek 4 秒，ChatGPT、Hermes 看过才收；表外的照旧 4 秒），行为不变（ADR 第 7 条）。
+  - 测试：`test/hermes-failure.test.ts`（新，7 条）；契约测试加 2 条（Hermes 出错共用回执、停留配置表）；场景预览台加 `hermes-trouble`（机器人乙飞书断线报了 2 次、机器人甲定时任务没跑成）。
+- 我顺手改的：
+  - 删死代码：`QuotaAlertViews.tsx`、`quota-chip.ts` 里 Hermes 两种细条的分支，`quota-list.ts` 的额度事件不再含这两种；`quota-alert-copy.ts` 的 `cronFailedCopy` 收成只返回时间那一行的 `cronFailedWhen`。
+  - `test/bot-offline.test.ts`、`test/cron-failed.test.ts` 跟着新行为改断言。
+  - `src/tooling/file-size-baseline.json`：`QuotaAlertViews.tsx`、`quota-alert-copy.ts`、`CompactAlertView.tsx` 变短后收紧。
+- 改变了已有行为的：只有上面 Hermes 两种异常那几条。
+- 测试：变基到 `9cce003`（含 #494）后跑的：`pnpm run check` 退出码 0；`pnpm test` 原样结果 `全量测试汇总：6 套，失败 0 套`（Rust 1097 passed / 0 failed，前端 `ℹ pass 513` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 61` / `ℹ fail 0`。日志在证据目录 `check-r2.log`、`test-r2.log`、`node-r2.log`。新测试先红（`does not provide an export named 'laneFailures'`）后绿。
+- 验证：
+  - 场景预览台（替身，127.0.0.1:1492，1440×900）`hermes-trouble`：小签「周会纪要 · 没跑成」红字带机器人印章，5 秒后收成窄条；点开是 Hermes 卡，红「出错」印章，「机器人乙 · 断线 ×2」「周会纪要（每周一）· 没跑成」两行，正文写原因和时间，没有回会话箭头；点「知道了」只收了没跑成那一行，断线那行还在、没有「知道了」。看板里 Hermes 一块原样（断线圆章、「飞书断线 40 分钟」、任务表）。回归：`failed` 场景两张出错小签照旧；`replies` 场景 4 秒后 Claude、Codex、DeepSeek 收起、ChatGPT 留着。结论：替身通过。
+  - 实机：读快照（`real-snapshot-after-install.txt`），两个机器人都在线、没有失败的定时任务，事件里没有 Hermes 异常。Hermes 出错回执在实机上还没出现过，等下次真断线或任务没跑成时看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-21-498-hermes-boundary/`：`scene-hermes-trouble-*.jpg/png`（小签窄条、卡片、点「知道了」后、看板）；装机 `smoke-before-1.png`、`smoke-motion-1.png`、`smoke-before-after-1.png`、`after-install-screen.png`。
+- 发布与回读：`install.sh 498-hermes-boundary --takeover`，原样输出在证据目录 `install.log`：`产物 382f3edea947 / 已装 382f3edea947`，`冒烟：侧栏在动`；`install.sh check` 结果「一致：已装的是本目录装的」。接管的是 #494 会话 16:59 装的 `dcb99bd83d56`（#494 已合并，本包从含它的 main 打出，没有丢功能）。装前装后只差 Codex 旁未读条数（3）重启清空，没有「想访问文稿」弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "$HOME/Library/Application Support/postpane/evidence/2026-11-21-498-hermes-boundary/PostPane-dcb99bd83d56.app" /Applications/PostPane.app; open /Applications/PostPane.app`
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 上一轮清单把 #447 标成「可直接做」，标错了：issue 写明改任务名还是改规则要常浩定，改规则会动 #326 定下的合并规则。本轮没做，等常浩定。
+  - 范围外发现：Hermes 的回执卡（新回复和出错都一样）下半截有「正在进行 · 0 / 暂无在跑的会话」，是 #369 起共用卡带的；ADR 说 Hermes 不算工作场所，这一段对 Hermes 有没有意义可以在整体验收时一起看。没改。
+  - 装机截图里驿窗设置窗口又开着（显示页），#486、#359 两轮都看到过，本次改动不碰窗口。
+  - 第 4 批还剩整体验收（清单 5），要常浩看证据回「验收」。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 出错回执：一轮失败或被限流时，那一家的卡上弹「出错」回执（#359 第 3 批之三，ADR-0001 C6）（2026-11-21，Claude，常浩 11-14 选甲，11-21 对分批计划回「都按推荐开工」、装机回「合在一起装」；已提交、PR 见 PR 描述、已装机回读通过）
 
 - 时间：开工 `2026-11-21 12:00`（按会话第一条记录的时间记，没用 `date`）。来由：工作场所契约第 3 批最后一项。原来一轮失败或被限流，侧栏什么都不显示，要自己进会话才知道。
