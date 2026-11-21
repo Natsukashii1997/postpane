@@ -152,6 +152,14 @@ test("对账：编号不一致、漏读、限流，各自单独算出来，都�
       pagePromptId: "p34",
     }),
     reread(35, "p34", "m34", { trusted: false }),
+    // 同一毫秒、但在文件里排在前面的那次读取，不算之后的补证（第 3 轮 P2-02）。
+    reread(36, "p38", "m38", { heardAt: START + 38 * (DAY / 8) }),
+    reply(38, {
+      outcome: "no-script",
+      final: undefined,
+      written: undefined,
+      pagePromptId: "p38",
+    }),
     // 不可信页面读到的、句柄被占的：不进门槛，也不算漏读，单独数（P1-01）。
     reply(36, { trusted: false }),
     reply(37, { outcome: "conflict", final: undefined, written: undefined }),
@@ -160,7 +168,7 @@ test("对账：编号不一致、漏读、限流，各自单独算出来，都�
   assert.equal(result.differentId, 1);
   assert.deepEqual(
     result.missed.map((miss) => miss.pageMessageId),
-    ["m25", "m26", "m27", "m30", "m32", "m34"],
+    ["m25", "m26", "m27", "m30", "m32", "m34", "m38"],
   );
   assert.equal(result.recovered, 1);
   assert.equal(result.untrusted, 2);

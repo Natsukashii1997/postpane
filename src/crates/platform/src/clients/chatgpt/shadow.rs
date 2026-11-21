@@ -33,8 +33,16 @@ enum Kind {
     Uuid,
     /// One of these words.
     Of(&'static [&'static str]),
+    /// A count, at most a billion: sizes, times taken, numbers of things.
     Count,
+    /// A time in milliseconds since 1970.
+    Time,
+    /// A whole number from the first to the second.
+    Range(u64, u64),
+    /// One of these numbers.
+    Nums(&'static [u64]),
     Flag,
+    /// 16 lowercase hex digits.
     Sha,
     /// At most 8 names of fields, at most 48 characters each.
     Names,
@@ -101,15 +109,15 @@ const FINISH: &[&str] = &["stop", "max_tokens", "interrupted", "other"];
 const FIELDS: &[(&str, Kind)] = &[
     ("conversation", Uuid),
     ("why", Of(WHY)),
-    ("at", Count),
+    ("at", Time),
     ("pagePromptId", Uuid),
     ("pageMessageId", Uuid),
     ("pageChars", Count),
     ("pageOutcome", Of(PAGE_OUTCOME)),
     ("outcome", Of(OUTCOME)),
-    ("status", Count),
-    ("turns", Count),
-    ("tries", Count),
+    ("status", Range(100, 599)),
+    ("turns", Nums(&[2, 10])),
+    ("tries", Nums(&[1, 2])),
     ("bytes", Count),
     ("ms", Count),
     ("hidden", Flag),
@@ -164,9 +172,16 @@ fn fits(kind: Kind, value: &Value) -> bool {
         (Uuid | Of(_) | Flag, Value::Null) => true,
         (Uuid, Value::String(s)) => uuid(s),
         (Of(words), Value::String(s)) => words.contains(&s.as_str()),
-        (Count, Value::Number(n)) => n.as_u64().is_some(),
+        (Count, Value::Number(n)) => n.as_u64().is_some_and(|n| n <= 1_000_000_000),
+        (Time, Value::Number(n)) => n.as_u64().is_some(),
+        (Range(low, high), Value::Number(n)) => {
+            n.as_u64().is_some_and(|n| (low..=high).contains(&n))
+        }
+        (Nums(known), Value::Number(n)) => n.as_u64().is_some_and(|n| known.contains(&n)),
         (Flag, Value::Bool(_)) => true,
-        (Sha, Value::String(s)) => s.len() == 16 && s.chars().all(|c| c.is_ascii_hexdigit()),
+        (Sha, Value::String(s)) => {
+            s.len() == 16 && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
+        }
         (Names, Value::Array(names)) => {
             names.len() <= 8
                 && names.iter().all(|name| {

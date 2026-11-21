@@ -240,7 +240,7 @@ test("a prompt is a message the person sent: an id of another kind is not taken 
 });
 
 const ASK = "0b1c2d3e-0000-4000-8000-000000000001";
-const KEY = Symbol.for("postpane.data");
+const KEY = "__postpaneData";
 
 /** A stubbed page showing `CONVERSATION`: `window.fetch` answers from
  * `served` with real responses (of the page's own `Response`, which a test
@@ -715,4 +715,47 @@ test("stopped while a read is on its way, the read is cut short and no wider rea
   release();
   assert.deepEqual(await reading, { outcome: "stopped" });
   assert.equal(calls.length, 2);
+});
+
+// #488 review round 3, P1-01: the extension finds the handle by its name;
+// a page swapping Symbol.for (or anything else) cannot point it at another.
+test("the extension's calls find this file's handle, whatever the page swaps", async () => {
+  const background = readFileSync(
+    new URL("../background.js", import.meta.url),
+    "utf8",
+  );
+  const pick = (name) =>
+    background.match(
+      new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`),
+    )[0];
+  const { window, context, calls } = page({
+    served: [
+      { status: 200, body: {} },
+      { status: 200, body: body([user(ASK, "x"), final("f", "x", "real")]) },
+    ],
+  });
+  await own(window);
+  vm.runInContext(
+    `${pick("readInPage")}\n${pick("stopInPage")}
+     const fake = Symbol("fake");
+     Symbol.for = () => fake;
+     window[fake] = { read: () => ({ outcome: "read", written: true }), stop: () => ({ stopped: true }) };
+     Object.defineProperty(Object.prototype, "__postpaneData", { get: () => window[fake] });`,
+    context,
+  );
+  const read = JSON.parse(
+    JSON.stringify(
+      await vm.runInContext(
+        `readInPage(${JSON.stringify(CONVERSATION)}, ${JSON.stringify(ASK)})`,
+        context,
+      ),
+    ),
+  );
+  assert.equal(read.outcome, "read");
+  assert.equal(read.final.chars, "real".length);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(vm.runInContext("stopInPage()", context))),
+    { stopped: true, restored: true },
+  );
 });

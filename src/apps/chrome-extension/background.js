@@ -57,15 +57,17 @@ async function onHost(message) {
       statusSoon();
       break;
     case "open": {
+      const begun = generation;
       const result = await open(message.text, message.project);
       post({ type: "opened", requestId: message.requestId, ...result });
-      wrote(result.conversation, result);
+      wrote(result.conversation, result, { begun });
       break;
     }
     case "send": {
+      const sent = sending(message.conversation);
       const result = await send(message.conversation, message.text);
       post({ type: "sent", requestId: message.requestId, ...result });
-      wrote(message.conversation, result);
+      wrote(message.conversation, result, sent);
       break;
     }
     case "focus":
@@ -428,27 +430,38 @@ let generation = 0;
 const inflight = new Set();
 // Kept so a restarted worker reads nothing twice (review P1-03, P2-05):
 // what was read, `conversation:prompt` -> the whys; the prompt PostPane's
-// words became in each conversation; and the pages data.js was put into
-// after they loaded (`late`) or found a handle in already (`conflict`):
-// what those say is not trusted (review P1-01). Not restored, nothing is
-// read, and none of it is written over.
+// words became in each conversation; the pages data.js was put into after
+// they loaded (`late`) or found a handle in already (`conflict`); and when
+// data.js was last registered (`shadowRegisteredAt`). Not restored, nothing
+// is registered, put in or read, and none of it is written over.
 let ledger = {};
 let prompts = {};
 let docs = {};
+let registeredAt = null;
 let ledgerOk = false;
 const plain = (v) =>
   v === undefined || (!!v && typeof v === "object" && !Array.isArray(v));
 const restored = chrome.storage.local
-  .get(["shadowLedger", "shadowPrompts", "shadowDocs"])
+  .get(["shadowLedger", "shadowPrompts", "shadowDocs", "shadowRegisteredAt"])
   .then((kept) => {
     if (![kept.shadowLedger, kept.shadowPrompts, kept.shadowDocs].every(plain))
       return;
     ledger = kept.shadowLedger ?? {};
     prompts = kept.shadowPrompts ?? {};
     docs = kept.shadowDocs ?? {};
+    registeredAt = Number.isFinite(kept.shadowRegisteredAt)
+      ? kept.shadowRegisteredAt
+      : null;
     ledgerOk = true;
   })
   .catch(() => {});
+// A page is trusted only when it began loading this long after data.js was
+// registered: then data.js went in as it loaded, before any script of its
+// own (review P1-01). The room is for the two clocks.
+const BORN_AFTER = 5000;
+// Words sent, by conversation: only the latest one's prompt is kept as the
+// conversation's (review P2-09).
+const sends = new Map();
 
 /** Keeps `work` among what a switch-off waits for. */
 function track(work) {
@@ -472,8 +485,21 @@ function trim(kept) {
  * is stopped; until each is known stopped, the switch-off is tried again
  * with each list (review P1-02). What was switched is what this extension
  * kept. */
-async function setShadow(on) {
+function setShadow(on) {
+  // What was begun before stops at once; the switching itself waits its turn,
+  // so a switch-off never runs beside a switch-on (review P1-02).
+  if (on !== shadow) generation++;
+  shadow = on;
+  const next = switching.then(() => applyShadow(on));
+  switching = next.catch(() => {});
+  return next;
+}
+let switching = Promise.resolve();
+
+async function applyShadow(on) {
   await restored;
+  // Switched again since: that switching does it.
+  if (on !== shadow) return;
   const kept = await chrome.storage.local.get([
     "shadow",
     "shadowStops",
@@ -481,8 +507,6 @@ async function setShadow(on) {
     "shadowArm",
   ]);
   const was = kept.shadow === true;
-  if (on !== shadow) generation++;
-  shadow = on;
   // On since before (a restarted worker told again): its stops still hold.
   if (on && was) {
     halted = !!kept.shadowStops?.halted;
@@ -516,13 +540,27 @@ async function setShadow(on) {
  * loads with it registered. */
 async function arm(left) {
   const begun = generation;
+  // What was read not known: nothing goes into any page, not even as it
+  // loads; one registered before is taken out (review P1-03).
+  if (!ledgerOk) {
+    await unregister();
+    await everyPage({ func: stopInPage });
+    await chrome.storage.local.set({
+      shadowArm: { pending: true, ledger: false, at: Date.now() },
+    });
+    return;
+  }
   let registered = false;
   try {
     const there = await chrome.scripting.getRegisteredContentScripts({
       ids: [DATA_SCRIPT.id],
     });
-    if (!there.length)
+    if (begun !== generation) return;
+    if (!there.length) {
       await chrome.scripting.registerContentScripts([DATA_SCRIPT]);
+      registeredAt = Date.now();
+    } else if (registeredAt === null) registeredAt = Date.now();
+    await chrome.storage.local.set({ shadowRegisteredAt: registeredAt });
     registered = true;
   } catch {
     // Not registered: tried again.
@@ -547,7 +585,7 @@ async function arm(left) {
 
 /** Puts data.js into the page in `tabId` now, after it loaded: what it reads
  * there is not trusted, and from a page that had a handle already nothing
- * is read (review P1-01). Not once switched since `begun`, nor while what
+ * is taken (review P1-01). Not once switched since `begun`, nor while what
  * was kept is not known. Whether it went in. */
 async function putIn(tabId, begun) {
   if (begun !== generation || !shadow || !ledgerOk) return false;
@@ -587,25 +625,11 @@ async function everyPage(what) {
  * is discarded has no page running, and loads without it; any other is
  * tried again later. */
 async function disarm() {
-  let unregistered = false;
-  try {
-    const there = await chrome.scripting.getRegisteredContentScripts({
-      ids: [DATA_SCRIPT.id],
-    });
-    if (there.length)
-      await chrome.scripting.unregisterContentScripts({
-        ids: [DATA_SCRIPT.id],
-      });
-    unregistered = !(
-      await chrome.scripting.getRegisteredContentScripts({
-        ids: [DATA_SCRIPT.id],
-      })
-    ).length;
-  } catch {
-    // Left registered: tried again.
-  }
+  await unregister();
   await everyPage({ func: stopInPage });
   await Promise.allSettled([...inflight]);
+  // Whatever those registered or put in meanwhile is taken out too.
+  const unregistered = await unregister();
   const { done, failed } = await everyPage({ func: stopInPage });
   const live = failed.filter((tab) => !tab.discarded).map((tab) => tab.id);
   const pending = !unregistered || live.length > 0;
@@ -625,13 +649,65 @@ async function disarm() {
   });
 }
 
-// Run in the page's own world: no closure, only what is passed.
+/** Takes data.js's registering out: whether it is known gone. */
+async function unregister() {
+  try {
+    const there = await chrome.scripting.getRegisteredContentScripts({
+      ids: [DATA_SCRIPT.id],
+    });
+    if (there.length)
+      await chrome.scripting.unregisterContentScripts({
+        ids: [DATA_SCRIPT.id],
+      });
+    const gone = !(
+      await chrome.scripting.getRegisteredContentScripts({
+        ids: [DATA_SCRIPT.id],
+      })
+    ).length;
+    if (gone) {
+      registeredAt = null;
+      await chrome.storage.local.set({ shadowRegisteredAt: null });
+    }
+    return gone;
+  } catch {
+    return false; // Left registered: tried again.
+  }
+}
+
+// Run in the page's own world: no closure, only what is passed. The handle
+// is found by its name, a property of the window nothing in the page can
+// change once there; not through anything the page could swap, such as
+// Symbol.for (review P1-01).
 function stopInPage() {
-  return window[Symbol.for("postpane.data")]?.stop() ?? { absent: true };
+  return window.__postpaneData?.stop() ?? { absent: true };
 }
 function readInPage(conversation, promptId) {
-  const there = window[Symbol.for("postpane.data")];
+  const there = window.__postpaneData;
   return there ? there.read(conversation, promptId) : { outcome: "no-script" };
+}
+// Run in the extension's own world in the page, out of the page's reach:
+// when the page began loading.
+function bornAt() {
+  return performance.timeOrigin;
+}
+
+/** Whether what the page in `tabId`, document `documentId`, said can be
+ * trusted: data.js was registered before it began loading, and was not put
+ * in after (review P1-01). Not known, not trusted. */
+async function trustedPage(tabId, documentId) {
+  if (!documentId || docs[documentId] || registeredAt === null) return false;
+  const ran = await chrome.scripting
+    .executeScript({
+      target: { tabId, documentIds: [documentId] },
+      func: bornAt,
+    })
+    .catch(() => null);
+  const born = ran?.[0]?.result;
+  return (
+    ran?.[0]?.documentId === documentId &&
+    Number.isFinite(born) &&
+    born > registeredAt + BORN_AFTER
+  );
 }
 
 const stops = () => ({ halted, unread: [...unread] });
@@ -640,20 +716,32 @@ const stops = () => ({ halted, unread: [...unread] });
  * reads look for, and the data is read once while the answer is written,
  * for that prompt, whatever was sent after (review P2-05). Words whose
  * prompt is not known leave none, and that read says so. */
-async function wrote(conversation, result) {
+async function wrote(conversation, result, sent = {}) {
   if (!result.ok || !conversation) return;
   await restored;
-  if (!ledgerOk) return;
+  // Off, or switched while the words went out: nothing is kept (review
+  // P2-08); nor what the store holds not known.
+  if (!shadow || !ledgerOk || sent.begun !== generation) return;
   const promptId = isId(result.promptId) ? result.promptId : null;
-  if (promptId) prompts[conversation] = promptId;
-  else delete prompts[conversation];
-  trim(prompts);
-  await chrome.storage.local.set({ shadowPrompts: prompts });
-  if (shadow)
+  // Words sent later came back first: theirs stays the conversation's.
+  if (sent.ticket === undefined || sends.get(conversation) === sent.ticket) {
+    if (promptId) prompts[conversation] = promptId;
+    else delete prompts[conversation];
+    trim(prompts);
+    await chrome.storage.local.set({ shadowPrompts: prompts });
+  }
+  if (shadow && sent.begun === generation)
     setTimeout(
       () => shadowRead(conversation, "writing", {}, promptId),
       WRITING_AFTER,
     );
+}
+
+/** What words going out to `conversation` now are, for `wrote`. */
+function sending(conversation) {
+  const ticket = (sends.get(conversation) ?? 0) + 1;
+  if (conversation) sends.set(conversation, ticket);
+  return { ticket: conversation ? ticket : undefined, begun: generation };
 }
 
 /** Reads `conversation` from the data, once per prompt for each `why`, and
@@ -709,15 +797,17 @@ async function readShadow(conversation, why, beside, named) {
     .catch(() => null);
   if (gone()) return superseded();
   const there = ran?.[0];
-  const doc = there?.documentId ? docs[there.documentId] : "unknown";
   let answer = there
     ? summary(there.result, promptId)
     : { outcome: "unreachable" };
   // What a page with a handle not this file's own says is not taken.
   // A page with no data.js said nothing of its own.
-  if (there && doc === "conflict") answer = { outcome: "conflict" };
-  else if (there && answer.outcome !== "no-script")
-    answer.trusted = doc === undefined;
+  if (there && docs[there.documentId] === "conflict")
+    answer = { outcome: "conflict" };
+  else if (there && answer.outcome !== "no-script") {
+    answer.trusted = await trustedPage(tabId, there.documentId);
+    if (gone()) return superseded();
+  }
   // A page open since before the switch went on, missed when it was turned
   // on: data.js is put in now, and hears the page's sign-in on its next
   // request. What it reads there is not trusted.

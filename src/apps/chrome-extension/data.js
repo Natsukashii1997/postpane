@@ -185,7 +185,9 @@
   // the copy put in before (stopped, it stays so; a page loaded again gets
   // a new one) or the page's. Either way this one does nothing, and says so:
   // the extension reads nothing from that page (#488 review P1-01, P1-02).
-  const KEY = Symbol.for("postpane.data");
+  // Named, not keyed by Symbol.for: the extension finds it by the name, and
+  // nothing the page swaps later can point it elsewhere.
+  const KEY = "__postpaneData";
   if (KEY in window) return "present";
 
   const API = "/backend-api/";

@@ -234,6 +234,27 @@ fn a_shadow_line_takes_only_uuids_known_words_and_a_prompt_found_as_asked() {
     assert_eq!(found["dropped"], 2);
     assert!(found.get("askFound").is_none() && found.get("prompt").is_none());
     assert_eq!(found["asked"], asked);
+    // Numbers within what the extension says, as it says them (review P2-10).
+    let numbers = lines(
+        5,
+        json!({
+            "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "http", "at": 1_763_700_000_000u64,
+            "status": 600, "turns": 3, "tries": 0, "bytes": 1_000_000_001u64, "ms": 5,
+            "final": {"id": other, "sha": "0123456789ABCDEF"}
+        }),
+    );
+    assert_eq!(numbers["dropped"], 5, "{numbers}");
+    assert_eq!(numbers["ms"], 5);
+    assert_eq!(numbers["at"], 1_763_700_000_000u64);
+    let edges = lines(
+        6,
+        json!({
+            "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "http",
+            "status": 599, "turns": 10, "tries": 2, "bytes": 1_000_000_000u64,
+            "final": {"id": other, "sha": "0123456789abcdef"}
+        }),
+    );
+    assert!(edges.get("dropped").is_none(), "{edges}");
     // An outcome is one the extension says, or there is no line.
     let made_up = json!({"type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "made-up"});
     assert!(shadow::keep(&data, true, &made_up, 4).is_err());

@@ -55,11 +55,13 @@ export function summarize(records, handoffs = []) {
     record.final &&
     record.written;
   const askedOf = (record) => record.pagePromptId ?? record.asked;
+  // 「之后」按文件里的先后：驿窗按收到的顺序一行行追加，同一毫秒的也分得清
+  // 先后；时间戳不作数（第 3 轮审查 P2-02）。
+  const order = new Map(records.map((record, index) => [record, index]));
   const later = (record) =>
     records.some(
       (other) =>
-        other !== record &&
-        (other.heardAt ?? other.at) >= (record.heardAt ?? record.at) &&
+        order.get(other) > order.get(record) &&
         other.conversation === record.conversation &&
         other.asked === askedOf(record) &&
         other.prompt === askedOf(record) &&
