@@ -182,8 +182,20 @@
       }),
     });
   } catch {
-    return "present";
+    // Not put in: this page has no handle of this file's, and leaves no sign
+    // of one (new cycle round 1, P1-01).
+    return "unavailable";
   }
+  // The handle is in: as the page loads, leave mark.js the sign of it, an
+  // element of its own in the document. At document_start nothing of the
+  // page is there yet, no markup and no script, so only a script of an
+  // extension could have put it; mark.js, in the extension's own world,
+  // takes it away and marks the page as loaded with data.js. mark.js running
+  // before this, or this not running, leaves no mark (review P1-01).
+  if (document.readyState === "loading")
+    document.documentElement?.appendChild(
+      document.createElement("postpane-installed"),
+    );
 
   // What reading uses of the page's world, taken now: put in as the page
   // loads (document_start), before any script of the page runs, so what

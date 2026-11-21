@@ -798,3 +798,94 @@ test("set up failing after the handle went in, a read only says it failed, and t
     restored: false,
   });
 });
+
+// #488 review, new cycle round 1, P1-01: mark.js marks a page as loaded with
+// data.js only on data.js's own sign, left once its handle is in. data.js not
+// running, its handle not going in, or mark.js running first: no mark.
+const markSource = readFileSync(new URL("../mark.js", import.meta.url), "utf8");
+
+/** A page as it loads: an empty document, its page world and the
+ * extension's own world (`isolated`) sharing it. */
+function loading({ taken = false } = {}) {
+  const children = [];
+  const document = {
+    readyState: "loading",
+    visibilityState: "visible",
+    createElement: (localName) => {
+      const element = {
+        localName,
+        remove: () => children.splice(children.indexOf(element), 1),
+      };
+      return element;
+    },
+    documentElement: {
+      appendChild: (element) => children.push(element),
+      querySelector: (name) =>
+        children.find((element) => element.localName === name) ?? null,
+    },
+  };
+  const window = { fetch: async () => new Response("{}") };
+  if (taken)
+    Object.defineProperty(window, KEY, { value: { read: () => ({}) } });
+  const main = vm.createContext({
+    window,
+    document,
+    location: {
+      origin: "https://chatgpt.com",
+      href: "https://chatgpt.com/",
+      pathname: "/",
+    },
+    Headers,
+    URL,
+    Response,
+    AbortController,
+    TextEncoder,
+    crypto: globalThis.crypto,
+    performance,
+    Date,
+  });
+  const isolated = vm.createContext({ document });
+  return {
+    window,
+    children,
+    data: () => vm.runInContext(source, main),
+    mark: () => {
+      vm.runInContext(markSource, isolated);
+      return isolated.postpaneLoadedWithData;
+    },
+    // The page, after both: its own handle, if it can put one in.
+    forge: () =>
+      vm.runInContext(
+        `window.${KEY} = { read: () => ({ outcome: "read", written: true }) };`,
+        main,
+      ),
+  };
+}
+
+test("mark.js marks a page only on data.js's sign, left once its handle is in, and takes the sign away", () => {
+  const both = loading();
+  assert.equal(both.data(), "installed");
+  assert.equal(both.mark(), true);
+  assert.deepEqual(both.children, [], "the sign is taken away");
+  // data.js never ran: no mark, whatever the page puts in after.
+  const alone = loading();
+  assert.equal(alone.mark(), false);
+  alone.forge();
+  assert.ok(alone.window[KEY]);
+  // mark.js ran first: no mark either.
+  const early = loading();
+  assert.equal(early.mark(), false);
+  assert.equal(early.data(), "installed");
+  // data.js's handle could not go in: it says so, and leaves no sign.
+  const taken = loading({ taken: true });
+  assert.equal(taken.data(), "present");
+  assert.equal(taken.mark(), false);
+});
+
+test("a handle that cannot be put in is not taken for one there already, and leaves no sign", () => {
+  const page = loading();
+  Object.preventExtensions(page.window);
+  assert.equal(page.data(), "unavailable");
+  assert.equal(page.mark(), false);
+  assert.deepEqual(page.children, []);
+});
