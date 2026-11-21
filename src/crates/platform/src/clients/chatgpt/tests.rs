@@ -242,7 +242,7 @@ impl Peer for Sink {
 #[test]
 fn a_new_connection_has_no_version_until_it_says_hello() {
     let temp = tempfile::tempdir().unwrap();
-    let shared = Shared::new(temp.path().to_path_buf());
+    let shared = Shared::new(temp.path().join("data"));
     let first = shared.attach(Box::new(Sink));
     shared.inbound(
         first,
