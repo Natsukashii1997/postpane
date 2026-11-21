@@ -613,3 +613,11 @@
 - 正确做法：隔离验证连主目录一起换。应用的主目录只认 `$HOME`（`os/macos/mod.rs` 的 `home_dir`），数据目录、Claude 配置、各家登记都从它推出来：`env -i HOME=<证据目录下的空文件夹> PATH=/usr/bin:/bin:/usr/sbin:/sbin <包里的主程序>`。不在 `/Applications` 里的副本不认领客户端钩子，也不抢共用锁。启动前后各记一次 `shasum ~/.claude/plugins/installed_plugins.json`，确认没变；停它只按自己记下的进程号 `kill`，不用 `pkill -f`（G-32）。屏幕上会多出一条侧栏，验完就关。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/iso-run1-postpane.log`（隔离实例写出的启动行和 panic 一段）；验证前后插件登记的校验值都是 `8c45e265e598`。
 - 升级：〔提醒〕未升级。
+
+## L-65 往页面主世界注入的同一份脚本，两次执行之间没有「只有自己知道」的东西：重新启用、认出自己的句柄都做不到（2026-11-21）
+
+- 现象：#488 第 2 轮审查指出，`data.js` 放在页面上的句柄带一个公开的 `start()`，页面自己就能调它重新开始旁听；再装一份时直接调已有句柄的 `start()`，页面先放一个假句柄就能顶替。原拟「用闭包里的私有 Symbol 认出自己的句柄、文件再次执行时重新启用」，动手时发现做不到。
+- 根因：每次执行都是一个新闭包，第一次执行的私有 Symbol 第二次拿不到；写死在文件里的常量，页面用 `Function.prototype.toString` 就能从句柄的函数里读出来。另外，`registerContentScripts` 登记的那份跑出的结果插件后台看不到，只有 `executeScript` 的结果带 `documentId` 和脚本的返回值。
+- 正确做法：主世界里的句柄只给停用这种收得回的能力，停用是永久的，没有重新启用的入口（关掉再打开要刷新页面）。脚本发现句柄已经在了一律让开，返回 `present`；可信与否由插件后台按「谁装的」判断：后台用 `executeScript` 补装过的页面按 `documentId` 记下来（`installed` 记晚装、`present` 记冲突），不信页面说的。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/round3-red.log`（新测试放到第 2 轮受审版本上跑的结果）及同目录 `round3-red-说明.txt`。
+- 升级：〔提醒〕未升级。

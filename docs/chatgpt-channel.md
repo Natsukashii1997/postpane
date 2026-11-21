@@ -147,18 +147,20 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 回信照旧从页面画面读，那一路作数。影子读取另加一路：插件在 chatgpt.com 页面里读页面自己用的对话数据，把读到的摘要报给驿窗，驿窗只记录，不据此认领、转回或停下任何接力。用来攒证据，决定以后要不要改成读对话数据；来由和探测结果见 [接力第1批探测结果](design/接力第1批探测结果-2026-11-20.md)。
 
 - **开关**：`<数据目录>/chatgpt/config.json` 的 `dataShadow`，默认没有（关）。设成 `true` 后重启驿窗生效：驿窗在 `watch` 里带 `shadow: true`。设置里没有这个开关的界面。
-  - 打开时：插件把 `data.js` 登记进 chatgpt.com 页面自己的运行环境（`chrome.scripting.registerContentScripts`，`world: "MAIN"`，`document_start`），并给已经开着的每个 chatgpt.com 标签页补装一份。所有 chatgpt.com 标签页都会装上它，包括常浩自己聊天的页面；在那些页面里它只旁听、不读数据。
-  - 关掉时：先撤掉登记（`getRegisteredContentScripts` 回查确认撤掉了），再到每个开着的 chatgpt.com 标签页里调用它的 `stop()`。`stop()` 清掉登录信息、不再旁听、不再读；页面的 `fetch` 没被别人再包过就放回原样，被包过就只透传。被 Chrome 丢弃（`discarded`）的标签页没有页面在跑，重新加载时也不会再装。别的够不着的标签页、或登记没撤掉，记成「撤销未完」（插件 `chrome.storage.local` 的 `shadowDisarm.pending`），驿窗每发一次名单就重试一次。撤销的结果报给驿窗一条 `why: "off"` 的记录（开关关着也记）。
+  - 打开时：插件把 `data.js` 登记进 chatgpt.com 页面自己的运行环境（`chrome.scripting.registerContentScripts`，`world: "MAIN"`，`document_start`），并给已经开着的每个 chatgpt.com 标签页补装一份。所有 chatgpt.com 标签页都会装上它，包括常浩自己聊天的页面；在那些页面里它只旁听、不读数据。补装进去的页面读到的不可信（见「可信」），刷新后由登记的那份重新装上才可信。登记失败、或有没被丢弃的标签页装不进去，记成「打开未完」（`shadowArm.pending`，带装不进去的标签页），驿窗每发一次名单就重试一次，插件后台重启后也接着重试（#488 审查 P2-03）。
+  - 关掉时：先撤掉登记（`getRegisteredContentScripts` 回查确认撤掉了），再到每个开着的 chatgpt.com 标签页里调用它的 `stop()`；然后等开关切换前已经开始的读取和补装全部结束（插件后台记着在途的每一件），再到每个标签页调用一次 `stop()`，报的是这第二遍的结果。`stop()` 中止页面里正在发的请求（每次读取一个 `AbortController`）、清掉登录信息、不再旁听、不再读；页面的 `fetch` 没被别人再包过就放回原样，被包过就只透传。停用是永久的：句柄上没有重新启用的入口，同一个页面再装一份也只会让开（见「怎么调用」），所以关掉再打开后，开着的页面要刷新才重新读。开关每切换一次，插件后台的「代次」加一；读取每一步之后都核对代次，变了就停，不补装、不报读到的内容，只报一条 `superseded`（#488 审查 P1-02）。被 Chrome 丢弃（`discarded`）的标签页没有页面在跑，重新加载时也不会再装。别的够不着的标签页、或登记没撤掉，记成「撤销未完」（插件 `chrome.storage.local` 的 `shadowDisarm.pending`），驿窗每发一次名单就重试一次。撤销的结果报给驿窗一条 `why: "off"` 的记录（开关关着也记）。
   - 开关切换（关→开、开→关）都让停读状态重新开始。插件后台重启后，开关以驿窗下一次发来的名单为准；停读状态和读取账本从插件存储恢复。
 - **登录信息**：`data.js` 旁听页面自己发往 `/backend-api/` 的请求，把其中的登录请求头留在自己的闭包里：页面读会话那个请求按前缀留（`authorization`、`originator`、`chatgpt-*`、`oai-*`、`x-openai-*`，记 `login: "same"`）；没见过它时用页面别的请求的，只留探测见过的那 11 个名字（`"other"`）。还没旁听到登录信息时不读，报 `no-login`。登录信息不交给内容脚本、插件后台或驿窗。
-- **怎么调用**：页面上没有任何消息入口。`data.js` 在 `window` 上放一个不可改写、不可删除的句柄（`Symbol.for("postpane.data")`，只有 `read`、`stop`、`start` 三个函数）。插件后台用 `chrome.scripting.executeScript`（`world: "MAIN"`）直接调用它，结果经插件内部通道带回，页面上的脚本看不到，也伪造不了回传（#488 审查 P1-01）。
-- **页面里的限制**（不论谁调用句柄）：只读这个标签页正显示的会话；会话编号和提问编号都要是编号的样子；每个页面 10 分钟内最多发 12 次请求，超了报 `limited`。
+- **怎么调用**：页面上没有任何消息入口。`data.js` 在 `window` 上放一个不可改写、不可删除的句柄（`Symbol.for("postpane.data")`，只有 `read`、`stop` 两个函数）。插件后台用 `chrome.scripting.executeScript`（`world: "MAIN"`）直接调用它，结果经插件内部通道带回，页面上的脚本看不到，也伪造不了回传（#488 审查 P1-01）。`data.js` 跑起来时句柄已经在了（以前装过的那份，或页面、别的扩展先放的），它一律不用、什么都不做，脚本的结果是 `present`；装上了是 `installed`。插件后台补装时看这个结果。
+- **取下原生方法**：`data.js` 一跑起来就取下读取要用的原生方法（`fetch`、`Response.prototype.text` 和 `status`、`JSON.parse`、`crypto.subtle.digest`、`TextEncoder.prototype.encode`、`Headers`、`URL`、`AbortController`、`Reflect.apply`），读的时候只用取下的这份。登记的那份在 `document_start` 跑，早于页面自己的脚本，所以页面之后改这些原型，影响不到读取。数组、字符串这类公共原型没有一一取下（见「风险」）。
+- **可信**（`trusted`，#488 审查 P1-01）：插件后台按 `executeScript` 返回的 `documentId` 区分页面。凡是插件后台自己补装过的页面（开开关时补装、读到 `no-script` 时补装），记在 `chrome.storage.local` 的 `shadowDocs` 里：补装结果是 `installed` 的记「晚装」，是 `present` 的记「冲突」，最多记 200 个。读取结果来自「晚装」页面的，插件后台给它加 `trusted: false`；来自「冲突」页面的，页面说的一概不要，只报 `outcome: "conflict"`；都不是的，就是页面加载时由登记的那份装上的，加 `trusted: true`。这个标记由插件后台加，不信页面说的。对账只把 `trusted: true` 的计入门槛。
+- **页面里的限制**（不论谁调用句柄）：只读这个标签页正显示的会话；会话编号和提问编号都要是 UUID；每个页面 10 分钟内最多发 12 次请求，超了报 `limited`。每发一次请求之前现取登录信息，停用后取不到，报 `stopped`；每个 `await` 之后都再核对一次是否已停用，停用了就报 `stopped`，不再发第二次（更宽的）请求。
 - **读什么**：`GET /backend-api/conversations/<会话>?num_turns=2&include_has_versions=true`（页面自己进会话时发的同一个接口，页面取 10 轮）。驿窗记下的提问不在这 2 轮里、前面还有时，再取一次 10 轮，仅此一次。所以一次读取是一次或两次请求。
-- **怎么认回信**：在 `messages` 里找编号等于提问编号、角色是 `user` 的那条；它后面到下一条用户消息之前是这一轮；回信是这一轮里 `channel` 为 `final`、`metadata.turn_exchange_id` 和提问相同的最后一条助手消息。`status` 为 `finished_successfully`、`end_turn` 为 `true`、`metadata.is_complete` 为 `true`、`metadata.finish_details.type` 为 `stop` 四样都满足才算写完（`written`）。提问没有 `turn_exchange_id`、`page_info.has_previous_page` 不是布尔值、缺用到的字段时报 `unreadable` 并列出缺哪些。不用 `metadata.parent_id`（不完整）。
-- **什么时候读**：都由事件触发，不靠页面计时器。三种原因：页面那一路报了回信（`why: "complete"`）；驿窗发起重读、页面问过之后（`"reread"`）；驿窗的话发出 20 秒后（`"writing"`，看回答生成中数据长什么样）。每条提问每种原因最多一次，所以每条提问最多读三次、最多六次请求。读取账本按「会话 → 提问 → 读过的原因」存在插件的 `chrome.storage.local`（`shadowLedger`），先记账再读，插件后台重启后同一条提问不会再读（#488 审查 P1-03）。
-- **读哪条提问**：页面报回信时带的提问编号优先，并记下来给这个会话之后的读取用；没有就用驿窗的话发出后变成的那条。都不知道时不读，只报 `no-prompt`。只读名单里的会话、只在插件连着驿窗时读、只问正显示这个会话的标签页（没有就报 `no-tab`）。
+- **怎么认回信**：在 `messages` 里找编号等于提问编号、角色是 `user` 的那条；它后面到下一条用户消息之前是这一轮；回信是这一轮里 `channel` 为 `final`、`metadata.turn_exchange_id` 和提问相同的最后一条助手消息。`status` 为 `finished_successfully`、`end_turn` 为 `true`、`metadata.is_complete` 为 `true`、`metadata.finish_details.type` 为 `stop` 四样都满足才算写完（`written`）。回信的正文必须是 `content.content_type` 为 `text`、`content.parts` 为全是字符串的非空数组，不是就报 `unreadable`（`missing` 写 `final.content.content_type` 或 `final.content.parts`），不算写完（#488 审查 P2-06）。提问没有 `turn_exchange_id`、`page_info.has_previous_page` 不是布尔值、缺用到的字段时报 `unreadable` 并列出缺哪些。不用 `metadata.parent_id`（不完整）。
+- **什么时候读**：都由事件触发，不靠页面计时器。三种原因：页面那一路报了回信（`why: "complete"`）；驿窗发起重读、页面问过之后（`"reread"`）；驿窗的话发出 20 秒后（`"writing"`，看回答生成中数据长什么样）。每条提问每种原因最多一次，所以每条提问最多读三次、最多六次请求。读取账本按「会话:提问 → 读过的原因」存在插件的 `chrome.storage.local`（`shadowLedger`，最多记 200 条提问），先记账再读，插件后台重启后同一条提问不会再读；按提问分开记，后发的提问不会占掉前一条的次数，前一条迟到的事件也不会动后一条的（#488 审查 P1-03、P2-05）。插件后台启动时从存储恢复账本、提问和「可信」记录；恢复失败（或存的不是约定的样子）就一律不读、不补装、不覆盖存储里的旧账，每次该读时只报 `ledger-unavailable`，直到插件后台下次启动恢复成功（#488 审查 P1-03）。
+- **读哪条提问**：20 秒后那一次读的是那段话发出后变成的那条（定时器建立时就记下，之后又发了话也不变，#488 审查 P2-05）；页面报回信那一次读页面带的那条；驿窗重读那一次读驿窗的话最近变成的那条。这个会话还不知道提问时，页面报回信带的那条记下来给之后用；已经知道的不被页面报的覆盖。编号不是 UUID 的不认。都不知道时不读，只报 `no-prompt`。只读名单里的会话、只在插件连着驿窗时读、只问正显示这个会话的标签页（没有就报 `no-tab`）。
 - **什么时候停**：任何一次不是 200，或请求发不出去，这个会话不再读；401、403、429 则所有会话都不读。不重试。停的状态存在插件的 `chrome.storage.local`（`shadowStops`），插件后台重启后仍然有效；把开关关掉再打开才重新开始。
-- **两头校验**：插件后台只认摘要里约定的字段和类型，有一个不对就整条记成 `invalid` 并列出哪些字段；驿窗写入前再按字段白名单过一遍，未知或类型不对的字段丢掉、记个数（`dropped`）。所以记录里不会有自由文字（#488 审查 P1-01）。
+- **两头校验**：插件后台只认摘要里约定的字段和类型，有一个不对就整条记成 `invalid` 并列出哪些字段；驿窗写入前再按字段白名单过一遍，未知或类型不对的字段丢掉、记个数（`dropped`）。编号（会话、提问、回信）只认 UUID；`why`、`outcome`、`pageOutcome`、`login` 和消息的 `role`、`channel`、`status`、`type`、`finish` 只认约定的词（`data.js` 的 `KINDS`，认不出的由 `data.js` 记成 `other`）；`asyncStatus` 的取值还没摸清，只记有没有（有就是 `other`）。跨字段：摘要里的 `asked` 必须是插件后台要它找的那条，`askFound` 为真时 `prompt` 必须等于它；驿窗那头 `askFound` 为真而 `prompt` 和 `asked` 不同，就把这两个字段丢掉。所以记录里没有自由文字，也放不进一段任意的 ASCII（#488 审查 P1-01 和白名单意见）。
 - **`shadow` 消息和记录**：驿窗把每条 `shadow` 按白名单过滤、加上 `heardAt`，追加成 `<数据目录>/chatgpt/shadow.jsonl` 的一行。不在名单里的会话、开关关着时不记（`why: "off"` 的撤销记录除外）；超过 4096 字节的不记。文件已存在时必须是普通文件、只有本人能读写，不是就不写（#488 审查 P2-04）。字段：
 
   | 字段 | 含义 |
@@ -166,19 +168,23 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
   | `conversation`, `why`, `at`, `asked` | 会话、原因（见上，另有 `off`）、插件发出的时间、要找的提问编号 |
   | `pagePromptId`, `pageMessageId`, `pageChars` | `why` 为 `complete` 时：页面那一路认到的提问编号、回信编号、回信字数，用来对比 |
   | `pageOutcome` | `why` 为 `reread` 时：页面那一路这次重读的结果 |
-  | `outcome` | `read` 读到了；`http` 不是 200（带 `status`）；`error` 请求没发出去；`unreadable` 结构读不懂（带 `missing`）；`no-login` 还没有登录信息；`limited` 页面里的请求上限到了；`stopped` 页面里那份已停用；`no-script` 页面里没有 `data.js`（这时插件补装一份，下次再读）；`other-conversation` 标签页显示的不是这个会话；`no-tab` 没有显示这个会话的标签页；`no-prompt` 不知道是哪条提问，没读；`unreachable` 标签页里调用不了；`invalid` 页面回的不是约定的摘要（带 `fields`）；`why: "off"` 时为 `disarmed` 或 `disarm-pending` |
-  | `status`, `turns`, `tries`, `bytes`, `ms`, `hidden`, `login` | 状态码、取了几轮、发了几次请求、返回的字符数、耗时、当时标签页是否隐藏、用的哪一套登录信息 |
+  | `outcome` | `read` 读到了；`conflict` 页面的句柄不是 `data.js` 自己的，页面说的不要；`superseded` 读到一半开关切换了，结果不报；`ledger-unavailable` 读取账本没恢复，没读；`http` 不是 200（带 `status`）；`error` 请求没发出去；`unreadable` 结构读不懂（带 `missing`）；`no-login` 还没有登录信息；`limited` 页面里的请求上限到了；`stopped` 页面里那份已停用；`no-script` 页面里没有 `data.js`（这时插件补装一份，下次再读）；`other-conversation` 标签页显示的不是这个会话；`no-tab` 没有显示这个会话的标签页；`no-prompt` 不知道是哪条提问，没读；`unreachable` 标签页里调用不了；`invalid` 页面回的不是约定的摘要（带 `fields`）；`why: "off"` 时为 `disarmed` 或 `disarm-pending` |
+  | `status`, `turns`, `tries`, `bytes`, `ms`, `hidden`, `login` | 状态码、取了几轮、发了几次请求、返回的 UTF-8 字节数（#488 审查 P2-07）、耗时、当时标签页是否隐藏、用的哪一套登录信息 |
   | `messages`, `more`, `asyncStatus` | 返回的消息条数、前面还有没有、会话级状态 |
   | `askFound`, `prompt` | 找没找到要找的提问、实际用的那条提问 |
   | `after`, `exchange`, `last` | 提问后面这一轮有几条消息、它们的 `turn_exchange_id` 是否都和提问相同、最后一条的角色 / 类别 / 状态 / 内容类型 |
   | `final` | 回信：`id`、`status`、`endTurn`、`complete`、`finish`、`chars`（字数）、`sha`（正文 SHA-256 的前 16 位）；没有就是 `null` |
   | `written` | 回信是否写完（四样都满足） |
+  | `trusted` | 页面那一路给出的结果才有：页面加载时就装上 `data.js` 的为 `true`，后来补装的为 `false`（见「可信」） |
   | `tabs`, `stopped`, `failed`, `unregistered` | `why: "off"` 时：调用了几个标签页、几个确认停用、几个够不着、登记是否已撤掉 |
   | `dropped`, `heardAt` | 驿窗过滤掉的字段数、驿窗收到的时间 |
 
   记录里没有回信正文，没有登录信息。
-- **对账**：`node scripts/relay-shadow-report.mjs` 把 `shadow.jsonl` 和 `handoffs.json` 对一遍，按切换门槛列出够不够。`no-script` 那次只是待补证：同一条提问之后读成且写完才算补上，没补上的算漏读；认到的提问都要能在 `handoffs.json` 里找到，也是门槛之一。
-- **风险和防不住的**：这不是公开接口，结构和频率限制都没有承诺；`data.js` 包了一层页面的 `fetch` 来旁听，页面能察觉到。页面顶层的脚本本来就握着整个登录会话（自己能读任何对话），`data.js` 防不住专门针对驿窗、又先于它跑起来的脚本：那样的脚本可以先占住句柄，给出假摘要。两头校验保证假摘要也只能是约定字段里的编号、计数和标记；影子记录不驱动任何接力行为；切换之前要在真实环境核对。所以默认关，出现任何异常就停，读页面那一路不受影响。
+- **对账**：`node scripts/relay-shadow-report.mjs` 把 `shadow.jsonl` 和 `handoffs.json` 对一遍，按切换门槛列出够不够。只有 `trusted: true` 的读取计入门槛；`trusted: false` 和 `conflict` 的不进门槛、也不算漏读，单独数出来。`no-script` 那次只是待补证：之后要有一次可信的读取，同一会话、要找的是同一条提问、实际找到的就是它（`prompt` 相同、`askFound` 为真）、回信编号和页面那一路报的相同，而且读成、写完，才算补上，没补上的算漏读；认到的提问和补上的那几次要找的提问，都要能在 `handoffs.json` 里找到，也是门槛之一（#488 审查 P2-02）。
+- **风险和防不住的**：这不是公开接口，结构和频率限制都没有承诺；`data.js` 包了一层页面的 `fetch` 来旁听，页面能察觉到。影子证据的来源可信只做到这一步：补装的页面标成不可信、句柄冲突的页面不要、读取用页面加载前取下的原生方法。剩下两种防不住，常浩 2026-11-21 决定接受这份剩余风险，只靠 `trusted` 标记加门槛排除兜底：
+  - 页面在 `data.js` 装好之后改数组、字符串这类没有一一取下的公共原型，能影响 `data.js` 对数据的整理，给出结构合法的假摘要；
+  - 别的扩展在 `document_start` 之前抢先放好句柄：这时登记的那份让开了，但插件后台看不到登记的那份跑出的结果，这个页面仍会被当成可信。
+  接受的理由：现有正式那一路（读页面画面）完全由页面脚本画出来，页面顶层脚本同样能伪造，所以影子那一路对页面脚本的可信度不低于现有正式路径；「来源绝对可信」对任何读 chatgpt.com 的办法都做不到。两头校验保证假摘要也只能是约定字段里的编号、计数和标记；影子记录不驱动任何接力行为；切换之前要在真实环境核对。所以默认关，出现任何异常就停，读页面那一路不受影响。
 
 ## 页面结构（2026-11 新版 chatgpt.com，探针 #95）
 

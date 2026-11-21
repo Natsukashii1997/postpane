@@ -96,7 +96,7 @@ fn the_watched_list_is_kept_between_runs() {
 fn a_shadow_read_is_kept_as_a_line_while_the_switch_is_on() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
-    let told = json!({"type":"shadow","conversation":"68a1","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"m1","chars":12,"sha":"0123456789abcdef"}});
+    let told = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"0b1c2d3e-0000-4000-8000-0000000000a1","chars":12,"sha":"0123456789abcdef"}});
     // Off unless set: nothing is written.
     assert!(!shadow::on(&data));
     assert_eq!(shadow::keep(&data, true, &told, 9), Ok(false));
@@ -115,7 +115,7 @@ fn a_shadow_read_is_kept_as_a_line_while_the_switch_is_on() {
         shadow::keep(
             &data,
             true,
-            &json!({"type":"shadow","conversation":"68a1","why":"reread","outcome":"http","status":429}),
+            &json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"reread","outcome":"http","status":429}),
             10
         ),
         Ok(true)
@@ -128,11 +128,11 @@ fn a_shadow_read_is_kept_as_a_line_while_the_switch_is_on() {
     assert_eq!(lines.len(), 2);
     assert_eq!(
         lines[0],
-        json!({"conversation":"68a1","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"m1","chars":12,"sha":"0123456789abcdef"},"heardAt":9})
+        json!({"conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","at":5,"outcome":"read","written":true,"final":{"id":"0b1c2d3e-0000-4000-8000-0000000000a1","chars":12,"sha":"0123456789abcdef"},"heardAt":9})
     );
     assert_eq!(lines[1]["status"], 429);
     // A summary is short: anything long (a reply's words would be) is refused.
-    let long = json!({"type":"shadow","conversation":"68a1","text":"答".repeat(3000)});
+    let long = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","text":"答".repeat(3000)});
     assert!(shadow::keep(&data, true, &long, 11).is_err());
     assert_eq!(
         std::fs::read_to_string(shadow::path(&data))
@@ -152,9 +152,9 @@ fn a_shadow_line_keeps_only_known_fields_of_their_kinds() {
     crate::os::private_directory(&folder(&data)).unwrap();
     std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
     let told = json!({
-        "type": "shadow", "conversation": "68a1", "why": "complete", "at": 5, "outcome": "read",
+        "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "why": "complete", "at": 5, "outcome": "read",
         "text": "回信的正文", "authorization": "Bearer x", "status": "200", "hidden": "yes",
-        "final": {"id": "m1", "chars": 3, "sha": "0123456789abcdef"},
+        "final": {"id": "0b1c2d3e-0000-4000-8000-0000000000a1", "chars": 3, "sha": "0123456789abcdef"},
         "last": {"role": "assistant", "words": "正文"},
         "missing": ["messages[].id"]
     });
@@ -163,12 +163,12 @@ fn a_shadow_line_keeps_only_known_fields_of_their_kinds() {
         serde_json::from_str(std::fs::read_to_string(shadow::path(&data)).unwrap().trim()).unwrap();
     assert_eq!(
         kept,
-        json!({"conversation":"68a1","why":"complete","at":5,"outcome":"read",
-               "final":{"id":"m1","chars":3,"sha":"0123456789abcdef"},
+        json!({"conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","at":5,"outcome":"read",
+               "final":{"id":"0b1c2d3e-0000-4000-8000-0000000000a1","chars":3,"sha":"0123456789abcdef"},
                "missing":["messages[].id"],"dropped":5,"heardAt":9})
     );
     // Words where an id or a word goes are not ids or words.
-    let wordy = json!({"type":"shadow","conversation":"68a1","outcome":"read","prompt":"请 审核","why":"a b"});
+    let wordy = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","outcome":"read","prompt":"请 审核","why":"a b"});
     assert_eq!(shadow::keep(&data, true, &wordy, 10), Ok(true));
     let last: Value = serde_json::from_str(
         std::fs::read_to_string(shadow::path(&data))
@@ -182,6 +182,63 @@ fn a_shadow_line_keeps_only_known_fields_of_their_kinds() {
     assert!(last.get("prompt").is_none() && last.get("why").is_none());
 }
 
+// #488 review: ids are UUIDs and words are the ones the extension says; a
+// prompt found is the one asked for. Anything else is left out and counted.
+#[test]
+fn a_shadow_line_takes_only_uuids_known_words_and_a_prompt_found_as_asked() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    let asked = "0b1c2d3e-0000-4000-8000-000000000001";
+    let other = "0b1c2d3e-0000-4000-8000-000000000002";
+    let lines = |at: i64, told: Value| {
+        assert_eq!(shadow::keep(&data, true, &told, at), Ok(true));
+        let text = std::fs::read_to_string(shadow::path(&data)).unwrap();
+        serde_json::from_str::<Value>(text.lines().last().unwrap()).unwrap()
+    };
+    let known = lines(
+        1,
+        json!({
+            "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "why": "complete", "outcome": "read",
+            "asked": asked, "askFound": true, "prompt": asked, "trusted": false,
+            "asyncStatus": "other", "login": "same", "pageOutcome": "told",
+            "last": {"role": "assistant", "channel": "final", "status": "in_progress", "type": "other"},
+            "final": {"id": other, "status": "finished_successfully", "finish": "stop", "chars": 1}
+        }),
+    );
+    assert!(known.get("dropped").is_none(), "{known}");
+    assert_eq!(known["trusted"], false);
+    // Free ASCII where an id or a word goes: left out.
+    let free = lines(
+        2,
+        json!({
+            "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "read",
+            "asked": "sk-not-an-id", "asyncStatus": "token_abc", "login": "bearer",
+            "final": {"id": other, "finish": "stopped_by_me"},
+            "last": {"role": "assistant", "status": "abcdef"}
+        }),
+    );
+    assert_eq!(free["dropped"], 5);
+    for name in ["asked", "asyncStatus", "login", "final", "last"] {
+        assert!(free.get(name).is_none(), "{name} kept: {free}");
+    }
+    // Found, but not the prompt asked for: neither is kept.
+    let found = lines(
+        3,
+        json!({
+            "type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "read",
+            "asked": asked, "askFound": true, "prompt": other
+        }),
+    );
+    assert_eq!(found["dropped"], 2);
+    assert!(found.get("askFound").is_none() && found.get("prompt").is_none());
+    assert_eq!(found["asked"], asked);
+    // An outcome is one the extension says, or there is no line.
+    let made_up = json!({"type": "shadow", "conversation": "6af7ec47-c0f4-83ee-9b9e-bf518660767e", "outcome": "made-up"});
+    assert!(shadow::keep(&data, true, &made_up, 4).is_err());
+}
+
 // #488 review P1-02: what a switch-off came to is kept with the switch off.
 #[test]
 fn a_switch_off_is_kept_with_the_switch_off() {
@@ -191,10 +248,10 @@ fn a_switch_off_is_kept_with_the_switch_off() {
     assert!(!shadow::on(&data));
     assert_eq!(shadow::keep(&data, false, &off, 4), Ok(true));
     // A read with the switch off is not, even of a watched conversation.
-    let read = json!({"type":"shadow","conversation":"68a1","why":"complete","outcome":"read"});
+    let read = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","outcome":"read"});
     assert_eq!(shadow::keep(&data, true, &read, 5), Ok(false));
     // Nor is one saying `off` about a conversation.
-    let posing = json!({"type":"shadow","conversation":"68a1","why":"off","outcome":"read"});
+    let posing = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"off","outcome":"read"});
     assert_eq!(shadow::keep(&data, true, &posing, 6), Ok(false));
     let lines = std::fs::read_to_string(shadow::path(&data)).unwrap();
     assert_eq!(lines.lines().count(), 1);
@@ -223,7 +280,13 @@ fn a_shadow_read_told_by_the_extension_is_kept_for_watched_conversations() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
     let mut list = vec![];
-    add_watched(&mut list, "68a1", "审核", true, 1);
+    add_watched(
+        &mut list,
+        "6af7ec47-c0f4-83ee-9b9e-bf518660767e",
+        "审核",
+        true,
+        1,
+    );
     save_watched(&data, &list).unwrap();
     std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
     let shared = Shared::new(data.clone());
@@ -232,9 +295,11 @@ fn a_shadow_read_told_by_the_extension_is_kept_for_watched_conversations() {
     let first = sent.lock().unwrap().clone();
     assert_eq!(
         read_frame(&mut first.as_slice(), INBOUND_LIMIT).unwrap(),
-        Some(json!({"type":"watch","conversations":["68a1"],"shadow":true}))
+        Some(
+            json!({"type":"watch","conversations":["6af7ec47-c0f4-83ee-9b9e-bf518660767e"],"shadow":true})
+        )
     );
-    for conversation in ["other", "68a1"] {
+    for conversation in ["other", "6af7ec47-c0f4-83ee-9b9e-bf518660767e"] {
         shared.inbound(
             id,
             json!({"type":"shadow","conversation":conversation,"why":"complete","at":7,"outcome":"read","written":true}),
@@ -246,7 +311,10 @@ fn a_shadow_read_told_by_the_extension_is_kept_for_watched_conversations() {
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0]["conversation"], "68a1");
+    assert_eq!(
+        lines[0]["conversation"],
+        "6af7ec47-c0f4-83ee-9b9e-bf518660767e"
+    );
     assert_eq!(lines[0]["why"], "complete");
     assert!(lines[0]["heardAt"].is_i64());
     assert!(lines[0].get("type").is_none());

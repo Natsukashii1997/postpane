@@ -31,41 +31,54 @@ export function summarize(records, handoffs = []) {
       {},
     );
   const read = records.filter((record) => record.outcome === "read");
+  // 只有页面加载时就装上 data.js 的那一份读到的算数（trusted）；开开关时、
+  // 补装时才装进去的页面，和句柄被别人先占住的页面（conflict），读到什么
+  // 都不进门槛，只单独数出来（#488 审查 P1-01）。
+  const trusted = (record) => record.trusted === true;
+  const untrustedOf = (record) =>
+    record.trusted === false || record.outcome === "conflict";
   // 读页面报了回信时的那一次：两路能直接比。
   const complete = records.filter((record) => record.why === "complete");
   const compared = complete.filter(
-    (record) => record.outcome === "read" && record.final,
+    (record) => record.outcome === "read" && record.final && trusted(record),
   );
   const sameId = compared.filter(
     (record) => record.final.id === record.pageMessageId,
   );
   // 读页面拿到了，数据一路没拿到（没读成、没找到回信，或回信没标成写完）。
-  // 页面里还没有 data.js（no-script）的那次只是待补证：同一条提问之后有一次
-  // 读成且写完才算补上，没补上的照样算漏读（#488 审查 P2-02）。
+  // 页面里还没有 data.js（no-script）的那次只是待补证：之后有一次可信的读取，
+  // 同一会话、同一条要找的提问、实际找到的就是它、回信编号和页面那一路的
+  // 一样，而且读成、写完，才算补上；没补上的照样算漏读（#488 审查 P2-02）。
   const good = (record) =>
-    record.outcome === "read" && record.final && record.written;
-  const promptOf = (record) =>
-    record.pagePromptId ?? record.asked ?? record.prompt;
+    record.outcome === "read" &&
+    trusted(record) &&
+    record.final &&
+    record.written;
+  const askedOf = (record) => record.pagePromptId ?? record.asked;
   const later = (record) =>
     records.some(
       (other) =>
         other !== record &&
         (other.heardAt ?? other.at) >= (record.heardAt ?? record.at) &&
         other.conversation === record.conversation &&
-        promptOf(other) === promptOf(record) &&
+        other.asked === askedOf(record) &&
+        other.prompt === askedOf(record) &&
+        other.askFound === true &&
+        other.final?.id === record.pageMessageId &&
         good(other),
     );
+  const recovered = complete.filter(
+    (record) => record.outcome === "no-script" && later(record),
+  );
+  const untrusted = complete.filter(untrustedOf);
   const missed = complete.filter(
     (record) =>
-      !good(record) && !(record.outcome === "no-script" && later(record)),
+      !good(record) && !untrustedOf(record) && !recovered.includes(record),
   );
   // 驿窗重读时页面那一路没拿到，数据一路拿到了写完的回信：本可以不卡。
   const rereads = records.filter((record) => record.why === "reread");
   const rescued = rereads.filter(
-    (record) =>
-      record.pageOutcome !== "told" &&
-      record.outcome === "read" &&
-      record.written,
+    (record) => record.pageOutcome !== "told" && good(record),
   );
   // 提问发出 20 秒后的那一次：回答生成中数据长什么样。
   const writing = records.filter(
@@ -81,8 +94,13 @@ export function summarize(records, handoffs = []) {
     compared.map((record) => day.format(new Date(record.heardAt ?? record.at))),
   );
   const hidden = compared.filter((record) => record.hidden);
-  const known = compared.filter((record) =>
-    asked.has(`${record.conversation}:${record.prompt}`),
+  // 认到的提问，和补上的那几次要找的提问，都要是驿窗记下的（#488 审查 P2-02）。
+  const matched = [
+    ...compared.map((record) => [record, record.prompt]),
+    ...recovered.map((record) => [record, askedOf(record)]),
+  ];
+  const known = matched.filter(([record, prompt]) =>
+    asked.has(`${record.conversation}:${prompt}`),
   );
   const result = {
     records: records.length,
@@ -93,6 +111,9 @@ export function summarize(records, handoffs = []) {
     sameId: sameId.length,
     differentId: compared.length - sameId.length,
     promptInHandoffs: known.length,
+    promptsMatched: matched.length,
+    recovered: recovered.length,
+    untrusted: untrusted.length,
     missed: missed.map((record) => ({
       conversation: record.conversation,
       outcome: record.outcome,
@@ -123,7 +144,7 @@ export function summarize(records, handoffs = []) {
     noMiss: result.missed.length === 0,
     // 认到的提问都是驿窗记下的那条（#488 审查 P2-02）。
     promptKnown:
-      result.compared > 0 && result.promptInHandoffs === result.compared,
+      result.compared > 0 && result.promptInHandoffs === result.promptsMatched,
     noLimit: result.limited === 0,
   };
   result.reached = Object.values(result.bar).every(Boolean);
@@ -148,7 +169,10 @@ function print(result) {
   );
   console.log(`读成的用的登录信息：${list(result.bySignIn)}。`);
   console.log(
-    `两路都拿到回信、能直接比的 ${result.compared} 封：编号一致 ${result.sameId}，不一致 ${result.differentId}；提问编号在 handoffs.json 里找得到的 ${result.promptInHandoffs}。`,
+    `两路都拿到回信、能直接比的 ${result.compared} 封（只算可信的）：编号一致 ${result.sameId}，不一致 ${result.differentId}；补证补上的 ${result.recovered} 次；认到的 ${result.promptsMatched} 条提问里在 handoffs.json 里找得到的 ${result.promptInHandoffs}。`,
+  );
+  console.log(
+    `不可信、不进门槛的 ${result.untrusted} 次（开开关或补装后才装上 data.js 的页面，或句柄被占的页面）。`,
   );
   console.log(
     `读页面拿到、数据一路没拿到：${result.missed.length} 次${result.missed.length ? "：" + JSON.stringify(result.missed) : ""}。`,

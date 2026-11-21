@@ -27,6 +27,13 @@ function load(
     stored = {},
     called = [],
     unreachable = new Set(),
+    // #488: each tab's document, what data.js says when put in a tab
+    // (`installed` unless named), a read the test lets go of (`gate`), and
+    // what fails on purpose.
+    docs = {},
+    installs = {},
+    gate = null,
+    faults = {},
   } = {},
 ) {
   const listeners = {};
@@ -47,7 +54,11 @@ function load(
     },
     storage: {
       local: {
-        get: async () => ({ watched, ...stored }),
+        get: async (keys) => {
+          if (faults.restore && [keys].flat().includes("shadowLedger"))
+            throw new Error("storage unavailable");
+          return { watched, ...stored };
+        },
         set: async (values) =>
           void Object.assign(stored, JSON.parse(JSON.stringify(values))),
       },
@@ -78,6 +89,7 @@ function load(
     scripting: {
       // As Chrome: a script already registered, or not registered, throws.
       registerContentScripts: async (scripts) => {
+        if (faults.register) throw new Error("Could not register");
         if (stored.registered) throw new Error("Duplicate script ID");
         stored.registered = true;
         registered.push(["on", JSON.parse(JSON.stringify(scripts))]);
@@ -93,6 +105,7 @@ function load(
         // A function run in the page (#488): what the page in that tab
         // answers. `unreachable` tabs take no script at all.
         if (unreachable.has(target.tabId)) throw new Error("Cannot access");
+        const documentId = docs[target.tabId] ?? `doc-${target.tabId}`;
         if (func) {
           called.push([
             target.tabId,
@@ -100,8 +113,11 @@ function load(
             JSON.parse(JSON.stringify(args ?? [])),
           ]);
           if (func.name === "stopInPage")
-            return [{ result: { stopped: true, restored: true } }];
-          return [{ result: answers.shift() ?? { outcome: "read" } }];
+            return [{ documentId, result: { stopped: true, restored: true } }];
+          if (gate) await gate();
+          return [
+            { documentId, result: answers.shift() ?? { outcome: "read" } },
+          ];
         }
         // Copied out of the sandbox's realm, so deepEqual compares values.
         injected.push(
@@ -111,7 +127,7 @@ function load(
         );
         if (target.tabId === 1) throw new Error("Frame with ID 0 was removed.");
         dead.delete(target.tabId);
-        return [{ result: undefined }];
+        return [{ documentId, result: installs[target.tabId] ?? "installed" }];
       },
     },
   };
@@ -698,6 +714,9 @@ test("two failed tries say not pressed only when both do", async () => {
 // --- #488: the shadow read of ChatGPT's own data ------------------------------
 
 const SHADOWED = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+// Prompts and replies are named by UUIDs, as ChatGPT's are.
+const P = (n) => `0b1c2d3e-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const M = (n) => `0b1c2d3e-0000-4000-9000-${String(n).padStart(12, "0")}`;
 const OTHER = "6af7ec47-c0f4-83ee-9b9e-bf518660aaaa";
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const settle = async () => {
@@ -720,6 +739,8 @@ async function shadowed(options = {}) {
     stored: {},
     called: [],
     unreachable: new Set(),
+    docs: {},
+    faults: {},
     ...options,
   };
   delete kit.more;
@@ -749,8 +770,8 @@ async function shadowed(options = {}) {
         type: "turn",
         phase: "complete",
         conversation,
-        promptId: "p1",
-        messageId: "m1",
+        promptId: P(1),
+        messageId: M(1),
         reply: "abc",
         ...more,
       },
@@ -825,7 +846,8 @@ test("switched off, data.js is taken out of the pages it is in, and said so", as
   await kit.watch(true);
   await kit.watch();
   assert.deepEqual(kit.registered[1], ["off", ["postpane-data"]]);
-  assert.deepEqual(kit.stopsAsked(), [2, 3]);
+  // Stopped, then once what was on its way has ended, stopped again.
+  assert.deepEqual(kit.stopsAsked(), [2, 3, 2, 3]);
   assert.equal(kit.stored.shadow, false);
   assert.deepEqual(kit.stored.shadowDisarm.pending, false);
   const said = kit.shadows().at(-1);
@@ -842,7 +864,7 @@ test("switched off, data.js is taken out of the pages it is in, and said so", as
   );
   // Off and done: the next lists ask nothing of the pages.
   await kit.watch();
-  assert.deepEqual(kit.stopsAsked(), [2, 3]);
+  assert.deepEqual(kit.stopsAsked(), [2, 3, 2, 3]);
 });
 
 test("a page it could not reach keeps the switch-off pending, and it is tried again; a discarded one does not", async () => {
@@ -859,7 +881,7 @@ test("a page it could not reach keeps the switch-off pending, and it is tried ag
   kit.unreachable.delete(3);
   await kit.watch();
   assert.equal(kit.stored.shadowDisarm.pending, false);
-  assert.deepEqual(kit.stopsAsked(), [2, 2, 3]);
+  assert.deepEqual(kit.stopsAsked(), [2, 2, 2, 3, 2, 3]);
   assert.equal(kit.shadows().at(-1).outcome, "disarmed");
 });
 
@@ -869,7 +891,7 @@ test("a reply the page reports is read from the data too, once, and told beside 
       {
         outcome: "read",
         written: true,
-        final: { id: "m1", chars: 3, sha: "0123456789abcdef" },
+        final: { id: M(1), chars: 3, sha: "0123456789abcdef" },
       },
     ],
   });
@@ -880,7 +902,7 @@ test("a reply the page reports is read from the data too, once, and told beside 
   // One PostPane does not watch is the person's own chat: never read.
   kit.complete(4, "6af7ec47-c0f4-83ee-9b9e-bf518660bbbb");
   await settle();
-  assert.deepEqual(kit.reads(), [[2, SHADOWED, "p1"]]);
+  assert.deepEqual(kit.reads(), [[2, SHADOWED, P(1)]]);
   const [told, ...rest] = kit.shadows();
   assert.deepEqual(rest, []);
   const { at, ...record } = told;
@@ -889,16 +911,18 @@ test("a reply the page reports is read from the data too, once, and told beside 
     type: "shadow",
     conversation: SHADOWED,
     why: "complete",
-    asked: "p1",
-    pagePromptId: "p1",
-    pageMessageId: "m1",
+    asked: P(1),
+    pagePromptId: P(1),
+    pageMessageId: M(1),
     pageChars: 3,
     outcome: "read",
     written: true,
-    final: { id: "m1", chars: 3, sha: "0123456789abcdef" },
+    final: { id: M(1), chars: 3, sha: "0123456789abcdef" },
+    // Put into this page when switched on, after it loaded: not trusted.
+    trusted: false,
   });
   // The next prompt's reply is read again.
-  kit.complete(2, SHADOWED, { promptId: "p2", messageId: "m2" });
+  kit.complete(2, SHADOWED, { promptId: P(2), messageId: M(2) });
   await settle();
   assert.equal(kit.reads().length, 2);
 });
@@ -909,13 +933,13 @@ test("what a page answers is told only as a summary of known fields", async () =
   const kit = await shadowed({
     answers: [
       { outcome: "read", written: true, text: "the reply's words" },
-      { outcome: "read", final: { id: "m1", sha: "not a sha" } },
+      { outcome: "read", final: { id: M(1), sha: "not a sha" } },
       { outcome: "made up" },
       "a string",
     ],
   });
   await kit.watch(true);
-  for (const prompt of ["p1", "p2", "p3", "p4"]) {
+  for (const prompt of [P(1), P(2), P(3), P(4)]) {
     kit.complete(2, SHADOWED, { promptId: prompt });
     await settle();
   }
@@ -948,15 +972,15 @@ test("a read that failed ends the reads of that conversation; a limit or a refus
   await kit.watch(true);
   kit.complete(2, SHADOWED);
   await settle();
-  kit.complete(2, SHADOWED, { promptId: "p2" });
+  kit.complete(2, SHADOWED, { promptId: P(2) });
   await settle();
   assert.equal(kit.reads().length, 1, "the conversation is not read again");
   kit.complete(3, OTHER);
   await settle();
-  kit.complete(3, OTHER, { promptId: "p2" });
+  kit.complete(3, OTHER, { promptId: P(2) });
   await settle();
   assert.equal(kit.reads().length, 3);
-  kit.complete(3, OTHER, { promptId: "p3" });
+  kit.complete(3, OTHER, { promptId: P(3) });
   await settle();
   assert.equal(kit.reads().length, 3, "after a limit no conversation is read");
   assert.deepEqual(kit.stored.shadowStops, {
@@ -974,7 +998,7 @@ test("a read that failed ends the reads of that conversation; a limit or a refus
   // Switched off and on again by the person: reads start over.
   await kit.watch();
   await kit.watch(true);
-  kit.complete(2, SHADOWED, { promptId: "p4" });
+  kit.complete(2, SHADOWED, { promptId: P(4) });
   await settle();
   assert.equal(kit.reads().length, 4);
 });
@@ -989,10 +1013,10 @@ test("a restarted worker goes by what the extension kept: stops still hold, and 
   await off.watch();
   assert.deepEqual(off.registered, [["off", ["postpane-data"]]]);
   assert.equal(off.stored.shadow, false);
-  assert.deepEqual(off.stopsAsked(), [2, 3]);
+  assert.deepEqual(off.stopsAsked(), [2, 3, 2, 3]);
   const kit = await shadowed({ stored: { ...kept } });
   // Not told the switch yet (PostPane not connected again): nothing is read.
-  kit.complete(3, OTHER, { promptId: "p0" });
+  kit.complete(3, OTHER, { promptId: P(0) });
   await settle();
   assert.deepEqual(kit.reads(), []);
   await kit.watch(true);
@@ -1022,7 +1046,7 @@ test("a restarted worker reads nothing it read before", async () => {
   await settle();
   assert.deepEqual(again.reads(), []);
   // A new prompt is read.
-  again.complete(2, SHADOWED, { promptId: "p2" });
+  again.complete(2, SHADOWED, { promptId: P(2) });
   await settle();
   assert.equal(again.reads().length, 1);
 });
@@ -1031,7 +1055,7 @@ test("reading again, and words sent, are read from the data too: once the page w
   const kit = await shadowed({
     answers: [
       { ok: true, streaming: false, told: false, loaded: true },
-      { ok: true, promptId: "p9" },
+      { ok: true, promptId: P(9) },
       { outcome: "read", written: false },
       { outcome: "read", written: true },
     ],
@@ -1054,7 +1078,7 @@ test("reading again, and words sent, are read from the data too: once the page w
   });
   await settle();
   assert.ok(kit.waits.includes(20000));
-  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, "p9"]);
+  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, P(9)]);
   assert.equal(kit.shadows().at(-1).why, "writing");
   // Read again later for the same prompt: read, once.
   kit.asked.length = 0;
@@ -1062,12 +1086,12 @@ test("reading again, and words sent, are read from the data too: once the page w
   await kit.listeners.port({ type: "reread", conversation: SHADOWED });
   await settle();
   assert.equal(kit.reads().length, 2);
-  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, "p9"]);
+  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, P(9)]);
   // A reply the page reports names its own prompt: that one is read, not the
   // one PostPane's words became before it (the person asked on by hand).
-  kit.complete(2, SHADOWED, { promptId: "p10", messageId: "m10" });
+  kit.complete(2, SHADOWED, { promptId: P(10), messageId: M(10) });
   await settle();
-  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, "p10"]);
+  assert.deepEqual(kit.reads().at(-1), [2, SHADOWED, P(10)]);
 });
 
 test("words whose prompt is not known are not read 20 s later, and that is said", async () => {
@@ -1096,4 +1120,253 @@ test("a page open from before data.js came gets it put in, and says it had none"
   assert.deepEqual(kit.injected, [[2, ["data.js"], "MAIN"]]);
   assert.equal(kit.reads().length, 1);
   assert.equal(kit.shadows()[0].outcome, "no-script");
+});
+
+// #488 review P1-01: only a page data.js went into as it loaded is trusted;
+// one it was put into after it loaded is not, and from one that held the
+// handle already nothing is taken.
+test("what a page read says is trusted only of a page data.js went into as it loaded", async () => {
+  const kit = await shadowed({
+    installs: { 3: "present" },
+    answers: [
+      { outcome: "read", written: true },
+      { outcome: "read", written: true, asked: P(1) },
+      { outcome: "read", written: true },
+    ],
+  });
+  await kit.watch(true);
+  assert.deepEqual(kit.stored.shadowDocs, {
+    "doc-2": "late",
+    "doc-3": "conflict",
+  });
+  kit.complete(2, SHADOWED);
+  kit.complete(3, OTHER);
+  await settle();
+  // The page in tab 2 loads again: data.js goes in as it loads.
+  kit.docs[2] = "doc-2-again";
+  kit.complete(2, SHADOWED, { promptId: P(2) });
+  await settle();
+  assert.deepEqual(
+    kit
+      .shadows()
+      .map((told) => [told.conversation, told.outcome, told.trusted]),
+    [
+      [SHADOWED, "read", false],
+      [OTHER, "conflict", undefined],
+      [SHADOWED, "read", true],
+    ],
+  );
+  // A worker started again still knows which pages are not trusted.
+  const again = await shadowed({
+    stored: { ...kit.stored },
+    docs: { 2: "doc-2-again" },
+  });
+  await again.watch(true);
+  again.complete(2, SHADOWED, { promptId: P(5) });
+  await settle();
+  assert.equal(again.shadows()[0].trusted, true);
+  again.docs[2] = "doc-2";
+  again.complete(2, SHADOWED, { promptId: P(6) });
+  await settle();
+  assert.equal(again.shadows()[1].trusted, false);
+});
+
+// #488 review P1-02: switched off while a read is on its way, the switch-off
+// waits for it, nothing is put in after, and what it found is not told.
+test("switched off while a read is on its way: it is waited for, superseded, and puts nothing in", async () => {
+  let letGo;
+  const held = new Promise((resolve) => (letGo = resolve));
+  const kit = await shadowed({
+    gate: () => held,
+    answers: [{ outcome: "no-script" }],
+  });
+  await kit.watch(true);
+  kit.injected.length = 0;
+  kit.complete(2, SHADOWED);
+  await settle();
+  assert.equal(kit.reads().length, 1);
+  const off = kit.watch();
+  await settle();
+  // The switch-off stopped the pages once and waits for the read.
+  assert.deepEqual(kit.stopsAsked(), [2, 3]);
+  assert.ok(!kit.shadows().some((told) => told.why === "off"));
+  letGo();
+  await off;
+  await settle();
+  assert.deepEqual(kit.injected, [], "nothing put in after the switch-off");
+  assert.deepEqual(kit.stopsAsked(), [2, 3, 2, 3]);
+  assert.deepEqual(
+    kit.shadows().map((told) => [told.why, told.outcome]),
+    [
+      ["complete", "superseded"],
+      ["off", "disarmed"],
+    ],
+  );
+});
+
+// #488 review P1-03: what was read not known, nothing is read.
+test("what was read cannot be restored: nothing is read, and nothing kept is written over", async () => {
+  const kit = await shadowed({
+    faults: { restore: true },
+    stored: { shadowLedger: { kept: ["complete"] } },
+  });
+  await kit.watch(true);
+  assert.deepEqual(kit.injected, [], "nothing put into pages either");
+  kit.complete(2, SHADOWED);
+  await kit.listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation: SHADOWED,
+    text: "words",
+  });
+  await settle();
+  assert.deepEqual(kit.reads(), []);
+  assert.deepEqual(
+    kit.shadows().map((told) => told.outcome),
+    ["ledger-unavailable"],
+  );
+  assert.deepEqual(kit.stored.shadowLedger, { kept: ["complete"] });
+  assert.equal(kit.stored.shadowArm.pending, true);
+});
+
+test("the same event twice at once reads once; a late reply of an earlier prompt has its own reads and changes nothing", async () => {
+  const kit = await shadowed({
+    answers: [{ outcome: "read" }, { ok: true, promptId: P(2) }],
+  });
+  await kit.watch(true);
+  kit.complete(2, SHADOWED);
+  kit.complete(2, SHADOWED);
+  await settle();
+  assert.deepEqual(kit.reads(), [[2, SHADOWED, P(1)]]);
+  // Words went out, and became P(2); P(1)'s reply is told again, late.
+  await kit.listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation: SHADOWED,
+    text: "words",
+  });
+  await settle();
+  kit.complete(2, SHADOWED, { promptId: P(1) });
+  await kit.listeners.port({ type: "reread", conversation: SHADOWED });
+  await settle();
+  assert.deepEqual(
+    kit
+      .shadows()
+      .map((told) => [told.why, told.asked])
+      .filter(([why]) => why !== "writing"),
+    [
+      ["complete", P(1)],
+      ["reread", P(2)],
+    ],
+  );
+});
+
+// #488 review P2-05: the read 20 s after words went out is of their prompt.
+test("words sent twice within 20 s: each prompt is read 20 s after its own words", async () => {
+  const kit = await shadowed({
+    answers: [
+      { ok: true, promptId: P(1) },
+      { ok: true, promptId: P(2) },
+    ],
+  });
+  await kit.watch(true);
+  const send = (requestId) =>
+    kit.listeners.port({
+      type: "send",
+      requestId,
+      conversation: SHADOWED,
+      text: "words",
+    });
+  await send("r1");
+  await send("r2");
+  await settle();
+  assert.deepEqual(
+    kit
+      .shadows()
+      .filter((told) => told.why === "writing")
+      .map((told) => told.asked),
+    [P(1), P(2)],
+  );
+  assert.deepEqual(
+    kit.reads().map(([, , promptId]) => promptId),
+    [P(1), P(2)],
+  );
+});
+
+// #488 review P2-03: a page data.js could not go into, or a registering that
+// failed, is tried again with each list, after a restart as well.
+test("switched on, a page it could not go into and a failed registering are tried again", async () => {
+  const kit = await shadowed({
+    more: [{ id: 5, url: "https://chatgpt.com/", discarded: true }],
+    faults: { register: true },
+  });
+  kit.unreachable.add(3);
+  kit.unreachable.add(5);
+  await kit.watch(true);
+  assert.deepEqual(kit.stored.shadowArm.failed, [3]);
+  assert.equal(kit.stored.shadowArm.registered, false);
+  assert.equal(kit.stored.shadowArm.pending, true);
+  kit.unreachable.delete(3);
+  kit.faults.register = false;
+  kit.injected.length = 0;
+  const again = await shadowed({
+    stored: { ...kit.stored },
+    more: [{ id: 5, url: "https://chatgpt.com/", discarded: true }],
+  });
+  await again.watch(true);
+  assert.deepEqual(again.injected, [[3, ["data.js"], "MAIN"]]);
+  assert.equal(again.stored.shadowArm.pending, false);
+  assert.equal(again.registered.length, 1);
+  await again.watch(true);
+  assert.equal(again.injected.length, 1, "nothing left to put in");
+});
+
+// #488 review: ids are UUIDs, kinds are data.js's words, and a prompt found
+// is the one asked for.
+test("a summary takes UUIDs, data.js's words for a message's kinds, and only the prompt asked", async () => {
+  const data = {};
+  vm.runInNewContext(
+    readFileSync(new URL("../data.js", import.meta.url), "utf8"),
+    data,
+  );
+  const { KINDS } = data.PostPaneData;
+  const lastOf = (field, value) => ({
+    outcome: "read",
+    last: { [field]: value },
+  });
+  const known = Object.entries(KINDS)
+    .filter(([field]) => field !== "finish")
+    .flatMap(([field, words]) =>
+      [...words, "other"].map((word) => lastOf(field, word)),
+    );
+  const finishes = [...KINDS.finish, "other"].map((finish) => ({
+    outcome: "read",
+    final: { id: M(1), finish },
+  }));
+  const wrong = [
+    lastOf("status", "token_abc"),
+    { outcome: "read", final: { id: "m1" } },
+    { outcome: "read", asked: P(9) },
+    { outcome: "read", askFound: true, prompt: P(2) },
+    { outcome: "read", asyncStatus: "token_abc" },
+  ];
+  const all = [...known, ...finishes, ...wrong];
+  const kit = await shadowed({ answers: [...all] });
+  await kit.watch(true);
+  for (let n = 0; n < all.length; n++) {
+    kit.complete(2, SHADOWED, { promptId: P(1000 + n) });
+    await settle();
+  }
+  const outcomes = kit.shadows().map((told) => told.outcome);
+  assert.deepEqual(
+    outcomes,
+    all.map((_, n) => (n < all.length - wrong.length ? "read" : "invalid")),
+  );
+  assert.deepEqual(
+    kit
+      .shadows()
+      .slice(-wrong.length)
+      .map((told) => told.fields),
+    [["last"], ["final"], ["asked"], ["askFound"], ["asyncStatus"]],
+  );
 });

@@ -243,27 +243,41 @@ const ASK = "0b1c2d3e-0000-4000-8000-000000000001";
 const KEY = Symbol.for("postpane.data");
 
 /** A stubbed page showing `CONVERSATION`: `window.fetch` answers from
- * `served`. The file is called as the extension does, by its handle. */
+ * `served` with real responses (of the page's own `Response`, which a test
+ * may change). A served `{ held: true }` answers once `release()` is called,
+ * or fails once the request is cut short. The file is called as the
+ * extension does, by its handle. `before` runs in the page first. */
 function page({
   served = [],
   hidden = false,
   path = `/g/g-p-x/c/${CONVERSATION}`,
+  before,
 } = {}) {
   const calls = [];
   const listeners = [];
+  const held = [];
+  // The page's own: changing it reaches nothing outside this page.
+  const PageResponse = class extends Response {};
   const window = {
     fetch: async (input, init) => {
       calls.push({
         url: String(input?.url ?? input),
         headers: [...new Headers(init?.headers ?? input?.headers ?? {})],
+        signal: init?.signal ?? null,
       });
       const next = served.shift() ?? { status: 200, body: {} };
       if (next.throws) throw new TypeError("Failed to fetch");
-      return {
-        status: next.status,
-        ok: next.status >= 200 && next.status < 300,
-        text: async () => JSON.stringify(next.body),
-      };
+      const answer = () =>
+        new PageResponse(next.raw ?? JSON.stringify(next.body), {
+          status: next.status,
+        });
+      if (!next.held) return answer();
+      return new Promise((resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+        held.push(() => resolve(answer()));
+      });
     },
     addEventListener: (name, fn) => listeners.push([name, fn]),
     postMessage: () => {
@@ -281,16 +295,31 @@ function page({
     document: { visibilityState: hidden ? "hidden" : "visible" },
     Headers,
     URL,
+    Response: PageResponse,
+    AbortController,
     TextEncoder,
     crypto: globalThis.crypto,
     performance,
     Date,
   };
-  vm.runInNewContext(source, context);
+  vm.createContext(context);
+  before?.(context);
+  const installed = vm.runInContext(source, context);
   const handle = () => window[KEY];
   const read = async (conversation = CONVERSATION, promptId = ASK) =>
     JSON.parse(JSON.stringify(await handle().read(conversation, promptId)));
-  return { window, calls, listeners, read, handle, context, location };
+  const release = () => held.shift()?.();
+  return {
+    window,
+    calls,
+    listeners,
+    read,
+    handle,
+    context,
+    location,
+    installed,
+    release,
+  };
 }
 
 const pageHeaders = {
@@ -306,14 +335,15 @@ const own = (window) =>
   });
 
 test("the page gets one handle, fixed in place, and no listener", () => {
-  const { window, listeners, handle, context } = page();
+  const { window, listeners, handle, context, installed } = page();
+  assert.equal(installed, "installed");
   assert.deepEqual(listeners, []);
   assert.equal(context.PostPaneData, undefined);
   const descriptor = Object.getOwnPropertyDescriptor(window, KEY);
   assert.equal(descriptor.writable, false);
   assert.equal(descriptor.configurable, false);
   assert.ok(Object.isFrozen(handle()));
-  assert.deepEqual(Object.keys(handle()).sort(), ["read", "start", "stop"]);
+  assert.deepEqual(Object.keys(handle()).sort(), ["read", "stop"]);
 });
 
 test("nothing is read before the page's own sign-in was heard", async () => {
@@ -474,21 +504,25 @@ test("stopped, the page gets its fetch back, the sign-in is forgotten and nothin
       { status: 200, body: body([user(ASK, "x")]) },
     ],
   });
-  const theirs = window.fetch;
+  const ours = window.fetch;
   await own(window);
   assert.deepEqual(JSON.parse(JSON.stringify(handle().stop())), {
     stopped: true,
     restored: true,
   });
-  assert.notEqual(window.fetch, theirs);
+  assert.notEqual(window.fetch, ours);
+  const theirs = window.fetch;
   assert.deepEqual(await read(), { outcome: "stopped" });
   assert.equal(calls.length, 1);
-  // Put in again (the switch on again): the copy there hears again, and the
-  // sign-in it forgot must be heard anew.
-  vm.runInNewContext(source, context);
-  assert.deepEqual(await read(), { outcome: "no-login" });
+  // Stopped for good (#488 review P1-02): put in again (the switch on
+  // again), the new copy finds the handle there and steps aside; nothing in
+  // the page can start the old one, and it hears nothing.
+  assert.equal(vm.runInContext(source, context), "present");
+  assert.equal(window.fetch, theirs);
+  assert.equal(handle().start, undefined);
   await own(window);
-  assert.equal((await read()).outcome, "read");
+  assert.deepEqual(await read(), { outcome: "stopped" });
+  assert.equal(calls.length, 2);
 });
 
 test("stopped after the page wrapped fetch itself, it only passes requests on", async () => {
@@ -532,4 +566,153 @@ test("the page's own requests go through untouched, whatever they are", async ()
     calls.map((call) => call.url),
     ["/backend-api/conversation/init", "http://[bad"],
   );
+});
+
+// #488 review P2-06: an answer is read only from text parts.
+test("an answer not said in text parts cannot be read, and is not taken as written", () => {
+  const { claim } = bare();
+  const shaped = (content) =>
+    claim(body([user("ask", "x"), final("f", "x", "a", { content })]), "ask");
+  for (const [content, lacks] of [
+    [undefined, "final.content.content_type"],
+    [
+      { content_type: "multimodal_text", parts: ["a"] },
+      "final.content.content_type",
+    ],
+    [{ content_type: "text" }, "final.content.parts"],
+    [{ content_type: "text", parts: [] }, "final.content.parts"],
+    [
+      { content_type: "text", parts: ["a", { asset: 1 }] },
+      "final.content.parts",
+    ],
+  ])
+    assert.deepEqual(JSON.parse(JSON.stringify(shaped(content))), {
+      outcome: "unreadable",
+      missing: [lacks],
+    });
+});
+
+// #488 review: a message's kinds are known words, or `other`.
+test("a message's role, channel, status, type and finish are known words, else other", () => {
+  const { claim, KINDS } = bare();
+  const found = claim(
+    body([
+      user("ask", "x"),
+      final("f", "x", "a", {
+        status: "token-like-abc",
+        metadata: {
+          turn_exchange_id: "x",
+          is_complete: true,
+          finish_details: { type: "free text here" },
+        },
+      }),
+      step("s", "x", { channel: "secret", status: "in_progress" }),
+    ]),
+    "ask",
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(found.last)), {
+    role: "assistant",
+    channel: "other",
+    status: "in_progress",
+    type: "thoughts",
+  });
+  assert.equal(found.final.status, "other");
+  assert.equal(found.final.finish, "other");
+  assert.equal(found.written, false);
+  assert.equal(
+    claim(body([user("ask", "x")], { async_status: 4 }), "ask").asyncStatus,
+    "other",
+  );
+  assert.deepEqual(Object.keys(KINDS).sort(), [
+    "channel",
+    "finish",
+    "role",
+    "status",
+    "type",
+  ]);
+});
+
+// #488 review P2-07: what came back is counted in UTF-8 bytes.
+test("bytes are the UTF-8 bytes of what came back", async () => {
+  const served = body([user(ASK, "x"), final("f", "x", "中文的回信")]);
+  const { window, read } = page({
+    served: [
+      { status: 200, body: {} },
+      { status: 200, body: served },
+    ],
+  });
+  await own(window);
+  const answer = await read();
+  assert.equal(answer.bytes, Buffer.byteLength(JSON.stringify(served)));
+  assert.ok(answer.bytes > JSON.stringify(served).length);
+});
+
+// #488 review P1-01: a handle there before the file is not taken for its own.
+test("a page that holds the handle first keeps it: the file steps aside and says so", async () => {
+  const fake = Object.freeze({
+    read: () => ({ outcome: "read", written: true }),
+    stop: () => ({ stopped: true }),
+  });
+  let theirs;
+  const { window, installed, handle } = page({
+    before: (context) => {
+      Object.defineProperty(context.window, KEY, { value: fake });
+      theirs = context.window.fetch;
+    },
+  });
+  assert.equal(installed, "present");
+  assert.equal(handle(), fake);
+  // It does not hear the page: fetch is the page's own.
+  assert.equal(window.fetch, theirs);
+});
+
+// #488 review P1-01: what reading uses of the page is taken when the file
+// goes in; the page changing it later reaches no read.
+test("a page changing Response, JSON or digest after the file went in changes no read", async () => {
+  const reply = "the real answer";
+  const { window, read, context } = page({
+    served: [
+      { status: 200, body: {} },
+      { status: 200, body: body([user(ASK, "x"), final("f", "x", reply)]) },
+    ],
+  });
+  await own(window);
+  const fakeBody = JSON.stringify(
+    body([user(ASK, "x"), final("f", "x", "made up")]),
+  );
+  context.Response.prototype.text = async () => fakeBody;
+  Object.defineProperty(context.Response.prototype, "status", {
+    get: () => 200,
+  });
+  vm.runInContext(
+    "JSON.parse = () => ({}); crypto = { subtle: { digest: async () => new ArrayBuffer(32) } };",
+    context,
+  );
+  const answer = await read();
+  assert.equal(answer.outcome, "read");
+  assert.equal(answer.final.chars, reply.length);
+  assert.notEqual(answer.final.sha, "0000000000000000");
+});
+
+// #488 review P1-02: stopped while a read is on its way, it is cut short and
+// asks for nothing more.
+test("stopped while a read is on its way, the read is cut short and no wider read goes", async () => {
+  const further = body([final("f", "x", "answer")], {
+    page_info: { has_previous_page: true },
+  });
+  const { window, read, handle, calls, release } = page({
+    served: [
+      { status: 200, body: {} },
+      { held: true, status: 200, body: further },
+    ],
+  });
+  await own(window);
+  const reading = read();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.length, 2);
+  handle().stop();
+  assert.equal(calls[1].signal.aborted, true);
+  release();
+  assert.deepEqual(await reading, { outcome: "stopped" });
+  assert.equal(calls.length, 2);
 });

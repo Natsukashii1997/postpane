@@ -29,10 +29,10 @@ pub fn on(data: &Path) -> bool {
 /// The kinds a field may be.
 #[derive(Clone, Copy)]
 enum Kind {
-    /// An id: letters, digits, `-` and `_`, at most 64.
-    Id,
-    /// A word: a letter, then letters, digits, `-` and `_`, at most 40.
-    Word,
+    /// A message or conversation id: a UUID.
+    Uuid,
+    /// One of these words.
+    Of(&'static [&'static str]),
     Count,
     Flag,
     Sha,
@@ -43,33 +43,87 @@ enum Kind {
 }
 use Kind::*;
 
+// The words a field may be: what the extension says, nothing else (#488
+// review). The kinds of a message are data.js's `KINDS`, or `other`.
+const WHY: &[&str] = &["complete", "reread", "writing", "off"];
+const OUTCOME: &[&str] = &[
+    "read",
+    "http",
+    "error",
+    "unreadable",
+    "no-login",
+    "other-conversation",
+    "stopped",
+    "limited",
+    "no-script",
+    "invalid",
+    "conflict",
+    "unreachable",
+    "no-tab",
+    "no-prompt",
+    "superseded",
+    "ledger-unavailable",
+    "disarmed",
+    "disarm-pending",
+];
+const PAGE_OUTCOME: &[&str] = &[
+    "told",
+    "undrawn",
+    "streaming",
+    "unloaded",
+    "waiting",
+    "unreachable",
+    "unopened",
+];
+const LOGIN: &[&str] = &["same", "other"];
+const ASYNC: &[&str] = &["other"];
+const ROLE: &[&str] = &["user", "assistant", "system", "tool", "other"];
+const CHANNEL: &[&str] = &["final", "analysis", "commentary", "other"];
+const STATUS: &[&str] = &[
+    "finished_successfully",
+    "in_progress",
+    "finished_partial_completion",
+    "other",
+];
+const TYPE: &[&str] = &[
+    "text",
+    "thoughts",
+    "reasoning_recap",
+    "code",
+    "multimodal_text",
+    "execution_output",
+    "other",
+];
+const FINISH: &[&str] = &["stop", "max_tokens", "interrupted", "other"];
+
 /// Every field a line may hold, and its kind. Ids, words and flags of the
 /// extension's summary may also be null.
 const FIELDS: &[(&str, Kind)] = &[
-    ("conversation", Id),
-    ("why", Word),
+    ("conversation", Uuid),
+    ("why", Of(WHY)),
     ("at", Count),
-    ("pagePromptId", Id),
-    ("pageMessageId", Id),
+    ("pagePromptId", Uuid),
+    ("pageMessageId", Uuid),
     ("pageChars", Count),
-    ("pageOutcome", Word),
-    ("outcome", Word),
+    ("pageOutcome", Of(PAGE_OUTCOME)),
+    ("outcome", Of(OUTCOME)),
     ("status", Count),
     ("turns", Count),
     ("tries", Count),
     ("bytes", Count),
     ("ms", Count),
     ("hidden", Flag),
-    ("login", Word),
+    ("login", Of(LOGIN)),
     ("messages", Count),
     ("more", Flag),
-    ("asyncStatus", Word),
-    ("asked", Id),
+    ("asyncStatus", Of(ASYNC)),
+    ("asked", Uuid),
     ("askFound", Flag),
-    ("prompt", Id),
+    ("prompt", Uuid),
     ("after", Count),
     ("exchange", Flag),
     ("written", Flag),
+    ("trusted", Flag),
     ("missing", Names),
     ("fields", Names),
     ("last", Last),
@@ -80,33 +134,36 @@ const FIELDS: &[(&str, Kind)] = &[
     ("unregistered", Flag),
 ];
 const LAST: &[(&str, Kind)] = &[
-    ("role", Word),
-    ("channel", Word),
-    ("status", Word),
-    ("type", Word),
+    ("role", Of(ROLE)),
+    ("channel", Of(CHANNEL)),
+    ("status", Of(STATUS)),
+    ("type", Of(TYPE)),
 ];
 const FINAL: &[(&str, Kind)] = &[
-    ("id", Id),
-    ("status", Word),
+    ("id", Uuid),
+    ("status", Of(STATUS)),
     ("endTurn", Flag),
     ("complete", Flag),
-    ("finish", Word),
+    ("finish", Of(FINISH)),
     ("chars", Count),
     ("sha", Sha),
 ];
 
-fn text_is(value: &str, max: usize, first: fn(char) -> bool) -> bool {
-    let mut chars = value.chars();
-    value.len() <= max
-        && chars.next().is_some_and(first)
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+/// `8-4-4-4-12` hex digits.
+fn uuid(value: &str) -> bool {
+    let groups: Vec<&str> = value.split('-').collect();
+    groups.len() == 5
+        && groups
+            .iter()
+            .zip([8, 4, 4, 4, 12])
+            .all(|(group, len)| group.len() == len && group.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 fn fits(kind: Kind, value: &Value) -> bool {
     match (kind, value) {
-        (Id | Word | Flag, Value::Null) => true,
-        (Id, Value::String(s)) => text_is(s, 64, |c| c.is_ascii_alphanumeric()),
-        (Word, Value::String(s)) => text_is(s, 40, |c| c.is_ascii_alphabetic()),
+        (Uuid | Of(_) | Flag, Value::Null) => true,
+        (Uuid, Value::String(s)) => uuid(s),
+        (Of(words), Value::String(s)) => words.contains(&s.as_str()),
         (Count, Value::Number(n)) => n.as_u64().is_some(),
         (Flag, Value::Bool(_)) => true,
         (Sha, Value::String(s)) => s.len() == 16 && s.chars().all(|c| c.is_ascii_hexdigit()),
@@ -156,7 +213,13 @@ fn line(message: &Value, now: i64) -> Option<Map<String, Value>> {
             _ => dropped += 1,
         }
     }
-    kept.get("outcome")?;
+    kept.get("outcome").filter(|outcome| outcome.is_string())?;
+    // A prompt found is the one asked for, or neither is kept.
+    if kept.get("askFound") == Some(&Value::Bool(true)) && kept.get("asked") != kept.get("prompt") {
+        kept.remove("askFound");
+        kept.remove("prompt");
+        dropped += 2;
+    }
     if dropped > 0 {
         kept.insert("dropped".into(), json!(dropped));
     }
