@@ -6,29 +6,44 @@
     user: "[data-user-message-bubble]",
     // A prompt's whole turn: one ChatGPT made a long paste into an attachment
     // has no bubble, only the file (#410, 2026-11-19).
-    prompt: '[data-chatgpt-search-unit-key$=":user"], [data-user-message-bubble]',
+    prompt:
+      '[data-chatgpt-search-unit-key$=":user"], [data-user-message-bubble]',
     composer: '.ProseMirror[contenteditable="true"]',
     send: 'form button[type="submit"]',
     stop: '[data-testid="stop-button"], form button[type="button"][aria-label]',
     skip: ".sr-only, button, svg, [role=status], h4[data-conversation-role]",
-    prose: "p, li, h1, h2, h3, h5, h6, table, blockquote, [data-d-component=text]",
+    prose:
+      "p, li, h1, h2, h3, h5, h6, table, blockquote, [data-d-component=text]",
   };
-  const STOP_LABELS = ["停止", "停止生成", "停止流式传输", "Stop", "Stop generating", "Stop streaming"];
+  const STOP_LABELS = [
+    "停止",
+    "停止生成",
+    "停止流式传输",
+    "Stop",
+    "Stop generating",
+    "Stop streaming",
+  ];
 
   /** `/c/<id>` or `/g/<project>/c/<id>`. */
   function conversationId(url) {
-    const match = /\/c\/([0-9a-f]{8}-[0-9a-f-]{8,})/i.exec(new URL(url).pathname);
+    const match = /\/c\/([0-9a-f]{8}-[0-9a-f-]{8,})/i.exec(
+      new URL(url).pathname,
+    );
     return match ? match[1] : null;
   }
 
   function streaming(doc) {
     return [...doc.querySelectorAll(SEL.stop)].some(
-      (button) => button.matches('[data-testid="stop-button"]') || STOP_LABELS.includes(button.getAttribute("aria-label")),
+      (button) =>
+        button.matches('[data-testid="stop-button"]') ||
+        STOP_LABELS.includes(button.getAttribute("aria-label")),
     );
   }
 
   function title(doc) {
-    const text = (doc.title || "").replace(/\s*[-|–]\s*ChatGPT\s*$/i, "").trim();
+    const text = (doc.title || "")
+      .replace(/\s*[-|–]\s*ChatGPT\s*$/i, "")
+      .trim();
     return text === "ChatGPT" ? "" : text;
   }
 
@@ -43,9 +58,12 @@
    * it stands in that order. A node outside any unit is a message of its own. */
   function newest(doc, selector, shows = () => true) {
     const order = new Map();
-    const keyOf = (node) => node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
+    const keyOf = (node) =>
+      node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
     // One order for prompts and replies alike, so their places compare.
-    for (const node of doc.querySelectorAll(`[${UNIT}], ${SEL.user}, ${SEL.assistant}`)) {
+    for (const node of doc.querySelectorAll(
+      `[${UNIT}], ${SEL.user}, ${SEL.assistant}`,
+    )) {
       const key = keyOf(node);
       if (!order.has(key)) order.set(key, order.size);
     }
@@ -61,7 +79,9 @@
   function lastReply(doc) {
     const node = newest(doc, SEL.assistant)?.node;
     if (!node) return null;
-    const ids = (node.getAttribute("data-chatgpt-search-message-ids") || "").split(/\s+/).filter(Boolean);
+    const ids = (node.getAttribute("data-chatgpt-search-message-ids") || "")
+      .split(/\s+/)
+      .filter(Boolean);
     return { messageId: ids[ids.length - 1] || null, markdown: markdown(node) };
   }
 
@@ -69,9 +89,13 @@
    * readers or buttons say (「你说：」, the copy button). */
   function shownText(node) {
     let text = "";
-    const walker = node.ownerDocument.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    const walker = node.ownerDocument.createTreeWalker(
+      node,
+      NodeFilter.SHOW_TEXT,
+    );
     while (walker.nextNode()) {
-      if (!walker.currentNode.parentElement?.closest(SEL.skip)) text += walker.currentNode.textContent;
+      if (!walker.currentNode.parentElement?.closest(SEL.skip))
+        text += walker.currentNode.textContent;
     }
     return text.trim();
   }
@@ -79,7 +103,10 @@
   /** Whether a prompt shows: its bubble, or a turn with words of its own
    * (an attachment's name). One drawn with neither is history still
    * loading, not a prompt yet (#356 P2-04). */
-  const promptShows = (node) => node.matches(SEL.user) || !!node.querySelector(SEL.user) || !!shownText(node);
+  const promptShows = (node) =>
+    node.matches(SEL.user) ||
+    !!node.querySelector(SEL.user) ||
+    !!shownText(node);
 
   const newestPrompt = (doc) => newest(doc, SEL.prompt, promptShows);
 
@@ -97,7 +124,9 @@
   function lastPromptId(doc) {
     const node = newestPrompt(doc)?.node;
     const turn = node?.closest(`[${UNIT}]`);
-    const ids = (turn?.getAttribute("data-chatgpt-search-message-ids") || "").split(/\s+/).filter(Boolean);
+    const ids = (turn?.getAttribute("data-chatgpt-search-message-ids") || "")
+      .split(/\s+/)
+      .filter(Boolean);
     return ids[ids.length - 1] || null;
   }
 
@@ -115,7 +144,10 @@
   function reveal(doc) {
     const drawn = [...doc.querySelectorAll(`[${UNIT}]`)].pop();
     for (let node = drawn?.parentElement; node; node = node.parentElement) {
-      if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(doc.defaultView.getComputedStyle(node).overflowY)) {
+      if (
+        node.scrollHeight > node.clientHeight &&
+        /auto|scroll/.test(doc.defaultView.getComputedStyle(node).overflowY)
+      ) {
         node.scrollTop = node.scrollHeight;
         return true;
       }
@@ -131,10 +163,13 @@
       if (child.nodeType === 3) out += child.textContent;
       else if (child.nodeType !== 1 || child.matches(SEL.skip)) continue;
       else if (child.matches("br")) out += "\n";
-      else if (child.matches("code, [data-d-component=code]")) out += "`" + child.textContent + "`";
-      else if (child.matches("strong, b, [data-d-default-strong]")) out += "**" + inline(child) + "**";
+      else if (child.matches("code, [data-d-component=code]"))
+        out += "`" + child.textContent + "`";
+      else if (child.matches("strong, b, [data-d-default-strong]"))
+        out += "**" + inline(child) + "**";
       else if (child.matches("em, i")) out += "*" + inline(child) + "*";
-      else if (child.matches("a[href]")) out += `[${inline(child)}](${child.getAttribute("href")})`;
+      else if (child.matches("a[href]"))
+        out += `[${inline(child)}](${child.getAttribute("href")})`;
       else out += inline(child);
     }
     return out;
@@ -143,14 +178,28 @@
   function codeBlock(wrapper) {
     const out = [];
     for (const content of wrapper.querySelectorAll(".cm-content")) {
-      const lines = [...content.querySelectorAll(".cm-line")].map((line) => line.textContent);
-      out.push(fence(content.getAttribute("data-language") || "", lines.length ? lines.join("\n") : content.textContent));
+      const lines = [...content.querySelectorAll(".cm-line")].map(
+        (line) => line.textContent,
+      );
+      out.push(
+        fence(
+          content.getAttribute("data-language") || "",
+          lines.length ? lines.join("\n") : content.textContent,
+        ),
+      );
     }
     if (out.length) return out;
-    for (const pre of wrapper.matches("pre") ? [wrapper] : wrapper.querySelectorAll("pre")) {
+    for (const pre of wrapper.matches("pre")
+      ? [wrapper]
+      : wrapper.querySelectorAll("pre")) {
       const code = pre.querySelector("code") || pre;
       const named = /language-([\w+-]+)/.exec(code.className || "");
-      out.push(fence(named ? named[1] : headerLanguage(wrapper, pre), code.textContent.replace(/\n$/, "")));
+      out.push(
+        fence(
+          named ? named[1] : headerLanguage(wrapper, pre),
+          code.textContent.replace(/\n$/, ""),
+        ),
+      );
     }
     return out;
   }
@@ -171,7 +220,9 @@
 
   function isCode(node) {
     if (node.matches(".cm-editor, pre")) return true;
-    return !!node.querySelector(".cm-editor, pre") && !node.querySelector(SEL.prose);
+    return (
+      !!node.querySelector(".cm-editor, pre") && !node.querySelector(SEL.prose)
+    );
   }
 
   function blocks(node, depth) {
@@ -180,9 +231,13 @@
       if (child.matches(SEL.skip)) continue;
       if (isCode(child)) out.push(...codeBlock(child));
       else if (child.matches("ul, ol")) out.push(list(child, depth));
-      else if (child.matches("h1, h2, h3, h4, h5, h6")) out.push("#".repeat(Number(child.tagName[1])) + " " + inline(child).trim());
+      else if (child.matches("h1, h2, h3, h4, h5, h6"))
+        out.push(
+          "#".repeat(Number(child.tagName[1])) + " " + inline(child).trim(),
+        );
       else if (child.matches("p")) out.push(inline(child).trim());
-      else if (child.matches("blockquote")) out.push(blocks(child, depth).join("\n\n").replace(/^/gm, "> "));
+      else if (child.matches("blockquote"))
+        out.push(blocks(child, depth).join("\n\n").replace(/^/gm, "> "));
       else if (child.matches("hr")) out.push("---");
       else if (child.matches("table")) out.push(table(child));
       else if (child.children.length) out.push(...blocks(child, depth));
@@ -199,25 +254,42 @@
       const nested = [...item.children].filter((c) => c.matches("ul, ol"));
       const own = [...item.childNodes].filter((c) => !nested.includes(c));
       const text = own
-        .map((c) => (c.nodeType === 1 ? (c.matches(SEL.skip) ? "" : inline(c)) : c.textContent))
+        .map((c) =>
+          c.nodeType === 1
+            ? c.matches(SEL.skip)
+              ? ""
+              : inline(c)
+            : c.textContent,
+        )
         .join(" ")
         .replace(/\s+/g, " ")
         .trim();
-      lines.push("  ".repeat(depth) + (node.matches("ol") ? `${n++}. ` : "- ") + text);
+      lines.push(
+        "  ".repeat(depth) + (node.matches("ol") ? `${n++}. ` : "- ") + text,
+      );
       for (const sub of nested) lines.push(list(sub, depth + 1));
     }
     return lines.join("\n");
   }
 
   function table(node) {
-    const rows = [...node.querySelectorAll("tr")].map((tr) => [...tr.children].map((cell) => inline(cell).replace(/\s+/g, " ").trim()));
+    const rows = [...node.querySelectorAll("tr")].map((tr) =>
+      [...tr.children].map((cell) => inline(cell).replace(/\s+/g, " ").trim()),
+    );
     if (!rows.length) return "";
     const line = (cells) => "| " + cells.join(" | ") + " |";
-    return [line(rows[0]), line(rows[0].map(() => "---")), ...rows.slice(1).map(line)].join("\n");
+    return [
+      line(rows[0]),
+      line(rows[0].map(() => "---")),
+      ...rows.slice(1).map(line),
+    ].join("\n");
   }
 
   function markdown(node) {
-    return blocks(node, 0).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+    return blocks(node, 0)
+      .join("\n\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   // --- Composer ------------------------------------------------------------
@@ -226,7 +298,11 @@
 
   function sendReady(doc) {
     const button = doc.querySelector(SEL.send);
-    return button && !button.disabled && button.getAttribute("aria-disabled") !== "true" ? button : null;
+    return button &&
+      !button.disabled &&
+      button.getAttribute("aria-disabled") !== "true"
+      ? button
+      : null;
   }
 
   async function waitFor(check, ms) {
@@ -268,9 +344,13 @@
     for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
       for (let at = 0, end; at < line.length; at = end) {
         end = Math.min(at + max, line.length);
-        if (end < line.length && /[\uD800-\uDBFF\r]/.test(line[end - 1])) end -= 1;
+        if (end < line.length && /[\uD800-\uDBFF\r]/.test(line[end - 1]))
+          end -= 1;
         const part = line.slice(at, end);
-        if (piece.length + part.length > max && (bare(piece) || piece.length + part.length > max + GLUE)) {
+        if (
+          piece.length + part.length > max &&
+          (bare(piece) || piece.length + part.length > max + GLUE)
+        ) {
           out.push(piece);
           piece = "";
         }
@@ -289,14 +369,19 @@
       const want = bare(box.textContent).length + bare(piece).length;
       const data = new DataTransfer();
       data.setData("text/plain", piece);
-      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+      const event = new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      });
       const selection = doc.getSelection();
       timely();
       selection.selectAllChildren(box);
       selection.collapseToEnd();
       timely();
       box.dispatchEvent(event);
-      if (!(await wait(() => bare(box.textContent).length >= want, 3000))) return false;
+      if (!(await wait(() => bare(box.textContent).length >= want, 3000)))
+        return false;
     }
     return true;
   }
@@ -324,7 +409,10 @@
       if (Date.now() >= until) throw LATE;
     };
     const wait = async (check, ms) => {
-      const got = await waitFor(check, Math.max(0, Math.min(ms, until - Date.now())));
+      const got = await waitFor(
+        check,
+        Math.max(0, Math.min(ms, until - Date.now())),
+      );
       timely();
       return got;
     };
@@ -362,7 +450,9 @@
     // characters either way (`holds`).
     let held = () => bare(box.textContent) === bare(text);
     const pasted = await paste(doc, box, text, wait, timely);
-    let button = pasted ? await wait(() => held() && sendReady(doc), 3000) : null;
+    let button = pasted
+      ? await wait(() => held() && sendReady(doc), 3000)
+      : null;
     if (!button) {
       // Send lit with the words not in the box: something else is in the
       // composer, such as a paste ChatGPT made an attachment (#429). Sent,
@@ -380,7 +470,10 @@
     const before = lastPromptId(doc);
     timely();
     button.click();
-    const started = await waitFor(() => streaming(doc) || !sendReady(doc), 5000);
+    const started = await waitFor(
+      () => streaming(doc) || !sendReady(doc),
+      5000,
+    );
     if (!started) return { ok: false, reason: "send-failed", pressed: true };
     const promptId = await waitFor(() => {
       const id = lastPromptId(doc);
@@ -389,5 +482,17 @@
     return promptId ? { ok: true, promptId } : { ok: true };
   }
 
-  globalThis.PostPanePage = { SEL, conversationId, streaming, title, lastReply, lastPrompt, lastPromptId, answered, reveal, markdown, submit };
+  globalThis.PostPanePage = {
+    SEL,
+    conversationId,
+    streaming,
+    title,
+    lastReply,
+    lastPrompt,
+    lastPromptId,
+    answered,
+    reveal,
+    markdown,
+    submit,
+  };
 })();

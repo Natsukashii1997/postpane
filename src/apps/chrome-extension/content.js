@@ -25,16 +25,31 @@
   // page) are not news: a reply counts once this page saw a stop button or
   // sent something itself. Put in while one is being written (the extension
   // installed, updated or reloaded), that one is news once it ends (#356).
-  let reported = wasStreaming ? null : (page.lastReply(document)?.messageId ?? null);
+  let reported = wasStreaming
+    ? null
+    : (page.lastReply(document)?.messageId ?? null);
   let expecting = wasStreaming;
   let timer = null;
 
   function report() {
-    tell({ type: "page", conversation, hidden: document.visibilityState === "hidden", streaming: wasStreaming });
+    tell({
+      type: "page",
+      conversation,
+      hidden: document.visibilityState === "hidden",
+      streaming: wasStreaming,
+    });
   }
 
   function tellStart() {
-    tell({ type: "turn", phase: "start", conversation, title: page.title(document), prompt: page.lastPrompt(document), promptId: page.lastPromptId(document), at: Date.now() });
+    tell({
+      type: "turn",
+      phase: "start",
+      conversation,
+      title: page.title(document),
+      prompt: page.lastPrompt(document),
+      promptId: page.lastPromptId(document),
+      at: Date.now(),
+    });
   }
 
   function tellComplete(reply, extra = {}) {
@@ -69,11 +84,15 @@
       if (now && streaming && wasStreaming) tellStart();
     }
     if (streaming) expecting = true;
-    if (!expecting && !streaming) reported = page.lastReply(document)?.messageId ?? reported;
+    if (!expecting && !streaming)
+      reported = page.lastReply(document)?.messageId ?? reported;
     if (streaming && !wasStreaming) tellStart();
     // A finished turn is a stop button that went away, or a reply this page has
     // not reported yet: a background tab may never be sampled mid-stream.
-    const fresh = expecting && !streaming && (page.lastReply(document)?.messageId ?? null) !== reported;
+    const fresh =
+      expecting &&
+      !streaming &&
+      (page.lastReply(document)?.messageId ?? null) !== reported;
     if (!streaming && (wasStreaming || fresh)) {
       const seen = page.lastReply(document)?.markdown;
       // The last chunk may still be rendering when the stop button goes away.
@@ -102,16 +121,26 @@
       settle();
     }, 400);
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-label"] });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["aria-label"],
+  });
 
   document.addEventListener("visibilitychange", report);
 
   function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
-      page.submit(document, command.text, command.until).then((result) => {
-        if (result.ok) expecting = true;
-        reply(result);
-      }, (error) => reply({ ok: false, reason: "send-failed", detail: String(error) }));
+      page.submit(document, command.text, command.until).then(
+        (result) => {
+          if (result.ok) expecting = true;
+          reply(result);
+        },
+        (error) =>
+          reply({ ok: false, reason: "send-failed", detail: String(error) }),
+      );
       return true;
     }
     // PostPane heard nothing of a turn it waits on (#356): the newest reply,
@@ -122,7 +151,10 @@
     // being written; a page that shows only a prompt yet (its history still
     // drawing) or nothing is asked again soon.
     if (command.op === "reread") {
-      if (command.conversation && page.conversationId(location.href) !== command.conversation) {
+      if (
+        command.conversation &&
+        page.conversationId(location.href) !== command.conversation
+      ) {
         reply({ ok: false, reason: "other-conversation" });
         return false;
       }
@@ -135,12 +167,21 @@
         // not drawn at all: `undrawn` asks for it to be put in front.
         const undrawn = ready();
         if (undrawn) page.reveal(document);
-        reply({ ok: true, streaming: page.streaming(document), told: false, loaded, ...(undrawn && { undrawn }) });
+        reply({
+          ok: true,
+          streaming: page.streaming(document),
+          told: false,
+          loaded,
+          ...(undrawn && { undrawn }),
+        });
         return false;
       }
       setTimeout(() => {
         const now = page.lastReply(document);
-        const told = ready() && now?.messageId === seen.messageId && now.markdown === seen.markdown;
+        const told =
+          ready() &&
+          now?.messageId === seen.messageId &&
+          now.markdown === seen.markdown;
         if (told) tellComplete(now, { reread: true });
         reply({ ok: true, streaming: page.streaming(document), told, loaded });
       }, 600);

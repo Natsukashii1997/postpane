@@ -602,6 +602,7 @@
 - 现象：#486 改动后 `cargo test -p agent-hud-platform --lib` 三次里挂了两次，都是这一条，断言是 `tests_unix.rs:195` 的 `assert!(focus("68a1"))`。当时机器负载均值 20–80（别的会话在编译）。
 - 根因：没查到底。能确定的两点：这条测试跑的时候走不到 #486 改过的代码（`--nocapture` 下没有任何输出）；main 上同样会挂。单跑这一条，main 和 #486 分支交替各 80 次都过；整套并行交替各 15 次，main 挂 2 次、分支挂 2 次，都是这一条。`focus` 读的是进程里共用的一个全局通道（`commands.rs` 的 `CURRENT`），同一进程里并行的别的测试也会换它，像是测试之间抢这个全局量（推断，没证实）。
 - 正确做法：这条失败先别归到自己的改动上，也别直接当偶发放过：在 main 和自己的分支上交替各跑同样多次，比失败率；一样就写进交接，按范围外发现报，不为它改代码。全量里它挂了，等负载降下来重跑。
+- 补充（2026-11-21，#488）：原因坐实了。`Channel::start` 把自己登记进进程级的 `CURRENT`，`focus()`、`reread()` 都从它取；`tests_unix.rs` 里原有两条测试各起一个 `Channel`，并行时后起的顶掉先起的，`focus("68a1")` 问到另一条测试的通道。#488 加第三条起 `Channel` 的测试后，这条失败变得常见，撤掉就恢复。已改：起 `Channel` 的测试都先拿同一把测试锁（`tests_unix.rs` 的 `one_channel()`），一次只有一个；不需要真实 socket 的新测试直接用 `Shared::new` + `attach`（假对端）+ `inbound`，不碰 `CURRENT`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/flake-compare.txt`（整套并行交替各 15 次，记了每次挂的是哪条）、`platform-rerun-2.log`。
 - 升级：〔提醒〕未升级。
 
@@ -611,4 +612,13 @@
 - 根因：应用启动时会修各家登记（`claude_plugin::repair_on_launch`）：Claude Code 里的驿窗插件如果是从「别的目录」装的，就从自己的数据目录重装一遍。隔离实例眼里，常浩正在用的那份就是「别的目录」；它一启动，正在用的插件会被指到临时目录，之后的转回、左滑都送不到真应用。只换数据目录时，它读的仍是真的 `~/.claude`。
 - 正确做法：隔离验证连主目录一起换。应用的主目录只认 `$HOME`（`os/macos/mod.rs` 的 `home_dir`），数据目录、Claude 配置、各家登记都从它推出来：`env -i HOME=<证据目录下的空文件夹> PATH=/usr/bin:/bin:/usr/sbin:/sbin <包里的主程序>`。不在 `/Applications` 里的副本不认领客户端钩子，也不抢共用锁。启动前后各记一次 `shasum ~/.claude/plugins/installed_plugins.json`，确认没变；停它只按自己记下的进程号 `kill`，不用 `pkill -f`（G-32）。屏幕上会多出一条侧栏，验完就关。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/iso-run1-postpane.log`（隔离实例写出的启动行和 panic 一段）；验证前后插件登记的校验值都是 `8c45e265e598`。
+- 升级：〔提醒〕未升级。
+
+## L-65 往页面主世界注入的同一份脚本，两次执行之间没有「只有自己知道」的东西：重新启用、认出自己的句柄都做不到（2026-11-21）
+
+- 现象：#488 第 2 轮审查指出，`data.js` 放在页面上的句柄带一个公开的 `start()`，页面自己就能调它重新开始旁听；再装一份时直接调已有句柄的 `start()`，页面先放一个假句柄就能顶替。原拟「用闭包里的私有 Symbol 认出自己的句柄、文件再次执行时重新启用」，动手时发现做不到。
+- 根因：每次执行都是一个新闭包，第一次执行的私有 Symbol 第二次拿不到；写死在文件里的常量，页面用 `Function.prototype.toString` 就能从句柄的函数里读出来。另外，`registerContentScripts` 登记的那份跑出的结果插件后台看不到，只有 `executeScript` 的结果带 `documentId` 和脚本的返回值。
+- 正确做法：主世界里的句柄只给停用这种收得回的能力，停用是永久的，没有重新启用的入口（关掉再打开要刷新页面）。脚本发现句柄已经在了一律让开，返回 `present`；可信与否由插件后台按「谁装的」判断：后台用 `executeScript` 补装过的页面按 `documentId` 记下来（`installed` 记晚装、`present` 记冲突），不信页面说的。
+- 补充（同日，第 3 轮审查）：可信要靠正面证据，「不在不可信名单里」不算（名单一淘汰、或补装时没拿到 `documentId`，补装页就被当成可信了）。做法：和 `data.js` 同一次登记一份跑在插件隔离环境里的 `mark.js`，它在那里留一个标记；读完再用 `executeScript`（不写 `world`，就是插件的隔离环境，页面和别的扩展都碰不到）按同一个 `documentId` 查标记，有才算可信。第 4 轮审查否掉了先前「比较页面 `performance.timeOrigin` 和后台 `Date.now()`」的做法：前者走单调时钟，后者会随系统校时跳，两者不能当安全边界比较。句柄按固定的属性名取，不经 `Symbol.for`：页面能换掉 `Symbol.for`，换不掉已经放上的不可配置属性。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/round3-red.log`（新测试放到第 2 轮受审版本上跑的结果）及同目录 `round3-red-说明.txt`；第 3 轮审查那部分见 `round4-red.log`、`round4-red-说明.txt`。
 - 升级：〔提醒〕未升级。

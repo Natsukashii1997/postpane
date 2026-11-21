@@ -28,7 +28,7 @@ pub use chain::{chain_id, Earlier};
 pub use doer::{by_doer, codex_began, codex_turn, doer_name};
 pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
 pub use gate_io::{
-    archive, archived, head_in, ledger, review_limit, reviewed_commit, same_commit,
+    archive, archived, data_shadow, head_in, ledger, review_limit, reviewed_commit, same_commit,
     set_review_limit, slim_kept,
 };
 pub use idle::IDLE_END_MS;

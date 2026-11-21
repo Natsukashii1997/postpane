@@ -2,6 +2,13 @@
 use super::super::*;
 use std::os::unix::net::UnixStream;
 
+/// `Channel::start` makes itself the one channel `focus` and `reread` ask
+/// (`CURRENT`): tests that start one run one at a time, or the later takes
+/// the earlier's place under it (L-63).
+fn one_channel() -> std::sync::MutexGuard<'static, ()> {
+    static ONE: Mutex<()> = Mutex::new(());
+    ONE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 fn connect(data: &Path) -> UnixStream {
     let stream = UnixStream::connect(socket_path(data)).unwrap();
     stream
@@ -27,6 +34,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     // Leave room for the socket under macOS's long temporary path.
     let temp = tempfile::Builder::new().prefix("").tempdir().unwrap();
     let data = temp.path().join("d");
+    let _one = one_channel();
     let channel = Arc::new(Channel::start(data.clone()).unwrap());
     assert_eq!(channel.status()["connected"], false);
     assert!(channel.open("你好", None).is_err());
@@ -235,6 +243,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
 fn a_send_that_did_not_go_says_whether_send_was_pressed() {
     let temp = tempfile::Builder::new().prefix("").tempdir().unwrap();
     let data = temp.path().join("d");
+    let _one = one_channel();
     let channel = Arc::new(Channel::start(data.clone()).unwrap());
     // No extension: the words never left PostPane.
     let unposted = channel.send_as("68a1", "第 2 轮", Some("h1~send1"));
@@ -267,4 +276,36 @@ fn a_send_that_did_not_go_says_whether_send_was_pressed() {
         );
         assert!(failed.text().contains(said["reason"].as_str().unwrap()));
     }
+}
+
+/// #488: what a shadow read found is kept for this user alone.
+#[test]
+fn what_a_shadow_read_found_is_kept_privately() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    let told = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","outcome":"read"});
+    assert_eq!(shadow::keep(&data, true, &told, 1), Ok(true));
+    let mode = std::fs::metadata(shadow::path(&data))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+}
+
+/// #488 review P2-04: a shadow.jsonl others may read is not written to.
+#[test]
+fn a_shadow_file_others_may_read_is_not_written_to() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    std::fs::write(shadow::path(&data), "").unwrap();
+    std::fs::set_permissions(shadow::path(&data), std::fs::Permissions::from_mode(0o644)).unwrap();
+    let told = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","outcome":"read"});
+    assert!(shadow::keep(&data, true, &told, 1).is_err());
+    assert_eq!(std::fs::read_to_string(shadow::path(&data)).unwrap(), "");
 }

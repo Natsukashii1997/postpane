@@ -92,6 +92,10 @@ pub fn set_review_limit(data: &Path, limit: u32) -> Result<u32, String> {
     set_config(data, "reviewLimit", serde_json::json!(limit))?;
     Ok(limit)
 }
+/// Whether the shadow read (#488) is switched on (`dataShadow: true`).
+pub fn data_shadow(data: &Path) -> bool {
+    config(data)["dataShadow"] == true
+}
 pub(super) fn config(data: &Path) -> serde_json::Value {
     read_small(&config_path(data))
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
