@@ -622,3 +622,11 @@
 - 补充（同日，第 3 轮审查）：可信要靠正面证据，「不在不可信名单里」不算（名单一淘汰、或补装时没拿到 `documentId`，补装页就被当成可信了）。做法：和 `data.js` 同一次登记一份跑在插件隔离环境里的 `mark.js`，它在那里留一个标记；读完再用 `executeScript`（不写 `world`，就是插件的隔离环境，页面和别的扩展都碰不到）按同一个 `documentId` 查标记，有才算可信。第 4 轮审查否掉了先前「比较页面 `performance.timeOrigin` 和后台 `Date.now()`」的做法：前者走单调时钟，后者会随系统校时跳，两者不能当安全边界比较。句柄按固定的属性名取，不经 `Symbol.for`：页面能换掉 `Symbol.for`，换不掉已经放上的不可配置属性。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-20-488-relay-shadow/round3-red.log`（新测试放到第 2 轮受审版本上跑的结果）及同目录 `round3-red-说明.txt`；第 3 轮审查那部分见 `round4-red.log`、`round4-red-说明.txt`。
 - 升级：〔提醒〕未升级。
+
+## L-66 改了 Cargo.toml 的依赖没提交 Cargo.lock：本地全绿，干净的 main 上 `--locked` 构建失败（2026-11-21）
+
+- 现象：7a 批 2（#503）给 host 加了工作区内的 `agent-hud-agents` 依赖，只提交了 `Cargo.toml`。合并后删 worktree 时被拒（「contains modified files」），才发现 `Cargo.lock` 多了一行没提交。干净的 main 上 `cargo metadata --locked` 退出码 101；打包走的 `src/tooling/build.mjs` 用 `cargo build --locked`，会断。
+- 根因：cargo 在本地构建时自动改写锁文件，`pnpm run check`、`pnpm test` 都在这份改过的工作区里跑，所以全绿；`git add` 时按目录只加了 `src`、`docs`，根目录的 `Cargo.lock` 漏了。
+- 正确做法：改了任何 `Cargo.toml` 的依赖，提交前 `git status --short` 看一眼根目录，`Cargo.lock` 一起提交；推送前在干净副本上跑 `cargo metadata --locked --format-version 1 >/dev/null` 确认锁文件是新的。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-21-7a-move-book/locked-before.txt`（修前 `--locked` 的报错），修后同一命令退出码 0。
+- 升级：〔提醒〕未升级；再犯一次就加进 `pnpm run check`（跑一次 `cargo metadata --locked`）。
