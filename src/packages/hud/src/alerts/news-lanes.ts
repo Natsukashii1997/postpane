@@ -1,7 +1,7 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
 import { foldsByItself } from "./reply-stays.ts";
-import { withoutLineOf } from "./failure-list.ts";
+import { isFailure, takeLine } from "./failure-list.ts";
 import { answersElsewhere } from "../permissions/approval-list.ts";
 
 /** One card of the sidebar's news queue (IslandNews keeps the queue). */
@@ -165,6 +165,13 @@ export function laneEvents(
   );
 }
 
+/** A lane's failures: failed or limited turns, a Hermes bot down or its
+ * task not run (#359, #498). */
+export const laneFailures = (lane: NewsLane | undefined): IslandEvent[] =>
+  (lane?.cards ?? []).flatMap((card) =>
+    card.type === "news" && isFailure(card.event) ? [card.event] : [],
+  );
+
 /** A notice other than a reply or a failure waits out its own agent's
  * request: another agent's request no longer holds it back. */
 export function blocksNotice(
@@ -172,7 +179,7 @@ export function blocksNotice(
   requests: readonly Approval[],
   event: IslandEvent,
 ): boolean {
-  if (event.kind === "completion" || event.kind === "turn-failed") return false;
+  if (event.kind === "completion" || isFailure(event)) return false;
   const vendor = agentArtworkKey(event.source);
   return queue.some(
     (card) => card.type === "request" && cardVendor(card, requests) === vendor,
@@ -218,18 +225,18 @@ export function reconcileIslandCards(
       next.push(requestCard(request));
     }
   }
-  for (const event of visible) {
-    if (blocksNotice(next, requests, event)) continue;
-    next = withoutLineOf(next, event);
+  for (const arrived of visible) {
+    if (blocksNotice(next, requests, arrived)) continue;
+    const line = takeLine(next, arrived);
+    const event = line.event;
+    next = line.queue;
     next.push({
       type: "news",
       id: event.id,
       at: event.at,
       event,
       inUsagePanel:
-        event.kind !== "completion" &&
-        event.kind !== "turn-failed" &&
-        inUsagePanel,
+        event.kind !== "completion" && !isFailure(event) && inUsagePanel,
     });
   }
   // Persistent requests are never evicted by a burst of informational events;

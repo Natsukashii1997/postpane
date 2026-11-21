@@ -7,13 +7,23 @@ import assert from "node:assert/strict";
 import { liveSessions } from "../src/panel/agent-board.ts";
 import { runningForMark } from "../src/panel/running-rows.ts";
 import { handoffFor } from "../src/alerts/handoff-doer.ts";
-import { frontFolds, staysUntilSeen } from "../src/alerts/reply-stays.ts";
+import {
+  REPLY_STAY,
+  frontFolds,
+  staysUntilSeen,
+} from "../src/alerts/reply-stays.ts";
 import {
   laneEvents,
+  laneFailures,
   newsLanes,
   reconcileIslandCards,
 } from "../src/alerts/news-lanes.ts";
-import { dismissable, failureStands } from "../src/alerts/failure-list.ts";
+import {
+  dismissable,
+  failureStands,
+  standingQueue,
+} from "../src/alerts/failure-list.ts";
+import { noticeSeal } from "../src/scene/news-seal.ts";
 import { cardRelays, relaysOf, workspaceOf } from "../src/workspace.ts";
 import { NOW, WORKPLACES, type Place } from "./scenes/build.ts";
 import { SCENES, scene } from "./scenes/scenes.ts";
@@ -172,4 +182,48 @@ test("混合场景里四家的在跑、等你互不串家", () => {
   for (const place of WORKPLACES)
     for (const row of runningForMark(snapshot, place))
       assert.equal(row.session.source, place);
+});
+
+test("回执停留是每家一项配置：Hermes、ChatGPT 看过才收，其余 4 秒（ADR 第 7 条）", () => {
+  assert.deepEqual(REPLY_STAY, {
+    claude: "clock",
+    codex: "clock",
+    chatgpt: "seen",
+    deepseek: "clock",
+    hermes: "seen",
+  });
+});
+
+test("Hermes 断线、没跑成和四家共用出错回执：本家一张卡、红色「出错」印章，不进等你（第 4 批，#498）", () => {
+  const { snapshot } = scene("hermes-trouble");
+  const queue = reconcileIslandCards(
+    [],
+    [],
+    snapshot.islandEvents?.items ?? [],
+  );
+  const lanes = newsLanes(queue, []);
+  assert.deepEqual(
+    lanes.map((lane) => [lane.vendor, laneFailures(lane).map((e) => e.kind)]),
+    [["hermes", ["cron-failed", "bot-offline"]]],
+  );
+  const failures = laneFailures(lanes[0]);
+  assert.deepEqual(noticeSeal(failures[0], { replies: [], failures }, true), {
+    seal: { words: "出错", ink: "red" },
+    count: 2,
+  });
+  // Neither folds on the 4-second clock.
+  for (const card of queue)
+    assert.equal(
+      frontFolds(card, { held: false, opened: true, looked: new Set() }),
+      false,
+    );
+  // Down hangs while the bot is down, and only 「知道了」 puts away the task.
+  const bots = snapshot.hermesBots ?? [];
+  assert.equal(standingQueue(queue, snapshot.sessions, NOW, bots), queue);
+  assert.deepEqual(
+    failures.map((e) => dismissable(e)),
+    [true, false],
+  );
+  // Hermes waits on no one: no work line for it.
+  assert.equal(workspaceOf(snapshot, "hermes").waiting.length, 0);
 });

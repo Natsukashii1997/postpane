@@ -356,9 +356,12 @@ export function hooksReviewCopy(event: IslandEvent, language: Language) {
 export const cronShortName = (name: string) =>
   name.split(/[（(]/)[0]?.trim() || name;
 
-/** A failed Hermes scheduled task's strip (owner's pick 甲, issue #114): the
- * task, a framed red "失败", then when the run failed and when it runs next. */
-export function cronFailedCopy(event: IslandEvent, settings: FormatSettings) {
+/** When a failed Hermes scheduled task failed and runs next (owner's pick
+ * 甲, issue #114), for its failure line (#498); null knowing neither. */
+export function cronFailedWhen(
+  event: IslandEvent,
+  settings: FormatSettings,
+): string | null {
   const { language, calendar } = settings;
   const at = (iso: string | null | undefined) => {
     const ms = iso ? Date.parse(iso) : NaN;
@@ -382,10 +385,5 @@ export function cronFailedCopy(event: IslandEvent, settings: FormatSettings) {
           `Next ${monthDayTime(next, calendar, language)}`,
         ),
   ].filter((part): part is string => part != null);
-  return {
-    who: event.title || "Hermes",
-    status: event.message?.trim() || say(language, "没跑成", "Did not run"),
-    tag: say(language, "失败", "Failed"),
-    when: parts.length ? parts.join(" · ") : null,
-  };
+  return parts.length ? parts.join(" · ") : null;
 }

@@ -478,6 +478,69 @@ const hermesDesks: Scene = {
   }),
 };
 
+// #498 (ADR-0001 第 4 批, the owner answered 「改」 on 2026-11-21): a Hermes
+// bot down (told twice) and a task that did not run, each a red 出错 line on
+// Hermes' own card; the Hermes desk itself unchanged.
+const hermesTrouble: Scene = {
+  key: "hermes-trouble",
+  title:
+    "Hermes 机器人乙飞书断线（报了 2 次）、机器人甲的定时任务没跑成：各一行「出错」回执",
+  snapshot: snapshot({
+    bots: [
+      {
+        id: "default",
+        name: "机器人甲",
+        down: null,
+        turnsToday: 6,
+        lastReplyAt: at(20),
+        jobs: [
+          job("weekly", "周会纪要（每周一）", "45 7 * * 1", 400, {
+            failed: true,
+          }),
+        ],
+        asks: [],
+      },
+      {
+        id: "agumon",
+        name: "机器人乙",
+        down: "feishu",
+        downSince: at(40),
+        turnsToday: 2,
+        lastReplyAt: at(90),
+        jobs: [],
+        asks: [],
+      },
+    ],
+    events: [
+      {
+        id: "hermes:default:cron:weekly:scene",
+        kind: "cron-failed",
+        islandAlert: true,
+        at: at(5),
+        source: "hermes",
+        accountId: "default",
+        title: "周会纪要（每周一）",
+        message: "没跑成",
+        failedAt: at(400),
+        nextRunAt: at(-60 * 24 * 2),
+        bot: { id: "default", name: "机器人甲" },
+      },
+      {
+        id: "hermes:agumon:offline:scene",
+        kind: "bot-offline",
+        islandAlert: true,
+        at: at(2),
+        source: "hermes",
+        accountId: "agumon",
+        title: "机器人乙",
+        message: "飞书断线",
+        count: 2,
+        bot: { id: "agumon", name: "机器人乙" },
+      },
+    ],
+  }),
+};
+
 // #427 (owner chose 甲): nine open relays, five the person's, three under
 // way, one quiet, and ChatGPT's own two chats replied; for the peek's
 // 「审核」, the card's 「等待处理 / 正在进行」 and the handoff card's
@@ -615,6 +678,7 @@ export const SCENES: readonly Scene[] = [
   claudeBusy,
   claudeManyAsks,
   hermesDesks,
+  hermesTrouble,
   relayStopped,
   relayPassed,
   relayPaused,

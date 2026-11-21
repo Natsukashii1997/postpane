@@ -3,7 +3,6 @@
 import type { IslandEvent } from "@agent-hud/protocol";
 import { systemCalendar, type QuotaDisplay } from "@agent-hud/ui/format";
 import {
-  cronShortName,
   quotaAlertCopy,
   resetCreditCopy,
   hooksReviewCopy,
@@ -37,18 +36,6 @@ export function quotaChipLabels(
     const copy = resetCreditCopy(event, undefined, settings);
     return { who: copy.chipLabel, status: copy.chipValue, tone: "reset" };
   }
-  if (event.kind === "bot-offline")
-    return {
-      who: event.title ?? "",
-      status: event.message ?? (zh ? "断线" : "Offline"),
-      tone: "critical",
-    };
-  if (event.kind === "cron-failed")
-    return {
-      who: cronShortName(event.title ?? ""),
-      status: zh ? "失败" : "Failed",
-      tone: "critical",
-    };
   if (event.kind === "sign-in-needed")
     return {
       who: "",
