@@ -740,13 +740,13 @@ impl Book {
         handoff.enter(Phase::Failed, now);
         true
     }
-    /// A failed open tried again: opening, with its brief.
+    /// A failed open tried again: opening, with its brief; not while its session has a live or newer one (F-01).
     pub fn retry(&mut self, id: &str, now: i64) -> Option<String> {
         if self.get(id)?.status != Status::Failed {
             return None;
         }
         let session = self.get(id)?.claude_session.clone();
-        if self.for_session(&session).is_some() {
+        if self.for_session(&session).is_some() || self.superseded(id) {
             return None;
         }
         let handoff = self.get_mut(id)?;

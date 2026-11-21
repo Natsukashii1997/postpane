@@ -123,7 +123,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 | `begin` | 无 | 新接力 `opening/sending`；同会话原来进行中的改 `closed`（阶段不变） | `t01` |
 | `opened` / `opened_late` | `opening`；或 `failed`、还留着 brief、没被同会话更新的接力顶替 | `open/delivered`，记 `ask`；绑同一会话的其他进行中接力改 `closed`（阶段不变） | `t02` |
 | `failed` / `expire`（打开超 2 分钟）/ `interrupted`（重启时还在开） | `opening` | `failed/failed` | `t03` |
-| `retry` | `failed`，且同会话没有进行中的接力 | `opening/sending`，`attempt` 加 1 | `t04` |
+| `retry` | `failed`，同会话没有进行中的接力，也没被同会话更新的接力顶替（F-01） | `opening/sending`，`attempt` 加 1 | `t04` |
 | `working` | 进行中、绑着这个会话，阶段 `sending` / `delivered` | `working` | `t05` |
 | `replied` | 进行中、绑着这个会话，阶段 `sending` / `delivered` / `working`，或有没答的送话 | `replied` | `t05` |
 | `returned` | 进行中 | `returned`，`rounds` 加 1 | `t05` |
@@ -144,14 +144,14 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - I-03 `closed` 是终点：之后 `status`、`phase` 都不再变。
 - I-04 `opening`、`failed` 没绑会话；`open` 一定绑着会话。
 - I-05 `auto` 开着当且仅当 `halt` 为空。
-- I-06 同一个 Claude 会话最多一张进行中的接力。**目前不成立，见缺口 F-01。**
+- I-06 同一个 Claude 会话最多一张进行中的接力。
 - I-07 同一个 ChatGPT 会话最多绑一张进行中的接力。
 - I-08 `rounds`、`attempt` 只增不减，`steps` 只追加不删。
 - I-09 `phaseAt` 不晚于 `updatedAt`。
 
 缺口与约定：
 
-- F-01（2026-11-21 随机跑发现，待常浩定）：同一会话先后两张接力都没打开，重试较旧那张，较新那张又迟到打开，就有两张进行中的接力。`retry` 只看「同会话有没有进行中的」，不像 `opened` 那样看「有没有被更新的顶替」。复现：`f01_…`，标 `#[ignore]`，`cargo test -- --ignored f01` 能看到。
+- F-01（2026-11-21 随机跑发现，常浩回「修 F-01」，当天修好）：同一会话先后两张接力都没打开，重试较旧那张、较新那张又迟到打开，曾会有两张进行中的接力。现在 `retry` 和 `opened` 一样不认被同会话更新的接力顶替的那张，接力卡上点它的「重试」显示「这次接力不能重试」。测试 `f01_…`。
 - `Book` 不拦在 `opening` 上调用 `asked` / `returned` / `format_asked`（只要求进行中），所以「`opening` 一定是 `sending`」不写成不变量，靠宿主只在打开后续接。
 
 ### 从 Claude 发起：`relay_to_chatgpt`
