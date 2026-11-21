@@ -64,6 +64,7 @@ const OUTCOME: &[&str] = &[
     "stopped",
     "limited",
     "no-script",
+    "failed",
     "invalid",
     "conflict",
     "unreachable",

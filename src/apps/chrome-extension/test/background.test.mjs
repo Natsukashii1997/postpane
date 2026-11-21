@@ -78,7 +78,10 @@ function load(
       },
     },
     tabs: {
-      query: async () => tabs,
+      query: async () => {
+        if (faults.query) throw new Error("No tabs");
+        return tabs;
+      },
       get: async (tabId) => tabs.find((tab) => tab.id === tabId),
       create: async ({ url }) => {
         const tab = { id: 99, url, active: false, windowId: 1 };
@@ -115,6 +118,7 @@ function load(
       },
       unregisterContentScripts: async ({ ids }) => {
         if (faults.unregister) throw new Error("Could not unregister");
+        if (faults.unregisterGate) await faults.unregisterGate();
         if (!stored.registered) throw new Error("Nonexistent script ID");
         stored.registered = false;
         registered.push(["off", [...ids]]);
@@ -1691,4 +1695,41 @@ test("a read due 20 s after words went out is not made once the switch went off,
   held[1]();
   await settle();
   assert.deepEqual(kit.reads(), [[2, SHADOWED, P(2)]]);
+});
+
+// #488 review round 5, P1-04: a switch-off keeps that it is not done before
+// it does anything, whatever started it; a worker stopped midway takes
+// data.js out of the pages when it starts again.
+test("a switch-off cut short, even of a registering nothing kept, is taken up again by a restarted worker", async () => {
+  const kit = await shadowed({
+    stored: { registered: true },
+    faults: { unregisterGate: () => new Promise(() => {}) },
+  });
+  // The worker stops while taking the registering out.
+  kit.watch(false);
+  await settle();
+  assert.equal(kit.stored.shadowDisarm.pending, true);
+  assert.deepEqual(kit.stopsAsked(), []);
+  // Started again; the registering had gone, the pages not stopped.
+  const again = await shadowed({
+    stored: { ...kit.stored, registered: false },
+  });
+  await again.watch(false);
+  assert.deepEqual(again.stopsAsked(), [2, 3, 2, 3]);
+  assert.equal(again.stored.shadowDisarm.pending, false);
+  assert.equal(again.shadows().at(-1).outcome, "disarmed");
+});
+
+test("a switch-off that cannot list the tabs stays pending, and is tried again", async () => {
+  const kit = await shadowed();
+  await kit.watch(true);
+  kit.faults.query = true;
+  await kit.watch(false);
+  assert.equal(kit.stored.shadowDisarm.pending, true);
+  assert.equal(kit.stored.shadowDisarm.unlisted, true);
+  assert.equal(kit.shadows().at(-1).outcome, "disarm-pending");
+  kit.faults.query = false;
+  await kit.watch(false);
+  assert.equal(kit.stored.shadowDisarm.pending, false);
+  assert.equal(kit.shadows().at(-1).outcome, "disarmed");
 });

@@ -153,6 +153,38 @@
     return;
   }
 
+  // The handle goes in before anything else (#488 review round 5, P1-01):
+  // whatever fails after, the page cannot put one of its own in its place.
+  // Until all is ready a read only says it failed; stopping stops whatever
+  // was set up. One there already is not taken for this file's own: the copy
+  // put in before (stopped, it stays so; a page loaded again gets a new one)
+  // or the page's. Either way this one does nothing, and says so: the
+  // extension reads nothing from that page (review P1-01, P1-02). Named, not
+  // keyed by Symbol.for: the extension finds it by the name, and nothing the
+  // page swaps later can point it elsewhere. Not writable, not configurable:
+  // once here, nothing in the page swaps it.
+  const KEY = "__postpaneData";
+  if (KEY in window) return "present";
+  let readNow = async () => ({ outcome: "failed" });
+  try {
+    Object.defineProperty(window, KEY, {
+      value: Object.freeze({
+        read: (conversation, promptId) => readNow(conversation, promptId),
+        stop: () => {
+          readNow = async () => ({ outcome: "stopped" });
+          try {
+            return stop();
+          } catch {
+            // Nothing was set up yet to stop.
+            return { stopped: true, restored: false };
+          }
+        },
+      }),
+    });
+  } catch {
+    return "present";
+  }
+
   // What reading uses of the page's world, taken now: put in as the page
   // loads (document_start), before any script of the page runs, so what
   // the page changes later of these does not reach a read (#488 review
@@ -180,15 +212,6 @@
   const abort = AbortController.prototype.abort;
   const bytesOf = (text) =>
     apply(byteLength, apply(encode, encoder, [text]), []);
-
-  // One handle, this file's own. One there already is not taken for it:
-  // the copy put in before (stopped, it stays so; a page loaded again gets
-  // a new one) or the page's. Either way this one does nothing, and says so:
-  // the extension reads nothing from that page (#488 review P1-01, P1-02).
-  // Named, not keyed by Symbol.for: the extension finds it by the name, and
-  // nothing the page swaps later can point it elsewhere.
-  const KEY = "__postpaneData";
-  if (KEY in window) return "present";
 
   const API = "/backend-api/";
   const CONVERSATION = /^\/backend-api\/conversations\/[0-9a-f-]{36}$/;
@@ -384,14 +407,7 @@
     return { stopped: true, restored: window.fetch === page };
   }
 
-  // Not writable, not configurable: once here, nothing in the page swaps it.
-  try {
-    Object.defineProperty(window, KEY, {
-      value: Object.freeze({ read, stop }),
-    });
-  } catch {
-    stop();
-    return "present";
-  }
+  // All ready: the handle reads from now on, unless stopped meanwhile.
+  if (alive) readNow = read;
   return "installed";
 })();

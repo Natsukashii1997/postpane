@@ -579,7 +579,7 @@ async function arm(left, gen) {
   // (review P1-03, round 4).
   if (!ledgerOk) {
     const unregistered = await unregister();
-    const { failed } = await everyPage({ func: stopInPage });
+    const { failed, unlisted } = await everyPage({ func: stopInPage });
     const live = failed.filter((tab) => !tab.discarded).map((tab) => tab.id);
     await chrome.storage.local.set({
       shadowArm: {
@@ -587,6 +587,7 @@ async function arm(left, gen) {
         ledger: false,
         unregistered,
         failed: live,
+        ...(unlisted && { unlisted: true }),
         at: Date.now(),
       },
     });
@@ -655,7 +656,14 @@ async function putIn(tabId, begun) {
 async function everyPage(what) {
   const done = {};
   const failed = [];
-  for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
+  // Tabs not known: as if none could be reached (review round 5, P1-04).
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ url: `${HOME}*` });
+  } catch {
+    return { done, failed, unlisted: true };
+  }
+  for (const tab of tabs) {
     const ran = await chrome.scripting
       .executeScript({ target: { tabId: tab.id }, world: "MAIN", ...what })
       .catch(() => null);
@@ -672,16 +680,27 @@ async function everyPage(what) {
  * is discarded has no page running, and loads without it; any other is
  * tried again later. */
 async function disarm() {
+  // Kept first, whatever started it: a worker stopped from here on takes
+  // data.js out again when it starts (review round 5, P1-04).
+  await chrome.storage.local.set({
+    shadowDisarm: { pending: true, at: Date.now() },
+  });
   await unregister();
   await everyPage({ func: stopInPage });
   await Promise.allSettled([...inflight]);
   // Whatever those registered or put in meanwhile is taken out too.
   const unregistered = await unregister();
-  const { done, failed } = await everyPage({ func: stopInPage });
+  const { done, failed, unlisted } = await everyPage({ func: stopInPage });
   const live = failed.filter((tab) => !tab.discarded).map((tab) => tab.id);
-  const pending = !unregistered || live.length > 0;
+  const pending = !unregistered || live.length > 0 || !!unlisted;
   await chrome.storage.local.set({
-    shadowDisarm: { pending, unregistered, failed: live, at: Date.now() },
+    shadowDisarm: {
+      pending,
+      unregistered,
+      failed: live,
+      ...(unlisted && { unlisted: true }),
+      at: Date.now(),
+    },
   });
   const stopped = Object.values(done).filter((r) => r?.stopped).length;
   post({
@@ -896,6 +915,7 @@ const OUTCOMES = [
   "stopped",
   "limited",
   "no-script",
+  "failed",
 ];
 const SUMMARY = {
   outcome: (v) => OUTCOMES.includes(v),

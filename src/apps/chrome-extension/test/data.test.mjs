@@ -759,3 +759,42 @@ test("the extension's calls find this file's handle, whatever the page swaps", a
     { stopped: true, restored: true },
   );
 });
+
+// #488 review round 5, P1-01: the handle goes in before anything else; set
+// up failing after, it only says so, and the page cannot put one of its own
+// in its place.
+test("set up failing after the handle went in, a read only says it failed, and the handle stays this file's", async () => {
+  const context = {
+    window: { fetch: async () => ({}) },
+    location: {
+      origin: "https://chatgpt.com",
+      href: "https://chatgpt.com/",
+      pathname: "/",
+    },
+    document: { visibilityState: "visible" },
+    // No Response: taking what reading uses throws.
+    Headers,
+    URL,
+    TextEncoder,
+    crypto: globalThis.crypto,
+  };
+  vm.createContext(context);
+  assert.throws(() => vm.runInContext(source, context));
+  const handle = context.window[KEY];
+  assert.ok(handle);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(await handle.read(CONVERSATION, ASK))),
+    { outcome: "failed" },
+  );
+  // The page cannot swap it for one of its own.
+  vm.runInContext(
+    `try { Object.defineProperty(window, "${KEY}", { value: { read: () => ({ outcome: "read" }) } }); } catch {}
+     window["${KEY}"] = { read: () => ({ outcome: "read" }) };`,
+    context,
+  );
+  assert.equal(context.window[KEY], handle);
+  assert.deepEqual(JSON.parse(JSON.stringify(handle.stop())), {
+    stopped: true,
+    restored: false,
+  });
+});
