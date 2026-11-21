@@ -1,5 +1,6 @@
 import type { IslandEvent } from "@agent-hud/protocol";
 import { staysUntilSeen } from "../alerts/reply-stays.ts";
+import { isFailure } from "../alerts/failure-list.ts";
 
 type Edge = "top" | "bottom" | "left" | "right";
 
@@ -9,12 +10,13 @@ export const TAG_NARROW_MS = 5000;
 
 /** Whether a tag waits on the sidebar rather than folding away on its
  * 4-second clock: a request until it is answered, a Hermes or ChatGPT reply
- * until its card has been opened. Only these fold into a narrow slip. */
+ * until its card has been opened, a failure until it is put away or no
+ * longer stands (#359). Only these fold into a narrow slip. */
 export function tagWaits(
   tag: { id: string; request?: unknown; event?: IslandEvent },
   looked: ReadonlySet<string>,
 ): boolean {
-  if (tag.request) return true;
+  if (tag.request || isFailure(tag.event)) return true;
   return staysUntilSeen(tag.event) && !looked.has(tag.id);
 }
 

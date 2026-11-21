@@ -185,7 +185,9 @@ test("新回复的停留规则不变：Claude 4 秒收、Hermes 和 ChatGPT 看�
     }),
     true,
   );
-  assert.equal(tagWaits({ id: "f", event: failed(1) }, none), false);
+  // Like a request, a failure hangs whole five seconds, then folds into its
+  // narrow slip (#359).
+  assert.equal(tagWaits({ id: "f", event: failed(1) }, none), true);
 });
 
 test("后到的新回复排到同一家的出错卡前面，照常 4 秒收；出错卡随后回到前面", () => {

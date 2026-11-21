@@ -305,6 +305,8 @@ export function CompactAlertView({
   const warnAccent = paper
     ? paperLevel("warning", paper)
     : alertText("warning", ground);
+  const failed = event?.kind === "turn-failed";
+  const failedInk = failed ? (paper?.red ?? tagColor("ask", light)) : null;
   const dimInk = paper ? paper.dim : alertInk(0.55, ground);
   const secondary = light ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.55)";
   const segmentBg = light ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)";
@@ -408,10 +410,7 @@ export function CompactAlertView({
         fontSize: font,
         fontWeight: 500,
         // A failed turn's words in red (#359), any other notice's in amber.
-        color:
-          event?.kind === "turn-failed"
-            ? (paper?.red ?? tagColor("ask", light))
-            : warnAccent,
+        color: failedInk ?? warnAccent,
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
@@ -422,14 +421,14 @@ export function CompactAlertView({
   );
 
   if (narrow) {
-    // The narrow slip: the tag's own seal, a short tear, then the count in
-    // the colour of its box (red to answer, amber to approve, blue a reply).
+    // The narrow slip: its seal, a short tear, the count in its box's colour
+    // (red to answer or a failed turn #359, amber to approve, blue a reply).
     const count = request ? requestCount : (reply?.count ?? 1);
     const countColor = asked
       ? paper
         ? askedColor(asked.tone, paper)
         : tagColor(asked.tone, light)
-      : (paper?.blue ?? tagColor("reply", light));
+      : (failedInk ?? paper?.blue ?? tagColor("reply", light));
     return (
       <div
         className="hud-compact-request hud-narrow-tag"
