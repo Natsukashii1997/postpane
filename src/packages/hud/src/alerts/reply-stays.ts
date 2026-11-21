@@ -2,16 +2,24 @@ import type { IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
 import { isFailure } from "./failure-list.ts";
 
+/** How each place's new reply leaves the sidebar (ADR-0001 第 7 条, one
+ * setting per place): on the 4-second clock, or once it has been looked at
+ * (owner, 2026-11-05, kept 2026-11-07). A Hermes bot answers in Feishu
+ * within seconds, while the person is reading Feishu, not the sidebar, so
+ * its reply would be gone before they turn; ChatGPT answers in a browser tab
+ * the same way. A source not listed folds on the clock. */
+export const REPLY_STAY: Readonly<Record<string, "clock" | "seen">> = {
+  claude: "clock",
+  codex: "clock",
+  chatgpt: "seen",
+  deepseek: "clock",
+  hermes: "seen",
+};
+
 /** Whether a notice waits on the sidebar until it has been looked at,
- * rather than folding away after a few seconds (owner, 2026-11-05): a
- * Hermes bot answers in Feishu within seconds, while the person is reading
- * Feishu, not the sidebar, so its reply would be gone before they turn.
- * ChatGPT answers in a browser tab the same way. */
+ * rather than folding away after a few seconds: a reply from a place set so. */
 export function staysUntilSeen(event: IslandEvent | undefined): boolean {
-  return (
-    event?.kind === "completion" &&
-    (event.source === "hermes" || event.source === "chatgpt")
-  );
+  return event?.kind === "completion" && REPLY_STAY[event.source] === "seen";
 }
 
 /** Whether a notice folds away on the 4-second clock: not a reply that

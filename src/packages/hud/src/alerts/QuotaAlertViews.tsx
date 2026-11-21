@@ -16,7 +16,6 @@ import {
 import { useFormat } from "@agent-hud/ui/format-context";
 import {
   quotaAlertCopy,
-  cronFailedCopy,
   hooksReviewCopy,
   resetCreditCopy,
   signInCopy,
@@ -71,37 +70,6 @@ export function stripCopy(
       stillEmpty: null,
       note: null,
       opens: true,
-    };
-  }
-  if (event.kind === "bot-offline") {
-    const zh = settings.language === "zh";
-    return {
-      status: `${event.title ?? "Hermes"} · ${event.message ?? (zh ? "断线" : "Offline")}`,
-      display: zh ? "断线" : "Offline",
-      tone: "critical",
-      framed: true,
-      bar: null,
-      when: zh
-        ? "机器人暂时收不到飞书消息"
-        : "The bot cannot get Feishu messages",
-      stillEmpty: null,
-      note: null,
-      opens: false,
-    };
-  }
-  if (event.kind === "cron-failed") {
-    const copy = cronFailedCopy(event, settings);
-    return {
-      who: copy.who,
-      status: copy.status,
-      display: copy.tag,
-      tone: "critical",
-      framed: true,
-      bar: null,
-      when: copy.when,
-      stillEmpty: null,
-      note: null,
-      opens: false,
     };
   }
   if (event.kind === "hooks-review-needed") {

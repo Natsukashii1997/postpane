@@ -4,6 +4,7 @@
 // notice keeps its receipt, with no seal.
 import type { IslandEvent } from "@agent-hud/protocol";
 import type { NewsSeal } from "../permissions/PaperSeal";
+import { isFailure } from "../alerts/failure-list.ts";
 
 export function noticeSeal(
   event: IslandEvent | undefined,
@@ -15,7 +16,7 @@ export function noticeSeal(
       seal: { words: zh ? "已回" : "DONE", ink: "blue" },
       count: lane.replies.length,
     };
-  if (event?.kind === "turn-failed")
+  if (isFailure(event))
     return {
       seal: { words: zh ? "出错" : "ERROR", ink: "red" },
       count: lane.failures.length,

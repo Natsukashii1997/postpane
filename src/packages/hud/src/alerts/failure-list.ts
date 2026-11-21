@@ -3,8 +3,15 @@
 // one line per source, session and kind of failure, Core counting the turns
 // in a row (×2…). A passing failure stays until 「知道了」 or the session's
 // next turn, never on the 4-second clock; a limit hangs until it lifts
-// (owner, 2026-11-21).
-import type { IslandEvent, Session } from "@agent-hud/protocol";
+// (owner, 2026-11-21). Hermes shares it (ADR-0001 第 4 批, #498, the owner
+// answered 「改」 on 2026-11-21): a bot down or a scheduled task that did not
+// run is one line per bot and kind, counted here; down hangs until the bot is
+// back, a task that did not run stays until 「知道了」.
+import type {
+  HermesBotStatus,
+  IslandEvent,
+  Session,
+} from "@agent-hud/protocol";
 import {
   dateFormat,
   monthDayTime,
@@ -12,13 +19,21 @@ import {
   type WeekCalendar,
 } from "@agent-hud/ui/format";
 import { findSession } from "../permissions/approval-list.ts";
+import { cronFailedWhen } from "./quota-alert-copy.ts";
+
+/** A Hermes bot's trouble: its gateway down, or a task that did not run. */
+const hermesTrouble = (event: IslandEvent) =>
+  event.kind === "bot-offline" || event.kind === "cron-failed";
 
 export const isFailure = (event: IslandEvent | undefined) =>
-  event?.kind === "turn-failed";
+  event?.kind === "turn-failed" || (event != null && hermesTrouble(event));
 
-/** The line a failure is told on: its source, session and kind. */
+/** The line a failure is told on: its source, session and kind; a Hermes
+ * bot's by the bot and kind. */
 export const failureKey = (event: IslandEvent) =>
-  `${event.source}:${event.sessionId ?? ""}:${event.failure ?? "failed"}`;
+  hermesTrouble(event)
+    ? `${event.source}:${event.bot?.id ?? event.accountId ?? ""}:${event.kind}`
+    : `${event.source}:${event.sessionId ?? ""}:${event.failure ?? "failed"}`;
 
 const instant = (iso: string | null | undefined) => {
   const ms = iso ? Date.parse(iso) : NaN;
@@ -28,17 +43,26 @@ const instant = (iso: string | null | undefined) => {
 const limited = (event: IslandEvent) => event.failure === "limited";
 
 /** A limit whose end is known hangs until then: 「知道了」 leaves it. One
- * whose end is unknown would hang for ever, so it goes with the rest. */
+ * whose end is unknown would hang for ever, so it goes with the rest. A bot
+ * down hangs until it is back. */
 export const dismissable = (event: IslandEvent) =>
-  !limited(event) || instant(event.limitedUntil) === null;
+  event.kind !== "bot-offline" &&
+  (!limited(event) || instant(event.limitedUntil) === null);
 
 /** Whether a failure's line still stands: its session has not started
- * another turn, and a limit has not lifted. */
+ * another turn, and a limit has not lifted; a bot is still down, as far as
+ * it is still read. */
 export function failureStands(
   event: IslandEvent,
   sessions: readonly Session[],
   now: number,
+  bots: readonly HermesBotStatus[] = [],
 ): boolean {
+  if (event.kind === "bot-offline") {
+    const id = event.bot?.id ?? event.accountId;
+    return bots.some((bot) => bot.id === id && bot.down != null);
+  }
+  if (event.kind === "cron-failed") return true;
   const until = instant(event.limitedUntil);
   if (limited(event) && until !== null && until <= now) return false;
   const turn = findSession(sessions, event.sessionId, event.source)?.liveFacts
@@ -53,36 +77,47 @@ export function standingQueue<C extends Card>(
   queue: C[],
   sessions: readonly Session[],
   now: number,
+  bots: readonly HermesBotStatus[] = [],
 ): C[] {
   const kept = queue.filter(
     (card) =>
-      !isFailure(card.event) || failureStands(card.event!, sessions, now),
+      !isFailure(card.event) || failureStands(card.event!, sessions, now, bots),
   );
   return kept.length === queue.length ? queue : kept;
 }
 
-/** The queue without the line `event` is told on: a failure again in the
- * same session takes its place, counted by Core. */
-export function withoutLineOf<C extends Card>(
+/** `event` taking the place of the line it is told on: the queue without
+ * that line, and the event counted. A failure again in the same session is
+ * counted by Core; a Hermes bot's here, one more than the line it replaces. */
+export function takeLine<C extends Card>(
   queue: C[],
   event: IslandEvent,
-): C[] {
-  if (!isFailure(event)) return queue;
+): { queue: C[]; event: IslandEvent } {
+  if (!isFailure(event)) return { queue, event };
   const key = failureKey(event);
-  return queue.filter(
-    (card) => !isFailure(card.event) || failureKey(card.event!) !== key,
-  );
+  const onLine = (card: C) =>
+    isFailure(card.event) && failureKey(card.event!) === key;
+  const old = queue.find(onLine)?.event;
+  return {
+    queue: old ? queue.filter((card) => !onLine(card)) : queue,
+    event:
+      old && event.count == null
+        ? { ...event, count: (old.count ?? 1) + 1 }
+        : event,
+  };
 }
 
-/** The line's red tag: 失败 or 限流, ×n once it failed so again. */
+/** The line's own word: 失败 or 限流; 断线 or 没跑成 for a Hermes bot. */
+function failureWord(event: IslandEvent, zh: boolean): string {
+  if (event.kind === "bot-offline") return zh ? "断线" : "Offline";
+  if (event.kind === "cron-failed") return zh ? "没跑成" : "Did not run";
+  if (limited(event)) return zh ? "限流" : "Limited";
+  return zh ? "失败" : "Failed";
+}
+
+/** The line's red tag: its word, ×n once it failed so again. */
 export function failureTag(event: IslandEvent, zh: boolean): string {
-  const word = limited(event)
-    ? zh
-      ? "限流"
-      : "Limited"
-    : zh
-      ? "失败"
-      : "Failed";
+  const word = failureWord(event, zh);
   return (event.count ?? 1) > 1 ? `${word} ×${event.count}` : word;
 }
 
@@ -96,12 +131,33 @@ function span(ms: number, zh: boolean): string {
   return zh ? `${h} 小时 ${m} 分` : `${h}h ${m}m`;
 }
 
-/** What the line says under its title. */
+/** What the line says under its title. A Hermes task's names when it failed
+ * and runs next in `calendar`'s time zone, as its strip did. */
 export function failureBody(
   event: IslandEvent,
   now: number,
   zh: boolean,
+  calendar: WeekCalendar = { timeZone: "Asia/Shanghai", firstWeekday: 2 },
 ): string {
+  if (event.kind === "bot-offline") {
+    const why = event.message?.trim() || (zh ? "断线" : "Offline");
+    return zh
+      ? `${why}，重新连上后自动收起。`
+      : `${why}; this goes once it is back.`;
+  }
+  if (event.kind === "cron-failed") {
+    const when = cronFailedWhen(event, {
+      language: zh ? "zh" : "en",
+      calendar,
+    });
+    if (when)
+      return zh
+        ? `定时任务没跑成：${when}。`
+        : `The task did not run: ${when}.`;
+    return zh
+      ? "定时任务没跑成，去飞书看原因。"
+      : "The task did not run. See why in Feishu.";
+  }
   if (!limited(event))
     return zh
       ? "这一轮没跑完，失败了。去会话里看原因。"
@@ -140,13 +196,15 @@ function clock(
     : monthDayTime(at, calendar, language);
 }
 
-/** The folded tag's words (owner, 2026-11-21): 出错, or 限流至 14:30. */
+/** The folded tag's words (owner, 2026-11-21): 出错, or 限流至 14:30; a
+ * Hermes bot's 断线 or 没跑成. */
 export function failureChip(
   event: IslandEvent,
   now: number,
   calendar: WeekCalendar,
   zh: boolean,
 ): string {
+  if (hermesTrouble(event)) return failureWord(event, zh);
   if (!limited(event)) return zh ? "出错" : "Error";
   const until = instant(event.limitedUntil);
   if (until === null) return zh ? "限流" : "Limited";
