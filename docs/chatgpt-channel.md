@@ -101,6 +101,58 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - 新会话放进的 ChatGPT 项目存 `<数据目录>/chatgpt/config.json`：`{"project": "https://chatgpt.com/g/<id>/project"}`，只认这种项目页网址（去掉 `?`、`#` 和末尾 `/`）。在设置 · 智能体插件 ·「ChatGPT（Chrome 插件）」登记后出现「新会话放进项目」一行，粘贴保存；不填就开在 ChatGPT 首页。
 - 名单（`watched.json`）：接力的会话都是驿窗经 `open` 新开的，开好就在名单里，记的是接力标题（`named: true`），不是插件报的标签页标题；它的回信回执也先用接力标题。
 
+### 接力状态（状态转移与不变量，7a 批 1）
+
+一张接力的状态由 `status`（4 种）和 `phase`（7 种）一起决定，另有 `auto` / `halt`（自动往返开着还是停着）、`queuedAt`、`wakingSince` 几项只管等待，不改这两项。所有改动都在 `Book`（`platform/.../chatgpt/handoffs.rs` 及 `handoffs/`）里；宿主 `Desk` 只调用它。测试在 `handoffs/tests/states.rs`：下表每一行对应一条 `tNN_` 测试；`t10` 用固定种子随机跑 300 组、每组 120 步（各种移动、各种时间间隔混着来），每一步后检查全部不变量。改了一行转移或一条不变量，表和测试一起改。
+
+能出现的组合：
+
+| status | phase | 怎么来的 |
+|---|---|---|
+| `opening` | `sending` | 新发起（`begin`）、重试（`retry`） |
+| `open` | `delivered` / `working` / `replied` / `returned` | 绑上会话之后的一轮轮往返 |
+| `failed` | `failed` | 没打开（`failed`、`expire`、`interrupted`） |
+| `closed` | `ended` | 结束（`end`、`passed`、`idle`、审查链转走） |
+| `closed` | 被顶替时的阶段 | 同一会话发起新接力、或别的接力绑上同一个会话时，旧的只改 `closed`，`phase` 停在原处（`t01`、`t02`） |
+
+转移（前提不满足的调用不做任何事、返回 false）：
+
+| 移动 | 前提 | 结果 | 测试 |
+|---|---|---|---|
+| `begin` | 无 | 新接力 `opening/sending`；同会话原来进行中的改 `closed`（阶段不变） | `t01` |
+| `opened` / `opened_late` | `opening`；或 `failed`、还留着 brief、没被同会话更新的接力顶替 | `open/delivered`，记 `ask`；绑同一会话的其他进行中接力改 `closed`（阶段不变） | `t02` |
+| `failed` / `expire`（打开超 2 分钟）/ `interrupted`（重启时还在开） | `opening` | `failed/failed` | `t03` |
+| `retry` | `failed`，且同会话没有进行中的接力 | `opening/sending`，`attempt` 加 1 | `t04` |
+| `working` | 进行中、绑着这个会话，阶段 `sending` / `delivered` | `working` | `t05` |
+| `replied` | 进行中、绑着这个会话，阶段 `sending` / `delivered` / `working`，或有没答的送话 | `replied` | `t05` |
+| `returned` | 进行中 | `returned`，`rounds` 加 1 | `t05` |
+| `asked` / `format_asked` | 进行中 | `delivered`（`asked` 另加 1 轮、清掉等待） | `t05` |
+| `undelivered` | 进行中，没送到的是最新一段转回 | 是「转回」且阶段 `returned` 时退回 `replied`；停下自动往返（已停着就记一步失败） | `t06` |
+| `end` | 进行中或 `failed` | `closed/ended` | `t07` |
+| `passed` | 进行中 | `closed/ended` | `t07` |
+| `idle` | `open`、不在唤醒，阶段 `replied` / `returned`（或停着的 `delivered` / `working`），闲置超 24 小时 | `closed/ended` | `t07` |
+| `close_others` | 同一审查链上别的进行中接力，或还可能迟到打开的失败接力 | 进行中的改 `closed/ended`；失败的仍是 `failed`，只清掉 brief、不能再绑会话 | `t08` |
+| `stop` / `overdue` / `unconfirmed` / `stop_undrawn` | 进行中、自动往返开着 | `auto=false`、`halt` 写原因，`status`/`phase` 不变 | `t09` |
+| `resume` / `evidence_in` / 续接时自动恢复（只恢复驿窗自己停的） | 进行中、停着 | `auto=true`、`halt` 清空 | `t09` |
+| `queued` / `woke` / `awake` / `delivery` / `told` / `round` | 各自的前提 | 只改等待、回执、轮数，`status`/`phase` 不变 | `t10` |
+
+不变量（随机跑的每一步都查，`t10`）：
+
+- I-01 `status` 是 `failed` 当且仅当 `phase` 是 `failed`。
+- I-02 `phase` 是 `ended` 时 `status` 一定是 `closed`；反过来不成立（被顶替的保留原阶段）。
+- I-03 `closed` 是终点：之后 `status`、`phase` 都不再变。
+- I-04 `opening`、`failed` 没绑会话；`open` 一定绑着会话。
+- I-05 `auto` 开着当且仅当 `halt` 为空。
+- I-06 同一个 Claude 会话最多一张进行中的接力。**目前不成立，见缺口 F-01。**
+- I-07 同一个 ChatGPT 会话最多绑一张进行中的接力。
+- I-08 `rounds`、`attempt` 只增不减，`steps` 只追加不删。
+- I-09 `phaseAt` 不晚于 `updatedAt`。
+
+缺口与约定：
+
+- F-01（2026-11-21 随机跑发现，待常浩定）：同一会话先后两张接力都没打开，重试较旧那张，较新那张又迟到打开，就有两张进行中的接力。`retry` 只看「同会话有没有进行中的」，不像 `opened` 那样看「有没有被更新的顶替」。复现：`f01_…`，标 `#[ignore]`，`cargo test -- --ignored f01` 能看到。
+- `Book` 不拦在 `opening` 上调用 `asked` / `returned` / `format_asked`（只要求进行中），所以「`opening` 一定是 `sending`」不写成不变量，靠宿主只在打开后续接。
+
 ### 从 Claude 发起：`relay_to_chatgpt`
 
 - 驿窗 MCP 的内置工具，参数 `{title, summary?, brief, risk?, head?, chain?, extra?, launch?}`（`risk`、`head`、`chain`、`extra` 见上面「审核门」）（`summary` 一句话写这一轮做了什么，显示在接力卡时间线上）；MCP 自己补上 `caller`（Claude Code 的 `CLAUDE_CODE_SESSION_ID`）、`cwd`（MCP 进程的目录，就是 Claude 的工作目录）和 `parent`。工具说明写明 brief 要带的六项：任务名与目标、改了什么和为什么、分支和 PR 链接、改动本身（`git diff`，太长写摘要 + 关键片段）、重点看哪里、请 ChatGPT 最后一行写「结论：通过」或「结论：需修改」。

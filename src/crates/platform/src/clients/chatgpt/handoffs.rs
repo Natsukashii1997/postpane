@@ -1572,6 +1572,7 @@ pub fn project_url(text: &str) -> Result<Option<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod states;
 
     #[test]
     fn a_session_and_a_conversation_belong_to_one_live_handoff() {
