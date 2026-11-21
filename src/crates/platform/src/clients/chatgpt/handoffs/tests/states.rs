@@ -166,12 +166,11 @@ fn t09_stop_and_resume_change_only_the_round_trip() {
     assert_eq!(state(&book, &id), (Status::Open, Phase::Delivered));
 }
 
-/// Gap F-01 (found by the random runs, 2026-11-21): retrying an older failed
-/// handoff while a newer failed one of the same session can still bind late
-/// leaves two live handoffs of one session. Ignored until the owner decides;
-/// `cargo test -- --ignored f01` shows it.
+/// Gap F-01 (found by the random runs, 2026-11-21; fixed the same day, the
+/// owner: 「修 F-01」): retrying an older failed handoff while a newer failed
+/// one of the same session could still bind late left two live handoffs of
+/// one session. A failed one taken over is no longer retried.
 #[test]
-#[ignore = "gap F-01: awaits the owner's decision"]
 fn f01_a_session_keeps_one_live_handoff_through_retry_and_a_late_bind() {
     let mut book = Book::default();
     let older = book.begin("s1", None, "t", None, "brief", 10).id;
@@ -396,8 +395,9 @@ fn broken(book: &Book, before: &HashMap<String, Seen>) -> Vec<String> {
             broken.push(format!("I-05 {id} auto={} halt={:?}", h.auto, h.halt));
         }
         if h.live() {
-            // I-06 does not hold yet (gap F-01, see f01_…): not checked here.
-            live_sessions.insert(h.claude_session.clone(), id);
+            if live_sessions.insert(h.claude_session.clone(), id).is_some() {
+                broken.push(format!("I-06 {}", h.claude_session));
+            }
             if let Some(c) = &h.chatgpt_conversation {
                 if live_conversations.insert(c.clone(), id).is_some() {
                     broken.push(format!("I-07 {c}"));
