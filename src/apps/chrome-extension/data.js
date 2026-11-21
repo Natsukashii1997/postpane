@@ -230,6 +230,9 @@
   const NativeURL = URL;
   const Abort = AbortController;
   const abort = AbortController.prototype.abort;
+  // The clock the request cap counts by: the page swapping Date.now later
+  // does not lift the cap (#488 review P2-13).
+  const dateNow = Date.now;
   const bytesOf = (text) =>
     apply(byteLength, apply(encode, encoder, [text]), []);
   const hexOf = (bytes) =>
@@ -329,7 +332,7 @@
 
   /** Whether one more request may go now; counts it when it may. */
   function allowed() {
-    const now = Date.now();
+    const now = dateNow();
     while (sent.length && now - sent[0] > SPAN) sent.shift();
     if (sent.length >= LIMIT) return false;
     sent.push(now);

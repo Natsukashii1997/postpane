@@ -301,7 +301,8 @@ function page({
     TextEncoder,
     crypto: globalThis.crypto,
     performance,
-    Date,
+    // The page's own: swapping its Date.now reaches nothing outside.
+    Date: class PageDate extends Date {},
   };
   vm.createContext(context);
   before?.(context);
@@ -922,4 +923,22 @@ test("a handle that cannot be put in is not taken for one there already, and lea
   assert.equal(page.data(), "unavailable");
   assert.equal(page.mark(), null);
   assert.deepEqual(page.children, []);
+});
+
+// #488 review P2-13: the cap counts by the clock taken when the file went in;
+// the page swapping Date.now after does not lift it.
+test("a page swapping Date.now after the file went in does not lift the request cap", async () => {
+  const { window, read, calls, context } = page({
+    served: Array.from({ length: 20 }, () => ({
+      status: 200,
+      body: body([user(ASK, "x")]),
+    })),
+  });
+  await own(window);
+  let at = Date.now();
+  // Every call ten minutes and more on: every count would look stale.
+  context.Date.now = () => (at += 11 * 60 * 1000);
+  for (let i = 0; i < 12; i++) assert.equal((await read()).outcome, "read");
+  assert.equal((await read()).outcome, "limited");
+  assert.equal(calls.length, 13);
 });
