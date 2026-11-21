@@ -4,14 +4,9 @@ import { labelWidth } from "../geometry";
 import { agentVendorName } from "../model";
 import { clientDisplayName, projectName } from "../IslandNews";
 import { ReminderMark } from "./ReminderMark";
-import {
-  cronShortName,
-  quotaAlertCopy,
-  resetCreditCopy,
-  hooksReviewCopy,
-  signInCopy,
-  type QuotaTone,
-} from "./quota-alert-copy";
+import { cronShortName, hooksReviewCopy } from "./quota-alert-copy";
+import { compactQuotaStatus, quotaChipLabels } from "./quota-chip";
+import { failureChip } from "./failure-list";
 import { systemCalendar, type QuotaDisplay } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { alertInk, alertText } from "../tokens";
@@ -23,66 +18,13 @@ import { ApprovalTag } from "../permissions/ApprovalTag";
 import {
   REPLY_BADGE,
   START_BADGE,
+  findSession,
   requestBadge,
   requestTitle,
   tagColor,
   type TagTone,
 } from "../permissions/approval-list";
 import type { ReplyChip } from "./reply-list";
-
-/** What a quota reminder says beside its agent (Open's QuotaAlertCopy.compactTitle). */
-export function compactQuotaStatus(event: IslandEvent, zh = false): string {
-  return quotaAlertCopy(event, {
-    language: zh ? "zh" : "en",
-    calendar: systemCalendar(navigator.language),
-  }).compactTitle;
-}
-
-/** A quota notice's folded tag: what it is about in dim ink, then its
- * figure in the notice's colour. A window's name and the share shown (or that
- * it reset); "重置" and the resets added, in blue; a sign-out's words alone, in
- * red. */
-export function quotaChipLabels(
-  event: IslandEvent,
-  zh: boolean,
-  quotaDisplay?: QuotaDisplay,
-): { who: string; status: string; tone: QuotaTone } {
-  const settings = {
-    language: zh ? ("zh" as const) : ("en" as const),
-    quotaDisplay,
-    calendar: systemCalendar(navigator.language),
-  };
-  if (event.kind === "reset-credits") {
-    const copy = resetCreditCopy(event, undefined, settings);
-    return { who: copy.chipLabel, status: copy.chipValue, tone: "reset" };
-  }
-  if (event.kind === "bot-offline")
-    return {
-      who: event.title ?? "",
-      status: event.message ?? (zh ? "断线" : "Offline"),
-      tone: "critical",
-    };
-  if (event.kind === "cron-failed")
-    return {
-      who: cronShortName(event.title ?? ""),
-      status: zh ? "失败" : "Failed",
-      tone: "critical",
-    };
-  if (event.kind === "sign-in-needed")
-    return {
-      who: "",
-      status: signInCopy(event, [], settings).chip,
-      tone: "critical",
-    };
-  if (event.kind === "hooks-review-needed")
-    return {
-      who: "",
-      status: hooksReviewCopy(event, settings.language).chip,
-      tone: "critical",
-    };
-  const copy = quotaAlertCopy(event, settings);
-  return { who: copy.windowName, status: copy.chipStatus, tone: copy.tone };
-}
 
 export function compactAlertLabels(
   request: Approval | undefined,
@@ -137,6 +79,20 @@ export function compactAlertLabels(
     return {
       who: clientDisplayName(event.source),
       status: zh ? "有新回复" : "New reply",
+    };
+  }
+  if (event.kind === "turn-failed") {
+    return {
+      who:
+        findSession(sessions, event.sessionId, event.source)?.title?.trim() ||
+        event.title?.trim() ||
+        clientDisplayName(event.source),
+      status: failureChip(
+        event,
+        Date.now(),
+        systemCalendar(navigator.language),
+        zh,
+      ),
     };
   }
   if (event.kind === "bot-offline") {
@@ -360,7 +316,8 @@ export function CompactAlertView({
         event?.kind === "sign-in-needed" ||
         event?.kind === "hooks-review-needed" ||
         event?.kind === "bot-offline" ||
-        event?.kind === "cron-failed"
+        event?.kind === "cron-failed" ||
+        event?.kind === "turn-failed"
       ? onOpen
       : onDismissAndStats;
 
@@ -446,20 +403,22 @@ export function CompactAlertView({
       {status}
     </span>
   ) : (
-    <>
-      <span
-        style={{
-          fontSize: font,
-          fontWeight: 500,
-          color: warnAccent,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {status}
-      </span>
-    </>
+    <span
+      style={{
+        fontSize: font,
+        fontWeight: 500,
+        // A failed turn's words in red (#359), any other notice's in amber.
+        color:
+          event?.kind === "turn-failed"
+            ? (paper?.red ?? tagColor("ask", light))
+            : warnAccent,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {status}
+    </span>
   );
 
   if (narrow) {

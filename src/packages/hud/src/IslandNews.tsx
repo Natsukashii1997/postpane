@@ -10,9 +10,10 @@ import { agentVendorName, sourceID, vendorKey } from "./model";
 import { CompletionAlertView } from "./alerts/CompletionAlertView";
 import { QuotaAlertView } from "./alerts/QuotaAlertViews";
 import { queuedQuotas, shownNews } from "./alerts/quota-list";
-import { frontFolds, seenFirst, staysUntilSeen } from "./alerts/reply-stays";
+import { FailureAlertView } from "./alerts/FailureAlertView";
+import { isFailure, standingQueue } from "./alerts/failure-list";
+import { frontFolds, seenFirst } from "./alerts/reply-stays";
 import {
-  blocksNotice,
   laneEvents,
   liveQueue,
   newsLanes,
@@ -21,9 +22,7 @@ import {
   dropIslandCards,
   laneRequests,
   newestAskFirst,
-  promoteNewestWaiting,
-  requestCard,
-  roomForNews,
+  reconcileIslandCards,
   sideLanes,
   type LaneCard,
 } from "./alerts/news-lanes";
@@ -33,8 +32,6 @@ export { ReminderMark } from "./alerts/ReminderMark";
 export {
   CompactAlertView,
   compactAlertDockWidth,
-  compactAlertLabels,
-  compactQuotaStatus,
 } from "./alerts/CompactAlertView";
 export {
   CompletionClosedRow,
@@ -45,43 +42,6 @@ export {
 
 /** Presentation only: Core is the sole producer/deduplicator of event facts. */
 export type IslandCard = LaneCard;
-
-export function reconcileIslandCards(
-  previous: IslandCard[],
-  requests: Approval[],
-  visible: IslandEvent[],
-  newRequests: Approval[] = requests,
-  inUsagePanel = false,
-): IslandCard[] {
-  const frontRemoved =
-    previous.length > 0 &&
-    previous[0].type === "request" &&
-    !requests.some((request) => request.id === previous[0].id);
-  const kept = previous.filter(
-    (card) =>
-      card.type !== "request" ||
-      requests.some((request) => request.id === card.id),
-  );
-  const next = frontRemoved ? promoteNewestWaiting(kept) : kept;
-  for (const request of newRequests) {
-    if (!next.some((card) => card.id === request.id)) {
-      next.push(requestCard(request));
-    }
-  }
-  for (const event of visible) {
-    if (blocksNotice(next, requests, event)) continue;
-    next.push({
-      type: "news",
-      id: event.id,
-      at: event.at,
-      event,
-      inUsagePanel: event.kind !== "completion" && inUsagePanel,
-    });
-  }
-  // Persistent requests are never evicted by a burst of informational events;
-  // a new notice is kept, an older one makes room (#221).
-  return roomForNews(next);
-}
 
 export type SideNews = ReturnType<typeof useIslandNews>["sides"][number];
 
@@ -107,6 +67,8 @@ export function useIslandNews(
     heldArrivals = useRef<IslandEvent[]>([]),
     heldAsk = useRef(false); // asked while held: in front once let go (#328)
   const [queue, setQueue] = useState<IslandCard[]>([]);
+  const standing = (cards: IslandCard[]) =>
+    standingQueue(cards, snapshot.sessions, Date.now());
   const items = snapshot.islandEvents?.items ?? [];
   const requestIDs = requests.map((request) => request.id).join("\0");
   useEffect(() => {
@@ -135,15 +97,19 @@ export function useIslandNews(
             (event) =>
               event.islandAlert !== false &&
               shown.includes(vendorKey(event.source)) &&
-              (event.kind !== "completion" ||
+              // A reply or a failure is a session's news: its live switch.
+              ((event.kind !== "completion" && !isFailure(event)) ||
                 (services?.sources?.[sourceID(snapshot, event.source)]?.live !==
                   false &&
                   services?.sources?.[sourceID(snapshot, event.source)]
                     ?.reminders !== false)),
           );
-    // Held, a reply that waits to be seen comes in front once let go (#221).
-    if (held) heldArrivals.current.push(...visible.filter(staysUntilSeen));
-    setQueue((previous) => {
+    // Held, a reply that waits to be seen comes in front once let go (#221),
+    // and a notice goes ahead of its agent's failures (#359).
+    if (held)
+      heldArrivals.current.push(...visible.filter((e) => !isFailure(e)));
+    setQueue((old) => {
+      const previous = standing(old);
       const next = seenFirst(
         reconcileIslandCards(
           silenced
@@ -174,12 +140,13 @@ export function useIslandNews(
       ),
     );
   }, [held]);
-  // Requests answered since the queue last caught up are already gone.
-  const live = liveQueue(queue, requests);
+  // Requests answered since the queue last caught up are already gone; so
+  // are failures whose session went on or whose limit lifted (#359).
+  const live = liveQueue(standing(queue), requests);
   const current = live[0];
-  const dismiss = () => setQueue(dismissIslandCard);
+  const dismiss = () => setQueue((old) => dismissIslandCard(standing(old)));
   const drop = (ids: readonly string[]) =>
-    setQueue((previous) => dropIslandCards(previous, ids));
+    setQueue((old) => dropIslandCards(standing(old), ids));
   // Cards opened so far: a Hermes reply folds away only then (#221).
   const looked = useRef(new Set<string>());
   useEffect(() => {
@@ -192,7 +159,8 @@ export function useIslandNews(
   const lanes = newsLanes(live, requests);
   const sides = sideLanes(lanes, shown);
   const select = (id: string) =>
-    setQueue((previous) => {
+    setQueue((old) => {
+      const previous = standing(old);
       const at = previous.findIndex((card) => card.id === id);
       if (at <= 0) return previous;
       const next = [...previous];
@@ -212,6 +180,7 @@ export function useIslandNews(
     laneQueue: lanes[0]?.cards ?? [],
     requests: laneRequests(lanes[0], requests),
     replies: laneEvents(lanes[0], "completion"),
+    failures: laneEvents(lanes[0], "turn-failed"),
     quotas: queuedQuotas(lanes[0]?.cards ?? []),
     // The other agents' tags, each by its own mark.
     sides: sides.map(({ lane, mark }) => ({
@@ -294,9 +263,13 @@ export const newsTitle = (event: IslandEvent, zh = false) =>
                 ? zh
                   ? "钩子未允许"
                   : "Hooks not allowed"
-                : zh
-                  ? "额度预警"
-                  : "Running low";
+                : event.kind === "turn-failed"
+                  ? zh
+                    ? "出错"
+                    : "Error"
+                  : zh
+                    ? "额度预警"
+                    : "Running low";
 
 export const compactDuration = (seconds: number) => {
   const total = Math.max(0, Math.round(seconds)),
@@ -325,6 +298,7 @@ export function NewsContent({
   snapshot,
   dismiss,
   replies = [event],
+  failures = [event],
   quotas = [event],
   drop = () => dismiss(),
   onStats,
@@ -337,6 +311,8 @@ export function NewsContent({
   dismiss: () => void;
   /** Every reply in the queue: a reply's card lists them all. */
   replies?: IslandEvent[];
+  /** The agent's failures: a failure's card lists them all (#359). */
+  failures?: IslandEvent[];
   /** Every quota notice in the queue (windows, resets added, sign-outs),
    * newest first: a quota card lists them all. */
   quotas?: IslandEvent[];
@@ -348,6 +324,15 @@ export function NewsContent({
   botLogos?: boolean;
 }) {
   const zh = snapshotLanguage(snapshot) === "zh";
+  if (event.kind === "turn-failed")
+    return (
+      <FailureAlertView
+        failures={failures}
+        snapshot={snapshot}
+        drop={drop}
+        light={light}
+      />
+    );
   if (event.kind === "completion") {
     return (
       <CompletionAlertView

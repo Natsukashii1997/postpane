@@ -157,6 +157,24 @@ export function reply(
   };
 }
 
+/** The failure Core tells for a session's failed or limited turn (#359):
+ * at its end, the turns in a row it failed so being `count`. */
+export function failure(of: Session, count = 1): IslandEvent {
+  const facts = of.liveFacts!;
+  return {
+    id: `failed:${of.source}:${of.id}`,
+    kind: "turn-failed",
+    failure: facts.outcome === "limited" ? "limited" : "failed",
+    at: facts.endedAt ?? at(0),
+    source: of.source,
+    sessionId: of.id,
+    turnId: facts.turnId ?? undefined,
+    title: of.title,
+    limitedUntil: facts.limitedUntil,
+    count,
+  };
+}
+
 export interface RelaySpec {
   id: string;
   title: string;

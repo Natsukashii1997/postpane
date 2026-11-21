@@ -1,7 +1,15 @@
 // The workplace scenes (#349, ADR-0001 「验收场景」): each the state one
 // acceptance case needs, shared by the contract tests and the scene preview.
 import type { HermesCronJob, Snapshot } from "@agent-hud/protocol";
-import { approval, at, relay, reply, session, snapshot } from "./build.ts";
+import {
+  approval,
+  at,
+  failure,
+  relay,
+  reply,
+  session,
+  snapshot,
+} from "./build.ts";
 import {
   relayIdleStopped,
   relayStaleBack,
@@ -251,28 +259,31 @@ const reviews: Scene = {
   }),
 };
 
+const failedSessions = [
+  session({
+    place: "codex",
+    id: "x-fail",
+    title: "生成迁移脚本",
+    state: "idle",
+    lastAgo: 3,
+    outcome: "failed",
+  }),
+  session({
+    place: "claude",
+    id: "c-limit",
+    title: "批量改测试",
+    state: "idle",
+    lastAgo: 10,
+    outcome: "limited",
+  }),
+];
 const failed: Scene = {
   key: "failed",
-  title: "Codex 一轮失败、Claude 被限流",
+  title:
+    "Codex 一轮失败（连着第 2 次）、Claude 被限流：各弹一张「出错」回执（C6）",
   snapshot: snapshot({
-    sessions: [
-      session({
-        place: "codex",
-        id: "x-fail",
-        title: "生成迁移脚本",
-        state: "idle",
-        lastAgo: 3,
-        outcome: "failed",
-      }),
-      session({
-        place: "claude",
-        id: "c-limit",
-        title: "批量改测试",
-        state: "idle",
-        lastAgo: 10,
-        outcome: "limited",
-      }),
-    ],
+    sessions: failedSessions,
+    events: [failure(failedSessions[1]), failure(failedSessions[0], 2)],
   }),
 };
 

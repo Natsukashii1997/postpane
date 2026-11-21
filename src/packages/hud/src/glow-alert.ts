@@ -11,8 +11,8 @@ export interface GlowAlert {
   span: { from: number; to: number; feather: number } | null;
 }
 
-/** Open's IslandAlert accents: a finished turn is blue, an exhausted quota or
- * a waiting request is a warning, everything else calm. The sender's span is
+/** Open's IslandAlert accents: a finished turn is blue, an exhausted quota, a
+ * failed turn or a waiting request is a warning, everything else calm. The sender's span is
  * its place among the glow's vendors, feathered by 0.15 / their count. */
 export function glowAlert(
   alert: {
@@ -26,6 +26,7 @@ export function glowAlert(
       | "hooks-review-needed"
       | "bot-offline"
       | "cron-failed"
+      | "turn-failed"
       | "request";
     vendor: string;
   } | null,
@@ -38,6 +39,7 @@ export function glowAlert(
     alert.kind === "hooks-review-needed" ||
     alert.kind === "bot-offline" ||
     alert.kind === "cron-failed" ||
+    alert.kind === "turn-failed" ||
     alert.kind === "request";
   const color =
     alert.kind === "completion" ? "#82aaff" : warning ? "#e9a16d" : "#6cd8ac";

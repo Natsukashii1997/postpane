@@ -3,7 +3,9 @@
 //! then suppress facts rather than keeping another independent diff history.
 use super::*;
 
+mod failures;
 mod hook_reviews;
+mod turns;
 
 #[derive(Clone)]
 struct Observation {
@@ -38,6 +40,8 @@ pub(super) struct Tracker {
     gateways: HashMap<String, SignIn>,
     /// When each agent's hooks waiting for the user were last told.
     reviews: HashMap<String, i64>,
+    /// How many turns in a row each `source:session:failure` failed.
+    failures: HashMap<String, u64>,
     /// The failed Hermes scheduled tasks already told (`bot:job`), kept on
     /// disk so a restart does not tell them again; loaded on first look.
     cron_told: Option<HashSet<String>>,
@@ -64,6 +68,7 @@ impl Tracker {
             sign_ins: HashMap::new(),
             gateways: HashMap::new(),
             reviews: HashMap::new(),
+            failures: HashMap::new(),
             cron_told: None,
             cron_unsaved: false,
             revision: 0,
@@ -93,27 +98,8 @@ impl Tracker {
         self.sign_ins(providers, now);
         self.hook_reviews(providers, now);
         self.seen.retain(|_, at| *at >= now - 31 * 86_400_000);
-        let mut completions = sessions
-            .iter()
-            .filter_map(|session| {
-                let facts = &session["liveFacts"];
-                if facts["outcome"] != "completed" {
-                    return None;
-                }
-                let at = date(&facts["endedAt"])?;
-                let turn = facts["turnId"].as_str()?;
-                let source = session["source"].as_str()?;
-                let id = session["id"].as_str()?;
-                Some((at, format!("{source}:{id}:{turn}"), session))
-            })
-            .collect::<Vec<_>>();
-        completions.sort_by_key(|(at, key, _)| (*at, key.clone()));
-        for (at, key, session) in completions {
-            if at <= self.started || at > now || self.seen.insert(key.clone(), at).is_some() {
-                continue;
-            }
-            self.push(&key,json!({"kind":"completion","at":iso(at),"startedAt":session["liveFacts"]["turnStartedAt"],"source":session["source"],"sessionId":session["id"],"turnId":session["liveFacts"]["turnId"],"title":session["title"],"model":session["model"],"message":session["liveFacts"]["message"],"prompt":session["liveFacts"]["prompt"],"navigationTarget":session["navigationTarget"],"cwd":session["cwd"],"logPath":session["logPath"]}));
-        }
+        self.completions(sessions, now);
+        self.failures(sessions, now);
         let ids = quotas
             .iter()
             .filter_map(|q| q["id"].as_str())

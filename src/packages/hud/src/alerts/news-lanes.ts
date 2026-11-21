@@ -1,6 +1,7 @@
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { agentArtworkKey } from "../agent-artwork.ts";
-import { staysUntilSeen } from "./reply-stays.ts";
+import { foldsByItself } from "./reply-stays.ts";
+import { withoutLineOf } from "./failure-list.ts";
 import { answersElsewhere } from "../permissions/approval-list.ts";
 
 /** One card of the sidebar's news queue (IslandNews keeps the queue). */
@@ -164,14 +165,14 @@ export function laneEvents(
   );
 }
 
-/** A notice other than a reply waits out its own agent's request: another
- * agent's request no longer holds it back. */
+/** A notice other than a reply or a failure waits out its own agent's
+ * request: another agent's request no longer holds it back. */
 export function blocksNotice(
   queue: readonly LaneCard[],
   requests: readonly Approval[],
   event: IslandEvent,
 ): boolean {
-  if (event.kind === "completion") return false;
+  if (event.kind === "completion" || event.kind === "turn-failed") return false;
   const vendor = agentArtworkKey(event.source);
   return queue.some(
     (card) => card.type === "request" && cardVendor(card, requests) === vendor,
@@ -190,6 +191,52 @@ export function sideLanes(
   });
 }
 
+/** The queue once `requests` and the news `visible` are in: a request no
+ * longer waiting leaves, a new one joins, and each notice joins unless its
+ * own agent's request holds it back; a failure takes its line's place. A
+ * notice is shown in the usage panel only when it is not a reply or a
+ * failure (`inUsagePanel`). */
+export function reconcileIslandCards(
+  previous: LaneCard[],
+  requests: Approval[],
+  visible: IslandEvent[],
+  newRequests: Approval[] = requests,
+  inUsagePanel = false,
+): LaneCard[] {
+  const frontRemoved =
+    previous.length > 0 &&
+    previous[0].type === "request" &&
+    !requests.some((request) => request.id === previous[0].id);
+  const kept = previous.filter(
+    (card) =>
+      card.type !== "request" ||
+      requests.some((request) => request.id === card.id),
+  );
+  let next = frontRemoved ? promoteNewestWaiting(kept) : kept;
+  for (const request of newRequests) {
+    if (!next.some((card) => card.id === request.id)) {
+      next.push(requestCard(request));
+    }
+  }
+  for (const event of visible) {
+    if (blocksNotice(next, requests, event)) continue;
+    next = withoutLineOf(next, event);
+    next.push({
+      type: "news",
+      id: event.id,
+      at: event.at,
+      event,
+      inUsagePanel:
+        event.kind !== "completion" &&
+        event.kind !== "turn-failed" &&
+        inUsagePanel,
+    });
+  }
+  // Persistent requests are never evicted by a burst of informational events;
+  // a new notice is kept, an older one makes room (#221).
+  return roomForNews(next);
+}
+
 /** The queue with at most `limit` notices: past that, the oldest notice that
  * folds away by itself makes room, else the oldest one, never the card in
  * front nor the one just come; requests are never put away (#221). */
@@ -203,7 +250,7 @@ export function roomForNews(queue: LaneCard[], limit = 32): LaneCard[] {
         : [],
     );
     const out =
-      notices.find(({ card }) => !staysUntilSeen(card.event)) ?? notices[0];
+      notices.find(({ card }) => foldsByItself(card.event)) ?? notices[0];
     next.splice(out.index, 1);
     news -= 1;
   }
