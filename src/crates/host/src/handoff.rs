@@ -1875,7 +1875,11 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
         chain: params["chain"].as_str().map(str::to_owned),
         head: params["head"].as_str().map(str::to_owned),
     };
-    let mut answer = start(app, &session, cwd, title, summary, brief, false, &rule)?;
+    // Sent or refused alike, the extension may not be this app's (#493).
+    let note = super::chatgpt::version_note(app);
+    let note = note.as_deref();
+    let mut answer = start(app, &session, cwd, title, summary, brief, false, &rule)
+        .map_err(|error| super::chatgpt::noted(&error, note))?;
     // A swipe's words named here: that swipe is done (左滑发起).
     if let Some(code) = params["launch"].as_str().filter(|code| !code.is_empty()) {
         let settled = app
@@ -1920,13 +1924,8 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
             )
         )
     });
-    // Sent all the same: the extension may not be this app's (#493).
-    if let Some(note) = super::chatgpt::version_note(app) {
-        answer["message"] = json!(format!(
-            "{} {note}",
-            answer["message"].as_str().unwrap_or("")
-        ));
-    }
+    let message = super::chatgpt::noted(answer["message"].as_str().unwrap_or(""), note);
+    answer["message"] = json!(message);
     Ok(answer)
 }
 

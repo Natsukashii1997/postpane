@@ -238,6 +238,8 @@ impl Shared {
         // Requests asked of the old connection are not answered by this one.
         state.pending.clear();
         state.connection = Some(Connection { id, peer });
+        // What the one before said of itself is not this one's (#493).
+        state.hello = Value::Null;
         state.last_seen = Some(now_ms());
         let watch = watch_message(&state.watched);
         post_locked(&mut state, &watch);
@@ -266,9 +268,7 @@ impl Shared {
         }
         state.last_seen = Some(now_ms());
         match message["type"].as_str() {
-            Some("hello") => {
-                state.hello = version::hello(&message);
-            }
+            Some("hello") => state.hello = version::hello(&message),
             Some("tabs") => state.tabs = message["conversations"].clone(),
             Some("turn") if message["phase"] == "start" => {
                 let watched = watched_entry(&state.watched, &message);
