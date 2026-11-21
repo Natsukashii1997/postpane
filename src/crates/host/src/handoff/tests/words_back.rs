@@ -126,8 +126,8 @@ fn words_back_to_claude_that_fail_are_tried_once_more_then_left_to_the_person() 
     opened(&desk, &lines);
     desk.observe(&turn("complete", "审查出口：返修\n结论：需修改"), 4);
     desk.drive(&lines, 5);
-    assert!(desk.projection(5 + handoffs::QUEUE_WAIT_MS)[0]["halt"].is_null());
-    let shown = desk.projection(6 + handoffs::QUEUE_WAIT_MS);
+    assert!(desk.projection(5 + book::QUEUE_WAIT_MS)[0]["halt"].is_null());
+    let shown = desk.projection(6 + book::QUEUE_WAIT_MS);
     assert_eq!(shown[0]["halt"], no_wake());
     assert_eq!(shown[0]["phase"], "returned");
 }

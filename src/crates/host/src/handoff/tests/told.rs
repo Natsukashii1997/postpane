@@ -46,7 +46,7 @@ fn a_session_is_told_once_when_its_review_could_not_open() {
     desk.start(&lines, "s2", None, "修登录", None, "brief", false, 1)
         .unwrap();
     assert!(!desk.tell(&lines, 2), "still opening");
-    let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+    let late = 1 + book::OPEN_TIMEOUT_MS + 1;
     assert!(desk.tell(&lines, late));
     let told = sent_as(&lines, "reply");
     assert_eq!(told.len(), 1);
@@ -61,11 +61,11 @@ fn a_session_is_told_once_when_its_review_could_not_open() {
 fn a_restart_tells_of_an_opening_it_cut_off_but_not_of_old_trouble() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
-    let mut book = handoffs::Book::default();
+    let mut book = book::Book::default();
     let old = book.begin("s-old", None, "旧单", None, "b", 1);
     book.failed(&old.id, "timeout", 2);
     book.begin("s1", None, "修登录", None, "b", 3);
-    handoffs::save(&data, &book).unwrap();
+    book::save(&data, &book).unwrap();
     let lines = Fake::default();
     let desk = Desk::new(Some(data.clone()));
     let now = now_ms();
@@ -142,7 +142,7 @@ fn trouble_moved_on_from_before_it_is_told_is_not_told() {
     let (_temp, desk) = self::desk();
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
-    let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 2 + book::REPLY_WAIT_MS + 1;
     desk.late(late);
     let (id, at, trouble) = desk.lock().untold(0).remove(0);
     desk.act(&lines, &id, "resume", late + 1).unwrap();
@@ -164,7 +164,7 @@ fn an_opening_told_of_that_comes_late_still_carries_on() {
     else {
         panic!("a first brief opens a conversation");
     };
-    let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+    let late = 1 + book::OPEN_TIMEOUT_MS + 1;
     assert!(desk.tell(&lines, late));
     let told = last_sent(&lines).2;
     assert!(!told.contains("不会有回信"), "{told}");
@@ -198,7 +198,7 @@ fn an_opening_reported_while_its_failure_is_told_waits_for_it() {
     else {
         panic!("a first brief opens a conversation");
     };
-    let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+    let late = 1 + book::OPEN_TIMEOUT_MS + 1;
     desk.late(late);
     let opened = json!({"type":"opened","requestId":format!("{}~0", handoff.id),"ok":true,"conversation":"c-new"});
     let (during, bound) = while_told(
@@ -220,7 +220,7 @@ fn an_answer_that_comes_while_no_answer_is_told_waits_for_it() {
     let (_temp, desk) = desk();
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
-    let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 2 + book::REPLY_WAIT_MS + 1;
     desk.late(late);
     let answer = turn("complete", "结论：需修改");
     let (during, took) = while_told(
@@ -249,7 +249,7 @@ fn a_retry_while_its_failure_is_told_waits_for_it() {
     else {
         panic!("a first brief opens a conversation");
     };
-    let late = 1 + handoffs::OPEN_TIMEOUT_MS + 1;
+    let late = 1 + book::OPEN_TIMEOUT_MS + 1;
     desk.late(late);
     let (during, retried) = while_told(
         &desk,
@@ -273,7 +273,7 @@ fn a_session_is_told_when_chatgpt_does_not_answer_and_a_late_answer_still_counts
     let (_temp, desk) = desk();
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
-    let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 2 + book::REPLY_WAIT_MS + 1;
     assert!(desk.tell(&lines, late));
     let told = sent_as(&lines, "reply");
     assert_eq!(told.len(), 1);
@@ -315,7 +315,7 @@ fn a_session_is_told_when_chatgpt_does_not_answer_and_a_late_answer_still_counts
 /// A Codex thread is told in its own queue, the card naming Codex.
 #[test]
 fn trouble_that_cannot_reach_the_session_says_how_it_went() {
-    let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 2 + book::REPLY_WAIT_MS + 1;
     let (_temp, desk) = desk();
     let quiet = Fake {
         unreachable: true,

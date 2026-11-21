@@ -25,7 +25,7 @@ export function stopped(handoff: Handoff): boolean {
   );
 }
 
-/** A 思维评审 (#209), as the gate tells it (handoffs.rs `thinking`). */
+/** A 思维评审 (#209), as the gate tells it (host/src/handoff/book.rs `thinking`). */
 export function thinking(handoff: Handoff): boolean {
   const title = handoff.title.trimStart();
   return title.startsWith("思维评审｜") || title.startsWith("思维评审|");

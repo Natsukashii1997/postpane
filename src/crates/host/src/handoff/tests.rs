@@ -23,7 +23,7 @@ mod words_back;
 use super::notice::{not_told, told as told_back, told_queued};
 use super::wake::{wake_arguments, woke_without_handover};
 use super::*;
-use agent_hud_runtime::chatgpt::handoffs::Flaw;
+use crate::handoff::book::Flaw;
 use std::cell::RefCell;
 
 /// Lines that write down what was sent and answer as told.
@@ -266,7 +266,7 @@ fn left_as(lines: &Fake, state: Option<&str>, reason: Option<&str>) {
 /// A desk with a cap of `limit` reviews.
 fn desk_of(limit: u32) -> (tempfile::TempDir, Desk) {
     let (temp, desk) = desk();
-    handoffs::set_review_limit(&temp.path().join("data"), limit).unwrap();
+    book::set_review_limit(&temp.path().join("data"), limit).unwrap();
     (temp, desk)
 }
 
@@ -274,7 +274,7 @@ fn desk() -> (tempfile::TempDir, Desk) {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
     // The cap these tests were written for: two reviews (#347 made it a setting).
-    handoffs::set_review_limit(&data, 2).unwrap();
+    book::set_review_limit(&data, 2).unwrap();
     let mut desk = Desk::new(Some(data));
     // The tests' clocks start near 0: trouble from then is not old (#318).
     desk.since = 0;

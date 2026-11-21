@@ -106,7 +106,7 @@ fn a_background_run_that_cannot_start_or_ends_without_a_handover_is_left_to_the_
 
 #[test]
 fn queued_words_for_a_session_that_stays_quiet_are_taken_back_and_run_in_the_background() {
-    let wake_at = 5 + handoffs::WAKE_AFTER_MS;
+    let wake_at = 5 + book::WAKE_AFTER_MS;
     let queued = || {
         let (temp, desk) = self::desk();
         let lines = Fake::default();

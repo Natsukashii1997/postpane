@@ -1,4 +1,4 @@
-//! Which pull request a review names, moved out of handoffs.rs for the
+//! Which pull request a review names, moved out of book.rs (then handoffs.rs) for the
 //! 300-line ratchet (#280).
 
 /// The first pull request `text` links to, as 「owner/repo#n」 (#217).

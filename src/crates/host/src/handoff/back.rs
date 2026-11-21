@@ -8,7 +8,7 @@
 
 use super::guard::Held;
 use super::texts::{flaw_text, review_flaw_text};
-use agent_hud_runtime::chatgpt::handoffs::{self, Exit, Handoff, Next, Review, Verdict};
+use crate::handoff::book::{self, Exit, Handoff, Next, Review, Verdict};
 
 /// 转回 Claude: ChatGPT's answer in full, and what to do with it.
 /// An answer that only mended its last lines goes with the one it mended (#347).
@@ -97,7 +97,7 @@ fn review_back_text(
         }
         _ => ask,
     };
-    let tail = match handoffs::review_exit(reply) {
+    let tail = match book::review_exit(reply) {
         Ok(Some(way)) => format!("审查出口：{}，结论：{verdict}", review_way(way)),
         _ => format!("结论：{verdict}"),
     };
@@ -123,7 +123,7 @@ fn thinking_back_text(handoff: &Handoff, reply: &str, off: Option<&str>) -> Stri
     // Drafting is fine; what is undecided is not recorded as decided.
     let draft = "逐条整理意见、起草决策记录（待常浩裁决的写成待定，不要记成已定决策）";
     let not_yet = "实施被评审的方案、再调用 relay_to_chatgpt 送审";
-    let (tail, ask) = match handoffs::exit(reply) {
+    let (tail, ask) = match book::exit(reply) {
         Ok(exit) => {
             let (way, verdict, ask) = match exit {
                 Exit::Mature => ("成熟退出", "通过", "这次思维评审已收口。请按回信收尾：把采纳的意见和最终结论写进决策记录，余下的意见记为执行建议；不要再调用 relay_to_chatgpt。".to_owned()),

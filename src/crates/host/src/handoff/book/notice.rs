@@ -2,8 +2,8 @@
 //! or ChatGPT did not answer in time. The session that handed its work over
 //! waits on, unaware, unless it is told — once for each, never for trouble
 //! from before the notices began, so an upgrade tells no old session.
-use super::super::{folder, write_private};
 use super::{read_small, Book, Handoff, Phase, Status, Step, StepKind};
+use agent_hud_runtime::chatgpt::{folder, write_private};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -20,7 +20,7 @@ pub fn notices_since(data: &Path, now: i64) -> i64 {
     }
     let bytes = serde_json::json!({ "since": now }).to_string();
     if let Err(error) = write_private(data, "notices", bytes.as_bytes(), &path) {
-        agent_hud_core::note!("{error}");
+        agent_hud_runtime::note!("{error}");
     }
     now
 }

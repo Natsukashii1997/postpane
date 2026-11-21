@@ -58,7 +58,7 @@ fn a_pass_holds_only_for_the_pull_requests_current_commit() {
         assert_eq!(desk.projection(4)[0]["status"], status, "{head:?}");
         let said = last_reply_to_claude(&lines);
         if status == "closed" {
-            assert_eq!(kept.gate.notice, Some(handoffs::Notice::Passed));
+            assert_eq!(kept.gate.notice, Some(book::Notice::Passed));
         } else {
             // Words that say it did not pass, none that it did (L3 P1-09).
             assert!(
@@ -173,7 +173,7 @@ fn an_unknown_chain_is_refused_and_the_top_is_noted() {
         desk.drive(&lines, at + 1);
     }
     let kept = desk.lock().get(&id).cloned().unwrap();
-    assert_eq!(kept.gate.notice, Some(handoffs::Notice::Top));
+    assert_eq!(kept.gate.notice, Some(book::Notice::Top));
     let kept_dir = desk
         .data
         .as_deref()
@@ -418,7 +418,7 @@ fn evidence_never_goes_past_a_cap_lowered_meanwhile() {
         3,
     );
     desk.drive(&lines, 4);
-    handoffs::set_review_limit(&temp.path().join("data"), 1).unwrap();
+    book::set_review_limit(&temp.path().join("data"), 1).unwrap();
     assert_eq!(
         ruled(&desk, &lines, "s1", "L1", None, 5).err(),
         Some(budget_spent(1))

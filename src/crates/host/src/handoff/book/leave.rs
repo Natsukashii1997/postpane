@@ -2,7 +2,7 @@
 //! P1-06): leave goes only with words from outside the reviewing agent.
 
 use super::Book;
-use crate::claude_plugin::Opener;
+use agent_hud_runtime::claude_plugin::Opener;
 
 impl Book {
     /// Whether `turn` (who began the asking session's current turn, and
@@ -28,7 +28,7 @@ impl Book {
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::claude_plugin::Opener;
+    use agent_hud_runtime::claude_plugin::Opener;
 
     fn back(book: &mut Book, session: &str, words: &str, at: i64) -> String {
         let handoff = book.begin(session, None, "修登录", None, "改动", at);

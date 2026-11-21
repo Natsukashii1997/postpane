@@ -5,8 +5,8 @@
 //! and not settled (P1-08).
 use super::back::held_back_text;
 use super::{back_text, Desk, Lines};
-use agent_hud_runtime::chatgpt::handoffs::{self as book_file, Book};
-use agent_hud_runtime::chatgpt::handoffs::{Handoff, Next};
+use crate::handoff::book::{self as book_file, Book};
+use crate::handoff::book::{Handoff, Next};
 use agent_hud_runtime::l10n;
 
 /// Why a pass or a close was held back, and whether Claude sending the

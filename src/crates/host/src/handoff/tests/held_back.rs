@@ -3,7 +3,7 @@
 //! whatever the answer says; new words taken after a stop PostPane made
 //! turn it on again, the person's pause not.
 use super::*;
-use agent_hud_runtime::chatgpt::handoffs::{FIX_WAIT_MS, REPLY_WAIT_MS};
+use crate::handoff::book::{FIX_WAIT_MS, REPLY_WAIT_MS};
 
 const MIN: i64 = 60 * 1000;
 const PASS: &str = "1. 都改好了\n审查出口：通过\n结论：通过";

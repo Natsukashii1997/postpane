@@ -3,9 +3,10 @@
 //! back and forth between the two. Kept in `<data>/chatgpt/handoffs.json`,
 //! with the ChatGPT project new review conversations open in
 //! (`<data>/chatgpt/config.json`).
-use super::{folder, write_private};
 use agent_hud_agents::chatgpt as agent;
-use agent_hud_core::l10n;
+use agent_hud_runtime::chatgpt::files::{config_path, read_small, set_config};
+use agent_hud_runtime::chatgpt::{folder, write_private};
+use agent_hud_runtime::l10n;
 use serde::{Deserialize, Serialize};
 mod asked;
 mod held;
@@ -24,13 +25,15 @@ mod leave;
 mod notice;
 mod pull_request;
 mod unsure;
-pub use chain::{chain_id, Earlier};
-pub use doer::{by_doer, codex_began, codex_turn, doer_name};
+#[cfg(test)]
+pub use chain::chain_id;
+pub use doer::{by_doer, codex_began, codex_turn};
 pub use gate::{Gate, Notice, LIMIT, LIMIT_MAX};
 pub use gate_io::{
-    archive, archived, data_shadow, head_in, ledger, review_limit, reviewed_commit, same_commit,
-    set_review_limit, slim_kept,
+    archive, archived, head_in, review_limit, same_commit, set_review_limit, slim_kept,
 };
+#[cfg(test)]
+pub use gate_io::{ledger, reviewed_commit};
 pub use idle::IDLE_END_MS;
 pub use notice::{notices_since, Cause, Trouble};
 pub use pull_request::pull_request;
@@ -49,7 +52,7 @@ pub const REPLY_WAIT_MS: i64 = 30 * 60 * 1000;
 pub const FIX_WAIT_MS: i64 = 2 * 60 * 60 * 1000;
 /// How long words queued for a paused Claude session wait to be taken up
 /// (the plugin's own lifetime for words left).
-pub const QUEUE_WAIT_MS: i64 = crate::claude_plugin::PROMPT_LIFETIME.as_millis() as i64;
+pub const QUEUE_WAIT_MS: i64 = agent_hud_runtime::claude_plugin::PROMPT_LIFETIME.as_millis() as i64;
 /// The longest excerpt a step keeps of what was said.
 pub const EXCERPT: usize = 600;
 /// The longest reply kept in full (the newest only), to forward it back.
@@ -420,6 +423,7 @@ impl Handoff {
         format!("{}~{}", self.id, self.attempt)
     }
     /// How many reviews were asked for, since its rounds last began (#258).
+    #[cfg(test)]
     pub fn reviews(&self) -> u32 {
         self.chain()
             .iter()
@@ -428,6 +432,7 @@ impl Handoff {
     }
     /// The steps its rounds count over: all, or those since the person
     /// spoke up (#258).
+    #[cfg(test)]
     fn chain(&self) -> &[Step] {
         &self.steps[self.rounds_from.min(self.steps.len())..]
     }
@@ -554,8 +559,8 @@ impl Handoff {
     /// (#258): Claude's current turn (`turn`: who began it and when) began
     /// after them, with the person's own words rather than PostPane's. Not
     /// when it cannot be told, nor once Claude handed over again since.
-    pub fn spoke_up(&self, turn: Option<&(crate::claude_plugin::Opener, i64)>) -> bool {
-        use crate::claude_plugin::Opener;
+    pub fn spoke_up(&self, turn: Option<&(agent_hud_runtime::claude_plugin::Opener, i64)>) -> bool {
+        use agent_hud_runtime::claude_plugin::Opener;
         let Some((opener, at)) = turn else {
             return false;
         };
@@ -1146,6 +1151,7 @@ impl Book {
         self.forget_runs()
     }
     /// Words went across once more.
+    #[cfg(test)]
     pub fn round(&mut self, id: &str, now: i64) -> bool {
         let Some(handoff) = self.get_mut(id).filter(|h| h.live()) else {
             return false;
@@ -1476,18 +1482,6 @@ fn new_id(now: i64) -> String {
 fn handoffs_path(data: &Path) -> PathBuf {
     folder(data).join("handoffs.json")
 }
-fn config_path(data: &Path) -> PathBuf {
-    folder(data).join("config.json")
-}
-
-/// A small private JSON file in the channel's folder, when it is there and readable.
-fn read_small(path: &Path) -> Option<Vec<u8>> {
-    let metadata = fs::symlink_metadata(path).ok()?;
-    if !metadata.is_file() || metadata.len() > 4 * 1024 * 1024 {
-        return None;
-    }
-    fs::read(path).ok()
-}
 
 /// The handoffs kept; none when there are none or they cannot be read.
 pub fn load(data: &Path) -> Book {
@@ -1505,7 +1499,7 @@ pub fn load(data: &Path) -> Book {
     }
     let mut list = read.unwrap_or_default();
     list.retain(|handoff| {
-        crate::claude_plugin::valid_name(&handoff.claude_session)
+        agent_hud_runtime::claude_plugin::valid_name(&handoff.claude_session)
             && handoff
                 .chatgpt_conversation
                 .as_deref()
@@ -1535,7 +1529,7 @@ pub fn project(data: &Path) -> Option<String> {
 pub fn set_project(data: &Path, text: &str) -> Result<Option<String>, String> {
     let project = project_url(text)?;
     // The other settings, the review cap among them (#347), stay.
-    gate_io::set_config(data, "project", serde_json::json!(project))
+    set_config(data, "project", serde_json::json!(project))
         .map_err(|_| l10n::text("项目没能保存", "The project could not be saved"))?;
     Ok(project)
 }
@@ -2427,7 +2421,10 @@ mod tests {
         book.replied("c1", FIX, Some("m1"), 4);
         let handoff = book.get(&id).unwrap();
         let prompt = handoff.prompt_for(StepKind::Back);
-        assert!(crate::claude_plugin::valid_name(&prompt), "{prompt}");
+        assert!(
+            agent_hud_runtime::claude_plugin::valid_name(&prompt),
+            "{prompt}"
+        );
         assert_eq!(prompt, handoff.prompt_for(StepKind::Back), "fixed");
         assert_ne!(prompt, handoff.prompt_for(StepKind::Again));
         assert!(book.returned(&id, StepKind::Back, "意见", &prompt, true, 5));
@@ -2469,7 +2466,7 @@ mod tests {
     /// PostPane's own begin no new count, and the limit stays.
     #[test]
     fn the_rounds_count_from_one_once_the_person_spoke_up() {
-        use crate::claude_plugin::Opener;
+        use agent_hud_runtime::claude_plugin::Opener;
         let mut book = Book::default();
         let id = asked_once(&mut book);
         assert!(book.set_limit(&id, 2));

@@ -179,7 +179,7 @@ fn a_codex_doer_is_never_run_as_a_claude_session() {
     assert!(sent_as(&lines, "wake").is_empty());
     assert_eq!(sent_as(&lines, "codex").len(), 1, "queued for Codex");
     assert_eq!(desk.projection(5)[0]["queuedAt"], 5);
-    let later = 5 + handoffs::WAKE_AFTER_MS;
+    let later = 5 + book::WAKE_AFTER_MS;
     assert!(!desk.wake_queued(&lines, later));
     assert!(sent_as(&lines, "withdraw").is_empty());
     assert!(sent_as(&lines, "wake").is_empty());

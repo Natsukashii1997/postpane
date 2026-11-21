@@ -5,7 +5,7 @@
 use super::guard::Held;
 use super::texts::Sent;
 use super::{Desk, Lines};
-use agent_hud_runtime::chatgpt::handoffs::{self, Handoff};
+use crate::handoff::book::{self, Handoff};
 use agent_hud_runtime::l10n;
 use std::time::Duration;
 
@@ -15,9 +15,7 @@ const READ_HEAD_WAIT: Duration = Duration::from_secs(20);
 impl Desk {
     /// The review cap as set now (`reviewLimit`, #347).
     pub(super) fn review_limit(&self) -> u32 {
-        self.data
-            .as_deref()
-            .map_or(handoffs::LIMIT, handoffs::review_limit)
+        self.data.as_deref().map_or(book::LIMIT, book::review_limit)
     }
     /// The commit under review: as named, else the brief's (#347).
     pub(super) fn head(&self, rule: &super::Rule, brief: &str) -> Option<String> {
@@ -26,9 +24,7 @@ impl Desk {
             .as_deref()
             .map(str::trim)
             .filter(|h| !h.is_empty());
-        named
-            .map(str::to_owned)
-            .or_else(|| handoffs::head_in(brief))
+        named.map(str::to_owned).or_else(|| book::head_in(brief))
     }
     /// An engineering review of a pull request goes only with the full
     /// commit under review (MA-02 §4): else no pass could be checked.
@@ -44,26 +40,26 @@ impl Desk {
         }
     }
     /// Keeps the newest answer of handoff `id` in full (#347).
-    pub(super) fn keep_answer(&self, book: &handoffs::Book, id: &str, reply: &str) {
+    pub(super) fn keep_answer(&self, book: &book::Book, id: &str, reply: &str) {
         let Some(data) = &self.data else { return };
         let n = book.get(id).map_or(0, |handoff| {
             handoff
                 .steps
                 .iter()
-                .filter(|s| s.kind == handoffs::StepKind::Reply)
+                .filter(|s| s.kind == book::StepKind::Reply)
                 .count()
         });
         // As it came, before the handoff cuts it to its own length (#347).
-        if let Err(error) = handoffs::archive(data, id, n, reply.trim()) {
+        if let Err(error) = book::archive(data, id, n, reply.trim()) {
             agent_hud_runtime::note!("{error}");
         }
     }
     /// What PostPane adds to the next review of handoff `id` (#347), the
     /// ledger read from the answers kept in full.
-    pub(super) fn carry(&self, book: &handoffs::Book, id: &str) -> String {
+    pub(super) fn carry(&self, book: &book::Book, id: &str) -> String {
         let data = self.data.clone();
         book.carry(id, &move |h, n| {
-            data.as_deref().and_then(|d| handoffs::archived(d, h, n))
+            data.as_deref().and_then(|d| book::archived(d, h, n))
         })
     }
     /// Asks ChatGPT, in the handoff's conversation, to mend only its newest
@@ -79,13 +75,13 @@ impl Desk {
         let Some(conversation) = handoff.chatgpt_conversation.clone() else {
             return false;
         };
-        if handoff.next() != Some(handoffs::Next::Format) {
+        if handoff.next() != Some(book::Next::Format) {
             return false;
         }
         let request = format!("{id}~format{now}");
         // Named by its request, so an earlier ask's answer never passes for
         // this one's (round 4 P1-11).
-        let text = handoffs::tagged(&request, &format_ask(&handoff));
+        let text = book::tagged(&request, &format_ask(&handoff));
         // On the card and kept apart from the review as one change, before
         // it goes (round 4 P1-10, P1-15): an answer quicker than the send's
         // own word is taken, and any that came early is caught up after.
@@ -136,7 +132,7 @@ impl Desk {
             return held(super::guard::no_anchor(pr), true);
         };
         match lines.pr_head(pr) {
-            Ok(now) if handoffs::same_commit(&now, head) => None,
+            Ok(now) if book::same_commit(&now, head) => None,
             // Commits after the one reviewed: common, as every round
             // touches CURRENT.md; the current one sent again goes on.
             Ok(now) => held(moved_on(pr, head, &now), true),

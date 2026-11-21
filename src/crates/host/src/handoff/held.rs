@@ -3,7 +3,7 @@
 //! same (#410): it used to wait on the sidebar for the person's 「转回」
 //! while the session that asked waited on unaware.
 use super::{Desk, Lines, Unsent, CLAUDE};
-use agent_hud_runtime::chatgpt::handoffs::{by_doer, Handoff, StepKind};
+use crate::handoff::book::{by_doer, Handoff, StepKind};
 use agent_hud_runtime::l10n;
 
 impl Desk {

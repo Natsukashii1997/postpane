@@ -171,7 +171,7 @@ fn an_end_queued_for_a_quiet_session_says_whether_it_arrived() {
         reply_fails: std::cell::Cell::new(2),
         ..Fake::default()
     };
-    let later = 5 + handoffs::WAKE_AFTER_MS + 1;
+    let later = 5 + book::WAKE_AFTER_MS + 1;
     // A pass: it ends, its answer queued.
     let (_temp, desk) = desk();
     let lines = quiet();
@@ -222,7 +222,7 @@ fn an_end_queued_for_a_quiet_session_says_whether_it_arrived() {
     assert_eq!(shown[0]["status"], "open");
     assert_eq!(shown[0]["halt"], at_limit(2, Sent::Queued));
     lines.stopped.set(true);
-    let later = 8 + handoffs::WAKE_AFTER_MS + 1;
+    let later = 8 + book::WAKE_AFTER_MS + 1;
     assert!(!desk.wake_queued(&lines, later), "no background run");
     let (prompt, _) = last_back(&desk, later);
     left_by(&lines, &prompt, "expired", None);
@@ -275,12 +275,12 @@ fn the_person_pauses_and_resumes_the_auto_round_trip() {
 fn a_review_that_passed_with_nothing_driving_it_ends_when_the_app_starts() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join("data");
-    let mut book = handoffs::Book::default();
+    let mut book = book::Book::default();
     let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
     book.opened(&handoff.id, "c1", 2);
     assert!(book.stop(&handoff.id, "停", true, 3));
     book.replied("c1", "都改好了\n审查出口：通过\n结论：通过", Some("m1"), 4);
-    handoffs::save(&data, &book).unwrap();
+    book::save(&data, &book).unwrap();
     let desk = Desk::new(Some(data));
     let shown = desk.projection(5);
     assert_eq!(shown[0]["status"], "closed");
@@ -315,7 +315,7 @@ fn a_restart_keeps_the_auto_round_trip_on_and_a_long_wait_stops_it() {
 
     let (_temp, desk) = self::desk();
     opened(&desk, &lines);
-    let late = 2 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 2 + book::REPLY_WAIT_MS + 1;
     let shown = desk.projection(late);
     assert_eq!(shown[0]["halt"], no_answer());
 }
@@ -374,7 +374,7 @@ fn what_a_restart_writes_follows_the_language_setting() {
             json!({"settings":{"language":language},"providers":{}}).to_string(),
         )
         .unwrap();
-        let mut book = handoffs::Book::default();
+        let mut book = book::Book::default();
         let on = book.begin("s1", None, "修登录", None, "请审核", 1).id;
         book.opened(&on, "c1", 2);
         let opening = book.begin("s2", None, "别的", None, "请审核", 1).id;
@@ -382,7 +382,7 @@ fn what_a_restart_writes_follows_the_language_setting() {
         book.opened(&passed, "c3", 2);
         book.stop(&passed, "停", true, 3);
         book.replied("c3", "审查出口：通过\n结论：通过", Some("m1"), 4);
-        handoffs::save(&data, &book).unwrap();
+        book::save(&data, &book).unwrap();
         let desk = Desk::new(Some(data));
         let book = desk.lock();
         assert!(book.get(&on).unwrap().auto, "a restart keeps it on");

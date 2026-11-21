@@ -174,7 +174,7 @@ fn the_owners_stuck_review_is_taken_when_read_again() {
         &json!({"type":"turn","phase":"start","conversation":"c-new","prompt":ATTACHED}),
         3,
     );
-    let late = 3 + handoffs::REPLY_WAIT_MS + 1;
+    let late = 3 + book::REPLY_WAIT_MS + 1;
     assert!(desk.late(late));
     assert!(
         !desk.lock().get(&handoff.id).unwrap().auto,

@@ -76,7 +76,7 @@ fn the_first_brief_opens_a_review_and_the_next_goes_into_it() {
     let last = lines.sent.borrow().last().unwrap().clone();
     assert_eq!((last.0.as_str(), last.1.as_str()), ("send", "c-new"));
     assert!(
-        handoffs::untagged(&last.2).starts_with("第二轮\n\n---\n【驿窗附注】")
+        book::untagged(&last.2).starts_with("第二轮\n\n---\n【驿窗附注】")
             && last.2.starts_with("【驿窗送审 "),
         "{}",
         last.2
@@ -236,7 +236,7 @@ fn a_review_that_cannot_open_says_why_and_can_be_retried() {
     assert_eq!(brief, "brief");
     assert_eq!(desk.projection(4)[0]["status"], "opening");
     // An opening that hangs fails after two minutes.
-    let later = 4 + handoffs::OPEN_TIMEOUT_MS + 1;
+    let later = 4 + book::OPEN_TIMEOUT_MS + 1;
     assert_eq!(desk.projection(later)[0]["status"], "failed");
     // The first try's answer coming late binds nothing; this try's does.
     assert!(!desk.observe(

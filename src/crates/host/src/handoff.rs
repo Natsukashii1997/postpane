@@ -3,11 +3,11 @@
 //! between the two. The host owns the handoffs because it holds both ways
 //! out: the ChatGPT extension's channel and Agent HUD's Claude Code plugin.
 //! Started by Claude (the `relay_to_chatgpt` local tool); the HUD's handoff
-//! card moves it on (`handoff_act`). Each step is kept (handoffs.rs), and
+//! card moves it on (`handoff_act`). Each step is kept (book.rs), and
 //! the ChatGPT channel tells the desk when ChatGPT starts and finishes.
 use crate::extension::Flight;
-use agent_hud_runtime::chatgpt::handoffs::{
-    self, by_doer, Book, Delivery, Handoff, Next, Notice, Phase, Risk, Status, Step, StepKind,
+use crate::handoff::book::{
+    by_doer, Book, Delivery, Handoff, Next, Notice, Phase, Risk, Status, Step, StepKind,
 };
 use agent_hud_runtime::chatgpt::SendFailed;
 use agent_hud_runtime::claude_plugin::Opener;
@@ -38,6 +38,7 @@ use tauri::Manager;
 mod asking;
 mod back;
 mod belongs;
+pub(crate) mod book;
 mod driver;
 mod gate;
 mod guard;
@@ -316,7 +317,7 @@ impl Desk {
     /// The handoffs kept in `data`; none kept in the demo. Conversations
     /// that were opening when the app stopped count as failed, to retry.
     pub(crate) fn new(data: Option<PathBuf>) -> Self {
-        let mut book = data.as_deref().map(handoffs::load).unwrap_or_default();
+        let mut book = data.as_deref().map(book::load).unwrap_or_default();
         // What a restart writes below comes before Core follows the
         // Language setting (#223).
         let chinese = data.as_deref().map_or_else(l10n::chinese, stored_chinese);
@@ -329,7 +330,7 @@ impl Desk {
         let now = now_ms();
         let since = data
             .as_deref()
-            .map_or(now, |data| handoffs::notices_since(data, now));
+            .map_or(now, |data| book::notices_since(data, now));
         let desk = |book: Book| Self {
             data,
             since,
@@ -401,8 +402,8 @@ impl Desk {
         let mut book = self.lock();
         let result = change(&mut book);
         if let Some(data) = &self.data {
-            handoffs::slim_kept(data, &mut book);
-            if let Err(error) = handoffs::save(data, &book) {
+            book::slim_kept(data, &mut book);
+            if let Err(error) = book::save(data, &book) {
                 agent_hud_runtime::note!("{error}");
             }
         }
@@ -418,11 +419,11 @@ impl Desk {
     }
     /// The ChatGPT project new review conversations open in.
     pub(crate) fn project(&self) -> Option<String> {
-        self.data.as_deref().and_then(handoffs::project)
+        self.data.as_deref().and_then(book::project)
     }
     pub(crate) fn set_project(&self, text: &str) -> Result<Option<String>, String> {
         let data = self.data.as_deref().ok_or_else(demo)?;
-        handoffs::set_project(data, text)
+        book::set_project(data, text)
     }
     /// The snapshot's `handoffs`: the live ones and those that failed or
     /// ended lately, without their briefs.
@@ -621,7 +622,7 @@ impl Desk {
         rule: &Rule,
         now: i64,
     ) -> Result<Started, String> {
-        let engineering = !handoffs::thinking(title);
+        let engineering = !book::thinking(title);
         let risk = match rule.risk.as_deref().map(str::trim) {
             Some(text) if engineering && !text.is_empty() => {
                 if text.eq_ignore_ascii_case("L0") {
@@ -714,7 +715,7 @@ impl Desk {
         };
         // A review of a pull request, or a review chain, reviewed before
         // counts on (#217, #347); a chain named must be known.
-        let pr = engineering.then(|| handoffs::pull_request(brief)).flatten();
+        let pr = engineering.then(|| book::pull_request(brief)).flatten();
         let chain = rule
             .chain
             .as_deref()
@@ -810,7 +811,7 @@ impl Desk {
         // one named now binds the handoff to it, and goes with its commit
         // (P1-02).
         let pr = (!handoff.thinking())
-            .then(|| handoffs::pull_request(brief).or_else(|| handoff.pr.clone()))
+            .then(|| book::pull_request(brief).or_else(|| handoff.pr.clone()))
             .flatten();
         if !handoff.thinking() {
             Self::head_needed(pr.as_deref(), head.as_deref())?;
@@ -889,14 +890,14 @@ impl Desk {
         let request = format!("{}~send{now}", handoff.id);
         // Named by its request, so an earlier round's words never pass for
         // these (round 4 P1-11).
-        let sent = &handoffs::tagged(&request, brief);
+        let sent = &book::tagged(&request, brief);
         // Kept, on disk, before it goes, so a restart before word of it
         // cannot let an answer pass (L3 P1-10): not kept, not sent; nor
         // when the handoff ended meanwhile (round 5 P1-18).
         let kept = self.change_kept(|book| {
             book.ask_pending(
                 &handoff.id,
-                handoffs::Pending {
+                book::Pending {
                     request: request.clone(),
                     pr: anchor.pr.clone(),
                     head: anchor.head.clone(),

@@ -4,7 +4,7 @@
 //! trip that stopped for it goes on. Only for a mending sent in this run,
 //! and only its own request.
 use super::*;
-use agent_hud_runtime::chatgpt::handoffs::REPLY_WAIT_MS;
+use crate::handoff::book::REPLY_WAIT_MS;
 
 const PASS: &str = "全部关闭\n受审版本：0123456\n未决：P0 0，P1 0\n审查出口：通过\n结论：通过";
 const FIX: &str = "1. 还差\n受审版本：0123456\n审查出口：返修\n结论：需修改";
