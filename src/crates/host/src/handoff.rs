@@ -1920,6 +1920,13 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
             )
         )
     });
+    // Sent all the same: the extension may not be this app's (#493).
+    if let Some(note) = super::chatgpt::version_note(app) {
+        answer["message"] = json!(format!(
+            "{} {note}",
+            answer["message"].as_str().unwrap_or("")
+        ));
+    }
     Ok(answer)
 }
 

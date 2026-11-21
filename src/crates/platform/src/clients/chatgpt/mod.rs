@@ -21,6 +21,7 @@ pub(crate) use commands::focus;
 pub mod handoffs;
 mod manifest;
 mod sending;
+pub mod version;
 pub use manifest::{
     install_manifest, manifest, manifest_directory, manifest_path, manifest_state, remove_manifest,
     transient,
@@ -266,8 +267,7 @@ impl Shared {
         state.last_seen = Some(now_ms());
         match message["type"].as_str() {
             Some("hello") => {
-                state.hello =
-                    json!({"version":message["version"],"extensionId":message["extensionId"]});
+                state.hello = version::hello(&message);
             }
             Some("tabs") => state.tabs = message["conversations"].clone(),
             Some("turn") if message["phase"] == "start" => {
