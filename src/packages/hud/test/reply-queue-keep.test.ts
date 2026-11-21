@@ -1,14 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { stripTypeScriptTypes } from "node:module";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import {
-  blocksNotice,
   dismissIslandCard,
   newsLanes,
-  promoteNewestWaiting,
-  requestCard,
+  reconcileIslandCards,
   roomForNews,
   sideLanes,
   type LaneCard,
@@ -21,31 +17,6 @@ import {
 
 // #221: a reply the owner has not seen is not put away on a clock. Taken
 // from the 2026-11-07 audit (evidence/2026-11-07-ops-audit/replies/).
-
-// IslandNews.tsx cannot be imported under node --test (TSX); take the pure
-// queue functions out of it verbatim, as the audit did.
-const source = readFileSync(
-  new URL("../src/IslandNews.tsx", import.meta.url),
-  "utf8",
-);
-const start = source.indexOf("export function reconcileIslandCards");
-const end = source.indexOf("export type SideNews");
-const body = stripTypeScriptTypes(
-  source.slice(start, end).replaceAll("export function", "function"),
-);
-const { reconcileIslandCards } = new Function(
-  "promoteNewestWaiting",
-  "blocksNotice",
-  "roomForNews",
-  "requestCard",
-  `${body}; return { reconcileIslandCards };`,
-)(promoteNewestWaiting, blocksNotice, roomForNews, requestCard) as {
-  reconcileIslandCards: (
-    previous: LaneCard[],
-    requests: Approval[],
-    visible: IslandEvent[],
-  ) => LaneCard[];
-};
 
 const reply = (n: number, src = "hermes", kind = "completion"): IslandEvent =>
   ({

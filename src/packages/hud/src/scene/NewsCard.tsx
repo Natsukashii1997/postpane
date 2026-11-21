@@ -2,7 +2,8 @@
 // 300-line ratchet. An agent's requests or replies come on its own card,
 // the one its mark opens: its head with the paper plane and the news's seal,
 // its quota, then what waits on you and what is at work (owner chose 甲,
-// 2026-11-14). Any other news keeps its receipt.
+// 2026-11-14); so do its failures, apart from the replies (#359). Any other
+// news keeps its receipt.
 import type { Approval, IslandEvent, Snapshot } from "@agent-hud/protocol";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import type { HUDConfig, HUDDecision, HUDVendor } from "../model";
@@ -17,6 +18,7 @@ import { PaperContext, type Paper } from "../paper";
 import { CardRunning } from "../panel/CardRunning";
 import { ApprovalContent, waitingSeal } from "../permissions/ApprovalContent";
 import { NewsSealContext, type NewsSeal } from "../permissions/PaperSeal";
+import { noticeSeal } from "./news-seal";
 import { WeeklyMark } from "./WeeklyMark";
 import type { CardWeekly } from "../card-weekly";
 
@@ -74,6 +76,7 @@ export function NewsCard({
       snapshot={snapshot}
       dismiss={news.dismiss}
       replies={news.replies}
+      failures={news.failures}
       quotas={news.quotas}
       drop={news.drop}
       onStats={links.onStats}
@@ -102,12 +105,7 @@ export function NewsCard({
           seal: waitingSeal(request, zh),
           count: news.requests.length + news.replies.length,
         }
-      : event?.kind === "completion"
-        ? {
-            seal: { words: zh ? "已回" : "DONE", ink: "blue" },
-            count: news.replies.length,
-          }
-        : null;
+      : noticeSeal(event, news, zh);
   return (
     <PaperContext.Provider value={paper}>
       {list && vendor ? (

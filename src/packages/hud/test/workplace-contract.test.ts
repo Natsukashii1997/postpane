@@ -7,9 +7,15 @@ import assert from "node:assert/strict";
 import { liveSessions } from "../src/panel/agent-board.ts";
 import { runningForMark } from "../src/panel/running-rows.ts";
 import { handoffFor } from "../src/alerts/handoff-doer.ts";
-import { staysUntilSeen } from "../src/alerts/reply-stays.ts";
+import { frontFolds, staysUntilSeen } from "../src/alerts/reply-stays.ts";
+import {
+  laneEvents,
+  newsLanes,
+  reconcileIslandCards,
+} from "../src/alerts/news-lanes.ts";
+import { dismissable, failureStands } from "../src/alerts/failure-list.ts";
 import { cardRelays, relaysOf, workspaceOf } from "../src/workspace.ts";
-import { WORKPLACES, type Place } from "./scenes/build.ts";
+import { NOW, WORKPLACES, type Place } from "./scenes/build.ts";
 import { SCENES, scene } from "./scenes/scenes.ts";
 
 const ids = (rows: { session: { id: string } }[]) =>
@@ -127,6 +133,38 @@ test("出错：失败或限流的一轮在本家能看到，不当成空闲（B9
   assert.deepEqual(failed("codex"), ["x-fail"]);
   assert.deepEqual(failed("claude"), ["c-limit"]);
   assert.deepEqual(failed("deepseek"), []);
+});
+
+test("出错回执：失败、限流各家一张，不走 4 秒，限流挂到恢复（C6）", () => {
+  const { snapshot } = scene("failed");
+  const events = snapshot.islandEvents?.items ?? [];
+  const queue = reconcileIslandCards([], [], events);
+  assert.deepEqual(
+    newsLanes(queue, []).map((lane) => [
+      lane.vendor,
+      laneEvents(lane, "turn-failed").map((event) => event.failure),
+    ]),
+    [
+      ["claude", ["limited"]],
+      ["codex", ["failed"]],
+    ],
+  );
+  for (const card of queue) {
+    assert.equal(
+      frontFolds(card, { held: false, opened: true, looked: new Set() }),
+      false,
+    );
+    assert.equal(
+      card.type === "news" && failureStands(card.event, snapshot.sessions, NOW),
+      true,
+    );
+  }
+  // 「知道了」 puts away the failure only; the limit lifts in an hour.
+  assert.deepEqual(events.map(dismissable), [false, true]);
+  assert.equal(
+    failureStands(events[0], snapshot.sessions, NOW + 61 * 60_000),
+    false,
+  );
 });
 
 test("混合场景里四家的在跑、等你互不串家", () => {
