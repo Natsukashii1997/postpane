@@ -400,7 +400,11 @@ function statusSoon() {
 // that found is told beside what the page drew: recorded, never acted on.
 // Each prompt is read at most three times, each on something that happened:
 // the page reported its reply, PostPane had it read again, 20 s after it was
-// sent. Only watched conversations, only while PostPane is connected.
+// sent; a read is one request, or two when the prompt is further back. Only
+// watched conversations, only while PostPane is connected. The page is
+// called through chrome.scripting and answers the same way: nothing goes
+// over the page's own messages, and what comes back is checked field by
+// field before it is told (#488 review P1-01).
 const DATA_SCRIPT = {
   id: "postpane-data",
   js: ["data.js"],
@@ -414,78 +418,273 @@ const HALT = [401, 403, 429];
 let shadow = false;
 let halted = false;
 const unread = new Set(); // conversations a read failed on: not read again
-const prompts = new Map(); // conversation -> the prompt PostPane's words became
-const reads = new Map(); // conversation -> {promptId, whys} read for it so far
+// What was read, kept so a restarted worker reads nothing twice (review
+// P1-03): conversation -> {promptId, whys}; and the prompt PostPane's
+// words, or the page's reply, last named in each conversation.
+let ledger = {};
+let prompts = {};
+const restored = chrome.storage.local
+  .get(["shadowLedger", "shadowPrompts"])
+  .then((kept) => {
+    ledger = kept.shadowLedger ?? {};
+    prompts = kept.shadowPrompts ?? {};
+  })
+  .catch(() => {});
 
-/** Switches the shadow read, as PostPane says with each list: data.js goes
- * into chatgpt.com pages as they load, or no longer does. What was switched
- * is what this extension kept, not what a restarted worker remembers: on
- * since before, the stops met still hold; switched, they start over. */
+/** Switches the shadow read, as PostPane says with each list. On: data.js
+ * goes into chatgpt.com pages as they load, and into the ones open now.
+ * Off: it no longer goes in, and every copy in a page is stopped; until
+ * each is known stopped, the switch-off is tried again with each list
+ * (review P1-02). What was switched is what this extension kept. */
 async function setShadow(on) {
-  const kept = await chrome.storage.local.get(["shadow", "shadowStops"]);
+  await restored;
+  const kept = await chrome.storage.local.get([
+    "shadow",
+    "shadowStops",
+    "shadowDisarm",
+  ]);
   const was = kept.shadow === true;
   shadow = on;
-  const held = on && was ? kept.shadowStops : null;
-  halted = !!held?.halted;
-  unread.clear();
-  for (const id of held?.unread ?? []) unread.add(id);
-  if (on !== was)
-    await chrome.storage.local.set({ shadow, shadowStops: stops() });
+  // On since before (a restarted worker told again): its stops still hold.
+  if (on && was) {
+    halted = !!kept.shadowStops?.halted;
+    unread.clear();
+    for (const id of kept.shadowStops?.unread ?? []) unread.add(id);
+  }
+  if (on !== was) {
+    halted = false;
+    unread.clear();
+    await chrome.storage.local.set({
+      shadow,
+      shadowStops: stops(),
+      ...(on ? {} : { shadowDisarm: { pending: true } }),
+    });
+  }
+  if (on) {
+    await chrome.scripting
+      .getRegisteredContentScripts({ ids: [DATA_SCRIPT.id] })
+      .then((there) =>
+        there.length
+          ? null
+          : chrome.scripting.registerContentScripts([DATA_SCRIPT]),
+      )
+      .catch(() => {});
+    if (!was) await everyPage({ files: DATA_SCRIPT.js });
+  } else if (!was ? kept.shadowDisarm?.pending : true) await disarm();
+}
+
+/** Runs `what` in the page's own world of every chatgpt.com tab: the
+ * results, by tab, and the tabs it could not run in. */
+async function everyPage(what) {
+  const done = {};
+  const failed = [];
+  for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
+    const ran = await chrome.scripting
+      .executeScript({ target: { tabId: tab.id }, world: "MAIN", ...what })
+      .catch(() => null);
+    if (ran) done[tab.id] = ran[0]?.result ?? null;
+    else failed.push(tab);
+  }
+  return { done, failed };
+}
+
+/** Takes data.js out: no longer put into pages, and stopped in each one
+ * open now. A tab it could not reach that is discarded has no page
+ * running, and loads without it; any other is tried again later. */
+async function disarm() {
+  let unregistered = false;
   try {
-    // Registered again each time it is on: an updated extension has lost it.
-    if (on) await chrome.scripting.registerContentScripts([DATA_SCRIPT]);
-    else if (was)
+    const there = await chrome.scripting.getRegisteredContentScripts({
+      ids: [DATA_SCRIPT.id],
+    });
+    if (there.length)
       await chrome.scripting.unregisterContentScripts({
         ids: [DATA_SCRIPT.id],
       });
+    unregistered = !(
+      await chrome.scripting.getRegisteredContentScripts({
+        ids: [DATA_SCRIPT.id],
+      })
+    ).length;
   } catch {
-    // Already in, or already out.
+    // Left registered: tried again.
   }
+  const { done, failed } = await everyPage({ func: stopInPage });
+  const live = failed.filter((tab) => !tab.discarded).map((tab) => tab.id);
+  const pending = !unregistered || live.length > 0;
+  await chrome.storage.local.set({
+    shadowDisarm: { pending, unregistered, failed: live, at: Date.now() },
+  });
+  const stopped = Object.values(done).filter((r) => r?.stopped).length;
+  post({
+    type: "shadow",
+    why: "off",
+    at: Date.now(),
+    outcome: pending ? "disarm-pending" : "disarmed",
+    tabs: Object.keys(done).length,
+    stopped,
+    failed: live.length,
+    unregistered,
+  });
+}
+
+// Run in the page's own world: no closure, only what is passed.
+function stopInPage() {
+  return window[Symbol.for("postpane.data")]?.stop() ?? { absent: true };
+}
+function readInPage(conversation, promptId) {
+  const there = window[Symbol.for("postpane.data")];
+  return there ? there.read(conversation, promptId) : { outcome: "no-script" };
 }
 
 const stops = () => ({ halted, unread: [...unread] });
 
 /** Words went out to `conversation`: the prompt they became is the one its
- * reads look for, and the data is read once while the answer is written. */
-function wrote(conversation, result) {
+ * reads look for, and the data is read once while the answer is written.
+ * Words whose prompt is not known leave none, and that read says so. */
+async function wrote(conversation, result) {
   if (!result.ok || !conversation) return;
-  if (result.promptId) prompts.set(conversation, result.promptId);
-  else prompts.delete(conversation);
+  await restored;
+  if (result.promptId) prompts[conversation] = result.promptId;
+  else delete prompts[conversation];
+  await chrome.storage.local.set({ shadowPrompts: prompts });
   if (shadow)
     setTimeout(() => shadowRead(conversation, "writing"), WRITING_AFTER);
 }
 
 /** Reads `conversation` from the data, once per prompt for each `why`, and
  * tells PostPane what that found, with `beside` (what the page made of it).
- * A read that failed ends the reads of that conversation; one refused or
- * over a limit ends them all, until the switch goes off and on. */
+ * It is marked read before it is read. A read that failed ends the reads
+ * of that conversation; one refused or over a limit ends them all, until
+ * the switch goes off and on. With no prompt known, nothing is read. */
 async function shadowRead(conversation, why, beside = {}) {
+  await restored;
   if (!shadow || !port || halted) return;
   if (!watched.has(conversation) || unread.has(conversation)) return;
+  // The prompt a reply answers is the one the page says; it is the one the
+  // conversation's later reads look for too (review P2-01).
+  if (beside.pagePromptId) prompts[conversation] = beside.pagePromptId;
+  const promptId = prompts[conversation] ?? null;
+  const round = ledger[conversation];
+  const whys = round?.promptId === promptId ? round.whys : [];
+  if (whys.includes(why)) return;
+  ledger[conversation] = { promptId, whys: [...whys, why] };
+  await chrome.storage.local.set({
+    shadowLedger: ledger,
+    shadowPrompts: prompts,
+  });
+  const told = {
+    type: "shadow",
+    conversation,
+    why,
+    at: Date.now(),
+    asked: promptId,
+    ...beside,
+  };
+  if (!promptId) return post({ ...told, outcome: "no-prompt" });
   const tabId = await tabShowing(conversation);
-  if (tabId === null) return;
-  // The prompt a reply answers is the one the page says; with nothing from
-  // the page (read again, being written), the one PostPane's words became.
-  const promptId = beside.pagePromptId ?? prompts.get(conversation) ?? null;
-  const round = reads.get(conversation);
-  const whys = round?.promptId === promptId ? round.whys : new Set();
-  if (whys.has(why)) return;
-  reads.set(conversation, { promptId, whys: whys.add(why) });
-  const answer = (await chrome.tabs
-    .sendMessage(tabId, { op: "data", conversation, promptId })
-    .catch(() => null)) ?? { outcome: "unreachable" };
-  // A page open since before the switch went on: data.js is put in now, and
-  // hears the page's sign-in on its next request.
+  if (tabId === null) return post({ ...told, outcome: "no-tab" });
+  const ran = await chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readInPage,
+      args: [conversation, promptId],
+    })
+    .catch(() => null);
+  const answer = ran ? summary(ran[0]?.result) : { outcome: "unreachable" };
+  // A page open since before the switch went on, missed when it was turned
+  // on: data.js is put in now, and hears the page's sign-in on its next
+  // request.
   if (answer.outcome === "no-script")
     await chrome.scripting
-      .executeScript({ target: { tabId }, files: DATA_SCRIPT.js, world: "MAIN" })
+      .executeScript({
+        target: { tabId },
+        files: DATA_SCRIPT.js,
+        world: "MAIN",
+      })
       .catch(() => {});
   if (answer.outcome === "http" || answer.outcome === "error") {
     if (HALT.includes(answer.status)) halted = true;
     else unread.add(conversation);
     await chrome.storage.local.set({ shadowStops: stops() });
   }
-  post({ type: "shadow", conversation, why, at: Date.now(), ...beside, ...answer });
+  post({ ...told, ...answer });
+}
+
+// What a page may say of a read: these fields, of these kinds, and nothing
+// else. Anything else makes it `invalid`, naming the fields (review P1-01).
+const WORD = /^[a-z][a-z0-9_-]{0,39}$/i;
+const ANY_ID = /^[0-9a-z][0-9a-z_-]{0,63}$/i;
+const count = (v) => Number.isInteger(v) && v >= 0 && v <= 1e9;
+const word = (v) => v === null || (typeof v === "string" && WORD.test(v));
+const anId = (v) => v === null || (typeof v === "string" && ANY_ID.test(v));
+const flag = (v) => typeof v === "boolean";
+const maybe = (test) => (v) => v === null || test(v);
+const OUTCOMES = [
+  "read",
+  "http",
+  "error",
+  "unreadable",
+  "no-login",
+  "other-conversation",
+  "stopped",
+  "limited",
+  "no-script",
+];
+const SUMMARY = {
+  outcome: (v) => OUTCOMES.includes(v),
+  status: (v) => Number.isInteger(v) && v >= 100 && v <= 599,
+  turns: (v) => v === 2 || v === 10,
+  tries: (v) => v === 1 || v === 2,
+  bytes: count,
+  ms: count,
+  hidden: flag,
+  login: (v) => v === "same" || v === "other",
+  messages: count,
+  more: flag,
+  asyncStatus: word,
+  asked: anId,
+  askFound: flag,
+  prompt: anId,
+  after: count,
+  exchange: maybe(flag),
+  written: flag,
+  missing: (v) =>
+    Array.isArray(v) &&
+    v.length <= 8 &&
+    v.every((m) => typeof m === "string" && /^[a-z_.[\]]{1,48}$/i.test(m)),
+  last: maybe((v) =>
+    fits(v, { role: word, channel: word, status: word, type: word }),
+  ),
+  final: maybe((v) =>
+    fits(v, {
+      id: (x) => typeof x === "string" && ANY_ID.test(x),
+      status: word,
+      endTurn: maybe(flag),
+      complete: maybe(flag),
+      finish: word,
+      chars: count,
+      sha: (x) => typeof x === "string" && /^[0-9a-f]{16}$/.test(x),
+    }),
+  ),
+};
+const fits = (value, shape) =>
+  !!value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Object.entries(value).every(([key, v]) => shape[key]?.(v));
+
+/** What a page said of a read, if it is a summary and only that. */
+function summary(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    return { outcome: "invalid", fields: [] };
+  const bad = Object.entries(raw)
+    .filter(([key, v]) => !SUMMARY[key]?.(v))
+    .map(([key]) => (WORD.test(key) ? key : "?"));
+  if (bad.length || !("outcome" in raw))
+    return { outcome: "invalid", fields: [...new Set(bad)].slice(0, 8) };
+  return JSON.parse(JSON.stringify(raw));
 }
 
 // --- Content scripts ---------------------------------------------------------

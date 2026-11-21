@@ -40,10 +40,24 @@ export function summarize(records, handoffs = []) {
     (record) => record.final.id === record.pageMessageId,
   );
   // 读页面拿到了，数据一路没拿到（没读成、没找到回信，或回信没标成写完）。
+  // 页面里还没有 data.js（no-script）的那次只是待补证：同一条提问之后有一次
+  // 读成且写完才算补上，没补上的照样算漏读（#488 审查 P2-02）。
+  const good = (record) =>
+    record.outcome === "read" && record.final && record.written;
+  const promptOf = (record) =>
+    record.pagePromptId ?? record.asked ?? record.prompt;
+  const later = (record) =>
+    records.some(
+      (other) =>
+        other !== record &&
+        (other.heardAt ?? other.at) >= (record.heardAt ?? record.at) &&
+        other.conversation === record.conversation &&
+        promptOf(other) === promptOf(record) &&
+        good(other),
+    );
   const missed = complete.filter(
     (record) =>
-      record.outcome !== "no-script" &&
-      !(record.outcome === "read" && record.final && record.written),
+      !good(record) && !(record.outcome === "no-script" && later(record)),
   );
   // 驿窗重读时页面那一路没拿到，数据一路拿到了写完的回信：本可以不卡。
   const rereads = records.filter((record) => record.why === "reread");
@@ -107,6 +121,9 @@ export function summarize(records, handoffs = []) {
     hidden: result.hidden >= BAR.hidden,
     sameId: result.compared > 0 && result.differentId === 0,
     noMiss: result.missed.length === 0,
+    // 认到的提问都是驿窗记下的那条（#488 审查 P2-02）。
+    promptKnown:
+      result.compared > 0 && result.promptInHandoffs === result.compared,
     noLimit: result.limited === 0,
   };
   result.reached = Object.values(result.bar).every(Boolean);
@@ -147,7 +164,7 @@ function print(result) {
   );
   console.log("");
   console.log(
-    `切换门槛：回信 ${result.compared} / ${BAR.replies}（${mark(result.bar.replies)}）；跨 ${result.days} / ${BAR.days} 天（${mark(result.bar.days)}）；隐藏时读到 ${result.hidden} / ${BAR.hidden}（${mark(result.bar.hidden)}）；编号全一致（${mark(result.bar.sameId)}）；没有漏读（${mark(result.bar.noMiss)}）；没有限流（${mark(result.bar.noLimit)}）。`,
+    `切换门槛：回信 ${result.compared} / ${BAR.replies}（${mark(result.bar.replies)}）；跨 ${result.days} / ${BAR.days} 天（${mark(result.bar.days)}）；隐藏时读到 ${result.hidden} / ${BAR.hidden}（${mark(result.bar.hidden)}）；编号全一致（${mark(result.bar.sameId)}）；提问都在 handoffs.json 里（${mark(result.bar.promptKnown)}）；没有漏读（${mark(result.bar.noMiss)}）；没有限流（${mark(result.bar.noLimit)}）。`,
   );
   console.log(
     result.reached

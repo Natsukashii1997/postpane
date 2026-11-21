@@ -25,8 +25,10 @@ test("对账：两路编号一致、够数、跨天、有隐藏时读到的，�
     {
       chatgptConversation: "c1",
       steps: [
-        { kind: "ask", askedId: "p0" },
-        { kind: "ask", askedId: "p1" },
+        ...Array.from({ length: 24 }, (_, n) => ({
+          kind: "ask",
+          askedId: `p${n}`,
+        })),
         { kind: "reply" },
       ],
     },
@@ -34,7 +36,7 @@ test("对账：两路编号一致、够数、跨天、有隐藏时读到的，�
   const result = summarize(records, handoffs);
   assert.equal(result.compared, 24);
   assert.equal(result.sameId, 24);
-  assert.equal(result.promptInHandoffs, 2);
+  assert.equal(result.promptInHandoffs, 24);
   assert.equal(result.hidden, 8);
   // 每 3 小时一封，北京时间 11-20 10:00 起：跨 20、21、22、23 四天。
   assert.equal(result.days, 4);
@@ -44,9 +46,17 @@ test("对账：两路编号一致、够数、跨天、有隐藏时读到的，�
     hidden: true,
     sameId: true,
     noMiss: true,
+    promptKnown: true,
     noLimit: true,
   });
   assert.equal(result.reached, true);
+  // 认到的提问有一条不是驿窗记下的，就不算达到（#488 审查 P2-02）。
+  const stray = summarize(
+    [...records.slice(1), reply(0, { prompt: "the-persons-own" })],
+    handoffs,
+  );
+  assert.equal(stray.bar.promptKnown, false);
+  assert.equal(stray.reached, false);
   // 少一封就不够。
   assert.equal(summarize(records.slice(0, BAR.replies - 1)).reached, false);
 });
@@ -62,14 +72,36 @@ test("对账：编号不一致、漏读、限流，各自单独算出来，都�
       final: undefined,
       written: undefined,
     }),
-    // 打开开关前就开着的页面第一次读不到，不算漏读。
-    reply(27, { outcome: "no-script", final: undefined, written: undefined }),
+    // 页面里还没有 data.js：之后同一条提问没再读成，算漏读（#488 审查 P2-02）。
+    reply(27, {
+      outcome: "no-script",
+      final: undefined,
+      written: undefined,
+      pagePromptId: "p27",
+    }),
+    // 之后驿窗重读时读成、写完了，就补上了，不算漏读。
+    reply(28, {
+      outcome: "no-script",
+      final: undefined,
+      written: undefined,
+      pagePromptId: "p28",
+    }),
+    {
+      conversation: "c1",
+      why: "reread",
+      heardAt: START + 29 * (DAY / 8),
+      asked: "p28",
+      prompt: "p28",
+      outcome: "read",
+      final: { id: "m28" },
+      written: true,
+    },
   ];
   const result = summarize(records);
   assert.equal(result.differentId, 1);
   assert.deepEqual(
     result.missed.map((miss) => miss.pageMessageId),
-    ["m25", "m26"],
+    ["m25", "m26", "m27"],
   );
   assert.equal(result.refused, 1);
   assert.equal(result.limited, 1);

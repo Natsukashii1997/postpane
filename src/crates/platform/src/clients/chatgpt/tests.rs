@@ -143,6 +143,64 @@ fn a_shadow_read_is_kept_as_a_line_while_the_switch_is_on() {
     );
 }
 
+// #488 review P1-01: a line holds the known fields of their kinds, nothing
+// else, whatever the extension (or a page) put in it.
+#[test]
+fn a_shadow_line_keeps_only_known_fields_of_their_kinds() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    let told = json!({
+        "type": "shadow", "conversation": "68a1", "why": "complete", "at": 5, "outcome": "read",
+        "text": "回信的正文", "authorization": "Bearer x", "status": "200", "hidden": "yes",
+        "final": {"id": "m1", "chars": 3, "sha": "0123456789abcdef"},
+        "last": {"role": "assistant", "words": "正文"},
+        "missing": ["messages[].id"]
+    });
+    assert_eq!(shadow::keep(&data, true, &told, 9), Ok(true));
+    let kept: Value =
+        serde_json::from_str(std::fs::read_to_string(shadow::path(&data)).unwrap().trim()).unwrap();
+    assert_eq!(
+        kept,
+        json!({"conversation":"68a1","why":"complete","at":5,"outcome":"read",
+               "final":{"id":"m1","chars":3,"sha":"0123456789abcdef"},
+               "missing":["messages[].id"],"dropped":5,"heardAt":9})
+    );
+    // Words where an id or a word goes are not ids or words.
+    let wordy = json!({"type":"shadow","conversation":"68a1","outcome":"read","prompt":"请 审核","why":"a b"});
+    assert_eq!(shadow::keep(&data, true, &wordy, 10), Ok(true));
+    let last: Value = serde_json::from_str(
+        std::fs::read_to_string(shadow::path(&data))
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(last["dropped"], 2);
+    assert!(last.get("prompt").is_none() && last.get("why").is_none());
+}
+
+// #488 review P1-02: what a switch-off came to is kept with the switch off.
+#[test]
+fn a_switch_off_is_kept_with_the_switch_off() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let off = json!({"type":"shadow","why":"off","at":3,"outcome":"disarmed","tabs":2,"stopped":2,"failed":0,"unregistered":true});
+    assert!(!shadow::on(&data));
+    assert_eq!(shadow::keep(&data, false, &off, 4), Ok(true));
+    // A read with the switch off is not, even of a watched conversation.
+    let read = json!({"type":"shadow","conversation":"68a1","why":"complete","outcome":"read"});
+    assert_eq!(shadow::keep(&data, true, &read, 5), Ok(false));
+    // Nor is one saying `off` about a conversation.
+    let posing = json!({"type":"shadow","conversation":"68a1","why":"off","outcome":"read"});
+    assert_eq!(shadow::keep(&data, true, &posing, 6), Ok(false));
+    let lines = std::fs::read_to_string(shadow::path(&data)).unwrap();
+    assert_eq!(lines.lines().count(), 1);
+    assert!(lines.contains(r#""outcome":"disarmed""#));
+}
+
 /// The extension's end of a connection, for a test: what it was sent.
 struct Sent(Arc<Mutex<Vec<u8>>>);
 impl Write for Sent {

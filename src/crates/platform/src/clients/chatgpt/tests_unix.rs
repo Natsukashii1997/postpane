@@ -294,3 +294,18 @@ fn what_a_shadow_read_found_is_kept_privately() {
         .mode();
     assert_eq!(mode & 0o777, 0o600);
 }
+
+/// #488 review P2-04: a shadow.jsonl others may read is not written to.
+#[test]
+fn a_shadow_file_others_may_read_is_not_written_to() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(folder(&data).join("config.json"), r#"{"dataShadow":true}"#).unwrap();
+    std::fs::write(shadow::path(&data), "").unwrap();
+    std::fs::set_permissions(shadow::path(&data), std::fs::Permissions::from_mode(0o644)).unwrap();
+    let told = json!({"type":"shadow","conversation":"68a1","why":"complete","outcome":"read"});
+    assert!(shadow::keep(&data, true, &told, 1).is_err());
+    assert_eq!(std::fs::read_to_string(shadow::path(&data)).unwrap(), "");
+}

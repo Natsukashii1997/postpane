@@ -10,23 +10,11 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://chatgpt.com/*"
-      ],
-      "js": [
-        "page.js",
-        "content.js"
-      ],
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["page.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
-  "permissions": [
-    "nativeMessaging",
-    "scripting",
-    "storage",
-    "tabGroups"
-  ],
-  "host_permissions": [
-    "https://chatgpt.com/*"
-  ]
+  "permissions": ["nativeMessaging", "scripting", "storage", "tabGroups"],
+  "host_permissions": ["https://chatgpt.com/*"]
 }

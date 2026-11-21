@@ -9,48 +9,85 @@
   <body>
     <main data-app-shell-main-surface="browser">
       <div data-turn-key="t1">
-        <div class="group/user-message" data-chatgpt-search-unit-key="fallback-turn-0:0:user">
+        <div
+          class="group/user-message"
+          data-chatgpt-search-unit-key="fallback-turn-0:0:user"
+        >
           <h4 class="sr-only" data-conversation-role="user">你说：</h4>
           <div data-user-message-bubble="true">第一轮问题</div>
         </div>
-        <div data-chatgpt-search-unit-key="fallback-turn-0:1:assistant" data-chatgpt-search-message-ids="m1 m1">
-          <h4 class="sr-only" data-conversation-role="assistant">ChatGPT 说：</h4>
-          <div class="[--entity-prose-inset:0px]"><p data-d-component="text">OK</p></div>
+        <div
+          data-chatgpt-search-unit-key="fallback-turn-0:1:assistant"
+          data-chatgpt-search-message-ids="m1 m1"
+        >
+          <h4 class="sr-only" data-conversation-role="assistant">
+            ChatGPT 说：
+          </h4>
+          <div class="[--entity-prose-inset:0px]">
+            <p data-d-component="text">OK</p>
+          </div>
         </div>
       </div>
       <div data-turn-key="t2">
-        <div class="group/user-message" data-chatgpt-search-unit-key="fallback-turn-0:2:user">
+        <div
+          class="group/user-message"
+          data-chatgpt-search-unit-key="fallback-turn-0:2:user"
+        >
           <h4 class="sr-only" data-conversation-role="user">你说：</h4>
           <div data-user-message-bubble="true">请审核这次改动</div>
-          <div class="turn-action-controls"><button aria-label="复制消息"></button></div>
+          <div class="turn-action-controls">
+            <button aria-label="复制消息"></button>
+          </div>
         </div>
-        <div data-chatgpt-search-unit-key="fallback-turn-0:3:assistant" data-chatgpt-search-message-ids="m2 m2">
-          <h4 class="sr-only" data-conversation-role="assistant" tabindex="-1">ChatGPT 说：</h4>
+        <div
+          data-chatgpt-search-unit-key="fallback-turn-0:3:assistant"
+          data-chatgpt-search-message-ids="m2 m2"
+        >
+          <h4 class="sr-only" data-conversation-role="assistant" tabindex="-1">
+            ChatGPT 说：
+          </h4>
           <div class="[--entity-prose-inset:0px]">
             <h2 data-d-component="title">审核意见</h2>
             <ol data-d-component="list" data-d-marker="number">
-              <li data-d-component="list-item"><p data-d-component="text">修好边界</p></li>
+              <li data-d-component="list-item">
+                <p data-d-component="text">修好边界</p>
+              </li>
               <li data-d-component="list-item">
                 <p data-d-component="text">
-                  检查 <span data-d-default-strong="" data-d-inline="">挂件位置</span> 和
+                  检查
+                  <span data-d-default-strong="" data-d-inline=""
+                    >挂件位置</span
+                  >
+                  和
                   <code data-d-component="code">pendantLayout</code>
                 </p>
               </li>
               <li data-d-component="list-item">
                 <p data-d-component="text">补测试</p>
                 <ul data-d-component="list" data-d-marker="bullet">
-                  <li data-d-component="list-item"><p data-d-component="text">底边</p></li>
+                  <li data-d-component="list-item">
+                    <p data-d-component="text">底边</p>
+                  </li>
                 </ul>
               </li>
             </ol>
             <div data-d-component="table">
               <table>
-                <tr data-d-component="table-row"><th>项目</th><th>状态</th></tr>
-                <tr data-d-component="table-row"><td><p data-d-component="text">连接</p></td><td>正常</td></tr>
+                <tr data-d-component="table-row">
+                  <th>项目</th>
+                  <th>状态</th>
+                </tr>
+                <tr data-d-component="table-row">
+                  <td><p data-d-component="text">连接</p></td>
+                  <td>正常</td>
+                </tr>
               </table>
             </div>
             <div class="code-block">
-              <div class="header"><span>Python</span><button aria-label="复制">复制</button><span>运行</span></div>
+              <div class="header">
+                <span>Python</span><button aria-label="复制">复制</button
+                ><span>运行</span>
+              </div>
               <div class="cm-editor">
                 <div class="cm-announced" aria-live="polite"></div>
                 <div class="cm-scroller">
@@ -62,22 +99,32 @@
               </div>
             </div>
             <div class="code-block">
-              <div class="header"><span>Bash</span><button aria-label="复制">复制</button></div>
+              <div class="header">
+                <span>Bash</span><button aria-label="复制">复制</button>
+              </div>
               <pre class="ViewerContent"><code>echo "开始"
 ls -la
 </code></pre>
             </div>
-            <p data-d-component="text">结论：<a href="https://github.com/x/y/pull/1">PR</a> 需修改</p>
+            <p data-d-component="text">
+              结论：<a href="https://github.com/x/y/pull/1">PR</a> 需修改
+            </p>
           </div>
           <div class="actionRow turn-action-controls">
-            <button aria-label="复制"></button><button aria-label="重新生成回复"></button>
+            <button aria-label="复制"></button
+            ><button aria-label="重新生成回复"></button>
           </div>
           <div role="status" class="sr-only">最新一条回复</div>
         </div>
       </div>
     </main>
     <form>
-      <div class="ProseMirror" contenteditable="true" role="textbox" aria-label="询问 ChatGPT"></div>
+      <div
+        class="ProseMirror"
+        contenteditable="true"
+        role="textbox"
+        aria-label="询问 ChatGPT"
+      ></div>
       <button type="button" aria-label="听写"></button>
       <button id="slot" type="submit" aria-label="发送" disabled></button>
     </form>
@@ -85,8 +132,12 @@ ls -la
       // Stand-in for the composer: send enables with text; clicking starts "streaming".
       const box = document.querySelector(".ProseMirror");
       const slot = document.getElementById("slot");
-      new MutationObserver(() => (slot.disabled = !box.textContent.trim())).observe(box, { childList: true, subtree: true, characterData: true });
-      document.querySelector("form").addEventListener("submit", (event) => event.preventDefault());
+      new MutationObserver(
+        () => (slot.disabled = !box.textContent.trim()),
+      ).observe(box, { childList: true, subtree: true, characterData: true });
+      document
+        .querySelector("form")
+        .addEventListener("submit", (event) => event.preventDefault());
       slot.addEventListener("click", () => {
         window.sent = box.textContent;
         box.textContent = "";

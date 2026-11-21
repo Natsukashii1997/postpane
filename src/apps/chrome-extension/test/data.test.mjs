@@ -174,21 +174,84 @@ test("data without the fields read here is unreadable, naming what is missing", 
   assert.equal(found.outcome, "unreadable");
   assert.deepEqual([...found.missing].sort(), [
     "messages[].author.role",
-    "page_info",
+    "page_info.has_previous_page",
   ]);
+  // Whether there is more before must be said, as a boolean (#488 review P2-01).
+  assert.equal(
+    claim(
+      body([user("ask", "x")], { page_info: { has_previous_page: "yes" } }),
+      "ask",
+    ).outcome,
+    "unreadable",
+  );
 });
 
-/** A stubbed page: `window.fetch` answers from `served`, and the file's
- * answers to "data-read" asks are collected. */
-function page({ served = [], hidden = false } = {}) {
+// #488 review P2-01: the answer is the prompt's own, by its exchange id.
+test("the answer must share the prompt's exchange id, and a prompt without one cannot be read", () => {
+  const { claim } = bare();
+  // A final of another exchange in the turn is not the answer; the last of
+  // its own is.
+  const mixed = claim(
+    body([
+      user("ask", "x"),
+      final("mine", "x", "mine"),
+      step("other-step", "y"),
+      final("theirs", "y", "theirs"),
+    ]),
+    "ask",
+  );
+  assert.equal(mixed.final.id, "mine");
+  assert.equal(mixed.exchange, false);
+  assert.equal(mixed.written, true);
+  const none = claim(
+    body([user("ask", "x"), final("theirs", "y", "theirs")]),
+    "ask",
+  );
+  assert.equal(none.final, null);
+  assert.equal(none.written, false);
+  const two = claim(
+    body([
+      user("ask", "x"),
+      final("first", "x", "a"),
+      final("second", "x", "bb"),
+    ]),
+    "ask",
+  );
+  assert.equal(two.final.id, "second");
+  const unnamed = claim(
+    body([{ ...user("ask", "x"), metadata: {} }, final("f", "x", "a")]),
+    "ask",
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(unnamed)), {
+    outcome: "unreadable",
+    missing: ["messages[].metadata.turn_exchange_id"],
+  });
+});
+
+test("a prompt is a message the person sent: an id of another kind is not taken for it", () => {
+  const { claim } = bare();
+  const found = claim(
+    body([user("ask", "x"), final("final", "x", "answer")]),
+    "final",
+  );
+  assert.equal(found.askFound, false);
+  assert.equal(found.prompt, null);
+  assert.equal(found.final, null);
+});
+
+const ASK = "0b1c2d3e-0000-4000-8000-000000000001";
+const KEY = Symbol.for("postpane.data");
+
+/** A stubbed page showing `CONVERSATION`: `window.fetch` answers from
+ * `served`. The file is called as the extension does, by its handle. */
+function page({
+  served = [],
+  hidden = false,
+  path = `/g/g-p-x/c/${CONVERSATION}`,
+} = {}) {
   const calls = [];
-  const answers = [];
   const listeners = [];
   const window = {
-    location: {
-      origin: "https://chatgpt.com",
-      href: `https://chatgpt.com/c/${CONVERSATION}`,
-    },
     fetch: async (input, init) => {
       calls.push({
         url: String(input?.url ?? input),
@@ -202,35 +265,32 @@ function page({ served = [], hidden = false } = {}) {
         text: async () => JSON.stringify(next.body),
       };
     },
-    addEventListener: (name, fn) => name === "message" && listeners.push(fn),
-    postMessage: (data) =>
-      data.postpane === "data-answer" && answers.push(data),
+    addEventListener: (name, fn) => listeners.push([name, fn]),
+    postMessage: () => {
+      throw new Error("nothing goes over the page's messages");
+    },
+  };
+  const location = {
+    origin: "https://chatgpt.com",
+    href: `https://chatgpt.com${path}`,
+    pathname: path,
   };
   const context = {
     window,
-    location: window.location,
+    location,
     document: { visibilityState: hidden ? "hidden" : "visible" },
     Headers,
     URL,
     TextEncoder,
     crypto: globalThis.crypto,
     performance,
+    Date,
   };
   vm.runInNewContext(source, context);
-  const ask = async (conversation = CONVERSATION, promptId = "ask") => {
-    const id = `id-${answers.length}`;
-    for (const fn of listeners)
-      fn({
-        source: window,
-        data: { postpane: "data-read", id, conversation, promptId },
-      });
-    for (let i = 0; i < 50 && !answers.some((a) => a.id === id); i++)
-      await new Promise((resolve) => setImmediate(resolve));
-    return JSON.parse(
-      JSON.stringify(answers.find((a) => a.id === id)?.answer ?? null),
-    );
-  };
-  return { window, calls, answers, listeners, ask, context };
+  const handle = () => window[KEY];
+  const read = async (conversation = CONVERSATION, promptId = ASK) =>
+    JSON.parse(JSON.stringify(await handle().read(conversation, promptId)));
+  return { window, calls, listeners, read, handle, context, location };
 }
 
 const pageHeaders = {
@@ -240,37 +300,39 @@ const pageHeaders = {
   "Content-Type": "application/json",
   "X-Other": "no",
 };
+const own = (window) =>
+  window.fetch(`/backend-api/conversations/${CONVERSATION}?num_turns=10`, {
+    headers: pageHeaders,
+  });
+
+test("the page gets one handle, fixed in place, and no listener", () => {
+  const { window, listeners, handle, context } = page();
+  assert.deepEqual(listeners, []);
+  assert.equal(context.PostPaneData, undefined);
+  const descriptor = Object.getOwnPropertyDescriptor(window, KEY);
+  assert.equal(descriptor.writable, false);
+  assert.equal(descriptor.configurable, false);
+  assert.ok(Object.isFrozen(handle()));
+  assert.deepEqual(Object.keys(handle()).sort(), ["read", "start", "stop"]);
+});
 
 test("nothing is read before the page's own sign-in was heard", async () => {
-  const { ask, calls, context } = page();
-  assert.equal(
-    context.PostPaneData,
-    undefined,
-    "the page gets no global of ours",
-  );
-  assert.deepEqual(await ask(), { outcome: "no-login" });
+  const { read, calls } = page();
+  assert.deepEqual(await read(), { outcome: "no-login" });
   assert.equal(calls.length, 0);
 });
 
 test("a read reuses the sign-in the page sent, asks for two turns, and tells no words and no sign-in", async () => {
   const reply = "the full answer, not to leave the page";
-  const { window, ask, calls, answers } = page({
+  const { window, read, calls } = page({
     hidden: true,
     served: [
       { status: 200, body: {} },
-      {
-        status: 200,
-        body: body([user("ask", "x"), final("final", "x", reply)]),
-      },
+      { status: 200, body: body([user(ASK, "x"), final("final", "x", reply)]) },
     ],
   });
-  // The page's own request: answered as before, its sign-in heard.
-  const own = await window.fetch(
-    `/backend-api/conversations/${CONVERSATION}?num_turns=10`,
-    { headers: pageHeaders },
-  );
-  assert.equal(own.status, 200);
-  const answer = await ask();
+  assert.equal((await own(window)).status, 200);
+  const answer = await read();
   assert.equal(
     calls[1].url,
     `/backend-api/conversations/${CONVERSATION}?num_turns=2&include_has_versions=true`,
@@ -290,7 +352,7 @@ test("a read reuses the sign-in the page sent, asks for two turns, and tells no 
   assert.equal(answer.written, true);
   assert.equal(answer.final.chars, reply.length);
   assert.match(answer.final.sha, /^[0-9a-f]{16}$/);
-  const told = JSON.stringify(answers);
+  const told = JSON.stringify(answer);
   assert.ok(
     !told.includes(reply) &&
       !told.includes("secret-token") &&
@@ -299,11 +361,11 @@ test("a read reuses the sign-in the page sent, asks for two turns, and tells no 
 });
 
 test("sign-in heard on another request of the page serves when the conversation's was not seen", async () => {
-  const { window, ask, calls } = page({
+  const { window, read, calls } = page({
     served: [
       { status: 200, body: {} },
       { status: 200, body: {} },
-      { status: 200, body: body([user("ask", "x")]) },
+      { status: 200, body: body([user(ASK, "x")]) },
     ],
   });
   await window.fetch(
@@ -315,45 +377,71 @@ test("sign-in heard on another request of the page serves when the conversation'
   await window.fetch("https://example.com/backend-api/x", {
     headers: { Authorization: "Bearer elsewhere" },
   });
-  const answer = await ask();
+  const answer = await read();
   assert.equal(answer.outcome, "read");
   assert.equal(answer.login, "other");
+  assert.deepEqual(
+    calls[2].headers.find(([name]) => name === "authorization"),
+    ["authorization", SECRET],
+  );
   // Of another request, only the names the page's own read was seen to carry.
   assert.deepEqual(calls[2].headers.map(([name]) => name).sort(), [
     "authorization",
     "oai-device-id",
     "oai-language",
   ]);
-  assert.deepEqual(
-    calls[2].headers.find(([name]) => name === "authorization"),
-    ["authorization", SECRET],
-  );
+});
+
+// #488 review P1-01: whoever calls the handle, it reads the conversation the
+// page shows and nothing else, and not more often than a prompt needs.
+test("only the conversation the page shows is read, with ids that are ids", async () => {
+  const other = "6affe42f-aeb8-83ec-91b5-928f5f8228aa";
+  const { window, read, calls } = page();
+  await own(window);
+  assert.deepEqual(await read(other), { outcome: "other-conversation" });
+  assert.deepEqual(await read("../../me"), { outcome: "other-conversation" });
+  assert.deepEqual(await read(CONVERSATION, "x&num_turns=999"), {
+    outcome: "other-conversation",
+  });
+  assert.equal(calls.length, 1);
+  const home = page({ path: "/" });
+  await own(home.window);
+  assert.deepEqual(await home.read(), { outcome: "other-conversation" });
+});
+
+test("reads are capped: twelve requests in ten minutes, whoever asks", async () => {
+  const { window, read, calls } = page({
+    served: Array.from({ length: 20 }, () => ({
+      status: 200,
+      body: body([user(ASK, "x")]),
+    })),
+  });
+  await own(window);
+  for (let i = 0; i < 12; i++) assert.equal((await read()).outcome, "read");
+  const limited = await read();
+  assert.equal(limited.outcome, "limited");
+  assert.equal(calls.length, 13);
 });
 
 test("a read that is refused says so and reads nothing more", async () => {
-  const { window, ask, calls } = page({
+  const { window, read, calls } = page({
     served: [
       { status: 200, body: {} },
       { status: 429, body: {} },
     ],
   });
-  await window.fetch(`/backend-api/conversations/${CONVERSATION}`, {
-    headers: pageHeaders,
-  });
-  const answer = await ask();
+  await own(window);
+  const answer = await read();
   assert.equal(answer.outcome, "http");
   assert.equal(answer.status, 429);
   assert.equal(calls.length, 2);
-  // A read that could not be made at all.
   const down = page({ served: [{ status: 200, body: {} }, { throws: true }] });
-  await down.window.fetch(`/backend-api/conversations/${CONVERSATION}`, {
-    headers: pageHeaders,
-  });
-  assert.equal((await down.ask()).outcome, "error");
+  await own(down.window);
+  assert.equal((await down.read()).outcome, "error");
 });
 
 test("a prompt further back than two turns is looked for once more, wider", async () => {
-  const { window, ask, calls } = page({
+  const { window, read, calls } = page({
     served: [
       { status: 200, body: {} },
       {
@@ -364,52 +452,65 @@ test("a prompt further back than two turns is looked for once more, wider", asyn
       },
       {
         status: 200,
-        body: body([user("ask", "x"), final("final", "x", "answer")]),
+        body: body([user(ASK, "x"), final("final", "x", "answer")]),
       },
     ],
   });
-  await window.fetch(`/backend-api/conversations/${CONVERSATION}`, {
-    headers: pageHeaders,
-  });
-  const answer = await ask();
+  await own(window);
+  const answer = await read();
   assert.match(calls[2].url, /num_turns=10&/);
   assert.equal(answer.tries, 2);
   assert.equal(answer.turns, 10);
   assert.equal(answer.askFound, true);
 });
 
-test("an ask from elsewhere, or naming something that is no conversation, is not answered", async () => {
-  const { window, answers, calls, listeners } = page({
-    served: [{ status: 200, body: {} }],
+// #488 review P1-02: switched off, a copy in a page keeps nothing and does
+// nothing; switched on again, it hears again.
+test("stopped, the page gets its fetch back, the sign-in is forgotten and nothing is read", async () => {
+  const { window, read, handle, calls, context } = page({
+    served: [
+      { status: 200, body: {} },
+      { status: 200, body: {} },
+      { status: 200, body: body([user(ASK, "x")]) },
+    ],
   });
-  await window.fetch(`/backend-api/conversations/${CONVERSATION}`, {
-    headers: pageHeaders,
+  const theirs = window.fetch;
+  await own(window);
+  assert.deepEqual(JSON.parse(JSON.stringify(handle().stop())), {
+    stopped: true,
+    restored: true,
   });
-  for (const fn of listeners) {
-    fn({
-      source: {},
-      data: { postpane: "data-read", id: "a", conversation: CONVERSATION },
-    });
-    fn({
-      source: window,
-      data: { postpane: "data-read", id: "b", conversation: "../../me" },
-    });
-    fn({
-      source: window,
-      data: { postpane: "other", id: "c", conversation: CONVERSATION },
-    });
-  }
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(answers.length, 0);
+  assert.notEqual(window.fetch, theirs);
+  assert.deepEqual(await read(), { outcome: "stopped" });
   assert.equal(calls.length, 1);
+  // Put in again (the switch on again): the copy there hears again, and the
+  // sign-in it forgot must be heard anew.
+  vm.runInNewContext(source, context);
+  assert.deepEqual(await read(), { outcome: "no-login" });
+  await own(window);
+  assert.equal((await read()).outcome, "read");
 });
 
-test("put into a page a second time, the file steps aside", () => {
-  const { window, listeners, context } = page();
-  const fetched = window.fetch;
-  vm.runInNewContext(source, context);
-  assert.equal(window.fetch, fetched);
-  assert.equal(listeners.length, 1);
+test("stopped after the page wrapped fetch itself, it only passes requests on", async () => {
+  const { window, read, handle, calls } = page({
+    served: [
+      { status: 200, body: {} },
+      { status: 200, body: {} },
+    ],
+  });
+  const ours = window.fetch;
+  const wrapped = function (...args) {
+    return ours.apply(this, args);
+  };
+  window.fetch = wrapped;
+  assert.deepEqual(JSON.parse(JSON.stringify(handle().stop())), {
+    stopped: true,
+    restored: false,
+  });
+  assert.equal(window.fetch, wrapped);
+  await own(window);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(await read(), { outcome: "stopped" });
 });
 
 test("the page's own requests go through untouched, whatever they are", async () => {
