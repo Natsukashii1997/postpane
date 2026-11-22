@@ -801,7 +801,7 @@ test("an end by PostPane reads as a pass only when the gate let a pass through (
     "审核通过，自动结束接力",
   );
   // A pass on another commit than the one under review is sent back, not
-  // let through (gate.rs `Next::Stale`): ended after a day idle, it is no pass.
+  // let through (host handoff/gate/book.rs `Next::Stale`): ended after a day idle, it is no pass.
   const stale = handoff({
     status: "closed",
     phase: "ended",
@@ -871,7 +871,7 @@ test("a pass sent back unpassed (another commit) still shows the round to come; 
     timeline(h, T + 13 * minute, true).some(
       (row) => row.title === "第 2 轮：ChatGPT 再审核",
     );
-  // Sent back by the gate without a pass (gate.rs `Next::Stale`).
+  // Sent back by the gate without a pass (host handoff/gate/book.rs `Next::Stale`).
   const stale = handoff({
     phase: "returned",
     phaseAt: T + 12 * minute,

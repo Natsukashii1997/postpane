@@ -7,7 +7,7 @@ export { chatgptSession, doerSession, handoffFor } from "./handoff-doer.ts";
 /** The handoff card (relay design 甲, docs/chatgpt-channel.md): a handoff's
  * steps as a timeline, where it stands and what the person may do next. */
 
-/** Reviews one leave of the person's gives, unless set (gate.rs `LIMIT`, #347). */
+/** Reviews one leave of the person's gives, unless set (host handoff/gate/book.rs `LIMIT`, #347). */
 export const LIMIT = 5;
 
 /** Who a timeline row is about: the two sides, or PostPane passing words. */
@@ -41,7 +41,7 @@ export type Action =
 export const live = (handoff: Handoff) =>
   handoff.status === "open" || handoff.status === "opening";
 /** Answers since its rounds last began (#258), but those only mending the
- * last lines of the one before (#347, gate.rs `reviewed`). */
+ * last lines of the one before (#347, host handoff/gate/book.rs `reviewed`). */
 export function reviews(handoff: Handoff): number {
   let count = 0;
   let mending = false;

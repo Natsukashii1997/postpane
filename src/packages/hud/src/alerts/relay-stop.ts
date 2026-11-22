@@ -1,7 +1,7 @@
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 
 /** Ended by PostPane after a day untouched (#368), not by the person: the
- * gate counts such a one at its cap as not settled (guard.rs
+ * gate counts such a one at its cap as not settled (host handoff/gate/book_guard.rs
  * `unsettled_top`), so it still shows 「停」 (#411 L2 P2-02). */
 export function idleEnded(handoff: Handoff): boolean {
   const last = handoff.steps?.at(-1);
@@ -32,7 +32,7 @@ export function thinking(handoff: Handoff): boolean {
 }
 
 /** A review of its kind begun since it stopped, in its session or folder,
- * settles it, as the gate counts (guard.rs `unsettled_top`): a 思维评审
+ * settles it, as the gate counts (host handoff/gate/book_guard.rs `unsettled_top`): a 思维评审
  * settles no engineering review, nor the other way round (#411 L2 P2-02). */
 export function settledSince(
   handoff: Handoff,

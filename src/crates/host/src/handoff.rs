@@ -35,22 +35,35 @@ use std::{
 };
 use tauri::Manager;
 
+#[path = "handoff/sending/desk_asking.rs"]
 mod asking;
+#[path = "handoff/back/desk.rs"]
 mod back;
+#[path = "handoff/answers/desk_belongs.rs"]
 mod belongs;
 pub(crate) mod book;
+#[path = "handoff/answers/desk_driver.rs"]
 mod driver;
+#[path = "handoff/gate/desk.rs"]
 mod gate;
+#[path = "handoff/gate/desk_guard.rs"]
 mod guard;
+#[path = "handoff/back/desk_held.rs"]
 mod held;
+#[path = "handoff/sending/desk_lines.rs"]
 mod lines;
+#[path = "handoff/notice/desk.rs"]
 mod notice;
+#[path = "handoff/answers/desk_reread.rs"]
 mod reread;
 pub mod settings;
+#[path = "handoff/back/desk_texts.rs"]
 mod texts;
+#[path = "handoff/answers/desk_undrawn.rs"]
 mod undrawn;
 use back::back_text;
 use lines::AppLines;
+#[path = "handoff/back/desk_wake.rs"]
 mod wake;
 use texts::*;
 use wake::{wake_failed, woke_stopped};

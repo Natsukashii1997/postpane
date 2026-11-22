@@ -8,22 +8,35 @@ use agent_hud_runtime::chatgpt::files::{config_path, read_small, set_config};
 use agent_hud_runtime::chatgpt::{folder, write_private};
 use agent_hud_runtime::l10n;
 use serde::{Deserialize, Serialize};
+#[path = "answers/book_asked.rs"]
 mod asked;
+#[path = "back/book_held.rs"]
 mod held;
+#[path = "back/book_idle.rs"]
 mod idle;
+#[path = "back/book_wake.rs"]
 mod wake;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+#[path = "gate/book_chain.rs"]
 mod chain;
+#[path = "sending/book_doer.rs"]
 mod doer;
+#[path = "gate/book.rs"]
 mod gate;
+#[path = "gate/book_io.rs"]
 mod gate_io;
+#[path = "gate/book_guard.rs"]
 mod guard;
+#[path = "gate/book_leave.rs"]
 mod leave;
+#[path = "notice/book.rs"]
 mod notice;
+#[path = "gate/book_pull_request.rs"]
 mod pull_request;
+#[path = "sending/book_unsure.rs"]
 mod unsure;
 #[cfg(test)]
 pub use chain::chain_id;
@@ -488,7 +501,7 @@ impl Handoff {
     /// What the newest answer comes to, on or off: what the auto round trip
     /// does with it, and what words back to Claude say of it, by hand too
     /// (#316: the same words either way, so they go once). The review gate
-    /// decides (#347, `gate.rs`).
+    /// decides (#347, `gate/book.rs`).
     pub fn outcome(&self) -> Next {
         self.decide()
     }
@@ -1566,7 +1579,6 @@ pub fn project_url(text: &str) -> Result<Option<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    mod states;
 
     #[test]
     fn a_session_and_a_conversation_belong_to_one_live_handoff() {

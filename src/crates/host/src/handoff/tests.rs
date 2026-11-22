@@ -3,6 +3,7 @@
 //! The tests themselves are in `tests/`, a file to a subject.
 mod asked_id;
 mod background_run;
+mod book_states;
 mod codex;
 mod driver;
 mod held_back;
