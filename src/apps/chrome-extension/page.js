@@ -390,8 +390,10 @@
    * the conversation, and PostPane lets them go again (#466). */
   const unsent = (reason) => ({ ok: false, reason, pressed: false });
 
-  /** Thrown by a wait that ends out of the time a sending has. */
+  /** Thrown by a wait that ends out of the time a sending has; and when the
+   * page no longer shows the conversation the words are for. */
   const LATE = Symbol("late");
+  const ELSEWHERE = Symbol("elsewhere");
 
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
    * not ok, `pressed` says whether send was pressed (then they may have
@@ -403,10 +405,16 @@
    * touched again (#466 review P1-02): `timely` ends the try out of time,
    * looked to when asked, after each wait, and right before each thing
    * done to the box. The moment the time is up is out of it, as the extension
-   * counts (#466 review P2-03). */
-  async function submit(doc, text, until = Infinity) {
+   * counts (#466 review P2-03). With `shows`, whether the page still shows
+   * the conversation the words are for, the try ends the same way once it
+   * does not (#507 review P1-03): the page may be moved to another
+   * conversation while the words go in, and they are not sent into that
+   * one. What is in the box by then is left: it is the other conversation's
+   * box now. */
+  async function submit(doc, text, until = Infinity, shows = () => true) {
     const timely = () => {
       if (Date.now() >= until) throw LATE;
+      if (!shows()) throw ELSEWHERE;
     };
     const wait = async (check, ms) => {
       const got = await waitFor(
@@ -420,8 +428,9 @@
       timely();
       return await press(doc, text, wait, timely);
     } catch (error) {
-      if (error !== LATE) throw error;
-      return unsent("timeout");
+      if (error === LATE) return unsent("timeout");
+      if (error === ELSEWHERE) return unsent("other-conversation");
+      throw error;
     }
   }
 
