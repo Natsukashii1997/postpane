@@ -219,4 +219,5 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 发生了什么：#486 的日志落盘只有真应用里才验得了（标准错误指向哪、panic 写没写出来），又不想先覆盖常浩正在用的那份。第 3 步只写了「打包 → install.sh 装机」，没有「先隔离验」这一步；照直觉只换 `AGENTHUD_DATA_DIR` 会让隔离实例把正在用的 Claude Code 插件改装到临时目录（L-64）。
 - 建议：SKILL.md 第 3 步在「装」之前加一条可选步骤：行为只有真应用里才验得了、又不想先动实机时，用 `env -i HOME=<证据目录下的空文件夹> PATH=/usr/bin:/bin:/usr/sbin:/sbin <包里的主程序>` 另起一份；启动前后比 `~/.claude/plugins/installed_plugins.json` 的校验值；只按记下的进程号停。写明它只验得了不依赖真实数据和登记的行为。
 - 证据：#486 这一轮；L-64；`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/`。
-- 状态：待批
+- 批准：2026-11-22 常浩经侧栏回「全按推荐」（推荐是「批」），写进 SKILL.md 第 3 步第 3 项下。
+- 状态：已采纳（本 PR，#515）
