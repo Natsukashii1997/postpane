@@ -56,6 +56,9 @@ function load(
     hung = new Set(),
     shows = {},
     onCreate = null,
+    // Waits of these lengths do not end, though `now`: what is waited for
+    // comes first, or never.
+    parked = [],
   } = {},
 ) {
   const listeners = {};
@@ -233,7 +236,7 @@ function load(
     setTimeout: (fn, ms) => {
       waits.push(ms);
       if (held && ms === 20000) return held.push(fn);
-      if (now) setImmediate(fn);
+      if (now && !parked.includes(ms)) setImmediate(fn);
       return 0;
     },
     clearTimeout() {},
@@ -285,12 +288,18 @@ test("reading again asks the conversation's tab, putting a script in first if it
 
 // #507: 2026-11-21 a discarded tab was read 128 times, two minutes apart,
 // each `unreachable`: it takes no script, and nothing loaded it again.
-test("reading again loads a tab again that takes no script", async () => {
+test("reading again loads a tab again that Chrome unloaded", async () => {
   const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
   const asked = [];
   const posted = [];
   const reloaded = [];
-  const tabs = [{ id: 2, url: `https://chatgpt.com/c/${conversation}` }];
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${conversation}`,
+      status: "unloaded",
+    },
+  ];
   const page = { type: "page", conversation, hidden: true, streaming: false };
   const { listeners } = load(tabs, {
     asked,
@@ -300,6 +309,7 @@ test("reading again loads a tab again that takes no script", async () => {
     unreachable: new Set([2]),
     watched: [conversation],
     answers: [{ ok: true, told: true, loaded: true }],
+    now: true,
     onReload: (tabId) => listeners.message(page, { tab: { id: tabId } }),
   });
   await new Promise((resolve) => setImmediate(resolve));
@@ -699,6 +709,56 @@ test("an answer not drawn in a background tab is read with the tab in front, the
 // in front for the read.
 const readsOf = (posted) => posted.filter((m) => m.type === "reread");
 
+// Review P2-04: what Chrome says of a tab is not waited on without end.
+test("Chrome not saying how a tab stands, or not putting it in front, does not hold a read", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const tabs = [
+    { id: 2, url: `https://chatgpt.com/c/${conversation}`, windowId: 1 },
+    { id: 3, url: "https://chatgpt.com/", windowId: 1, active: true },
+  ];
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const read = async (answer, rig) => {
+    tabs[0].active = false;
+    tabs[1].active = true;
+    const posted = [];
+    const fronted = [];
+    const { listeners, chrome } = load(tabs, {
+      posted,
+      fronted,
+      watched: [conversation],
+      answers: Array(5).fill(answer),
+      now: true,
+    });
+    await tick();
+    listeners.message(page, { tab: { id: 2 } });
+    rig(chrome);
+    await listeners.port({ type: "reread", conversation });
+    return { found: posted.find((m) => m.type === "reread"), fronted };
+  };
+  const told = { ok: true, told: true, loaded: true };
+  const stood = await read(told, (chrome) => {
+    chrome.tabs.get = never;
+    chrome.windows.get = never;
+  });
+  assert.equal(stood.found.outcome, "told");
+  assert.equal(stood.found.active, false);
+  // Not known to be in front, it is not read as if it were.
+  const undrawn = { ok: true, undrawn: true, loaded: true };
+  const unasked = await read(undrawn, (chrome) => (chrome.tabs.query = never));
+  assert.equal(unasked.found.outcome, "undrawn");
+  assert.deepEqual(unasked.fronted, [], "no tab is put in front");
+  // Asked to the front with no word back: it may come late, so the tab
+  // that was in front is put back all the same.
+  const late = await read(undrawn, (chrome) => {
+    const { update } = chrome.tabs;
+    chrome.tabs.update = (tabId, to) =>
+      tabId === 2 ? never() : update(tabId, to);
+  });
+  assert.equal(late.found.outcome, "undrawn");
+  assert.equal(late.found.fronted, true);
+  assert.deepEqual(late.fronted, [3]);
+});
+
 test("reading again tells PostPane what it found and how the tab stood", async () => {
   const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
   const tabs = [
@@ -804,7 +864,8 @@ test("a read again says whether it was told, in front or not, still written, or 
     assert.equal(read.minimized, false);
   }
   // A tab that cannot be reached even with a script put in (the stub
-  // refuses tab 1 one).
+  // refuses tab 1 one), loaded as Chrome has it: left as it is, and the one
+  // made for the conversation does not report here.
   const posted = [];
   const { listeners } = load(
     [
@@ -819,7 +880,7 @@ test("a read again says whether it was told, in front or not, still written, or 
   );
   await new Promise((resolve) => setImmediate(resolve));
   await listeners.port({ type: "reread", conversation });
-  assert.equal(readsOf(posted)[0]?.outcome, "unreachable");
+  assert.equal(readsOf(posted)[0]?.outcome, "unopened");
   // One not on the watch list says nothing.
   const none = [];
   const other = load(tabs(), {
@@ -1132,11 +1193,15 @@ test("a tab that says nothing, and takes no script in time, is left as it is: th
   }
 });
 
-test("a tab that takes no script at all, though not discarded, runs no page of the conversation: it is loaded again", async () => {
+// As Chromium 156 has a tab whose page crashed (2026-11-22,
+// `real-chromium/probe-crashed.log`): at its address still, not discarded,
+// `status: "unloaded"`, and it takes no script.
+test("a tab whose page crashed, unloaded as Chrome has it, runs no page of the conversation: it is loaded again", async () => {
   const reloaded = [];
   const made = [];
   const sent = await sending([], {
     refuses: true,
+    tab: { status: "unloaded" },
     reloads: true,
     reloaded,
     made,
@@ -1144,6 +1209,182 @@ test("a tab that takes no script at all, though not discarded, runs no page of t
   assert.deepEqual(reloaded, [7]);
   assert.deepEqual(made, []);
   assert.equal(sent.ok, true);
+});
+
+// #507 review round 3, P1-01: Chrome refuses a script as the tab's document
+// gives way to another (one prerendered, one back from its cache), and that
+// one is alive. A script refused is not "no page": only a tab Chrome itself
+// says has nothing loaded is loaded again.
+test("a tab that refuses a script, loaded as Chrome has it, is not loaded again", async () => {
+  for (const status of ["complete", "loading", undefined]) {
+    const reloaded = [];
+    const made = [];
+    const sent = await sending([], {
+      refuses: true,
+      tab: { status },
+      reloads: true,
+      makes: true,
+      reloaded,
+      made,
+    });
+    assert.deepEqual(reloaded, [], String(status));
+    assert.equal(made.length, 1, "the words go to a tab made for them");
+    assert.equal(sent.ok, true, String(status));
+  }
+});
+
+test("a tab Chrome unloaded since it was first looked at is loaded again", async () => {
+  // Its page crashes, or Chrome discards it, as the script is put in.
+  for (const gone of [{ status: "unloaded" }, { discarded: true }]) {
+    const unloading = (chrome) => {
+      const { executeScript } = chrome.scripting;
+      chrome.scripting.executeScript = async (details) => {
+        if (details.files) Object.assign(await chrome.tabs.get(7), gone);
+        return executeScript(details);
+      };
+    };
+    const reloaded = [];
+    const made = [];
+    const sent = await sending([], {
+      refuses: true,
+      tab: { status: "complete" },
+      rig: unloading,
+      reloads: true,
+      reloaded,
+      made,
+    });
+    assert.deepEqual([reloaded, made], [[7], []], JSON.stringify(gone));
+    assert.equal(sent.ok, true);
+  }
+});
+
+// Review P2-02: out of time, the one who asked for a tab goes on without
+// it, and Chrome may make it all the same. Till Chrome says, it is being
+// made: another looking for a tab meanwhile makes none.
+test("a tab asked of Chrome and not made in time is still being made: no other is asked for", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const posted = [];
+  const tabs = [];
+  const clock = { now: 1_000_000 };
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const { listeners, chrome } = load(tabs, {
+    posted,
+    clock,
+    watched: [conversation],
+    answers: [{ ok: true, told: true, loaded: true }],
+    now: true,
+  });
+  let creates = 0;
+  let comes;
+  chrome.tabs.create = () => {
+    creates++;
+    return new Promise((resolve) => (comes = resolve));
+  };
+  // Time goes by once Chrome was asked `patient` times which tabs are open.
+  const { query } = chrome.tabs;
+  let patient = Infinity;
+  chrome.tabs.query = async (asked) => {
+    if (--patient < 0) clock.now += 50_000;
+    return query(asked);
+  };
+  await tick();
+  await listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation,
+    text: "x",
+  });
+  assert.equal(creates, 1);
+  assert.deepEqual(
+    posted.find((m) => m.type === "sent"),
+    { type: "sent", requestId: "r1", ...unsent("timeout", false) },
+  );
+  // A read with time of its own waits for that tab, and makes none: it has
+  // time to look for a tab, and to ask for one, before its own runs out.
+  patient = 2;
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(creates, 1, "no second tab asked for");
+  assert.equal(posted.find((m) => m.type === "reread").outcome, "unreachable");
+  // Chrome made it after all: it is the conversation's tab, found and read.
+  patient = Infinity;
+  const tab = { id: 99, url: `https://chatgpt.com/c/${conversation}` };
+  tabs.push(tab);
+  comes(tab);
+  await tick();
+  listeners.message(page, { tab });
+  posted.length = 0;
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(creates, 1);
+  assert.equal(posted.find((m) => m.type === "reread").outcome, "told");
+});
+
+// Review P2-02, as Chrome makes a tab: it answers with a tab that has no
+// address yet, so it is not found at the conversation's. One still waiting
+// for it then waits on, till its page reports, and asks for no other.
+test("a tab Chrome makes late has no address yet: the one waiting for it asks for no other", async () => {
+  const conversation = "6aff2027-bec4-83e8-b12d-2b531c27937f";
+  const posted = [];
+  const tabs = [];
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const { listeners, chrome } = load(tabs, {
+    posted,
+    clock: { now: 1_000_000 },
+    watched: [conversation],
+    answers: [{ ok: true, told: true, loaded: true }],
+    now: true,
+    // The wait for a tab made late to show its conversation.
+    parked: [15000],
+  });
+  let creates = 0;
+  let comes;
+  chrome.tabs.create = () => {
+    creates++;
+    return new Promise((resolve) => (comes = resolve));
+  };
+  await tick();
+  await listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation,
+    text: "x",
+  });
+  assert.equal(posted.find((m) => m.type === "sent").reason, "timeout");
+  // A read looks for a tab meanwhile, with time of its own.
+  const reading = listeners.port({ type: "reread", conversation });
+  for (let ticks = 0; ticks < 5; ticks++) await tick();
+  // Chrome answers: the tab is made, its address not there yet.
+  const tab = { id: 99, url: "" };
+  tabs.push(tab);
+  comes(tab);
+  for (let ticks = 0; ticks < 20; ticks++) await tick();
+  assert.equal(creates, 1, "no second tab asked for while it loads");
+  // Its page reports: it is the conversation's tab, and is read.
+  tab.url = `https://chatgpt.com/c/${conversation}`;
+  listeners.message(page, { tab });
+  await reading;
+  assert.equal(creates, 1);
+  assert.equal(posted.find((m) => m.type === "reread").outcome, "told");
+});
+
+// Review P2-02: Chrome not saying which tabs are open is not none open.
+test("no tab is made when Chrome does not say which are open", async () => {
+  const silent = (chrome) =>
+    (chrome.tabs.query = async () => {
+      throw new Error("Tabs cannot be queried right now.");
+    });
+  const made = [];
+  const sent = await sending([], {
+    tab: false,
+    rig: silent,
+    makes: true,
+    made,
+  });
+  assert.deepEqual(made, []);
+  assert.deepEqual(sent, {
+    type: "sent",
+    requestId: "r1",
+    ...unsent("timeout", false),
+  });
 });
 
 test("no third tab is made for a conversation two tabs show already", async () => {

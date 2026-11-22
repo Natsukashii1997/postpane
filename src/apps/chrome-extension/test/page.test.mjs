@@ -331,6 +331,11 @@ test("moved to another conversation before send is pressed, it is not pressed", 
   const pastes = await fresh.evaluate(() => window.pastes.length);
   assert.equal(pastes, 1, `pasted ${pastes} times`);
   assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // The piece that went in is taken out again (review P2-03): it would sit
+  // in the other conversation's box for the person to send by hand.
+  const boxOf = (page) =>
+    page.evaluate(() => document.querySelector(".ProseMirror").textContent);
+  assert.equal(await boxOf(fresh), "");
   // Not the conversation's from the start: the box is not touched.
   const never = await composer();
   const untouched = await never.evaluate(
@@ -357,9 +362,85 @@ test("moved to another conversation before send is pressed, it is not pressed", 
     pressed: false,
   });
   assert.equal(await last.evaluate(() => window.sent), undefined);
+  assert.equal(await boxOf(last), "", "all of them in: taken out again");
+  // What the box holds by then is not only these words: the person wrote
+  // on, or it is the other conversation's draft. Left, and said so.
+  const written = await composer();
+  const kept = await written.evaluate((text) => {
+    let shows = true;
+    const box = document.querySelector(".ProseMirror");
+    // The first piece in (the box's own listener ran first), the person
+    // writes in the box, and the page shows another conversation.
+    const moved = () => {
+      box.prepend("我自己写的：");
+      shows = false;
+    };
+    document.addEventListener("paste", moved, { once: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, text);
+  assert.deepEqual(kept, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+    left: true,
+  });
+  assert.match(await boxOf(written), /^我自己写的：/);
+  // Moved before anything of these went in: what the box holds is the other
+  // conversation's own draft, not touched and not said to be left by these.
+  const drafted = await composer({ draft: "另一个会话的草稿" });
+  const own = await drafted.evaluate((text) => {
+    let asked = 0;
+    const shows = () => ++asked < 2;
+    return PostPanePage.submit(document, text, Date.now() + 20000, shows);
+  }, text);
+  assert.deepEqual(own, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  assert.equal(await boxOf(drafted), "另一个会话的草稿");
+  // Out of time and moved at once: told as out of time, and the piece that
+  // went in is taken out of the other conversation's box all the same.
+  const both = await composer();
+  const lateToo = await both.evaluate((text) => {
+    const until = Date.now() + 20000;
+    let shows = true;
+    const moved = () => {
+      shows = false;
+      Date.now = () => until;
+    };
+    document.addEventListener("paste", moved, { once: true });
+    return PostPanePage.submit(document, text, until, () => shows);
+  }, text);
+  assert.deepEqual(lateToo, { ok: false, reason: "timeout", pressed: false });
+  assert.equal(await boxOf(both), "");
   await fresh.close();
   await never.close();
   await last.close();
+  await written.close();
+  await drafted.close();
+  await both.close();
+});
+
+// #507 review P1-04: a page just loaded may not have drawn yet that an
+// answer is being written (the person's own prompt, in the tab beside it).
+test("an answer begun while the words went in: send is not pressed", async () => {
+  const fresh = await composer();
+  const text = "P1-04 专项复核";
+  const busy = await fresh.evaluate((text) => {
+    const box = document.querySelector(".ProseMirror");
+    new MutationObserver(() => {
+      if (!box.textContent.includes(text)) return;
+      if (document.querySelector("[data-testid=stop-button]")) return;
+      const stop = document.createElement("button");
+      stop.dataset.testid = "stop-button";
+      document.querySelector("main").append(stop);
+    }).observe(box, { childList: true, subtree: true, characterData: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000);
+  }, text);
+  assert.deepEqual(busy, { ok: false, reason: "busy", pressed: false });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
 });
 
 test("out of time between pieces, no more is put in the box", async () => {

@@ -649,5 +649,6 @@
   - 这类测试里顶替 chatgpt.com 不能用 Playwright 的 `context.route`：插件自己用 `chrome.tabs.create` 开的标签页，第一次加载发生在路由生效之前，会真的连到 chatgpt.com。改用本机 HTTPS 服务器加 `--host-resolver-rules=MAP * 127.0.0.1:<端口>`、`--no-proxy-server`（本机有系统代理时不加会被代理接走）、`--ignore-certificate-errors`。
   - 要用一个缓存字段做判断之前，先搜它在哪些时刻被写。存了没人读的字段删掉，不留着等人误用。
   - 无头 Chromium 里造不出真冻结：CDP 的 `Page.setWebLifecycleState` 和 `chrome://discards` 的 Freeze 都没让 `tab.frozen` 变真。冻结相关的结论只能标「未实测」，规则写成不依赖它的具体表现。
+  - 判断「标签页里还有没有活页面」用 Chrome 自己的说法，不从报错反推（#507 第 3 轮复审 P1-01）。实测 Chromium 156：页面崩溃后 `tabs.get` 给 `status: "unloaded"`、网址还在、`discarded: false`；停在 Chrome 错误页的标签页不把网址告诉插件；重载途中注入脚本不会被拒，会等新文档。「注入被拒」只说明这一刻注不进去，不能当成可以重载的依据：审查指出预渲染页面顶上来、从缓存恢复时也会被拒（这两种没实测）（`real-chromium/probe-crashed.log`、`probe-error-page.log`）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/real-chromium/`（`probe-discard.log` 回收前后的编号和各接口返回，`probe-freeze.log` 两种冻结办法都没生效，`chromium-test.log` 四条真实 Chromium 测试）。
 - 升级：〔机检〕已升级（2026-11-22，#507）：加了 `chromium.test.mjs`，随 `pnpm test` 跑；其中第一条断言「回收后编号会换」，Chrome 改了这个行为会在这里先红。可提议提升为全局坑（浏览器插件项目都适用），等常浩批。

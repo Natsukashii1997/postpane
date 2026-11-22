@@ -21,6 +21,7 @@ mod told;
 mod undrawn;
 mod unsure;
 mod words_back;
+mod writing;
 
 use super::notice::{not_told, told as told_back, told_queued};
 use super::wake::{wake_arguments, woke_without_handover};

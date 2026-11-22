@@ -111,6 +111,15 @@ pub(super) fn still_waiting() -> String {
         "This handoff's review still waits on ChatGPT (or was never known to have gone in); nothing was sent. Send once the answer is in; the same words again are not sent twice.",
     )
 }
+/// Other words while an answer is being written in the conversation that
+/// is not this handoff's review (#507 review P1-04).
+pub(super) fn writing_other() -> String {
+    let minutes = book_file::REPLY_WAIT_MS / 60_000;
+    l10n::text(
+        &format!("ChatGPT 正在这个会话里写另一个回答（不是这张接力送的，比如常浩自己在会话里发了话），没有发出。驿窗已让插件重读这个会话：页面说没在写就放行，过一两分钟原样重送；确实在写，等它写完再送。开始后 {minutes} 分钟没听到写完也不再拦。"),
+        &format!("ChatGPT is writing another answer in this conversation (not to this handoff's words: the person may have asked something there); nothing was sent. PostPane has the conversation read again: if its page is not writing, the same words go in a minute or two; if it is, send once it is written. Not heard to end {minutes} minutes after it began, it holds nothing back."),
+    )
+}
 /// Why the round trip stopped: words sent and never known to have gone in
 /// (L3 P1-10).
 pub(super) fn send_unconfirmed() -> String {

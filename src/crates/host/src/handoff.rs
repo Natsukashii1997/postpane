@@ -861,10 +861,8 @@ impl Desk {
                 repeated: true,
             });
         }
-        // Its review still with ChatGPT: other words would take its answer.
-        if self.lock().get(&handoff.id).is_some_and(Handoff::in_flight) {
-            return Err(guard::still_waiting());
-        }
+        // Its review with ChatGPT still, or another answer being written.
+        self.unheld(lines, &handoff.id, conversation, now)?;
         // Evidence a 思维评审 paused for (#209): it goes on by itself again.
         let evidence = self
             .lock()
@@ -1073,7 +1071,9 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
-            (Some("turn"), Some("start" | "complete")) => {
+            (Some("turn"), Some(phase @ ("start" | "complete"))) => {
+                self.lock()
+                    .heard_writing(conversation, phase == "start", now);
                 // Held while deciding and taking, so `caught_up` and this
                 // keep the turns' order.
                 let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
