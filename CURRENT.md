@@ -78,6 +78,7 @@
   - `node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`。
   - 第 5 轮返修后（`0d64294`）三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1127 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 165`（含真实 Chromium 6 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r6.log`、`test-r6.log`、`rules-r6.log`）。
   - 第 6 轮返修后（`a7eb0c4`）三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1127 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 166`（含真实 Chromium 6 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r7.log`、`test-r7.log`、`rules-r7.log`）。第 7 轮没有送：常浩授权的是「再审 1 轮」，已用在第 6 轮，等他再定。
+  - 第 7 轮返修后（`5c1c7a9`）三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1127 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 166`（含真实 Chromium 6 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r8.log`、`test-r8.log`、`rules-r8.log`）。
   - 日志在 `~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/`。
 - 验证：只有测试（插件在沙盒里用替身的扩展接口跑，页面脚本在无头浏览器里跑），属于替身通过；未在真实环境验证：真实 Chrome 里标签页被回收后发送、重读能不能自己恢复，要装机并重新加载插件 0.2.7 后实测。
 - 截图：无界面改动，无。
