@@ -2,6 +2,32 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 跳回会话失败：提示改中文，失败原因记进日志（#517）（2026-11-23，Claude，常浩看排查后回「补上」；已提交，PR 见描述，已装机，冒烟因锁屏未截到侧栏）
+
+- 时间：开工 `2026-11-23 00:06`（`date '+%F %H:%M'` 记录）。来由：常浩截图里提问卡点 ↗ 后出现英文红字「The native client could not open this session」，4 秒就消失；本机按同样方式调 `open` 6 次都成功，`postpane.log` 里什么都没有，失败原因查不出（#517）。
+- 改变的行为：跳回会话失败时，侧栏那行字由英文改成随语言设置的「没能在对应的应用里打开这个会话，过几秒再试一次」；显示会话记录失败的那句中文环境下改为「没能显示这个会话的记录文件」。失败时 `postpane.log` 多一行「A session's link did not open: …」或「The transcript could not be shown: …」，写明没起来 / 超过 3 秒被结束 / 返回码 / 等不到子进程（Windows 记 ShellExecuteW 返回值）。跳回本身（3 秒时限、4 秒后可重试）不变。
+- 你要求的：
+  - `platform/src/os/mod.rs`：新 `could_not_open_session`、`could_not_reveal_transcript`，记日志并返回中英文提示，三个平台共用。
+  - `platform/src/os/unix/mod.rs`：脚本调用拆出 `run()`，按失败类型返回 `Failure`；`spawn_script` 返回原因；`inspect` 对外报错原文不变；新 `open_url`、`reveal`；4 条单测（返回码、超时、成功、inspect 原文不变）。
+  - `platform/src/os/windows/mod.rs`：打开失败记 ShellExecuteW 返回值，显示记录失败记启动错误，提示走共用函数。
+- 我顺手改的：
+  - `platform/src/os/macos/mod.rs`、`linux/mod.rs`：两家各写一遍的「调脚本、失败换提示」合进 `unix::open_url` / `unix::reveal`，macos/mod.rs 变短，`file-size-baseline.json` 收紧（337 → 333）。
+  - 「Could not reveal transcript」同属没翻译的提示，一并改中文、记原因（行为变化已列在上面）。
+  - `docs/LESSONS.md`：L-71。
+- 测试：
+  - 新测试先红后绿：红为编译失败 `cannot find function run`，绿 `4 passed; 0 failed`；输出在 `evidence/2026-11-23-517-open-reason/red.txt`。
+  - 变基到 `2429481`（含 #508）后：`pnpm run check` 退出 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1133 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。输出在同目录 `check3.txt`、`test3.txt`、`node3.txt`。
+  - Windows 代码没在 Windows 上编译过（本机只编 macOS 目标）。
+- 验证：替身通过：单测覆盖返回码、超时两种失败原因的写法。真实环境未验：要等一次真的跳回失败，才看得到中文提示和日志那一行；正常跳回不受影响。
+- 截图：无（锁屏，装机脚本没截到侧栏）。
+- 发布与回读：`install.sh 517-open-reason`：产物 `9e7bacbba8f4` / 已装 `9e7bacbba8f4`，签名证书 `b773068e`；冒烟没过，原因是屏幕锁着（`CGSSessionScreenIsLocked = True`），驿窗进程 58861 在跑、`postpane.log` 01:28:20 有启动行。装的包含 #508。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-23-517-open-reason/PostPane-566bda76888b.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 2026-11-22 那次失败的真正原因仍不知道；下次出现先 `grep "link did not open" postpane.log`。
+  - 装后日志：「The ChatGPT extension connected as 0.2.6; this app was built with 0.2.7」：#508 升了插件版本，Chrome 里的 ChatGPT 插件要重新加载。
+  - 截图里黄字那条（会话进程被 Claude 停了，答案送不进去）是正常提醒，没改。
+- 本轮新坑：L-71。
+- skill 进化：无。
+
 ## 网页进程退出时记进日志再重载（#512）（2026-11-22，Claude，常浩经侧栏选「只加记录」；已提交，PR 见描述，已装机回读通过）
 
 - 时间：开工 `2026-11-22 22:38`（`date '+%F %H:%M'` 记录）。来由：22:10 侧栏整窗空白，重启驿窗才恢复；查到 22:09 侧栏网页自动重载过却没画出来，驿窗什么都没记，原因查不出（#512）。
