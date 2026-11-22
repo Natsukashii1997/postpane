@@ -64,7 +64,7 @@
 - 本轮新坑：无（L-47 复发，补在原条目）。
 - skill 进化：无。
 
-## 接力：送达未确认之后驿窗自己去会话里找，不再卡死（#509，#507 的批 B1）（2026-11-22，Claude，常浩看改动确认 1 后经 agent-hud 插件回「两条都改」；已提交、PR #510、未送审、未装机）
+## 接力：送达未确认之后驿窗自己去会话里找，不再卡死（#509，#507 的批 B1）（2026-11-22，Claude，常浩看改动确认 1 后经 agent-hud 插件回「两条都改」；已提交、PR #510、#508 合并后跟上 main、已送 L3 审查、未装机）
 
 - 时间：开工 `2026-11-22 12:52`（`date '+%F %H:%M'` 记录）。来由：送审发出后没等到确认（送达未确认）是死胡同：自动往返停下、这张接力不再收别的话、同一段话重送回「刚才已经送到」，之后没有任何东西去查。实机 `h1a1f80d704602`、`h1a1fd0571bd03` 卡了一天。本分支接在 #508（`f19e091`）后面，PR 连带 #508 的改动，#508 先合并后只剩自己的。
 - 改变的行为（已定内容，改动确认 1，已登记 DECIDED.md）：
@@ -87,6 +87,7 @@
   - `pnpm test`：「全量测试汇总：6 套，失败 0 套」；Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 132`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
   - `node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`。
   - 日志在 `~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`。
+- 跟上 main 并送审（2026-11-23）：#508 已 squash 合并（`2429481`）。直接合 main 会因为 squash 认不出共同历史、冲突 11 个文件；main 的内容和 #508 分支最后的 `84d0ab7` 完全相同（树对象一致），所以先合 `84d0ab7`（只有本文件一处冲突：保留 #509 一节，#507 一节用新标题），再 `git merge -s ours origin/main` 记成已合入。和 main 的差异只剩 #510 自己的 24 个文件。三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1134 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 176`（含真实 Chromium），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`evidence/2026-11-22-509-unsure-resolve/check-l3.log`、`test-l3.log`、`rules-l3.log`）。L3 送审说明 `brief-l3.md`（`brief-l3-c4f9e0f.md` 是合并前那版）。
 - 验证：只有测试，属于替身通过。未在真实环境验证：真实 chatgpt.com 页面重载后最新一条提问能不能读到请求号、两张卡死的接力装机后会不会自己查清，要装机并重新加载插件 0.2.8 后看。
 - 截图：无界面改动，无。
 - 发布与回读：未装机。
