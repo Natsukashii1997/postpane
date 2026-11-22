@@ -527,3 +527,11 @@
 - 正确做法：改了任何 `Cargo.toml` 的依赖，提交前 `git status --short` 看一眼根目录，`Cargo.lock` 一起提交；推送前在干净副本上跑 `cargo metadata --locked --format-version 1 >/dev/null` 确认锁文件是新的。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-21-7a-move-book/locked-before.txt`（修前 `--locked` 的报错），修后同一命令退出码 0。
 - 升级：〔提醒〕未升级；再犯一次就加进 `pnpm run check`（跑一次 `cargo metadata --locked`）。
+
+## L-67 窗口一片空白，先别断定「网页进程死了没重载」：Tauri 默认会自动重载，查进程归属要看它跟不跟驿窗一起退出（2026-11-22）
+
+- 现象：侧栏窗口还在屏幕上，截图却全透明，设置窗口正常（#512）。先按「网页进程退出、驿窗没接重载回调」下结论，提出补回调；准备动手时才读到 `tauri-runtime-wry` 在没设回调时默认就会重载，22:09 那次侧栏也确实重载过（新起了网页进程 11622），只是重载后没画出来。中途按启动时间挑「驿窗的」WebKit 进程去杀，挑中的是不是驿窗的，一开始也说不准。
+- 根因：只看了项目代码里有没有处理，没看框架的默认行为；WebKit 的辅助进程父进程都是 launchd，`ps`、`sample` 看不出属于哪个应用，读环境变量又会泄露令牌（G-42）。重载后为什么没画出来仍不知道（推断之一：Tauri 默认重载用 `try_borrow` 借窗口表，借不到只记 debug 日志不重载）。
+- 正确做法：窗口空白时，先查框架对这件事的默认行为（Tauri 2 看 `tauri-runtime-wry` 的 `with_on_web_content_process_terminate_handler` 一段），再下「没处理」的结论。认 WebKit 进程归属：退出驿窗，跟着消失的那些才是驿窗的；或在重启后的驿窗上杀进程，看是不是同一秒新起一个替身。#512 起，网页进程退出、重载发出或失败都会记进 `postpane.log`，下次先 `grep "Web content" postpane.log`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-侧栏不显示/`（空白截图、主进程与网页进程采样、`repro-*`、`repro2-*`、`gpu-*` 三组杀进程后的截图）。
+- 升级：〔提醒〕未升级；再出现空白时先看日志里这几行，定位到原因再决定要不要做整窗重建。
