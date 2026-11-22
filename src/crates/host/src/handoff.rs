@@ -1071,9 +1071,8 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
-            (Some("turn"), Some(phase @ ("start" | "complete"))) => {
-                self.lock()
-                    .heard_writing(conversation, phase == "start", now);
+            (Some("turn"), Some("start" | "complete")) => {
+                self.lock().heard_writing(conversation, message, now);
                 // Held while deciding and taking, so `caught_up` and this
                 // keep the turns' order.
                 let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
@@ -1385,9 +1384,11 @@ impl Desk {
             (Next::Pass | Next::Close, _) => {
                 book.note(id, Notice::Passed, now);
                 let pass = next == Next::Pass;
-                let words = pass
-                    .then(|| passed_back(how))
-                    .unwrap_or_else(thinking_closed);
+                let words = if pass {
+                    passed_back(how)
+                } else {
+                    thinking_closed()
+                };
                 book.passed(id, &named(words), now)
             }
             // Another commit than the one sent: the current one sent again

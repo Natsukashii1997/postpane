@@ -49,10 +49,10 @@ pub struct Gate {
     /// (round 4 P1-10).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mending: Option<super::unsure::Pending>,
-    /// When an answer was last heard to begin in its conversation, and not
-    /// since to end (`book_writing.rs`). Of this run only.
+    /// An answer heard to begin in its conversation, and not since to end,
+    /// and the last prompt whose end was heard (`book_writing.rs`). Of this run only.
     #[serde(skip)]
-    pub writing: Option<i64>,
+    pub writing: writing::Pen,
 }
 
 fn is_zero_at(at: &i64) -> bool {
@@ -301,9 +301,8 @@ mod tests {
             );
         }
         assert_eq!(book.get(&t.id).unwrap().next(), Some(Next::Limit));
-        assert_eq!(
-            book.carry(&t.id, &|_, _| None).contains("台账"),
-            false,
+        assert!(
+            !book.carry(&t.id, &|_, _| None).contains("台账"),
             "no ledger for a 思维评审"
         );
     }

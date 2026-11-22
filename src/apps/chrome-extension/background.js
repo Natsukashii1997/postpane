@@ -32,7 +32,9 @@ function connect() {
     extensionId: chrome.runtime.id,
   });
   retry = 5000;
-  statusSoon();
+  // PostPane (started again) knows of no tab yet, nor of any answer being
+  // written: each says again.
+  resync();
 }
 
 function reconnect() {
@@ -282,8 +284,10 @@ function scripted(tabId, until) {
   );
 }
 
-/** Whether Chrome says nothing is loaded in `tab`: it discarded it, or its
- * page crashed (`status: "unloaded"`, Chromium 156, 2026-11-22). */
+/** Whether Chrome says no page is loaded in `tab`: it discarded it, or it
+ * has no live main frame (`status: "unloaded"`: its page crashed, or its
+ * loading was put off as a session was restored; Chromium's
+ * `ExtensionTabUtil::GetLoadingStatus`, round 4 review). */
 const unloaded = (tab) => !!tab && (tab.discarded || tab.status === "unloaded");
 
 /** How a tab that may show `conversation` stands, asked whether it is there
@@ -353,13 +357,17 @@ async function loadAgain(tabId, conversation, until) {
   return !!page && Date.now() < until;
 }
 
-/** The tabs open at chatgpt.com that show `conversation` by their address;
- * null when Chrome does not say by `until`: not none (review P2-02). */
+/** The tabs open at chatgpt.com that show `conversation` by their address,
+ * or are on their way to it (`pendingUrl`: a tab just made has no address
+ * till its page commits, and Chrome finds none by a query for one; round 4
+ * review P2-02); null when Chrome does not say by `until`: not none. */
 async function tabsAt(conversation, until) {
-  const tabs = await by(until, () => chrome.tabs.query({ url: `${HOME}*` }));
-  return Array.isArray(tabs)
-    ? tabs.filter((tab) => tab.url?.includes(`/c/${conversation}`))
-    : null;
+  const tabs = await by(until, () => chrome.tabs.query({}));
+  const at = (tab) =>
+    [tab.url, tab.pendingUrl].some((url) =>
+      url?.includes(`/c/${conversation}`),
+    );
+  return Array.isArray(tabs) ? tabs.filter(at) : null;
 }
 
 /** The tab being made for each conversation: two looking for a tab at once
@@ -616,26 +624,64 @@ const REREAD_PAUSE = 2000;
 // itself is not raised: one off screen still draws nothing (#457). Whether
 // the answer was told.
 async function drawnInFront(tabId, ask) {
-  const tab = await chromeSays(() => chrome.tabs.get(tabId));
-  if (!tab || tab.active) return false;
-  const active = { active: true };
-  const fronts = await chromeSays(() =>
-    chrome.tabs.query({ ...active, windowId: tab.windowId }),
-  );
-  if (!Array.isArray(fronts)) return false;
-  const front = fronts.find((t) => t.active);
-  // Not known to be in front in time, it is not read as if it were; the
-  // tab that was in front is put back all the same, in case it came late.
-  const put = await chromeSays(() => chrome.tabs.update(tabId, active));
-  let told = false;
-  for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
-    await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
-    told = !!(await ask().catch(() => null))?.told;
+  // Every tab made active from here on, before anything is asked of Chrome
+  // (round 7 review P2-05): those of its window but this one are the
+  // person's doing. Its window is known only once Chrome says, so they are
+  // kept till then.
+  const seen = [];
+  const onActivated = (info) => seen.push(info);
+  chrome.tabs.onActivated.addListener(onActivated);
+  try {
+    const tab = await chromeSays(() => chrome.tabs.get(tabId));
+    if (!tab || tab.active) return false;
+    const chosen = () =>
+      seen.filter((i) => i.windowId === tab.windowId && i.tabId !== tabId);
+    const moved = () => chosen().length > 0;
+    const active = { active: true };
+    // Whether its window had the focus: put back only while that is as it was.
+    const focused = async () =>
+      (await chromeSays(() => chrome.windows.get(tab.windowId)))?.focused;
+    const before = await focused();
+    const fronts = await chromeSays(() =>
+      chrome.tabs.query({ ...active, windowId: tab.windowId }),
+    );
+    // The person chose a tab meanwhile: this one is not put over it.
+    if (!Array.isArray(fronts) || moved()) return false;
+    const front = fronts.find((t) => t.active);
+    // Not known to be in front in time, it is not read as if it were; the
+    // tab that was in front is put back all the same, in case it came late.
+    const put = await chromeSays(() => chrome.tabs.update(tabId, active));
+    // The person chose a tab while it was being put in front: theirs comes
+    // back if this one, done after, went over it, and nothing is read.
+    if (moved()) {
+      const theirs = chosen().at(-1).tabId;
+      const now = await chromeSays(() => chrome.tabs.get(tabId));
+      if (now?.active && seen.at(-1)?.tabId === tabId)
+        await chromeSays(() => chrome.tabs.update(theirs, active));
+      return false;
+    }
+    let told = false;
+    for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
+      told = !!(await ask().catch(() => null))?.told;
+    }
+    // Put back only with no other tab of the window made active meanwhile,
+    // this tab known to be in front of its window still, and the window's
+    // focus known to be as it was: the person may have moved on, to another
+    // tab, window or app, or come to this window, and not known, nothing is
+    // moved (round 4 to 7 review P2-05). A tab in front of its window is no
+    // sign the window is. Asked to the front with no word back, it may come
+    // late: then it stays, rather than the two moves crossing. Looked at last,
+    // right before the move back: a choice made while Chrome was asked counts.
+    const after = await focused();
+    const now = await chromeSays(() => chrome.tabs.get(tabId));
+    const still = now?.active && !moved();
+    if (front && still && typeof before === "boolean" && after === before)
+      await chromeSays(() => chrome.tabs.update(front.id, active));
+    return told;
+  } finally {
+    chrome.tabs.onActivated.removeListener(onActivated);
   }
-  const now = await chromeSays(() => chrome.tabs.get(tabId));
-  if (front && (now?.active || !put))
-    await chromeSays(() => chrome.tabs.update(front.id, active));
-  return told;
 }
 const FRONT_TRIES = 3;
 const FRONT_PAUSE = 1500;
@@ -1292,7 +1338,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   } else if (message.type === "turn") {
     // A new chat's first start, before it has an address, says nothing yet.
     if (!message.conversation) return;
-    post(message);
+    // Which tab told it: a beginning whose prompt is not known yet is ended
+    // only by the same tab's end (#507 review round 5, P1-04).
+    post({ ...message, tab: tabId });
     if (message.phase === "complete")
       shadowRead(message.conversation, "complete", {
         pagePromptId: message.promptId ?? null,
@@ -1331,10 +1379,23 @@ async function resync() {
     const state = await by(Date.now() + ALIVE_BY, () =>
       chrome.tabs.sendMessage(tab.id, { op: "state" }),
     );
-    if (state && state !== true)
-      pages.set(tab.id, {
+    if (!state || state === true) return;
+    pages.set(tab.id, {
+      conversation: state.conversation,
+      hidden: state.hidden,
+    });
+    // Writing as this worker or PostPane starts again: PostPane forgot, and
+    // holds words back by it (#507 review round 4, P1-04).
+    if (state.streaming && state.conversation)
+      post({
+        type: "turn",
+        phase: "start",
         conversation: state.conversation,
-        hidden: state.hidden,
+        title: state.title ?? "",
+        promptId: state.writingFor ?? null,
+        tab: tab.id,
+        at: Date.now(),
+        again: true,
       });
   };
   await Promise.all(tabs.map(ask));
@@ -1357,5 +1418,4 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.storage.local.get("watched").then(({ watched: saved }) => {
   if (saved && !watched.size) watched = new Set(saved);
 });
-resync();
 connect();

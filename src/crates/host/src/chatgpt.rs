@@ -214,35 +214,6 @@ pub async fn native_chatgpt_extension(
     .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-pub async fn chatgpt_open(
-    app: tauri::AppHandle,
-    text: String,
-    project: Option<String>,
-) -> Result<Value, String> {
-    let params = json!({"text":text,"project":project});
-    tauri::async_runtime::spawn_blocking(move || tool(&app, "chatgpt_open", &params))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub async fn chatgpt_send(
-    app: tauri::AppHandle,
-    conversation: String,
-    text: String,
-) -> Result<Value, String> {
-    let params = json!({"conversation":conversation,"text":text});
-    tauri::async_runtime::spawn_blocking(move || tool(&app, "chatgpt_send", &params))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-pub fn chatgpt_status(app: tauri::AppHandle) -> Result<Value, String> {
-    tool(&app, "chatgpt_status", &Value::Null)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

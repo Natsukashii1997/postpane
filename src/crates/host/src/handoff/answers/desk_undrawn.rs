@@ -28,9 +28,6 @@ impl Desk {
             "reloaded": message["reloaded"],
         }));
         let conversation = message["conversation"].as_str().unwrap_or("");
-        // Whether an answer is being written there, as the page says now.
-        let outcome = message["outcome"].as_str().unwrap_or("");
-        self.lock().read_writing(conversation, outcome);
         let Some(id) = self
             .lock()
             .for_conversation(conversation)

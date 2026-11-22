@@ -26,16 +26,16 @@ impl crate::AgentHudCore {
                 .flatten()
                 .map(move |ask| (log, ask))
             })
-            .filter_map(|(log, ask)| {
-                // Read again for as long as the box can be shown (#184).
-                (!ask.is_worded() && ask.offset.is_some() && self.requests.still_held(ask.at, now))
-                    .then(|| {
-                        (
-                            log.path.clone(),
-                            log.origin_path.clone().unwrap_or_else(|| log.path.clone()),
-                            ask.clone(),
-                        )
-                    })
+            // Read again for as long as the box can be shown (#184).
+            .filter(|(_, ask)| {
+                !ask.is_worded() && ask.offset.is_some() && self.requests.still_held(ask.at, now)
+            })
+            .map(|(log, ask)| {
+                (
+                    log.path.clone(),
+                    log.origin_path.clone().unwrap_or_else(|| log.path.clone()),
+                    ask.clone(),
+                )
             })
             .collect::<Vec<_>>();
         fn asked<'a>(head: &'a mut crate::LogHead, id: &str) -> Option<&'a mut DesktopAsk> {
