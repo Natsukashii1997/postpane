@@ -347,3 +347,17 @@ test("a page writing an answer is not loaded again to look: not told", async () 
   assert.equal(await page.evaluate(() => window.kept), "not loaded again");
 });
 
+// Found in real Chromium (2026-11-22, `real-chromium-find/probe-reload-
+// report-before.log`, 8 times in 10): a tab in front loaded again hides its
+// old page as it goes, which says so (`visibilitychange`), and was taken
+// for the new one: the newest prompt was asked of a page on its way out.
+test("a tab in front loaded again to look is read once its new page is there", async () => {
+  for (let n = 12; n < 15; n++) {
+    const { page, id } = await open(n);
+    const request = `h1a2~send17952330024${n}`;
+    asked.set(address(id), `【驿窗送审 ${request}】下一轮`);
+    await page.bringToFront();
+    assert.equal(await find(id, request), "there", `try ${n}`);
+    await page.close();
+  }
+});

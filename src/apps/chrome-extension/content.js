@@ -135,7 +135,20 @@
     attributeFilter: ["aria-label"],
   });
 
-  document.addEventListener("visibilitychange", report);
+  // A page on its way out (the tab loaded again, or moved on) hides as it
+  // goes, after `pagehide`: said then, it is taken for the page coming in,
+  // which is not there yet (#509, Chromium 156). Back from the cache
+  // (`pageshow`), it is there again.
+  let leaving = false;
+  const hidden = () => leaving || report();
+  const left = () => (leaving = true);
+  const back = (event) => {
+    leaving = false;
+    if (event.persisted) report();
+  };
+  document.addEventListener("visibilitychange", hidden);
+  window.addEventListener("pagehide", left);
+  window.addEventListener("pageshow", back);
 
   function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
@@ -243,7 +256,9 @@
     stopped = true;
     observer.disconnect();
     clearTimeout(timer);
-    document.removeEventListener("visibilitychange", report);
+    document.removeEventListener("visibilitychange", hidden);
+    window.removeEventListener("pagehide", left);
+    window.removeEventListener("pageshow", back);
     try {
       chrome.runtime.onMessage.removeListener(onCommand);
     } catch {
