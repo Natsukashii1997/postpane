@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { isTauri } from "@tauri-apps/api/core";
+import { call, listenHere } from "./native.ts";
 
 export interface NativeRect {
   x: number;
@@ -84,7 +84,7 @@ export function useHUDGeometry(ownScreenId?: string, enabled = true) {
       for (const monitor of targets) {
         if (seenGeometry.has(monitor.screenId)) continue;
         const before = revisions.get(monitor.screenId) ?? 0;
-        void invoke<NativeHUDGeometry | null>("hud_geometry", {
+        void call<NativeHUDGeometry | null>("hud_geometry", {
           screenId: monitor.screenId,
         })
           .then((geometry) => {
@@ -105,8 +105,7 @@ export function useHUDGeometry(ownScreenId?: string, enabled = true) {
           );
       }
     };
-    const here = getCurrentWebviewWindow();
-    const geometrySubscription = here.listen<NativeHUDGeometry>(
+    const geometrySubscription = listenHere<NativeHUDGeometry>(
       "hud:geometry",
       (event) => {
         if (disposed) return;
@@ -117,14 +116,12 @@ export function useHUDGeometry(ownScreenId?: string, enabled = true) {
         setGeometries((previous) => ({ ...previous, [value.screenId]: value }));
       },
     );
-    const monitorSubscription = here.listen<NativeHUDMonitor[]>(
+    const monitorSubscription = listenHere<NativeHUDMonitor[]>(
       "hud:monitors",
       (event) => applyMonitors(event.payload),
     );
     void Promise.all([geometrySubscription, monitorSubscription])
-      .then(() =>
-        disposed ? null : invoke<NativeHUDMonitor[]>("hud_monitors"),
-      )
+      .then(() => (disposed ? null : call<NativeHUDMonitor[]>("hud_monitors")))
       .then((value) => {
         if (value) applyMonitors(value);
       })

@@ -71,7 +71,7 @@ pub(crate) fn play(app: tauri::AppHandle, service: &Service) {
             };
             wake_collector(&wake, REQUEST);
             for open in panels {
-                let _ = app.emit("demo:panel", open);
+                let _ = app.emit(crate::events::DEMO_PANEL, open);
             }
         });
 }

@@ -1,7 +1,8 @@
 // The host calls behind Agent plugins: which clients have Agent HUD's MCP
 // server, and the state of Agent HUD's Claude Code and DeepSeek Harness
 // plugins. Pictures and tests pass fakes with the same shapes.
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
+import { call } from "../../lib/native.ts";
 
 /** native_mcp_clients: which clients have Agent HUD's MCP server, and the
  * command and settings to add it by hand. */
@@ -26,7 +27,7 @@ export type MCPClientsService = (
 export const nativeClients: MCPClientsService = async (action, client) => {
   if (!isTauri())
     return { ready: false, notice: null, json: null, clients: [] };
-  return invoke<MCPClientsStatus>("native_mcp_clients", {
+  return call<MCPClientsStatus>("native_mcp_clients", {
     action,
     client: client ?? null,
   });
@@ -45,14 +46,14 @@ export type ClaudePluginService = (
 
 export const nativePlugin: ClaudePluginService = async (action) => {
   if (!isTauri()) return { found: false, installed: false, sessions: 0 };
-  return invoke<ClaudePluginStatus>("native_claude_plugin", { action });
+  return call<ClaudePluginStatus>("native_claude_plugin", { action });
 };
 
 /** native_deepseek_plugin: whether DeepSeek Harness is here, whether its home
  * patch loads Agent HUD's plugin, and how many sessions run it now. */
 export const nativeDeepSeekPlugin: ClaudePluginService = async (action) => {
   if (!isTauri()) return { found: false, installed: false, sessions: 0 };
-  return invoke<ClaudePluginStatus>("native_deepseek_plugin", { action });
+  return call<ClaudePluginStatus>("native_deepseek_plugin", { action });
 };
 
 /** native_chatgpt_extension: whether Chrome's native host manifest names
@@ -87,7 +88,7 @@ export const nativeChatGpt: ChatGptService = async (action) => {
       lastSeen: null,
       watched: [],
     };
-  return invoke<ChatGptStatus>("native_chatgpt_extension", { action });
+  return call<ChatGptStatus>("native_chatgpt_extension", { action });
 };
 
 /** chatgpt_project: the ChatGPT project page new review conversations open
@@ -98,7 +99,7 @@ export type ChatGptProjectService = (
 
 export const nativeChatGptProject: ChatGptProjectService = async (project) => {
   if (!isTauri()) return { project: null };
-  return invoke<{ project: string | null }>("chatgpt_project", {
+  return call<{ project: string | null }>("chatgpt_project", {
     project: project ?? null,
   });
 };
@@ -113,7 +114,7 @@ export const nativeChatGptReviewLimit: ChatGptReviewLimitService = async (
   limit,
 ) => {
   if (!isTauri()) return { limit: 5, max: 9, default: 5 };
-  return invoke("chatgpt_review_limit", { limit: limit ?? null });
+  return call("chatgpt_review_limit", { limit: limit ?? null });
 };
 
 /** The clients the host can give HUD tools to (hud_tools::CLIENTS), in page

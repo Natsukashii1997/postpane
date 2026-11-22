@@ -76,7 +76,7 @@ pub(crate) fn notify(app: &tauri::AppHandle, label: &str) {
     }
     if let Some(window) = app.get_webview_window(label) {
         let (_, value) = record(app, label, current(&window));
-        let _ = app.emit_to(label, "window:activity", value);
+        let _ = app.emit_to(label, crate::events::WINDOW_ACTIVITY, value);
     }
 }
 
@@ -84,7 +84,7 @@ pub(crate) fn notify(app: &tauri::AppHandle, label: &str) {
 pub(crate) fn set(app: &tauri::AppHandle, label: &str, active: bool) {
     let (changed, value) = record(app, label, Activity { active });
     if changed {
-        let _ = app.emit_to(label, "window:activity", value);
+        let _ = app.emit_to(label, crate::events::WINDOW_ACTIVITY, value);
     }
 }
 
@@ -108,12 +108,12 @@ pub(crate) fn publish<S: Serialize + ?Sized>(app: &tauri::AppHandle, event: &str
         tauri::EventTarget::WebviewWindow { label } => !inactive.contains(label),
         _ => false,
     };
-    if event == "hud:snapshot" {
+    if event == crate::events::SNAPSHOT {
         // Tauri injects event payloads as JavaScript source. A full session
         // object literal makes WebKit compile a large syntax tree every pass.
         // Transfer JSON as a string and decode data once in the subscriber.
         if let Ok(json) = serde_json::to_string(value) {
-            let _ = app.emit_filter("hud:snapshot-json", json, filter);
+            let _ = app.emit_filter(crate::events::SNAPSHOT_JSON, json, filter);
         }
     } else {
         let _ = app.emit_filter(event, value, filter);

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { isTauri } from "@tauri-apps/api/core";
 import type { PanelLayout, SourcePreferences } from "@agent-hud/protocol";
 import { defaultHUDConfig, type HUDConfig } from "@agent-hud/hud/model";
 import { usageStyle } from "@agent-hud/hud/usage-meter/arcs";
 import { storageKeys } from "./storage-keys";
+import { call, emitTo, listenHere } from "./native.ts";
 const configKey = storageKeys.hudConfig;
 const previousKey = storageKeys.hudConfigV2;
 const legacyKey = storageKeys.hudConfigV1;
@@ -32,7 +31,7 @@ export async function presentationRequest(
   method: string,
   params: unknown = {},
 ) {
-  return invoke<PresentationState>("presentation_request", { method, params });
+  return call<PresentationState>("presentation_request", { method, params });
 }
 export function presentationStore(state: PresentationState): HUDConfigStore {
   const global = { ...state.store.global };
@@ -234,7 +233,7 @@ function readStore() {
 }
 function publish(store: HUDConfigStore) {
   if (isTauri())
-    void emit("hud:config", store).catch((error) =>
+    void emitTo("hud:config", store).catch((error) =>
       console.error("Display preference synchronization failed", error),
     );
 }
@@ -344,7 +343,7 @@ export function useHUDConfig(
       setPresentation(state);
       setLoaded({ store: presentationStore(state), ready: state.initialized });
     };
-    const subscription = getCurrentWebviewWindow().listen<PresentationState>(
+    const subscription = listenHere<PresentationState>(
       "hud:presentation",
       (event) => receive(event.payload),
     );

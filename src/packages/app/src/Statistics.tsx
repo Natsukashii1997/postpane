@@ -7,7 +7,6 @@ import {
 } from "react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Button } from "@agent-hud/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@agent-hud/ui/components/tabs";
 import {
@@ -56,6 +55,7 @@ import {
 } from "./StatisticsParts";
 import { snapshotLanguage, systemTimeZone } from "@agent-hud/ui/format";
 import { indexingText } from "@agent-hud/ui/text/indexing";
+import { listenTo } from "./lib/native.ts";
 
 interface StatisticsProps {
   snapshot: Snapshot;
@@ -400,7 +400,7 @@ export default function Statistics({
     window.addEventListener("focus", consumePending);
     window.addEventListener("storage", consumePending);
     const sub = isTauri()
-      ? listen<{ provider: string; at: number }>(
+      ? listenTo<{ provider: string; at: number }>(
           "statistics:provider",
           (event) => {
             try {

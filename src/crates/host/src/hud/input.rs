@@ -354,7 +354,7 @@ pub(super) fn publish_pointer(
         }
         state.pointer = Some(pointer.clone());
         state.pointer_emitted_at = Some(Instant::now());
-        if let Err(error) = app.emit_to(&owner.label, "hud:pointer", &pointer) {
+        if let Err(error) = app.emit_to(&owner.label, crate::events::POINTER, &pointer) {
             agent_hud_runtime::note!("Agent HUD pointer event: {error}");
         }
     }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { isTauri } from "@tauri-apps/api/core";
 import { HUDScene } from "@agent-hud/hud/HUDScene";
 import type {
   DiskSlimState,
@@ -17,6 +16,7 @@ import type {
   NativeHUDGeometry,
   NativeHUDMonitor,
 } from "./lib/use-hud-geometry";
+import { call, listenTo } from "./lib/native.ts";
 
 type NativePointerEvent = HUDNativePointer & { screenId: string };
 const outsidePointer: HUDNativePointer = {
@@ -183,7 +183,7 @@ export default function NativeHUDSurface({
       serial = serial
         .catch(() => undefined)
         .then(async () => {
-          await invoke("hud_text_focus", { active: false, leaseId });
+          await call("hud_text_focus", { active: false, leaseId });
         })
         .catch((error) => {
           if (!disposed)
@@ -224,7 +224,7 @@ export default function NativeHUDSurface({
         .then(async () => {
           if (disposed || !wanted || captured !== epoch || !verified(target))
             return;
-          await invoke("hud_text_focus", { active: true, leaseId });
+          await call("hud_text_focus", { active: true, leaseId });
           if (
             refocus &&
             !disposed &&
@@ -259,7 +259,7 @@ export default function NativeHUDSurface({
             !selected()
           )
             return;
-          await invoke("hud_text_focus", { active: true, leaseId });
+          await call("hud_text_focus", { active: true, leaseId });
         })
         .catch((error) => {
           if (!disposed && captured === epoch) {
@@ -365,10 +365,10 @@ export default function NativeHUDSurface({
   const shownConfig = held ? { ...config, ...held } : config;
   // Settings and Statistics resolve once open, or reject with why not: the
   // panel goes away only once they opened (#220).
-  const configure = useCallback(() => invoke("hud_show_main"), []);
+  const configure = useCallback(() => call("hud_show_main"), []);
   const floatNotes = useCallback(
     (anchor: { x: number; y: number; width: number; height: number }) =>
-      invoke<boolean>("toggle_float_notes", { anchor }),
+      call<boolean>("toggle_float_notes", { anchor }),
     [],
   );
   // 随手记's halo follows its window (#224): the host's word on each show and
@@ -378,9 +378,9 @@ export default function NativeHUDSurface({
     if (!isTauri()) return;
     return watchFloatNotes(
       {
-        ask: () => invoke<boolean>("float_notes_shown"),
+        ask: () => call<boolean>("float_notes_shown"),
         follow: (heard) =>
-          listen<boolean>("float-notes:shown", ({ payload }) => heard(payload)),
+          listenTo<boolean>("float-notes:shown", (e) => heard(e.payload)),
       },
       setFloatNotesShown,
     );
@@ -398,7 +398,7 @@ export default function NativeHUDSurface({
     let last = "";
     const read = () => {
       clearTimeout(timer);
-      void invoke<DiskSlimState>("disk_slim_status")
+      void call<DiskSlimState>("disk_slim_status")
         .then((status) => {
           if (stopped) return;
           poll.open = status.panelOpen;
@@ -425,7 +425,7 @@ export default function NativeHUDSurface({
   }, []);
   const toggleDiskSlim = useCallback(
     async (anchor: { x: number; y: number; width: number; height: number }) => {
-      await invoke("toggle_disk_slim", { anchor });
+      await call("toggle_disk_slim", { anchor });
       diskSlimPoll.current.fastUntil = performance.now() + 10000;
       setTimeout(() => diskSlimPoll.current.now(), 600);
     },
@@ -434,17 +434,17 @@ export default function NativeHUDSurface({
   // Statistics opens on Tokens (Open's footer button), or where a session row points.
   const stats = useCallback(
     (target?: { tab?: string; sessionId?: string }) =>
-      invoke("open_statistics", {
+      call("open_statistics", {
         tab: target?.tab ?? "tokens",
         sessionId: target?.sessionId,
       }),
     [],
   );
   const looked = useCallback((keys: string[] | null) => {
-    void invoke("hud_bot_looked", { keys });
+    void call("hud_bot_looked", { keys });
   }, []);
   const beginDrag = useCallback(async (args: HUDDragStartArgs) => {
-    await invoke("hud_drag_start", { ...args });
+    await call("hud_drag_start", { ...args });
   }, []);
   const decide = useCallback(
     async (id: string, decision: HUDDecision) => {
@@ -459,7 +459,7 @@ export default function NativeHUDSurface({
   }>();
   useEffect(() => {
     if (!isTauri()) return;
-    const subscription = listen<boolean>("demo:panel", ({ payload }) =>
+    const subscription = listenTo<boolean>("demo:panel", ({ payload }) =>
       setPanelCommand((previous) => ({
         open: payload,
         sequence: (previous?.sequence ?? 0) + 1,
@@ -471,7 +471,7 @@ export default function NativeHUDSurface({
   const [flights, setFlights] = useState<readonly HUDFlightCommand[]>([]);
   useEffect(() => {
     if (!isTauri()) return;
-    const subscription = listen<HUDFlight>("hud:flight", ({ payload }) =>
+    const subscription = listenTo<HUDFlight>("hud:flight", ({ payload }) =>
       setFlights((previous) => [
         ...previous.slice(-15),
         {
@@ -487,7 +487,7 @@ export default function NativeHUDSurface({
     if (!isTauri()) return;
     let disposed = false;
     setNativePointer(outsidePointer);
-    const pointerSubscription = listen<NativePointerEvent>(
+    const pointerSubscription = listenTo<NativePointerEvent>(
       "hud:pointer",
       (event) => {
         if (disposed || event.payload.screenId !== screenId) return;
@@ -495,7 +495,7 @@ export default function NativeHUDSurface({
         setNativePointer(event.payload);
       },
     );
-    const previewSubscription = listen<
+    const previewSubscription = listenTo<
       { screenId: string } & Pick<
         HUDConfig,
         "mode" | "edge" | "offset" | "monitorIndex"
@@ -506,7 +506,7 @@ export default function NativeHUDSurface({
       lastPreview.current = { mode, edge, offset };
       setDragPreview({ mode, edge, offset, monitorIndex });
     });
-    const subscription = listen<{ screenId: string; cancelled: boolean }>(
+    const subscription = listenTo<{ screenId: string; cancelled: boolean }>(
       "hud:drag-end",
       (event) => {
         if (!disposed && event.payload.screenId === screenId) {
@@ -540,7 +540,7 @@ export default function NativeHUDSurface({
       inFlight = true;
       const revision = pointerRevision.current;
       try {
-        const status = await invoke<{ pointer: NativePointerEvent }>(
+        const status = await call<{ pointer: NativePointerEvent }>(
           "hud_report_regions",
           { regions },
         );

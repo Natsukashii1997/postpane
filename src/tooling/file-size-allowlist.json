@@ -8,8 +8,8 @@
     "reason": "7a 批 2 从 platform/clients/chatgpt/handoffs.rs 原样搬来（原上限 1583）；7a 批 3 子模块按概念放进各目录，13 个 #[path] 声明各多一行（1565 → 1578）；按函数拆开另开单"
   },
   "src/crates/host/src/lib.rs": {
-    "max": 1126,
-    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单"
+    "max": 1127,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单；7b 挂 events 模块（事件名常量）一行"
   },
   "src/crates/host/src/mcp_clients.rs": {
     "max": 339,

@@ -19,6 +19,7 @@ mod coordinator;
 mod deepseek_plugin;
 mod demo;
 mod disk_slim;
+mod events;
 pub mod extension;
 mod float_notes;
 mod handoff;
@@ -48,7 +49,7 @@ struct Backend {
 /// Every HUD flies the letters handoffs moved since the last look (#171).
 fn fly_tosses(app: &tauri::AppHandle, desk: &handoff::Desk) {
     for flight in desk.tosses() {
-        activity::publish(app, "hud:flight", &flight);
+        activity::publish(app, events::FLIGHT, &flight);
     }
 }
 
@@ -92,7 +93,7 @@ impl Backend {
             if let Some(clock) = snapshot.get("generatedAt") {
                 // UI reset/countdown/calendar boundaries still use the collector's
                 // existing cadence without bridging another unchanged session list.
-                activity::publish(app, "hud:clock", clock);
+                activity::publish(app, events::CLOCK, clock);
             }
         }
     }
@@ -106,7 +107,7 @@ impl Backend {
             coordinator::snapshot(app, snapshot, false);
             activity::publish(
                 app,
-                "hud:clock",
+                events::CLOCK,
                 &Value::String(chrono::Utc::now().to_rfc3339()),
             );
         }
@@ -114,7 +115,7 @@ impl Backend {
 
     fn publish_snapshot(&self, app: &tauri::AppHandle) {
         if let Some(snapshot) = &self.snapshot {
-            activity::publish(app, "hud:snapshot", snapshot.as_ref());
+            activity::publish(app, events::SNAPSHOT, snapshot.as_ref());
             coordinator::snapshot(app, snapshot, true);
         }
     }
@@ -183,7 +184,7 @@ impl Backend {
                     && self.error.as_ref() != Some(&error)
                 {
                     self.error = Some(error.clone());
-                    activity::publish(app, "hud:snapshot-error", &Value::String(error.clone()));
+                    activity::publish(app, events::SNAPSHOT_ERROR, &Value::String(error.clone()));
                 }
                 Err(error)
             }
@@ -327,9 +328,9 @@ impl Service {
                 }),
                 publish: Arc::new(move |value| {
                     use tauri::Emitter;
-                    let _ = events.emit("product:event", value);
+                    let _ = events.emit(events::PRODUCT_EVENT, value);
                 }),
-                fly: Arc::new(move |flight| activity::publish(&flights, "hud:flight", &flight)),
+                fly: Arc::new(move |flight| activity::publish(&flights, events::FLIGHT, &flight)),
             })?;
         }
         // Agent messages, over the product's senders when it has some.
@@ -724,7 +725,7 @@ fn show_settings_page(app: &tauri::AppHandle, page: String) {
     tauri::async_runtime::spawn_blocking(move || match show_settings(&app) {
         Ok(()) => {
             use tauri::Emitter;
-            let _ = app.emit_to("main", "settings:page", page);
+            let _ = app.emit_to("main", events::SETTINGS_PAGE, page);
         }
         Err(error) => agent_hud_runtime::note!("Agent HUD Settings: {error}"),
     });
@@ -798,9 +799,9 @@ async fn open_statistics(
         .await
         .map_err(|error| format!("Statistics window worker failed: {error}"))??;
     if let Some(session_id) = session_id {
-        let _ = app.emit("statistics:session", session_id);
+        let _ = app.emit(events::STATISTICS_SESSION, session_id);
     } else if let Some(tab) = tab {
-        let _ = app.emit("statistics:tab", tab);
+        let _ = app.emit(events::STATISTICS_TAB, tab);
     }
     Ok(())
 }

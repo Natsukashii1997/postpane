@@ -305,6 +305,9 @@ importers:
       '@agent-hud/engine-client':
         specifier: workspace:*
         version: link:../engine-client
+      '@agent-hud/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
