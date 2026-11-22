@@ -393,6 +393,42 @@ test("asked whether it is there, the page says which conversation it shows", asy
   await page.close();
 });
 
+// #509: PostPane looks for words it sent: they begin with a line naming
+// their request, and the page's newest prompt has it or not.
+test("asked whether words are there, the page reads its newest prompt", async () => {
+  const page = await open(() => {
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">【驿窗送审 h1~send5】\n第二轮</div>';
+    document.querySelector("main").append(turn);
+  });
+  const ask = (command) =>
+    page.evaluate(
+      (command) =>
+        new Promise((resolve) =>
+          window.listener({ op: "asked", ...command }, {}, resolve),
+        ),
+      command,
+    );
+  const conversation = await page.evaluate(
+    () => location.href.split("/c/")[1] ?? null,
+  );
+  assert.deepEqual(await ask({ conversation, request: "h1~send5" }), {
+    loaded: true,
+    there: true,
+    streaming: false,
+  });
+  assert.deepEqual(await ask({ conversation, request: "h1~send9" }), {
+    loaded: true,
+    there: false,
+    streaming: false,
+  });
+  // Another conversation's page says nothing of this one.
+  const other = await ask({ conversation: "another", request: "h1~send5" });
+  assert.deepEqual([other.loaded, other.there], [false, false]);
+  await page.close();
+});
+
 // #356: words sent and not answered yet leave the reply before them as the
 // last one; it is an older turn's, so asking again tells nothing.
 test("asked to read again before the newest prompt is answered, nothing is told", async () => {

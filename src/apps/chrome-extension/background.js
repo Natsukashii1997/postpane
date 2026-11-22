@@ -76,6 +76,12 @@ async function onHost(message) {
     case "reread":
       await reread(message.conversation);
       break;
+    case "find": {
+      const { conversation, request } = message;
+      const outcome = await find(conversation, request);
+      post({ type: "found", conversation, request, outcome });
+      break;
+    }
   }
 }
 
@@ -369,6 +375,53 @@ async function readAgain(conversation) {
 }
 const ASK_BY = 10000;
 const RELOAD_BY = 30000;
+
+/** Whether the words sent as `request` are in `conversation` (#509):
+ * PostPane heard no word that they went in. Its tab is loaded again, so it
+ * shows what ChatGPT has, and its newest prompt read: the words begin with
+ * a line naming their request. "there"; "absent" when the newest prompt,
+ * read twice a moment apart, is another and no answer is being written;
+ * "unread" when that cannot be told (the page not loaded or not drawn, an
+ * answer on its way). */
+async function find(conversation, request) {
+  if (!watched.has(conversation)) return "unread";
+  const until = Date.now() + RELOAD_BY;
+  let tabId = await loadAgain(tabFor(conversation), conversation, until);
+  if (tabId === false) return "unread";
+  if (tabId === null) {
+    const url = `${HOME}c/${conversation}`;
+    const tab = await by(until, () =>
+      chrome.tabs.create({ url, active: false }),
+    );
+    if (!tab) return "unread";
+    tabId = tab.id;
+    await by(until, () => group(tabId));
+    const loaded = (p) => p.conversation === conversation;
+    if (!(await ready(tabId, until - Date.now(), loaded))) return "unread";
+  }
+  const ask = () =>
+    by(Date.now() + ASK_BY, () =>
+      chrome.tabs.sendMessage(tabId, { op: "asked", conversation, request }),
+    ).then((said) => (said === true ? null : said));
+  const pause = () =>
+    new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
+  let first = await ask();
+  for (
+    let tries = 0;
+    first && first.loaded === false && tries < REREAD_TRIES;
+    tries++
+  ) {
+    await pause();
+    first = await ask();
+  }
+  if (!first?.loaded) return "unread";
+  if (first.there) return "there";
+  await pause();
+  const second = await ask();
+  if (second?.loaded && second.there) return "there";
+  const quiet = second?.loaded && !first.streaming && !second.streaming;
+  return quiet ? "absent" : "unread";
+}
 
 /** What a read's answer comes to: told, or why not. */
 function outcomeOf(answer, told) {

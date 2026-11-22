@@ -29,6 +29,7 @@ impl Desk {
         if !lines.connected() {
             return 0;
         }
+        self.find_unsure(lines, now);
         let quiet = self
             .lock()
             .list

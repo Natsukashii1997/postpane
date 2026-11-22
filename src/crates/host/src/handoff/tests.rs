@@ -6,6 +6,7 @@ mod background_run;
 mod book_states;
 mod codex;
 mod driver;
+mod finding;
 mod held_back;
 mod letters;
 mod mend_late;
@@ -143,6 +144,12 @@ impl Lines for Fake {
             return Err(SendFailed::Unsure(error));
         }
         Ok(self.asked_as.borrow().clone())
+    }
+    fn find(&self, conversation: &str, request: &str) -> Result<(), String> {
+        self.sent
+            .borrow_mut()
+            .push(("find".into(), conversation.into(), request.into()));
+        Ok(())
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {
         self.sent
@@ -604,6 +611,9 @@ impl Lines for Held {
     }
     fn send(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, SendFailed> {
         Err(SendFailed::Unsure("not here".into()))
+    }
+    fn find(&self, _: &str, _: &str) -> Result<(), String> {
+        Ok(())
     }
     fn reread(&self, _: &str) -> Result<(), String> {
         Ok(())

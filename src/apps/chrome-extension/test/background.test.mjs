@@ -306,6 +306,83 @@ test("reading again loads a tab again that answers nothing even with a script pu
   assert.equal(posted.find((m) => m.type === "reread").outcome, "unreachable");
 });
 
+// #509: PostPane does not know whether words went in. The conversation's
+// tab is loaded again, so it shows what ChatGPT has, and its newest prompt
+// is read: the words begin with a line naming their request.
+const finding = async (answers, { loads = true, watched = true } = {}) => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const posted = [];
+  const reloaded = [];
+  const sent = [];
+  const tabs = [{ id: 2, url: `https://chatgpt.com/c/${conversation}` }];
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const { listeners } = load(tabs, {
+    posted,
+    reloaded,
+    sent,
+    answers: [...answers],
+    watched: watched ? [conversation] : [],
+    now: true,
+    onReload: (tabId) =>
+      loads && listeners.message(page, { tab: { id: tabId } }),
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const request = "h1~send5";
+  await listeners.port({ type: "find", conversation, request });
+  const [found] = posted.filter((m) => m.type === "found");
+  assert.deepEqual(
+    [found.conversation, found.request],
+    [conversation, request],
+  );
+  return {
+    outcome: found.outcome,
+    reloaded,
+    asked: sent.filter(([, m]) => m.op === "asked").map(([, m]) => m.request),
+  };
+};
+const shows = (there, more = {}) => ({
+  loaded: true,
+  there,
+  streaming: false,
+  ...more,
+});
+
+test("words looked for are found in the newest prompt of the tab loaded again", async () => {
+  const found = await finding([shows(true)]);
+  assert.deepEqual(found, {
+    outcome: "there",
+    reloaded: [2],
+    asked: ["h1~send5"],
+  });
+});
+
+test("words are not there only when the newest prompt, read twice, is another and nothing is written", async () => {
+  assert.equal((await finding([shows(false), shows(false)])).outcome, "absent");
+  // There by the second read: the page was still drawing.
+  assert.equal((await finding([shows(false), shows(true)])).outcome, "there");
+  // An answer being written, at either read: not known.
+  for (const answers of [
+    [shows(false, { streaming: true }), shows(false)],
+    [shows(false), shows(false, { streaming: true })],
+    [shows(false), { loaded: false }],
+  ])
+    assert.equal((await finding(answers)).outcome, "unread", `${answers}`);
+});
+
+test("words looked for in a page that cannot be read are not known", async () => {
+  // Its history never drawn, however often asked.
+  const undrawn = await finding(Array(8).fill({ loaded: false }));
+  assert.equal(undrawn.outcome, "unread");
+  // The tab does not load again in time: its page is not asked.
+  const unloaded = await finding([shows(false), shows(false)], {
+    loads: false,
+  });
+  assert.deepEqual([unloaded.outcome, unloaded.asked], ["unread", []]);
+  // Not a conversation of PostPane's: not read.
+  const other = await finding([shows(true)], { watched: false });
+  assert.deepEqual([other.outcome, other.reloaded], ["unread", []]);
+});
+
 // #356 P2-02: a tab that has not drawn its history yet (just opened) is asked
 // again shortly, a few times, until it has or gives up; not every two minutes.
 test("reading again asks a tab without its history again, a few times", async () => {

@@ -70,6 +70,9 @@ impl Lines for Wired {
             Err(SendFailed::Unsure("ChatGPT 插件没能完成：timeout".into()))
         }
     }
+    fn find(&self, _: &str, _: &str) -> Result<(), String> {
+        Ok(())
+    }
     fn reread(&self, _: &str) -> Result<(), String> {
         Ok(())
     }

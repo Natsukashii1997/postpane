@@ -192,6 +192,19 @@
       reply({ conversation: page.conversationId(location.href) });
       return false;
     }
+    // Whether the newest prompt is the words sent as `request` (#509):
+    // they begin with a line naming it. `loaded`: this conversation, with
+    // a newest prompt drawn.
+    if (command.op === "asked") {
+      const here = page.conversationId(location.href) === command.conversation;
+      const prompt = here ? page.lastPrompt(document) : null;
+      reply({
+        loaded: !!prompt,
+        there: !!prompt?.includes(command.request),
+        streaming: page.streaming(document),
+      });
+      return false;
+    }
     if (command.op === "state") {
       reply({
         conversation: page.conversationId(location.href),
