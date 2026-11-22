@@ -652,3 +652,13 @@
   - 判断「标签页里还有没有活页面」用 Chrome 自己的说法，不从报错反推（#507 第 3 轮复审 P1-01）。实测 Chromium 156：页面崩溃后 `tabs.get` 给 `status: "unloaded"`、网址还在、`discarded: false`；停在 Chrome 错误页的标签页不把网址告诉插件；重载途中注入脚本不会被拒，会等新文档。「注入被拒」只说明这一刻注不进去，不能当成可以重载的依据：审查指出预渲染页面顶上来、从缓存恢复时也会被拒（这两种没实测）（`real-chromium/probe-crashed.log`、`probe-error-page.log`）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/real-chromium/`（`probe-discard.log` 回收前后的编号和各接口返回，`probe-freeze.log` 两种冻结办法都没生效，`chromium-test.log` 四条真实 Chromium 测试）。
 - 升级：〔机检〕已升级（2026-11-22，#507）：加了 `chromium.test.mjs`，随 `pnpm test` 跑；其中第一条断言「回收后编号会换」，Chrome 改了这个行为会在这里先红。可提议提升为全局坑（浏览器插件项目都适用），等常浩批。
+
+## L-69 通道一启动就收消息，订阅方稍后才挂上：中间到的消息被直接丢掉，「重连时补报」恰好落在这段（2026-11-22）
+
+- 现象：#507 第 5 轮审查指出，驿窗启动时 `ChatGpt::start` 先开 Unix socket 接连接，`Desk::new` 读完接力账本后 `handoff::listen` 才挂上监听；`Shared::tell` 没有监听就直接丢消息。插件一连上就 `resync`，把「这个会话正在写」补报一次，这条正好可能落在中间被丢，驿窗重启后的写作闸就恢复不了。三条全量、所有替身测试都没覆盖到，是审查沿真实初始化顺序读出来的。
+- 根因：生产者（插件重连补报）和消费者（接力监听）的就绪顺序没人保证；「没有监听就不交付」写成了「没有监听就丢」。补报机制本身就是为重启设计的，却偏偏只在启动那一瞬发一次。
+- 正确做法：
+  - 事件通道在订阅方挂上之前收到的消息，按顺序暂存、设上限，订阅时先按序交付再接新的；交付旧消息时持锁，不让新消息插队（`platform/src/clients/chatgpt/listening.rs`）。
+  - 写「重连时补报 / 重启后同步」这类逻辑时，顺着真实启动代码走一遍：补报发出那一刻，接收方的每一层（连接、解析、订阅、账本）是不是都已就绪。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/r6-unit.log`（`listening` 两条测试）；第 5 轮回信 `replies/h1a2026f624206-02-c9f2aa78.md`。
+- 升级：〔结构〕已升级（2026-11-22，#507）：通道自带暂存，监听晚挂上也不丢；单测守着顺序和上限。

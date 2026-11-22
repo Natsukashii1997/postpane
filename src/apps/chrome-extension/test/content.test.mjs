@@ -131,6 +131,43 @@ test("a reply to a prompt ChatGPT made an attachment is told with that prompt's 
   );
 });
 
+// #507 review round 5, P1-04: an answer begins before its prompt is drawn.
+// The newest prompt then is the one before, answered already: the beginning
+// does not name it, and is told again naming its own prompt once drawn.
+test("an answer begun before its prompt is drawn names that prompt only once drawn", async () => {
+  const page = await open(() => {
+    const units = document.querySelectorAll(
+      '[data-chatgpt-search-unit-key$=":user"]',
+    );
+    units[units.length - 1].setAttribute(
+      "data-chatgpt-search-message-ids",
+      "p1",
+    );
+  });
+  await page.evaluate(async () => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    await new Promise((r) => setTimeout(r, 900));
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="y:0:user" data-chatgpt-search-message-ids="p2"><div data-message-author-role="user">又一问</div></div>',
+      );
+    await new Promise((r) => setTimeout(r, 900));
+  });
+  const starts = (await turns(page)).filter((m) => m.phase === "start");
+  assert.deepEqual(
+    starts.map((m) => [m.promptId, !!m.again]),
+    [
+      [null, false],
+      ["p2", true],
+    ],
+  );
+  assert.equal(starts[1].at, starts[0].at, "the same turn, begun when it did");
+});
+
 test("an empty placeholder is not the reply that fills it later", async () => {
   // 2026-11-07 h1a1b1fed89e00: ChatGPT put an empty reply up first, the
   // extension reported it as finished, and the answer that then filled the

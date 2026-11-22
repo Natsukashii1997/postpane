@@ -578,6 +578,10 @@ async function drawnInFront(tabId, ask) {
   );
   if (!Array.isArray(fronts)) return false;
   const front = fronts.find((t) => t.active);
+  // Whether its window had the focus: put back only while that is as it was.
+  const focused = async () =>
+    (await chromeSays(() => chrome.windows.get(tab.windowId)))?.focused;
+  const before = await focused();
   // Not known to be in front in time, it is not read as if it were; the
   // tab that was in front is put back all the same, in case it came late.
   const put = await chromeSays(() => chrome.tabs.update(tabId, active));
@@ -586,12 +590,15 @@ async function drawnInFront(tabId, ask) {
     await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
     told = !!(await ask().catch(() => null))?.told;
   }
-  // Put back only from this tab, known to be in front still: the person may
-  // have moved on meanwhile, and not known, nothing is moved (round 4 review
-  // P2-05). Asked to the front with no word back, it may come late: then it
-  // stays, rather than the two moves crossing.
+  // Put back only from this tab, known to be in front of its window still,
+  // and the window's focus known to be as it was: the person may have moved
+  // on meanwhile, to another tab, window or app, or come to this window, and
+  // not known, nothing is moved (round 4 and 5 review P2-05). A tab in front
+  // of its window is no sign the window is. Asked to the front with no word
+  // back, it may come late: then it stays, rather than the two moves crossing.
   const now = await chromeSays(() => chrome.tabs.get(tabId));
-  if (front && now?.active)
+  const after = now?.active ? await focused() : undefined;
+  if (front && typeof before === "boolean" && after === before)
     await chromeSays(() => chrome.tabs.update(front.id, active));
   return told;
 }
@@ -1250,7 +1257,9 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   } else if (message.type === "turn") {
     // A new chat's first start, before it has an address, says nothing yet.
     if (!message.conversation) return;
-    post(message);
+    // Which tab told it: a beginning whose prompt is not known yet is ended
+    // only by the same tab's end (#507 review round 5, P1-04).
+    post({ ...message, tab: tabId });
     if (message.phase === "complete")
       shadowRead(message.conversation, "complete", {
         pagePromptId: message.promptId ?? null,
@@ -1302,7 +1311,8 @@ async function resync() {
         phase: "start",
         conversation: state.conversation,
         title: state.title ?? "",
-        promptId: state.promptId ?? null,
+        promptId: state.writingFor ?? null,
+        tab: tab.id,
         at: Date.now(),
         again: true,
       });

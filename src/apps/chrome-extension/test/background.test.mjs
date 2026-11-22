@@ -145,7 +145,9 @@ function load(
       onReplaced: event("replaced"),
       onUpdated: event("updated"),
     },
-    windows: { get: async (id) => windows[id] ?? { state: "normal" } },
+    windows: {
+      get: async (id) => windows[id] ?? { state: "normal", focused: true },
+    },
     scripting: {
       // As Chrome: a script already registered, or not registered, throws.
       registerContentScripts: async (scripts) => {
@@ -589,21 +591,31 @@ test("a tab writing when PostPane or the worker starts again tells a beginning",
           streaming: tabId === 2,
           hidden: true,
           title: "审核",
-          promptId: `p${tabId}`,
+          // The newest prompt on the page; the one being answered is
+          // `writingFor`, when drawn (round 5 review P1-04).
+          promptId: `old${tabId}`,
+          writingFor: `p${tabId}`,
         }
       : null;
   for (let ticks = 0; ticks < 10; ticks++) await tick();
   const starts = () =>
     posted.filter((m) => m.type === "turn" && m.phase === "start");
   assert.deepEqual(
-    starts().map((m) => [m.conversation, m.promptId, m.again]),
-    [[conversation, "p2", true]],
+    starts().map((m) => [m.conversation, m.promptId, m.again, m.tab]),
+    [[conversation, "p2", true, 2]],
   );
   // PostPane starts again: the port is made anew, and each says again.
   posted.length = 0;
   listeners.gone();
   for (let ticks = 0; ticks < 10; ticks++) await tick();
   assert.equal(starts().length, 1);
+  // What a tab tells goes on with which tab told it (round 5 review P1-04).
+  posted.length = 0;
+  listeners.message(
+    { type: "turn", phase: "start", conversation, promptId: null },
+    { tab: { id: 7 } },
+  );
+  assert.equal(starts()[0].tab, 7);
 });
 
 // Review P2-04: what Chrome says of a tab is not waited on without end.
@@ -657,9 +669,10 @@ test("Chrome not saying how a tab stands, or not putting it in front, does not h
   assert.deepEqual(late.fronted, []);
 });
 
-// Round 4 review P2-05: the person moved to another tab while the answer was
-// read in front: that stays in front.
-test("a tab put in front for a read is moved back from only while it is in front still", async () => {
+// Round 4 and 5 review P2-05: the person moved to another tab, window or app
+// while the answer was read in front, or came to the window: that stays as
+// it is. One in another app all along gets the tab back.
+test("a tab put in front for a read is moved back from only while it and its window's focus are as they were", async () => {
   const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
   const tabs = [
     { id: 2, url: `https://chatgpt.com/c/${conversation}`, windowId: 1 },
@@ -667,11 +680,13 @@ test("a tab put in front for a read is moved back from only while it is in front
     { id: 4, url: "https://chatgpt.com/", windowId: 1 },
   ];
   const page = { type: "page", conversation, hidden: true, streaming: false };
-  const read = async (moves) => {
+  const read = async (moves, focus = [true, true]) => {
     const posted = [];
     const fronted = [];
     tabs.forEach((tab) => (tab.active = tab.id === 3));
+    const window = { state: "normal", focused: focus[0] };
     const { listeners, chrome } = load(tabs, {
+      windows: { 1: window },
       posted,
       fronted,
       watched: [conversation],
@@ -684,8 +699,11 @@ test("a tab put in front for a read is moved back from only while it is in front
     let asks = 0;
     chrome.tabs.sendMessage = async (tabId, message) => {
       // Asked again with the tab in front: the person moves to tab 4.
-      if (message.op === "reread" && ++asks === 2 && moves)
-        tabs.forEach((tab) => (tab.active = tab.id === 4));
+      if (message.op === "reread" && ++asks === 2) {
+        if (moves) tabs.forEach((tab) => (tab.active = tab.id === 4));
+        window.focused = focus[1];
+        if (focus[1] === "never") chrome.windows.get = never;
+      }
       return sendMessage(tabId, message);
     };
     await listeners.port({ type: "reread", conversation });
@@ -694,6 +712,15 @@ test("a tab put in front for a read is moved back from only while it is in front
   assert.deepEqual(await read(false), [2, 3], "in front still: moved back");
   assert.deepEqual(await read(true), [2], "the person's choice stays");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
+  // The tab in front of its window still, but the person went to another
+  // window or app: its window is left as it is now.
+  assert.deepEqual(await read(false, [true, false]), [2], "moved away");
+  // In another app all along: nothing of the person's moved, it goes back.
+  assert.deepEqual(await read(false, [false, false]), [2, 3], "never here");
+  // Came to the window meanwhile: they see what they came to.
+  assert.deepEqual(await read(false, [false, true]), [2], "came to it");
+  // Chrome does not say in time whether the window has the focus.
+  assert.deepEqual(await read(false, [true, "never"]), [2], "not known");
 });
 
 test("reading again tells PostPane what it found and how the tab stood", async () => {

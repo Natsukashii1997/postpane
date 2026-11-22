@@ -1,4 +1,4 @@
-//! #507 review rounds 3 and 4, P1-04: an answer being written in a handoff's
+//! #507 review rounds 3 to 5, P1-04: an answer being written in a handoff's
 //! conversation that is not its review's (the person asked something there
 //! once the review was back). No words go in beside it, and only the end of
 //! that answer's own turn lets them go.
@@ -124,15 +124,68 @@ fn a_beginning_told_again_after_a_restart_holds_the_words() {
     held(&desk, &lines, 6);
     desk.observe(&own("complete", "p-2"), 7);
     goes(&desk, &lines, 8);
-    // A beginning whose prompt the page could not tell.
+}
+
+// Round 5, P1-04: a beginning whose prompt is not drawn yet names none,
+// and only the end its own tab tells ends it: an older turn's end, told
+// late by another tab, does not.
+#[test]
+fn a_beginning_with_no_prompt_yet_ends_only_by_its_own_tabs_end() {
     let (_temp, desk) = desk_of(5);
     let lines = Fake::default();
     sent_back(&desk, &lines);
-    let unknown = json!({"type":"turn","phase":"start","conversation":"c-new"});
+    let unknown = json!({"type":"turn","phase":"start","conversation":"c-new","tab":1});
     desk.observe(&unknown, 5);
     held(&desk, &lines, 6);
-    desk.observe(&own("complete", "p-9"), 7);
-    goes(&desk, &lines, 8);
+    let mut late = own("complete", "p-1");
+    late["tab"] = json!(2);
+    desk.observe(&late, 7);
+    held(&desk, &lines, 8);
+    let mut ended = own("complete", "p-2");
+    ended["tab"] = json!(1);
+    desk.observe(&ended, 9);
+    goes(&desk, &lines, 10);
+}
+
+// Round 5, P1-04: told again once its prompt is drawn, the beginning is
+// the same one (when it began stays), and from then on its own prompt's
+// end ends it, whichever tab tells it.
+#[test]
+fn a_beginning_told_again_with_its_prompt_keeps_when_it_began() {
+    let (_temp, desk) = desk_of(5);
+    let lines = Fake::default();
+    let handoff = sent_back(&desk, &lines);
+    desk.observe(
+        &json!({"type":"turn","phase":"start","conversation":"c-new","tab":1}),
+        5,
+    );
+    let mut named = own("start", "p-2");
+    named["tab"] = json!(1);
+    desk.observe(&named, 7);
+    let pen = kept(&desk, &handoff).gate.writing;
+    assert_eq!(pen.now.map(|w| w.began), Some(5));
+    let mut read = own("complete", "p-2");
+    read["tab"] = json!(3);
+    desk.observe(&read, 8);
+    goes(&desk, &lines, 9);
+}
+
+// Round 5, P1-04: a beginning naming a prompt already heard to end read
+// the older turn's id by mistake: it names none, so that turn's end told
+// late does not end it.
+#[test]
+fn a_beginning_naming_an_ended_prompt_names_none() {
+    let (_temp, desk) = desk_of(5);
+    let lines = Fake::default();
+    sent_back(&desk, &lines);
+    desk.observe(&own("complete", "p-1"), 4);
+    let mut stale = own("start", "p-1");
+    stale["tab"] = json!(1);
+    desk.observe(&stale, 5);
+    let mut late = own("complete", "p-1");
+    late["tab"] = json!(2);
+    desk.observe(&late, 6);
+    held(&desk, &lines, 7);
 }
 
 #[test]

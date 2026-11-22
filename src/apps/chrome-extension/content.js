@@ -35,7 +35,26 @@
       ? null
       : (page.lastReply(document)?.messageId ?? null);
   let expecting = wasStreaming || !!kept?.expecting;
+  // The newest prompt known to be answered here (#507 review round 5,
+  // P1-04): an answer begins before its prompt is drawn, and the newest
+  // prompt on the page is then the one before, answered already. A
+  // beginning never names that one; it names its own once drawn.
+  let done = kept ? kept.done : wasStreaming ? null : answeredPrompt();
+  // The prompt the last beginning named (null: not known yet), and when it
+  // was told.
+  let begun = null;
+  let begunAt = 0;
   let timer = null;
+
+  function answeredPrompt() {
+    return page.answered(document) ? page.lastPromptId(document) : null;
+  }
+
+  /** The prompt an answer being written now answers, when the page shows it. */
+  function writingFor() {
+    const id = page.lastPromptId(document);
+    return id && id !== done ? id : null;
+  }
 
   function report() {
     tell({
@@ -47,13 +66,15 @@
   }
 
   function tellStart(extra = {}) {
+    begun = writingFor();
+    begunAt = extra.at ?? Date.now();
     tell({
       type: "turn",
       phase: "start",
       conversation,
       title: page.title(document),
       prompt: page.lastPrompt(document),
-      promptId: page.lastPromptId(document),
+      promptId: begun,
       at: Date.now(),
       ...extra,
     });
@@ -62,6 +83,7 @@
   function tellComplete(reply, extra = {}) {
     reported = reply.messageId;
     expecting = false;
+    done = page.lastPromptId(document) ?? done;
     tell({
       type: "turn",
       phase: "complete",
@@ -91,9 +113,16 @@
       if (now && streaming && wasStreaming) tellStart();
     }
     if (streaming) expecting = true;
-    if (!expecting && !streaming)
+    if (!expecting && !streaming) {
       reported = page.lastReply(document)?.messageId ?? reported;
+      done = answeredPrompt() ?? done;
+    }
     if (streaming && !wasStreaming) tellStart();
+    // Its prompt drawn after the answer began: the beginning is told again,
+    // naming it, so its own end is the one that ends it.
+    // The same turn: told as beginning when it did.
+    else if (streaming && writingFor() && writingFor() !== begun)
+      tellStart({ again: true, at: begunAt });
     // A finished turn is a stop button that went away, or a reply this page has
     // not reported yet: a background tab may never be sampled mid-stream.
     const fresh =
@@ -220,6 +249,8 @@
         hidden: document.visibilityState === "hidden",
         title: page.title(document),
         promptId: page.lastPromptId(document),
+        // The prompt being answered, when the page shows it yet (P1-04).
+        writingFor: page.streaming(document) ? writingFor() : null,
       });
     }
     return false;
@@ -236,7 +267,7 @@
     } catch {
       // Cut off from the extension: nothing left to remove.
     }
-    return { reported, expecting };
+    return { reported, expecting, done };
   }
   globalThis.PostPaneContentStop = stop;
 
