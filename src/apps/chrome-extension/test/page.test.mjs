@@ -312,6 +312,169 @@ test("out of time before send is pressed, it is not pressed", async () => {
   await fresh.close();
 });
 
+// #507 review P1-03: the page may be moved to another conversation while the
+// words go in. Looked to before each thing done to the box, and before send.
+test("moved to another conversation before send is pressed, it is not pressed", async () => {
+  const fresh = await composer();
+  // As PostPane's words go into a conversation that holds a review: their
+  // first line names their request.
+  const text = `【驿窗送审 h1a2~send1795233002405】\n${brief(800)}`;
+  const moved = await fresh.evaluate((text) => {
+    // The first piece in, the page shows another conversation.
+    let shows = true;
+    document.addEventListener("paste", () => (shows = false), { once: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, text);
+  assert.deepEqual(moved, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  const pastes = await fresh.evaluate(() => window.pastes.length);
+  assert.equal(pastes, 1, `pasted ${pastes} times`);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // The piece that went in is taken out again (review P2-03): it would sit
+  // in the other conversation's box for the person to send by hand.
+  const boxOf = (page) =>
+    page.evaluate(() => document.querySelector(".ProseMirror").textContent);
+  assert.equal(await boxOf(fresh), "");
+  // Not the conversation's from the start: the box is not touched.
+  const never = await composer();
+  const untouched = await never.evaluate(
+    (text) =>
+      PostPanePage.submit(document, text, Date.now() + 20000, () => false),
+    text,
+  );
+  assert.equal(untouched.reason, "other-conversation");
+  assert.equal(await never.evaluate(() => window.pastes.length), 0);
+  // Moved just as send is to be pressed: the words are in, and not sent.
+  const last = await composer();
+  const short = "【驿窗送审 h1a2~send1795233002409】\nP1-03 专项复核";
+  const unpressed = await last.evaluate((text) => {
+    let shows = true;
+    const box = document.querySelector(".ProseMirror");
+    new MutationObserver(() => {
+      if (box.textContent.includes("P1-03 专项复核")) shows = false;
+    }).observe(box, { childList: true, subtree: true, characterData: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, short);
+  assert.deepEqual(unpressed, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  assert.equal(await last.evaluate(() => window.sent), undefined);
+  assert.equal(await boxOf(last), "", "all of them in: taken out again");
+  // What the box holds by then is not only these words: the person wrote
+  // on, or it is the other conversation's draft. Left, and said so.
+  const written = await composer();
+  const kept = await written.evaluate((text) => {
+    let shows = true;
+    const box = document.querySelector(".ProseMirror");
+    // The first piece in (the box's own listener ran first), the person
+    // writes in the box, and the page shows another conversation.
+    const moved = () => {
+      box.prepend("我自己写的：");
+      shows = false;
+    };
+    document.addEventListener("paste", moved, { once: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, text);
+  assert.deepEqual(kept, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+    left: true,
+  });
+  assert.match(await boxOf(written), /^我自己写的：/);
+  // The other conversation's own draft, alike to the words but not naming
+  // a request of PostPane's whole (round 4 review P2-03): words alike are no
+  // proof they are these. Left, and said so.
+  for (const [words, draft] of [
+    [brief(800), brief(800).slice(0, 12)],
+    [text, text.slice(0, 8)],
+  ]) {
+    const alike = await composer();
+    const said = await alike.evaluate(
+      ([words, draft]) => {
+        let shows = true;
+        const box = document.querySelector(".ProseMirror");
+        const moved = () => {
+          box.textContent = draft;
+          shows = false;
+        };
+        document.addEventListener("paste", moved, { once: true });
+        return PostPanePage.submit(
+          document,
+          words,
+          Date.now() + 20000,
+          () => shows,
+        );
+      },
+      [words, draft],
+    );
+    assert.equal(said.left, true, draft);
+    assert.equal(await boxOf(alike), draft);
+    await alike.close();
+  }
+  // Moved before anything of these went in: what the box holds is the other
+  // conversation's own draft, not touched and not said to be left by these.
+  const drafted = await composer({ draft: "另一个会话的草稿" });
+  const own = await drafted.evaluate((text) => {
+    let asked = 0;
+    const shows = () => ++asked < 2;
+    return PostPanePage.submit(document, text, Date.now() + 20000, shows);
+  }, text);
+  assert.deepEqual(own, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  assert.equal(await boxOf(drafted), "另一个会话的草稿");
+  // Out of time and moved at once: told as out of time, and the piece that
+  // went in is taken out of the other conversation's box all the same.
+  const both = await composer();
+  const lateToo = await both.evaluate((text) => {
+    const until = Date.now() + 20000;
+    let shows = true;
+    const moved = () => {
+      shows = false;
+      Date.now = () => until;
+    };
+    document.addEventListener("paste", moved, { once: true });
+    return PostPanePage.submit(document, text, until, () => shows);
+  }, text);
+  assert.deepEqual(lateToo, { ok: false, reason: "timeout", pressed: false });
+  assert.equal(await boxOf(both), "");
+  await fresh.close();
+  await never.close();
+  await last.close();
+  await written.close();
+  await drafted.close();
+  await both.close();
+});
+
+// #507 review P1-04: a page just loaded may not have drawn yet that an
+// answer is being written (the person's own prompt, in the tab beside it).
+test("an answer begun while the words went in: send is not pressed", async () => {
+  const fresh = await composer();
+  const text = "P1-04 专项复核";
+  const busy = await fresh.evaluate((text) => {
+    const box = document.querySelector(".ProseMirror");
+    new MutationObserver(() => {
+      if (!box.textContent.includes(text)) return;
+      if (document.querySelector("[data-testid=stop-button]")) return;
+      const stop = document.createElement("button");
+      stop.dataset.testid = "stop-button";
+      document.querySelector("main").append(stop);
+    }).observe(box, { childList: true, subtree: true, characterData: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000);
+  }, text);
+  assert.deepEqual(busy, { ok: false, reason: "busy", pressed: false });
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  await fresh.close();
+});
+
 test("out of time between pieces, no more is put in the box", async () => {
   const fresh = await composer();
   const text = brief(800);

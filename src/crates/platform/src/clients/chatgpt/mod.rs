@@ -16,6 +16,7 @@ use std::{
 };
 
 mod commands;
+mod listening;
 pub(crate) use commands::focus;
 pub mod files;
 mod manifest;
@@ -158,7 +159,7 @@ pub type Listener = Arc<dyn Fn(&Value) + Send + Sync>;
 pub(crate) struct Shared {
     data: PathBuf,
     state: Mutex<State>,
-    listener: Mutex<Option<Listener>>,
+    listening: listening::Listening,
 }
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -172,18 +173,11 @@ impl Shared {
                 watched,
                 ..State::default()
             }),
-            listener: Mutex::new(None),
+            listening: listening::Listening::default(),
         }
     }
     fn tell(&self, message: &Value) {
-        let listener = self
-            .listener
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-        if let Some(listener) = listener {
-            listener(message);
-        }
+        self.listening.tell(message);
     }
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
@@ -527,13 +521,10 @@ impl Channel {
             .ok_or_else(|| refused("send-failed"))?;
         Ok(json!({"conversation":conversation,"title":reply["title"],"promptId":reply["promptId"]}))
     }
-    /// Tells `listener` of turns and openings from now on.
+    /// Tells `listener` of turns and openings from now on, after those
+    /// that came before it listened (#507).
     pub fn listen(&self, listener: Listener) {
-        *self
-            .shared
-            .listener
-            .lock()
-            .unwrap_or_else(|p| p.into_inner()) = Some(listener);
+        self.shared.listening.listen(listener);
     }
     /// Whether the extension is connected, what it said of itself and its
     /// tabs, and the watched list.

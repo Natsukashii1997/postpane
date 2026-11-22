@@ -176,6 +176,46 @@ fn words_unsure_at_a_restart_are_told_of_and_late_word_is_noted() {
     assert_eq!(again.steps.len(), after.steps.len());
 }
 
+/// #507: every restart finds the same words pending again. They go on the
+/// card and to the session once: on 2026-11-22 one handoff had five such
+/// steps and five notices, one a restart. Records from before, with no
+/// mark that a restart said so, are known by their last step.
+#[test]
+fn words_unsure_at_a_later_restart_are_not_told_of_again() {
+    let (temp, desk) = desk();
+    let lines = Fake::default();
+    let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+    else {
+        panic!()
+    };
+    desk.observe(&turn("complete", FIX), 3);
+    desk.drive(&lines, 4);
+    lines.send_fails.set(true);
+    assert!(ruled(&desk, &lines, "s1", "L2", None, 5).is_err());
+    lines.send_fails.set(false);
+    drop(desk);
+    let mut desk = Desk::new(Some(temp.path().join("data")));
+    desk.since = 0;
+    assert!(desk.tell(&lines, 6));
+    let steps = desk.lock().get(&handoff.id).unwrap().steps.len();
+    let told = sent_as(&lines, "reply").len();
+    for forgotten in [false, true] {
+        if forgotten {
+            desk.change(|book| {
+                let kept = book.list.iter_mut().find(|h| h.id == handoff.id).unwrap();
+                kept.gate.pending.as_mut().unwrap().restarted = false;
+                true
+            });
+        }
+        drop(desk);
+        desk = Desk::new(Some(temp.path().join("data")));
+        desk.since = 0;
+        assert!(!desk.tell(&lines, 7), "told once");
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().steps.len(), steps);
+        assert_eq!(sent_as(&lines, "reply").len(), told);
+    }
+}
+
 /// Review round 4 P1-14: an answer come before the notice went makes it
 /// out of date.
 #[test]

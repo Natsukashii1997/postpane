@@ -185,15 +185,6 @@ pub(super) fn no_answer() -> String {
         "ChatGPT has not answered in 30 minutes; left to you",
     )
 }
-pub(super) fn no_handover() -> String {
-    l10n::text(
-        &format!(
-            "Claude {} 小时没交回复审，自动往返停下，交还常浩",
-            book::FIX_WAIT_MS / 3_600_000
-        ),
-        "Claude has not handed it over again in 2 hours; left to you",
-    )
-}
 pub(super) fn paused() -> String {
     l10n::text("常浩暂停", "Paused by the person")
 }

@@ -221,3 +221,11 @@ E-01 至 E-05 是这份 skill 建立之前就已经长出来的规矩，补记�
 - 证据：#486 这一轮；L-64；`~/Library/Application Support/postpane/evidence/2026-11-20-486-app-log/`。
 - 批准：2026-11-22 常浩经侧栏回「全按推荐」（推荐是「批」），写进 SKILL.md 第 3 步第 3 项下。
 - 状态：已采纳（本 PR，#515）
+
+## E-25 第 1 步开工：新 worktree 借主目录已编译好的依赖，用写时复制克隆 `target/debug`，不共用目录（2026-11-22）
+
+- 步骤：start
+- 发生了什么：#507 这一轮本机负载 200 以上，`setup-worktree.sh` 里生成打包资源那一步从头编译用了 47 分钟；接着跑 `cargo test` 还要再从头编译一遍调试版。改成先 `cp -Rc <主目录>/target/debug <worktree>/target/debug`（APFS 写时复制，12 GB 几分钟克隆完、不多占盘），第三方依赖直接复用，只重编工作区自己的几个 crate：接力测试 1 分多钟出结果，`pnpm run check` 里 cargo check 3 分 47 秒。克隆出来的是独立副本，不是 L-26、G-23 说的共用构建目录，不会跑到别的 worktree 的代码。
+- 建议：SKILL.md 第 1 步在「新 worktree 先备环境」后加一句：主目录有现成的 `target/debug`、当时没有 cargo 在主目录里跑时，可以先克隆它再跑测试；克隆前看一眼 `pgrep -fl cargo`，正在编译的目录不克隆。可以顺便让 `setup-worktree.sh` 接受一个「从哪里克隆」的参数。
+- 证据：#507 这一轮；`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/green-host.log`（200 passed）。
+- 状态：待批

@@ -67,8 +67,6 @@ enum Stop {
     NoAnswer,
     /// The person paused it.
     Paused,
-    /// Claude did not hand over again within `FIX_WAIT_MS`; it did later.
-    NoHandover,
     /// The answer before had no verdict; Claude handed over again.
     NoVerdict,
     /// The answer before escalated; Claude handed over again.
@@ -87,13 +85,6 @@ fn stopped(desk: &Desk, lines: &Fake, stop: Stop) -> (Handoff, i64) {
         Stop::Paused => {
             desk.act(lines, &handoff.id, "pause", 3).unwrap();
             4
-        }
-        Stop::NoHandover => {
-            assert_eq!(answer(desk, lines, FIX, 3), 1);
-            assert!(desk.late(3 + MIN + FIX_WAIT_MS + 1));
-            let at = 3 + MIN + FIX_WAIT_MS + 2;
-            again(desk, lines, at);
-            at + 1
         }
         Stop::NoVerdict | Stop::Escalated => {
             let first = if matches!(stop, Stop::NoVerdict) {
@@ -119,7 +110,6 @@ fn an_answer_goes_back_once_whatever_stopped_the_round_trip() {
     let stops = [
         Stop::NoAnswer,
         Stop::Paused,
-        Stop::NoHandover,
         Stop::NoVerdict,
         Stop::Escalated,
     ];
@@ -160,7 +150,11 @@ fn new_words_after_a_stop_postpane_made_turn_the_round_trip_on_again() {
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
     assert_eq!(answer(&desk, &lines, FIX, 3), 1);
-    assert!(desk.late(3 + MIN + FIX_WAIT_MS + 1));
+    // Back with Claude, the round trip goes on however long (#507): two
+    // hours used to stop it. A stop PostPane made, then.
+    assert!(!desk.late(3 + MIN + 10 * FIX_WAIT_MS));
+    assert!(desk.lock().get(&handoff.id).unwrap().auto);
+    assert!(desk.change(|book| book.stop(&handoff.id, "停", true, 3 + MIN)));
     let stopped = desk.lock().get(&handoff.id).cloned().unwrap();
     assert!(!stopped.auto && stopped.halt.is_some());
     assert!(!stopped.paused_by_person());
@@ -257,7 +251,8 @@ fn the_owners_three_stuck_handoffs_replayed() {
     let lines = Fake::default();
     opened(&desk, &lines);
     assert_eq!(answer(&desk, &lines, FIX, 24 * MIN), 1);
-    assert!(desk.late(145 * MIN));
+    // Two hours used to stop it there; since #507 it goes on.
+    assert!(!desk.late(145 * MIN));
     again(&desk, &lines, 346 * MIN);
     assert_eq!(
         answer(&desk, &lines, FIX, 359 * MIN),

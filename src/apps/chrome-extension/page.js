@@ -390,8 +390,10 @@
    * the conversation, and PostPane lets them go again (#466). */
   const unsent = (reason) => ({ ok: false, reason, pressed: false });
 
-  /** Thrown by a wait that ends out of the time a sending has. */
+  /** Thrown by a wait that ends out of the time a sending has; and when the
+   * page no longer shows the conversation the words are for. */
   const LATE = Symbol("late");
+  const ELSEWHERE = Symbol("elsewhere");
 
   /** Puts `text` in the composer and presses send. Resolves `{ok, reason?}`;
    * not ok, `pressed` says whether send was pressed (then they may have
@@ -403,10 +405,20 @@
    * touched again (#466 review P1-02): `timely` ends the try out of time,
    * looked to when asked, after each wait, and right before each thing
    * done to the box. The moment the time is up is out of it, as the extension
-   * counts (#466 review P2-03). */
-  async function submit(doc, text, until = Infinity) {
+   * counts (#466 review P2-03). With `shows`, whether the page still shows
+   * the conversation the words are for, the try ends the same way once it
+   * does not (#507 review P1-03): the page may be moved to another
+   * conversation while the words go in, and they are not sent into that
+   * one. What these put in the box by then is taken out again (`takeBack`,
+   * review P2-03), so the person does not send it there by hand; `left`
+   * when words stay in it that are not known to be these. Out of time in
+   * the conversation they are for, the box stays as it is. */
+  async function submit(doc, text, until = Infinity, shows = () => true) {
+    // Whether anything of `text` was put in the box.
+    const put = { begun: false };
     const timely = () => {
       if (Date.now() >= until) throw LATE;
+      if (!shows()) throw ELSEWHERE;
     };
     const wait = async (check, ms) => {
       const got = await waitFor(
@@ -418,14 +430,45 @@
     };
     try {
       timely();
-      return await press(doc, text, wait, timely);
+      return await press(doc, text, wait, timely, put);
     } catch (error) {
-      if (error !== LATE) throw error;
-      return unsent("timeout");
+      if (error !== LATE && error !== ELSEWHERE) throw error;
+      // Out of time, the page may show another conversation as well.
+      const left = put.begun && !shows() && takeBack(doc, text);
+      const reason = error === LATE ? "timeout" : "other-conversation";
+      return { ...unsent(reason), ...(left && { left }) };
     }
   }
 
-  async function press(doc, text, wait, timely) {
+  /** The first line PostPane's words begin with in a conversation that
+   * holds a review: 「【驿窗送审 <request>】」, the request naming when they
+   * went (the host's `handoff/sending/book_unsure.rs`, `TAG_OPEN`). */
+  const OWN = "【驿窗送审 ";
+
+  /** Empties the composer of words `submit` put in it for a conversation
+   * the page no longer shows (#507 review P2-03): only when all it holds is
+   * `text`, whole or its beginning, and that holds its first line naming
+   * its request whole. Words alike are not proof they are these (round 4
+   * review P2-03): a draft of the other conversation's may begin as they
+   * do, but not with a request of PostPane's, named to the millisecond.
+   * Anything else stays. Whether words stay. */
+  function takeBack(doc, text) {
+    const box = doc.querySelector(SEL.composer);
+    const held = box ? bare(box.textContent) : "";
+    if (!held) return false;
+    const named = bare(text.split("\n", 1)[0]);
+    const ours =
+      named.startsWith(bare(OWN)) &&
+      held.startsWith(named) &&
+      bare(text).startsWith(held);
+    if (!ours) return true;
+    box.focus();
+    doc.execCommand("selectAll", false);
+    doc.execCommand("delete", false);
+    return !!bare(box.textContent);
+  }
+
+  async function press(doc, text, wait, timely, put = {}) {
     if (streaming(doc)) return unsent("busy");
     const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
@@ -449,6 +492,7 @@
     // ones (#435 review P1-01). Typed in when paste is not taken, a few
     // characters either way (`holds`).
     let held = () => bare(box.textContent) === bare(text);
+    put.begun = true;
     const pasted = await paste(doc, box, text, wait, timely);
     let button = pasted
       ? await wait(() => held() && sendReady(doc), 3000)
@@ -467,6 +511,9 @@
     }
     if (!button) return unsent("send-failed");
     if (!held()) return unsent("composer-mismatch");
+    // An answer begun since the words started going in (review P1-04): a
+    // page just loaded may not have drawn yet that one is being written.
+    if (streaming(doc)) return unsent("busy");
     const before = lastPromptId(doc);
     timely();
     button.click();

@@ -264,3 +264,40 @@ fn a_read_again_that_did_not_get_through_is_tried_again_soon() {
         "one failed try, one passed on"
     );
 }
+
+// #507: 2026-11-21 a conversation whose tab was gone was read 128 times, two
+// minutes apart, each `unreachable`. Reads that reach nothing come further
+// apart, up to a limit; one that reaches the page brings them back.
+#[test]
+fn reads_that_reach_nothing_come_further_apart() {
+    use super::super::reread::{AGAIN_MS, MISSES_MOST, QUIET_MS};
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let handoff = opened(&desk, &lines);
+    let mut now = desk.lock().get(&handoff.id).unwrap().phase_at + QUIET_MS;
+    let heard = |outcome: &str, now: i64| {
+        desk.observe(
+            &json!({"type":"reread","conversation":"c-new","outcome":outcome}),
+            now,
+        )
+    };
+    assert_eq!(desk.reread(&lines, now), 1);
+    for missed in 1..=MISSES_MOST + 2 {
+        heard(
+            if missed % 2 == 0 {
+                "unopened"
+            } else {
+                "unreachable"
+            },
+            now + 1,
+        );
+        let wait = AGAIN_MS << missed.min(MISSES_MOST);
+        assert_eq!(desk.reread(&lines, now + wait - 1), 0, "after {missed}");
+        now += wait;
+        assert_eq!(desk.reread(&lines, now), 1, "after {missed}");
+    }
+    // The page was reached: every two minutes again.
+    heard("streaming", now + 1);
+    assert_eq!(desk.reread(&lines, now + AGAIN_MS - 1), 0);
+    assert_eq!(desk.reread(&lines, now + AGAIN_MS), 1);
+}

@@ -535,3 +535,35 @@
 - 正确做法：窗口空白时，先查框架对这件事的默认行为（Tauri 2 看 `tauri-runtime-wry` 的 `with_on_web_content_process_terminate_handler` 一段），再下「没处理」的结论。认 WebKit 进程归属：退出驿窗，跟着消失的那些才是驿窗的；或在重启后的驿窗上杀进程，看是不是同一秒新起一个替身。#512 起，网页进程退出、重载发出或失败都会记进 `postpane.log`，下次先 `grep "Web content" postpane.log`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-侧栏不显示/`（空白截图、主进程与网页进程采样、`repro-*`、`repro2-*`、`gpu-*` 三组杀进程后的截图）。
 - 升级：〔提醒〕未升级；再出现空白时先看日志里这几行，定位到原因再决定要不要做整窗重建。
+
+## L-68 Chrome 回收或冻结的标签页还留在插件的名单里：往它发消息抛错或一直不答，被记成「不知道送没送到」（2026-11-22）
+
+- 现象：11-21 两次送审、一次补格式回了不带 `pressed` 的 `tab-closed`（其中一次 0.3 秒就回）或 30 秒没答话，驿窗记成送达未确认，两张接力卡了一天，会话重送只得到「刚才已经送到」；另一个会话每 2 分钟重读一次，128 次全是 `unreachable`。同一时段「Claude 2 小时没交回复审」7 次全是误报，一度被当成主要问题。
+- 根因：插件 `background.js` 的 `pages` 名单只在标签页被关、导航离开时清。标签页被 Chrome 回收（内存节省）或冻结后既不触发这两个事件，也不再有内容脚本：`chrome.tabs.sendMessage` 抛「Receiving end does not exist」或一直挂着。发送把抛错一律报成「标签页中途没了、可能点过发送」；重读补注入脚本失败（回收的标签页注入不进）后就放弃，不重载。
+- 根因更正（11-22 第 2 轮审查返修时在真实 Chromium 156 里实测）：标签页被回收后**编号会换**，触发的是 `chrome.tabs.onReplaced`，不是 `onRemoved`。名单里留下的旧编号不属于任何标签页（`chrome.tabs.get` 报不存在），真正的标签页在新编号下、`discarded: true`。所以「重载名单里那个编号」行不通，要按网址把它找回来。
+- 正确做法：往标签页发要紧的话之前先探活（一条立即回答的消息加时限）。不答的只在确定里面没有活页面时才重载（已回收，或注入脚本被 Chrome 直接拒绝）；其余不答的不动它，换一个或另开一个，因为它可能正在写回答（第一版写的是「不答就重载」，审查后改掉）。找到答应显示这个会话的标签页之前什么都没递给页面，可以明确报「没点发送」。给页面的每个提问、每次注入都带时限。查这类「卡住」先对三处：接力卡的步骤、`turns.jsonl` 里那个会话的行、发起会话记录里 `relay_to_chatgpt` 当时返回的原话（原因码只在那里）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/`（`red-plugin.log` 是新测试在旧代码上的 5 条失败）；实机记录见 issue #507。
+- 升级：〔提醒〕未升级。发送失败的原因码现在只进调用的返回、不进接力卡和日志，下次再查不到就把原因码写进卡片步骤（#434）。
+
+## L-69 浏览器接口的行为按想象写进替身，测试全绿、和真实 Chrome 对不上：回收换编号、名单里的状态没人更新（2026-11-22）
+
+- 现象：#507 两轮审查共 6 条意见，替身测试每一轮都全绿。第 1 轮返修把「重载」限定成只重载名单里那个编号，替身里通过；真实 Chrome 里被回收的标签页已经换了编号，这条路径根本走不到重载，只会另开一个标签页。审查建议用名单里缓存的 `streaming` 判断页面是不是在写回答，查了才发现这个字段只在页面加载、换会话、切前后台时更新，开始写和写完都不刷新。
+- 根因：`test/background.test.mjs` 的扩展接口替身是照「我以为 Chrome 会怎样」写的（回收后编号不变、`chrome.tabs.get` 对不存在的标签页返回空值），没有一条测试在真实浏览器里跑插件本身。缓存字段有人存、没人读，也就没人发现它不准。
+- 正确做法：
+  - 方案依赖浏览器对标签页做了什么（回收、冻结、替换、注入被拒）时，先在真实 Chromium 里加载插件实测，再写替身和实现。现成的做法见 `src/apps/chrome-extension/test/chromium.test.mjs`：Playwright `launchPersistentContext` 加 `--load-extension`，用后台的 `worker.evaluate` 直接调插件自己的函数。
+  - 这类测试里顶替 chatgpt.com 不能用 Playwright 的 `context.route`：插件自己用 `chrome.tabs.create` 开的标签页，第一次加载发生在路由生效之前，会真的连到 chatgpt.com。改用本机 HTTPS 服务器加 `--host-resolver-rules=MAP * 127.0.0.1:<端口>`、`--no-proxy-server`（本机有系统代理时不加会被代理接走）、`--ignore-certificate-errors`。
+  - 要用一个缓存字段做判断之前，先搜它在哪些时刻被写。存了没人读的字段删掉，不留着等人误用。
+  - 无头 Chromium 里造不出真冻结：CDP 的 `Page.setWebLifecycleState` 和 `chrome://discards` 的 Freeze 都没让 `tab.frozen` 变真。冻结相关的结论只能标「未实测」，规则写成不依赖它的具体表现。
+  - 判断「标签页里还有没有活页面」用 Chrome 自己的说法，不从报错反推（#507 第 3 轮复审 P1-01）。实测 Chromium 156：页面崩溃后 `tabs.get` 给 `status: "unloaded"`、网址还在、`discarded: false`；停在 Chrome 错误页的标签页不把网址告诉插件；重载途中注入脚本不会被拒，会等新文档。「注入被拒」只说明这一刻注不进去，不能当成可以重载的依据：审查指出预渲染页面顶上来、从缓存恢复时也会被拒（这两种没实测）（`real-chromium/probe-crashed.log`、`probe-error-page.log`）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/real-chromium/`（`probe-discard.log` 回收前后的编号和各接口返回，`probe-freeze.log` 两种冻结办法都没生效，`chromium-test.log` 四条真实 Chromium 测试）。
+- 升级：〔机检〕已升级（2026-11-22，#507）：加了 `chromium.test.mjs`，随 `pnpm test` 跑；其中第一条断言「回收后编号会换」，Chrome 改了这个行为会在这里先红。可提议提升为全局坑（浏览器插件项目都适用），等常浩批。
+
+## L-70 通道一启动就收消息，订阅方稍后才挂上：中间到的消息被直接丢掉，「重连时补报」恰好落在这段（2026-11-22）
+
+- 现象：#507 第 5 轮审查指出，驿窗启动时 `ChatGpt::start` 先开 Unix socket 接连接，`Desk::new` 读完接力账本后 `handoff::listen` 才挂上监听；`Shared::tell` 没有监听就直接丢消息。插件一连上就 `resync`，把「这个会话正在写」补报一次，这条正好可能落在中间被丢，驿窗重启后的写作闸就恢复不了。三条全量、所有替身测试都没覆盖到，是审查沿真实初始化顺序读出来的。
+- 根因：生产者（插件重连补报）和消费者（接力监听）的就绪顺序没人保证；「没有监听就不交付」写成了「没有监听就丢」。补报机制本身就是为重启设计的，却偏偏只在启动那一瞬发一次。
+- 正确做法：
+  - 事件通道在订阅方挂上之前收到的消息，按顺序暂存、设上限，订阅时先按序交付再接新的；交付旧消息时持锁，不让新消息插队（`platform/src/clients/chatgpt/listening.rs`）。
+  - 写「重连时补报 / 重启后同步」这类逻辑时，顺着真实启动代码走一遍：补报发出那一刻，接收方的每一层（连接、解析、订阅、账本）是不是都已就绪。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/r6-unit.log`（`listening` 两条测试）；第 5 轮回信 `replies/h1a2026f624206-02-c9f2aa78.md`。
+- 升级：〔结构〕已升级（2026-11-22，#507）：通道自带暂存，监听晚挂上也不丢；单测守着顺序和上限。

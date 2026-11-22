@@ -71,6 +71,10 @@ pub struct Pending {
     /// however often it comes again (round 5 P2-16).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub noted: bool,
+    /// A restart found them pending and said so on the card: once, however
+    /// many restarts find them (#507).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub restarted: bool,
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
@@ -222,15 +226,29 @@ impl Book {
     /// so the auto round trip stops on them, as when word never came, and
     /// the session is told (round 4 P1-14); their answers count but cannot
     /// pass. Each card says so.
+    ///
+    /// Once for the same words (#507): each restart finds them again, and
+    /// one handoff got a step and a notice a restart. Ones a restart said
+    /// before `restarted` was kept are known by their last step.
     pub fn pending_at_restart(&mut self, text: &str, now: i64) -> bool {
+        let said = |h: &Handoff| {
+            h.unanswered().is_some_and(|p| p.restarted)
+                || h.steps.last().and_then(|s| s.cause) == Some(Cause::Unconfirmed)
+        };
         let ids = self
             .list
             .iter()
-            .filter(|h| h.live() && h.unanswered().is_some())
+            .filter(|h| h.live() && h.unanswered().is_some() && !said(h))
             .map(|h| h.id.clone())
             .collect::<Vec<_>>();
         for id in &ids {
             self.unconfirmed(id, text, true, now);
+            if let Some(handoff) = self.live_mut(id) {
+                let gate = &mut handoff.gate;
+                for pending in [&mut gate.mending, &mut gate.pending].into_iter().flatten() {
+                    pending.restarted |= !pending.answered;
+                }
+            }
         }
         !ids.is_empty()
     }

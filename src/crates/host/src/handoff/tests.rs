@@ -20,6 +20,7 @@ mod told;
 mod undrawn;
 mod unsure;
 mod words_back;
+mod writing;
 
 use super::notice::{not_told, told as told_back, told_queued};
 use super::wake::{wake_arguments, woke_without_handover};
@@ -303,8 +304,10 @@ fn opened(desk: &Desk, lines: &Fake) -> Handoff {
     handoff
 }
 
+/// Told by the one tab the conversation is open in, as the extension says
+/// which (#507 round 5).
 fn turn(phase: &str, reply: &str) -> Value {
-    json!({"type":"turn","phase":phase,"conversation":"c-new","reply":reply,"prompt":asked()})
+    json!({"type":"turn","phase":phase,"conversation":"c-new","reply":reply,"prompt":asked(),"tab":1})
 }
 
 thread_local! {
