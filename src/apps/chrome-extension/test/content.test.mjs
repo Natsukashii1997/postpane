@@ -295,6 +295,40 @@ test("injected again into an open tab, the page reports each turn once", async (
   );
 });
 
+// #507: a script is put in again when the page did not say it is there in
+// two seconds. A page that was only slow has its copy still running: what
+// that one was waiting on is handed over, or the answer to words it sent
+// would pass for one already there.
+test("put in again while an answer is due, the script still reports that answer", async () => {
+  const page = await open();
+  await page.evaluate(async () => {
+    const result = await new Promise((resolve) =>
+      window.listener({ op: "submit", text: "请审核" }, {}, resolve),
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    // Streaming ended with nothing drawn yet, as in a slow background tab.
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  });
+  await page.waitForTimeout(1200);
+  for (const path of scripts) await page.addScriptTag({ path });
+  await page.evaluate(() =>
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:7:assistant" data-chatgpt-search-message-ids="m4"><p data-d-component="text">好的</p></div>',
+      ),
+  );
+  await page.waitForTimeout(1500);
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.deepEqual(
+    done.map((m) => [m.messageId, m.reply]),
+    [["m4", "好的"]],
+  );
+});
+
 test("a copy cut off by an extension reload stops instead of throwing on every change", async () => {
   const page = await open();
   const errors = [];
@@ -312,30 +346,29 @@ test("a copy cut off by an extension reload stops instead of throwing on every c
   assert.deepEqual(errors, []);
 });
 
-// #507 review P1-01: the background leaves a page alone that says nothing
-// while it writes an answer, going by what the page last said of itself.
-test("the page says when an answer begins and ends being written", async () => {
+// #507 review P1-03: words for a conversation go into no other. The tab may
+// show another since it was asked whether it is there.
+test("words for another conversation than the page shows are not put in or sent", async () => {
   const page = await open();
-  const said = () =>
-    page.evaluate(() =>
-      window.told.filter((m) => m.type === "page").map((m) => m.streaming),
-    );
-  const slot = (type, label) =>
-    page.evaluate(
-      ([type, label]) => {
-        const slot = document.getElementById("slot");
-        slot.type = type;
-        slot.setAttribute("aria-label", label);
-      },
-      [type, label],
-    );
-  assert.deepEqual(await said(), [false]);
-  await slot("button", "停止");
-  await page.waitForTimeout(700);
-  assert.deepEqual(await said(), [false, true]);
-  await slot("submit", "发送");
-  await page.waitForTimeout(700);
-  assert.deepEqual(await said(), [false, true, false]);
+  const answer = await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        window.listener(
+          { op: "submit", text: "下一轮", conversation: "another" },
+          {},
+          resolve,
+        ),
+      ),
+  );
+  assert.deepEqual(answer, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  const box = await page.evaluate(
+    () => document.querySelector(".ProseMirror")?.textContent ?? "",
+  );
+  assert.equal(box, "");
   await page.close();
 });
 
@@ -414,7 +447,8 @@ test("asked whether it is there, the page says which conversation it shows", asy
     () =>
       new Promise((resolve) => window.listener({ op: "alive" }, {}, resolve)),
   );
-  assert.deepEqual(Object.keys(answer), ["conversation"]);
+  assert.deepEqual(Object.keys(answer), ["conversation", "hidden"]);
+  assert.equal(answer.hidden, false);
   const shown = await page.evaluate(() => location.href);
   assert.equal(answer.conversation, shown.split("/c/")[1] ?? null);
   await page.close();
@@ -441,18 +475,24 @@ test("asked whether words are there, the page reads its newest prompt", async ()
     () => location.href.split("/c/")[1] ?? null,
   );
   assert.deepEqual(await ask({ conversation, request: "h1~send5" }), {
+    here: true,
     loaded: true,
     there: true,
     streaming: false,
   });
   assert.deepEqual(await ask({ conversation, request: "h1~send9" }), {
+    here: true,
     loaded: true,
     there: false,
     streaming: false,
   });
-  // Another conversation's page says nothing of this one.
+  // Another conversation's page says nothing of this one, and that it is
+  // not this one's (#507 review P1-01: it is not loaded again to look).
   const other = await ask({ conversation: "another", request: "h1~send5" });
-  assert.deepEqual([other.loaded, other.there], [false, false]);
+  assert.deepEqual(
+    [other.here, other.loaded, other.there],
+    [false, false, false],
+  );
   await page.close();
 });
 

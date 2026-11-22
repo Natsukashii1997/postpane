@@ -4,9 +4,10 @@
 (() => {
   const page = globalThis.PostPanePage;
   // background.js injects this again into tabs already open when the
-  // extension is installed, updated or reloaded: a copy still running here
-  // steps aside, so the page is reported once.
-  globalThis.PostPaneContentStop?.();
+  // extension is installed, updated or reloaded, and into one that did not
+  // say it is there (#507): a copy still running here steps aside, so the
+  // page is reported once, and hands over what it was waiting on.
+  const kept = globalThis.PostPaneContentStop?.();
   let stopped = false;
   // A copy left behind by a reload is cut off from the extension and every
   // send throws: it stops instead of failing silently on every change.
@@ -25,10 +26,15 @@
   // page) are not news: a reply counts once this page saw a stop button or
   // sent something itself. Put in while one is being written (the extension
   // installed, updated or reloaded), that one is news once it ends (#356).
-  let reported = wasStreaming
-    ? null
-    : (page.lastReply(document)?.messageId ?? null);
-  let expecting = wasStreaming;
+  // A copy that stepped aside knew which reply it told last, and whether
+  // one is due (words it sent, not answered yet): with those, a page that
+  // was only slow to answer loses no reply to the script put in again.
+  let reported = kept
+    ? kept.reported
+    : wasStreaming
+      ? null
+      : (page.lastReply(document)?.messageId ?? null);
+  let expecting = wasStreaming || !!kept?.expecting;
   let timer = null;
 
   function report() {
@@ -110,12 +116,7 @@
         tellComplete(reply);
       }, 600);
     }
-    // The background leaves a page alone that says nothing while it writes
-    // an answer, by what the page last said (#507 review P1-01): said as
-    // writing begins and ends.
-    const turned = streaming !== wasStreaming;
     wasStreaming = streaming;
-    if (turned) report();
   }
 
   // Sample at most every 400 ms while the page changes, never postponing: a
@@ -138,7 +139,18 @@
 
   function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
-      page.submit(document, command.text, command.until).then(
+      // Words for a conversation go into no other (#507 review P1-03): the
+      // tab may show another since it was asked whether it is there. Looked
+      // to here, and by page.js before each thing it does to the box.
+      const here = () => page.conversationId(location.href);
+      if (command.conversation && here() !== command.conversation) {
+        reply({ ok: false, reason: "other-conversation", pressed: false });
+        return false;
+      }
+      const shows = command.conversation
+        ? () => here() === command.conversation
+        : undefined;
+      page.submit(document, command.text, command.until, shows).then(
         (result) => {
           if (result.ok) expecting = true;
           reply(result);
@@ -194,7 +206,10 @@
     }
     // Whether this page is there, and which conversation it shows (#507).
     if (command.op === "alive") {
-      reply({ conversation: page.conversationId(location.href) });
+      reply({
+        conversation: page.conversationId(location.href),
+        hidden: document.visibilityState === "hidden",
+      });
       return false;
     }
     // Whether the newest prompt is the words sent as `request` (#509):
@@ -204,6 +219,7 @@
       const here = page.conversationId(location.href) === command.conversation;
       const prompt = here ? page.lastPrompt(document) : null;
       reply({
+        here,
         loaded: !!prompt,
         there: !!prompt?.includes(command.request),
         streaming: page.streaming(document),
@@ -233,6 +249,7 @@
     } catch {
       // Cut off from the extension: nothing left to remove.
     }
+    return { reported, expecting };
   }
   globalThis.PostPaneContentStop = stop;
 

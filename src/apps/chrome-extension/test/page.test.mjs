@@ -312,6 +312,56 @@ test("out of time before send is pressed, it is not pressed", async () => {
   await fresh.close();
 });
 
+// #507 review P1-03: the page may be moved to another conversation while the
+// words go in. Looked to before each thing done to the box, and before send.
+test("moved to another conversation before send is pressed, it is not pressed", async () => {
+  const fresh = await composer();
+  const text = brief(800);
+  const moved = await fresh.evaluate((text) => {
+    // The first piece in, the page shows another conversation.
+    let shows = true;
+    document.addEventListener("paste", () => (shows = false), { once: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, text);
+  assert.deepEqual(moved, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  const pastes = await fresh.evaluate(() => window.pastes.length);
+  assert.equal(pastes, 1, `pasted ${pastes} times`);
+  assert.equal(await fresh.evaluate(() => window.sent), undefined);
+  // Not the conversation's from the start: the box is not touched.
+  const never = await composer();
+  const untouched = await never.evaluate(
+    (text) =>
+      PostPanePage.submit(document, text, Date.now() + 20000, () => false),
+    text,
+  );
+  assert.equal(untouched.reason, "other-conversation");
+  assert.equal(await never.evaluate(() => window.pastes.length), 0);
+  // Moved just as send is to be pressed: the words are in, and not sent.
+  const last = await composer();
+  const short = "P1-03 专项复核";
+  const unpressed = await last.evaluate((text) => {
+    let shows = true;
+    const box = document.querySelector(".ProseMirror");
+    new MutationObserver(() => {
+      if (box.textContent.includes(text)) shows = false;
+    }).observe(box, { childList: true, subtree: true, characterData: true });
+    return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
+  }, short);
+  assert.deepEqual(unpressed, {
+    ok: false,
+    reason: "other-conversation",
+    pressed: false,
+  });
+  assert.equal(await last.evaluate(() => window.sent), undefined);
+  await fresh.close();
+  await never.close();
+  await last.close();
+});
+
 test("out of time between pieces, no more is put in the box", async () => {
   const fresh = await composer();
   const text = brief(800);

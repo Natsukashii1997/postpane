@@ -8,7 +8,7 @@ const GROUP = "驿窗接力";
 let port = null;
 let retry = 5000;
 let watched = new Set();
-const pages = new Map(); // tabId -> {conversation, hidden, streaming, at}
+const pages = new Map(); // tabId -> {conversation, hidden}
 const opening = new Map(); // tabId -> requestId
 const waiters = new Map(); // tabId -> [resolve]
 
@@ -176,9 +176,17 @@ function both(first, second) {
  * ok, `pressed` is what the page says of send (#466): false when it was
  * pressed on neither try, true when on either; left out when it is not
  * known: a try did not say, or went out and the tab went away meanwhile. */
-async function submit(tabId, text, until) {
+async function submit(tabId, text, until, conversation) {
   const closed = { ok: false, reason: "tab-closed" };
-  const ask = { op: "submit", text, ...(until && { until }) };
+  // With `conversation`, the page presses send only while it shows it (#507
+  // review P1-03): a tab may be moved to another between being asked whether
+  // it is there and pressing send.
+  const ask = {
+    op: "submit",
+    text,
+    ...(until && { until }),
+    ...(conversation && { conversation }),
+  };
   let first;
   try {
     first = await chrome.tabs.sendMessage(tabId, ask);
@@ -239,71 +247,190 @@ async function open(text, project) {
 const ALIVE_BY = 2000;
 const ALIVE_AGAIN_BY = 8000;
 
-/** How long what a page said of writing an answer holds while it says
- * nothing: a page frozen mid-answer says it no more, and one left alone for
- * good would take no words again. A tab Chrome discarded is not held to it. */
-const WRITING_FOR = 30 * 60000;
+/** How many tabs may show one conversation before no more is made for it:
+ * the one that says nothing, and one in its place. */
+const TABS_MOST = 2;
 
-/** Whether the page in `tabId` may be writing an answer, by what it last
- * said of itself (#507 review P1-01): loading it again would end that. */
-function mayWrite(tabId) {
-  const page = pages.get(tabId);
-  return !!page?.streaming && Date.now() - page.at < WRITING_FOR;
-}
-
-/** The conversation the page in `tabId` says it shows, asked by `until`
- * (null: none); undefined when it says nothing by then. */
+/** What the page in `tabId` says of itself, asked by `until`: the
+ * conversation it shows (null: none) and whether it is hidden; undefined
+ * when it says nothing by then. */
 async function shown(tabId, until) {
   const said = await by(until, () =>
     chrome.tabs.sendMessage(tabId, { op: "alive" }),
   );
-  return said && said !== true ? (said.conversation ?? null) : undefined;
+  return said && said !== true
+    ? { conversation: said.conversation ?? null, hidden: !!said.hidden }
+    : undefined;
 }
 
-/** How the tab listed for `conversation` stands, asked whether it is there
- * (#507). A tab Chrome discarded or froze stays listed and says nothing:
- * words to one came back `tab-closed`, or not at all, and were kept as not
- * known to have gone. But no answer in two seconds is not a page gone, and
- * loading a tab again ends an answer being written in it (review P1-01):
- * - "there": it answers, and shows the conversation;
- * - "gone": no such tab, or it shows another conversation by now;
- * - "writing": still there and silent, and it last said it was writing an
- *   answer: left alone;
- * - "stale": to be loaded again. Chrome discarded it (it runs no page), or
- *   it is silent even asked a second time, with a script put in: one cut
- *   off from the extension (reloaded) answers then, and so does a page that
- *   was only slow. */
+/** Puts the content scripts in `tabId` by `until`: "in", "refused" when
+ * Chrome will not, and null when it is not done by then. Refused is not the
+ * same as not done in time: a frozen page takes the script once it runs
+ * again, and till then nothing comes back. */
+function scripted(tabId, until) {
+  return by(until, () =>
+    chrome.scripting
+      .executeScript({ target: { tabId }, files: ["page.js", "content.js"] })
+      .then(
+        () => "in",
+        () => "refused",
+      ),
+  );
+}
+
+/** How a tab that may show `conversation` stands, asked whether it is there
+ * (#507). A tab Chrome discarded says nothing (and has a new id: the one it
+ * had is listed still, and is no tab's): words to one came back
+ * `tab-closed`, or not at all, and were kept as not known to have gone.
+ * - "there": its page answers, and shows the conversation;
+ * - "stale": no page of the conversation runs in it, so loading it again
+ *   ends nothing: it is at the conversation's address, and Chrome discarded
+ *   it, or it takes no script at all (an error page, a crashed one);
+ * - "away": anything else, and it is left as it is (review P1-01): no such
+ *   tab, another conversation (it is listed for that one, then) or another
+ *   site by now, or a page that says
+ *   nothing even asked a second time with a script put in (frozen, or
+ *   busy). That page may be writing an answer, which loading it again would
+ *   end; what it last said of that is not gone by, since a restarted worker
+ *   has not heard it. A page cut off from the extension (reloaded) answers
+ *   once it has the script, and so does one that was only slow. */
 async function stands(tabId, conversation, until) {
-  let shows = await shown(tabId, Math.min(until, Date.now() + ALIVE_BY));
-  if (shows === undefined) {
+  // Chrome tells a tab's address only at chatgpt.com: a listed tab that
+  // went to another site (nothing says so) has none, and is not this
+  // extension's to load again.
+  const tab = async () => {
     const tab = await by(until, () => chrome.tabs.get(tabId));
-    if (!tab) return "gone";
-    if (tab.discarded) return "stale";
-    if (mayWrite(tabId)) return "writing";
+    return tab?.url?.includes(`/c/${conversation}`) ? tab : null;
+  };
+  let said = await shown(tabId, Math.min(until, Date.now() + ALIVE_BY));
+  if (said === undefined) {
+    const before = await tab();
+    if (!before) return "away";
+    if (before.discarded) return "stale";
     const again = Math.min(until, Date.now() + ALIVE_AGAIN_BY);
-    await by(again, () =>
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["page.js", "content.js"],
-      }),
-    );
-    shows = await shown(tabId, again);
-    // A script put in says how its page stands: writing, it is left alone.
-    if (shows === undefined) return mayWrite(tabId) ? "writing" : "stale";
+    if ((await scripted(tabId, again)) === "refused") {
+      // As Chrome has the tab now: it may have been loaded or moved since.
+      const now = await tab();
+      const idle = now && !now.frozen && now.status !== "loading";
+      return idle ? "stale" : "away";
+    }
+    said = await shown(tabId, again);
   }
-  return shows === conversation ? "there" : "gone";
+  if (!said) return "away";
+  // Listed as it says, if it was not: a worker that restarted may not have
+  // heard from it, and one that moved on says so only as its page changes.
+  if (pages.get(tabId)?.conversation !== said.conversation) {
+    pages.set(tabId, said);
+    statusSoon();
+  }
+  return said.conversation === conversation ? "there" : "away";
 }
 
 /** Loads `tabId` again (#507), that tab and no other showing the same
  * conversation (review P2-01): true once its page reports showing
- * `conversation`, by `until`; false when it does not by then; null when it
- * cannot be loaded again (no such tab). */
+ * `conversation`, by `until`; false when it does not by then (begun or
+ * not: out of time it may load again all the same); null when it cannot be
+ * loaded again (no such tab). */
 async function loadAgain(tabId, conversation, until) {
   pages.delete(tabId);
-  if (!(await by(until, () => chrome.tabs.reload(tabId)))) return null;
+  const begun = await by(until, () =>
+    chrome.tabs.reload(tabId).then(
+      () => "begun",
+      () => "refused",
+    ),
+  );
+  if (begun === "refused") return null;
   const loaded = (p) => p.conversation === conversation;
-  const page = await ready(tabId, until - Date.now(), loaded);
+  const page = begun && (await ready(tabId, until - Date.now(), loaded));
   return !!page && Date.now() < until;
+}
+
+/** The tabs open at chatgpt.com that show `conversation` by their address. */
+async function tabsAt(conversation, until) {
+  const tabs = await by(until, () => chrome.tabs.query({ url: `${HOME}*` }));
+  return Array.isArray(tabs)
+    ? tabs.filter((tab) => tab.url?.includes(`/c/${conversation}`))
+    : [];
+}
+
+/** The tab being made for each conversation, till its page reports or the
+ * time for it is up: two looking for a tab at once (a sending and a read)
+ * do not each make one. */
+const making = new Map();
+
+/** A tab whose page says, by `until`, that it shows `conversation` (#507):
+ * `tabId`, with `reloaded` when it was loaded again and `made` when it was
+ * made for it. None by then: no `tabId`.
+ *
+ * Each tab that may show it is asked, the listed ones first, then the ones
+ * at its address (a discarded tab is listed under the id it had). A stale
+ * one is loaded again; any other that is not there is passed over and left
+ * as it is, and dropped from the list (its page reports again when it can).
+ * With none left one is made, unless `TABS_MOST` show the conversation
+ * already: then PostPane hears the words did not go, or the read reached
+ * nothing, and asks again later. */
+async function reach(conversation, until) {
+  const passed = new Set();
+  const next = async () => {
+    for (const [tabId, page] of pages)
+      if (page.conversation === conversation && !passed.has(tabId))
+        return tabId;
+    const open = await tabsAt(conversation, until);
+    return open.find((tab) => !passed.has(tab.id))?.id ?? null;
+  };
+  for (;;) {
+    const tabId = await next();
+    if (Date.now() >= until) return {};
+    if (tabId === null) {
+      // One being made for it is waited for, and asked like any other.
+      const other = making.get(conversation);
+      if (!other) break;
+      await by(until, () => other);
+      continue;
+    }
+    const how = await stands(tabId, conversation, until);
+    if (Date.now() >= until) return {};
+    if (how === "there") return { tabId };
+    passed.add(tabId);
+    // One that answered is listed by now as showing what it does.
+    if (pages.get(tabId)?.conversation === conversation) pages.delete(tabId);
+    if (how !== "stale") continue;
+    const again = await loadAgain(tabId, conversation, until);
+    if (again) return { tabId, reloaded: true };
+    if (again === false) return { reloaded: true };
+  }
+  // Said at once, before anything is waited for: another looking for a tab
+  // meanwhile waits for this one.
+  const made = make(conversation, until);
+  making.set(conversation, made);
+  try {
+    return await made;
+  } finally {
+    making.delete(conversation);
+  }
+}
+
+/** Makes a tab for `conversation`, in its group, unless `TABS_MOST` show it
+ * already: `{tabId, made}` once its page reports, by `until`; `{made}` when
+ * it does not by then; `{}` when none was made. */
+async function make(conversation, until) {
+  if ((await tabsAt(conversation, until)).length >= TABS_MOST) return {};
+  if (Date.now() >= until) return {};
+  const url = `${HOME}c/${conversation}`;
+  const tab = await by(until, () =>
+    chrome.tabs.create({ url, active: false }).then(
+      (tab) => tab,
+      () => false,
+    ),
+  );
+  // Out of time, Chrome may make it all the same.
+  if (tab === false) return {};
+  const made = { made: true };
+  if (!tab) return made;
+  if (!(await by(until, () => group(tab.id)))) return made;
+  const loaded = (p) => p.conversation === conversation;
+  if (!(await ready(tab.id, until - Date.now(), loaded))) return made;
+  return Date.now() < until ? { tabId: tab.id, ...made } : made;
 }
 
 async function send(conversation, text) {
@@ -311,40 +438,13 @@ async function send(conversation, text) {
   if (!watched.has(conversation))
     return { ok: false, reason: "not-watched", pressed: false };
   const until = Date.now() + PRESS_BY;
-  // No tab made, grouped and loaded in time, or none that answers: the page
-  // is not asked, so send was not pressed (a page there all the same is not
-  // asked late).
-  const late = { ok: false, reason: "timeout", pressed: false };
-  // The tab listed for the conversation, once it says it is there. One that
-  // does not is dropped from the list, or loaded again, and the next listed
-  // is asked: each round leaves one fewer.
-  let tabId = tabFor(conversation);
-  for (; tabId !== null; tabId = tabFor(conversation)) {
-    const how = await stands(tabId, conversation, until);
-    if (Date.now() >= until) return late;
-    if (how === "there") break;
-    // A page writing an answer takes no words (page.js says the same of one
-    // that answers), and is not loaded again to make it.
-    if (how === "writing") return { ok: false, reason: "busy", pressed: false };
-    pages.delete(tabId);
-    if (how === "gone") continue;
-    const again = await loadAgain(tabId, conversation, until);
-    if (again) break;
-    if (again === false) return late;
-  }
-  if (tabId === null) {
-    const url = `${HOME}c/${conversation}`;
-    const tab = await by(until, () =>
-      chrome.tabs.create({ url, active: false }),
-    );
-    if (!tab) return late;
-    tabId = tab.id;
-    if (!(await by(until, () => group(tabId)))) return late;
-    const loaded = (p) => p.conversation === conversation;
-    if (!(await ready(tabId, until - Date.now(), loaded))) return late;
-    if (Date.now() >= until) return late;
-  }
-  return submit(tabId, text, until);
+  // No tab that says it shows the conversation, made, grouped and loaded in
+  // time: the page is not asked, so send was not pressed (a page there all
+  // the same is not asked late).
+  const { tabId } = await reach(conversation, until);
+  if (tabId === undefined)
+    return { ok: false, reason: "timeout", pressed: false };
+  return submit(tabId, text, until, conversation);
 }
 
 /** The tab showing `conversation`: as reported, else by its address. */
@@ -368,49 +468,26 @@ async function reread(conversation) {
   shadowRead(conversation, "reread", { pageOutcome: found.outcome });
 }
 
-/** What reading `conversation` again found (`outcome`) and how its tab stood. */
+/** What reading `conversation` again found (`outcome`) and how its tab
+ * stood. The tab is one that says it shows the conversation (`reach`: a
+ * script put in one cut off, a discarded one loaded again, one made when
+ * none is there), so the read is of this conversation and no other (#507
+ * review P2-01). */
 async function readAgain(conversation) {
-  let tabId = await tabShowing(conversation);
-  if (tabId === null) {
-    const tab = await chrome.tabs.create({
-      url: `${HOME}c/${conversation}`,
-      active: false,
-    });
-    tabId = tab.id;
-    await group(tabId);
-    if (!(await ready(tabId, 30000, (p) => p.conversation === conversation)))
-      return { outcome: "unopened" };
-  }
+  const at = await reach(conversation, Date.now() + REACH_BY);
+  const reloaded = at.reloaded && { reloaded: true };
+  if (at.tabId === undefined)
+    return { outcome: at.made ? "unopened" : "unreachable", ...reloaded };
+  const { tabId } = at;
   const stood = await standing(tabId);
-  // The tab checks it shows this conversation. One that has not drawn its
-  // history yet (just opened) is asked again shortly, a few times. A page
-  // that says nothing in `ASK_BY` (a frozen tab's) counts as not answering.
+  // One that has not drawn its history yet (just opened) is asked again
+  // shortly, a few times. A page that says nothing in `ASK_BY`, or shows
+  // another conversation by now, counts as not answering.
   const ask = () =>
     by(Date.now() + ASK_BY, () =>
       chrome.tabs.sendMessage(tabId, { op: "reread", conversation }),
-    ).then((said) => (said === true ? null : said));
+    ).then((said) => (said === true || said?.ok === false ? null : said));
   let answer = await ask();
-  if (!answer) {
-    await chrome.scripting
-      .executeScript({ target: { tabId }, files: ["page.js", "content.js"] })
-      .catch(() => {});
-    answer = await ask();
-  }
-  // Still nothing, even with a script put in (#507): a tab Chrome discarded
-  // takes none. It is loaded again, once a read; but not a page still there
-  // that last said it was writing an answer, which loading again would end
-  // (review P1-01). A listed tab that is gone is passed over: the read
-  // begins again with another showing the conversation, or a new one.
-  let reloaded = false;
-  if (!answer) {
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    if (!tab && pages.delete(tabId)) return readAgain(conversation);
-    if (tab && !tab.discarded && mayWrite(tabId))
-      return { outcome: "busy", ...stood, fronted: false };
-    const again = await loadAgain(tabId, conversation, Date.now() + RELOAD_BY);
-    reloaded = again !== null;
-    if (again) answer = await ask();
-  }
   for (
     let tries = 0;
     answer?.loaded === false && tries < REREAD_TRIES;
@@ -423,60 +500,39 @@ async function readAgain(conversation) {
   const told = answer?.undrawn
     ? await drawnInFront(tabId, ask)
     : !!answer?.told;
-  return {
-    outcome: outcomeOf(answer, told),
-    ...stood,
-    fronted,
-    ...(reloaded && { reloaded }),
-  };
+  return { outcome: outcomeOf(answer, told), ...stood, fronted, ...reloaded };
 }
+/** How long a read has to get to a tab that shows the conversation. */
+const REACH_BY = 45000;
 const ASK_BY = 10000;
-const RELOAD_BY = 30000;
 
 /** Whether the words sent as `request` are in `conversation` (#509):
- * PostPane heard no word that they went in. Its tab is loaded again, so it
- * shows what ChatGPT has, and its newest prompt read: the words begin with
- * a line naming their request. "there"; "absent" when the newest prompt,
- * read twice a moment apart, is another and no answer is being written;
- * "unread" when that cannot be told (the page not loaded or not drawn, an
- * answer on its way). Words not known to have gone in often did, and their
- * answer is being written: a page that says so, or says nothing and last
- * said so, is not loaded again, which would end it (#507 review P1-01);
- * "unread", and PostPane looks again later. */
+ * PostPane heard no word that they went in. A tab that shows the
+ * conversation is found as for sending (`reach`), and loaded again unless
+ * it just was, or was made, so it shows what ChatGPT has; then its newest
+ * prompt is read: the words begin with a line naming their request.
+ * "there"; "absent" when the newest prompt, read twice a moment apart, is
+ * another and no answer is being written; "unread" when that cannot be
+ * told (no tab to read, the page not loaded or not drawn, an answer on its
+ * way). Words not known to have gone in often did, and their answer is
+ * being written: a page that says so is not loaded again, which would end
+ * it (#507 review P1-01); nor is one that does not say how it stands, or
+ * shows another conversation by now. "unread", and PostPane looks again
+ * later. */
 async function find(conversation, request) {
   if (!watched.has(conversation)) return "unread";
-  let tabId = await tabShowing(conversation);
+  const at = await reach(conversation, Date.now() + REACH_BY);
+  if (at.tabId === undefined) return "unread";
+  const { tabId } = at;
   const ask = () =>
     by(Date.now() + ASK_BY, () =>
       chrome.tabs.sendMessage(tabId, { op: "asked", conversation, request }),
     ).then((said) => (said === true ? null : said));
-  if (tabId !== null) {
-    const how = await stands(tabId, conversation, Date.now() + ASK_BY);
-    if (how === "writing") return "unread";
-    if (how === "there") {
-      const now = await ask();
-      if (now ? now.streaming : mayWrite(tabId)) return "unread";
-    }
-    const until = Date.now() + RELOAD_BY;
-    const again =
-      how === "gone" ? null : await loadAgain(tabId, conversation, until);
-    if (again === false) return "unread";
-    if (again === null) {
-      pages.delete(tabId);
-      tabId = null;
-    }
-  }
-  if (tabId === null) {
-    const until = Date.now() + RELOAD_BY;
-    const url = `${HOME}c/${conversation}`;
-    const tab = await by(until, () =>
-      chrome.tabs.create({ url, active: false }),
-    );
-    if (!tab) return "unread";
-    tabId = tab.id;
-    await by(until, () => group(tabId));
-    const loaded = (p) => p.conversation === conversation;
-    if (!(await ready(tabId, until - Date.now(), loaded))) return "unread";
+  if (!at.reloaded && !at.made) {
+    const now = await ask();
+    if (!now?.here || now.streaming) return "unread";
+    const again = await loadAgain(tabId, conversation, Date.now() + REACH_BY);
+    if (!again) return "unread";
   }
   const pause = () =>
     new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
@@ -1195,8 +1251,6 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     const page = {
       conversation: message.conversation,
       hidden: message.hidden,
-      streaming: message.streaming,
-      at: Date.now(),
     };
     pages.set(tabId, page);
     for (const check of waiters.get(tabId) || []) check(page);
@@ -1219,6 +1273,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   statusSoon();
 });
 
+// A tab Chrome discards gets a new id (#507, Chromium 156): the one it had
+// is no tab's from then on.
+chrome.tabs.onReplaced.addListener((_added, removed) => {
+  pages.delete(removed);
+  statusSoon();
+});
+
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   // A tab navigating away from chatgpt.com no longer runs our content script.
   if (change.url && !change.url.startsWith(HOME)) {
@@ -1227,20 +1288,22 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
   }
 });
 
-// A restarted worker has lost its tab map; ask the tabs already open.
+// A restarted worker has lost its tab map; ask the tabs already open, all at
+// once and each for `ALIVE_BY`: one that says nothing (frozen) does not keep
+// the rest from being listed (#507 review P1-01).
 async function resync() {
-  for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
-    const state = await chrome.tabs
-      .sendMessage(tab.id, { op: "state" })
-      .catch(() => null);
-    if (state)
+  const tabs = await chrome.tabs.query({ url: `${HOME}*` });
+  const ask = async (tab) => {
+    const state = await by(Date.now() + ALIVE_BY, () =>
+      chrome.tabs.sendMessage(tab.id, { op: "state" }),
+    );
+    if (state && state !== true)
       pages.set(tab.id, {
         conversation: state.conversation,
         hidden: state.hidden,
-        streaming: state.streaming,
-        at: Date.now(),
       });
-  }
+  };
+  await Promise.all(tabs.map(ask));
   statusSoon();
 }
 
@@ -1249,14 +1312,11 @@ async function resync() {
 // went unreported until the tab was reloaded (#206). Put one in each; a tab
 // that cannot take it (discarded, still loading) gets one when it loads.
 chrome.runtime.onInstalled.addListener(async () => {
-  for (const tab of await chrome.tabs.query({ url: `${HOME}*` })) {
-    await chrome.scripting
-      .executeScript({
-        target: { tabId: tab.id },
-        files: ["page.js", "content.js"],
-      })
-      .catch(() => {});
-  }
+  // All at once, and each for so long: a frozen tab's is not done till it
+  // runs again, and does not keep the rest waiting (#507 review P1-02).
+  const tabs = await chrome.tabs.query({ url: `${HOME}*` });
+  const until = Date.now() + ALIVE_AGAIN_BY;
+  await Promise.all(tabs.map((tab) => scripted(tab.id, until)));
   resync();
 });
 
