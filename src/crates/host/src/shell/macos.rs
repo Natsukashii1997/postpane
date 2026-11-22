@@ -41,6 +41,24 @@ pub(crate) fn statistics_chrome<'a>(
         .hidden_title(true)
 }
 
+/// WebKit ends a page's content process when it crashes or grows too large,
+/// and the window then draws nothing. The app logs it and reloads the page
+/// from another thread: the reload reaches the event loop as a message instead
+/// of borrowing the window table inside WebKit's callback, where Tauri's own
+/// reload gives up silently when the table is in use (#512).
+pub(crate) fn web_content_hooks(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder.on_web_content_process_terminate(|webview| {
+        let webview = webview.clone();
+        std::thread::spawn(move || {
+            super::web_process::process_ended(
+                webview.label(),
+                || webview.reload().map_err(|error| error.to_string()),
+                |line| agent_hud_runtime::note!("{line}"),
+            );
+        });
+    })
+}
+
 pub(crate) fn system_prefers_chinese() -> bool {
     objc2_foundation::NSLocale::preferredLanguages()
         .firstObject()

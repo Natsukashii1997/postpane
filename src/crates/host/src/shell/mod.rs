@@ -8,6 +8,9 @@
 //!   system_prefers_chinese()  the system's language, before any setting is read
 //!   alert(title, body, ok)    a blocking message, before the app starts
 //!   open_in_browser(url)      a web page in the default browser
+//!   web_content_hooks(b)      a page whose content process ended is logged and reloaded
+mod web_process;
+
 #[cfg(target_os = "macos")]
 #[path = "macos.rs"]
 mod host;
@@ -19,5 +22,5 @@ mod host;
 mod host;
 pub(crate) use host::{
     alert, install, open_in_browser, reopened, statistics_chrome, system_prefers_chinese,
-    window_opened, windows_changed,
+    web_content_hooks, window_opened, windows_changed,
 };

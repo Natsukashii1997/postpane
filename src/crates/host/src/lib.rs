@@ -890,7 +890,7 @@ pub fn run_with_options(
         }
     };
     agent_hud_runtime::app_log::start(demo);
-    tauri::Builder::default()
+    shell::web_content_hooks(tauri::Builder::default())
         .manage(options.clone())
         .manage(AppState { demo })
         .invoke_handler(tauri::generate_handler![
