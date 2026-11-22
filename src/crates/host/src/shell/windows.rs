@@ -18,6 +18,11 @@ pub(crate) fn statistics_chrome<'a>(
     builder
 }
 
+/// WebView2 does not report an ended content process through Tauri.
+pub(crate) fn web_content_hooks(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+}
+
 pub(crate) fn system_prefers_chinese() -> bool {
     // The primary language is the low ten bits; 0x04 is Chinese.
     unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() & 0x3ff == 0x04 }

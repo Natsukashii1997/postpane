@@ -2,6 +2,27 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 网页进程退出时记进日志再重载（#512）（2026-11-22，Claude，常浩经侧栏选「只加记录」；已提交，PR 见描述，已装机回读通过）
+
+- 时间：开工 `2026-11-22 22:38`（`date '+%F %H:%M'` 记录）。来由：22:10 侧栏整窗空白，重启驿窗才恢复；查到 22:09 侧栏网页自动重载过却没画出来，驿窗什么都没记，原因查不出（#512）。
+- 改变的行为：用户看得到的没有变：网页进程退出后照样自动重载。内部变化两处：`postpane.log` 多出「Web content process ended in window …」「reload sent / failed」两行；重载改由另一个线程发消息进事件循环，不再用 Tauri 默认的 `try_borrow`（借不到窗口表时会静默不重载）。
+- 你要求的：
+  - `host/src/shell/web_process.rs`（新）：`process_ended(label, reload, log)`，先记退出、再重载，记下重载已发出或失败原因；两条单测。
+  - `host/src/shell/macos.rs`：`web_content_hooks` 在应用构建器上接 `on_web_content_process_terminate`，克隆网页视图后另起线程调 `process_ended`，用 `note!` 写日志。
+  - `host/src/shell/windows.rs`、`linux.rs`：同名函数原样返回构建器（这两家 Tauri 不报网页进程退出）；`shell/mod.rs` 登记新项。
+  - `host/src/lib.rs`：只把 `tauri::Builder::default()` 换成 `shell::web_content_hooks(tauri::Builder::default())`，行数不变。
+  - `docs/LESSONS.md`：L-67。
+- 我顺手改的：无。
+- 测试：
+  - 新测试先红后绿：红 `test result: FAILED. 0 passed; 2 failed`（`left: []`），绿 `2 passed; 0 failed`；输出在 `evidence/2026-11-22-512-process-log/red.txt`、`green.txt`。
+  - 变基前：`pnpm run check` 退出 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。变基到 `6dd1bea`（含 #513、#514）后重跑的结果写在 PR 描述。
+- 验证：装机后在真实驿窗上依次 `kill -9` 两个网页进程（23:56:18、23:56:22）。`postpane.log` 记下 `window main` 和 `window hud-3337…3230` 各两行（退出、重载已发出）；替身进程同一秒起来；侧栏 8 秒、15 秒后截图都有内容，五家小人与读数、两个挂件都在。22:09 那种「重载了却没画出来」没复现，这次的改动不保证修好它，只保证下次能在日志里看到。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-22-512-process-log/kill2-after-crop.png`（杀进程后侧栏）；诊断时的空白截图在 `evidence/2026-11-22-侧栏不显示/`。
+- 发布与回读：`install.sh 512-process-log`：产物 `7a0fef0ca5cf` / 已装 `7a0fef0ca5cf`，签名证书 `b773068e`；冒烟侧栏在动。装的包不含 #513、#514（都不是界面改动），合并后从 main 重打重装。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-22-512-process-log/PostPane-f3fecdbc07f2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：#512 的根因还不知道，issue 保持打开；下次空白先 `grep "Web content" postpane.log`，看重载是否发出、发给了哪个窗口，再决定要不要做整窗重建。
+- 本轮新坑：L-67。
+- skill 进化：无。
+
 ## E-24 写进驿窗一轮 SKILL，L-64 提升为全局 G-48（2026-11-22，Claude，常浩经侧栏回「全按推荐」：E-24 批、L-64 提升、7b 批 3 继续搁置；已提交，PR 见描述，无需发布）
 
 - 时间：开工 `2026-11-22 23:33`（按分支建立时间补记）。来由：上一节留下的三问，推荐分别是「批」「提升」「不做」。
@@ -45,7 +66,7 @@
 
 ## 接力：ChatGPT 标签页失效后发送和重读自己恢复；转回 Claude 后不再因 2 小时停下（#507）（2026-11-22，Claude，常浩说「出第 2 批计划，直到该问题彻底解决」，看两条改动确认后经 agent-hud 插件回「两条都改」；已提交、PR #508、第 7 轮审查返修已提交推送、等常浩定要不要再审、未装机）
 
-- 时间：开工 `2026-11-22 10:47`（`date '+%F %H:%M'` 记录）。来由：常浩要求彻底解决接力「中途停止、超时未读取」。对账本机 `handoffs.json`、`turns.jsonl` 和发起会话记录：11-20 17:02 装上第 0 批止血代码后的 41 次送审里，「30 分钟没回信」0 次；非规则要求的停下三类：送审没确认送到 3 次（两次插件回 `tab-closed`，一次 30 秒没答话，2 张接力卡到现在）、半截回信 1 次（之后同一标签页重读 128 次全是 `unreachable`）、「Claude 2 小时没交回复审」7 次（全是误报）。前两类同一个根因：标签页失效后插件不探活、不重载（L-67）。
+- 时间：开工 `2026-11-22 10:47`（`date '+%F %H:%M'` 记录）。来由：常浩要求彻底解决接力「中途停止、超时未读取」。对账本机 `handoffs.json`、`turns.jsonl` 和发起会话记录：11-20 17:02 装上第 0 批止血代码后的 41 次送审里，「30 分钟没回信」0 次；非规则要求的停下三类：送审没确认送到 3 次（两次插件回 `tab-closed`，一次 30 秒没答话，2 张接力卡到现在）、半截回信 1 次（之后同一标签页重读 128 次全是 `unreachable`）、「Claude 2 小时没交回复审」7 次（全是误报）。前两类同一个根因：标签页失效后插件不探活、不重载（L-68）。
 - 改变的行为（常浩 11-22 看过计划和改动确认）：
   - 发送：原来标签页不应答时回不带 `pressed` 的 `tab-closed` 或一直不答，记成送达未确认并停下；现在发送前先探活，不答的按情况恢复（见下面「第 2 轮审查返修」：已回收的、注入被拒的重载；其余不答的不动它，换一个或另开一个，同一会话最多 2 个标签页）再发，到点没好回 `timeout`、`pressed: false`，按 #466 的「没送成」处理。发送指令带会话编号，页面核对不上回 `other-conversation`、不发。
   - 重读：原来补注入脚本失败就放弃，每 2 分钟空读一次；现在和发送用同一套办法找到一个答应显示这个会话的标签页再读，连续读不到的间隔翻倍到最长 32 分钟。
@@ -55,7 +76,7 @@
   - 插件（0.2.6 → 0.2.7）：`background.js` 加 `answers`（探活）、`loadAgain`（重载），`send`、`readAgain` 接上；给页面的重读提问加 10 秒时限。`content.js` 加 `alive` 指令。
   - 驿窗：`handoff/answers/desk_reread.rs`、`desk_undrawn.rs`（读不到的退避，`turns.jsonl` 多记 `reloaded`）；`handoff/sending/book_unsure.rs`（`Pending.restarted`，重启只记一次，旧记录按最后一步的原因认）；`handoff/book.rs`（`overdue` 去掉转回后的 2 小时）、`handoff/back/desk_texts.rs`（删用不上的 `no_handover`）、`handoff.rs`（调用处）。
   - 测试：`chrome-extension/test/background.test.mjs`（5 条新测试，1 条按新语义改）、`content.test.mjs`（1 条）、`handoff/tests/read_again.rs`、`unsure.rs`（各 1 条）、`held_back.rs`、`book.rs`、`book_states.rs`、`notice/book.rs`（跟着 2 小时去掉改）。
-  - 文档：`docs/chatgpt-channel.md`、`docs/LESSONS.md`（L-67）、`docs/DECIDED.md`（1 行）。
+  - 文档：`docs/chatgpt-channel.md`、`docs/LESSONS.md`（L-68）、`docs/DECIDED.md`（1 行）。
 - 第 1 轮审查返修（开工 `2026-11-22 13:35`，接力 `h1a2019f9b8302`、审查链 `r1a2019f9b8302`，ChatGPT 结论「需修改」：P1-01、P2-01；另四个重点方向它判可以接受）：
   - P1-01（探活 2 秒没答就重载，可能打断正在写的回答）：改成分情况。Chrome 已回收的直接重载；标签页还在、最近一次报到说正在写回答（30 分钟内，`WRITING_FOR`）的不重载、不注入，发送回 `busy`、`pressed: false`，重读回 `outcome: "busy"`；还在、没说在写的先补注入脚本再问一次（合计最多 8 秒），脚本被切断的、只是答得慢的这一次会答；仍不答才重载。`background.js` 的 `answers` 换成 `stands`、`shown`、`mayWrite`。
   - 审查没提到、返修时查出的一处：`pages` 里的 `streaming` 只在页面报到时更新（加载、换会话、切前后台），开始写和写完回答时并不刷新，照审查意见直接用它，保护是空的。`content.js` 改成开始写、写完各报到一次，插件记下报到时间。
@@ -63,7 +84,7 @@
   - 测试夹具的 `chrome.tabs.get` 改成像 Chrome 一样对不存在的标签页报错。
   - 返修测试：9 条新测试（插件后台 8 条、页面脚本 1 条），3 条按新语义改。旧实现上 `ℹ pass 72` / `ℹ fail 8`（`red-r2-plugin.log`，另 1 条「冻结的标签页问两次仍不答就重载」旧实现也过，是防回退的）；实现后插件整套 `ℹ pass 137` / `ℹ fail 0`（`green-r2-plugin.log`）。返修后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 137`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r2.log`、`test-r2.log`、`rules-r2.log`）。
 - 第 2 轮审查返修（开工 `2026-11-22 14:05`，接力 `h1a201cbe06b04`，ChatGPT 结论「需修改」：P1-01 未关、新增 P1-02、P1-03，P2-01 未关。四条都成立，照修；第 1 轮返修里的「最近说过在写就不重载」「30 分钟上限」「`outcome: busy`」「页面在开始写和写完时报到」随之撤掉）：
-  - 先在真实 Chromium 156 里加载插件实测（L-68）：标签页被回收后编号会换，旧编号不属于任何标签页，触发 `onReplaced`；新编号下 `discarded: true`、注入被拒、重载后恢复。第 1 轮返修把重载限定成名单里那个编号，真实环境里走不到重载。
+  - 先在真实 Chromium 156 里加载插件实测（L-69）：标签页被回收后编号会换，旧编号不属于任何标签页，触发 `onReplaced`；新编号下 `discarded: true`、注入被拒、重载后恢复。第 1 轮返修把重载限定成名单里那个编号，真实环境里走不到重载。
   - P1-01（「是不是在写」靠后台内存，重启就丢）：不再靠记忆。只在确定里面没有活页面时重载：已回收，或注入脚本被 Chrome 直接拒绝（冻结、还在加载的除外）。其余不答的不动它，从名单拿掉，换下一个候选或另开一个标签页；同一会话已有 2 个标签页就不再开。`resync` 改成同时问、每个最多等 2 秒。加 `onReplaced` 监听。名单里不再存 `streaming`（存了没人读）。
   - P1-02（重读补注入没有时限）：发送和重读共用 `reach`、`stands`，注入都有时限。
   - P1-03（探活后标签页被切到别的会话，话会发进别的会话；`main` 上本来就有）：发送指令带会话编号，`content.js` 收到时核对，`page.js` 往输入框放每一段前、点发送前核对，对不上回 `other-conversation`、`pressed: false`。
@@ -73,7 +94,7 @@
   - 没做到：冻结的标签页没能实测（无头 Chromium 里两种办法都没让 `tab.frozen` 变真）；规则写成不依赖它的表现。
   - 待观察：`background.test.mjs` 里影子读取的两条旧测试（`a page is trusted only on evidence…`、`what a page read says is trusted only…`）在本机负载很高时偶发失败过两次，之后上一版提交和当前改动各连跑 8 遍都全过，没能复现。
   - 代价：冻结或卡死的标签页不再被刷新，留在原处，旁边多开一个同会话的标签页。
-  - 返修测试：上一版实现上跑新测试 `ℹ pass 101` / `ℹ fail 9` / `ℹ cancelled 3`（`red-r3-plugin.log`，每条限 20 秒；不限时会卡死在「注入永不返回」那条上，其中 1 条失败是限时碰到的旧慢测试）。实现后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 152`（含真实 Chromium 5 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r3.log`、`test-r3.log`、`rules-r3.log`）。第一遍全量有两条失败（L-68「升级」一行的标签词不合规则；真实 Chromium 的卡死页面测试在高负载下超时，原因是后台标签页定时器每秒只跑一次、测试页面不接粘贴），修后重跑全过。
+  - 返修测试：上一版实现上跑新测试 `ℹ pass 101` / `ℹ fail 9` / `ℹ cancelled 3`（`red-r3-plugin.log`，每条限 20 秒；不限时会卡死在「注入永不返回」那条上，其中 1 条失败是限时碰到的旧慢测试）。实现后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 152`（含真实 Chromium 5 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r3.log`、`test-r3.log`、`rules-r3.log`）。第一遍全量有两条失败（L-69「升级」一行的标签词不合规则；真实 Chromium 的卡死页面测试在高负载下超时，原因是后台标签页定时器每秒只跑一次、测试页面不接粘贴），修后重跑全过。
 - 第 3 轮审查返修（开工 `2026-11-22 15:54`，接手会话；接力 `h1a201cbe06b04` 第 3 轮，ChatGPT 结论「需修改」：P1-02、P1-03、P2-01 已验证关闭；P1-01 未关，新增 P1-04、P2-02、P2-03、P2-04。五条都成立，照修）：
   - P1-01（注入被 Chrome 拒绝不等于没有活页面：标签页正在换文档时也会被拒，之后会误重载）：不再拿「注入被拒」当证据。只有 Chrome 自己说标签页里没有加载任何页面时才重载：`discarded: true`，或 `status: "unloaded"`。先在真实 Chromium 156 里实测（`real-chromium/probe-crashed.log`、`probe-error-page.log`）：页面崩溃后网址还在、`discarded: false`、`status: "unloaded"`、注入被拒；停在 Chrome 错误页的标签页不把网址告诉插件；重载途中注入不被拒、会等新文档。`stands` 不再读 `tab.frozen`。行为变化：注入被拒但 Chrome 没说卸载的标签页，原来重载，现在不动它、另开一个。
   - P1-04（驿窗的「在途」只认自己送出的话；回信转回之后常浩自己在这个会话里发话、ChatGPT 正在写时，原标签页不应答、另开的标签页还没画出停止按钮，新送审可能发进去）：三道。`page.js` 点发送前再看一次有没有停止按钮，有就回 `busy`、`pressed: false`；驿窗记下已绑定会话里每个回合的开始和结束，不分阶段（新文件 `handoff/gate/book_writing.rs`，`Gate.writing`，只在内存里），正在写时 `ask` 不发，工具回「ChatGPT 正在这个会话里写另一个回答…没有发出」。每次拦下都让插件重读这个会话，重读回 `told` 或 `waiting`（页面在、没有回答在写）就解除；没有重读结果时，听到开始后 30 分钟（`REPLY_WAIT_MS`）不再拦。这份记录只用来拦发送，不决定重不重载。行为变化（已定内容，常浩 2026-11-22 在本会话看甲乙两种做法后回「甲」，已登记 DECIDED.md）：多了一种「没发出」的情形，会话要等它写完、或等重读核实后再送。
@@ -81,7 +102,7 @@
   - P2-03（发送途中页面被切到别的会话，插件放进输入框的字留在那里）：输入框里只有这次放进去的字（整段或开头一部分）就清掉；还有别的字不动，回报多带 `left: true`，驿窗在没送成的说明后面加一句「输入框里留着没清掉的字」。到点的同时页面也换了会话，同样取回。
   - P2-04（重读后半段 `standing`、`drawnInFront` 里问 Chrome 的调用没时限）：每次最多等 3 秒（`CHROME_BY`），没答按「不在前台、没最小化」记，没确认切到前台就不读。
   - 送审前请子 agent 做了一次只读的独立复查（没给它我的结论），9 条发现，修了 7 条：只听到开始没听到结束会误拦 30 分钟（回答途中标签页切走、被关、被回收、点了停止都只报开始）→ 加上面的「拦下就重读、页面说没在写就解除」；迟到的标签页刚开出来没有网址，等它的一方会当场再开一个 → 预留等到它报到；查询标签页失败时 `reach` 还会往下走 → 直接算没找到；`left` 没人读 → 写进没送成的说明；到点和换会话同时发生时字不清 → 也取回；两条新测试没测到它声称的分支（其中「开标签页超时不再开第二个」在旧实现上也能过）→ 改正并补断言；文案里的 30 分钟写死、注释和 LESSONS 措辞 → 改。没修 2 条：点发送前第二次看停止按钮，在真实页面上可能和「等不到发送键」是同一拍、拦不到东西（没核对 chatgpt.com 现在的页面结构；它是审查点名要的，留着无害，实际靠驿窗那一道）；`tabs.create` 永远不回时这个会话在插件后台重启前不再新开标签页（有意的，宁可不开）。另记：`resync`、`onInstalled`、`focus`、`open`、影子读取里问 Chrome 的调用仍没有时限，补格式不看「正在写」的记录，都不在这轮意见里。
-  - 改了哪些文件：`background.js`（`unloaded`、`stands`、`tabsAt`、`reach`、`make`、`MADE_BY`、`standing`、`drawnInFront`、`chromeSays`）、`page.js`（`submit`、`press`、`takeBack`）；驿窗 `handoff.rs`（`observe` 记回合、`ask` 改问 `unheld`，行数不变）、`handoff/gate/book.rs`（`Gate.writing`）、`gate/book_writing.rs`（新）、`gate/desk.rs`（`unheld`）、`gate/desk_guard.rs`（`writing_other`）、`answers/desk_undrawn.rs`（重读结果解除）、`platform/…/chatgpt/sending.rs`（留字说明）；测试 `background.test.mjs`（加 6 条，改 3 条）、`page.test.mjs`（加 1 条，改 1 条）、`chromium.test.mjs`（加 1 条：页面崩溃后重载）、`handoff/tests/writing.rs`（新，3 条）、`sending.rs` 内 1 条；文档 `docs/chatgpt-channel.md`、`docs/LESSONS.md`（L-68 补一条）、`docs/DECIDED.md`（1 行）。插件版本仍是 0.2.7（还没装过机）。
+  - 改了哪些文件：`background.js`（`unloaded`、`stands`、`tabsAt`、`reach`、`make`、`MADE_BY`、`standing`、`drawnInFront`、`chromeSays`）、`page.js`（`submit`、`press`、`takeBack`）；驿窗 `handoff.rs`（`observe` 记回合、`ask` 改问 `unheld`，行数不变）、`handoff/gate/book.rs`（`Gate.writing`）、`gate/book_writing.rs`（新）、`gate/desk.rs`（`unheld`）、`gate/desk_guard.rs`（`writing_other`）、`answers/desk_undrawn.rs`（重读结果解除）、`platform/…/chatgpt/sending.rs`（留字说明）；测试 `background.test.mjs`（加 6 条，改 3 条）、`page.test.mjs`（加 1 条，改 1 条）、`chromium.test.mjs`（加 1 条：页面崩溃后重载）、`handoff/tests/writing.rs`（新，3 条）、`sending.rs` 内 1 条；文档 `docs/chatgpt-channel.md`、`docs/LESSONS.md`（L-69 补一条）、`docs/DECIDED.md`（1 行）。插件版本仍是 0.2.7（还没装过机）。
   - 返修测试：上一版实现（`cb676bb` 的 `background.js`、`page.js`）上跑本轮最终的测试，`ℹ pass 100` / `ℹ fail 7` / `ℹ cancelled 1`（`red-r4-plugin.log`，在临时副本里跑，每条限 20 秒；取消的那条是旧实现卡在「Chrome 不答标签页状态」上）；驿窗在临时副本里让 `heard_writing` 什么都不记，`test result: FAILED. 0 passed; 3 failed`（`red-r4-host.log`）。实现后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1121 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 160`（含真实 Chromium 6 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r4.log`、`test-r4.log`、`rules-r4.log`）。仍是替身通过，未在真实环境验证。
 - 第 4 轮审查返修（开工 `2026-11-22 17:08`，接手会话；接力 `h1a2026f624206`，审查链 `r1a2019f9b8302` 第 4 轮，ChatGPT 结论「需修改」：P1-01、P2-04 已验证关闭（它查了 Chromium 源码，认可 `discarded || status === "unloaded"`）；P1-04、P2-02、P2-03 仍待修，新增 P2-05。四条都成立，照修）：
   - P1-04 三个子问题：① 重读回 `waiting` 也可能是回答还在变，不能当解除依据 → 去掉按重读结果解除，只认同一轮的 `turn complete`（重读读到已写完的回答会补报一次，带 `reread: true`）；② 驿窗重启后不记得、页面开始时已在写也不报开始 → `content.js` 脚本开始时页面已在写就补报开始（`again: true`），`background.js` 的 `resync` 对正在写的标签页补报开始，`connect()` 成功后调 `resync()`；③ 开始和结束没按回合对上 → `Gate.writing` 记下开始那一轮的 `promptId`（`Writing { began, prompt }`），只有同一编号的结束才解除，开始时编号不明的任何结束都解除。30 分钟上限写明是防卡死的出口（fail-open）。行为变化：解除条件更严，原来重读回 `waiting` 就放行，现在要读到这一轮回答已写完；DECIDED.md 那一行跟着改了措辞（常浩选定的「甲：挡，最长 30 分钟」不变）。
@@ -93,10 +114,10 @@
   - 返修测试：上一版实现（`c297be3` 的 `background.js`、`page.js`、`content.js` 和写作闸）上跑本轮最终的测试：插件 `ℹ pass 123` / `ℹ fail 5`（`red-r5-plugin.log`：重启补报开始、脚本开始时补报、未提交网址的标签页计数、不抢回焦点、文字相像不删），驿窗 `test result: FAILED. 3 passed; 1 failed`（`red-r5-host.log`：只有「旧回合的结束不解除」在旧实现上失败；补报开始、30 分钟兜底、基本拦截三条旧实现也过，补报的改动在插件那头）。新加的「读完只在仍在前台时切回」那条在旧实现上也过（它测的是常浩中途切走、请求本身成功的情形；P2-05 的失败路径由「切到前台没回音」那条测到）。实现后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 164`（含真实 Chromium 6 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r5.log`、`test-r5.log`、`rules-r5.log`）。仍是替身通过，未在真实环境验证。
 - 第 5 轮审查返修（开工 `2026-11-22 17:39`，接手会话；接力 `h1a2026f624206` 第 2 封回信，ChatGPT 结论「需修改」：P2-02、P2-03 已验证关闭；P1-04 两个子问题、P2-05 未关。本授权周期 5 轮到顶，常浩 2026-11-22 经 agent-hud 插件回「授权再审 1 轮」。三处我对照代码核实都成立，照修）：
   - P1-04 ①（开始时读到的提问编号可能是上一轮已答完的；开始没带编号时任何结束都能解除，含别的标签页迟到的旧回合）：`content.js` 记下页面已知答完的最新提问（`done`），最新提问就是它时开始不带编号，提问画出来后补报一次开始（带编号、沿用原开始时间）；`state` 多回 `writingFor`，`resync` 用它；`background.js` 转给驿窗的每个回合带上报信的标签页（`tab`）。驿窗 `gate/book_writing.rs` 改成 `Pen { now, ended }`、`Writing { began, prompt, tab }`：不带编号的开始只由同一标签页的结束解除；开始带的编号已听到过结束的当作不带编号；同一回合补报编号时沿用原 `began`。
-  - P1-04 ②（驿窗启动时通道先收消息、`handoff::listen` 稍后才注册，`Shared::tell` 没有监听就丢，插件连上就补报的开始可能丢）：新文件 `platform/src/clients/chatgpt/listening.rs`，监听注册前到的消息按序暂存（最多 64 条），注册时先交付。L-69。
+  - P1-04 ②（驿窗启动时通道先收消息、`handoff::listen` 稍后才注册，`Shared::tell` 没有监听就丢，插件连上就补报的开始可能丢）：新文件 `platform/src/clients/chatgpt/listening.rs`，监听注册前到的消息按序暂存（最多 64 条），注册时先交付。L-70。
   - P2-05（`tab.active` 只是窗口内激活，常浩切到别的窗口后仍会切回）：切回前还要窗口焦点和切过去之前一样（`windows.get(...).focused`），问不到就不动。和审查建议的「仍然 focused」不同：常浩一直在别的应用里、没动过 Chrome 时照常切回，送审说明里请它判断。
   - 改变的行为：写作闸里没带编号的开始，原来任何结束都解除，现在只认同一标签页的结束，认不到就等 30 分钟出口；读完切回原标签页多了「窗口焦点没变」这个条件；驿窗启动时在监听注册前收到的回合、打开、送达消息，原来丢掉，现在交给接力。
-  - 改了哪些文件：插件 `background.js`、`content.js`；驿窗 `gate/book.rs`（字段类型）、`gate/book_writing.rs`、`platform/…/chatgpt/mod.rs`、`listening.rs`（新）；测试 `handoff/tests/writing.rs`（删 1 例、加 3 条）、`handoff/tests.rs`（回合助手带 `tab`）、`listening.rs` 内 2 条、`tests_unix.rs`（监听前的消息现在会交付，断言按新语义改）、`background.test.mjs`（焦点 4 例、补报带 `writingFor` 和 `tab`、转发带 `tab`）、`content.test.mjs`（1 条）；文档 `docs/chatgpt-channel.md`（3 处）、`docs/LESSONS.md`（L-69）；`mod.rs` 行数基线收紧。
+  - 改了哪些文件：插件 `background.js`、`content.js`；驿窗 `gate/book.rs`（字段类型）、`gate/book_writing.rs`、`platform/…/chatgpt/mod.rs`、`listening.rs`（新）；测试 `handoff/tests/writing.rs`（删 1 例、加 3 条）、`handoff/tests.rs`（回合助手带 `tab`）、`listening.rs` 内 2 条、`tests_unix.rs`（监听前的消息现在会交付，断言按新语义改）、`background.test.mjs`（焦点 4 例、补报带 `writingFor` 和 `tab`、转发带 `tab`）、`content.test.mjs`（1 条）；文档 `docs/chatgpt-channel.md`（3 处）、`docs/LESSONS.md`（L-70）；`mod.rs` 行数基线收紧。
   - 返修测试：本轮新测试放在上一轮受审实现（`0438bec` 的 `background.js`、`content.js`、`page.js`，临时副本）上跑，插件 `ℹ pass 97` / `ℹ fail 3`（`red-r6-plugin.log`：焦点、补报带 `writingFor`/`tab`、提问后画出）；驿窗在新代码上把两处改回旧行为（未知编号通配、没有监听就丢），`test result: FAILED. 5 passed; 2 failed` 和 `FAILED. 2 passed; 2 failed`（`red-r6-host.log`）。第一遍全量 Rust 有 1 条失败：`tests_unix.rs` 的通道测试断言监听只收到 2 条，暂存后监听注册前的 2 条也会交付，按新语义改了断言。实现后三条全量结果见下面「测试」的第 5 轮那一行。仍是替身通过，未在真实环境验证。
   - 顺带发现：取红证据用的临时副本 `~/Sandbox/2026-11-22-postpane-508-red` 是整个复制过来的，`.git` 指向本 worktree 的 git 目录（同一个索引），而且源码停在 `c297be3`。已把它的 `.git` 改名为 `.git-detached-was-507-worktree` 断开，源码换成要比的版本再跑。
 - 第 6 轮审查返修（开工 `2026-11-22 18:50`；常浩经侧栏回「送审」后送出，新接力 `h1a202c9622b07`、审查链 `r1a2019f9b8302`，ChatGPT 结论「需修改」：P1-04 ② 已验证关闭；P1-04 ① 旧版脚本交接缺口、P2-05 活动标签页竞态未关。它认可 P2-05 的「焦点和之前一样」做法、通道暂存持锁交付）：
@@ -129,7 +150,7 @@
   - 规则和现状对不上一处：本文件「接力根治」主线写影子运行「装机、重载插件 0.2.6、打开开关都另等常浩定」，实际 11-22 09:37 已装含 #491 的包、`dataShadow` 已打开、`shadow.jsonl` 09:53 起有记录（到 10:27 共 7 行，2 封完整回信）。
   - 主线：接力根治｜完成 7/16：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）✅ 另外三处规则文字 ✅ 第 1 批只读探测（#487）✅ 第 1 批影子运行代码（#491）▶ 标签页失效自愈与 2 小时不再停（本节，#507）⏳ #507 实机验证（装机、重载插件 0.2.7）▶ 影子运行实测（11-22 09:53 起在记录）⏳ B1 送达未确认后自动查清（常浩 11-22 回「改」，另开 PR）❓ 半截回信并入读对话数据、何时切成正式读法 ❓ 补格式没送成怎么处理 ❓ #470 ❓ 第 2 批其余（回执序号与补发、会话查询工具 #442、已领取重投、转回按钮真重送、会话改绑，并 #431、#433 余下部分、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退；#432 排查单另算。
   - skill 进化：E-25 待批（新 worktree 克隆主目录的 `target/debug` 省编译）。
-- 本轮新坑：L-67（Chrome 回收或冻结的标签页还留在插件名单里）、L-68（浏览器接口的行为按想象写进替身，和真实 Chrome 对不上）。
+- 本轮新坑：L-68（Chrome 回收或冻结的标签页还留在插件名单里）、L-69（浏览器接口的行为按想象写进替身，和真实 Chrome 对不上）。
 
 ## 命令名、事件名集中到 protocol 包，加两侧对名字的测试（7b 批 1、批 2）（2026-11-22，Claude，常浩看 7b 分批计划后经 agent-hud 插件回「按推荐开工」；前一会话写完代码、上下文到 50% 交接，本会话补测试收尾；已提交，PR #506，无需装机）
 
