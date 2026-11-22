@@ -630,3 +630,12 @@
 - 正确做法：改了任何 `Cargo.toml` 的依赖，提交前 `git status --short` 看一眼根目录，`Cargo.lock` 一起提交；推送前在干净副本上跑 `cargo metadata --locked --format-version 1 >/dev/null` 确认锁文件是新的。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-21-7a-move-book/locked-before.txt`（修前 `--locked` 的报错），修后同一命令退出码 0。
 - 升级：〔提醒〕未升级；再犯一次就加进 `pnpm run check`（跑一次 `cargo metadata --locked`）。
+
+## L-67 Chrome 回收或冻结的标签页还留在插件的名单里：往它发消息抛错或一直不答，被记成「不知道送没送到」（2026-11-22）
+
+- 现象：11-21 两次送审、一次补格式回了不带 `pressed` 的 `tab-closed`（其中一次 0.3 秒就回）或 30 秒没答话，驿窗记成送达未确认，两张接力卡了一天，会话重送只得到「刚才已经送到」；另一个会话每 2 分钟重读一次，128 次全是 `unreachable`。同一时段「Claude 2 小时没交回复审」7 次全是误报，一度被当成主要问题。
+- 根因：插件 `background.js` 的 `pages` 名单只在标签页被关、导航离开时清。标签页被 Chrome 回收（内存节省）或冻结后既不触发这两个事件，也不再有内容脚本：`chrome.tabs.sendMessage` 抛「Receiving end does not exist」或一直挂着。发送把抛错一律报成「标签页中途没了、可能点过发送」；重读补注入脚本失败（回收的标签页注入不进）后就放弃，不重载。
+- 正确做法：往标签页发要紧的话之前先探活（一条立即回答的消息加时限），不答就重载或重开，再做事；探活失败到重载完成之前什么都没递给页面，可以明确报「没点发送」。给页面的每个提问都带时限。查这类「卡住」先对三处：接力卡的步骤、`turns.jsonl` 里那个会话的行、发起会话记录里 `relay_to_chatgpt` 当时返回的原话（原因码只在那里）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/`（`red-plugin.log` 是新测试在旧代码上的 5 条失败）；实机记录见 issue #507。
+- 升级：〔提醒〕未升级。发送失败的原因码现在只进调用的返回、不进接力卡和日志，下次再查不到就把原因码写进卡片步骤（#434）。
+

@@ -171,7 +171,7 @@ mod tests {
         let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
         book.opened(&handoff.id, "c1", 2);
         let late = 3 + REPLY_WAIT_MS;
-        assert!(book.overdue(late, reason, "没交回", "没人领"));
+        assert!(book.overdue(late, reason, "没人领"));
         (handoff.id, late)
     }
 

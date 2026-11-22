@@ -187,6 +187,11 @@
       }, 600);
       return true;
     }
+    // Whether this page is there, and which conversation it shows (#507).
+    if (command.op === "alive") {
+      reply({ conversation: page.conversationId(location.href) });
+      return false;
+    }
     if (command.op === "state") {
       reply({
         conversation: page.conversationId(location.href),

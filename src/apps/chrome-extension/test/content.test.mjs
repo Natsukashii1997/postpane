@@ -379,6 +379,20 @@ test("asked to read again, the newest written reply is told again", async () => 
   );
 });
 
+// #507: before words go to a tab, the extension asks whether its page is
+// there: a tab Chrome discarded or froze says nothing.
+test("asked whether it is there, the page says which conversation it shows", async () => {
+  const page = await open(() => {});
+  const answer = await page.evaluate(
+    () =>
+      new Promise((resolve) => window.listener({ op: "alive" }, {}, resolve)),
+  );
+  assert.deepEqual(Object.keys(answer), ["conversation"]);
+  const shown = await page.evaluate(() => location.href);
+  assert.equal(answer.conversation, shown.split("/c/")[1] ?? null);
+  await page.close();
+});
+
 // #356: words sent and not answered yet leave the reply before them as the
 // last one; it is an older turn's, so asking again tells nothing.
 test("asked to read again before the newest prompt is answered, nothing is told", async () => {

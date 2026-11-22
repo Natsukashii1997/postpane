@@ -1125,9 +1125,11 @@ impl Book {
         true
     }
     /// Auto round trips waiting too long stop: ChatGPT not answering within
-    /// `REPLY_WAIT_MS` (`no_answer`), Claude not handing over again within
-    /// `FIX_WAIT_MS` (`no_handover`).
-    pub fn overdue(&mut self, now: i64, no_answer: &str, no_handover: &str, no_wake: &str) -> bool {
+    /// `REPLY_WAIT_MS` (`no_answer`), words queued for a session not taken
+    /// within `QUEUE_WAIT_MS` (`no_wake`). Not one back with Claude (owner,
+    /// 2026-11-22, #507): two hours stopped it, all 7 times with the session
+    /// still mending; one never handed over again ends in a day (`idle`).
+    pub fn overdue(&mut self, now: i64, no_answer: &str, no_wake: &str) -> bool {
         let late = self
             .list
             .iter()
@@ -1140,9 +1142,6 @@ impl Book {
                     }
                     Phase::Returned if h.queued_at.is_some_and(|at| now - at > QUEUE_WAIT_MS) => {
                         Some((h.id.clone(), no_wake.to_owned()))
-                    }
-                    Phase::Returned if waited > FIX_WAIT_MS => {
-                        Some((h.id.clone(), by_doer(no_handover, h.doer.as_deref())))
                     }
                     _ => None,
                 }
@@ -1941,8 +1940,8 @@ mod tests {
     // than the next snapshot stopping it again at once.
     #[test]
     fn resuming_after_a_long_wait_counts_the_wait_from_then() {
-        let reasons = ("30 分钟没回信", "2 小时没交回", "排队没人领");
-        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1, reasons.2);
+        let reasons = ("30 分钟没回信", "排队没人领");
+        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1);
         let mut book = Book::default();
         let id = asked_once(&mut book);
         let late = 3 + REPLY_WAIT_MS;
@@ -1969,18 +1968,8 @@ mod tests {
         let mut book = Book::default();
         let id = asked_once(&mut book);
         // Asked at 2 (opened): ChatGPT has REPLY_WAIT_MS to answer.
-        assert!(!book.overdue(
-            2 + REPLY_WAIT_MS,
-            "30 分钟没回信",
-            "2 小时没交回",
-            "排队没人领"
-        ));
-        assert!(book.overdue(
-            3 + REPLY_WAIT_MS,
-            "30 分钟没回信",
-            "2 小时没交回",
-            "排队没人领"
-        ));
+        assert!(!book.overdue(2 + REPLY_WAIT_MS, "30 分钟没回信", "排队没人领"));
+        assert!(book.overdue(3 + REPLY_WAIT_MS, "30 分钟没回信", "排队没人领"));
         let kept = book.get(&id).unwrap();
         assert!(!kept.auto);
         assert!(kept.halt.as_deref().unwrap().contains("30 分钟没回信"));
@@ -1990,35 +1979,15 @@ mod tests {
         let id = asked_once(&mut book);
         book.replied("c1", "结论：需修改", Some("m1"), 4);
         book.returned(&id, StepKind::Back, "意见", "p", true, 5);
-        assert!(!book.overdue(
-            5 + FIX_WAIT_MS,
-            "30 分钟没回信",
-            "2 小时没交回",
-            "排队没人领"
-        ));
-        assert!(book.overdue(
-            6 + FIX_WAIT_MS,
-            "30 分钟没回信",
-            "2 小时没交回",
-            "排队没人领"
-        ));
-        assert!(book
-            .get(&id)
-            .unwrap()
-            .halt
-            .as_deref()
-            .unwrap()
-            .contains("2 小时"));
+        // The round trip goes on however long Claude mends (#507).
+        assert!(!book.overdue(6 + 10 * FIX_WAIT_MS, "30 分钟没回信", "排队没人领"));
+        let kept = book.get(&id).unwrap();
+        assert!(kept.auto && kept.halt.is_none());
         // A handoff paused by the person is not overdue.
         let mut book = Book::default();
         let id = asked_once(&mut book);
         book.stop(&id, "常浩暂停", false, 3);
-        assert!(!book.overdue(
-            10 * REPLY_WAIT_MS,
-            "30 分钟没回信",
-            "2 小时没交回",
-            "排队没人领"
-        ));
+        assert!(!book.overdue(10 * REPLY_WAIT_MS, "30 分钟没回信", "排队没人领"));
         assert!(!book.get(&id).unwrap().steps.last().unwrap().auto);
         // A restart leaves the auto round trip as it was (owner, 2026-11-14:
         // it used to pause every one still on, and the person had to turn
@@ -2367,8 +2336,8 @@ mod tests {
     // allowed one more review.
     #[test]
     fn an_extra_review_long_after_the_stop_counts_its_waits_from_then() {
-        let reasons = ("30 分钟没回信", "2 小时没交回", "排队没人领");
-        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1, reasons.2);
+        let reasons = ("30 分钟没回信", "排队没人领");
+        let overdue = |book: &mut Book, now| book.overdue(now, reasons.0, reasons.1);
         let mut book = Book::default();
         let id = ruled(&mut book, "s1", Some(Risk::L2), None);
         book.replied("c-s1", FIX, Some("m1"), 3);

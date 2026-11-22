@@ -259,7 +259,7 @@ pub(crate) struct Desk {
     tossed: Mutex<HashMap<String, usize>>,
     /// When the extension was last asked to read each quiet handoff's
     /// conversation again (#356).
-    reread_at: Mutex<HashMap<String, i64>>,
+    reread_at: Mutex<HashMap<String, (i64, u32)>>,
     /// How many reads in a row found each handoff's answer undrawn (#457).
     undrawn: Mutex<HashMap<String, u32>>,
     /// When the notices began (`notices_since`): trouble from before is not
@@ -459,7 +459,7 @@ impl Desk {
             let _quiet = self.quiet();
             let mut book = self.lock();
             book.expire(now, &timed_out())
-                | book.overdue(now, &no_answer(), &no_handover(), &no_wake())
+                | book.overdue(now, &no_answer(), &no_wake())
                 | book.idle(now, &idle_end())
         };
         if late {

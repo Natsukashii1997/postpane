@@ -228,16 +228,55 @@ async function open(text, project) {
   }
 }
 
+/** How long a page has to say it is there (#507). */
+const ALIVE_BY = 2000;
+
+/** Whether the page in `tabId` answers and shows `conversation` (#507). A
+ * tab Chrome discarded or froze stays listed and does neither: words to one
+ * came back `tab-closed`, or not at all, and were kept as not known to have
+ * gone. */
+async function answers(tabId, conversation, until) {
+  const soon = Math.min(until, Date.now() + ALIVE_BY);
+  const said = await by(soon, () =>
+    chrome.tabs.sendMessage(tabId, { op: "alive" }),
+  );
+  return said?.conversation === conversation;
+}
+
+/** Loads the tab showing `conversation` again, `stale` not answering
+ * (#507): its id once its page reports, by `until`; false when it does not
+ * by then; null when no tab shows the conversation, or none can be loaded
+ * again (one is made). */
+async function loadAgain(stale, conversation, until) {
+  pages.delete(stale);
+  const tabs = await by(until, () => chrome.tabs.query({ url: `${HOME}*` }));
+  const there =
+    Array.isArray(tabs) &&
+    tabs.find((tab) => tab.url?.includes(`/c/${conversation}`));
+  if (!there) return null;
+  pages.delete(there.id);
+  if (!(await by(until, () => chrome.tabs.reload(there.id)))) return null;
+  const loaded = (p) => p.conversation === conversation;
+  const page = await ready(there.id, until - Date.now(), loaded);
+  return page && Date.now() < until ? there.id : false;
+}
+
 async function send(conversation, text) {
   // Not begun: send was not pressed (#466).
   if (!watched.has(conversation))
     return { ok: false, reason: "not-watched", pressed: false };
   const until = Date.now() + PRESS_BY;
+  // No tab made, grouped and loaded in time, or none that answers: the page
+  // is not asked, so send was not pressed (a page there all the same is not
+  // asked late).
+  const late = { ok: false, reason: "timeout", pressed: false };
   let tabId = tabFor(conversation);
+  if (tabId !== null && !(await answers(tabId, conversation, until))) {
+    const again = await loadAgain(tabId, conversation, until);
+    if (again === false) return late;
+    tabId = again;
+  }
   if (tabId === null) {
-    // No tab made, grouped and loaded in time: the page is not asked, so
-    // send was not pressed (a page there all the same is not asked late).
-    const late = { ok: false, reason: "timeout", pressed: false };
     const url = `${HOME}c/${conversation}`;
     const tab = await by(until, () =>
       chrome.tabs.create({ url, active: false }),
@@ -288,17 +327,26 @@ async function readAgain(conversation) {
   }
   const stood = await standing(tabId);
   // The tab checks it shows this conversation. One that has not drawn its
-  // history yet (just opened) is asked again shortly, a few times.
+  // history yet (just opened) is asked again shortly, a few times. A page
+  // that says nothing in `ASK_BY` (a frozen tab's) counts as not answering.
   const ask = () =>
-    chrome.tabs.sendMessage(tabId, { op: "reread", conversation });
-  let answer;
-  try {
-    answer = await ask();
-  } catch {
+    by(Date.now() + ASK_BY, () =>
+      chrome.tabs.sendMessage(tabId, { op: "reread", conversation }),
+    ).then((said) => (said === true ? null : said));
+  let answer = await ask();
+  if (!answer) {
     await chrome.scripting
       .executeScript({ target: { tabId }, files: ["page.js", "content.js"] })
       .catch(() => {});
-    answer = await ask().catch(() => null);
+    answer = await ask();
+  }
+  // Still nothing, even with a script put in (#507): a tab Chrome discarded
+  // takes none. It is loaded again, once a read.
+  let reloaded = false;
+  if (!answer) {
+    const again = await loadAgain(tabId, conversation, Date.now() + RELOAD_BY);
+    reloaded = again !== null;
+    if (again) answer = await ask();
   }
   for (
     let tries = 0;
@@ -306,14 +354,21 @@ async function readAgain(conversation) {
     tries++
   ) {
     await new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
-    answer = await ask().catch(() => null);
+    answer = await ask();
   }
   const fronted = !!answer?.undrawn && !stood.active;
   const told = answer?.undrawn
     ? await drawnInFront(tabId, ask)
     : !!answer?.told;
-  return { outcome: outcomeOf(answer, told), ...stood, fronted };
+  return {
+    outcome: outcomeOf(answer, told),
+    ...stood,
+    fronted,
+    ...(reloaded && { reloaded }),
+  };
 }
+const ASK_BY = 10000;
+const RELOAD_BY = 30000;
 
 /** What a read's answer comes to: told, or why not. */
 function outcomeOf(answer, told) {

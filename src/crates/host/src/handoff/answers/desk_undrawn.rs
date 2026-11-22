@@ -25,6 +25,7 @@ impl Desk {
             "active": message["active"],
             "minimized": message["minimized"],
             "fronted": message["fronted"],
+            "reloaded": message["reloaded"],
         }));
         let conversation = message["conversation"].as_str().unwrap_or("");
         let Some(id) = self
@@ -34,6 +35,19 @@ impl Desk {
         else {
             return false;
         };
+        // Reads that reach no page come further apart (#507).
+        if let Some((_, missed)) = self
+            .reread_at
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(&id)
+        {
+            let reached = !matches!(
+                message["outcome"].as_str(),
+                Some("unreachable" | "unopened")
+            );
+            *missed = if reached { 0 } else { *missed + 1 };
+        }
         let times = {
             let mut undrawn = self.undrawn.lock().unwrap_or_else(|p| p.into_inner());
             if message["outcome"] != "undrawn" {

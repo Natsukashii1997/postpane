@@ -160,7 +160,7 @@ fn t09_stop_and_resume_change_only_the_round_trip() {
         ),
         (true, None)
     );
-    assert!(book.overdue(15 + REPLY_WAIT_MS, "没回", "没接", "没醒"));
+    assert!(book.overdue(15 + REPLY_WAIT_MS, "没回", "没醒"));
     assert!(book.evidence_in(&id, 16 + REPLY_WAIT_MS));
     assert!(book.get(&id).unwrap().auto);
     assert_eq!(state(&book, &id), (Status::Open, Phase::Delivered));
@@ -302,7 +302,7 @@ fn step(book: &mut Book, dice: &mut Dice, now: i64, n: usize) -> String {
             "evidence_in"
         }
         21 => {
-            book.overdue(now, "没回", "没接", "没醒");
+            book.overdue(now, "没回", "没醒");
             "overdue"
         }
         22 => {
