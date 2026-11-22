@@ -72,7 +72,7 @@ impl AgentMessages {
             delivery.follow,
             // The handoffs' paper plane, with no stamp: the owner chose it for
             // agent messages too (2026-11-09, #278).
-            Arc::new(move |flight| activity::publish(&flights, "hud:flight", &flight)),
+            Arc::new(move |flight| activity::publish(&flights, crate::events::FLIGHT, &flight)),
         );
         let owner = Arc::new(Self {
             messaging: Mutex::new(messaging),

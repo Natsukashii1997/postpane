@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { isTauri } from "@tauri-apps/api/core";
 import {
   monotonicDirection,
   type Direction,
 } from "@agent-hud/hud/bots/mark-director";
+import { call, listenHere } from "./native.ts";
 
 interface Wire {
   startedAt: number;
@@ -19,7 +19,7 @@ export function useBotDirections(enabled = true) {
     if (!enabled || !isTauri()) return;
     let disposed = false;
     let revision = 0;
-    const subscription = getCurrentWebviewWindow().listen<Wire>(
+    const subscription = listenHere<Wire>(
       "hud:bot-directions",
       ({ payload }) => {
         if (disposed) return;
@@ -31,7 +31,7 @@ export function useBotDirections(enabled = true) {
       .then(async () => {
         if (disposed) return;
         const before = revision;
-        const value = await invoke<Wire>("hud_bot_directions");
+        const value = await call<Wire>("hud_bot_directions");
         if (!disposed && before === revision && value) setWire(value);
       })
       .catch((error) => {

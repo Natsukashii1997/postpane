@@ -34,7 +34,7 @@ const RESTORE_SCRIPT: &str = "window.floatingNotesHost?.focus?.()";
 const REFRESH_SCRIPT: &str = include_str!("float_notes_refresh.js");
 /// Told to the HUD windows each time the notes show or hide, so the
 /// pendant's halo follows the window, a 收起 inside the page included (#224).
-const SHOWN_EVENT: &str = "float-notes:shown";
+const SHOWN_EVENT: &str = crate::events::FLOAT_NOTES_SHOWN;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub(crate) struct Rect {

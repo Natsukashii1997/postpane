@@ -446,7 +446,7 @@ fn configure(
 }
 
 pub(super) fn emit_geometry(app: &tauri::AppHandle, geometry: &HudGeometry) {
-    if let Err(error) = app.emit("hud:geometry", geometry) {
+    if let Err(error) = app.emit(crate::events::GEOMETRY, geometry) {
         agent_hud_runtime::note!("Agent HUD geometry event: {error}");
     }
 }

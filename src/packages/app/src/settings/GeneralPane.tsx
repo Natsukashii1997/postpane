@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import {
   Notice,
@@ -12,6 +12,7 @@ import {
   type SettingsPaneProps,
 } from "./SettingsPrimitives";
 import { settingSaves } from "../lib/setting-saves";
+import { call } from "../lib/native.ts";
 
 type Failure = { key: string; message: string };
 
@@ -22,7 +23,7 @@ const startupKeys = ["launchAtLogin", "showMenuBarIcon"];
 export function GeneralPane({ snapshot, action }: SettingsPaneProps) {
   useEffect(() => {
     if (isTauri())
-      void invoke("native_system_status").catch((error) =>
+      void call("native_system_status").catch((error) =>
         console.warn("System preferences could not be refreshed", error),
       );
   }, []);

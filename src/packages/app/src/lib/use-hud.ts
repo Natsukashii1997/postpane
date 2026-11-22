@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { NativeMethod, Snapshot } from "./types";
+import { call, listenTo } from "./native.ts";
 
 async function nativeRequest(
   method: NativeMethod,
   params: Record<string, unknown> = {},
 ) {
-  if (isTauri()) return invoke("native_request", { method, params });
+  if (isTauri()) return call("native_request", { method, params });
   const response = await fetch("/__bridge", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -41,7 +41,7 @@ export function useHUD({ active = true }: { active?: boolean } = {}) {
     const boot = async () => {
       try {
         const mode = isTauri()
-          ? await invoke<{ demo: boolean }>("startup_mode")
+          ? await call<{ demo: boolean }>("startup_mode")
           : { demo: false };
         if (disposed) return;
         updateDemo(mode.demo);
@@ -89,12 +89,12 @@ export function useHUD({ active = true }: { active?: boolean } = {}) {
       kind: "WebviewWindow" as const,
       label: getCurrentWebviewWindow().label,
     };
-    const subscription = listen<string>(
+    const subscription = listenTo<string>(
       "hud:snapshot-json",
       ({ payload }) => receive(JSON.parse(payload) as Snapshot),
       { target },
     );
-    const failures = listen<string>(
+    const failures = listenTo<string>(
       "hud:snapshot-error",
       ({ payload }) => {
         if (!disposed) {
@@ -105,7 +105,7 @@ export function useHUD({ active = true }: { active?: boolean } = {}) {
       },
       { target },
     );
-    const clock = listen<string>(
+    const clock = listenTo<string>(
       "hud:clock",
       ({ payload }) => {
         if (disposed) return;
@@ -122,7 +122,7 @@ export function useHUD({ active = true }: { active?: boolean } = {}) {
       .then(async () => {
         if (disposed) return;
         const before = revision;
-        const cached = await invoke<{
+        const cached = await call<{
           snapshot: Snapshot | null;
           error: string | null;
         }>("cached_snapshot");

@@ -1,6 +1,10 @@
 import { EngineClient } from "@agent-hud/engine-client";
+import type { NativeMethod } from "@agent-hud/protocol";
 import type { Plugin } from "vite";
-const methods = new Set([
+// What the dev server may ask of the engine: a subset of NativeMethod, so a
+// renamed method fails the type check. Writing credentials and relay sources
+// is left out on purpose (dev mode takes them from no one).
+const methods = new Set<NativeMethod>([
   "snapshot",
   "refresh",
   "statistics",

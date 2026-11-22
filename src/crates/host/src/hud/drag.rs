@@ -157,7 +157,7 @@ pub async fn hud_drag_start(
 
 pub(super) fn emit_drag_end(app: &tauri::AppHandle, owner: &Shared, cancelled: bool) {
     if let Err(error) = app.emit(
-        "hud:drag-end",
+        crate::events::DRAG_END,
         DragEnd {
             screen_id: owner.screen_id.clone(),
             cancelled,
@@ -168,7 +168,7 @@ pub(super) fn emit_drag_end(app: &tauri::AppHandle, owner: &Shared, cancelled: b
 }
 
 pub(super) fn emit_drag_preview(app: &tauri::AppHandle, preview: &HudPlacement) {
-    if let Err(error) = app.emit("hud:drag-preview", preview) {
+    if let Err(error) = app.emit(crate::events::DRAG_PREVIEW, preview) {
         agent_hud_runtime::note!("Agent HUD drag preview event: {error}");
     }
 }

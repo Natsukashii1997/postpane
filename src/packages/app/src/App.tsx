@@ -9,11 +9,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
-import { emit } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   CircleHelp,
   Coins,
@@ -68,6 +66,7 @@ export type {
   AgentPluginContext,
   AgentPluginItem,
 } from "./settings/AgentPluginsPane";
+import { call, emitTo, listenHere } from "./lib/native.ts";
 
 // Windows load their own views. Statistics does not need the shader/bot renderer,
 // and a resting HUD does not need the historical charts and settings panes.
@@ -452,14 +451,11 @@ function AppContent({
       if (allPages.some((page) => page.id === target)) setPage(target);
     };
     const take = () =>
-      void invoke<string | null>("take_settings_page")
+      void call<string | null>("take_settings_page")
         .then(open)
         .catch(() => {});
     take();
-    const subscription = getCurrentWebviewWindow().listen<string>(
-      "settings:page",
-      take,
-    );
+    const subscription = listenHere<string>("settings:page", take);
     return () => void subscription.then((unlisten) => unlisten());
   }, []);
   const [statisticsTab, setStatisticsTab] = useState("tokens");
@@ -531,9 +527,8 @@ function AppContent({
   }, [demo]);
   useEffect(() => {
     if (!statistics || !isTauri()) return;
-    const subscription = getCurrentWebviewWindow().listen<string>(
-      "statistics:tab",
-      (event) => setStatisticsTab(event.payload),
+    const subscription = listenHere<string>("statistics:tab", (event) =>
+      setStatisticsTab(event.payload),
     );
     return () => {
       void subscription.then((unlisten) => unlisten());
@@ -541,7 +536,7 @@ function AppContent({
   }, [statistics]);
   async function showStatistics(tab = "tokens") {
     if (isTauri()) {
-      await invoke("open_statistics", { tab });
+      await call("open_statistics", { tab });
     } else {
       window.open(`?window=statistics`, "_blank");
     }
@@ -568,7 +563,7 @@ function AppContent({
         {statistics && (
           <DropdownMenuItem
             onClick={() => {
-              if (isTauri()) void invoke("hud_show_main");
+              if (isTauri()) void call("hud_show_main");
             }}
           >
             {chinese ? "设置…" : "Settings…"}
@@ -589,7 +584,7 @@ function AppContent({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {
-                void invoke("quit_app");
+                void call("quit_app");
               }}
             >
               {chinese ? "退出" : "Quit"}
@@ -608,20 +603,17 @@ function AppContent({
       setSelectedSession(session ?? ({ id } as Session));
       setStatisticsTab("sessions");
     };
-    const pendingSession = getCurrentWebviewWindow().listen<string>(
-      "statistics:session",
-      (event) => {
-        applySession(event.payload);
-      },
-    );
-    const pendingProvider = getCurrentWebviewWindow().listen<{
+    const pendingSession = listenHere<string>("statistics:session", (event) => {
+      applySession(event.payload);
+    });
+    const pendingProvider = listenHere<{
       provider: string;
       at: number;
     }>("statistics:provider", () => {
       setSelectedSession(null);
       setStatisticsTab("tokens");
     });
-    void invoke<{ tab?: string | null; sessionId?: string | null } | null>(
+    void call<{ tab?: string | null; sessionId?: string | null } | null>(
       "take_statistics_target",
     )
       .then((target) => {
@@ -657,18 +649,18 @@ function AppContent({
     },
     query: (method, params) => act(method, params),
     openSettingsPage: (page) => {
-      if (isTauri()) void invoke("hud_show_main", { page });
+      if (isTauri()) void call("hud_show_main", { page });
     },
     // The handoff card's buttons (relay design 甲, docs/chatgpt-channel.md).
     handoffAct: async (id, action) => {
       if (!isTauri()) throw new Error("只能在驿窗里操作接力");
-      return invoke("handoff_act", { id, action });
+      return call("handoff_act", { id, action });
     },
     relayLaunch,
     selectSession: (session) => {
       setSelectedSession(session);
       if (isTauri()) {
-        void invoke("open_statistics", { sessionId: session.id });
+        void call("open_statistics", { sessionId: session.id });
       } else setStatisticsTab("sessions");
     },
     selectProvider: (provider) => {
@@ -682,7 +674,7 @@ function AppContent({
       setSelectedSession(null);
       setStatisticsTab("tokens");
       if (isTauri()) {
-        void emit("statistics:provider", payload);
+        void emitTo("statistics:provider", payload);
       }
     },
     draft: {

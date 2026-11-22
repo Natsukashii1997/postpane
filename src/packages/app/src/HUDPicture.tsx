@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { Snapshot } from "@agent-hud/protocol";
 import { FormatProvider } from "@agent-hud/ui/format-context";
 import { snapshotLanguage } from "@agent-hud/ui/format";
@@ -19,6 +18,7 @@ import {
   type PresentationState,
 } from "./lib/use-hud-config";
 import { PictureQueries, QUERY_DEADLINE_MS } from "./lib/picture-queries";
+import { call } from "./lib/native.ts";
 interface Job {
   id: string;
   params: { screen?: string; show?: string; agent?: string };
@@ -93,7 +93,7 @@ export default function HUDPicture() {
         method: "statistics" | "sessions",
         params: Record<string, unknown>,
       ) => {
-        const promise = invoke("native_request", { method, params }).then(
+        const promise = call("native_request", { method, params }).then(
           (value) => {
             if (method !== "sessions") return value;
             const response = value as { items: Snapshot["sessions"] };
@@ -115,11 +115,9 @@ export default function HUDPicture() {
   );
   const id = new URLSearchParams(location.search).get("pictureId") ?? "";
   useEffect(() => {
-    void invoke<Job>("picture_payload", { id })
+    void call<Job>("picture_payload", { id })
       .then(setJob)
-      .catch((error) =>
-        invoke("picture_complete", { id, error: String(error) }),
-      );
+      .catch((error) => call("picture_complete", { id, error: String(error) }));
   }, [id]);
   const screen = job?.presentation.screens.find(
     (s) => s.id === job.params.screen,
@@ -187,15 +185,15 @@ export default function HUDPicture() {
           2400,
           Math.max(80, Math.ceil(root.current!.scrollHeight)),
         );
-        await invoke("picture_resize", { id, width, height });
+        await call("picture_resize", { id, width, height });
         await new Promise((resolve) => setTimeout(resolve, 100));
-        const image = await invoke<{
+        const image = await call<{
           mimeType: string;
           pngBase64: string;
           width: number;
           height: number;
         }>("native_capture_webview");
-        await invoke("picture_complete", {
+        await call("picture_complete", {
           id,
           result: {
             ...job.metadata,
@@ -210,7 +208,7 @@ export default function HUDPicture() {
           },
         });
       } catch (error) {
-        await invoke("picture_complete", { id, error: String(error) });
+        await call("picture_complete", { id, error: String(error) });
       }
     })();
   }, [job, id, width]);

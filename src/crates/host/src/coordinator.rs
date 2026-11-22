@@ -107,7 +107,7 @@ pub(crate) fn stop(app: &tauri::AppHandle) {
 /// The display preferences changed: every active window reads them, and the
 /// HUD windows and the menu bar follow.
 pub(crate) fn presentation_changed(app: &tauri::AppHandle, view: &Value) {
-    activity::publish(app, "hud:presentation", view);
+    activity::publish(app, crate::events::PRESENTATION, view);
     wake(app, DISPLAY, |_| {});
 }
 
@@ -227,9 +227,9 @@ fn run(app: &tauri::AppHandle) {
             measured_at = now;
             match planner.measure(app) {
                 Ok(Some(monitors)) => {
-                    activity::publish(app, "hud:monitors", &monitors);
+                    activity::publish(app, crate::events::MONITORS, &monitors);
                     presentation.screens(planner.screens());
-                    activity::publish(app, "hud:presentation", &presentation.view());
+                    activity::publish(app, crate::events::PRESENTATION, &presentation.view());
                     changed |= DISPLAY;
                 }
                 Ok(None) => {}
@@ -261,7 +261,7 @@ fn run(app: &tauri::AppHandle) {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
             if *shown != wire {
-                activity::publish(app, "hud:bot-directions", &wire);
+                activity::publish(app, crate::events::BOT_DIRECTIONS, &wire);
                 *shown = wire;
             }
         }

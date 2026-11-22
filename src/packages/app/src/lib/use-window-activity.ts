@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { call, listenTo } from "./native.ts";
 
 interface WindowActivity {
   active: boolean;
@@ -22,7 +22,7 @@ export function useWindowActivity(track = true) {
     }
     let disposed = false;
     let revision = 0;
-    const subscription = listen<WindowActivity>(
+    const subscription = listenTo<WindowActivity>(
       "window:activity",
       ({ payload }) => {
         if (disposed) return;
@@ -40,7 +40,7 @@ export function useWindowActivity(track = true) {
       .then(async () => {
         if (disposed) return;
         const before = revision;
-        const state = await invoke<WindowActivity>("window_activity");
+        const state = await call<WindowActivity>("window_activity");
         if (!disposed && before === revision) setActive(state.active);
       })
       .catch((failure: unknown) => {
