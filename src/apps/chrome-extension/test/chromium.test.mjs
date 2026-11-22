@@ -52,6 +52,15 @@ let server;
 let scratch;
 // How often each address was loaded: a tab loaded again loads its own.
 const loads = new Map();
+// Words ChatGPT has as an address's newest prompt, which a page loaded
+// before they went in does not show: a load from then on draws them.
+const asked = new Map();
+/** The fixture with `words` as its newest prompt. */
+const withPrompt = (words) =>
+  fixture.replace(
+    "</main>",
+    `<div data-chatgpt-search-unit-key="x:8:user" data-chatgpt-search-message-ids="p8"><div data-user-message-bubble="true">${words}</div></div></main>`,
+  );
 
 before(async () => {
   scratch = mkdtempSync(join(tmpdir(), "postpane-extension-"));
@@ -69,7 +78,7 @@ before(async () => {
       const url = `https://chatgpt.com${request.url}`;
       loads.set(url, (loads.get(url) ?? 0) + 1);
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end(fixture);
+      response.end(asked.has(url) ? withPrompt(asked.get(url)) : fixture);
     },
   );
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -251,4 +260,58 @@ test("a listed tab gone to another site is not loaded again", async () => {
   assert.equal(loads.get(elsewhere), before);
   assert.equal(await page.evaluate(() => window.kept), "not loaded again");
   assert.equal(await page.evaluate(() => window.sent), undefined);
+});
+
+// #509: words never known to have gone in are looked for where ChatGPT
+// keeps them. `find` is the worker's own; the page reads what it shows.
+const find = (id, request) =>
+  worker.evaluate(([id, request]) => find(id, request), [id, request]);
+
+test("words that went in are found: the tab is loaded again, and shows them", async () => {
+  const { page, id } = await open(7);
+  const request = "h1a2~send1795233002405";
+  // They went in after the page was drawn, and it never heard.
+  asked.set(address(id), `【驿窗送审 ${request}】下一轮`);
+  await page.evaluate(() => (window.kept = "as drawn"));
+  const before = loads.get(address(id));
+  assert.equal(await find(id, request), "there");
+  assert.equal(loads.get(address(id)), before + 1, "loaded again, once");
+  assert.equal((await tabsAt(id)).length, 1, "and no tab made for it");
+  assert.equal(await page.evaluate(() => window.kept), undefined);
+});
+
+test("words that did not go are told absent, of a page loaded again", async () => {
+  const { id } = await open(8);
+  const before = loads.get(address(id));
+  assert.equal(await find(id, "h1a2~send1795233002406"), "absent");
+  assert.equal(loads.get(address(id)), before + 1);
+  assert.equal((await tabsAt(id)).length, 1);
+});
+
+test("a discarded tab is loaded again once to look, not twice", async () => {
+  const { tabId, id } = await open(9);
+  const request = "h1a2~send1795233002407";
+  asked.set(address(id), `【驿窗送审 ${request}】下一轮`);
+  await inFront();
+  await discard(tabId);
+  const before = loads.get(address(id));
+  assert.equal(await find(id, request), "there");
+  assert.equal(loads.get(address(id)), before + 1);
+  assert.equal((await tabsAt(id)).length, 1);
+});
+
+// #507 review P1-01: the words often did go in, and their answer is being
+// written; loading the page again would end it.
+test("a page writing an answer is not loaded again to look: not told", async () => {
+  const { page, id } = await open(10);
+  await page.evaluate(() => {
+    window.kept = "not loaded again";
+    const stop = document.createElement("button");
+    stop.dataset.testid = "stop-button";
+    document.querySelector("main").append(stop);
+  });
+  const before = loads.get(address(id));
+  assert.equal(await find(id, "h1a2~send1795233002408"), "unread");
+  assert.equal(loads.get(address(id)), before);
+  assert.equal(await page.evaluate(() => window.kept), "not loaded again");
 });
