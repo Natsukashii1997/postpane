@@ -374,6 +374,42 @@ test("words for another conversation than the page shows are not put in or sent"
 
 // #356: put in while a reply is being written (the extension installed,
 // updated or reloaded), the script reports that reply once it ends.
+// #507 review round 4, P1-04: no change to writing is seen by a script that
+// begins mid-answer, so the beginning is told as it begins: PostPane holds
+// words back by it. Not writing, nothing is told.
+test("a script that begins mid-answer tells the beginning at once", async () => {
+  const id = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const at = async (writing) => {
+    const page = await browser.newPage();
+    await page.route("https://chatgpt.com/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: fixture }),
+    );
+    await page.goto(`https://chatgpt.com/c/${id}`);
+    await page.evaluate((writing) => {
+      window.told = [];
+      window.chrome = {
+        runtime: {
+          sendMessage: (message) => (
+            window.told.push(message),
+            Promise.resolve()
+          ),
+          onMessage: { addListener() {} },
+        },
+      };
+      if (!writing) return;
+      const slot = document.getElementById("slot");
+      slot.type = "button";
+      slot.setAttribute("aria-label", "停止");
+    }, writing);
+    for (const path of scripts) await page.addScriptTag({ path });
+    const told = await turns(page);
+    await page.close();
+    return told.map((m) => [m.phase, m.again, m.conversation]);
+  };
+  assert.deepEqual(await at(true), [["start", true, id]]);
+  assert.deepEqual(await at(false), []);
+});
+
 test("a script put in mid-reply reports that reply when it ends", async () => {
   const page = await open(() => {
     const slot = document.getElementById("slot");

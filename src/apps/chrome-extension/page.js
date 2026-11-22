@@ -440,15 +440,28 @@
     }
   }
 
+  /** The first line PostPane's words begin with in a conversation that
+   * holds a review: 「【驿窗送审 <request>】」, the request naming when they
+   * went (the host's `handoff/sending/book_unsure.rs`, `TAG_OPEN`). */
+  const OWN = "【驿窗送审 ";
+
   /** Empties the composer of words `submit` put in it for a conversation
    * the page no longer shows (#507 review P2-03): only when all it holds is
-   * `text`, whole or its beginning. Anything else is the person's by now,
-   * or the other conversation's draft, and stays. Whether words stay. */
+   * `text`, whole or its beginning, and that holds its first line naming
+   * its request whole. Words alike are not proof they are these (round 4
+   * review P2-03): a draft of the other conversation's may begin as they
+   * do, but not with a request of PostPane's, named to the millisecond.
+   * Anything else stays. Whether words stay. */
   function takeBack(doc, text) {
     const box = doc.querySelector(SEL.composer);
     const held = box ? bare(box.textContent) : "";
     if (!held) return false;
-    if (!bare(text).startsWith(held)) return true;
+    const named = bare(text.split("\n", 1)[0]);
+    const ours =
+      named.startsWith(bare(OWN)) &&
+      held.startsWith(named) &&
+      bare(text).startsWith(held);
+    if (!ours) return true;
     box.focus();
     doc.execCommand("selectAll", false);
     doc.execCommand("delete", false);

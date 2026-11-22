@@ -46,7 +46,7 @@
     });
   }
 
-  function tellStart() {
+  function tellStart(extra = {}) {
     tell({
       type: "turn",
       phase: "start",
@@ -55,6 +55,7 @@
       prompt: page.lastPrompt(document),
       promptId: page.lastPromptId(document),
       at: Date.now(),
+      ...extra,
     });
   }
 
@@ -240,4 +241,8 @@
   globalThis.PostPaneContentStop = stop;
 
   report();
+  // Writing already as it begins (loaded mid-answer, or put in again): no
+  // change to writing is seen here, so the beginning is told now; PostPane
+  // holds words back by it (#507 review round 4, P1-04).
+  if (wasStreaming && conversation) tellStart({ again: true });
 })();

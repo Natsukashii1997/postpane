@@ -49,10 +49,10 @@ pub struct Gate {
     /// (round 4 P1-10).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mending: Option<super::unsure::Pending>,
-    /// When an answer was last heard to begin in its conversation, and not
-    /// since to end (`book_writing.rs`). Of this run only.
+    /// An answer heard to begin in its conversation, and not since to end
+    /// (`book_writing.rs`). Of this run only.
     #[serde(skip)]
-    pub writing: Option<i64>,
+    pub writing: Option<writing::Writing>,
 }
 
 fn is_zero_at(at: &i64) -> bool {

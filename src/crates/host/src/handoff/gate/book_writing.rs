@@ -10,28 +10,47 @@
 //! in any phase, and no words go while one is being written. Kept for this
 //! one use: nothing is loaded again or left alone for it.
 //!
-//! A beginning is often heard with no end: the tab moved to another
-//! conversation or went away mid-answer, the answer was stopped empty. So
-//! words held back for it have the conversation read again (`unheld`), and
-//! a read that reached its page, not writing, ends it too (`read_writing`):
-//! the same words go the next time. With no read to say, it holds words no
-//! longer than ChatGPT has to answer (`REPLY_WAIT_MS`). A restart forgets
-//! it, and the page's own look, as send is pressed, stands.
+//! A beginning is known by the prompt it answers (ChatGPT's id of it), and
+//! only the end of that turn ends it (round 4, P1-04): an older turn's end,
+//! told late or read again in another tab, does not. A beginning heard with
+//! no end (the tab moved on or went away mid-answer) has the conversation
+//! read again when it holds words back (`unheld`): a written answer to that
+//! prompt is told again, as an end. A page that was writing already when
+//! its script began, or when the extension or PostPane started again, tells
+//! a beginning then.
+//!
+//! What no end is heard of holds words back no longer than ChatGPT has to
+//! answer (`REPLY_WAIT_MS`). That lets words go by an answer still being
+//! written after it, and keeps holding by one stopped before anything was
+//! written (the read finds no answer to tell): the cap is the way out, not a
+//! promise nothing is being written. A restart forgets it, till a page tells
+//! it again.
 use super::super::{Book, Handoff, REPLY_WAIT_MS};
+use serde_json::Value;
+
+/// An answer heard to begin: when, and the prompt it answers when known.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Writing {
+    pub began: i64,
+    pub prompt: Option<String>,
+}
 
 impl Book {
-    /// A turn of `conversation` was heard to begin (`began`) or to end.
-    pub fn heard_writing(&mut self, conversation: &str, began: bool, now: i64) {
-        if let Some(handoff) = self.conversation_mut(conversation) {
-            handoff.gate.writing = began.then_some(now);
+    /// A turn of `conversation` was heard to begin or to end (`message`, a
+    /// `turn` with its `phase` and `promptId`). An end ends the beginning of
+    /// the same prompt's turn, or one whose prompt was not known.
+    pub fn heard_writing(&mut self, conversation: &str, message: &Value, now: i64) {
+        let Some(handoff) = self.conversation_mut(conversation) else {
+            return;
+        };
+        let prompt = message["promptId"].as_str().map(str::to_owned);
+        if message["phase"] == "start" {
+            handoff.gate.writing = Some(Writing { began: now, prompt });
+            return;
         }
-    }
-    /// What a read of `conversation` again found (`outcome`): its page
-    /// there with the newest answer written (`told`), or none being written
-    /// (`waiting`), no answer is on its way. Any other says nothing of it.
-    pub fn read_writing(&mut self, conversation: &str, outcome: &str) {
-        if matches!(outcome, "told" | "waiting") {
-            self.heard_writing(conversation, false, 0);
+        let ends = |writing: &Writing| writing.prompt.is_none() || writing.prompt == prompt;
+        if handoff.gate.writing.as_ref().is_some_and(ends) {
+            handoff.gate.writing = None;
         }
     }
 }
@@ -42,6 +61,7 @@ impl Handoff {
     pub fn writing(&self, now: i64) -> bool {
         self.gate
             .writing
-            .is_some_and(|began| now - began <= REPLY_WAIT_MS)
+            .as_ref()
+            .is_some_and(|writing| now - writing.began <= REPLY_WAIT_MS)
     }
 }

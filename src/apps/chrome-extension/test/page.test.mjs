@@ -316,7 +316,9 @@ test("out of time before send is pressed, it is not pressed", async () => {
 // words go in. Looked to before each thing done to the box, and before send.
 test("moved to another conversation before send is pressed, it is not pressed", async () => {
   const fresh = await composer();
-  const text = brief(800);
+  // As PostPane's words go into a conversation that holds a review: their
+  // first line names their request.
+  const text = `【驿窗送审 h1a2~send1795233002405】\n${brief(800)}`;
   const moved = await fresh.evaluate((text) => {
     // The first piece in, the page shows another conversation.
     let shows = true;
@@ -347,12 +349,12 @@ test("moved to another conversation before send is pressed, it is not pressed", 
   assert.equal(await never.evaluate(() => window.pastes.length), 0);
   // Moved just as send is to be pressed: the words are in, and not sent.
   const last = await composer();
-  const short = "P1-03 专项复核";
+  const short = "【驿窗送审 h1a2~send1795233002409】\nP1-03 专项复核";
   const unpressed = await last.evaluate((text) => {
     let shows = true;
     const box = document.querySelector(".ProseMirror");
     new MutationObserver(() => {
-      if (box.textContent.includes(text)) shows = false;
+      if (box.textContent.includes("P1-03 专项复核")) shows = false;
     }).observe(box, { childList: true, subtree: true, characterData: true });
     return PostPanePage.submit(document, text, Date.now() + 20000, () => shows);
   }, short);
@@ -385,6 +387,36 @@ test("moved to another conversation before send is pressed, it is not pressed", 
     left: true,
   });
   assert.match(await boxOf(written), /^我自己写的：/);
+  // The other conversation's own draft, alike to the words but not naming
+  // a request of PostPane's whole (round 4 review P2-03): words alike are no
+  // proof they are these. Left, and said so.
+  for (const [words, draft] of [
+    [brief(800), brief(800).slice(0, 12)],
+    [text, text.slice(0, 8)],
+  ]) {
+    const alike = await composer();
+    const said = await alike.evaluate(
+      ([words, draft]) => {
+        let shows = true;
+        const box = document.querySelector(".ProseMirror");
+        const moved = () => {
+          box.textContent = draft;
+          shows = false;
+        };
+        document.addEventListener("paste", moved, { once: true });
+        return PostPanePage.submit(
+          document,
+          words,
+          Date.now() + 20000,
+          () => shows,
+        );
+      },
+      [words, draft],
+    );
+    assert.equal(said.left, true, draft);
+    assert.equal(await boxOf(alike), draft);
+    await alike.close();
+  }
   // Moved before anything of these went in: what the box holds is the other
   // conversation's own draft, not touched and not said to be left by these.
   const drafted = await composer({ draft: "另一个会话的草稿" });

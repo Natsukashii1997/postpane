@@ -1069,9 +1069,8 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
-            (Some("turn"), Some(phase @ ("start" | "complete"))) => {
-                self.lock()
-                    .heard_writing(conversation, phase == "start", now);
+            (Some("turn"), Some("start" | "complete")) => {
+                self.lock().heard_writing(conversation, message, now);
                 // Held while deciding and taking, so `caught_up` and this
                 // keep the turns' order.
                 let mut early = self.early.lock().unwrap_or_else(|p| p.into_inner());
