@@ -67,24 +67,61 @@ fn script_command(script: &str, args: &[&OsStr]) -> Command {
         .stderr(Stdio::null());
     command
 }
+/// Errs with why, for the log: the caller says what failed (#517).
 pub(super) fn spawn_script(script: &str, args: &[&OsStr]) -> Result<(), String> {
     // Starting sh only proves the wrapper exists. Report success only after the
     // actual fixed operation exits successfully within the existing bound.
-    inspect(script, args)
+    run(script, args, BOUND)
         .map(|_| ())
-        .map_err(|_| "Could not reveal transcript".into())
+        .map_err(|failure| failure.to_string())
+}
+/// Opens a session's link with the host's fixed script.
+pub(super) fn open_url(script: &str, url: &str) -> Result<(), String> {
+    spawn_script(script, &[OsStr::new(url)])
+        .map_err(|reason| super::could_not_open_session(&reason))
+}
+/// Shows a transcript with the host's fixed script.
+pub(super) fn reveal(script: &str, path: &Path) -> Result<(), String> {
+    spawn_script(script, &[path.as_os_str()])
+        .map_err(|reason| super::could_not_reveal_transcript(&reason))
+}
+fn inspect(script: &str, args: &[&OsStr]) -> Result<String, String> {
+    run(script, args, BOUND).map_err(|failure| match failure {
+        Failure::Start => "Local service process inspection is unavailable.".to_owned(),
+        _ => "Local service process inspection did not complete.".to_owned(),
+    })
+}
+const BOUND: Duration = Duration::from_secs(3);
+/// Which way a script failed. None carries its output.
+enum Failure {
+    Start,
+    Wait(std::io::ErrorKind),
+    Timeout(Duration),
+    Status(std::process::ExitStatus),
+    Output,
+}
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Start => f.write_str("could not start"),
+            Self::Wait(kind) => write!(f, "could not be waited for ({kind})"),
+            Self::Timeout(bound) => write!(f, "did not finish within {bound:?} and was ended"),
+            Self::Status(status) => write!(f, "exited with {status}"),
+            Self::Output => f.write_str("its output could not be read"),
+        }
+    }
 }
 /// Output may contain a local token. It stays in memory, bounded to 2 MiB,
 /// and is never copied into errors or diagnostics.
-fn inspect(script: &str, args: &[&OsStr]) -> Result<String, String> {
+fn run(script: &str, args: &[&OsStr], bound: Duration) -> Result<String, Failure> {
     let mut child = script_command(script, args)
         .stdout(Stdio::piped())
         .spawn()
-        .map_err(|_| "Local service process inspection is unavailable.".to_owned())?;
+        .map_err(|_| Failure::Start)?;
     let Some(output) = child.stdout.take() else {
         let _ = child.kill();
         let _ = child.wait();
-        return Err("Local service process inspection is unavailable.".into());
+        return Err(Failure::Start);
     };
     let (sender, receiver) = mpsc::sync_channel(1);
     const LIMIT: u64 = 2 * 1024 * 1024;
@@ -99,25 +136,31 @@ fn inspect(script: &str, args: &[&OsStr]) -> Result<String, String> {
     {
         let _ = child.kill();
         let _ = child.wait();
-        return Err("Local service process inspection is unavailable.".into());
+        return Err(Failure::Start);
     }
-    let deadline = Instant::now() + Duration::from_secs(3);
-    let success = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status.success(),
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break false;
+    let deadline = Instant::now() + bound;
+    let ended = loop {
+        let failure = match child.try_wait() {
+            Ok(Some(status)) if status.success() => break None,
+            Ok(Some(status)) => Failure::Status(status),
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+                continue;
             }
-        }
+            Ok(None) => Failure::Timeout(bound),
+            Err(error) => Failure::Wait(error.kind()),
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+        break Some(failure);
     };
-    let (read, bytes) = receiver
-        .recv_timeout(Duration::from_millis(100))
-        .map_err(|_| "Local service process inspection did not complete.".to_owned())?;
-    if !success || !read || bytes.len() as u64 > LIMIT {
-        return Err("Local service process inspection did not complete.".into());
+    let received = receiver.recv_timeout(Duration::from_millis(100));
+    if let Some(failure) = ended {
+        return Err(failure);
+    }
+    let (read, bytes) = received.map_err(|_| Failure::Output)?;
+    if !read || bytes.len() as u64 > LIMIT {
+        return Err(Failure::Output);
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
@@ -240,5 +283,42 @@ mod version_tests {
             .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         assert_eq!(names, ["2.1.0", "2.0.10", "2.0.9", "1.9.99"]);
+    }
+}
+
+#[cfg(test)]
+mod spawn_tests {
+    use super::*;
+
+    // #517: a failed open says which way it failed, for the log.
+    #[test]
+    fn a_script_that_exits_non_zero_says_its_status() {
+        let reason = spawn_script("exit 3", &[]).unwrap_err();
+        assert!(
+            reason.contains("exited with") && reason.contains('3'),
+            "{reason}"
+        );
+    }
+
+    #[test]
+    fn a_script_past_its_bound_says_it_was_ended() {
+        let failure = run("sleep 2", &[], Duration::from_millis(100)).unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "did not finish within 100ms and was ended"
+        );
+    }
+
+    #[test]
+    fn a_script_that_succeeds_opens() {
+        assert_eq!(spawn_script("exit 0", &[]), Ok(()));
+    }
+
+    #[test]
+    fn inspection_keeps_its_own_words() {
+        assert_eq!(
+            inspect("exit 1", &[]).unwrap_err(),
+            "Local service process inspection did not complete."
+        );
     }
 }

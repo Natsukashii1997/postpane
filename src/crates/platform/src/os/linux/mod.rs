@@ -108,9 +108,9 @@ pub(crate) fn engine_path(home: &Path, env: &Environment) -> String {
     joined_path(dirs)
 }
 pub(crate) fn reveal_transcript(path: &Path) -> Result<(), String> {
-    super::unix::spawn_script(
+    super::unix::reveal(
         include_str!("../../../scripts/linux/reveal-transcript.sh"),
-        &[path.as_os_str()],
+        path,
     )
 }
 pub(crate) fn legacy_quota_database(_home: &Path) -> Option<PathBuf> {
@@ -149,11 +149,10 @@ pub(crate) fn open_folder_in_app(_bundle_id: &str, _folder: &std::path::Path) ->
 }
 
 pub(crate) fn open_session_url(url: &str) -> Result<(), String> {
-    super::unix::spawn_script(
+    super::unix::open_url(
         include_str!("../../../scripts/linux/open-session-url.sh"),
-        &[std::ffi::OsStr::new(url)],
+        url,
     )
-    .map_err(|_| "The native client could not open this session".into())
 }
 
 /// Swift UserDefaults has no native source on this host.

@@ -211,7 +211,7 @@ pub(crate) fn reveal_transcript(path: &Path) -> Result<(), String> {
         .stderr(Stdio::null())
         .spawn()
         .map(|_| ())
-        .map_err(|_| "Could not reveal transcript".into())
+        .map_err(|error| super::could_not_reveal_transcript(&error.to_string()))
 }
 pub(crate) fn legacy_quota_database(_home: &Path) -> Option<PathBuf> {
     None
@@ -253,7 +253,7 @@ pub(crate) fn open_session_url(url: &str) -> Result<(), String> {
         .encode_wide()
         .chain(Some(0))
         .collect::<Vec<_>>();
-    if unsafe {
+    let result = unsafe {
         ShellExecuteW(
             std::ptr::null_mut(),
             operation.as_ptr(),
@@ -262,12 +262,14 @@ pub(crate) fn open_session_url(url: &str) -> Result<(), String> {
             std::ptr::null(),
             1,
         )
-    } as isize
-        > 32
-    {
+    } as isize;
+    // At most 32 is ShellExecuteW's error code.
+    if result > 32 {
         Ok(())
     } else {
-        Err("The native client could not open this session".into())
+        Err(super::could_not_open_session(&format!(
+            "ShellExecuteW returned {result}"
+        )))
     }
 }
 
