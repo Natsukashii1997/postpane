@@ -567,3 +567,11 @@
   - 写「重连时补报 / 重启后同步」这类逻辑时，顺着真实启动代码走一遍：补报发出那一刻，接收方的每一层（连接、解析、订阅、账本）是不是都已就绪。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/r6-unit.log`（`listening` 两条测试）；第 5 轮回信 `replies/h1a2026f624206-02-c9f2aa78.md`。
 - 升级：〔结构〕已升级（2026-11-22，#507）：通道自带暂存，监听晚挂上也不丢；单测守着顺序和上限。
+
+## L-71 侧栏只亮 4 秒的失败提示，原因不进日志就再也查不到：`open` 跳回链接几乎总返回 0，失败只能出在驿窗自己这边（2026-11-23）
+
+- 现象：常浩截图里提问卡点 ↗ 后出现英文红字「The native client could not open this session」（#517）。事后本机按驿窗同样方式（`/bin/sh -c 'exec /usr/bin/open "$1"'`、标准输出接管道）跑 6 次全成功，假会话 id 也返回 0；`postpane.log` 什么都没有；系统日志里那几分钟只找到一次把链接交给 Claude 的 `open`，而且是成功的。失败那次是没起来、超过 3 秒还是返回码不对，无从判断。
+- 根因：`unix::spawn_script` 把所有失败合成一句固定英文，原因（超时、返回码、等不到子进程）在 `map_err(|_| …)` 里丢掉；侧栏提示 4 秒后就消失，没有别处留痕。提示也没走 `l10n::text`。
+- 正确做法：侧栏上一闪而过的失败，原因同时用 `note!` 写进 `postpane.log`，`map_err(|_| 固定句子)` 之前先想清楚原因要不要留。查跳回失败：`grep "link did not open" postpane.log`；再用 `log show --predicate 'process == "open"'` 看那一刻有没有 `open` 起来、有没有 `Opening URL`。#517 起失败分「could not start / did not finish within 3s and was ended / exited with … / could not be waited for」几种写进日志。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-23-517-open-reason/`（红测输出、全量测试输出）；排查过程在 #517。
+- 升级：〔提醒〕未升级。和 L-67 同属「失败不留痕」，再出现第三次时提议在 `check-rules` 里查 `src/crates` 下面向用户的 `map_err(|_|` 固定句子。

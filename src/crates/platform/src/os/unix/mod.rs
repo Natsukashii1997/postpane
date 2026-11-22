@@ -75,6 +75,16 @@ pub(super) fn spawn_script(script: &str, args: &[&OsStr]) -> Result<(), String> 
         .map(|_| ())
         .map_err(|failure| failure.to_string())
 }
+/// Opens a session's link with the host's fixed script.
+pub(super) fn open_url(script: &str, url: &str) -> Result<(), String> {
+    spawn_script(script, &[OsStr::new(url)])
+        .map_err(|reason| super::could_not_open_session(&reason))
+}
+/// Shows a transcript with the host's fixed script.
+pub(super) fn reveal(script: &str, path: &Path) -> Result<(), String> {
+    spawn_script(script, &[path.as_os_str()])
+        .map_err(|reason| super::could_not_reveal_transcript(&reason))
+}
 fn inspect(script: &str, args: &[&OsStr]) -> Result<String, String> {
     run(script, args, BOUND).map_err(|failure| match failure {
         Failure::Start => "Local service process inspection is unavailable.".to_owned(),

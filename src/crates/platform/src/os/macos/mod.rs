@@ -155,11 +155,10 @@ pub(crate) fn engine_path(home: &Path, env: &Environment) -> String {
     joined_path(dirs)
 }
 pub(crate) fn reveal_transcript(path: &Path) -> Result<(), String> {
-    super::unix::spawn_script(
+    super::unix::reveal(
         include_str!("../../../scripts/macos/reveal-transcript.sh"),
-        &[path.as_os_str()],
+        path,
     )
-    .map_err(|reason| super::could_not_reveal_transcript(&reason))
 }
 pub(crate) fn legacy_quota_database(home: &Path) -> Option<PathBuf> {
     legacy_history::quota_database(home)
@@ -310,11 +309,10 @@ pub(crate) fn open_folder_in_app(bundle_id: &str, folder: &std::path::Path) -> b
 }
 
 pub(crate) fn open_session_url(url: &str) -> Result<(), String> {
-    super::unix::spawn_script(
+    super::unix::open_url(
         include_str!("../../../scripts/macos/open-session-url.sh"),
-        &[std::ffi::OsStr::new(url)],
+        url,
     )
-    .map_err(|reason| super::could_not_open_session(&reason))
 }
 
 /// Darwin's sockaddr_un carries its own length.
