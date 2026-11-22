@@ -570,18 +570,20 @@ const REREAD_PAUSE = 2000;
 // itself is not raised: one off screen still draws nothing (#457). Whether
 // the answer was told.
 async function drawnInFront(tabId, ask) {
-  const tab = await chromeSays(() => chrome.tabs.get(tabId));
-  if (!tab || tab.active) return false;
-  const active = { active: true };
-  // Any other tab of its window made active from here on is the person's
-  // doing (round 6 review P2-05): what was in front then is not put back.
-  // Watched before anything is asked of Chrome, so no wait hides one.
-  let moved = false;
-  const onActivated = (info) => {
-    if (info.windowId === tab.windowId && info.tabId !== tabId) moved = true;
-  };
+  // Every tab made active from here on, before anything is asked of Chrome
+  // (round 7 review P2-05): those of its window but this one are the
+  // person's doing. Its window is known only once Chrome says, so they are
+  // kept till then.
+  const seen = [];
+  const onActivated = (info) => seen.push(info);
   chrome.tabs.onActivated.addListener(onActivated);
   try {
+    const tab = await chromeSays(() => chrome.tabs.get(tabId));
+    if (!tab || tab.active) return false;
+    const chosen = () =>
+      seen.filter((i) => i.windowId === tab.windowId && i.tabId !== tabId);
+    const moved = () => chosen().length > 0;
+    const active = { active: true };
     // Whether its window had the focus: put back only while that is as it was.
     const focused = async () =>
       (await chromeSays(() => chrome.windows.get(tab.windowId)))?.focused;
@@ -589,11 +591,21 @@ async function drawnInFront(tabId, ask) {
     const fronts = await chromeSays(() =>
       chrome.tabs.query({ ...active, windowId: tab.windowId }),
     );
-    if (!Array.isArray(fronts) || moved) return false;
+    // The person chose a tab meanwhile: this one is not put over it.
+    if (!Array.isArray(fronts) || moved()) return false;
     const front = fronts.find((t) => t.active);
     // Not known to be in front in time, it is not read as if it were; the
     // tab that was in front is put back all the same, in case it came late.
     const put = await chromeSays(() => chrome.tabs.update(tabId, active));
+    // The person chose a tab while it was being put in front: theirs comes
+    // back if this one, done after, went over it, and nothing is read.
+    if (moved()) {
+      const theirs = chosen().at(-1).tabId;
+      const now = await chromeSays(() => chrome.tabs.get(tabId));
+      if (now?.active && seen.at(-1)?.tabId === tabId)
+        await chromeSays(() => chrome.tabs.update(theirs, active));
+      return false;
+    }
     let told = false;
     for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
       await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
@@ -603,13 +615,13 @@ async function drawnInFront(tabId, ask) {
     // this tab known to be in front of its window still, and the window's
     // focus known to be as it was: the person may have moved on, to another
     // tab, window or app, or come to this window, and not known, nothing is
-    // moved (round 4 to 6 review P2-05). A tab in front of its window is no
+    // moved (round 4 to 7 review P2-05). A tab in front of its window is no
     // sign the window is. Asked to the front with no word back, it may come
     // late: then it stays, rather than the two moves crossing. Looked at last,
     // right before the move back: a choice made while Chrome was asked counts.
     const after = await focused();
     const now = await chromeSays(() => chrome.tabs.get(tabId));
-    const still = now?.active && !moved;
+    const still = now?.active && !moved();
     if (front && still && typeof before === "boolean" && after === before)
       await chromeSays(() => chrome.tabs.update(front.id, active));
     return told;

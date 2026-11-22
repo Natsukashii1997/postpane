@@ -745,6 +745,30 @@ test("a tab put in front for a read is moved back from only while it and its win
   assert.equal(tabs.find((tab) => tab.active).id, 4);
   assert.deepEqual(await read(false, [true, true], choosing(3)), [2], "after");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
+  // Round 7 review P2-05: the person chooses a tab while Chrome is first
+  // asked how the tab stands, before anything is watched as it was.
+  const choosingAsTabIs = (at) => (chrome) => {
+    const { get } = chrome.tabs;
+    let asked = 0;
+    chrome.tabs.get = async (id) => {
+      const answer = await get(id);
+      if (id === 2 && ++asked === at) chrome.tabs.activate(4);
+      return answer;
+    };
+  };
+  assert.deepEqual(await read(false, [true, true], choosingAsTabIs(2)), []);
+  assert.equal(tabs.find((tab) => tab.active).id, 4);
+  // ...or while it is being put in front, which Chrome does after: theirs
+  // comes back, and it is not read.
+  const late = (chrome) => {
+    const { update } = chrome.tabs;
+    chrome.tabs.update = async (id, to) => {
+      if (id === 2) chrome.tabs.activate(4);
+      return update(id, to);
+    };
+  };
+  assert.deepEqual(await read(false, [true, true], late), [2, 4], "late");
+  assert.equal(tabs.find((tab) => tab.active).id, 4);
   assert.deepEqual(await read(true), [2], "the person's choice stays");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
   // The tab in front of its window still, but the person went to another
