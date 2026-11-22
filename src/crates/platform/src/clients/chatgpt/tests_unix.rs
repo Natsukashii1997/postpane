@@ -140,11 +140,31 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
         OUTBOUND_LIMIT,
     )
     .unwrap();
-    wait_for(|| heard.lock().unwrap().len() == 2);
+    wait_for(|| heard.lock().unwrap().len() == 4);
     let heard = heard.lock().unwrap().clone();
-    assert_eq!(heard[0]["type"], "opened");
-    assert_eq!(heard[0]["requestId"], "h1");
-    assert_eq!(heard[1]["phase"], "start");
+    // What was told before anyone listened (the first opening and its
+    // reply) was kept for the listener, and comes first, in order (#507
+    // round 5, P1-04).
+    let said: Vec<_> = heard
+        .iter()
+        .map(|m| {
+            (
+                m["type"].as_str(),
+                m["phase"].as_str(),
+                m["conversation"].as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (Some("opened"), None, Some("68a1")),
+            (Some("turn"), Some("complete"), Some("68a1")),
+            (Some("opened"), None, Some("68b2")),
+            (Some("turn"), Some("start"), Some("68b2")),
+        ]
+    );
+    assert_eq!(heard[2]["requestId"], "h1");
     // ...and the start is kept in the inbox, which is how the sidebar shows
     // the conversation answering (#206: it used to be refused there).
     let started = || {
