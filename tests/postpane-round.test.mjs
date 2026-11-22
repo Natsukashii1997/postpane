@@ -37,10 +37,11 @@ test("SKILL.md 的步骤与 steps.json 一一对应、顺序一致", () => {
   }
 });
 
-test("引用的 L-xx 都在 docs/LESSONS.md 里", () => {
-  const have = new Set([...read("docs/LESSONS.md").matchAll(/^## (L-\d+)/gm)].map((m) => m[1]));
+test("引用的 L-xx 都在 docs/LESSONS.md 或它的归档里", () => {
+  const lessons = read("docs/LESSONS.md") + read("docs/history/LESSONS-归档.md");
+  const have = new Set([...lessons.matchAll(/^## (L-\d+)/gm)].map((m) => m[1]));
   for (const id of new Set([...(skill + evolution).matchAll(/\bL-\d+\b/g)].map((m) => m[0]))) {
-    assert.ok(have.has(id), `${id} 不在 docs/LESSONS.md`);
+    assert.ok(have.has(id), `${id} 不在 docs/LESSONS.md 和 docs/history/LESSONS-归档.md`);
   }
 });
 
