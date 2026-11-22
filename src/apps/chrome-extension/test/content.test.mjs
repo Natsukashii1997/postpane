@@ -312,6 +312,33 @@ test("a copy cut off by an extension reload stops instead of throwing on every c
   assert.deepEqual(errors, []);
 });
 
+// #507 review P1-01: the background leaves a page alone that says nothing
+// while it writes an answer, going by what the page last said of itself.
+test("the page says when an answer begins and ends being written", async () => {
+  const page = await open();
+  const said = () =>
+    page.evaluate(() =>
+      window.told.filter((m) => m.type === "page").map((m) => m.streaming),
+    );
+  const slot = (type, label) =>
+    page.evaluate(
+      ([type, label]) => {
+        const slot = document.getElementById("slot");
+        slot.type = type;
+        slot.setAttribute("aria-label", label);
+      },
+      [type, label],
+    );
+  assert.deepEqual(await said(), [false]);
+  await slot("button", "停止");
+  await page.waitForTimeout(700);
+  assert.deepEqual(await said(), [false, true]);
+  await slot("submit", "发送");
+  await page.waitForTimeout(700);
+  assert.deepEqual(await said(), [false, true, false]);
+  await page.close();
+});
+
 // #356: put in while a reply is being written (the extension installed,
 // updated or reloaded), the script reports that reply once it ends.
 test("a script put in mid-reply reports that reply when it ends", async () => {

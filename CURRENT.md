@@ -16,6 +16,7 @@
   - 驿窗：新文件 `handoff/sending/book_finding.rs`（`to_find`、`looked_for`、`found_late`、`found_absent`）、`desk_finding.rs`（`find_unsure`、`heard_found`）；`book_unsure.rs`（`Pending.looked`）；`desk_reread.rs`（定时入口里顺带去找）；`desk_lines.rs`、`handoff.rs`（`Lines::find` 和 `found` 一支，行数白名单 1997 → 2000）；`gate/desk_guard.rs`（卡上那句话）。
   - 测试：`chrome-extension/test/background.test.mjs`（3 条）、`content.test.mjs`（1 条）、`handoff/tests/finding.rs`（4 条）、`book_finding.rs` 内 1 条。
   - 文档：`docs/chatgpt-channel.md`（`find`、`found` 两行和送达未确认一段）、`docs/DECIDED.md`（1 行）。
+- 跟上 #508 第 1 轮审查的修法（开工 `2026-11-22 14:20`，接手会话）：把修过的 #508（`6bd1f05`）合进本分支（`git merge`，冲突在 `CURRENT.md`、`docs/chatgpt-channel.md`、`background.test.mjs`，两边都留）。`find` 原来无条件重载标签页；没确认送到的话多半其实送到了、ChatGPT 正在写回答，重载会打断它（和 #507-P1-01 同一类）。改成先问页面现在怎样：页面说正在写，或不应答但最近说过在写，不重载，报 `unread`，驿窗 2 分钟后再找；已回收的、没在写的照旧重载再读。`find` 改用 `tabShowing` 和 `stands`，不再把空的标签页编号交给 `loadAgain`。测试：`finding` 辅助函数加「重载前页面怎样」，原 3 条按新语义改，加 1 条；旧 `find` 上 `ℹ pass 59` / `ℹ fail 4`（`red-r2-plugin.log`），改后插件整套 `ℹ pass 142` / `ℹ fail 0`（`green-r2-plugin.log`）。合并后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 142`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r2.log`、`test-r2.log`、`rules-r2.log`）。仍是替身通过。
 - 测试：
   - 新测试先红后绿（G-40）。插件：3 条新测试在没有实现时 `ℹ pass 51` / `ℹ fail 3`（`red-plugin.log`），实现后 `ℹ pass 54` / `ℹ fail 0`。驿窗：临时让 `find_unsure` 不去找、`heard_found` 不入账，`cargo test -p agent-hud-host --lib handoff` 得 `test result: FAILED. 202 passed; 3 failed`（`red-host.log`）；还原后 `test result: ok. 205 passed; 0 failed`（`green-host.log`）。
   - `pnpm run check` 通过（`check exit 0`）。第一遍 `check exit 1`：三个新文件还没 `git add`，开头查 `src/` 下没提交文件那一步拦下的，加进暂存区后重跑。
@@ -35,12 +36,12 @@
   - skill 进化：无。
 - 本轮新坑：无。
 
-## 接力：ChatGPT 标签页失效后发送和重读自己恢复；转回 Claude 后不再因 2 小时停下（#507）（2026-11-22，Claude，常浩说「出第 2 批计划，直到该问题彻底解决」，看两条改动确认后经 agent-hud 插件回「两条都改」；已提交、PR 见 PR 描述、未装机）
+## 接力：ChatGPT 标签页失效后发送和重读自己恢复；转回 Claude 后不再因 2 小时停下（#507）（2026-11-22，Claude，常浩说「出第 2 批计划，直到该问题彻底解决」，看两条改动确认后经 agent-hud 插件回「两条都改」；已提交、PR #508、第 1 轮审查返修已交回复审、未装机）
 
 - 时间：开工 `2026-11-22 10:47`（`date '+%F %H:%M'` 记录）。来由：常浩要求彻底解决接力「中途停止、超时未读取」。对账本机 `handoffs.json`、`turns.jsonl` 和发起会话记录：11-20 17:02 装上第 0 批止血代码后的 41 次送审里，「30 分钟没回信」0 次；非规则要求的停下三类：送审没确认送到 3 次（两次插件回 `tab-closed`，一次 30 秒没答话，2 张接力卡到现在）、半截回信 1 次（之后同一标签页重读 128 次全是 `unreachable`）、「Claude 2 小时没交回复审」7 次（全是误报）。前两类同一个根因：标签页失效后插件不探活、不重载（L-67）。
 - 改变的行为（常浩 11-22 看过计划和改动确认）：
-  - 发送：原来标签页不应答时回不带 `pressed` 的 `tab-closed` 或一直不答，记成送达未确认并停下；现在发送前先探活，不答就重载（没有就新开）再发，到点没好回 `timeout`、`pressed: false`，按 #466 的「没送成」处理。
-  - 重读：原来补注入脚本失败就放弃，每 2 分钟空读一次；现在重载标签页再读一次，连续读不到的间隔翻倍到最长 32 分钟。
+  - 发送：原来标签页不应答时回不带 `pressed` 的 `tab-closed` 或一直不答，记成送达未确认并停下；现在发送前先探活，不答的按情况恢复（见下面「第 1 轮审查返修」：已回收的重载，正在写回答的不动、回 `busy`，其余先补注入脚本再问一次、仍不答才重载；标签页没了就新开）再发，到点没好回 `timeout`、`pressed: false`，按 #466 的「没送成」处理。
+  - 重读：原来补注入脚本失败就放弃，每 2 分钟空读一次；现在重载标签页再读一次（最近说过正在写回答的不重载，回 `busy`），连续读不到的间隔翻倍到最长 32 分钟。
   - 重启：原来每次重启都给还没确认的送审再记一步、再通知会话一次；现在同一段只记一次、只通知一次（修 bug）。
   - 转回 Claude 之后：原来 2 小时没交回复审就停下自动往返、标「未完暂停」；现在不设时限，由 24 小时没动静自动结束兜底（已定内容，改动确认 2，已登记 DECIDED.md）。
 - 改了哪些文件：
@@ -48,6 +49,12 @@
   - 驿窗：`handoff/answers/desk_reread.rs`、`desk_undrawn.rs`（读不到的退避，`turns.jsonl` 多记 `reloaded`）；`handoff/sending/book_unsure.rs`（`Pending.restarted`，重启只记一次，旧记录按最后一步的原因认）；`handoff/book.rs`（`overdue` 去掉转回后的 2 小时）、`handoff/back/desk_texts.rs`（删用不上的 `no_handover`）、`handoff.rs`（调用处）。
   - 测试：`chrome-extension/test/background.test.mjs`（5 条新测试，1 条按新语义改）、`content.test.mjs`（1 条）、`handoff/tests/read_again.rs`、`unsure.rs`（各 1 条）、`held_back.rs`、`book.rs`、`book_states.rs`、`notice/book.rs`（跟着 2 小时去掉改）。
   - 文档：`docs/chatgpt-channel.md`、`docs/LESSONS.md`（L-67）、`docs/DECIDED.md`（1 行）。
+- 第 1 轮审查返修（开工 `2026-11-22 13:35`，接力 `h1a2019f9b8302`、审查链 `r1a2019f9b8302`，ChatGPT 结论「需修改」：P1-01、P2-01；另四个重点方向它判可以接受）：
+  - P1-01（探活 2 秒没答就重载，可能打断正在写的回答）：改成分情况。Chrome 已回收的直接重载；标签页还在、最近一次报到说正在写回答（30 分钟内，`WRITING_FOR`）的不重载、不注入，发送回 `busy`、`pressed: false`，重读回 `outcome: "busy"`；还在、没说在写的先补注入脚本再问一次（合计最多 8 秒），脚本被切断的、只是答得慢的这一次会答；仍不答才重载。`background.js` 的 `answers` 换成 `stands`、`shown`、`mayWrite`。
+  - 审查没提到、返修时查出的一处：`pages` 里的 `streaming` 只在页面报到时更新（加载、换会话、切前后台），开始写和写完回答时并不刷新，照审查意见直接用它，保护是空的。`content.js` 改成开始写、写完各报到一次，插件记下报到时间。
+  - P2-01（重载的可能是另一个标签页，却还问旧的）：`loadAgain` 只重载传进来的那一个，不再按网址另找；名单里的标签页已经没了，发送换名单里下一个或新开，重读从头换一个读。
+  - 测试夹具的 `chrome.tabs.get` 改成像 Chrome 一样对不存在的标签页报错。
+  - 返修测试：9 条新测试（插件后台 8 条、页面脚本 1 条），3 条按新语义改。旧实现上 `ℹ pass 72` / `ℹ fail 8`（`red-r2-plugin.log`，另 1 条「冻结的标签页问两次仍不答就重载」旧实现也过，是防回退的）；实现后插件整套 `ℹ pass 137` / `ℹ fail 0`（`green-r2-plugin.log`）。返修后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 137`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r2.log`、`test-r2.log`、`rules-r2.log`）。
 - 测试：
   - 新测试先红后绿（G-40）。插件：5 条新测试在旧代码上 `ℹ pass 46` / `ℹ fail 5`（`red-plugin.log`），实现后 `ℹ pass 51` / `ℹ fail 0`。驿窗：临时关掉三处实现（重启只记一次的判断、读不到的退避、把转回后的 2 小时加回去）跑 `cargo test -p agent-hud-host --lib handoff`，`test result: FAILED. 195 passed; 5 failed`（2 条新测试加 3 条跟着 2 小时去掉改的，`red-host.log`）；还原后 `test result: ok. 200 passed; 0 failed`（`green-host.log`）。第一遍红没编译过（新测试调了私有的 `live_mut`），改掉后重跑的。
   - `pnpm run check` 通过（`check exit 0`）。
