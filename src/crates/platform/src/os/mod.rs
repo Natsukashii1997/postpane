@@ -35,6 +35,20 @@ pub(crate) fn variable(env: &Environment, key: &str, _home: &Path) -> Option<Pat
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
+/// What the panel says when a session's link did not open on this host;
+/// why goes to the app's log, which the panel's line cannot hold (#517).
+pub(crate) fn could_not_open_session(reason: &str) -> String {
+    agent_hud_core::note!("A session's link did not open: {reason}");
+    agent_hud_core::l10n::text(
+        "没能在对应的应用里打开这个会话，过几秒再试一次",
+        "The app could not open this session. Try again in a few seconds.",
+    )
+}
+/// What the panel says when the transcript could not be shown; why is logged.
+pub(crate) fn could_not_reveal_transcript(reason: &str) -> String {
+    agent_hud_core::note!("The transcript could not be shown: {reason}");
+    agent_hud_core::l10n::text("没能显示这个会话的记录文件", "Could not reveal transcript")
+}
 /// A base folder of the agents' locations on this host.
 pub(crate) fn folder(home: &Path, env: &Environment, base: agent_hud_agents::Base) -> PathBuf {
     match base {

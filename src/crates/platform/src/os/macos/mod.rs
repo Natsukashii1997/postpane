@@ -159,6 +159,7 @@ pub(crate) fn reveal_transcript(path: &Path) -> Result<(), String> {
         include_str!("../../../scripts/macos/reveal-transcript.sh"),
         &[path.as_os_str()],
     )
+    .map_err(|reason| super::could_not_reveal_transcript(&reason))
 }
 pub(crate) fn legacy_quota_database(home: &Path) -> Option<PathBuf> {
     legacy_history::quota_database(home)
@@ -313,7 +314,7 @@ pub(crate) fn open_session_url(url: &str) -> Result<(), String> {
         include_str!("../../../scripts/macos/open-session-url.sh"),
         &[std::ffi::OsStr::new(url)],
     )
-    .map_err(|_| "The native client could not open this session".into())
+    .map_err(|reason| super::could_not_open_session(&reason))
 }
 
 /// Darwin's sockaddr_un carries its own length.
