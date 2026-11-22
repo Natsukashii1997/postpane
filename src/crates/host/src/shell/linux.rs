@@ -18,6 +18,11 @@ pub(crate) fn statistics_chrome<'a>(
     builder
 }
 
+/// WebKitGTK does not report an ended content process through Tauri.
+pub(crate) fn web_content_hooks(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
+}
+
 pub(crate) fn system_prefers_chinese() -> bool {
     ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
