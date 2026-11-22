@@ -2,6 +2,27 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 网页进程退出时记进日志再重载（#512）（2026-11-22，Claude，常浩经侧栏选「只加记录」；已提交，PR 见描述，已装机回读通过）
+
+- 时间：开工 `2026-11-22 22:38`（`date '+%F %H:%M'` 记录）。来由：22:10 侧栏整窗空白，重启驿窗才恢复；查到 22:09 侧栏网页自动重载过却没画出来，驿窗什么都没记，原因查不出（#512）。
+- 改变的行为：用户看得到的没有变：网页进程退出后照样自动重载。内部变化两处：`postpane.log` 多出「Web content process ended in window …」「reload sent / failed」两行；重载改由另一个线程发消息进事件循环，不再用 Tauri 默认的 `try_borrow`（借不到窗口表时会静默不重载）。
+- 你要求的：
+  - `host/src/shell/web_process.rs`（新）：`process_ended(label, reload, log)`，先记退出、再重载，记下重载已发出或失败原因；两条单测。
+  - `host/src/shell/macos.rs`：`web_content_hooks` 在应用构建器上接 `on_web_content_process_terminate`，克隆网页视图后另起线程调 `process_ended`，用 `note!` 写日志。
+  - `host/src/shell/windows.rs`、`linux.rs`：同名函数原样返回构建器（这两家 Tauri 不报网页进程退出）；`shell/mod.rs` 登记新项。
+  - `host/src/lib.rs`：只把 `tauri::Builder::default()` 换成 `shell::web_content_hooks(tauri::Builder::default())`，行数不变。
+  - `docs/LESSONS.md`：L-67。
+- 我顺手改的：无。
+- 测试：
+  - 新测试先红后绿：红 `test result: FAILED. 0 passed; 2 failed`（`left: []`），绿 `2 passed; 0 failed`；输出在 `evidence/2026-11-22-512-process-log/red.txt`、`green.txt`。
+  - 变基前：`pnpm run check` 退出 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。变基到 `6dd1bea`（含 #513、#514）后重跑的结果写在 PR 描述。
+- 验证：装机后在真实驿窗上依次 `kill -9` 两个网页进程（23:56:18、23:56:22）。`postpane.log` 记下 `window main` 和 `window hud-3337…3230` 各两行（退出、重载已发出）；替身进程同一秒起来；侧栏 8 秒、15 秒后截图都有内容，五家小人与读数、两个挂件都在。22:09 那种「重载了却没画出来」没复现，这次的改动不保证修好它，只保证下次能在日志里看到。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-22-512-process-log/kill2-after-crop.png`（杀进程后侧栏）；诊断时的空白截图在 `evidence/2026-11-22-侧栏不显示/`。
+- 发布与回读：`install.sh 512-process-log`：产物 `7a0fef0ca5cf` / 已装 `7a0fef0ca5cf`，签名证书 `b773068e`；冒烟侧栏在动。装的包不含 #513、#514（都不是界面改动），合并后从 main 重打重装。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-22-512-process-log/PostPane-f3fecdbc07f2.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：#512 的根因还不知道，issue 保持打开；下次空白先 `grep "Web content" postpane.log`，看重载是否发出、发给了哪个窗口，再决定要不要做整窗重建。
+- 本轮新坑：L-67。
+- skill 进化：无。
+
 ## E-24 写进驿窗一轮 SKILL，L-64 提升为全局 G-48（2026-11-22，Claude，常浩经侧栏回「全按推荐」：E-24 批、L-64 提升、7b 批 3 继续搁置；已提交，PR 见描述，无需发布）
 
 - 时间：开工 `2026-11-22 23:33`（按分支建立时间补记）。来由：上一节留下的三问，推荐分别是「批」「提升」「不做」。
