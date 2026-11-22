@@ -393,8 +393,6 @@ fn refused(reason: &str) -> String {
     }
 }
 
-/// The watched entry a turn's conversation is, if PostPane opened it.
-
 /// A turn's conversation, and when it happened (never later than now).
 fn turn_at(message: &Value, now: i64) -> Option<(&str, i64)> {
     let conversation = message["conversation"]

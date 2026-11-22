@@ -1382,9 +1382,11 @@ impl Desk {
             (Next::Pass | Next::Close, _) => {
                 book.note(id, Notice::Passed, now);
                 let pass = next == Next::Pass;
-                let words = pass
-                    .then(|| passed_back(how))
-                    .unwrap_or_else(thinking_closed);
+                let words = if pass {
+                    passed_back(how)
+                } else {
+                    thinking_closed()
+                };
                 book.passed(id, &named(words), now)
             }
             // Another commit than the one sent: the current one sent again

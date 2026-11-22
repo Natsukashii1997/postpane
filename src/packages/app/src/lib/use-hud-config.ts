@@ -4,7 +4,7 @@ import type { PanelLayout, SourcePreferences } from "@agent-hud/protocol";
 import { defaultHUDConfig, type HUDConfig } from "@agent-hud/hud/model";
 import { usageStyle } from "@agent-hud/hud/usage-meter/arcs";
 import { storageKeys } from "./storage-keys";
-import { call, emitTo, listenHere } from "./native.ts";
+import { call, listenHere } from "./native.ts";
 const configKey = storageKeys.hudConfig;
 const previousKey = storageKeys.hudConfigV2;
 const legacyKey = storageKeys.hudConfigV1;
@@ -231,12 +231,6 @@ function readJSON(key: string): unknown {
 function readStore() {
   return parseHUDConfigStore(readJSON(configKey));
 }
-function publish(store: HUDConfigStore) {
-  if (isTauri())
-    void emitTo("hud:config", store).catch((error) =>
-      console.error("Display preference synchronization failed", error),
-    );
-}
 function initializeStore(screens: HUDScreenContext[]): HUDConfigStore | null {
   const existing = readStore();
   if (existing) return existing;
@@ -248,7 +242,6 @@ function initializeStore(screens: HUDScreenContext[]): HUDConfigStore | null {
     screens,
   );
   localStorage.setItem(configKey, JSON.stringify(store));
-  publish(store);
   return store;
 }
 export function getScreenHUDConfig(
@@ -405,7 +398,6 @@ export function useHUDConfig(
     const next = updateScreenHUDConfig(latest, id, patch);
     localStorage.setItem(configKey, JSON.stringify(next));
     setLoaded({ store: next, ready: true });
-    publish(next);
   }, []);
   const update = useCallback(
     (patch: Partial<HUDConfig>) => updateScreen(selectedId, patch),

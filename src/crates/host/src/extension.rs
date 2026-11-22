@@ -27,7 +27,6 @@ pub struct Delivery {
 pub type ReadSnapshot = Arc<dyn Fn() -> Result<Value, String> + Send + Sync>;
 pub type Query = Arc<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>;
 pub type Answer = Arc<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>;
-pub type Publish = Arc<dyn Fn(Value) + Send + Sync>;
 /// Asks every HUD for a flight (see `Flight`).
 pub type Fly = Arc<dyn Fn(Flight) + Send + Sync>;
 /// A short animation a product asks every HUD for: something leaves one
@@ -55,7 +54,6 @@ pub struct HostContext {
     pub snapshot: ReadSnapshot,
     pub query: Query,
     pub answer: Answer,
-    pub publish: Publish,
     pub fly: Fly,
 }
 pub trait ProductExtension: Send + Sync + 'static {
