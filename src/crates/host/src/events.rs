@@ -18,7 +18,6 @@ pub const DEMO_PANEL: &str = "demo:panel";
 pub const SETTINGS_PAGE: &str = "settings:page";
 pub const STATISTICS_TAB: &str = "statistics:tab";
 pub const STATISTICS_SESSION: &str = "statistics:session";
-pub const PRODUCT_EVENT: &str = "product:event";
 
 /// Not sent as such: `activity::publish` sends a snapshot as JSON text under
 /// `SNAPSHOT_JSON`, which WebKit decodes far faster than an object literal.

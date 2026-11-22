@@ -301,9 +301,8 @@ mod tests {
             );
         }
         assert_eq!(book.get(&t.id).unwrap().next(), Some(Next::Limit));
-        assert_eq!(
-            book.carry(&t.id, &|_, _| None).contains("台账"),
-            false,
+        assert!(
+            !book.carry(&t.id, &|_, _| None).contains("台账"),
             "no ledger for a 思维评审"
         );
     }

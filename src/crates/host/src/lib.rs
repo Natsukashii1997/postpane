@@ -301,7 +301,6 @@ impl Service {
             let snapshots = Arc::downgrade(&backend);
             let queries = snapshots.clone();
             let answers = snapshots.clone();
-            let events = app.clone();
             let flights = app.clone();
             product.start(extension::HostContext {
                 snapshot: Arc::new(move || {
@@ -325,10 +324,6 @@ impl Service {
                         "answer_request",
                         serde_json::json!({"id":id,"decision":decision}),
                     )
-                }),
-                publish: Arc::new(move |value| {
-                    use tauri::Emitter;
-                    let _ = events.emit(events::PRODUCT_EVENT, value);
                 }),
                 fly: Arc::new(move |flight| activity::publish(&flights, events::FLIGHT, &flight)),
             })?;
@@ -906,9 +901,6 @@ pub fn run_with_options(
             mcp_clients::native_mcp_clients,
             claude_plugin::native_claude_plugin,
             chatgpt::native_chatgpt_extension,
-            chatgpt::chatgpt_open,
-            chatgpt::chatgpt_send,
-            chatgpt::chatgpt_status,
             handoff::handoff_act,
             handoff::relay_launch,
             handoff::settings::chatgpt_project,
@@ -922,7 +914,6 @@ pub fn run_with_options(
             activity::window_activity,
             hud::hud_monitors,
             hud::hud_geometry,
-            hud::hud_native_capabilities,
             hud::hud_report_regions,
             hud::hud_drag_start,
             hud::hud_text_focus,

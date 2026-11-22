@@ -276,7 +276,6 @@ pub struct HudWindowState {
     pub(super) geometry: Option<HudGeometry>,
 }
 
-#[tauri::command]
 pub fn hud_native_capabilities() -> HudCapabilities {
     super::host::capabilities()
 }
