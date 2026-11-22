@@ -1,9 +1,11 @@
 // The app's Tauri events, by name (7b). The front end listens and emits only
 // through `listenTo` / `emitTo` (app/src/lib/native.ts) with one of these
-// names, and test/names.test.ts checks that every event the host emits is
-// named here. Payload types stay where each event is handled.
-export const EVENTS = [
-  // Host → front end.
+// names. test/names.test.ts keeps `HOST_EVENTS` equal to the names the host
+// emits (src/crates/host/src/events.rs). Payload types stay where each event
+// is handled.
+
+/** Sent by the host to the front end. */
+export const HOST_EVENTS = [
   "hud:snapshot-json",
   "hud:snapshot-error",
   "hud:clock",
@@ -22,9 +24,11 @@ export const EVENTS = [
   "statistics:tab",
   "statistics:session",
   "product:event",
-  // Front end → front end (between windows).
-  "statistics:provider",
-  "hud:config",
 ] as const;
+
+/** Sent by one front-end window to another; the host never emits these. */
+export const WINDOW_EVENTS = ["statistics:provider", "hud:config"] as const;
+
+export const EVENTS = [...HOST_EVENTS, ...WINDOW_EVENTS] as const;
 
 export type AppEvent = (typeof EVENTS)[number];
