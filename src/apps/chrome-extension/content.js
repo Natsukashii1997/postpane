@@ -110,7 +110,12 @@
         tellComplete(reply);
       }, 600);
     }
+    // The background leaves a page alone that says nothing while it writes
+    // an answer, by what the page last said (#507 review P1-01): said as
+    // writing begins and ends.
+    const turned = streaming !== wasStreaming;
     wasStreaming = streaming;
+    if (turned) report();
   }
 
   // Sample at most every 400 ms while the page changes, never postponing: a
