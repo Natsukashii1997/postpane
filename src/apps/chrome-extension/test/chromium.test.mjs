@@ -252,3 +252,34 @@ test("a listed tab gone to another site is not loaded again", async () => {
   assert.equal(await page.evaluate(() => window.kept), "not loaded again");
   assert.equal(await page.evaluate(() => window.sent), undefined);
 });
+
+// Review round 3, P1-01: only a tab Chrome itself says has nothing loaded
+// is loaded again. A page that crashed: at its address still, not discarded,
+// `status: "unloaded"`, and it takes no script (2026-11-22, Chromium 156).
+test("a tab whose page crashed is unloaded as Chrome has it: loaded again, it takes the words", async () => {
+  const { page, tabId, id } = await open(11);
+  const crash = await context.newCDPSession(page);
+  crash.send("Page.crash").catch(() => {});
+  let tab;
+  for (let tries = 0; tries < 50 && tab?.status !== "unloaded"; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    tab = await worker.evaluate((tabId) => chrome.tabs.get(tabId), tabId);
+  }
+  assert.deepEqual(
+    [tab.status, !!tab.discarded, tab.url],
+    ["unloaded", false, address(id)],
+  );
+  assert.equal(
+    await worker.evaluate((tabId) => scripted(tabId, Date.now() + 5000), tabId),
+    "refused",
+  );
+  const before = loads.get(address(id));
+  const sent = await worker.evaluate((id) => send(id, "下一轮"), id);
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.equal(loads.get(address(id)), before + 1, "loaded again, once");
+  const there = await worker.evaluate(
+    async (url) => (await chrome.tabs.query({ url })).map((tab) => tab.id),
+    address(id),
+  );
+  assert.deepEqual(there, [tabId], "and no tab made beside it");
+});

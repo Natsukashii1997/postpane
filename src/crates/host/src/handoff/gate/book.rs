@@ -8,6 +8,9 @@ use super::gate_io::{reviewed_commit, same_commit};
 use super::{exit, review_exit, Exit, Flaw, Handoff, Next, Review, Step, StepKind};
 use serde::{Deserialize, Serialize};
 
+#[path = "book_writing.rs"]
+mod writing;
+
 /// Reviews one leave of the person's gives, unless set otherwise.
 pub const LIMIT: u32 = 5;
 /// The most the setting takes (owner 2026-11-19, #409: 1 to 9, five unless set).
@@ -46,6 +49,10 @@ pub struct Gate {
     /// (round 4 P1-10).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mending: Option<super::unsure::Pending>,
+    /// When an answer was last heard to begin in its conversation, and not
+    /// since to end (`book_writing.rs`). Of this run only.
+    #[serde(skip)]
+    pub writing: Option<i64>,
 }
 
 fn is_zero_at(at: &i64) -> bool {

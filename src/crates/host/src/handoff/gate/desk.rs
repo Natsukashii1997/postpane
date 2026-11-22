@@ -13,6 +13,31 @@ use std::time::Duration;
 const READ_HEAD_WAIT: Duration = Duration::from_secs(20);
 
 impl Desk {
+    /// Whether words may go into `id`'s `conversation` now, else why not:
+    /// its review is with ChatGPT still, and other words would take its
+    /// answer; or another answer is being written there (#507 review
+    /// P1-04), and the conversation is read again, so a beginning heard
+    /// with no end does not hold the same words the next time.
+    pub(in crate::handoff) fn unheld(
+        &self,
+        lines: &dyn Lines,
+        id: &str,
+        conversation: &str,
+        now: i64,
+    ) -> Result<(), String> {
+        let held = |handoff: &Handoff| (handoff.in_flight(), handoff.writing(now));
+        let (waiting, writing) = self.lock().get(id).map_or((false, false), held);
+        if waiting {
+            return Err(super::guard::still_waiting());
+        }
+        if writing {
+            if let Err(error) = lines.reread(conversation) {
+                agent_hud_runtime::note!("{error}");
+            }
+            return Err(super::guard::writing_other());
+        }
+        Ok(())
+    }
     /// The review cap as set now (`reviewLimit`, #347).
     pub(super) fn review_limit(&self) -> u32 {
         self.data.as_deref().map_or(book::LIMIT, book::review_limit)

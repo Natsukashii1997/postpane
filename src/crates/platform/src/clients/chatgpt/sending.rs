@@ -18,9 +18,23 @@ impl From<Unasked> for String {
     fn from(unasked: Unasked) -> String {
         match unasked {
             Unasked::Unposted(text) | Unasked::Silent(text) => text,
-            Unasked::Refused(reply) => refused(reply["reason"].as_str().unwrap_or("send-failed")),
+            Unasked::Refused(reply) => {
+                let text = refused(reply["reason"].as_str().unwrap_or("send-failed"));
+                // Words the page put in the box and could not take out again
+                // (#507 review P2-03): said, so they are not sent by hand.
+                if reply["left"] == true {
+                    return text + &left_in_box();
+                }
+                text
+            }
         }
     }
+}
+fn left_in_box() -> String {
+    l10n::text(
+        "（页面已换到别的会话，输入框里留着没清掉的字，请到那个 ChatGPT 标签页看一眼）",
+        " (the page moved to another conversation; words are left in its box, look at that ChatGPT tab)",
+    )
 }
 
 /// Why words did not go into a conversation, as far as is known, each with
@@ -83,5 +97,27 @@ impl Channel {
         let message = json!({"type":"send","conversation":conversation,"text":text});
         let reply = self.shared.ask_as(id, message, SEND_TIME)?;
         Ok(json!({"sent":true,"promptId":reply["promptId"]}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // #507 review P2-03: words the page could not take out of the box again.
+    #[test]
+    fn words_left_in_the_box_are_said_with_the_reason() {
+        let said = |left: bool| {
+            let mut reply = json!({"reason":"other-conversation","pressed":false});
+            if left {
+                reply["left"] = json!(true);
+            }
+            reply
+        };
+        let plain = String::from(Unasked::Refused(said(false)));
+        let left = String::from(Unasked::Refused(said(true)));
+        assert!(left.starts_with(&plain) && left.len() > plain.len());
+        let failed = SendFailed::from(Unasked::Refused(said(true)));
+        assert_eq!(failed, SendFailed::NotPressed(left));
     }
 }

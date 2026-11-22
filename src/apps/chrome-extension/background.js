@@ -245,6 +245,10 @@ const ALIVE_AGAIN_BY = 8000;
  * the one that says nothing, and one in its place. */
 const TABS_MOST = 2;
 
+/** How long a tab Chrome made late (past the time of the one who asked for
+ * it) is waited for to show its conversation, while none other is made. */
+const MADE_BY = 15000;
+
 /** What the page in `tabId` says of itself, asked by `until`: the
  * conversation it shows (null: none) and whether it is hidden; undefined
  * when it says nothing by then. */
@@ -272,19 +276,26 @@ function scripted(tabId, until) {
   );
 }
 
+/** Whether Chrome says nothing is loaded in `tab`: it discarded it, or its
+ * page crashed (`status: "unloaded"`, Chromium 156, 2026-11-22). */
+const unloaded = (tab) => !!tab && (tab.discarded || tab.status === "unloaded");
+
 /** How a tab that may show `conversation` stands, asked whether it is there
  * (#507). A tab Chrome discarded says nothing (and has a new id: the one it
  * had is listed still, and is no tab's): words to one came back
  * `tab-closed`, or not at all, and were kept as not known to have gone.
  * - "there": its page answers, and shows the conversation;
  * - "stale": no page of the conversation runs in it, so loading it again
- *   ends nothing: it is at the conversation's address, and Chrome discarded
- *   it, or it takes no script at all (an error page, a crashed one);
+ *   ends nothing: it is at the conversation's address, and Chrome itself
+ *   says nothing is loaded in it (`unloaded`: discarded, or its page
+ *   crashed). A script refused is not that (review round 3, P1-01): Chrome
+ *   refuses one as the tab's document gives way to another, which is alive;
+ *   and why it refused is not gone by;
  * - "away": anything else, and it is left as it is (review P1-01): no such
  *   tab, another conversation (it is listed for that one, then) or another
- *   site by now, or a page that says
- *   nothing even asked a second time with a script put in (frozen, or
- *   busy). That page may be writing an answer, which loading it again would
+ *   site by now, or a page that says nothing even asked a second time with
+ *   a script put in, or that takes none (frozen, busy, on its way in). That
+ *   page may be writing an answer, which loading it again would
  *   end; what it last said of that is not gone by, since a restarted worker
  *   has not heard it. A page cut off from the extension (reloaded) answers
  *   once it has the script, and so does one that was only slow. */
@@ -300,14 +311,11 @@ async function stands(tabId, conversation, until) {
   if (said === undefined) {
     const before = await tab();
     if (!before) return "away";
-    if (before.discarded) return "stale";
+    if (unloaded(before)) return "stale";
     const again = Math.min(until, Date.now() + ALIVE_AGAIN_BY);
-    if ((await scripted(tabId, again)) === "refused") {
-      // As Chrome has the tab now: it may have been loaded or moved since.
-      const now = await tab();
-      const idle = now && !now.frozen && now.status !== "loading";
-      return idle ? "stale" : "away";
-    }
+    // Refused, as Chrome has the tab now: it may have unloaded it since.
+    if ((await scripted(tabId, again)) === "refused")
+      return unloaded(await tab()) ? "stale" : "away";
     said = await shown(tabId, again);
   }
   if (!said) return "away";
@@ -339,17 +347,20 @@ async function loadAgain(tabId, conversation, until) {
   return !!page && Date.now() < until;
 }
 
-/** The tabs open at chatgpt.com that show `conversation` by their address. */
+/** The tabs open at chatgpt.com that show `conversation` by their address;
+ * null when Chrome does not say by `until`: not none (review P2-02). */
 async function tabsAt(conversation, until) {
   const tabs = await by(until, () => chrome.tabs.query({ url: `${HOME}*` }));
   return Array.isArray(tabs)
     ? tabs.filter((tab) => tab.url?.includes(`/c/${conversation}`))
-    : [];
+    : null;
 }
 
-/** The tab being made for each conversation, till its page reports or the
- * time for it is up: two looking for a tab at once (a sending and a read)
- * do not each make one. */
+/** The tab being made for each conversation: two looking for a tab at once
+ * (a sending and a read) do not each make one. Till its page reports or the
+ * time for it is up, and till Chrome has said what came of the tab asked
+ * for, however long that takes (review P2-02): out of time, the one who
+ * asked goes on without it, and Chrome may make it all the same. */
 const making = new Map();
 
 /** A tab whose page says, by `until`, that it shows `conversation` (#507):
@@ -369,12 +380,14 @@ async function reach(conversation, until) {
     for (const [tabId, page] of pages)
       if (page.conversation === conversation && !passed.has(tabId))
         return tabId;
+    // Chrome not saying which are open: not known whether one is there.
     const open = await tabsAt(conversation, until);
+    if (!open) return undefined;
     return open.find((tab) => !passed.has(tab.id))?.id ?? null;
   };
   for (;;) {
     const tabId = await next();
-    if (Date.now() >= until) return {};
+    if (tabId === undefined || Date.now() >= until) return {};
     if (tabId === null) {
       // One being made for it is waited for, and asked like any other.
       const other = making.get(conversation);
@@ -395,34 +408,42 @@ async function reach(conversation, until) {
   }
   // Said at once, before anything is waited for: another looking for a tab
   // meanwhile waits for this one.
-  const made = make(conversation, until);
-  making.set(conversation, made);
-  try {
-    return await made;
-  } finally {
-    making.delete(conversation);
-  }
+  const asked = {};
+  const made = make(conversation, until, asked);
+  const done = made.then(() => asked.till).catch(() => {});
+  making.set(conversation, done);
+  done.then(
+    () => making.get(conversation) === done && making.delete(conversation),
+  );
+  return made;
 }
 
 /** Makes a tab for `conversation`, in its group, unless `TABS_MOST` show it
- * already: `{tabId, made}` once its page reports, by `until`; `{made}` when
- * it does not by then; `{}` when none was made. */
-async function make(conversation, until) {
-  if ((await tabsAt(conversation, until)).length >= TABS_MOST) return {};
+ * already, or Chrome does not say how many do: `{tabId, made}` once its
+ * page reports, by `until`; `{made}` when it does not by then; `{}` when
+ * none was made. `asked.till`: till Chrome has answered for the tab, and
+ * the tab it made, if any, shows the conversation or `MADE_BY` is up, to
+ * wait on past `until`: a tab just made has no address yet, and is not
+ * found at the conversation's (review P2-02). */
+async function make(conversation, until, asked = {}) {
+  const open = await tabsAt(conversation, until);
+  if (!open || open.length >= TABS_MOST) return {};
   if (Date.now() >= until) return {};
   const url = `${HOME}c/${conversation}`;
-  const tab = await by(until, () =>
-    chrome.tabs.create({ url, active: false }).then(
-      (tab) => tab,
-      () => false,
-    ),
+  const loaded = (p) => p.conversation === conversation;
+  const answered = new Promise((came) =>
+    came(chrome.tabs.create({ url, active: false })),
+  ).then(
+    (tab) => tab,
+    () => false,
   );
+  asked.till = answered.then((tab) => tab && ready(tab.id, MADE_BY, loaded));
+  const tab = await by(until, () => answered);
   // Out of time, Chrome may make it all the same.
   if (tab === false) return {};
   const made = { made: true };
   if (!tab) return made;
   if (!(await by(until, () => group(tab.id)))) return made;
-  const loaded = (p) => p.conversation === conversation;
   if (!(await ready(tab.id, until - Date.now(), loaded))) return made;
   return Date.now() < until ? { tabId: tab.id, ...made } : made;
 }
@@ -511,12 +532,20 @@ function outcomeOf(answer, told) {
   return "waiting";
 }
 
+/** How long Chrome has to say how a tab stands, or to put one in front,
+ * when a read is on its way (review P2-04): past it the read goes on
+ * without. */
+const CHROME_BY = 3000;
+/** What Chrome answers `ask` of its tabs or windows; null when it fails or
+ * does not by `CHROME_BY`. */
+const chromeSays = (ask) => by(Date.now() + CHROME_BY, ask);
+
 /** How `tabId` stood: hidden as its page last said, in front of its window,
- * its window minimized. */
+ * its window minimized; what Chrome does not say in time counts as not. */
 async function standing(tabId) {
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const tab = await chromeSays(() => chrome.tabs.get(tabId));
   const window =
-    tab && (await chrome.windows.get(tab.windowId).catch(() => null));
+    tab && (await chromeSays(() => chrome.windows.get(tab.windowId)));
   return {
     hidden: !!pages.get(tabId)?.hidden,
     active: !!tab?.active,
@@ -533,20 +562,25 @@ const REREAD_PAUSE = 2000;
 // itself is not raised: one off screen still draws nothing (#457). Whether
 // the answer was told.
 async function drawnInFront(tabId, ask) {
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const tab = await chromeSays(() => chrome.tabs.get(tabId));
   if (!tab || tab.active) return false;
-  const front = (
-    await chrome.tabs.query({ active: true, windowId: tab.windowId })
-  ).find((t) => t.active);
-  await chrome.tabs.update(tabId, { active: true });
+  const active = { active: true };
+  const fronts = await chromeSays(() =>
+    chrome.tabs.query({ ...active, windowId: tab.windowId }),
+  );
+  if (!Array.isArray(fronts)) return false;
+  const front = fronts.find((t) => t.active);
+  // Not known to be in front in time, it is not read as if it were; the
+  // tab that was in front is put back all the same, in case it came late.
+  const put = await chromeSays(() => chrome.tabs.update(tabId, active));
   let told = false;
-  for (let tries = 0; tries < FRONT_TRIES && !told; tries++) {
+  for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
     await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
     told = !!(await ask().catch(() => null))?.told;
   }
-  const now = await chrome.tabs.get(tabId).catch(() => null);
-  if (front && now?.active)
-    await chrome.tabs.update(front.id, { active: true }).catch(() => {});
+  const now = await chromeSays(() => chrome.tabs.get(tabId));
+  if (front && (now?.active || !put))
+    await chromeSays(() => chrome.tabs.update(front.id, active));
   return told;
 }
 const FRONT_TRIES = 3;
