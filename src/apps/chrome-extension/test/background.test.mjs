@@ -64,6 +64,14 @@ function load(
   const listeners = {};
   const injected = [];
   const event = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
+  // As Chrome: a tab made active is told to each listener, with its window.
+  const activated = new Set();
+  const activate = (tabId) => {
+    const tab = tabs.find((tab) => tab.id === tabId);
+    for (const other of tabs)
+      if (other.windowId === tab?.windowId) other.active = other.id === tabId;
+    for (const fn of activated) fn({ tabId, windowId: tab?.windowId });
+  };
   const chrome = {
     runtime: {
       id: "test",
@@ -114,8 +122,14 @@ function load(
       },
       update: async (tabId, { active }) => {
         fronted.push(tabId);
-        for (const tab of tabs) tab.active = tab.id === tabId ? active : false;
+        if (active) activate(tabId);
       },
+      onActivated: {
+        addListener: (fn) => activated.add(fn),
+        removeListener: (fn) => activated.delete(fn),
+      },
+      // The person making a tab active, for the tests.
+      activate,
       reload: async (tabId) => {
         if (!tabs.some((tab) => tab.id === tabId)) throw new Error("No tab");
         reloaded.push(tabId);
@@ -680,7 +694,7 @@ test("a tab put in front for a read is moved back from only while it and its win
     { id: 4, url: "https://chatgpt.com/", windowId: 1 },
   ];
   const page = { type: "page", conversation, hidden: true, streaming: false };
-  const read = async (moves, focus = [true, true]) => {
+  const read = async (moves, focus = [true, true], rig = () => {}) => {
     const posted = [];
     const fronted = [];
     tabs.forEach((tab) => (tab.active = tab.id === 3));
@@ -700,16 +714,37 @@ test("a tab put in front for a read is moved back from only while it and its win
     chrome.tabs.sendMessage = async (tabId, message) => {
       // Asked again with the tab in front: the person moves to tab 4.
       if (message.op === "reread" && ++asks === 2) {
-        if (moves) tabs.forEach((tab) => (tab.active = tab.id === 4));
+        if (moves === true) chrome.tabs.activate(4);
+        // To another tab and back to the one read: it is in front again,
+        // but the person chose (round 6 review P2-05).
+        if (moves === "back")
+          (chrome.tabs.activate(4), chrome.tabs.activate(2));
         window.focused = focus[1];
         if (focus[1] === "never") chrome.windows.get = never;
       }
       return sendMessage(tabId, message);
     };
+    rig(chrome);
     await listeners.port({ type: "reread", conversation });
     return fronted;
   };
   assert.deepEqual(await read(false), [2, 3], "in front still: moved back");
+  assert.deepEqual(await read("back"), [2], "went away and back");
+  // Round 6 review P2-05: the person chooses a tab while Chrome is asked
+  // whether the window has the focus, before the read or after it (the
+  // first ask is how the tab stood, before it is put in front).
+  const choosing = (at) => (chrome) => {
+    const { get } = chrome.windows;
+    let asked = 0;
+    chrome.windows.get = async (id) => {
+      if (++asked === at) chrome.tabs.activate(4);
+      return get(id);
+    };
+  };
+  assert.deepEqual(await read(false, [true, true], choosing(2)), [], "before");
+  assert.equal(tabs.find((tab) => tab.active).id, 4);
+  assert.deepEqual(await read(false, [true, true], choosing(3)), [2], "after");
+  assert.equal(tabs.find((tab) => tab.active).id, 4);
   assert.deepEqual(await read(true), [2], "the person's choice stays");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
   // The tab in front of its window still, but the person went to another

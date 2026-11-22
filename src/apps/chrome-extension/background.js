@@ -573,34 +573,49 @@ async function drawnInFront(tabId, ask) {
   const tab = await chromeSays(() => chrome.tabs.get(tabId));
   if (!tab || tab.active) return false;
   const active = { active: true };
-  const fronts = await chromeSays(() =>
-    chrome.tabs.query({ ...active, windowId: tab.windowId }),
-  );
-  if (!Array.isArray(fronts)) return false;
-  const front = fronts.find((t) => t.active);
-  // Whether its window had the focus: put back only while that is as it was.
-  const focused = async () =>
-    (await chromeSays(() => chrome.windows.get(tab.windowId)))?.focused;
-  const before = await focused();
-  // Not known to be in front in time, it is not read as if it were; the
-  // tab that was in front is put back all the same, in case it came late.
-  const put = await chromeSays(() => chrome.tabs.update(tabId, active));
-  let told = false;
-  for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
-    await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
-    told = !!(await ask().catch(() => null))?.told;
+  // Any other tab of its window made active from here on is the person's
+  // doing (round 6 review P2-05): what was in front then is not put back.
+  // Watched before anything is asked of Chrome, so no wait hides one.
+  let moved = false;
+  const onActivated = (info) => {
+    if (info.windowId === tab.windowId && info.tabId !== tabId) moved = true;
+  };
+  chrome.tabs.onActivated.addListener(onActivated);
+  try {
+    // Whether its window had the focus: put back only while that is as it was.
+    const focused = async () =>
+      (await chromeSays(() => chrome.windows.get(tab.windowId)))?.focused;
+    const before = await focused();
+    const fronts = await chromeSays(() =>
+      chrome.tabs.query({ ...active, windowId: tab.windowId }),
+    );
+    if (!Array.isArray(fronts) || moved) return false;
+    const front = fronts.find((t) => t.active);
+    // Not known to be in front in time, it is not read as if it were; the
+    // tab that was in front is put back all the same, in case it came late.
+    const put = await chromeSays(() => chrome.tabs.update(tabId, active));
+    let told = false;
+    for (let tries = 0; put && tries < FRONT_TRIES && !told; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, FRONT_PAUSE));
+      told = !!(await ask().catch(() => null))?.told;
+    }
+    // Put back only with no other tab of the window made active meanwhile,
+    // this tab known to be in front of its window still, and the window's
+    // focus known to be as it was: the person may have moved on, to another
+    // tab, window or app, or come to this window, and not known, nothing is
+    // moved (round 4 to 6 review P2-05). A tab in front of its window is no
+    // sign the window is. Asked to the front with no word back, it may come
+    // late: then it stays, rather than the two moves crossing. Looked at last,
+    // right before the move back: a choice made while Chrome was asked counts.
+    const after = await focused();
+    const now = await chromeSays(() => chrome.tabs.get(tabId));
+    const still = now?.active && !moved;
+    if (front && still && typeof before === "boolean" && after === before)
+      await chromeSays(() => chrome.tabs.update(front.id, active));
+    return told;
+  } finally {
+    chrome.tabs.onActivated.removeListener(onActivated);
   }
-  // Put back only from this tab, known to be in front of its window still,
-  // and the window's focus known to be as it was: the person may have moved
-  // on meanwhile, to another tab, window or app, or come to this window, and
-  // not known, nothing is moved (round 4 and 5 review P2-05). A tab in front
-  // of its window is no sign the window is. Asked to the front with no word
-  // back, it may come late: then it stays, rather than the two moves crossing.
-  const now = await chromeSays(() => chrome.tabs.get(tabId));
-  const after = now?.active ? await focused() : undefined;
-  if (front && typeof before === "boolean" && after === before)
-    await chromeSays(() => chrome.tabs.update(front.id, active));
-  return told;
 }
 const FRONT_TRIES = 3;
 const FRONT_PAUSE = 1500;

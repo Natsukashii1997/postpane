@@ -168,6 +168,57 @@ test("an answer begun before its prompt is drawn names that prompt only once dra
   assert.equal(starts[1].at, starts[0].at, "the same turn, begun when it did");
 });
 
+// #507 review round 6, P1-04: put in again over a copy from before this
+// change, which hands over no `done`, while an answer is being written and
+// its prompt is not drawn yet: the prompt before is not named; this one is,
+// once drawn, and its end names it too.
+test("put in over an older copy mid-answer, the answer names its prompt only once drawn", async () => {
+  const page = await open(() => {
+    const units = document.querySelectorAll(
+      '[data-chatgpt-search-unit-key$=":user"]',
+    );
+    units[units.length - 1].setAttribute(
+      "data-chatgpt-search-message-ids",
+      "p1",
+    );
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    // What a copy before this change hands over.
+    globalThis.PostPaneContentStop = () => ({
+      reported: "m2",
+      expecting: true,
+    });
+  });
+  await page.evaluate(async () => {
+    // The page changes while only the prompt before is drawn: it is not
+    // named (the fixture has no address, so no beginning is told at load).
+    await new Promise((r) => setTimeout(r, 300));
+    document.querySelector("main").append(document.createElement("span"));
+    await new Promise((r) => setTimeout(r, 700));
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="y:0:user" data-chatgpt-search-message-ids="p2"><div data-message-author-role="user">又一问</div></div>' +
+          '<div data-chatgpt-search-unit-key="y:1:assistant" data-chatgpt-search-message-ids="m9"><p data-d-component="text">答完了</p></div>',
+      );
+    await new Promise((r) => setTimeout(r, 700));
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  });
+  await page.waitForTimeout(1500);
+  const told = await turns(page);
+  assert.deepEqual(
+    told.map((m) => [m.phase, m.promptId, !!m.again]),
+    [
+      ["start", "p2", true],
+      ["complete", "p2", false],
+    ],
+  );
+});
+
 test("an empty placeholder is not the reply that fills it later", async () => {
   // 2026-11-07 h1a1b1fed89e00: ChatGPT put an empty reply up first, the
   // extension reported it as finished, and the answer that then filled the

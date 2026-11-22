@@ -39,7 +39,17 @@
   // P1-04): an answer begins before its prompt is drawn, and the newest
   // prompt on the page is then the one before, answered already. A
   // beginning never names that one; it names its own once drawn.
-  let done = kept ? kept.done : wasStreaming ? null : answeredPrompt();
+  // Not handed over (a copy from before this change knows nothing of it, round 6
+  // review P1-04) and writing already: the newest prompt shown may be the
+  // one before, or this answer's own with its answer begun after it; which,
+  // the page cannot tell, so it is taken as answered. A beginning then names
+  // no prompt, and is ended by this tab's own end; one drawn later is named.
+  let done =
+    kept && "done" in kept
+      ? kept.done
+      : wasStreaming
+        ? page.lastPromptId(document)
+        : answeredPrompt();
   // The prompt the last beginning named (null: not known yet), and when it
   // was told.
   let begun = null;
@@ -75,8 +85,8 @@
       title: page.title(document),
       prompt: page.lastPrompt(document),
       promptId: begun,
-      at: Date.now(),
       ...extra,
+      at: begunAt,
     });
   }
 
