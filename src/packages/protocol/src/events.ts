@@ -23,11 +23,10 @@ export const HOST_EVENTS = [
   "settings:page",
   "statistics:tab",
   "statistics:session",
-  "product:event",
 ] as const;
 
 /** Sent by one front-end window to another; the host never emits these. */
-export const WINDOW_EVENTS = ["statistics:provider", "hud:config"] as const;
+export const WINDOW_EVENTS = ["statistics:provider"] as const;
 
 export const EVENTS = [...HOST_EVENTS, ...WINDOW_EVENTS] as const;
 
