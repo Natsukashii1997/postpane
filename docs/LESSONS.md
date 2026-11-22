@@ -380,7 +380,7 @@
 ## L-39 驿窗重启后接力转回 Codex 报「Unknown or child session target」，失败两次后自动往返停下（2026-11-09）
 
 - 现象：#283 实测 (a)：为装新版重启过驿窗之后，ChatGPT 回了「需修改」，驿窗自动转回 Codex 线程时连续两次报 `Unavailable("Unknown or child session target")`，自动往返停下、交还常浩。#281 实测时没出这个问题。
-- 根因：投递服务只往「已知会话目标表」里的会话送话（`platform/src/delivery/sending.rs`）。这张表在驿窗启动时是空的（`host/src/messages.rs` 传 `Vec::new()`），只有「智能体互发消息」的工具被调用时才按当时的快照刷新；接力转回 Codex（`handoff/lines.rs` 的 `codex_send`）从不刷新。#281 那次能通过，是因为表里碰巧已经填过。
+- 根因：投递服务只往「已知会话目标表」里的会话送话（`platform/src/delivery/sending.rs`）。这张表在驿窗启动时是空的（`host/src/messages.rs` 传 `Vec::new()`），只有「智能体互发消息」的工具被调用时才按当时的快照刷新；接力转回 Codex（`handoff/lines.rs`，7a 批 3 起在 `handoff/sending/desk_lines.rs`，的 `codex_send`）从不刷新。#281 那次能通过，是因为表里碰巧已经填过。
 - 正确做法：借用别的功能的投递通道时，先查它的前置状态由谁填、什么时候填，不假设已经有了。接力转回前用 `LocalClients::know_target` 把发起线程补进表；已知的会话保留原条目，子会话仍不收。
 - 实测要先重启：凡是依赖进程内状态的通道，实机验收前先重启一次驿窗再测，才测得出「冷启动」这条路。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-09-283-codex-transcript/`（`h1a1bed7307000` 的步骤：`fail`、`fail`、`stop`）。
@@ -577,7 +577,7 @@
   2. 回调里通知侧栏 `republish`：`Backend::refresh_handoffs` → `handoff::projection` → `catch_up` → `drive`，和上一条一样。第一版修复只挪走了第 1 条，L2 审查指出这条还在（#441 P1-01）。
   3. `republish` 要拿后台锁；数据线程做快照时拿着这把锁走 `projection` → `ask_format` 等 `sent`，读线程卡在等锁上，读不到 `sent`。
   测试没拦住，是因为替身 `Fake::send` 立刻返回，比真实通道宽松（全局坑 G-34）；第一版的新测试又把 `republish` 写成空函数，漏了第 2、3 条。
-- 正确做法：读线程上的回调只记账（`observe`），推进和通知侧栏都交给另一条线程（`handoff/driver.rs` 的 `Driver`）。看一个函数能不能放在读线程上，要顺着调用链看到底，名字像「通知」「刷新」的不等于没有副作用。给会「发出去再等回应」的接口写测试时，替身要带上真实约束（回应只能由读线程带回，`handoff/tests/driver.rs` 的 `Wired`），回调的每个参数都要用和实机等价的实现测一遍（`Rig::refresh` 带后台锁、会推进）。
+- 正确做法：读线程上的回调只记账（`observe`），推进和通知侧栏都交给另一条线程（`handoff/driver.rs`，7a 批 3 起在 `handoff/answers/desk_driver.rs`，的 `Driver`）。看一个函数能不能放在读线程上，要顺着调用链看到底，名字像「通知」「刷新」的不等于没有副作用。给会「发出去再等回应」的接口写测试时，替身要带上真实约束（回应只能由读线程带回，`handoff/tests/driver.rs` 的 `Wired`），回调的每个参数都要用和实机等价的实现测一遍（`Rig::refresh` 带后台锁、会推进）。
 - 证据：`src/crates/host/src/handoff/tests/driver.rs`。`an_ask_to_mend_hears_that_it_went_in` 在原来的写法上失败（`evidence/2026-11-19-440-format-thread/red-before.txt`）；`the_sidebar_is_not_refreshed_on_the_reading_thread`、`a_refresh_that_waits_for_the_data_thread_does_not_hold_the_reading_thread` 在第一版修复上失败（`red-round2.txt`），第二版 6 条都过（`green-round2.txt`）。
 - 升级：〔提醒〕部分升级（2026-11-20：写成测试，未接进必经检查；这条通道目前只有 `handoff::listen` 一个监听者，以后再加监听者要守同一条）。
 

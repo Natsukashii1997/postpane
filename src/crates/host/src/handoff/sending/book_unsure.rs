@@ -11,7 +11,7 @@
 //! gone in clears both.
 //!
 //! Word of a mending that comes late is taken as a review's is
-//! (`mending.rs`, #446).
+//! (`book_mending.rs`, #446).
 //!
 //! Every word sent into a conversation already holding a review begins with
 //! a line naming its request (round 4 P1-11): an earlier round's words, even
@@ -20,6 +20,7 @@
 use super::{excerpt, key, notice::Cause, Book, Handoff, Phase, Status, Step, StepKind, EXCERPT};
 use serde::{Deserialize, Serialize};
 
+#[path = "book_mending.rs"]
 mod mending;
 pub use mending::Word;
 

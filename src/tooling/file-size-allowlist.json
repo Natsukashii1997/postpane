@@ -1,11 +1,11 @@
 {
   "src/crates/host/src/handoff.rs": {
-    "max": 1986,
-    "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单"
+    "max": 1997,
+    "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单；7a 批 3 子模块按概念放进 gate/back/answers/sending/notice 目录，13 个 #[path] 声明各多一行（1984 → 1997）"
   },
   "src/crates/host/src/handoff/book.rs": {
-    "max": 1565,
-    "reason": "7a 批 2 从 platform/clients/chatgpt/handoffs.rs 原样搬来（原上限 1583）；按概念拆开留给 7a 批 3"
+    "max": 1578,
+    "reason": "7a 批 2 从 platform/clients/chatgpt/handoffs.rs 原样搬来（原上限 1583）；7a 批 3 子模块按概念放进各目录，13 个 #[path] 声明各多一行（1565 → 1578）；按函数拆开另开单"
   },
   "src/crates/host/src/lib.rs": {
     "max": 1126,

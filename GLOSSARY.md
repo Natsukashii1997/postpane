@@ -70,7 +70,7 @@
 | 等你 | waiting、request、approval；后端 `crates/core/src/requests.rs` |
 | 待核对 | stale；`hud/stale.ts` 的 `isStale` |
 | 在跑 | running、working、busy；`hud/stale.ts` 的 `isBusy` |
-| 接力 | 协议和后端叫 `Handoff`（`src/packages/protocol/src/handoffs.ts`、`crates/host/src/handoff.rs`；记录与状态在 `crates/host/src/handoff/book.rs` 及 `book/`，7a 批 2 从 platform 搬来）；hud 的文件名和 MCP 工具名叫 relay（`relay_to_chatgpt`） |
+| 接力 | 协议和后端叫 `Handoff`（`src/packages/protocol/src/handoffs.ts`、`crates/host/src/handoff.rs`；记录与状态在 `crates/host/src/handoff/book.rs`，7a 批 2 从 platform 搬来；其余按概念放在 `handoff/` 下的 `gate/`、`back/`、`answers/`、`sending/`、`notice/`，见 `handoff/README.md`）；hud 的文件名和 MCP 工具名叫 relay（`relay_to_chatgpt`） |
 | 接力的执行方 | doer；字段 `claude_session` / `claudeSession` 在执行方是 Codex 时装的是 Codex 线程 |
 | 接力的三个角色（后端） | `Desk`：推进一张接力的编排者（host）；`Book`：全部接力的记录和落盘（platform）；`Lines`：收发通路，测试里换成 `Fake` |
 | 中转站 | 第三方 API 代理，也叫 relay：`RelaySource`、`crates/agents/src/relays.rs`、`app/settings/RelaysPane.tsx`。和接力无关 |

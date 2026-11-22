@@ -1,7 +1,7 @@
 //! What keeps a review's count and its commit whole however it is handed
 //! on (#347, L3 round 2): the pull request a later brief names (P1-02), a
 //! review still with ChatGPT (P1-04), a cap reached here and not settled
-//! (P1-08). Words sent and never known to have gone in: `unsure.rs`.
+//! (P1-08). Words sent and never known to have gone in: `sending/book_unsure.rs`.
 
 use super::{Book, Handoff, Notice, Phase, Status, StepKind};
 

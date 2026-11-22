@@ -2,7 +2,7 @@
 //! one test per move of the table, and seeded random runs of every move the
 //! book offers, checking the invariants I-01.. after each step. A move or an
 //! invariant changed here is changed in the table too.
-use super::*;
+use crate::handoff::book::*;
 use std::collections::HashMap;
 
 /// A book with one handoff of session `s1`, opened in conversation `c1`.
