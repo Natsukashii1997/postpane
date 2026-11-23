@@ -4,8 +4,8 @@
     "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单；7a 批 3 子模块按概念放进 gate/back/answers/sending/notice 目录，13 个 #[path] 声明各多一行（1984 → 1997）；2026-11-22 修 clippy 把 then/unwrap_or_else 改成 if/else 多 2 行，按函数拆见 #511；#509 送达未确认后去会话里找：Lines 加 find 的声明（2 行）、observe 加 found 一支（1 行），实现都在 handoff/sending/desk_finding.rs 和 book_finding.rs（1999 → 2001）"
   },
   "src/crates/host/src/handoff/book.rs": {
-    "max": 1578,
-    "reason": "7a 批 2 从 platform/clients/chatgpt/handoffs.rs 原样搬来（原上限 1583）；7a 批 3 子模块按概念放进各目录，13 个 #[path] 声明各多一行（1565 → 1578）；按函数拆开另开单"
+    "max": 1579,
+    "reason": "7a 批 2 从 platform/clients/chatgpt/handoffs.rs 原样搬来（原上限 1583）；7a 批 3 子模块按概念放进各目录，13 个 #[path] 声明各多一行（1565 → 1578）；#509 只给测试用的 FIND_* 常量单独一行 #[cfg(test)] 再导出，消掉非测试构建的 unused import 警告（1578 → 1579）；按函数拆开另开单"
   },
   "src/crates/host/src/lib.rs": {
     "max": 1127,

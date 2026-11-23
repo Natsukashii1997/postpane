@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 mod finding;
 #[path = "book_mending.rs"]
 mod mending;
+#[cfg(test)]
 pub use finding::{FIND_AFTER_MS, FIND_EVERY_MS};
 pub use mending::Word;
 
