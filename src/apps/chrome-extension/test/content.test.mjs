@@ -688,6 +688,51 @@ test("asked whether words are there, a prompt without words, or a request named 
   await page.close();
 });
 
+// #509 round 2 P1-01: a prompt's turn not drawn yet (no bubble, or an
+// empty one) after the last prompt known to have gone in may hold the
+// words; a turn drawn in one copy and still empty in another is read.
+test("asked whether words are there, a prompt not drawn yet is told", async () => {
+  const empty = (n, inner) =>
+    `<div data-chatgpt-search-unit-key="t${n}:0:user" data-chatgpt-search-message-ids="p${n}">${inner}</div>`;
+  const conversationOf = (page) =>
+    page.evaluate(() => location.href.split("/c/")[1] ?? null);
+  for (const drawing of ["", '<div data-user-message-bubble="true"></div>']) {
+    const page = await withTurns(
+      prompt(7, "上一轮") + empty(8, drawing) + prompt(9, "又问了一句"),
+    );
+    const said = await ask(page, {
+      conversation: await conversationOf(page),
+      request: "h1~send5",
+      after: "p7",
+    });
+    assert.deepEqual(
+      [said.there, said.anchored, said.unreadable],
+      [false, true, true],
+      drawing,
+    );
+    await page.close();
+  }
+  // Drawn in the hidden copy, still empty where it is drawn: read.
+  const page = await withTurns(
+    `<div style="height:0;overflow:hidden">${
+      prompt(7, "上一轮") + prompt(8, "【驿窗送审 h1~send5】\n第二轮")
+    }</div>${empty(8, '<div data-user-message-bubble="true"></div>')}${prompt(
+      9,
+      "又问了一句",
+    )}`,
+  );
+  const said = await ask(page, {
+    conversation: await conversationOf(page),
+    request: "h1~send5",
+    after: "p7",
+  });
+  assert.deepEqual(
+    [said.there, said.promptId, said.unreadable],
+    [true, "p8", false],
+  );
+  await page.close();
+});
+
 // #509 round 1 P1-03: the page loads itself again to look only when it
 // shows the conversation, writes nothing and holds no words in hand.
 test("asked to load again to look, a page writing, holding a draft or showing another conversation does not", async () => {
@@ -722,8 +767,20 @@ test("asked to load again to look, a page writing, holding a draft or showing an
     false,
     "a prompt being edited",
   );
+  // Round 2 P1-03: edited in an editable box of its turn.
   await page.evaluate(() => {
-    document.querySelector("textarea").remove();
+    document.querySelector("textarea").outerHTML =
+      '<div contenteditable="true">改一下</div>';
+  });
+  assert.equal(await reload(page, conversation), false, "edited in a box");
+  // Round 2 P1-03: send lit with the box empty, a file waiting beside it.
+  await page.evaluate(() => {
+    document.querySelector('main [contenteditable="true"]').remove();
+    document.getElementById("slot").disabled = false;
+  });
+  assert.equal(await reload(page, conversation), false, "a file waiting");
+  await page.evaluate(() => {
+    document.getElementById("slot").disabled = true;
     const slot = document.getElementById("slot");
     slot.type = "button";
     slot.setAttribute("aria-label", "停止");

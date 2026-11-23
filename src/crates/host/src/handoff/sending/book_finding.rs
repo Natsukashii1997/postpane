@@ -115,6 +115,29 @@ impl Book {
 mod tests {
     use super::*;
 
+    // Round 2: the last prompt known to have gone in may be PostPane's ask
+    // to mend the last lines; it went before the review looked for, which
+    // is asked only after the answer it mended.
+    #[test]
+    fn a_look_past_a_mending_names_its_prompt() {
+        let mut book = Book::default();
+        let handoff = book.begin("s1", None, "修登录", None, "请审核", 1);
+        book.opened(&handoff.id, "c1", 2);
+        book.asked_as(&handoff.id, Some("p1"));
+        book.replied("c1", "意见", Some("m1"), 3);
+        assert!(book.format_asked(&handoff.id, "请补末尾四行", 4));
+        assert!(book.asked_as(&handoff.id, Some("p2")));
+        book.replied("c1", "意见（补了末尾）", Some("m2"), 5);
+        let request = format!("{}~send6", handoff.id);
+        let pending = Pending {
+            request: request.clone(),
+            ..Pending::default()
+        };
+        assert!(book.ask_pending(&handoff.id, pending));
+        let due = book.to_find(6 + FIND_AFTER_MS);
+        assert_eq!(due, [("c1".to_owned(), request, Some("p2".to_owned()))]);
+    }
+
     #[test]
     fn a_request_names_when_its_words_went_out() {
         assert_eq!(asked_at("h1a2~send1795233002405"), Some(1795233002405));

@@ -56,7 +56,8 @@ const loads = new Map();
 // before they went in does not show: a load from then on draws them.
 const asked = new Map();
 /** The fixture with `words` as its newest prompt, or each of a list as a
- * prompt of its own, in order (ids p8, p9, ...). */
+ * prompt of its own, in order (ids p8, p9, ...): `null` a turn not drawn
+ * yet, with no bubble; "" one with an empty bubble. */
 const withPrompt = (words) =>
   fixture.replace(
     "</main>",
@@ -64,7 +65,11 @@ const withPrompt = (words) =>
       .flat()
       .map(
         (one, n) =>
-          `<div data-chatgpt-search-unit-key="x:${8 + n}:user" data-chatgpt-search-message-ids="p${8 + n}"><div data-user-message-bubble="true">${one}</div></div>`,
+          `<div data-chatgpt-search-unit-key="x:${8 + n}:user" data-chatgpt-search-message-ids="p${8 + n}">${
+            one === null
+              ? ""
+              : `<div data-user-message-bubble="true">${one}</div>`
+          }</div>`,
       )
       .join("")}</main>`,
   );
@@ -398,6 +403,43 @@ test("a page holding a draft is not loaded again to look, and keeps it", async (
       () => document.querySelector(".ProseMirror").textContent,
     ),
     "还没发的问题",
+  );
+});
+
+// #509 round 2 P1-01: a turn still drawing (no bubble, or an empty one)
+// may be the words; with Changhao's later prompt drawn, they are not known.
+test("a prompt not drawn yet, before a later one, keeps words from being told absent", async () => {
+  for (const [n, drawing] of [
+    [17, null],
+    [18, ""],
+  ]) {
+    const { id } = await open(n);
+    asked.set(address(id), [
+      "【驿窗送审 h1a2~send1795233002400】上一轮",
+      drawing,
+      "我又问了一句别的",
+    ]);
+    assert.equal(
+      await find(id, `h1a2~send17952330024${n}`, "p8"),
+      "unread",
+      JSON.stringify(drawing),
+    );
+  }
+});
+
+// #509 round 2 P1-03: a file waiting beside an empty box lights send, as
+// `submit` reads it (#429); the page is not loaded again, and keeps it.
+test("a page with a file waiting to be sent is not loaded again to look", async () => {
+  const { page, id } = await open(19);
+  await page.evaluate(() => {
+    document.getElementById("slot").disabled = false;
+  });
+  const before = loads.get(address(id));
+  assert.equal(await find(id, "h1a2~send1795233002419"), "unread");
+  assert.equal(loads.get(address(id)), before);
+  assert.equal(
+    await page.evaluate(() => document.getElementById("slot").disabled),
+    false,
   );
 });
 
