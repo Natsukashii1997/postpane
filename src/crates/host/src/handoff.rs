@@ -107,7 +107,7 @@ pub(crate) trait Lines {
     /// written (#356); it comes back, if at all, as a turn (`observe`).
     fn reread(&self, conversation: &str) -> Result<(), String>;
     /// Asks whether the words sent as `request` are in `conversation` (#509).
-    fn find(&self, conversation: &str, request: &str) -> Result<(), String>;
+    fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):

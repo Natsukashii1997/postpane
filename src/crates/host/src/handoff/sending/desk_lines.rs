@@ -56,12 +56,12 @@ impl Lines for AppLines<'_> {
         let sent = channel.send_as(conversation, text, Some(request))?;
         Ok(sent["promptId"].as_str().map(str::to_owned))
     }
-    fn find(&self, conversation: &str, request: &str) -> Result<(), String> {
+    fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String> {
         let state = self
             .0
             .try_state::<crate::chatgpt::ChatGpt>()
             .ok_or("The ChatGPT channel is unavailable")?;
-        state.channel()?.find(conversation, request)
+        state.channel()?.find(conversation, request, after)
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {
         let state = self

@@ -177,8 +177,8 @@ pub(super) fn not_sent_note(error: &str) -> String {
 /// conversation (#509): on the card.
 pub(super) fn found_absent() -> String {
     l10n::text(
-        "驿窗重新读了 ChatGPT 会话，最新一条提问不是这一段：这一段没送成，等会话重送",
-        "PostPane read the conversation again and its newest prompt is not these words: they did not go; the session may send them again",
+        "驿窗重新读了 ChatGPT 会话，里面没有这一段：这一段没送成，等会话重送",
+        "PostPane read the conversation again and these words are not in it: they did not go; the session may send them again",
     )
 }
 /// Words that must be on disk before they go could not be kept.

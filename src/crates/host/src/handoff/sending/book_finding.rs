@@ -2,10 +2,11 @@
 //! conversation (#509, owner 2026-11-22). Till then nothing looked: the
 //! round trip stopped on them, no other words went, and the same words sent
 //! again were not sent (two handoffs stood so for a day). They begin with a
-//! line naming their request, so the conversation's newest prompt tells:
-//! there, they went in, as word of them would have said; another prompt and
-//! nothing being written, they did not go, as when send was never pressed
-//! (#466). Not told, they stay as they are.
+//! line naming their request, so the conversation's prompts tell: one so,
+//! they went in, as word of them would have said, as that prompt (round 1
+//! P1-02); none past the last prompt known to have gone in, and nothing
+//! being written, they did not go, as when send was never pressed (#466).
+//! Not told, they stay as they are.
 //!
 //! Only a review's: PostPane's own ask to mend is not looked for.
 use super::{Book, Handoff, Pending};
@@ -34,19 +35,22 @@ impl Handoff {
 }
 
 impl Book {
-    /// The reviews to look for now, each as its conversation and request:
+    /// The reviews to look for now, each as its conversation, request and
+    /// the last prompt of the handoff's known to have gone in (round 1
+    /// P1-01: past it the history must reach for the words to be absent):
     /// unsure, unanswered, out `FIND_AFTER_MS`, and not looked for within
     /// `FIND_EVERY_MS`. They count as looked for.
-    pub fn to_find(&mut self, now: i64) -> Vec<(String, String)> {
+    pub fn to_find(&mut self, now: i64) -> Vec<(String, String, Option<String>)> {
         let due = |handoff: &mut Handoff| {
             let conversation = handoff.chatgpt_conversation.clone()?;
+            let after = handoff.steps.iter().rev().find_map(|s| s.asked_id.clone());
             let pending = handoff.gate.pending.as_mut().filter(|p| !p.answered)?;
             let (at, times) = pending.looked;
             let waited = now - asked_at(&pending.request)? >= FIND_AFTER_MS;
             let again = times == 0 || now - at >= FIND_EVERY_MS;
             (waited && again && times < FIND_MOST).then(|| {
                 pending.looked = (now, times + 1);
-                (conversation, pending.request.clone())
+                (conversation, pending.request.clone(), after)
             })
         };
         self.list
@@ -64,11 +68,19 @@ impl Book {
                 && handoff.unsure_of(request).is_some()
         })
     }
-    /// The review asked as `request` is in the conversation, and nothing
-    /// kept in this run says what it was (a restart since): it went in, with
-    /// the pull request, commit and cap kept with it, and its words as they
-    /// were kept. Whether the card changed.
-    pub fn found_late(&mut self, id: &str, request: &str, now: i64) -> bool {
+    /// The review asked as `request` is in the conversation, as prompt
+    /// `asked_id` when the page told it, and nothing kept in this run says
+    /// what it was (a restart since): it went in, with the pull request,
+    /// commit and cap kept with it, its words as they were kept, and the
+    /// prompt an answer is held to by (#437, round 1 P1-02), as any words
+    /// that went in. Whether the card changed.
+    pub fn found_late(
+        &mut self,
+        id: &str,
+        request: &str,
+        asked_id: Option<&str>,
+        now: i64,
+    ) -> bool {
         let Some(pending) = self
             .live_mut(id)
             .and_then(|handoff| handoff.unsure_of(request).cloned())
@@ -81,7 +93,9 @@ impl Book {
         if let Some(pr) = &pending.pr {
             self.set_pr(id, pr);
         }
-        self.asked(id, None, pending.words.as_deref().unwrap_or(""), now)
+        let asked = self.asked(id, None, pending.words.as_deref().unwrap_or(""), now);
+        self.asked_as(id, asked_id);
+        asked
     }
     /// The review asked as `request` is not in the conversation: it did not
     /// go (`not_sent`), `note` on the card, and the round trip that stopped

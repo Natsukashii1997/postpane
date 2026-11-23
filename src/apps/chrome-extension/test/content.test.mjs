@@ -579,43 +579,159 @@ test("asked whether it is there, the page says which conversation it shows", asy
 });
 
 // #509: PostPane looks for words it sent: they begin with a line naming
-// their request, and the page's newest prompt has it or not.
-test("asked whether words are there, the page reads its newest prompt", async () => {
-  const page = await open(() => {
-    const turn = document.createElement("div");
-    turn.innerHTML =
-      '<div data-user-message-bubble="true">【驿窗送审 h1~send5】\n第二轮</div>';
-    document.querySelector("main").append(turn);
-  });
-  const ask = (command) =>
-    page.evaluate(
-      (command) =>
-        new Promise((resolve) =>
-          window.listener({ op: "asked", ...command }, {}, resolve),
-        ),
-      command,
-    );
+// their request. Every prompt the page holds is read, not only the newest
+// (round 1 P1-01): Changhao may have asked something after them.
+const prompt = (n, words) =>
+  `<div data-chatgpt-search-unit-key="t${n}:0:user" data-chatgpt-search-message-ids="p${n}"><div data-user-message-bubble="true">${words}</div></div>`;
+/** The fixture with `html` added to its conversation. */
+async function withTurns(html) {
+  const page = await open();
+  await page.evaluate((html) => {
+    document.querySelector("main").insertAdjacentHTML("beforeend", html);
+  }, html);
+  return page;
+}
+const ask = (page, command) =>
+  page.evaluate(
+    (command) =>
+      new Promise((resolve) =>
+        window.listener({ op: "asked", ...command }, {}, resolve),
+      ),
+    command,
+  );
+
+test("asked whether words are there, the page reads every prompt it holds", async () => {
+  const page = await withTurns(
+    `<div style="height:0;overflow:hidden">${
+      prompt(7, "上一轮") +
+      prompt(8, "【驿窗送审 h1~send5】\n第二轮") +
+      prompt(9, "顺便问一句：【驿窗送审 h1~send6】")
+    }</div>${prompt(9, "顺便问一句：【驿窗送审 h1~send6】")}`,
+  );
   const conversation = await page.evaluate(
     () => location.href.split("/c/")[1] ?? null,
   );
-  assert.deepEqual(await ask({ conversation, request: "h1~send5" }), {
-    here: true,
-    loaded: true,
-    there: true,
-    streaming: false,
+  // Not the newest prompt, and found all the same, by its id (P1-02).
+  assert.deepEqual(
+    await ask(page, { conversation, request: "h1~send5", after: "p7" }),
+    {
+      here: true,
+      loaded: true,
+      there: true,
+      twice: false,
+      promptId: "p8",
+      anchored: true,
+      unreadable: false,
+      streaming: false,
+    },
+  );
+  // Named only inside a prompt, not as its first line: not theirs.
+  const quoted = await ask(page, { conversation, request: "h1~send6" });
+  assert.deepEqual([quoted.there, quoted.promptId], [false, null]);
+  // Words not there; the prompt before them is on the page, or is not.
+  const absent = await ask(page, {
+    conversation,
+    request: "h1~send9",
+    after: "p7",
   });
-  assert.deepEqual(await ask({ conversation, request: "h1~send9" }), {
-    here: true,
-    loaded: true,
-    there: false,
-    streaming: false,
-  });
+  assert.deepEqual(
+    [absent.there, absent.anchored, absent.unreadable],
+    [false, true, false],
+  );
+  for (const after of ["p1", undefined])
+    assert.equal(
+      (await ask(page, { conversation, request: "h1~send9", after })).anchored,
+      false,
+    );
   // Another conversation's page says nothing of this one, and that it is
   // not this one's (#507 review P1-01: it is not loaded again to look).
-  const other = await ask({ conversation: "another", request: "h1~send5" });
+  const other = await ask(page, {
+    conversation: "another",
+    request: "h1~send5",
+  });
   assert.deepEqual(
     [other.here, other.loaded, other.there],
     [false, false, false],
+  );
+  await page.close();
+});
+
+// #509 round 1 P1-01, P1-02: words that may be in a prompt drawn with no
+// words (ChatGPT made it an attachment, #410), or two prompts naming them.
+test("asked whether words are there, a prompt without words, or a request named twice, is told", async () => {
+  const page = await withTurns(
+    prompt(7, "上一轮") +
+      `<div data-chatgpt-search-unit-key="t8:0:user" data-chatgpt-search-message-ids="p8"><div>brief.md</div></div>` +
+      prompt(9, "【驿窗送审 h1~send5】\n第二轮") +
+      prompt(10, "【驿窗送审 h1~send5】\n第二轮"),
+  );
+  const conversation = await page.evaluate(
+    () => location.href.split("/c/")[1] ?? null,
+  );
+  const named = await ask(page, {
+    conversation,
+    request: "h1~send5",
+    after: "p7",
+  });
+  assert.deepEqual(
+    [named.there, named.twice, named.promptId, named.unreadable],
+    [false, true, null, true],
+  );
+  // Before the prompt known to have gone in, a prompt without words is
+  // older than the words looked for.
+  const past = await ask(page, {
+    conversation,
+    request: "h1~send9",
+    after: "p10",
+  });
+  assert.equal(past.unreadable, false);
+  await page.close();
+});
+
+// #509 round 1 P1-03: the page loads itself again to look only when it
+// shows the conversation, writes nothing and holds no words in hand.
+test("asked to load again to look, a page writing, holding a draft or showing another conversation does not", async () => {
+  const reload = (page, conversation) =>
+    page.evaluate(
+      (conversation) =>
+        new Promise((resolve) =>
+          window.listener({ op: "reload", conversation }, {}, resolve),
+        ),
+      conversation,
+    );
+  const page = await open();
+  const conversation = await page.evaluate(
+    () => location.href.split("/c/")[1] ?? null,
+  );
+  assert.equal(await reload(page, "another"), false);
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  assert.equal(await reload(page, conversation), false);
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "";
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="t3:0:user"><textarea>改一下</textarea></div>',
+      );
+  });
+  assert.equal(
+    await reload(page, conversation),
+    false,
+    "a prompt being edited",
+  );
+  await page.evaluate(() => {
+    document.querySelector("textarea").remove();
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  assert.equal(
+    await reload(page, conversation),
+    false,
+    "an answer being written",
   );
   await page.close();
 });

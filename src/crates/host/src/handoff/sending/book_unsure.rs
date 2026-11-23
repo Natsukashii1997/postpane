@@ -86,8 +86,11 @@ pub struct Pending {
     #[serde(skip)]
     pub word: Word,
     /// What was unsure before these were asked: put back when send was
-    /// never pressed for them (#466). Not kept.
-    #[serde(skip)]
+    /// never pressed for them (#466), or a look finds they did not go
+    /// (#509). Kept across restarts (#509 round 1 P1-04): an earlier
+    /// review answered and never known to have gone in sits here, and lost,
+    /// its answer could pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<Box<Pending>>,
 }
 

@@ -23,8 +23,13 @@ fn unsure(desk: &Desk, lines: &Fake) -> (Handoff, String) {
 }
 
 fn found(desk: &Desk, request: &str, outcome: &str, now: i64) -> bool {
+    found_as(desk, request, outcome, None, now)
+}
+
+/// Word of a look, with the prompt the words were found as (round 1 P1-02).
+fn found_as(desk: &Desk, request: &str, outcome: &str, prompt: Option<&str>, now: i64) -> bool {
     desk.observe(
-        &json!({"type":"found","conversation":"c-new","request":request,"outcome":outcome}),
+        &json!({"type":"found","conversation":"c-new","request":request,"outcome":outcome,"promptId":prompt}),
         now,
     )
 }
@@ -140,4 +145,88 @@ fn words_found_after_their_answer_still_cannot_pass() {
     let after = desk.lock().get(&handoff.id).cloned().unwrap();
     assert_eq!(after.steps.len(), before.steps.len());
     assert!(after.unsure());
+}
+
+// #509 round 1 P1-01: the words are absent only past the last prompt known
+// to have gone in, so each look names it; none known, none named.
+#[test]
+fn a_look_names_the_last_prompt_known_to_have_gone_in() {
+    for (known, named) in [(Some("p1"), Some("p1".to_owned())), (None, None)] {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        *lines.asked_as.borrow_mut() = known.map(str::to_owned);
+        let (_, request) = unsure(&desk, &lines);
+        desk.reread(&lines, 5 + FIND_AFTER_MS);
+        assert_eq!(sent_as(&lines, "find"), [("c-new".to_owned(), request)]);
+        // Nothing known: nothing named (the extension then never says absent).
+        assert_eq!(*lines.afters.borrow(), [named]);
+    }
+}
+
+// #509 round 1 P1-02: words found after a restart keep the prompt they were
+// found as, so their answer is held to them by it (#437), as any words'.
+#[test]
+fn words_found_keep_the_prompt_they_were_found_as() {
+    for restarted in [false, true] {
+        let (temp, mut desk) = desk();
+        let lines = Fake::default();
+        let (handoff, request) = unsure(&desk, &lines);
+        if restarted {
+            drop(desk);
+            desk = Desk::new(Some(temp.path().join("data")));
+            desk.since = 0;
+        }
+        assert!(found_as(&desk, &request, "there", Some("p2"), 50_000));
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            kept.last_asked().unwrap().asked_id.as_deref(),
+            Some("p2"),
+            "{restarted}"
+        );
+        // Another prompt's answer is not theirs, whatever it says.
+        let words = kept.last_asked().unwrap().text.clone();
+        let other = json!({"type":"turn","phase":"complete","conversation":"c-new","prompt":words,"promptId":"p3","reply":PASS,"messageId":"m2"});
+        desk.observe(&other, 50_001);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_ne!(kept.phase, Phase::Replied, "{restarted}");
+    }
+}
+
+// #509 round 1 P1-04: an earlier review answered and never known to have
+// gone in stays unsure under a later one, across a restart: a look that
+// finds the later did not go puts it back, and its answer still cannot pass.
+#[test]
+fn an_earlier_review_unsure_is_kept_across_a_restart() {
+    let temp = tempfile::tempdir().unwrap();
+    // Room for a third review.
+    book::set_review_limit(&temp.path().join("data"), 5).unwrap();
+    let mut desk = Desk::new(Some(temp.path().join("data")));
+    desk.since = 0;
+    let lines = Fake::default();
+    let (handoff, first) = unsure(&desk, &lines);
+    desk.observe(&reply_as(asked(), PASS, "m2"), 6);
+    lines.send_fails.set(true);
+    assert!(ruled(&desk, &lines, "s1", "L2", None, 7).is_err());
+    lines.send_fails.set(false);
+    let second = lines.requests.borrow().last().unwrap().clone();
+    assert_ne!(first, second);
+    drop(desk);
+    let mut desk = Desk::new(Some(temp.path().join("data")));
+    desk.since = 0;
+    assert!(found(&desk, &second, "absent", 50_000));
+    let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+    let pending = kept
+        .gate
+        .pending
+        .as_ref()
+        .expect("the earlier one, put back");
+    assert_eq!(
+        (pending.request.as_str(), pending.answered),
+        (first.as_str(), true)
+    );
+    assert!(kept.unsure());
+    assert!(!kept.auto, "still stopped on the earlier one");
+    desk.drive(&lines, 50_001);
+    let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+    assert_eq!(kept.status, Status::Open, "its answer did not pass");
 }

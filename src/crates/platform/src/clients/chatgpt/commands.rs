@@ -7,14 +7,21 @@ use std::sync::Weak;
 
 impl Channel {
     /// Asks the extension whether the words sent as `request` are in
-    /// `conversation` (#509): it loads the tab again and reads its newest
-    /// prompt. What it found comes as `found`.
-    pub fn find(&self, conversation: &str, request: &str) -> Result<(), String> {
+    /// `conversation` (#509): it loads the tab again and reads its prompts,
+    /// past `after`, the last prompt known to have gone in before them.
+    /// What it found comes as `found`.
+    pub fn find(
+        &self,
+        conversation: &str,
+        request: &str,
+        after: Option<&str>,
+    ) -> Result<(), String> {
         if !agent::conversation_id(conversation) {
             return Err(l10n::text("会话 id 不对", "Invalid conversation id"));
         }
-        self.shared
-            .post(&json!({"type":"find","conversation":conversation,"request":request}))
+        self.shared.post(
+            &json!({"type":"find","conversation":conversation,"request":request,"after":after}),
+        )
     }
     /// Asks the extension to tell the newest reply of a watched conversation
     /// again, once written (#356): a finished turn whose word was lost still

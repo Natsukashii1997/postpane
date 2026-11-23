@@ -55,11 +55,18 @@ const loads = new Map();
 // Words ChatGPT has as an address's newest prompt, which a page loaded
 // before they went in does not show: a load from then on draws them.
 const asked = new Map();
-/** The fixture with `words` as its newest prompt. */
+/** The fixture with `words` as its newest prompt, or each of a list as a
+ * prompt of its own, in order (ids p8, p9, ...). */
 const withPrompt = (words) =>
   fixture.replace(
     "</main>",
-    `<div data-chatgpt-search-unit-key="x:8:user" data-chatgpt-search-message-ids="p8"><div data-user-message-bubble="true">${words}</div></div></main>`,
+    `${[words]
+      .flat()
+      .map(
+        (one, n) =>
+          `<div data-chatgpt-search-unit-key="x:${8 + n}:user" data-chatgpt-search-message-ids="p${8 + n}"><div data-user-message-bubble="true">${one}</div></div>`,
+      )
+      .join("")}</main>`,
   );
 
 before(async () => {
@@ -295,8 +302,13 @@ test("a tab whose page crashed is unloaded as Chrome has it: loaded again, it ta
 
 // #509: words never known to have gone in are looked for where ChatGPT
 // keeps them. `find` is the worker's own; the page reads what it shows.
-const find = (id, request) =>
-  worker.evaluate(([id, request]) => find(id, request), [id, request]);
+const find = async (id, request, after = "p8") => {
+  const found = await worker.evaluate(
+    ([id, request, after]) => find(id, request, after),
+    [id, request, after],
+  );
+  return found.outcome === "there" ? found : found.outcome;
+};
 
 test("words that went in are found: the tab is loaded again, and shows them", async () => {
   const { page, id } = await open(7);
@@ -305,7 +317,10 @@ test("words that went in are found: the tab is loaded again, and shows them", as
   asked.set(address(id), `【驿窗送审 ${request}】下一轮`);
   await page.evaluate(() => (window.kept = "as drawn"));
   const before = loads.get(address(id));
-  assert.equal(await find(id, request), "there");
+  assert.deepEqual(await find(id, request), {
+    outcome: "there",
+    promptId: "p8",
+  });
   assert.equal(loads.get(address(id)), before + 1, "loaded again, once");
   assert.equal((await tabsAt(id)).length, 1, "and no tab made for it");
   assert.equal(await page.evaluate(() => window.kept), undefined);
@@ -313,6 +328,8 @@ test("words that went in are found: the tab is loaded again, and shows them", as
 
 test("words that did not go are told absent, of a page loaded again", async () => {
   const { id } = await open(8);
+  // The last words known to have gone in, then nothing.
+  asked.set(address(id), "【驿窗送审 h1a2~send1795233002400】上一轮");
   const before = loads.get(address(id));
   assert.equal(await find(id, "h1a2~send1795233002406"), "absent");
   assert.equal(loads.get(address(id)), before + 1);
@@ -326,7 +343,7 @@ test("a discarded tab is loaded again once to look, not twice", async () => {
   await inFront();
   await discard(tabId);
   const before = loads.get(address(id));
-  assert.equal(await find(id, request), "there");
+  assert.equal((await find(id, request)).outcome, "there");
   assert.equal(loads.get(address(id)), before + 1);
   assert.equal((await tabsAt(id)).length, 1);
 });
@@ -347,6 +364,43 @@ test("a page writing an answer is not loaded again to look: not told", async () 
   assert.equal(await page.evaluate(() => window.kept), "not loaded again");
 });
 
+// #509 round 1 P1-01: Changhao asked something after the words went in;
+// they are not the newest prompt, and are found all the same.
+test("words followed by another prompt are found, not told absent", async () => {
+  const { id } = await open(15);
+  const request = "h1a2~send1795233002415";
+  asked.set(address(id), [
+    "【驿窗送审 h1a2~send1795233002400】上一轮",
+    `【驿窗送审 ${request}】下一轮`,
+    "我又问了一句别的",
+  ]);
+  assert.deepEqual(await find(id, request), {
+    outcome: "there",
+    promptId: "p9",
+  });
+  // Absent only past the last words known to have gone in: not on the
+  // page, not known.
+  assert.equal(await find(id, "h1a2~send1795233002416", "p1"), "unread");
+  assert.equal(await find(id, "h1a2~send1795233002416", "p8"), "absent");
+});
+
+// #509 round 1 P1-03: words Changhao has in hand are not lost to a look.
+test("a page holding a draft is not loaded again to look, and keeps it", async () => {
+  const { page, id } = await open(16);
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  const before = loads.get(address(id));
+  assert.equal(await find(id, "h1a2~send1795233002417"), "unread");
+  assert.equal(loads.get(address(id)), before);
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelector(".ProseMirror").textContent,
+    ),
+    "还没发的问题",
+  );
+});
+
 // Found in real Chromium (2026-11-22, `real-chromium-find/probe-reload-
 // report-before.log`, 8 times in 10): a tab in front loaded again hides its
 // old page as it goes, which says so (`visibilitychange`), and was taken
@@ -357,7 +411,7 @@ test("a tab in front loaded again to look is read once its new page is there", a
     const request = `h1a2~send17952330024${n}`;
     asked.set(address(id), `【驿窗送审 ${request}】下一轮`);
     await page.bringToFront();
-    assert.equal(await find(id, request), "there", `try ${n}`);
+    assert.equal((await find(id, request)).outcome, "there", `try ${n}`);
     await page.close();
   }
 });

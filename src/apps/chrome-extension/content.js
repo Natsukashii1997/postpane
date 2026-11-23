@@ -265,18 +265,39 @@
       });
       return false;
     }
-    // Whether the newest prompt is the words sent as `request` (#509):
-    // they begin with a line naming it. `loaded`: this conversation, with
-    // a newest prompt drawn.
+    // Whether the words sent as `request` are in the conversation (#509):
+    // a prompt that begins with a line naming it, among all the page holds
+    // (round 1 P1-01). `loaded`: this conversation, with a newest prompt
+    // drawn; `promptId`: ChatGPT's id for the one found (P1-02); `twice`:
+    // more than one, none taken. See `PostPanePage.marked`.
     if (command.op === "asked") {
       const here = page.conversationId(location.href) === command.conversation;
-      const prompt = here ? page.lastPrompt(document) : null;
+      const loaded = here && !!page.lastPrompt(document);
+      const found = loaded
+        ? page.marked(document, command.request, command.after)
+        : { marked: [], anchored: false, unreadable: false };
       reply({
         here,
-        loaded: !!prompt,
-        there: !!prompt?.includes(command.request),
+        loaded,
+        there: found.marked.length === 1,
+        twice: found.marked.length > 1,
+        promptId: found.marked.length === 1 ? found.marked[0] : null,
+        anchored: found.anchored,
+        unreadable: found.unreadable,
         streaming: page.streaming(document),
       });
+      return false;
+    }
+    // Loads this page again to look (#509 round 1 P1-03), only when it shows
+    // `conversation`, writes nothing and holds no words of Changhao's in
+    // hand: told and done in one go, so nothing starts between the two.
+    if (command.op === "reload") {
+      const idle =
+        page.conversationId(location.href) === command.conversation &&
+        !page.streaming(document) &&
+        !page.drafting(document);
+      reply(idle);
+      if (idle) location.reload();
       return false;
     }
     if (command.op === "state") {

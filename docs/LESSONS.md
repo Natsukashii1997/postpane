@@ -575,3 +575,14 @@
 - 正确做法：侧栏上一闪而过的失败，原因同时用 `note!` 写进 `postpane.log`，`map_err(|_| 固定句子)` 之前先想清楚原因要不要留。查跳回失败：`grep "link did not open" postpane.log`；再用 `log show --predicate 'process == "open"'` 看那一刻有没有 `open` 起来、有没有 `Opening URL`。#517 起失败分「could not start / did not finish within 3s and was ended / exited with … / could not be waited for」几种写进日志。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-23-517-open-reason/`（红测输出、全量测试输出）；排查过程在 #517。
 - 升级：〔提醒〕未升级。和 L-67 同属「失败不留痕」，再出现第三次时提议在 `check-rules` 里查 `src/crates` 下面向用户的 `map_err(|_|` 固定句子。
+
+## L-72 判断「一段话送没送进去」只看最新一条提问：常浩在后面插一句，送到了的也被判成没送到；为了读最新内容去刷新活页面，会冲掉他没发的草稿（2026-11-23）
+
+- 现象：#510 第 1 轮 L3 审查指出，`find` 只读会话最新一条提问有没有请求号。送审其实送到了、之后常浩在同一会话里手动问了一句，页面画全、读两次都一样，照样报 `absent`，驿窗把同一段送审再发一遍。同一处为了读到最新内容，只看「没在生成」就重载标签页，常浩输入框里没发的话会丢。替身测试和真实 Chromium 测试都只造了「目标就是最新一条」「页面空闲」两种页面，全绿。另：写页面测试时 `page.evaluate(() => … prompt(7, …))` 里的 `prompt` 在浏览器里是 `window.prompt`，不报错，插进去的是 `null`。
+- 根因：把「最新的就是要找的」当成前提，没把用户自己也在用这个会话算进去（#507 的写作闸其实已经考虑过他会插话）；「判没有」比「判有」需要更强的证据，却用了同一套读法。刷新页面是一种新的动作授权，不能沿用「失效页面可以刷新」的结论。
+- 正确做法：
+  - 找一段话在不在，读会话里全部提问，按开头那一行精确匹配；判「不在」另要锚点证明历史读到了这段之前（上一轮已知送到的提问编号），锚点之后有读不到文字的提问就说不清；两条都匹配也说不清。
+  - 刷新用户可能正在用的页面，检查和刷新放在页面里同一步做（`content.js` 的 `reload`）：没在生成、没草稿、没在改旧提问才刷新。
+  - 测试里传给浏览器的 HTML 在 Node 侧拼好再当参数传，不在 `evaluate` 的函数体里引用 Node 侧的辅助函数。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`（`r1-red-host.log`、`r1-red-plugin.log`、`r1-red-chromium.log`）；回信 `replies/h1a207e54d6608-01-b7c08122.md`。
+- 升级：〔结构〕已升级（2026-11-23，#509）：`PostPanePage.marked` 读全部提问并要锚点，`reload` 由页面自己判断；真实 Chromium 测试守着「后面又有一条提问」「有草稿」两种页面。

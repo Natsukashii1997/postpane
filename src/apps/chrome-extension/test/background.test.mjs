@@ -150,6 +150,11 @@ function load(
         sent.push([tabId, JSON.parse(JSON.stringify(message))]);
         if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
         const answer = answers.shift() ?? { ok: true };
+        // #509 round 1 P1-03: a page that says it may loads itself again.
+        if (message.op === "reload" && answer === true) {
+          reloaded.push(tabId);
+          setImmediate(() => onReload?.(tabId));
+        }
         // A sending the test holds back answers once let go.
         if (message.op === "submit" && sendGates.length)
           await sendGates.shift()();
@@ -500,18 +505,19 @@ test("a page that shows another conversation by the time it is read counts as no
   assert.equal(posted.find((m) => m.type === "reread").outcome, "unreachable");
 });
 
-// #509: PostPane does not know whether words went in. A tab that shows the
-// conversation is found as for sending, and loaded again so it shows what
-// ChatGPT has; its newest prompt is read: the words begin with a line naming
-// their request. Before it is loaded again the page is asked how it stands
-// (`stood`, by default with another prompt newest and nothing being
-// written): an answer on its way is not cut short (#507 review P1-01).
+// #509: words never known to have gone in are looked for in a tab of the
+// conversation, loaded again so it shows what ChatGPT has; every prompt it
+// holds is read: the words begin with a line naming their request. The page
+// loads itself again only when it says, at that moment, that it may
+// (`stood`: true by default; false when it writes, holds a draft or shows
+// another conversation, #509 round 1 P1-03).
 const finding = async (
   answers,
   {
     loads = true,
     watched = true,
-    stood = shows(false),
+    stood = true,
+    after = "p7",
     // The tab as Chrome has it; its page says nothing and takes no script
     // (`dead`), or neither is done in time (`hung`); a tab made reports.
     tab = {},
@@ -545,90 +551,122 @@ const finding = async (
   });
   await new Promise((resolve) => setImmediate(resolve));
   const request = "h1~send5";
-  await listeners.port({ type: "find", conversation, request });
+  await listeners.port({ type: "find", conversation, request, after });
   const [found] = posted.filter((m) => m.type === "found");
   assert.deepEqual(
     [found.conversation, found.request],
     [conversation, request],
   );
+  for (const [, m] of sent.filter(([, m]) => m.op === "asked"))
+    assert.deepEqual([m.request, m.after], [request, after]);
   return {
     outcome: found.outcome,
+    ...(found.promptId !== undefined && { promptId: found.promptId }),
     reloaded,
     asked: sent
-      .filter(([, m]) => m.op === "asked")
-      .map(([tabId, m]) => [tabId, m.request]),
+      .filter(([, m]) => ["asked", "reload"].includes(m.op))
+      .map(([tabId, m]) => [tabId, m.op]),
   };
 };
 const shows = (there, more = {}) => ({
   here: true,
   loaded: true,
   there,
+  twice: false,
+  promptId: there ? "p9" : null,
+  anchored: true,
+  unreadable: false,
   streaming: false,
   ...more,
 });
-const ASKED = [2, "h1~send5"];
+const RELOAD = [2, "reload"];
+const ASKED = [2, "asked"];
 
-test("words looked for are found in the newest prompt of the tab loaded again", async () => {
+test("words looked for are found among the prompts of the tab loaded again, with their prompt's id", async () => {
   const found = await finding([shows(true)]);
   assert.deepEqual(found, {
     outcome: "there",
+    promptId: "p9",
     reloaded: [2],
-    // Once as the page stood, once loaded again.
-    asked: [ASKED, ASKED],
+    // The page loads itself again, then is read.
+    asked: [RELOAD, ASKED],
   });
 });
 
-test("words are not there only when the newest prompt, read twice, is another and nothing is written", async () => {
+// #509 round 1 P1-01: Changhao may have asked something after the words.
+test("words are absent only when no prompt names them, read twice, past the last prompt known to have gone in", async () => {
   assert.equal((await finding([shows(false), shows(false)])).outcome, "absent");
   // There by the second read: the page was still drawing.
-  assert.equal((await finding([shows(false), shows(true)])).outcome, "there");
-  // An answer being written, at either read: not known.
+  const late = await finding([shows(false), shows(true)]);
+  assert.deepEqual([late.outcome, late.promptId], ["there", "p9"]);
   for (const answers of [
+    // An answer being written, at either read.
     [shows(false, { streaming: true }), shows(false)],
     [shows(false), shows(false, { streaming: true })],
     [shows(false), { loaded: false }],
+    // The history may not reach back past the words.
+    [shows(false, { anchored: false }), shows(false)],
+    [shows(false), shows(false, { anchored: false })],
+    // A prompt after the last known one shows no words: maybe theirs.
+    [shows(false, { unreadable: true }), shows(false)],
+    [shows(false), shows(false, { unreadable: true })],
   ])
-    assert.equal((await finding(answers)).outcome, "unread", `${answers}`);
+    assert.equal(
+      (await finding(answers)).outcome,
+      "unread",
+      JSON.stringify(answers),
+    );
+  // No prompt known to have gone in before them: never absent.
+  const unanchored = { after: null };
+  assert.equal(
+    (await finding([shows(false), shows(false)], unanchored)).outcome,
+    "unread",
+  );
+});
+
+// #509 round 1 P1-02: two prompts naming the request: neither is taken.
+test("words named by two prompts are not known", async () => {
+  for (const answers of [
+    [shows(true, { there: false, twice: true })],
+    [shows(false), shows(false, { twice: true })],
+  ])
+    assert.equal((await finding(answers)).outcome, "unread");
 });
 
 test("words looked for in a page that cannot be read are not known", async () => {
   // Its history never drawn, however often asked.
   const undrawn = await finding(Array(8).fill({ loaded: false }));
   assert.equal(undrawn.outcome, "unread");
-  // The tab does not load again in time: its page is not asked again.
+  // The tab does not load again in time: its page is not asked.
   const unloaded = await finding([shows(false), shows(false)], {
     loads: false,
   });
-  assert.deepEqual([unloaded.outcome, unloaded.asked], ["unread", [ASKED]]);
+  assert.deepEqual([unloaded.outcome, unloaded.asked], ["unread", [RELOAD]]);
   // Not a conversation of PostPane's: not read.
   const other = await finding([shows(true)], { watched: false });
   assert.deepEqual([other.outcome, other.reloaded], ["unread", []]);
 });
 
-// #507 review P1-01, for #509: words not known to have gone in often did,
-// and their answer is being written. Loading the tab again would end it.
-test("words are not looked for by loading again a page that is writing an answer, or does not say", async () => {
-  // The page says so itself.
-  const writing = await finding([shows(true)], {
-    stood: shows(true, { streaming: true }),
-  });
-  assert.deepEqual(writing, {
+// #507 review P1-01, #509 round 1 P1-03: words not known to have gone in
+// often did, and their answer is being written; or Changhao has words in
+// hand on the page. Loading the tab again would lose either.
+test("words are not looked for by loading again a page that writes, holds a draft, or does not say", async () => {
+  // The page says it may not be loaded again (it writes, holds a draft, or
+  // shows another conversation by now).
+  const refused = await finding([shows(true)], { stood: false });
+  assert.deepEqual(refused, {
     outcome: "unread",
     reloaded: [],
-    asked: [ASKED],
+    asked: [RELOAD],
   });
-  // It shows another conversation by the time it is asked how it stands.
-  const moved = await finding([shows(true)], {
-    stood: { here: false, loaded: false, there: false, streaming: false },
-  });
-  assert.deepEqual([moved.outcome, moved.reloaded], ["unread", []]);
   // It says nothing, and takes no script in time: left as it is, and the
   // words looked for in a tab made for the conversation.
   const silent = await finding([shows(true)], { hung: true, makes: true });
   assert.deepEqual(silent, {
     outcome: "there",
+    promptId: "p9",
     reloaded: [],
-    asked: [[99, "h1~send5"]],
+    asked: [[99, "asked"]],
   });
   // A tab Chrome discarded runs no page: loaded again, and read once.
   const discarded = await finding([shows(true)], {
@@ -637,6 +675,7 @@ test("words are not looked for by loading again a page that is writing an answer
   });
   assert.deepEqual(discarded, {
     outcome: "there",
+    promptId: "p9",
     reloaded: [2],
     asked: [ASKED],
   });
