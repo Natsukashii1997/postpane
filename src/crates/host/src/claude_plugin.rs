@@ -52,9 +52,25 @@ impl ClaudePlugin {
     pub(crate) fn channel_directory(&self) -> PathBuf {
         self.channel.directory().to_path_buf()
     }
-    /// The HUD's way to answer Claude's questions in a session running the plugin.
+    /// The HUD's way to answer Claude's questions in a session running the
+    /// plugin; a session whose process stopped runs in the background with
+    /// the answer, for as long as a relay's run may take (#520).
     pub(crate) fn replies(&self) -> Arc<dyn SessionReplies> {
-        Arc::new(self.claude_replies())
+        let limit = Duration::from_secs(2 * 60 * 60);
+        Arc::new(
+            self.claude_replies()
+                .waking(Arc::new(move |session: &str, words: &str| {
+                    let ran = session.to_owned();
+                    super::claude_wake::run(session, words, limit, move |result| match result {
+                        Ok(()) => agent_hud_runtime::note!(
+                            "Background Claude run for the HUD's answer in {ran} ended"
+                        ),
+                        Err(error) => agent_hud_runtime::note!(
+                            "Background Claude run for the HUD's answer in {ran}: {error}"
+                        ),
+                    })
+                })),
+        )
     }
 
     /// `replies` as they are, for words back from a relay under their own

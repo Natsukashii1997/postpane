@@ -14,6 +14,7 @@ mod activity;
 mod capture;
 mod chatgpt;
 mod claude_plugin;
+mod claude_wake;
 mod cli;
 mod coordinator;
 mod deepseek_plugin;
