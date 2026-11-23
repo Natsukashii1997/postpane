@@ -1,4 +1,5 @@
 use super::*;
+use agent_hud_core::replies::{AnswerFix, SessionReplies};
 
 const SESSION: &str = "44444444-4444-4444-8444-444444444444";
 
@@ -504,4 +505,73 @@ fn the_current_turn_is_begun_by_the_person_or_by_the_plugin() {
     fs::write(&file, &more).unwrap();
     assert_eq!(current_turn(&config, SESSION), None, "not told");
     assert_eq!(current_turn(&config, "../x"), None);
+}
+
+#[test]
+fn an_answer_for_a_session_whose_process_stopped_runs_it_in_the_background() {
+    use std::sync::{Arc, Mutex};
+    let temp = tempfile::tempdir().unwrap();
+    let channel = ClaudeChannel::new(temp.path().join("channel"));
+    let data = temp.path().join("data");
+    let woken = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let waker = |result: Result<(), String>| {
+        let woken = woken.clone();
+        let waker: Waker = Arc::new(move |session: &str, words: &str| {
+            woken.lock().unwrap().push((session.into(), words.into()));
+            result.clone()
+        });
+        waker
+    };
+    let replies = |result| {
+        ClaudeReplies::new(channel.clone(), temp.path().join("claude-config"))
+            .recording_deliveries(Some(data.clone()))
+            .waking(waker(result))
+    };
+
+    // Never seen running the plugin, or only quiet: Claude may still run it,
+    // so nothing starts a second one beside it.
+    assert!(replies(Ok(())).reply("claude", SESSION, "重送").is_err());
+    check_in(&channel, SESSION, br#"{"at":1}"#);
+    let quiet = channel
+        .directory()
+        .join("sessions")
+        .join(format!("{SESSION}.json"));
+    fs::File::options()
+        .write(true)
+        .open(&quiet)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(600))
+        .unwrap();
+    assert!(replies(Ok(())).reply("claude", SESSION, "重送").is_err());
+    assert!(woken.lock().unwrap().is_empty());
+
+    // Its process stopped (the desktop app reclaimed it, L-14): the answer
+    // runs it in the background (#520), and the HUD is its sender.
+    check_in(&channel, SESSION, br#"{"ended":1}"#);
+    replies(Ok(())).reply("claude", SESSION, "重送").unwrap();
+    assert_eq!(
+        woken.lock().unwrap().as_slice(),
+        [(SESSION.to_string(), "重送".to_string())]
+    );
+    assert!(data
+        .join("hooks/inbox")
+        .read_dir()
+        .unwrap()
+        .next()
+        .is_some());
+    // Not to Codex, and no words handed to a plugin that is not running.
+    assert!(replies(Ok(())).reply("codex", SESSION, "重送").is_err());
+    assert_eq!(woken.lock().unwrap().len(), 1);
+    assert!(!channel.directory().join("prompts").join(SESSION).exists());
+
+    // It cannot run in the background: the card keeps waiting and says why.
+    let refused = replies(Err("这个会话的权限模式是 default".into()))
+        .reply("claude", SESSION, "重送")
+        .unwrap_err();
+    assert!(refused.contains("stopped"), "{refused}");
+    assert!(refused.contains("default"), "{refused}");
+
+    // A host that cannot run Claude Code refuses as before.
+    let plain = ClaudeReplies::new(channel.clone(), temp.path().join("claude-config"));
+    assert!(plain.reply("claude", SESSION, "重送").is_err());
 }
