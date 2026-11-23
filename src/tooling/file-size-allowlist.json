@@ -16,8 +16,8 @@
     "reason": "#175 后台续接要在会话自己的工作目录里跑 claude：加 run_client_in，原 run_client 委托给它"
   },
   "src/crates/platform/src/claude_plugin/mod.rs": {
-    "max": 763,
-    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单；另含 #175 后台续接：加 ClaudeChannel::stopped（会话进程已停）"
+    "max": 611,
+    "reason": "移植上游 b1217c3 智能体互发消息（#278）：接线与代码保持上游原样，便于以后逐行对照上游；拆分时移出名单；另含 #175 后台续接：加 ClaudeChannel::stopped（会话进程已停）；#520 把 ClaudeReplies 拆进 replies.rs"
   },
   "src/crates/runtime/src/lib.rs": {
     "max": 504,
