@@ -2,6 +2,32 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 侧栏回答 Claude 提问：会话进程被回收后在后台续接（#520）（2026-11-23，Claude，常浩看甲乙两种修法后回「按甲：后台续接」；已提交，PR 见描述，已装机回读，真实回收场景未实测）
+
+- 时间：开工 `2026-11-23 10:01`（`date '+%F %H:%M'` 记录）。来由：常浩截图「又出现这样的情况」：会话 `local_08fcc96a…`（CLI `3f10b6fe…`）09:53:45 答完这一轮、留下「下一步」框，09:55:09 桌面版日志 `[CliGovernor] pressure evicting … (idle 84s)` 回收了进程；侧栏卡按设计仍显示能答，选「重送」提交后被拒，要他去 Claude 里发话。接力早有后台续接（#175），侧栏回答没接上。
+- 改变的行为：侧栏（和手机）回答 Claude 桌面会话的提问时，插件签到写着已停（`ended`）的，不再拒绝，改用 `claude -p --resume <会话号>` 在后台续接，带会话自己的权限模式、模型、力度，最长 2 小时，回答当这一轮的输入，卡照常收走，投递记录照常记「Agent HUD」；后台那一轮结束或出错在 `postpane.log` 记一行「Background Claude run for the HUD's answer in …」。只是暂时没签到、没写已停的照旧拒绝（桌面版进程可能还活着，不另起一个）。权限模式会问人的、找不到会话记录或目录、找不到 claude 命令行的不续接，提示在原句后补「驿窗想在后台续接它，也没成：<原因>。」。不动：卡片生成时「能不能在侧栏答」的判断和 #331 沉底折叠；接力 `reply_as` 与它自己的续接；智能体互发消息。
+- 你要求的：
+  - `platform/src/claude_plugin/replies.rs`：`ClaudeReplies` 加 `waking(Waker)`；`reply` 遇到 `NotLoaded` 且会话已停时交给宿主续接；「进程已停」文案提成 `stopped()`，续接和原提示共用。
+  - `host/src/claude_wake.rs`（新）：续接命令组装与后台启动（`run`、`wake_arguments`），从 `handoff/back/desk_wake.rs` 移来，接力和侧栏回答共用。
+  - `host/src/claude_plugin.rs`：侧栏用的 `replies()` 接上 `claude_wake::run`。
+  - 测试 `an_answer_for_a_session_whose_process_stopped_runs_it_in_the_background`：从没签到、只是不签到都不续接；已停的续接、带会话号和原话、记投递；续接失败时提示带「已停」和失败原因；没接续接的照旧拒绝；回答给 Codex 照旧拒绝。
+- 我顺手改的：
+  - `ClaudeReplies` 整块从 `platform/src/claude_plugin/mod.rs` 拆进 `replies.rs`（mod.rs 763 → 611 行，`file-size-allowlist.json` 上限跟着收紧），原因是 mod.rs 已顶到上限；`tests.rs` 补一行引用。
+  - `handoff/back/desk_wake.rs` 的 `wake` 改调 `claude_wake::run`，行为不变；`handoff/tests.rs` 的 `wake_arguments` 引用改到新位置。
+  - `delivered` 改为只在成功时调用，不再自己判断结果（行为不变）。
+  - `docs/DECIDED.md`：登记本轮常浩选的「甲：后台续接」。
+- 测试：
+  - 新测试先红：编译失败 `cannot find type Waker` / `no method named waking`，输出在 `evidence/2026-11-23-520-answer-wake/red.txt`；实现后插件模块 `14 passed; 0 failed`，宿主 `255 passed; 0 failed`。
+  - `pnpm run check` 退出 0（`check.txt`）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1134 passed / 0 failed（基线 1133 + 新增 1），前端 `ℹ pass 516` / `ℹ fail 0`（`test.txt`）；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`node-tests.txt`）。
+- 验证：替身通过：续接由测试替身代替，没真的起 `claude`。接力那一路用的是同一段续接代码，只挪了位置。真实环境未验：装机后侧栏里两张可答的 Claude 卡对应会话都在线（10:26:38 签到），眼下没有「进程已停、卡还能答」的现成场景；不替常浩回答真实会话的提问。要等下一次桌面版回收某个会话后，常浩在侧栏回答它的卡，再核对 `postpane.log` 那一行和会话记录末尾的新一轮。
+- 截图：无（提示文字之外界面不变）；装机脚本的冒烟截图在 `evidence/2026-11-23-520-answer-wake/smoke-*.png`。
+- 发布与回读：`install.sh 520-answer-wake --takeover`（装前是已合并的 #517 分支包 `9e7bacbba8f4`，本分支从包含它的 `f2d0911` 拉出）：产物 `a252ca15d4b5` / 已装 `a252ca15d4b5`，签名证书 `b773068e`；冒烟：侧栏在动，装前装后 0.25% 像素不同、落在小人一带。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-23-520-answer-wake/PostPane-9e7bacbba8f4.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 只管「卡出来时会话还活着、之后才被回收」这一种（截图就是这种）。卡出来时会话已停，或驿窗重启过（「能答」的记忆在内存里），卡仍是「请到 Claude 里回答」、按 #331 沉底。要让这些也能后台续接，会碰到 #331 定下的沉底做法，要先单独发改动确认，没做。
+  - 后台那一轮在 Claude 窗口里看不到实时过程，之后打开会话能接上（L-14 证据 `evidence/2026-11-07-headless-resume/`）。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 跳回会话失败：提示改中文，失败原因记进日志（#517）（2026-11-23，Claude，常浩看排查后回「补上」；已提交，PR 见描述，已装机，冒烟因锁屏未截到侧栏）
 
 - 时间：开工 `2026-11-23 00:06`（`date '+%F %H:%M'` 记录）。来由：常浩截图里提问卡点 ↗ 后出现英文红字「The native client could not open this session」，4 秒就消失；本机按同样方式调 `open` 6 次都成功，`postpane.log` 里什么都没有，失败原因查不出（#517）。
