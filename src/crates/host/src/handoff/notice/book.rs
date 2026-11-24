@@ -38,6 +38,12 @@ pub enum Trouble {
     /// ChatGPT answered, and the tab it answered in drew nothing; the auto
     /// round trip stopped (#457).
     Undrawn,
+    /// A review looked for is not in its conversation: it did not go, and
+    /// may go again (#524).
+    Absent,
+    /// A review looked for `FIND_MOST` times is still not known to have
+    /// gone in: the person has it (#524).
+    Lost,
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -53,6 +59,10 @@ pub enum Cause {
     Unconfirmed,
     /// `stop_undrawn`: the answer is there, not drawn (#457).
     Undrawn,
+    /// `found_absent`: a review looked for did not go (#524).
+    Absent,
+    /// `lost_finding`: a review looked for long is still not known (#524).
+    Lost,
 }
 
 impl Step {
@@ -71,9 +81,11 @@ impl Handoff {
     pub fn untold(&self, since: i64) -> Option<(usize, Trouble)> {
         let at = self.steps.iter().rposition(|step| step.cause.is_some())?;
         let step = &self.steps[at];
+        // The round trip going on again is what found absent words do.
+        let resumed = |s: &Step| s.kind == StepKind::Resume && step.cause == Some(Cause::Absent);
         let moved_on = self.steps[at + 1..]
             .iter()
-            .any(|step| step.kind != StepKind::Fail);
+            .any(|s| s.kind != StepKind::Fail && !resumed(s));
         if step.at < since || self.told.contains(&at) || moved_on {
             return None;
         }
@@ -87,6 +99,8 @@ impl Handoff {
             Cause::Unconfirmed if self.live() && self.unanswered().is_some() => {
                 Trouble::Unconfirmed
             }
+            Cause::Absent if self.live() => Trouble::Absent,
+            Cause::Lost if self.live() && self.unanswered().is_some() => Trouble::Lost,
             _ => return None,
         };
         Some((at, trouble))

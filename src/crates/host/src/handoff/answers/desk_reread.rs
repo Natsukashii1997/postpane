@@ -26,6 +26,7 @@ impl Desk {
     /// at most every `AGAIN_MS`. A restart reads them at once: the phase
     /// began before it. How many were asked.
     pub(crate) fn reread(&self, lines: &dyn Lines, now: i64) -> usize {
+        self.lose_unfound(now);
         if !lines.connected() {
             return 0;
         }

@@ -109,6 +109,21 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
         ),
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
+        // The round trip may stay stopped (review of #524, P2): an earlier
+        // review never known to have gone in, or the person's pause.
+        Trouble::Absent => format!(
+            "驿窗没确认上一段送审送到了 ChatGPT，去会话里查了，上一段查明没送到：接力已恢复到发送前，{}。请把上一段送审原样重送（内容不变，再调用一次 relay_to_chatgpt）；连着几次都这样，请常浩看一眼 ChatGPT 那个标签页。",
+            if handoff.auto {
+                "自动往返没有停"
+            } else {
+                "自动往返仍停着（更早还有一段没确认送到，或常浩暂停了自动往返），重送前先向常浩说明"
+            }
+        ),
+        // Not a failure either: it may yet have gone in.
+        Trouble::Lost => format!(
+            "驿窗去 ChatGPT 会话里找了 {} 次，仍查不清上一段送审送到没有，送达状态未知，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知、驿窗已查不清。",
+            book::FIND_MOST
+        ),
     };
     format!("驿窗接力「{}」出错：{what}", handoff.title)
 }

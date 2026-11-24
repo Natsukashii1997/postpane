@@ -6,6 +6,7 @@ mod background_run;
 mod book_states;
 mod codex;
 mod driver;
+mod find_tell;
 mod finding;
 mod held_back;
 mod letters;
@@ -81,6 +82,8 @@ struct Fake {
     heads: RefCell<HashMap<String, Result<String, String>>>,
     /// Passing a read-again on to the extension fails (#356).
     reread_fails: std::cell::Cell<bool>,
+    /// Passing a look on to the extension fails (#524).
+    find_fails: std::cell::Cell<bool>,
 }
 
 impl Fake {
@@ -154,6 +157,9 @@ impl Lines for Fake {
             .borrow_mut()
             .push(("find".into(), conversation.into(), request.into()));
         self.afters.borrow_mut().push(after.map(str::to_owned));
+        if self.find_fails.get() {
+            return Err("The ChatGPT extension is not connected".into());
+        }
         Ok(())
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {

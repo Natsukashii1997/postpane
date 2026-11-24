@@ -181,6 +181,15 @@ pub(super) fn found_absent() -> String {
         "PostPane read the conversation again and these words are not in it: they did not go; the session may send them again",
     )
 }
+/// A review looked for `FIND_MOST` times is still not known (#524): on the
+/// card.
+pub(super) fn finding_lost() -> String {
+    let times = crate::handoff::book::FIND_MOST;
+    l10n::text(
+        &format!("驿窗去 ChatGPT 会话里找了 {times} 次仍查不清这一段送到没有，交常浩"),
+        &format!("PostPane looked in the conversation {times} times and still cannot tell whether these words went in; left to the person"),
+    )
+}
 /// Words that must be on disk before they go could not be kept.
 pub(super) fn not_kept(error: &str) -> String {
     l10n::text(

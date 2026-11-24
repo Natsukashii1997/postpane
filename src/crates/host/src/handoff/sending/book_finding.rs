@@ -9,7 +9,11 @@
 //! Not told, they stay as they are.
 //!
 //! Only a review's: PostPane's own ask to mend is not looked for.
-use super::{Book, Handoff, Pending};
+//!
+//! Found absent, the session is told to send them again; looked for
+//! `FIND_MOST` times and still not known, the person has them and the
+//! session is told so (#524). A look counts once the extension was asked.
+use super::{Book, Cause, Handoff, Pending, Step, StepKind};
 
 /// How long after words went out they are first looked for: past the wait
 /// for word of them (`SEND_TIME`, 30 s), and the extension's own time to
@@ -17,8 +21,9 @@ use super::{Book, Handoff, Pending};
 pub const FIND_AFTER_MS: i64 = 40 * 1000;
 /// How long between two looks for the same words.
 pub const FIND_EVERY_MS: i64 = 2 * 60 * 1000;
-/// How often the same words are looked for in a run: an hour of looks.
-const FIND_MOST: u32 = 30;
+/// How often the same words are looked for: an hour of looks, counted
+/// across restarts (#524).
+pub const FIND_MOST: u32 = 30;
 
 /// When the words asked as `request` went out: its request names the time.
 fn asked_at(request: &str) -> Option<i64> {
@@ -39,7 +44,8 @@ impl Book {
     /// the last prompt of the handoff's known to have gone in (round 1
     /// P1-01: past it the history must reach for the words to be absent):
     /// unsure, unanswered, out `FIND_AFTER_MS`, and not looked for within
-    /// `FIND_EVERY_MS`. They count as looked for.
+    /// `FIND_EVERY_MS`. They are not looked for again till then; they
+    /// count once the extension was asked (`looked_once`, #524).
     pub fn to_find(&mut self, now: i64) -> Vec<(String, String, Option<String>)> {
         let due = |handoff: &mut Handoff| {
             let conversation = handoff.chatgpt_conversation.clone()?;
@@ -47,9 +53,9 @@ impl Book {
             let pending = handoff.gate.pending.as_mut().filter(|p| !p.answered)?;
             let (at, times) = pending.looked;
             let waited = now - asked_at(&pending.request)? >= FIND_AFTER_MS;
-            let again = times == 0 || now - at >= FIND_EVERY_MS;
-            (waited && again && times < FIND_MOST).then(|| {
-                pending.looked = (now, times + 1);
+            let again = at == 0 || now - at >= FIND_EVERY_MS;
+            (waited && again && times < FIND_MOST && !pending.lost).then(|| {
+                pending.looked.0 = now;
                 (conversation, pending.request.clone(), after)
             })
         };
@@ -58,6 +64,41 @@ impl Book {
             .filter(|handoff| handoff.live())
             .filter_map(due)
             .collect()
+    }
+    /// The extension was asked to look for the words asked as `request`:
+    /// one look more (#524). Whether it counted.
+    pub fn looked_once(&mut self, request: &str) -> bool {
+        let id = request.rsplit_once('~').map_or("", |(id, _)| id);
+        let Some(pending) = self
+            .live_mut(id)
+            .and_then(|h| h.gate.pending.as_mut())
+            .filter(|p| p.request == request && !p.answered)
+        else {
+            return false;
+        };
+        pending.looked.1 += 1;
+        true
+    }
+    /// Reviews looked for `FIND_MOST` times, the last `FIND_EVERY_MS` ago,
+    /// and still not known: `note` on the card, for the person, and their
+    /// sessions are told (#524). Once each. Whether any changed.
+    pub fn lost_finding(&mut self, note: &str, now: i64) -> bool {
+        let mut changed = false;
+        for handoff in self.list.iter_mut().filter(|h| h.live()) {
+            let Some(pending) = handoff.gate.pending.as_mut() else {
+                continue;
+            };
+            let (at, times) = pending.looked;
+            if pending.answered || pending.lost || times < FIND_MOST || now - at < FIND_EVERY_MS {
+                continue;
+            }
+            pending.lost = true;
+            let step = Step::new(now, StepKind::Work, Some(note)).by_auto();
+            handoff.steps.push(step.caused(Cause::Lost));
+            handoff.updated_at = now;
+            changed = true;
+        }
+        changed
     }
     /// Whether `request` is a review of `id`'s, in `conversation`, still
     /// unsure and unanswered: what a look for it may change.
@@ -104,6 +145,8 @@ impl Book {
         if !self.not_sent(id, request, note, now) {
             return false;
         }
+        // Its session is told to send them again (#524).
+        self.caused_last(id, Cause::Absent);
         if let Some(handoff) = self.live_mut(id).filter(|handoff| !handoff.unsure()) {
             handoff.resume_for_ask(now);
         }

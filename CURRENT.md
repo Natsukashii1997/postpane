@@ -2,6 +2,35 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力：去会话里找满 30 次后交常浩并通知会话；查明没送到也通知会话（#524）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 2、3 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-24 12:46`（`date '+%F %H:%M'` 记录）。来由：#510 L3 审查留下的 P2-01、P2-02 交常浩定，推荐「查明没送到通知会话」「找满 30 次交常浩并通知一次，计数问题一起修」，常浩回「全按推荐」。
+- 改变的行为（动手前已在会话里列出）：
+  - 查明没送到（`absent`）：原来只恢复接力、卡上记一步，发起会话不知道；现在另按出错通知告诉会话一次「上一段查明没送到，请原样重送」。自动往返仍停着时（放回了更早一段没确认的送审，或常浩暂停了）照实说，请会话重送前先向常浩说明；通知前会话已经重送的不再通知。
+  - 找满 30 次之后：原来不再找、不出声，卡永远停在送达未确认；现在最后一次之后又过 2 分钟仍说不清，卡上记一步「驿窗去 ChatGPT 会话里找了 30 次仍查不清这一段送到没有，交常浩」，并通知会话一次（写「送达状态未知」）。这一步不需要插件，插件没连上也照记；之后重启不再另记、不再通知。
+  - 计数：原来定时到点就算一次（通道没连上也算），重启清零；现在插件收到查找指令才算一次，次数随待确认写盘，重启后接着数。
+- 你要求的：
+  - `sending/book_finding.rs`：`to_find` 只记时间不计数；新 `looked_once`、`lost_finding`；`found_absent` 给那一步标原因 `Absent`。
+  - `sending/desk_finding.rs`：`find_unsure` 发出去了才计数并写盘；新 `lose_unfound`（有改动才写盘）。`answers/desk_reread.rs`：定时入口先调它，再看插件连没连上。
+  - `sending/book_unsure.rs`：`Pending.looked` 写盘，新 `lost`；重启时 `lost` 的不再记「重启时未确认」。
+  - `notice/book.rs`、`notice/desk.rs`：新原因 `Absent`、`Lost` 和对应的两段通知；`Absent` 之后紧跟的「恢复自动往返」不算情况变了。
+  - `gate/desk_guard.rs`：卡上那句话 `finding_lost`。`book.rs` 导出 `FIND_MOST`（并进原有一行，行数不变）。
+  - 测试 `handoff/tests/find_tell.rs`（8 条），假通道 `tests.rs` 加 `find_fails`。
+  - 文档：`docs/chatgpt-channel.md` 送达未确认一段补三处；`docs/DECIDED.md` 登记 2026-11-24 一行。
+- 我顺手改的：`docs/LESSONS.md` L-69 补「提升：已提升为全局 G-49」（agent-kit#125，PR agent-kit#126 等合并）。
+- 同类：搜了接力里的计数（`+= 1`）和不写盘的字段（`serde(skip)`），命中 3 处：重读（发送失败本来就不计）、没画出（按插件回报计）、写作闸（设计上由插件重启后补报），都不用改。
+- 测试：
+  - 新测试先红后绿：第一批 5 条在旧代码上 `test result: FAILED. 1 passed; 4 failed`（`red.txt`；没失败那条守的是「会话已重送就不通知」，旧代码本来就不通知）；独立审查后补 3 条，`FAILED. 5 passed; 3 failed`（`red-r1.txt`）；改后接力模块 `test result: ok. 224 passed; 0 failed`（`green-r1.txt`）。
+  - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1151 passed（基线 1143 + 新增 8），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`check2.txt`、`test2.txt`、`node2.txt`）。第一次全量 `check exit 1`：`FIND_MOST` 只在测试配置下导出、正式构建找不到，`book.rs` 多一行超了 300 行棘轮名单的上限 1579；合进原有导出行后过了。
+  - 证据目录 `~/Library/Application Support/postpane/evidence/2026-11-24-524-find-tell/`。
+- 审查：请子 agent 做了一次只读独立审查（只给代码和需求），1 条 P1、2 条 P2、3 条 P3。P1「每秒都写盘」、P2「放回更早一段时通知说自动往返没停」、P2「交常浩后重启会再通知一次」、P3「约一小时不准」、P3「插件没连上时不记交常浩」都成立，已修并补测试；P3「放回的更早一段刚好找满 30 次会盖掉没送到的通知」不会发生：放回的那段一定已经有回信（`answered`），`lost_finding` 跳过它。没送 ChatGPT 审查。
+- 验证：替身通过：查找、通知都由测试替身代替。真实环境未验：要等真实出现送达未确认，再看接力卡步骤、发起会话收到的通知、`handoffs.json` 里待确认的 `looked`。
+- 截图：无界面改动。
+- 发布与回读：`install.sh 524-find-tell`（装前是 #510 从 main 打的包 `d11c804247c1`）：产物 `64081b80fd41` / 已装 `64081b80fd41`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 603 个像素不同；装前装后 0.23% 像素不同、落在小人一带。13:10:06 启动行正常，145 张旧接力照常读出（旧数据没有 `looked`、`lost` 两项，按默认值读）。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-24-524-find-tell/PostPane-d11c804247c1.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：无。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## #509 收尾：L3 审查 4 轮通过、合并、从 main 装机，真实页面只读核对（2026-11-24，Claude，接 #510 交接卡的收尾步骤；PR #510 已 squash 合并 `c2d84fb`、已装机回读通过，真实页面部分核对）
 
 - 时间：开工 `2026-11-24 12:27`（`date '+%F %H:%M'` 记录）。来由：上一节（#509）写到「已送 L3 审查、未装机」，本节记审查到合并装机的经过，补 DECIDED 提交号和通道文档，并把主线剩下要常浩定的事收成一张清单。
