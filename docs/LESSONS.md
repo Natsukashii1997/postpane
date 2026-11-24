@@ -557,6 +557,7 @@
   - 判断「标签页里还有没有活页面」用 Chrome 自己的说法，不从报错反推（#507 第 3 轮复审 P1-01）。实测 Chromium 156：页面崩溃后 `tabs.get` 给 `status: "unloaded"`、网址还在、`discarded: false`；停在 Chrome 错误页的标签页不把网址告诉插件；重载途中注入脚本不会被拒，会等新文档。「注入被拒」只说明这一刻注不进去，不能当成可以重载的依据：审查指出预渲染页面顶上来、从缓存恢复时也会被拒（这两种没实测）（`real-chromium/probe-crashed.log`、`probe-error-page.log`）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-507-tab-revive/real-chromium/`（`probe-discard.log` 回收前后的编号和各接口返回，`probe-freeze.log` 两种冻结办法都没生效，`chromium-test.log` 四条真实 Chromium 测试）。
 - 升级：〔机检〕已升级（2026-11-22，#507）：加了 `chromium.test.mjs`，随 `pnpm test` 跑；其中第一条断言「回收后编号会换」，Chrome 改了这个行为会在这里先红。可提议提升为全局坑（浏览器插件项目都适用），等常浩批。
+- 提升：已提升为全局 G-49（2026-11-24，常浩「全按推荐」；agent-kit#125，PR agent-kit#126 等合并）。
 
 ## L-70 通道一启动就收消息，订阅方稍后才挂上：中间到的消息被直接丢掉，「重连时补报」恰好落在这段（2026-11-22）
 

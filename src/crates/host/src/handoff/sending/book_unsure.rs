@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 mod finding;
 #[path = "book_mending.rs"]
 mod mending;
+pub use finding::FIND_MOST;
 #[cfg(test)]
 pub use finding::{FIND_AFTER_MS, FIND_EVERY_MS};
 pub use mending::Word;
@@ -79,10 +80,14 @@ pub struct Pending {
     /// many restarts find them (#507).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restarted: bool,
-    /// When they were last looked for in the conversation, and how often,
-    /// in this run (#509).
-    #[serde(skip)]
+    /// When they were last looked for in the conversation, and how often
+    /// the extension was asked to (#509). Kept across restarts (#524).
+    #[serde(default, skip_serializing_if = "never_looked")]
     pub looked: (i64, u32),
+    /// Looked for `FIND_MOST` times and still not known: left to the
+    /// person, once (#524).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lost: bool,
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
@@ -93,6 +98,10 @@ pub struct Pending {
     /// its answer could pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<Box<Pending>>,
+}
+
+fn never_looked(looked: &(i64, u32)) -> bool {
+    *looked == (0, 0)
 }
 
 impl Pending {
@@ -243,7 +252,7 @@ impl Book {
     /// before `restarted` was kept are known by their last step.
     pub fn pending_at_restart(&mut self, text: &str, now: i64) -> bool {
         let said = |h: &Handoff| {
-            h.unanswered().is_some_and(|p| p.restarted)
+            h.unanswered().is_some_and(|p| p.restarted || p.lost)
                 || h.steps.last().and_then(|s| s.cause) == Some(Cause::Unconfirmed)
         };
         let ids = self

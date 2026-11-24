@@ -5,12 +5,24 @@ use super::super::{guard, Desk, Lines};
 use serde_json::Value;
 
 impl Desk {
-    /// Asks the extension to look for each review due a look.
+    /// Reviews looked for as often as they may be, and still not known,
+    /// go to the person (#524): kept only when one did, the refresh coming
+    /// every second (review of #524, P1). Nothing asked of the extension, so
+    /// not put off while it is away.
+    pub(in crate::handoff) fn lose_unfound(&self, now: i64) {
+        if self.lock().lost_finding(&guard::finding_lost(), now) {
+            self.change(|_| ());
+        }
+    }
+    /// Asks the extension to look for each review due a look: a look
+    /// counts, and is kept, once it was asked (#524).
     pub(in crate::handoff) fn find_unsure(&self, lines: &dyn Lines, now: i64) {
         let due = self.lock().to_find(now);
         for (conversation, request, after) in due {
-            if let Err(error) = lines.find(&conversation, &request, after.as_deref()) {
-                agent_hud_runtime::note!("{error}");
+            match lines.find(&conversation, &request, after.as_deref()) {
+                Ok(()) if self.lock().looked_once(&request) => self.change(|_| ()),
+                Ok(()) => {}
+                Err(error) => agent_hud_runtime::note!("{error}"),
             }
         }
     }
