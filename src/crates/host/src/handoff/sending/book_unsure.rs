@@ -27,7 +27,7 @@ mod mending;
 pub use finding::FIND_MOST;
 #[cfg(test)]
 pub use finding::{FIND_AFTER_MS, FIND_EVERY_MS};
-pub use mending::Word;
+pub use mending::{Word, MEND_AGAIN_MS};
 
 const TAG_OPEN: &str = "【驿窗送审 ";
 const TAG_CLOSE: &str = "】";

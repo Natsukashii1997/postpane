@@ -6,7 +6,7 @@ use super::guard::Held;
 use super::texts::Sent;
 use super::{Desk, Lines};
 use crate::handoff::book::{self, Handoff};
-use agent_hud_runtime::l10n;
+use agent_hud_runtime::{chatgpt::SendFailed, l10n};
 use std::time::Duration;
 
 /// How long reading a pull request's current commit may take.
@@ -100,7 +100,7 @@ impl Desk {
         let Some(conversation) = handoff.chatgpt_conversation.clone() else {
             return false;
         };
-        if handoff.next() != Some(book::Next::Format) {
+        if handoff.next() != Some(book::Next::Format) || handoff.mending_waits(now) {
             return false;
         }
         let request = format!("{id}~format{now}");
@@ -123,10 +123,17 @@ impl Desk {
                 });
                 true
             }
+            // Send never pressed: it did not go, and goes once more (#528).
+            Err(SendFailed::NotPressed(error))
+                if self.change(|book| {
+                    let note = super::guard::mending_not_sent(&error);
+                    book.mending_not_sent(id, &request, &note, now)
+                }) =>
+            {
+                true
+            }
             // Never known to have gone in: the session is told (P1-14).
             // Not when word of it was heard as the send gave up (#446).
-            // Left as it is when send was never pressed for it (#466 is
-            // of what a session sends).
             Err(failed) => self.change(|book| {
                 if book.mending_gave_up(id, &request) {
                     book.trouble(id, &format_failed(failed.text()), now);

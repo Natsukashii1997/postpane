@@ -3,8 +3,12 @@
 //! waiting, and before the mended answer, is taken as a review's is (#446):
 //! only in the run that sent it (`Word`), and only its own request. After
 //! the answer, or after a restart, it only goes on the card, as before.
-use super::super::{notice::Cause, Book, Handoff, Step, StepKind};
+use super::super::{notice::Cause, Book, Handoff, Phase, Step, StepKind};
 use super::Pending;
+
+/// How long after send was never pressed for an ask to mend it is asked
+/// again (#528): ChatGPT was likely still writing.
+pub const MEND_AGAIN_MS: i64 = 30 * 1000;
 
 /// How word of a mending stands in the run that sent it (#446). Never kept:
 /// after a restart nothing says it went in (round 4 P1-14).
@@ -22,6 +26,22 @@ pub enum Word {
 }
 
 impl Handoff {
+    /// How often PostPane asked to mend the newest answer (#528).
+    fn mendings_asked(&self) -> usize {
+        let after = self
+            .steps
+            .iter()
+            .rposition(|s| s.kind == StepKind::Reply)
+            .map_or(0, |at| at + 1);
+        let asked = |s: &&Step| s.kind == StepKind::Format;
+        self.steps[after..].iter().filter(asked).count()
+    }
+    /// Whether the ask to mend the newest answer waits before it goes
+    /// again (#528): send was never pressed for the last, `MEND_AGAIN_MS`
+    /// ago or less.
+    pub fn mending_waits(&self, now: i64) -> bool {
+        self.mendings_asked() > 0 && now - self.phase_at < MEND_AGAIN_MS
+    }
     /// The auto round trip is off by the stop that words never known to
     /// have gone in made (`unconfirmed`), and nothing stopped it or turned
     /// it on since (review of #446, P2-01): a stop made after, for an
@@ -89,6 +109,25 @@ impl Book {
             Word::Unknown => return None,
         }
         Some(false)
+    }
+    /// Send was never pressed for the mending asked as `request` (#528):
+    /// it did not go, so the answer waits again as before it was asked,
+    /// `note` on the card, and it is asked once more (`mending_waits`).
+    /// Not after the once more: then it is as any send not known (false).
+    pub fn mending_not_sent(&mut self, id: &str, request: &str, note: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        let asked = |p: &Pending| p.request == request && !p.answered;
+        if !handoff.gate.mending.as_ref().is_some_and(asked) || handoff.mendings_asked() > 1 {
+            return false;
+        }
+        handoff.gate.mending = None;
+        handoff
+            .steps
+            .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
+        handoff.enter(Phase::Replied, now);
+        true
     }
     /// The send of the mending asked as `request` gave up waiting.
     /// Whether nothing says it went in: not so when word of it was heard

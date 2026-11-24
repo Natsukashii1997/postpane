@@ -50,7 +50,7 @@ pub use gate_io::{ledger, reviewed_commit};
 pub use idle::IDLE_END_MS;
 pub use notice::{notices_since, Cause, Trouble};
 pub use pull_request::pull_request;
-pub use unsure::{tagged, untagged, Pending, FIND_MOST};
+pub use unsure::{tagged, untagged, Pending, FIND_MOST, MEND_AGAIN_MS};
 #[cfg(test)]
 pub use unsure::{FIND_AFTER_MS, FIND_EVERY_MS};
 pub use wake::WAKE_AFTER_MS;
