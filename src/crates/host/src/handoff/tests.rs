@@ -11,6 +11,7 @@ mod finding;
 mod held_back;
 mod letters;
 mod mend_late;
+mod mend_unsent;
 mod not_pressed;
 mod opening;
 mod read_again;

@@ -181,6 +181,13 @@ pub(super) fn found_absent() -> String {
         "PostPane read the conversation again and these words are not in it: they did not go; the session may send them again",
     )
 }
+/// PostPane's ask to mend the last lines: send never pressed (#528).
+pub(super) fn mending_not_sent(error: &str) -> String {
+    l10n::text(
+        &format!("补格式这一段没送成（{error}）：发送没有点下去，驿窗过一会儿再补一次"),
+        &format!("The ask to mend the last lines did not go ({error}): send was never pressed; PostPane asks once more in a while"),
+    )
+}
 /// A review looked for `FIND_MOST` times is still not known (#524): on the
 /// card.
 pub(super) fn finding_lost() -> String {
