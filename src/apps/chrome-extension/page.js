@@ -139,6 +139,87 @@
     return !!reply && !!prompt && reply.place > prompt.place;
   }
 
+  /** Where PostPane's words sent as `request` stand in the conversation
+   * (#509 round 1 P1-01, P1-02), over every prompt the page holds, not only
+   * the newest: Changhao may have asked something after them.
+   * - `marked`: ChatGPT's id (or null) of each turn whose words begin with
+   *   the line naming `request`;
+   * - `anchored`: prompt `after` (the one before them that PostPane knows
+   *   went in) is on the page, so the history reaches back past them;
+   * - `unreadable`: a prompt after it shows no words of its own: one
+   *   ChatGPT made an attachment (#410), or one not drawn yet, with no
+   *   bubble or an empty one (round 2 P1-01). They may be in it, unseen. */
+  function marked(doc, request, after) {
+    const mark = bare(`${OWN}${request}】`);
+    const order = new Map();
+    const turns = new Map();
+    const keyOf = (node) =>
+      node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
+    for (const node of doc.querySelectorAll(
+      `[${UNIT}], ${SEL.user}, ${SEL.assistant}`,
+    )) {
+      const key = keyOf(node);
+      if (!order.has(key)) order.set(key, order.size);
+    }
+    const bubbleOf = (node) =>
+      node.matches(SEL.user) ? node : node.querySelector(SEL.user);
+    // A prompt's own words: its bubble's, none when it has no bubble or an
+    // empty one (round 2 P1-01: a turn still drawing is not another's).
+    const wordsOf = (node) => {
+      const bubble = bubbleOf(node);
+      return bubble ? bare(shownText(bubble)) : "";
+    };
+    // Every prompt's turn, words or not (round 2 P1-01): of its copies the
+    // last with words, else the last.
+    for (const node of doc.querySelectorAll(SEL.prompt)) {
+      const key = keyOf(node);
+      if (!turns.has(key) || wordsOf(node) || !wordsOf(turns.get(key)))
+        turns.set(key, node);
+    }
+    const idsOf = (node) =>
+      (node?.getAttribute("data-chatgpt-search-message-ids") || "")
+        .split(/\s+/)
+        .filter(Boolean);
+    const idOf = (node) => idsOf(node.closest(`[${UNIT}]`)).pop() ?? null;
+    const anchor = after
+      ? [...doc.querySelectorAll("[data-chatgpt-search-message-ids]")].find(
+          (node) => idsOf(node).includes(after),
+        )
+      : null;
+    const from = anchor ? order.get(keyOf(anchor)) : Infinity;
+    const shown = [...turns.entries()];
+    return {
+      marked: shown
+        .filter(([, node]) => wordsOf(node).startsWith(mark))
+        .map(([, node]) => idOf(node)),
+      anchored: !!anchor,
+      unreadable: shown.some(
+        ([key, node]) => order.get(key) > from && !wordsOf(node),
+      ),
+    };
+  }
+
+  /** Whether Changhao has something in hand on the page (#509 round 1
+   * P1-03, round 2 P1-03): words in the composer; send lit with the box
+   * empty, which is a file or image waiting beside it (as `submit` reads it,
+   * #429), whatever ChatGPT draws it as; or a prompt being edited, in a
+   * textarea or an editable box of its turn. Loading the page again would
+   * lose it. */
+  function drafting(doc) {
+    const box = doc.querySelector(SEL.composer);
+    const editing = ["textarea", '[contenteditable="true"]']
+      .flatMap((field) => [
+        `[${UNIT}] ${field}`,
+        `[data-message-author-role] ${field}`,
+      ])
+      .join(", ");
+    return (
+      !!(box && bare(box.textContent)) ||
+      !!sendReady(doc) ||
+      !!doc.querySelector(editing)
+    );
+  }
+
   /** Scrolls the conversation to its end, so the newest answer is drawn when
    * only the hidden copy holds it (#410). Whether there was a list to scroll. */
   function reveal(doc) {
@@ -538,6 +619,8 @@
     lastPrompt,
     lastPromptId,
     answered,
+    marked,
+    drafting,
     reveal,
     markdown,
     submit,

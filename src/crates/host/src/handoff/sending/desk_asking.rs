@@ -1,6 +1,8 @@
 //! Words on their way into a review conversation (`Asking`), booked once
 //! they went in, with the prompt ChatGPT shows them as (#410).
 use super::{Asking, Desk};
+#[path = "desk_finding.rs"]
+mod finding;
 use std::collections::HashMap;
 use std::sync::MutexGuard;
 

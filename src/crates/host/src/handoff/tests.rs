@@ -6,6 +6,7 @@ mod background_run;
 mod book_states;
 mod codex;
 mod driver;
+mod finding;
 mod held_back;
 mod letters;
 mod mend_late;
@@ -50,6 +51,8 @@ struct Fake {
     asked_as: RefCell<Option<String>>,
     /// The request each sending was asked as.
     requests: RefCell<Vec<String>>,
+    /// The prompt each look for words was to look past (#509 round 1 P1-01).
+    afters: RefCell<Vec<Option<String>>>,
     /// How left words stand, as the plugin would say; None once gone.
     left_as: RefCell<Option<(String, Option<String>)>>,
     /// Leaving words fails.
@@ -145,6 +148,13 @@ impl Lines for Fake {
             return Err(SendFailed::Unsure(error));
         }
         Ok(self.asked_as.borrow().clone())
+    }
+    fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String> {
+        self.sent
+            .borrow_mut()
+            .push(("find".into(), conversation.into(), request.into()));
+        self.afters.borrow_mut().push(after.map(str::to_owned));
+        Ok(())
     }
     fn reread(&self, conversation: &str) -> Result<(), String> {
         self.sent
@@ -608,6 +618,9 @@ impl Lines for Held {
     }
     fn send(&self, _: &str, _: &str, _: &str) -> Result<Option<String>, SendFailed> {
         Err(SendFailed::Unsure("not here".into()))
+    }
+    fn find(&self, _: &str, _: &str, _: Option<&str>) -> Result<(), String> {
+        Ok(())
     }
     fn reread(&self, _: &str) -> Result<(), String> {
         Ok(())

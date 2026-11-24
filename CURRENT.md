@@ -116,6 +116,43 @@
 - 本轮新坑：无（L-47 复发，补在原条目）。
 - skill 进化：无。
 
+## 接力：送达未确认之后驿窗自己去会话里找，不再卡死（#509，#507 的批 B1）（2026-11-22，Claude，常浩看改动确认 1 后经 agent-hud 插件回「两条都改」；已提交、PR #510、#508 合并后跟上 main、已送 L3 审查、未装机）
+
+- 时间：开工 `2026-11-22 12:52`（`date '+%F %H:%M'` 记录）。来由：送审发出后没等到确认（送达未确认）是死胡同：自动往返停下、这张接力不再收别的话、同一段话重送回「刚才已经送到」，之后没有任何东西去查。实机 `h1a1f80d704602`、`h1a1fd0571bd03` 卡了一天。本分支接在 #508（`f19e091`）后面，PR 连带 #508 的改动，#508 先合并后只剩自己的。
+- 改变的行为（已定内容，改动确认 1，已登记 DECIDED.md）：
+  - 原来：送达未确认后一律停下交常浩，回信到了一律不按通过结束。
+  - 现在：这段话发出 40 秒后还没确认、回信也没到，驿窗让插件重载这个会话的标签页，读最新一条提问里有没有这段话的请求号，之后每 2 分钟一次、一次运行最多 30 次。找到：等同确认送到，照常等回信、照常放行。最新提问不是这段、也没在生成（隔 2 秒读两次都这样）：按没送成处理，恢复到发送前，自动往返重新打开，同一段话重送会真的再发。说不清：什么都不改。回信先到的不再找，照旧不放行。只管会话发起的送审，不管补格式。
+- 改了哪些文件：
+  - 插件（0.2.7 → 0.2.8）：`background.js` 加 `find` 指令和 `found` 回报；`content.js` 加 `asked` 指令。
+  - 通道：`platform/src/clients/chatgpt/commands.rs` 加 `Channel::find`，`mod.rs` 把 `found` 交给监听方。
+  - 驿窗：新文件 `handoff/sending/book_finding.rs`（`to_find`、`looked_for`、`found_late`、`found_absent`）、`desk_finding.rs`（`find_unsure`、`heard_found`）；`book_unsure.rs`（`Pending.looked`）；`desk_reread.rs`（定时入口里顺带去找）；`desk_lines.rs`、`handoff.rs`（`Lines::find` 和 `found` 一支，行数白名单 1997 → 2000）；`gate/desk_guard.rs`（卡上那句话）。
+  - 测试：`chrome-extension/test/background.test.mjs`（3 条）、`content.test.mjs`（1 条）、`handoff/tests/finding.rs`（4 条）、`book_finding.rs` 内 1 条。
+  - 文档：`docs/chatgpt-channel.md`（`find`、`found` 两行和送达未确认一段）、`docs/DECIDED.md`（1 行）。
+- 跟上 #508 第 1 轮审查的修法（开工 `2026-11-22 13:48`，接手会话）：把修过的 #508（`6bd1f05`）合进本分支（`git merge`，冲突在 `CURRENT.md`、`docs/chatgpt-channel.md`、`background.test.mjs`，两边都留）。`find` 原来无条件重载标签页；没确认送到的话多半其实送到了、ChatGPT 正在写回答，重载会打断它（和 #507-P1-01 同一类）。改成先问页面现在怎样：页面说正在写，或不应答但最近说过在写，不重载，报 `unread`，驿窗 2 分钟后再找；已回收的、没在写的照旧重载再读。`find` 改用 `tabShowing` 和 `stands`，不再把空的标签页编号交给 `loadAgain`。测试：`finding` 辅助函数加「重载前页面怎样」，原 3 条按新语义改，加 1 条；旧 `find` 上 `ℹ pass 59` / `ℹ fail 4`（`red-r2-plugin.log`），改后插件整套 `ℹ pass 142` / `ℹ fail 0`（`green-r2-plugin.log`）。合并后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 142`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r2.log`、`test-r2.log`、`rules-r2.log`）。仍是替身通过。
+- 跟上 #508 第 2 轮审查的修法（约 `2026-11-22 15:18` 开工，写完时 `date` 为 15:26，接手会话；三条全量由再下一个接手会话 `2026-11-22 15:36` 起跑、跑完后推送）：把 #508 的 `cb676bb` 合进本分支（冲突在 `CURRENT.md`、`docs/chatgpt-channel.md`、`background.test.mjs`，两边都留）。`find` 改用 #508 的 `reach` 找标签页：刚重载或刚新开的直接读；原本就在的先问它现在怎样，正在写回答、不答、已换会话的不重载、报 `unread`，其余重载一次再读。页面的 `asked` 回答多带 `here`（是不是这个会话）。上面「跟上第 1 轮」那一条里的 `mayWrite`、`tabShowing`、`stands` 的写法已被这一条取代。插件整套 `ℹ pass 157` / `ℹ fail 0`（`green-r3-plugin.log`）。`b32511a` 上三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 157`（含真实 Chromium 5 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r3.log`、`test-r3.log`、`rules-r3.log`）。仍是替身通过。
+- 真实 Chromium 里查出并修掉一处（开工 `2026-11-22 15:43`，接手会话）：给 `find` 加了 4 条真实 Chromium 测试（`adf3881`），全量里其中一条失败。写探针在真实 Chromium 156 里跑 10 轮：重载一个在前台的标签页时，旧页面卸载途中会因为被隐藏（`visibilitychange`）再报到一次，插件把它当成新页面已经到了，去问一个正在离开的页面，10 轮里 8 轮报 `unread`（`real-chromium-find/probe-reload-report-before.log`）。替身测试测不出来。修法：`content.js` 在 `pagehide` 之后不再因为被隐藏而报到，从缓存回来（`pageshow` 且 `persisted`）时再报一次。修后 10 轮全是 `there`，每轮只收到新页面报到一次（`probe-reload-report-after.log`）。加 1 条真实 Chromium 测试（前台标签页重载后等新页面再读，连跑 3 个会话）：修前第 2 个会话就失败（`red-r4-front.log`），修后过。行为变化：页面卸载时不再多报一次「在、但隐藏了」，对驿窗看到的标签页状态没有可见影响（新页面马上会报到）。
+- 跟上 #508 第 3 轮审查的修法（开工 `2026-11-22 16:46`，接手会话）：把 #508 的 `c297be3` 合进本分支（`91e27cc`，冲突在 `CURRENT.md`、`docs/DECIDED.md`、`chromium.test.mjs`，两边都留）。`find` 不用改：它走 `reach`，只重载 Chrome 说已卸载的标签页这条规则只管 `reach` 里的候选；`find` 自己重载的是「答了在、显示这个会话、没在写」的标签页，有活页面但确定没在写，重载是要读到页面最新的样子。
+  - 测试：合并加修复后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1126 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 170`（含真实 Chromium 11 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r5.log`、`test-r5.log`、`rules-r5.log`）。仍是替身通过，未在真实环境验证。
+- 测试：
+  - 新测试先红后绿（G-40）。插件：3 条新测试在没有实现时 `ℹ pass 51` / `ℹ fail 3`（`red-plugin.log`），实现后 `ℹ pass 54` / `ℹ fail 0`。驿窗：临时让 `find_unsure` 不去找、`heard_found` 不入账，`cargo test -p agent-hud-host --lib handoff` 得 `test result: FAILED. 202 passed; 3 failed`（`red-host.log`）；还原后 `test result: ok. 205 passed; 0 failed`（`green-host.log`）。
+  - `pnpm run check` 通过（`check exit 0`）。第一遍 `check exit 1`：三个新文件还没 `git add`，开头查 `src/` 下没提交文件那一步拦下的，加进暂存区后重跑。
+  - `pnpm test`：「全量测试汇总：6 套，失败 0 套」；Rust 合计 1122 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 132`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
+  - `node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`。
+  - 日志在 `~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`。
+- 跟上 main 并送审（2026-11-23）：#508 已 squash 合并（`2429481`）。直接合 main 会因为 squash 认不出共同历史、冲突 11 个文件；main 的内容和 #508 分支最后的 `84d0ab7` 完全相同（树对象一致），所以先合 `84d0ab7`（只有本文件一处冲突：保留 #509 一节，#507 一节用新标题），再 `git merge -s ours origin/main` 记成已合入。和 main 的差异只剩 #510 自己的 24 个文件。三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1134 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 176`（含真实 Chromium），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`evidence/2026-11-22-509-unsure-resolve/check-l3.log`、`test-l3.log`、`rules-l3.log`）。L3 送审说明 `brief-l3.md`（`brief-l3-c4f9e0f.md` 是合并前那版）。
+- 验证：只有测试，属于替身通过。未在真实环境验证：真实 chatgpt.com 页面重载后最新一条提问能不能读到请求号、两张卡死的接力装机后会不会自己查清，要装机并重新加载插件 0.2.8 后看。
+- 截图：无界面改动，无。
+- 发布与回读：未装机。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 你要求的：送达未确认后自动查清。我顺手改的：无。
+  - 待常浩定：没找到之后，驿窗要不要主动通知发起会话「上一段查明没送到，请原样重送」，或者手里还有原文时由驿窗自己重发。现在只恢复状态、卡上记一步，会话不会自己知道，要常浩跟会话说一句。推荐通知会话。
+  - 已知代价（常浩已看过）：页面没画全时可能把在的看成不在，同一段送审发两遍。
+  - 驿窗重启后找到的那一轮，卡上的送审步骤只有摘录（原文没落盘），回信按摘录比对。
+  - 送审：#508 的 L2 已送（常浩 11-22 回「送审」，接力 `h1a2019f9b8302`），本 PR 的 L3 等它审完再送：同一个会话一次只挂一条审查。这个目录里有一条审到顶没了结的审查链 `r1a1fbaef0ca01`（#488），新送审要常浩先在会话里说一句。
+  - 主线：接力根治｜完成 7/16：✅ S1（#423）✅ 按提问编号认领（#437）✅ 全链路梳理 ✅ 第 0 批止血代码（#441、#451、#468）✅ 另外三处规则文字 ✅ 第 1 批只读探测（#487）✅ 第 1 批影子运行代码（#491）▶ 标签页失效自愈与 2 小时不再停（#507，PR #508 等审查）▶ 送达未确认后自动查清（本节，#509）⏳ #507、#509 实机验证（装机、重载插件 0.2.8）▶ 影子运行实测（11-22 09:53 起在记录）❓ 没找到之后通知会话还是驿窗自己重发 ❓ 半截回信并入读对话数据、何时切成正式读法 ❓ 补格式没送成怎么处理 ❓ #470 ❓ 第 2 批其余（回执序号与补发、会话查询工具 #442、已领取重投、转回按钮真重送、会话改绑，并 #431、#433 余下部分、#443、#444、#463）❓ 第 3 批分级恢复（并 #434）❓ 第 4 批体检与防回退；#432 排查单另算。
+  - skill 进化：无。
+- 本轮新坑：无。
+
 ## 接力：ChatGPT 标签页失效后发送和重读自己恢复；转回 Claude 后不再因 2 小时停下（#507）（2026-11-22，Claude，常浩说「出第 2 批计划，直到该问题彻底解决」，看两条改动确认后经 agent-hud 插件回「两条都改」；已提交、PR #508、第 8 轮审查后常浩定「先合并另开单」、P2-05 余下三处转 #518、PR #508 squash 合并、未装机）
 
 - 时间：开工 `2026-11-22 10:47`（`date '+%F %H:%M'` 记录）。来由：常浩要求彻底解决接力「中途停止、超时未读取」。对账本机 `handoffs.json`、`turns.jsonl` 和发起会话记录：11-20 17:02 装上第 0 批止血代码后的 41 次送审里，「30 分钟没回信」0 次；非规则要求的停下三类：送审没确认送到 3 次（两次插件回 `tab-closed`，一次 30 秒没答话，2 张接力卡到现在）、半截回信 1 次（之后同一标签页重读 128 次全是 `unreachable`）、「Claude 2 小时没交回复审」7 次（全是误报）。前两类同一个根因：标签页失效后插件不探活、不重载（L-68）。

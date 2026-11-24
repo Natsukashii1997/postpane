@@ -72,7 +72,13 @@ function setup(t) {
     promptPollMs: 60_000,
     answerPollMs: 5,
   });
+  // The plugin's timers are unref'd, as in the host they must not keep it
+  // alive; a test awaiting an answer only they bring has nothing else
+  // holding the event loop, and Node ends the file with the promise
+  // pending (2026-11-23, every run from then on). Kept alive till the end.
+  const alive = setInterval(() => {}, 1_000);
   t.after(() => {
+    clearInterval(alive);
     plugin.stop();
     fs.rmSync(channel, { recursive: true, force: true });
   });

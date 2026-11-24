@@ -575,3 +575,23 @@
 - 正确做法：侧栏上一闪而过的失败，原因同时用 `note!` 写进 `postpane.log`，`map_err(|_| 固定句子)` 之前先想清楚原因要不要留。查跳回失败：`grep "link did not open" postpane.log`；再用 `log show --predicate 'process == "open"'` 看那一刻有没有 `open` 起来、有没有 `Opening URL`。#517 起失败分「could not start / did not finish within 3s and was ended / exited with … / could not be waited for」几种写进日志。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-23-517-open-reason/`（红测输出、全量测试输出）；排查过程在 #517。
 - 升级：〔提醒〕未升级。和 L-67 同属「失败不留痕」，再出现第三次时提议在 `check-rules` 里查 `src/crates` 下面向用户的 `map_err(|_|` 固定句子。
+
+## L-72 判断「一段话送没送进去」只看最新一条提问：常浩在后面插一句，送到了的也被判成没送到；为了读最新内容去刷新活页面，会冲掉他没发的草稿（2026-11-23）
+
+- 现象：#510 第 1 轮 L3 审查指出，`find` 只读会话最新一条提问有没有请求号。送审其实送到了、之后常浩在同一会话里手动问了一句，页面画全、读两次都一样，照样报 `absent`，驿窗把同一段送审再发一遍。同一处为了读到最新内容，只看「没在生成」就重载标签页，常浩输入框里没发的话会丢。替身测试和真实 Chromium 测试都只造了「目标就是最新一条」「页面空闲」两种页面，全绿。另：写页面测试时 `page.evaluate(() => … prompt(7, …))` 里的 `prompt` 在浏览器里是 `window.prompt`，不报错，插进去的是 `null`。
+- 根因：把「最新的就是要找的」当成前提，没把用户自己也在用这个会话算进去（#507 的写作闸其实已经考虑过他会插话）；「判没有」比「判有」需要更强的证据，却用了同一套读法。刷新页面是一种新的动作授权，不能沿用「失效页面可以刷新」的结论。
+- 正确做法：
+  - 找一段话在不在，读会话里全部提问，按开头那一行精确匹配；判「不在」另要锚点证明历史读到了这段之前（上一轮已知送到的提问编号），锚点之后有读不到文字的提问就说不清；两条都匹配也说不清。
+  - 「读得到」要按内容算，不按节点在不在算（第 2 轮 P1-01）：还没画出来的提问（没有气泡、气泡是空的）同样可能就是要找的那段，不能先过滤掉再判「不在」。
+  - 刷新用户可能正在用的页面，检查和刷新放在页面里同一步做（`content.js` 的 `reload`）：没在生成、没草稿、没在改旧提问才刷新。草稿不只是输入框里的字（第 2 轮 P1-03）：待发的文件、图片看不到长什么样，就用「输入框空着、发送键却亮着」这个已在真实页面用过的信号（`submit`，#429），不去猜附件预览的 DOM。
+  - 测试里传给浏览器的 HTML 在 Node 侧拼好再当参数传，不在 `evaluate` 的函数体里引用 Node 侧的辅助函数。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`（`r1-red-host.log`、`r1-red-plugin.log`、`r1-red-chromium.log`）；回信 `replies/h1a207e54d6608-01-b7c08122.md`。
+- 升级：〔结构〕已升级（2026-11-23，#509）：`PostPanePage.marked` 读全部提问并要锚点，`reload` 由页面自己判断；真实 Chromium 测试守着「后面又有一条提问」「有草稿」两种页面。
+
+## L-73 被测代码的计时器都 `unref`，测试却在等只有这些计时器才会带来的结果：没有别的东西撑着事件循环，Node 提前结束文件，测试被取消（2026-11-23）
+
+- 现象：#510 第 2 轮返修跑全量时，「插件」一套在第 7～14 条报 `Promise resolution is still pending but the event loop has already resolved`（`cancelledByParent`），main `69f358a` 上一样，之后每次都这样；同一天早些时候全过，被测代码和 Node 版本都没变。
+- 根因：DeepSeek 插件的轮询计时器按设计 `unref`（宿主里不该被它们吊着不退出）。测试写完回答文件就 `await` 结果，而结果只有那个 `unref` 的轮询会带来；事件循环里没有别的 ref 句柄，Node 认为无事可做直接结束。之前能过，靠的是碰巧还有别的句柄没结束，属于时序巧合。
+- 正确做法：测试 `unref` 计时器驱动的逻辑时，测试自己挂一个 ref 的保活计时器，在 `t.after` 里清掉（`deepseek_plugin/agent-hud.test.mjs` 的 `setup`）。看到 `cancelledByParent` 加这句报错，先查被等的结果是不是只靠 `unref` 的句柄推进。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`（`r2-rerun-plugins-*.log` 修前 3 次失败，`r2-fix-plugins-*.log` 修后 3 次 14 条全过）。
+- 升级：〔文字〕未升级：只出现过一次，记在这里。

@@ -20,8 +20,12 @@
 use super::{excerpt, key, notice::Cause, Book, Handoff, Phase, Status, Step, StepKind, EXCERPT};
 use serde::{Deserialize, Serialize};
 
+#[path = "book_finding.rs"]
+mod finding;
 #[path = "book_mending.rs"]
 mod mending;
+#[cfg(test)]
+pub use finding::{FIND_AFTER_MS, FIND_EVERY_MS};
 pub use mending::Word;
 
 const TAG_OPEN: &str = "【驿窗送审 ";
@@ -75,12 +79,19 @@ pub struct Pending {
     /// many restarts find them (#507).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restarted: bool,
+    /// When they were last looked for in the conversation, and how often,
+    /// in this run (#509).
+    #[serde(skip)]
+    pub looked: (i64, u32),
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
     /// What was unsure before these were asked: put back when send was
-    /// never pressed for them (#466). Not kept.
-    #[serde(skip)]
+    /// never pressed for them (#466), or a look finds they did not go
+    /// (#509). Kept across restarts (#509 round 1 P1-04): an earlier
+    /// review answered and never known to have gone in sits here, and lost,
+    /// its answer could pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<Box<Pending>>,
 }
 

@@ -106,6 +106,8 @@ pub(crate) trait Lines {
     /// Asks the extension to tell `conversation`'s newest reply again, once
     /// written (#356); it comes back, if at all, as a turn (`observe`).
     fn reread(&self, conversation: &str) -> Result<(), String>;
+    /// Asks whether the words sent as `request` are in `conversation` (#509).
+    fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String>;
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):
@@ -1119,6 +1121,7 @@ impl Desk {
                 bound
             }
             (Some("reread"), _) => self.heard_reread(message, now),
+            (Some("found"), _) => self.heard_found(message, now),
             _ => false,
         }
     }

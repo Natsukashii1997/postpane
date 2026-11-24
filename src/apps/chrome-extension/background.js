@@ -78,6 +78,12 @@ async function onHost(message) {
     case "reread":
       await reread(message.conversation);
       break;
+    case "find": {
+      const { conversation, request, after } = message;
+      const found = await find(conversation, request, after);
+      post({ type: "found", conversation, request, ...found });
+      break;
+    }
   }
 }
 
@@ -528,6 +534,90 @@ async function readAgain(conversation) {
 /** How long a read has to get to a tab that shows the conversation. */
 const REACH_BY = 45000;
 const ASK_BY = 10000;
+
+/** Whether the words sent as `request` are in `conversation` (#509):
+ * PostPane heard no word that they went in. A tab that shows the
+ * conversation is found as for sending (`reach`), and loaded again unless
+ * it just was, or was made, so it shows what ChatGPT has; then every prompt
+ * it holds is read, not only the newest (round 1 P1-01): the words begin
+ * with a line naming their request.
+ * - `{outcome: "there", promptId}`: one prompt begins so, with ChatGPT's id
+ *   for it when the page has one (P1-02);
+ * - "absent": read twice a moment apart, none does, the page holds prompt
+ *   `after` (the last PostPane knows went in, so the history reaches back
+ *   past the words), every prompt after it shows its words, and no answer
+ *   is being written. Without `after` known, never absent;
+ * - "unread": it cannot be told (no tab to read, the page not loaded or
+ *   not drawn, two prompts naming the request, an answer on its way).
+ * Words not known to have gone in often did, and their answer is being
+ * written: a page is loaded again only when it says, at that moment, that
+ * it shows the conversation, writes nothing and holds no words of
+ * Changhao's in hand (#507 review P1-01, #509 round 1 P1-03). Any other is
+ * left as it is: "unread", and PostPane looks again later. */
+async function find(conversation, request, after) {
+  const unread = { outcome: "unread" };
+  if (!watched.has(conversation)) return unread;
+  const at = await reach(conversation, Date.now() + REACH_BY);
+  if (at.tabId === undefined) return unread;
+  const { tabId } = at;
+  const ask = () =>
+    by(Date.now() + ASK_BY, () =>
+      chrome.tabs.sendMessage(tabId, {
+        op: "asked",
+        conversation,
+        request,
+        after,
+      }),
+    ).then((said) => (said === true ? null : said));
+  if (!at.reloaded && !at.made) {
+    const again = await loadIdle(tabId, conversation, Date.now() + REACH_BY);
+    if (!again) return unread;
+  }
+  const pause = () =>
+    new Promise((resolve) => setTimeout(resolve, REREAD_PAUSE));
+  let first = await ask();
+  for (
+    let tries = 0;
+    first && first.loaded === false && tries < REREAD_TRIES;
+    tries++
+  ) {
+    await pause();
+    first = await ask();
+  }
+  const there = (said) =>
+    said?.loaded && said.there && !said.twice
+      ? { outcome: "there", promptId: said.promptId ?? null }
+      : null;
+  if (!first?.loaded || first.twice) return unread;
+  if (there(first)) return there(first);
+  await pause();
+  const second = await ask();
+  if (second?.twice) return unread;
+  if (there(second)) return there(second);
+  const sure = (said) =>
+    !!after &&
+    said?.loaded &&
+    said.anchored &&
+    !said.unreadable &&
+    !said.streaming;
+  return sure(first) && sure(second) ? { outcome: "absent" } : unread;
+}
+
+/** Loads tab `tabId` again to look (#509 round 1 P1-03): its page does it
+ * itself, only when it shows `conversation`, writes nothing and holds no
+ * draft (`reload`). Whether its new page reported, showing the
+ * conversation, by `until`. A page that would not, or says nothing (gone
+ * as it loads, or hung), is waited for as one loading. */
+async function loadIdle(tabId, conversation, until) {
+  pages.delete(tabId);
+  const said = await by(until, () =>
+    chrome.tabs.sendMessage(tabId, { op: "reload", conversation }),
+  );
+  if (said === false) return false;
+  const loaded = (p) => p.conversation === conversation;
+  const page = await ready(tabId, until - Date.now(), loaded);
+  return !!page && Date.now() < until;
+}
 
 /** What a read's answer comes to: told, or why not. */
 function outcomeOf(answer, told) {

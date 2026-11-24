@@ -283,8 +283,8 @@ impl Shared {
             }
             // Heard as well, so words that arrive after the wait for them
             // gave up still count (#223); what a read again found (#457).
-            Some(kind @ ("sent" | "reread")) => {
-                let ok = kind == "reread" || message["ok"] == true;
+            Some(kind @ ("sent" | "reread" | "found")) => {
+                let ok = kind != "sent" || message["ok"] == true;
                 answer(&mut state, message.clone());
                 drop(state);
                 if ok {
