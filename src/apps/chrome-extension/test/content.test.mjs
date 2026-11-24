@@ -984,3 +984,81 @@ test("an answer held only in the hidden copy is not told, and the page scrolls t
     0,
   );
 });
+
+// #526 (owner 2026-11-24 「12改」): an answer stopped before a word of it
+// was written ends no turn PostPane hears of, and held words back 30
+// minutes. Read twice 2 s apart, nothing after the newest prompt but an
+// empty placeholder or nothing at all, the page tells it stopped.
+const stoppedEmpty = (placeholder) => async () => {
+  const page = await open(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    const turn = document.createElement("div");
+    turn.innerHTML =
+      '<div data-user-message-bubble="true">我自己问的，然后点了停止</div>';
+    document.querySelector("main").append(turn);
+  });
+  await page.evaluate((placeholder) => {
+    if (placeholder)
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          '<div data-chatgpt-search-unit-key="x:9:assistant" data-chatgpt-search-message-ids="m9"><h6 class="sr-only">ChatGPT 说：</h6><p data-d-component="text"></p></div>',
+        );
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  }, placeholder);
+  const stopped = async () =>
+    (await turns(page)).filter((m) => m.phase === "stopped");
+  await page.waitForTimeout(1500);
+  assert.equal((await stopped()).length, 0, "not on one read");
+  await page.waitForTimeout(2500);
+  const told = await stopped();
+  assert.equal(told.length, 1, JSON.stringify(told));
+  const start = (await turns(page)).find((m) => m.phase === "start");
+  assert.equal(told[0].promptId, start?.promptId ?? null, "the turn it began");
+  assert.equal(
+    (await turns(page)).filter((m) => m.phase === "complete").length,
+    0,
+  );
+};
+test(
+  "an answer stopped before a word of it is told stopped",
+  stoppedEmpty(false),
+);
+test(
+  "an answer stopped on an empty placeholder is told stopped",
+  stoppedEmpty(true),
+);
+
+test("an answer written within the second read is not told stopped", async () => {
+  const page = await open(() => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    const turn = document.createElement("div");
+    turn.innerHTML = '<div data-user-message-bubble="true">再问一句</div>';
+    document.querySelector("main").append(turn);
+  });
+  await page.evaluate(async () => {
+    const slot = document.getElementById("slot");
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:9:assistant" data-chatgpt-search-message-ids="m9"><h6 class="sr-only">ChatGPT 说：</h6><p data-d-component="text"></p></div>',
+      );
+    await new Promise((r) => setTimeout(r, 1200));
+    document.querySelector(
+      '[data-chatgpt-search-message-ids="m9"] p',
+    ).textContent = "写出来了";
+  });
+  await page.waitForTimeout(3500);
+  const phases = (await turns(page)).map((m) => m.phase);
+  assert.ok(!phases.includes("stopped"), JSON.stringify(phases));
+});

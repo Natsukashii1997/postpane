@@ -52,6 +52,8 @@
         : answeredPrompt();
   // The prompt the last beginning named (null: not known yet), and when it
   // was told.
+  // How far apart the two reads of an answer stopped empty are (#526).
+  const STOP_AGAIN = 2000;
   let begun = null;
   let begunAt = 0;
   let timer = null;
@@ -110,6 +112,41 @@
     });
   }
 
+  /** Nothing written after the newest prompt, the page not writing: no
+   * reply after it, or only an empty placeholder (#526, G-36). */
+  function unwritten() {
+    if (page.streaming(document)) return false;
+    return (
+      !page.answered(document) || !page.lastReply(document)?.markdown.trim()
+    );
+  }
+
+  /** The stop button went away on the answer to `prompt`: read twice,
+   * `STOP_AGAIN` apart, with nothing written and the same newest prompt,
+   * the answer was stopped before a word of it (#526, owner 2026-11-24).
+   * Told so, PostPane holds no words back for it; nothing else hears it. */
+  function watchStop(prompt) {
+    const newest = page.lastPromptId(document);
+    const same = () =>
+      !stopped &&
+      !wasStreaming &&
+      unwritten() &&
+      page.lastPromptId(document) === newest;
+    setTimeout(() => {
+      if (!same()) return;
+      setTimeout(() => {
+        if (!same()) return;
+        tell({
+          type: "turn",
+          phase: "stopped",
+          conversation,
+          promptId: prompt,
+          at: Date.now(),
+        });
+      }, STOP_AGAIN);
+    }, 600);
+  }
+
   function settle() {
     if (stopped) return;
     const now = page.conversationId(location.href);
@@ -139,6 +176,8 @@
       expecting &&
       !streaming &&
       (page.lastReply(document)?.messageId ?? null) !== reported;
+    // Stopped before a word was written (#526): no end comes of it.
+    if (!streaming && wasStreaming) watchStop(begun);
     if (!streaming && (wasStreaming || fresh)) {
       const seen = page.lastReply(document)?.markdown;
       // The last chunk may still be rendering when the stop button goes away.

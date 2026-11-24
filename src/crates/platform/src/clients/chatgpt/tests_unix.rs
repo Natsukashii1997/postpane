@@ -1,5 +1,6 @@
 //! The channel over a real socket, with a test standing in for the extension.
 use super::super::*;
+use agent_hud_agents::HookEvent;
 use std::os::unix::net::UnixStream;
 
 /// `Channel::start` makes itself the one channel `focus` and `reread` ask
