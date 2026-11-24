@@ -2,6 +2,25 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力审核门：经代理回读 PR 提交失败时直连再读一次（#527）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 13 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-24 13:22`（`date '+%F %H:%M'` 记录）。来由：11-23 夜里本机代理 127.0.0.1:8086 坏了，驿窗按通过结束前回读 PR 提交失败，#510 第 3 轮通过被记「版本待核」、多跑一轮。
+- 改变的行为（动手前已在会话里列出）：原来回读失败就记「版本待核」、停下交常浩；现在第一次失败（PR 不存在除外）去掉代理、直连 GitHub 再读一次，两次都失败才记「版本待核」，原因把两次的都写上；日志记哪一次成的、各自失败原因。第一次仍按原来的环境读（直连可能被 DNS 污染，G-19）。审核门的判断规则不变。
+- 你要求的：
+  - `gate/desk_pr_head.rs`（新）：回读从 `gate/desk.rs` 整段挪来，加 `with_fallback`、`args`（直连时加 `-c http.proxy= -c https.proxy=`）、`PROXY_VARS`（直连时去掉的 6 个环境变量）；5 条单测。`gate/desk.rs` 声明这个模块并转出 `read_pr_head`，调用方不变。
+  - 文档：`docs/chatgpt-channel.md` 审核门一句；`docs/DECIDED.md` 一行。
+- 我顺手改的：#528 加的 `MEND_AGAIN_MS` 导出在正式构建里报「没用到的导入」警告（我上一张留下的），改成只在测试里导出（`book.rs`、`sending/book_unsure.rs`，行数不变）。
+- 同类：驿窗里另外的联网读取（额度、云端会话）不走 `git ls-remote`，不在这张范围；没有别处读 PR 提交。
+- 测试：
+  - 新测试先红后绿：先只挪代码、不加兜底，`test result: FAILED. 2 passed; 3 failed`（`red.txt`；没失败的两条守的是「一次成功就不再读」「PR 不存在不再读」）；实现后接力模块 `test result: ok. 231 passed; 0 failed`（`green.txt`）；正式构建 `cargo build -p agent-hud-host` 无警告。
+  - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1158 passed（1153 + 5），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-24-527-head-direct/`。
+- 验证：真实环境里分别跑了两种读法（`real-ls-remote.txt`）：当时本机代理又坏了，原来那种读法报 `LibreSSL SSL_connect: SSL_ERROR_SYSCALL`，直连读法读回 `c093ef69…`，和 PR #530 实际的提交一致。驿窗进程里走这一路的那一下没实测（要等一次真实的通过回信）。
+- 截图：无界面改动。
+- 发布与回读：`install.sh 527-head-direct`（本分支从含 #528 的 `360b5ae` 拉出，这一包同时带上 #528；装前是 #524 的包 `64081b80fd41`）：产物 `78a4d93b488a` / 已装 `78a4d93b488a`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 471 个像素不同。装前装后 1.08% 像素不同：重启后另一个会话等回答的提问小签弹出来了（装前收成角标「3」），属正常显示，和本次改动无关（`smoke-before-after-1.png`）。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-24-527-head-direct/PostPane-64081b80fd41.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：无。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 接力：驿窗自己发的补格式没点发送时也算没送成，过 30 秒再补一次（#528）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 6 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-24 13:14`（`date '+%F %H:%M'` 记录）。来由：#466（11-20）只把「没点发送算没送成」用在会话发起的送审上，补格式当时写明「等常浩定」，一直挂在主线 ❓。拍板清单第 6 项推荐「照送审一样：没点发送按没送成恢复，可重送」，常浩回「全按推荐」。核对过：这一块当时是待定，不是已定内容，没发改动确认。

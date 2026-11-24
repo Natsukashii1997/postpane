@@ -7,10 +7,10 @@ use super::texts::Sent;
 use super::{Desk, Lines};
 use crate::handoff::book::{self, Handoff};
 use agent_hud_runtime::{chatgpt::SendFailed, l10n};
-use std::time::Duration;
 
-/// How long reading a pull request's current commit may take.
-const READ_HEAD_WAIT: Duration = Duration::from_secs(20);
+#[path = "desk_pr_head.rs"]
+mod pr_head;
+pub(super) use pr_head::read_pr_head;
 
 impl Desk {
     /// Whether words may go into `id`'s `conversation` now, else why not:
@@ -171,59 +171,6 @@ impl Desk {
             Err(error) => held(unread_head(pr, &error), false),
         }
     }
-}
-
-/// A pull request's current commit, 「owner/repo#n」, as GitHub has it:
-/// `git ls-remote`, with the person's own git credentials.
-pub(super) fn read_pr_head(pr: &str) -> Result<String, String> {
-    use std::process::{Command, Stdio};
-    let (repo, number) = pr.split_once('#').ok_or("不是 PR")?;
-    let url = format!("https://github.com/{repo}.git");
-    let reference = format!("refs/pull/{number}/head");
-    // Never asks anyone for credentials: what git has, or it fails.
-    let mut child = Command::new("/usr/bin/git")
-        .args([
-            "-c",
-            "credential.interactive=never",
-            "ls-remote",
-            &url,
-            &reference,
-        ])
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "/usr/bin/false")
-        .env("SSH_ASKPASS", "/usr/bin/false")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    let deadline = std::time::Instant::now() + READ_HEAD_WAIT;
-    while child.try_wait().map_err(|e| e.to_string())?.is_none() {
-        if std::time::Instant::now() > deadline {
-            // Ended, not left behind (#347 review P2-03).
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("读取超时".to_owned());
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        return Err(error
-            .lines()
-            .next()
-            .unwrap_or("git ls-remote 失败")
-            .to_owned());
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .next()
-        .filter(|commit| commit.len() == 40)
-        .map(str::to_owned)
-        .ok_or_else(|| "没找到这个 PR".to_owned())
 }
 
 /// What PostPane asks ChatGPT when an answer's last lines do not hold.

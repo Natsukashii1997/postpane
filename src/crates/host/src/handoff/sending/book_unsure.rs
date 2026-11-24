@@ -24,10 +24,13 @@ use serde::{Deserialize, Serialize};
 mod finding;
 #[path = "book_mending.rs"]
 mod mending;
-pub use finding::FIND_MOST;
 #[cfg(test)]
-pub use finding::{FIND_AFTER_MS, FIND_EVERY_MS};
-pub use mending::{Word, MEND_AGAIN_MS};
+pub use self::{
+    finding::{FIND_AFTER_MS, FIND_EVERY_MS},
+    mending::MEND_AGAIN_MS,
+};
+pub use finding::FIND_MOST;
+pub use mending::Word;
 
 const TAG_OPEN: &str = "【驿窗送审 ";
 const TAG_CLOSE: &str = "】";
