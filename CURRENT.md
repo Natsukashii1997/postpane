@@ -27,10 +27,17 @@
   - 已改：刘海回弹 0.32 → 0.26 秒（`NOTCH_GEOMETRY`，侧栏外框仍 0.32）；托盘甩动另要这次手势至少滑过 12 点才看速度（`FLICK_TRAVEL`）；「收起」时退出中的行不再接点击。各补一条测试。
   - 不改并说明：票根读数「高频时跳过动画」——读数随快照变，几秒到几分钟一次，且已用等宽数字；「交叉淡时交互归属」——侧栏三种视图、小签退出时已 `pointerEvents: none`，设置切页是同一节点淡入，不叠放。
   - 转单 #538：加载反馈 300ms 后才出现、出错回执不自动消失、回执文案统一；减少动态效果分两级。
-  - 交常浩：挂件摆回 0.4 秒（常浩已批）GPT 建议 0.18–0.22 秒，没改，在会话里问。
+  - 交常浩：挂件摆回 0.4 秒（常浩已批）GPT 建议 0.18–0.22 秒，没改，在会话里问；常浩回「保持 0.4 秒」。
+- GPT 方案顾问第 2 轮（受审 `d8b26f4`）：「审查出口：通过」，接力结束。非阻断意见处理：
+  - 退出中的行键盘还能聚焦：已改，`FoldRow` 退出时 `inert`（`useIsPresent`）。侧栏三种视图、小签退出时没加 `inert`，只有 `pointerEvents: none`，退场只有 140ms，留作代码审查看。
+  - 挂件回位要先快后慢、不二次摆动、半路再移入能接上：回位动画改成叠加在摇晃上（`composite: "add"`）。无头 Chromium 逐帧（`pendant-settle.txt`）：移开时 4.2° → 3.4° → 2.8° → … 衰减；回位途中再移入，角度继续减到 0 再自然接上新一轮摇晃，没有跳变。扫帚那一路测试页没带上它的规则，没测到。
+  - 减少动态效果下循环停在哪：0.01ms、只跑一次后元素回到自身样式，项目里这些循环的静止样式就是 100% 关键帧那一帧；重新挂载会重跑一次 0.01ms，看不出来。
+  - 「动画」开关作用范围：现在只管侧栏，三个窗口只看系统设置；补进 #538 评论，由那张定。
+  - 票根读数位数变化：读数那一格左右用绝对定位固定，内容居中，位数变不推动别的东西。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
-  - `pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
+  - 最终一版：`pnpm run check` 原样 `check exit 0`（`check-5.txt`）；`pnpm test`（`test-7.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 534`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
+  - 之前一版：`pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
 - 验证（替身通过，环境是无头 Chromium + 场景预览台 1480 改前 / 1481 改后，设置页开发服务 1420，数据目录用证据目录里的假数据）：
   - 「展开 / 收起」逐帧（`fold/fold-trace-1480.txt` 改前：点「收起」第一帧按钮从 953 跳到 654、纸还 1089，之后空纸缩；`fold-trace-1481.txt` 改后：末尾 4 行约 140ms 淡到 0，高度和纸一起从 1089 收到 790，按钮跟着纸走）。
   - 设置开关逐帧（`settings/switch-trace.txt`：墨块 0% → 52% → 80% → 93% → … → 100%，约 120ms）；按钮按住时 `translate: 0px 1px`、`scale 0.98`。

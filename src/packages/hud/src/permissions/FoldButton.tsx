@@ -5,7 +5,12 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { AnimatePresence, motion, type Variants } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useIsPresent,
+  type Variants,
+} from "motion/react";
 import { EASE_OUT, GEOMETRY, MOTION } from "@agent-hud/ui/lib/motion";
 import { cardFolds } from "../panel/fold-store";
 import { GRID } from "../panel/theme";
@@ -99,8 +104,11 @@ export function FoldList<T>({
 /** One row of a `FoldRows` list; give it the row's key. */
 export function FoldRow({ children }: { children: ReactNode }) {
   const moving = useContext(Moving);
+  // Leaving, it is out of the keyboard's reach too, not only the pointer's.
+  const present = useIsPresent();
   return (
     <motion.div
+      inert={!present}
       custom={moving}
       variants={ROW}
       initial={moving ? "shut" : false}

@@ -16,4 +16,6 @@ test("a pendant let go mid-swing eases back upright instead of snapping", () => 
     /onPointerLeave=\{\(\) => \{\s*if \(!still\) settle\(root\.current\);/,
   );
   assert.match(shell, /const SWINGS = "\.hud-pendant-sway, \.hud-disk-broom";/);
+  // Added onto the swing, so a pointer back mid-way picks it up from there.
+  assert.match(shell, /composite: "add"/);
 });

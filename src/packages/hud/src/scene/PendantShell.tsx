@@ -9,7 +9,9 @@ const SWINGS = ".hud-pendant-sway, .hud-disk-broom";
 const SETTLE_MS = 400;
 
 /** Before the swing stops, take each swinging part from where it is now back
- * to rest, so the leave reads as the pendant coming to a stop. */
+ * to rest, so the leave reads as the pendant coming to a stop: quick at first,
+ * then easing in, with no second swing. It adds onto the swing rather than
+ * replacing it, so a pointer back mid-way picks the swing up from there. */
 function settle(root: HTMLElement | null) {
   for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? []) {
     const from = getComputedStyle(part).transform;
@@ -17,6 +19,7 @@ function settle(root: HTMLElement | null) {
     part.animate([{ transform: from }, { transform: "none" }], {
       duration: SETTLE_MS,
       easing: cssCurve(EASE_OUT),
+      composite: "add",
     });
   }
 }

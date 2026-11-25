@@ -104,4 +104,9 @@ test("rows a fold takes away stop taking clicks while they fade", () => {
   const fold = read("permissions/FoldButton.tsx");
   const shut = fold.slice(fold.indexOf("shut:"), fold.indexOf("open:"));
   assert.equal(shut.match(/pointerEvents: "none"/g)?.length, 2);
+  // Nor the keyboard: a leaving row is inert until it is gone.
+  assert.match(
+    fold,
+    /const present = useIsPresent\(\);\s*return \(\s*<motion\.div\s+inert=\{!present\}/,
+  );
 });
