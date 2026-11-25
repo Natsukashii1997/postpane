@@ -381,3 +381,47 @@ fn silent_or_undrawn_reads_stop_once_and_late_answers_still_arrive() {
         assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
     }
 }
+
+// #432: the saved page probe saw round two start with round one's title.
+// The rest of that page prompt was not kept; its incompatible prefix alone
+// is enough to refuse the reply. Never salvage it by searching for a suffix.
+#[test]
+fn a_historical_second_prompt_starting_with_round_one_is_not_the_review() {
+    let sample: Value = serde_json::from_str(include_str!(
+        "../../../../../fixtures/chatgpt-432-prompts.json"
+    ))
+    .unwrap();
+    let second = sample["secondRoundTitle"].as_str().unwrap();
+    let old_head = sample["observedSecondRoundHead"].as_str().unwrap();
+    assert!(sample["firstRoundTitle"]
+        .as_str()
+        .unwrap()
+        .starts_with(old_head));
+    let complete = |prompt: &str, id: &str| {
+        json!({"type":"turn", "phase":"complete", "conversation":"c-new",
+            "messageId":id, "prompt":prompt, "reply":"审查出口：返修\n结论：需修改"})
+    };
+    for tail in [String::new(), "后续说明。".repeat(140)] {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let brief = format!("{second}\n{tail}");
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "提问比对", None, &brief, false, 1)
+            .unwrap()
+        else {
+            panic!("新接力应打开会话")
+        };
+        desk.open(&lines, &handoff.id, &brief, None, || 2).unwrap();
+        // The observed head, and a constructed old+new paste, both fail.
+        for prompt in [old_head.to_owned(), format!("{old_head}\n{brief}")] {
+            assert!(!desk.observe(&complete(&prompt, "old-prefix"), 3));
+            assert_eq!(
+                desk.lock().get(&handoff.id).unwrap().phase,
+                Phase::Delivered
+            );
+        }
+        assert!(!desk.observe(&complete("顺便问一下，周末天气怎么样？", "personal"), 4));
+        assert!(desk.observe(&complete(&brief, "right-review"), 5));
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
+    }
+}
