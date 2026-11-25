@@ -50,7 +50,7 @@ export function SourceIndexing({
             width: `${text.fraction * 100}%`,
             borderRadius: 4,
             background: colors.accent,
-            transition: "width 600ms ease-out",
+            transition: "width var(--motion-data) var(--ease-out)",
           }}
         />
       </span>

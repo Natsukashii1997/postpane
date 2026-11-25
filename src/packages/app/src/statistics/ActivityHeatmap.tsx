@@ -3,6 +3,7 @@ import { Tooltip } from "radix-ui";
 import { Card } from "@agent-hud/ui/components/card";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { hourModels } from "../lib/statistics";
+import { moves } from "../lib/Motion";
 import type { StatisticsHeatmap, StatisticsResponse } from "../lib/types";
 import {
   card,
@@ -67,7 +68,7 @@ function HeatmapRow({
                     : "transparent",
                   border: known ? 0 : "1px dashed currentColor",
                   opacity: known ? 1 : 0.2,
-                  transition: "background-color 220ms ease, opacity 220ms ease",
+                  transition: moves("quick", "background-color", "opacity"),
                 }}
               />
             </Tooltip.Trigger>
@@ -79,7 +80,7 @@ function HeatmapRow({
                 side="top"
                 sideOffset={8}
                 collisionPadding={8}
-                className="statistics-heatmap-details animate-in fade-in-0"
+                className="statistics-heatmap-details"
                 style={{
                   ...raisedCard(theme),
                   minWidth: 180,

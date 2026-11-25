@@ -6,6 +6,8 @@ import {
   type ReactNode,
 } from "react";
 import type { IndexingText } from "@agent-hud/ui/text/indexing";
+import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
+import { dataProgress, moves, scaledFill } from "../lib/moves";
 import type {
   StatisticsCost,
   StatisticsCoverage,
@@ -281,10 +283,9 @@ export function IndexingProgress({
             position: "absolute",
             inset: "0 auto 0 0",
             display: "block",
-            width: `${text.fraction * 100}%`,
+            ...scaledFill(text.fraction),
             borderRadius: 0,
             background: theme.light ? "#007aff" : "#0a84ff",
-            transition: "width 600ms ease-out",
           }}
         />
       </span>
@@ -395,8 +396,8 @@ export function ModelBar({
             flex: `${total > 0 ? model.selectedTokens / total : 0} 1 0`,
             minWidth: 0,
             background: modelColor(model.id, theme),
-            transition:
-              "flex-grow 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease",
+            // Segments share one track: scaling one would not move the rest.
+            transition: `${moves("data", "flex-grow")}, ${moves("quick", "background-color")}`,
           }}
         />
       ))}
@@ -404,7 +405,7 @@ export function ModelBar({
   );
 }
 
-export function useAnimatedNumber(target: number, duration = 220): number {
+export function useAnimatedNumber(target: number): number {
   const [current, setCurrent] = useState(target);
   const currentRef = useRef(target);
   const targetRef = useRef(target);
@@ -423,10 +424,7 @@ export function useAnimatedNumber(target: number, duration = 220): number {
       setCurrent(target);
       return;
     }
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (systemReducesMotion()) {
       currentRef.current = target;
       setCurrent(target);
       return;
@@ -434,10 +432,8 @@ export function useAnimatedNumber(target: number, duration = 220): number {
     const start = performance.now();
     let frame = 0;
     const step = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(1, Math.max(0, elapsed / duration));
-      const eased = 1 - Math.pow(1 - t, 3);
-      const next = from + (target - from) * eased;
+      const { t, share } = dataProgress(start, now);
+      const next = from + (target - from) * share;
       currentRef.current = next;
       setCurrent(t >= 1 ? target : Math.round(next));
       if (t < 1) {
@@ -446,7 +442,7 @@ export function useAnimatedNumber(target: number, duration = 220): number {
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [target, duration]);
+  }, [target]);
 
   return current;
 }

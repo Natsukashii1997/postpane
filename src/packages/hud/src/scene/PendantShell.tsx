@@ -1,5 +1,25 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { EASE_OUT, cssCurve } from "@agent-hud/ui/lib/motion";
 import type { PendantLayout, PendantRect } from "../app-pendant";
+
+/** What swings under the pointer: the cord and ball, and 磁盘瘦身's broom. */
+const SWINGS = ".hud-pendant-sway, .hud-disk-broom";
+/** The pointer leaves mid-swing: it eases back upright over this long
+ * instead of snapping from up to 13° (2026-11-25, owner chose 改). */
+const SETTLE_MS = 400;
+
+/** Before the swing stops, take each swinging part from where it is now back
+ * to rest, so the leave reads as the pendant coming to a stop. */
+function settle(root: HTMLElement | null) {
+  for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? []) {
+    const from = getComputedStyle(part).transform;
+    if (from === "none" || from === "") continue;
+    part.animate([{ transform: from }, { transform: "none" }], {
+      duration: SETTLE_MS,
+      easing: cssCurve(EASE_OUT),
+    });
+  }
+}
 
 const SHADOW =
   "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))";
@@ -40,6 +60,10 @@ export function PendantShell({
   children: ReactNode;
 }) {
   const { frame, horizontal, reversed, cord, ball } = layout;
+  // Under the pointer, kept by hand rather than :hover so a leave can read
+  // the swing's angle before it stops.
+  const [hover, setHover] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   const cordColor = light ? "rgba(42,41,37,.5)" : "rgba(236,231,220,.5)";
   // Along the top or bottom the cord meets the ball at its middle.
   const cordStyle: CSSProperties = horizontal
@@ -109,10 +133,17 @@ export function PendantShell({
   );
   return (
     <div
+      ref={root}
       className="hud-app-pendant"
       data-app={app}
       data-motion={still ? "still" : "on"}
+      data-hover={hover}
       data-open={open}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => {
+        if (!still) settle(root.current);
+        setHover(false);
+      }}
       {...dataAttributes}
       style={{
         position: "absolute",

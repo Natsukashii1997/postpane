@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { HUD_METRICS } from "../model";
 import {
   arcPath,
   isWholeRing,
@@ -9,6 +8,7 @@ import {
   type UsageArc,
 } from "./arcs";
 import type { RingItem } from "./mark-windows";
+import { EASE_OUT, MOTION_MS, eased } from "@agent-hud/ui/lib/motion";
 
 export type { RingItem } from "./mark-windows";
 
@@ -68,7 +68,9 @@ export function UsageRing({
             key={i}
             style={{
               opacity: highlight == null || highlight === i ? 1 : 0.28,
-              transition: reduceMotion ? undefined : "opacity 0.18s",
+              transition: reduceMotion
+                ? undefined
+                : "opacity var(--motion-quick) var(--ease-out)",
             }}
           >
             <g opacity={arc.opacity}>
@@ -134,11 +136,11 @@ function useTween(target: Drawn[], reduceMotion: boolean): Drawn[] {
       },
     );
     const began = performance.now(),
-      duration = HUD_METRICS.duration * 1000;
+      duration = MOTION_MS.data;
     let raf = 0;
     const step = (now: number) => {
       const t = Math.min(1, (now - began) / duration),
-        e = ease(t);
+        e = eased(EASE_OUT, t);
       const drawn = pairs.map(({ a, b }) => ({
         radius: mix(a.radius, b.radius, e),
         width: mix(a.width, b.width, e),
@@ -162,19 +164,3 @@ function useTween(target: Drawn[], reduceMotion: boolean): Drawn[] {
 }
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
-
-/** HUD_METRICS.ease, the cubic Bézier every HUD transition follows. */
-function ease(t: number): number {
-  const [x1, y1, x2, y2] = HUD_METRICS.ease;
-  const bez = (p1: number, p2: number, s: number) =>
-    3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
-  let lo = 0,
-    hi = 1,
-    s = t;
-  for (let i = 0; i < 20; i++) {
-    s = (lo + hi) / 2;
-    if (bez(x1, x2, s) < t) lo = s;
-    else hi = s;
-  }
-  return bez(y1, y2, s);
-}

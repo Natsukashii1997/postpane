@@ -10,10 +10,17 @@ export interface FoldStore {
   use(key: string | undefined): [boolean, () => void];
   /** Folds every list back. */
   reset(): void;
+  /** A list was opened or folded just now: rows it brings or takes move,
+   * where rows that come and go for any other reason just appear or go. */
+  moving(): boolean;
 }
+
+/** Long enough for a fold's rows to start moving on the renders it causes. */
+const MOVING_MS = 600;
 
 export function foldStore(): FoldStore {
   const open = new Set<string>();
+  let toggledAt = Number.NEGATIVE_INFINITY;
   const listeners = new Set<() => void>();
   const changed = () => listeners.forEach((listener) => listener());
   const subscribe = (listener: () => void) => {
@@ -27,6 +34,7 @@ export function foldStore(): FoldStore {
       const toggle = () => {
         if (!key) return;
         if (!open.delete(key)) open.add(key);
+        toggledAt = Date.now();
         changed();
       };
       return [isOpen, toggle];
@@ -36,6 +44,7 @@ export function foldStore(): FoldStore {
       open.clear();
       changed();
     },
+    moving: () => Date.now() - toggledAt < MOVING_MS,
   };
 }
 

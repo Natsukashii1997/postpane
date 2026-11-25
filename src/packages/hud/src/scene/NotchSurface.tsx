@@ -6,10 +6,10 @@ import {
   useMotionValueEvent,
   useTransform,
 } from "motion/react";
+import { GEOMETRY } from "@agent-hud/ui/lib/motion";
 import HUDGlow, { type GlowAlert } from "../HUDGlow";
 import { islandPath, type HUDRect } from "../geometry";
 import {
-  HUD_METRICS,
   statusColor,
   type HUDConfig,
   type HUDEdge,
@@ -68,7 +68,8 @@ export function Silhouette({
         initial={initialShape ? { d: from } : false}
         animate={{ d: path }}
         exit={{ d: from }}
-        transition={{ duration, ease: HUD_METRICS.ease }}
+        // In step with the card around it, which springs (HUDExpandedSurface).
+        transition={duration === 0 ? { duration: 0 } : GEOMETRY}
         fill={fill}
         stroke={outline}
         strokeWidth={0.7}
@@ -100,27 +101,17 @@ export function useNotchGeometry(
       corner.set(radius);
       return;
     }
-    const origin = {
-      x: x.get(),
-      y: y.get(),
-      width: width.get(),
-      height: height.get(),
-      flare: shoulder.get(),
-      radius: corner.get(),
-    };
-    const tween = animate(0, 1, {
-      duration: HUD_METRICS.duration,
-      ease: HUD_METRICS.ease,
-      onUpdate: (progress) => {
-        x.set(origin.x + (frame.x - origin.x) * progress);
-        y.set(origin.y + (frame.y - origin.y) * progress);
-        width.set(origin.width + (frame.width - origin.width) * progress);
-        height.set(origin.height + (frame.height - origin.height) * progress);
-        shoulder.set(origin.flare + (flare - origin.flare) * progress);
-        corner.set(origin.radius + (radius - origin.radius) * progress);
-      },
-    });
-    return () => tween.stop();
+    // Each value springs from where it is at the speed it has, so turning
+    // the notch back halfway carries on instead of starting again from rest.
+    const moves = [
+      animate(x, frame.x, GEOMETRY),
+      animate(y, frame.y, GEOMETRY),
+      animate(width, frame.width, GEOMETRY),
+      animate(height, frame.height, GEOMETRY),
+      animate(shoulder, flare, GEOMETRY),
+      animate(corner, radius, GEOMETRY),
+    ];
+    return () => moves.forEach((move) => move.stop());
   }, [
     frame.x,
     frame.y,

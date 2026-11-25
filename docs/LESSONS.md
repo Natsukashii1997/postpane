@@ -596,3 +596,11 @@
 - 正确做法：测试 `unref` 计时器驱动的逻辑时，测试自己挂一个 ref 的保活计时器，在 `t.after` 里清掉（`deepseek_plugin/agent-hud.test.mjs` 的 `setup`）。看到 `cancelledByParent` 加这句报错，先查被等的结果是不是只靠 `unref` 的句柄推进。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-22-509-unsure-resolve/`（`r2-rerun-plugins-*.log` 修前 3 次失败，`r2-fix-plugins-*.log` 修后 3 次 14 条全过）。
 - 升级：〔文字〕未升级：只出现过一次，记在这里。
+
+## L-74 想让一个值滑过去，它的规则却带 `!important`：重要声明在层叠里压过过渡，值一下就跳到终点（2026-11-25）
+
+- 现象：动效统一第 6 处，设置页开关改成「墨块滑过去」，`background-position` 也写了 `transition`，计算样式里过渡属性和时长都对，逐帧读值却从 100% 一帧跳到 0，没有中间值。
+- 根因：CSS 层叠里，过渡产生的值排在所有普通声明之上、所有 `!important` 声明之下。开关原来用 `background: … !important` 压 Tailwind 的 `bg-primary`，简写顺带把 `background-position` 也设成了重要声明；勾选态那条也带 `!important`。过渡值赢不了它们，所以不动。
+- 正确做法：要做过渡的那个属性不写 `!important`，也别让带 `!important` 的简写（`background`、`transition`、`transform` 等）顺带设到它；需要压别人的，只给真正冲突的长写属性加（这里是 `background-color`、`background-image`）。验证时在页面里逐帧读 `getComputedStyle` 或看 `el.getAnimations()` 里有没有这条过渡，别只看计算样式里的 `transition-*`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/settings/`（`switch.mjs` 两次输出：改前一帧跳到 0；改后 100% → 48% → 20% → … → 0，约 120ms）。
+- 升级：〔文字〕未升级：只出现过一次，记在这里。

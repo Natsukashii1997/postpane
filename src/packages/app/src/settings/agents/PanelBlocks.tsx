@@ -32,7 +32,7 @@ import {
 } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { Row, Section, type Text } from "../SettingsPrimitives";
-import { moveAmong, ReorderButtons } from "./Reorder";
+import { moveAmong, moveBefore, ReorderButtons, useFlip } from "./Reorder";
 
 const dragType = "text/agent-hud-window";
 
@@ -297,6 +297,7 @@ function AccountRows({
     .map((id) => accountWindows.find((quota) => quotaRowMatches(quota, id)))
     .filter((quota): quota is Quota => Boolean(quota));
   const ids = ordered.map(quotaRowKey);
+  const place = useFlip(ids);
   const name =
     profile?.name ??
     accountWindows[0]?.account ??
@@ -353,6 +354,7 @@ function AccountRows({
         return (
           <div
             key={id}
+            ref={place(id)}
             className={`agents-draggable${target === id ? " is-target" : ""}`}
             draggable={!pending}
             onDragStart={(event) => event.dataTransfer.setData(dragType, id)}
@@ -368,9 +370,7 @@ function AccountRows({
               const from = event.dataTransfer.getData(dragType);
               // Windows move only within their own account.
               if (from === id || !ids.includes(from)) return;
-              const values = windowOrder.filter((key) => key !== from);
-              values.splice(values.indexOf(id), 0, from);
-              void changeBlock({ rows: values });
+              void changeBlock({ rows: moveBefore(windowOrder, from, id) });
             }}
           >
             <div

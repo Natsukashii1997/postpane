@@ -91,8 +91,8 @@ export interface HUDConfig {
 export const defaultHUDConfig: HUDConfig = hudDefaults as HUDConfig;
 
 export const HUD_METRICS = {
+  // The card's settle time for what waits on it; it moves by lib/motion GEOMETRY.
   duration: 0.4,
-  ease: [0.2, 0.8, 0.2, 1] as [number, number, number, number],
   entryDistance: 5,
   collapsedFlare: 8,
   expandedFlare: 16,

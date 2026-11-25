@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { EASE_OUT, GEOMETRY, MOTION } from "@agent-hud/ui/lib/motion";
 import type {
   Approval,
   IslandEvent,
@@ -15,6 +16,7 @@ import type {
 import { HUDArtwork as HUDLogo } from "../HUDArtwork";
 import { CompactAlertView } from "../IslandNews";
 import type { ReplyChip } from "../alerts/reply-list";
+import { FoldScope } from "../permissions/FoldButton";
 import { RequestDeliveryNotice } from "../permissions/RequestDeliveryNotice";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
@@ -27,11 +29,11 @@ import {
   type HUDVendor,
 } from "../model";
 import { AgentPeek } from "./AgentPeek";
+import { AirmailEdges } from "./AirmailEdges";
 import { Silhouette, type useNotchGeometry } from "./NotchSurface";
 import { outsideSimplePanel } from "./simple-panel";
 import { snapshotLanguage } from "@agent-hud/ui/format";
 import {
-  airmailStripes,
   PaperContext,
   paperFace,
   perforatedSide,
@@ -182,10 +184,10 @@ export function HUDExpandedSurface({
   useEffect(() => {
     lastTagAgent.current = tagAgent;
   });
-  const transition = {
-    duration: reduceMotion || dragging || swapped ? 0 : 0.4,
-    ease: HUD_METRICS.ease,
-  };
+  // A spring keeps the card's speed when it is turned back halfway, so
+  // opening and closing again mid-way joins up instead of jolting.
+  const transition =
+    reduceMotion || dragging || swapped ? { duration: 0 } : GEOMETRY;
   const from = {
     left: flared && horizontal(edge) ? strip.x - 8 : strip.x,
     top: strip.y,
@@ -200,13 +202,39 @@ export function HUDExpandedSurface({
     config.mode === "simple" && detached
       ? outsideSimplePanel(strip, edge, metricsRadius)
       : undefined;
-  // The tag's and the card's side facing into the screen is perforated, as
-  // the stubs' are.
+  // The tag's and card's side facing the screen is perforated, as stubs are.
   const punched = paper
     ? open
       ? perforation(perforatedSide(edge), 14, 3)
       : perforation(perforatedSide(edge), 10 * scale, 2.1 * scale)
     : undefined;
+
+  // What the card shows. When it changes, the old view fades out where it
+  // was while the new one comes in, so the paper is never blank between.
+  const view =
+    peek && focusedVendor
+      ? "peek"
+      : !open && (request || event)
+        ? "tag"
+        : "panel";
+  const lastView = useRef(view);
+  const grown = lastView.current === "panel";
+  useEffect(() => {
+    lastView.current = view;
+  });
+  const swap = (fadeIn: boolean) => ({
+    initial: fadeIn && !reduceMotion ? { opacity: 0 } : (false as const),
+    animate: {
+      opacity: 1,
+      transition: { duration: MOTION.enter, ease: EASE_OUT },
+    },
+    // The leaving view no longer takes a click meant for the new one.
+    exit: {
+      opacity: 0,
+      pointerEvents: "none" as const,
+      transition: { duration: reduceMotion ? 0 : MOTION.exit, ease: EASE_OUT },
+    },
+  });
 
   return (
     <div
@@ -360,7 +388,14 @@ export function HUDExpandedSurface({
               >
                 <motion.path
                   d={notchGeometry.path}
-                  fill={inNotchRow ? "#000" : fill}
+                  // Back in the row, a light panel darkens into the camera
+                  // housing's black instead of snapping to it.
+                  initial={false}
+                  animate={{ fill: inNotchRow ? "#000" : fill }}
+                  transition={{
+                    duration: reduceMotion ? 0 : MOTION.enter,
+                    ease: EASE_OUT,
+                  }}
                   stroke={outline}
                   strokeWidth={0.7}
                 />
@@ -392,7 +427,7 @@ export function HUDExpandedSurface({
                   animate={{ opacity: 1 }}
                   exit={{
                     opacity: 0,
-                    transition: { duration: reduceMotion ? 0 : 0.1 },
+                    transition: { duration: reduceMotion ? 0 : MOTION.exit },
                   }}
                   style={{
                     position: "relative",
@@ -402,7 +437,8 @@ export function HUDExpandedSurface({
                       config.mode === "notch" ? notchGeometry.clip : undefined,
                   }}
                 >
-                  <div
+                  <FoldScope
+                    moves={!reduceMotion}
                     style={
                       config.mode === "notch"
                         ? {
@@ -416,155 +452,170 @@ export function HUDExpandedSurface({
                         : { height: "100%" }
                     }
                   >
-                    {peek && focusedVendor ? (
-                      <button
-                        className="hud-peek-hit"
-                        onClick={() => pin(focusedVendor.key)}
-                        aria-label={`Open ${focusedVendor.name} panel`}
-                        style={{
-                          position: "relative",
-                          border: 0,
-                          padding: 0,
-                          margin: 0,
-                          width: "100%",
-                          height: "100%",
-                          color: "inherit",
-                          background: "transparent",
-                          textAlign: "left",
-                        }}
-                      >
-                        <PaperContext.Provider value={paper}>
-                          <AgentPeek
-                            vendor={focusedVendor}
-                            simple={config.mode === "simple"}
-                            scale={scale}
-                            light={light}
-                            zh={snapshotLanguage(snapshot) === "zh"}
-                            tuck={peekTuck}
-                            edge={edge}
-                          />
-                        </PaperContext.Provider>
-                        {expandMeter && !reduceMotion && (
-                          <span
-                            key={expandMeter.key}
-                            className="hud-peek-expand-meter"
-                            aria-hidden
-                            style={
-                              {
-                                "--hud-peek-expand-ms": `${expandMeter.ms}ms`,
-                                position: "absolute",
-                                left: edge === "left" ? 8 + peekTuck : 8,
-                                right: edge === "right" ? 8 + peekTuck : 8,
-                                bottom: 3,
-                                height: 2,
-                                borderRadius: 1,
-                                background: statusColor("warning"),
-                              } as CSSProperties
-                            }
-                          />
-                        )}
-                      </button>
-                    ) : !open && (request || event) ? (
-                      <CompactAlertView
-                        request={request}
-                        event={event}
-                        requestCount={requests.length}
-                        onDock={config.mode !== "notch"}
-                        notchWidth={config.notchWidth}
-                        surfaceFlare={surfaceFlare}
-                        scale={scale}
-                        light={rowLight}
-                        botLogos={config.botLogos}
-                        zh={snapshotLanguage(snapshot) === "zh"}
-                        paper={paper}
-                        reply={reply}
-                        sessions={snapshot.sessions}
-                        narrow={narrowTag}
-                        across={edge === "top" || edge === "bottom"}
-                        onOpen={() => forceOpen()}
-                        onDismissAndStats={() => {
-                          dismissNews();
-                          showPanelStats?.();
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          position: "relative",
-                          maxHeight: "100%",
-                          overflowY: "auto",
-                        }}
-                      >
-                        <motion.div
-                          key={
-                            request || (event && !inUsagePanel)
-                              ? "alert-stack"
-                              : (focusedVendor?.key ?? "all")
-                          }
-                          // Slides in from the edge the HUD sits on.
-                          initial={
-                            reduceMotion
-                              ? false
-                              : {
-                                  [horizontal(edge) ? "y" : "x"]:
-                                    (edge === "top" || edge === "left"
-                                      ? -1
-                                      : 1) * HUD_METRICS.entryDistance,
-                                  opacity: 0,
-                                }
-                          }
-                          animate={{ x: 0, y: 0, opacity: 1 }}
-                          transition={{
-                            duration: 0.22,
-                            delay: 0.12,
-                            ease: [0.25, 0.46, 0.45, 0.94],
+                    <AnimatePresence initial={false} mode="popLayout">
+                      {view === "peek" && focusedVendor ? (
+                        <motion.button
+                          // Keyed by agent: one receipt fades into the next.
+                          key={`peek-${focusedVendor.key}`}
+                          {...swap(true)}
+                          className="hud-peek-hit"
+                          onClick={() => pin(focusedVendor.key)}
+                          aria-label={`Open ${focusedVendor.name} panel`}
+                          style={{
+                            position: "relative",
+                            border: 0,
+                            padding: 0,
+                            margin: 0,
+                            width: "100%",
+                            height: "100%",
+                            color: "inherit",
+                            background: "transparent",
+                            textAlign: "left",
                           }}
                         >
-                          <div
-                            className="hud-panel-content"
-                            style={{
-                              paddingTop: surfacePadding.top,
-                              paddingRight: surfacePadding.right,
-                              paddingBottom: surfacePadding.bottom,
-                              paddingLeft: surfacePadding.left,
-                            }}
-                          >
-                            {eventContent &&
-                            (!inUsagePanel || Boolean(request)) ? (
-                              eventContent
-                            ) : (
-                              <PaperContext.Provider value={paper}>
-                                <SourceHoverPanel
-                                  active={open}
-                                  config={config}
-                                  snapshot={snapshot}
-                                  focusVendor={focusedVendor?.name}
-                                  spotlight={spotlight}
-                                  light={light}
-                                  Logo={HUDLogo}
-                                  onConfigure={configurePanel}
-                                  onStats={showPanelStats}
-                                  openFailure={panelFailure}
-                                  inlineAlert={inlineAlert}
-                                  maxHeight={Math.max(
-                                    40,
-                                    frame.height -
-                                      surfacePadding.top -
-                                      surfacePadding.bottom,
-                                  )}
-                                />
-                              </PaperContext.Provider>
-                            )}
-                            <RequestDeliveryNotice
-                              delivery={delivery}
+                          <PaperContext.Provider value={paper}>
+                            <AgentPeek
+                              vendor={focusedVendor}
+                              simple={config.mode === "simple"}
+                              scale={scale}
                               light={light}
-                              language={snapshotLanguage(snapshot)}
+                              zh={snapshotLanguage(snapshot) === "zh"}
+                              tuck={peekTuck}
+                              edge={edge}
                             />
-                          </div>
+                          </PaperContext.Provider>
+                          {expandMeter && !reduceMotion && (
+                            <span
+                              key={expandMeter.key}
+                              className="hud-peek-expand-meter"
+                              aria-hidden
+                              style={
+                                {
+                                  "--hud-peek-expand-ms": `${expandMeter.ms}ms`,
+                                  position: "absolute",
+                                  left: edge === "left" ? 8 + peekTuck : 8,
+                                  right: edge === "right" ? 8 + peekTuck : 8,
+                                  bottom: 3,
+                                  height: 2,
+                                  borderRadius: 1,
+                                  background: statusColor("warning"),
+                                } as CSSProperties
+                              }
+                            />
+                          )}
+                        </motion.button>
+                      ) : view === "tag" ? (
+                        <motion.div key="tag" {...swap(true)}>
+                          <CompactAlertView
+                            request={request}
+                            event={event}
+                            requestCount={requests.length}
+                            onDock={config.mode !== "notch"}
+                            notchWidth={config.notchWidth}
+                            surfaceFlare={surfaceFlare}
+                            scale={scale}
+                            light={rowLight}
+                            botLogos={config.botLogos}
+                            zh={snapshotLanguage(snapshot) === "zh"}
+                            paper={paper}
+                            reply={reply}
+                            sessions={snapshot.sessions}
+                            narrow={narrowTag}
+                            across={edge === "top" || edge === "bottom"}
+                            onOpen={() => forceOpen()}
+                            onDismissAndStats={() => {
+                              dismissNews();
+                              showPanelStats?.();
+                            }}
+                          />
                         </motion.div>
-                      </div>
-                    )}
-                  </div>
+                      ) : (
+                        <motion.div
+                          key="panel"
+                          {...swap(false)}
+                          style={{
+                            position: "relative",
+                            maxHeight: "100%",
+                            overflowY: "auto",
+                          }}
+                        >
+                          <AnimatePresence mode="popLayout">
+                            <motion.div
+                              key={
+                                request || (event && !inUsagePanel)
+                                  ? "alert-stack"
+                                  : (focusedVendor?.key ?? "all")
+                              }
+                              // Slides in from the edge the HUD sits on.
+                              initial={
+                                reduceMotion
+                                  ? false
+                                  : {
+                                      [horizontal(edge) ? "y" : "x"]:
+                                        (edge === "top" || edge === "left"
+                                          ? -1
+                                          : 1) * HUD_METRICS.entryDistance,
+                                      opacity: 0,
+                                    }
+                              }
+                              animate={{ x: 0, y: 0, opacity: 1 }}
+                              exit={swap(false).exit}
+                              // Out of a tag or a peek it waits for the card to
+                              // grow; between two agents' panels the card is
+                              // already there, so the new one comes at once.
+                              transition={{
+                                duration: MOTION.enter,
+                                delay: grown ? 0 : MOTION.quick,
+                                ease: EASE_OUT,
+                              }}
+                            >
+                              <div
+                                className="hud-panel-content"
+                                style={{
+                                  paddingTop: surfacePadding.top,
+                                  paddingRight: surfacePadding.right,
+                                  paddingBottom: surfacePadding.bottom,
+                                  paddingLeft: surfacePadding.left,
+                                }}
+                              >
+                                {eventContent &&
+                                (!inUsagePanel || Boolean(request)) ? (
+                                  eventContent
+                                ) : (
+                                  <PaperContext.Provider value={paper}>
+                                    <SourceHoverPanel
+                                      active={open}
+                                      config={config}
+                                      snapshot={snapshot}
+                                      focusVendor={focusedVendor?.name}
+                                      spotlight={spotlight}
+                                      light={light}
+                                      Logo={HUDLogo}
+                                      onConfigure={configurePanel}
+                                      onStats={showPanelStats}
+                                      openFailure={panelFailure}
+                                      inlineAlert={inlineAlert}
+                                      maxHeight={Math.max(
+                                        40,
+                                        frame.height -
+                                          surfacePadding.top -
+                                          surfacePadding.bottom,
+                                      )}
+                                    />
+                                  </PaperContext.Provider>
+                                )}
+                                <RequestDeliveryNotice
+                                  delivery={delivery}
+                                  light={light}
+                                  language={snapshotLanguage(snapshot)}
+                                />
+                              </div>
+                            </motion.div>
+                          </AnimatePresence>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </FoldScope>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -572,64 +623,5 @@ export function HUDExpandedSurface({
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-type Side = "left" | "right" | "top" | "bottom";
-
-/** A handoff's airmail edge (owner, 2026-11-06): red and blue stripes along
- * `sides` of the paper, never its hole side. */
-export function AirmailEdges({
-  holes,
-  sides,
-  width,
-  inset,
-}: {
-  holes: Side;
-  sides: Side[];
-  width: number;
-  inset?: Insets;
-}) {
-  // A band along the hole side's neighbour stops short of the holes.
-  const clear = 7;
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        inset: 0,
-        ...inset,
-        borderRadius: 3,
-        overflow: "hidden",
-        pointerEvents: "none",
-      }}
-    >
-      {sides
-        .filter((side) => side !== holes)
-        .map((side) => {
-          const across = side === "top" || side === "bottom";
-          return (
-            <span
-              key={side}
-              style={{
-                position: "absolute",
-                [side]: 0,
-                ...(across
-                  ? {
-                      height: width,
-                      left: holes === "left" ? clear : 0,
-                      right: holes === "right" ? clear : 0,
-                    }
-                  : {
-                      width,
-                      top: holes === "top" ? clear : 0,
-                      bottom: holes === "bottom" ? clear : 0,
-                    }),
-                background: airmailStripes(width),
-              }}
-            />
-          );
-        })}
-    </span>
   );
 }

@@ -27,7 +27,7 @@ function firstSwing(animation: string) {
 test("every pendant swings within half a second of a hover (#240)", () => {
   const rules = [
     ...css.matchAll(
-      /([^{}]*:hover \.hud-pendant-sway)\s*\{\s*animation: hud-pendant-sway ([^;]+);/g,
+      /([^{}]*\[data-hover="true"\] \.hud-pendant-sway)\s*\{\s*animation: hud-pendant-sway ([^;]+);/g,
     ),
   ];
   assert.ok(rules.length >= 1, "a hover rule plays the sway");
@@ -45,4 +45,17 @@ test("磁盘瘦身 sways from the same rule as the cat, not its own", () => {
     /data-app="disk"\][^{]*\.hud-pendant-sway\s*\{/,
     "no disk-only sway timing",
   );
+});
+
+test("a pendant let go mid-swing eases back upright instead of snapping", () => {
+  // The swing keys on the shell's own hover flag, so a leave can read the
+  // angle before the swing stops and ease it back (owner chose 改, 2026-11-25).
+  assert.doesNotMatch(css, /:hover \.hud-(pendant-sway|disk-broom)\s*\{/);
+  const shell = readFileSync(
+    new URL("../../hud/src/scene/PendantShell.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(shell, /data-hover=\{hover\}/);
+  assert.match(shell, /onPointerLeave=\{\(\) => \{\s*if \(!still\) settle\(root\.current\);/);
+  assert.match(shell, /const SWINGS = "\.hud-pendant-sway, \.hud-disk-broom";/);
 });

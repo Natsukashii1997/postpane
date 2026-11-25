@@ -2,6 +2,30 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 全项目动效统一：一套动效语言，侧栏、设置、统计、会话窗口按状态变化补齐过渡（2026-11-25，Claude，常浩要求「把项目的动效整体做到苹果那种细腻、丝滑的水准……审完直接做……最后直接合并上线」；碰到的 9 处已定内容单独发改动确认，常浩回「全按推荐」；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-25 12:28`（`date '+%F %H:%M'` 记录）。来由：常浩要求整体动效到苹果水准，按「状态变化」找问题（出现、消失、移动、尺寸、内容、图标、数字、按下、悬停、加载、完成、出错），一套语言、克制、跟手可打断、不付性能代价、尊重「减少动态效果」，GPT 当方案、文案、交互顾问，做完再审，最后合并上线。
+- 动效语言（单一来源 `src/packages/ui/src/lib/motion.ts`，CSS 变量同值，`motion.test.ts` 锁住两边一致）：按下 60ms、悬停换色 120ms、退场 140ms、进场展开 200ms、数据变化 240ms；曲线两条：ease-out `(0.22,1,0.36,1)` 管进场、展开、数据、悬停，ease-in-out `(0.65,0,0.35,1)` 只给原地往返的循环；空间几何（侧栏外框、刘海）用回弹（visualDuration 0.32、bounce 0），中途反向保留速度；拖动和换家 0 时长（守 L-27）。
+- 改变的行为（动手前已在会话里列出；9 处已定内容另发改动确认，常浩回「全按推荐」）：
+  - **已定内容 9 处**（逐条见 DECIDED.md 2026-11-25 九行）：别家小签进出淡入淡出；「展开其余 / 收起」行与纸一起淡入淡出、伸缩，箭头转向；挂件移开 0.4 秒摆回；接力方章离场淡出略缩；左滑托盘看甩动速度、回弹 200ms；设置开关墨块滑过去；设置按钮按下下沉 1px；GoButton 和卡片文字按钮曲线统一；票根读数变化交叉淡。
+  - 减少动态效果：原来只把时长压到 0.01ms，循环动画照转、每帧跳位置会闪；侧栏「动画」开关只管 JS 动画。现在系统设置开或「动画」关时，CSS 动画和过渡都压到 0.01ms 且循环只跑一次（ChatGPT 未审闪烁、「在跑」方点、接力绿点停在静止状态）；没开时和原来一样。
+  - 侧栏：换内容（换家、小收据 / 小签 / 展开卡之间）从「旧的瞬间卸掉、隔 120ms 新的才淡入」改为旧的 140ms 淡出、新的 200ms 淡入叠着换，中间不留空纸；外框从固定 0.4s 补间改回弹；刘海收回时浅色 200ms 变黑，不再瞬间变；数据条、环、Token 图、索引进度统一 240ms ease-out（进度条原来 600ms）。
+  - 弹层、提示、下拉：缩放 0.95 → 0.98、位移统一 1，开 120 关 80；对话框开 200 关 140；设置窗口提示延迟统一 400ms（原来 0/300/400 三种）。
+  - 窗口：设置折叠区、会话详情、日分组标题改为高度 + 透明度可打断展开；设置切页、会话进详情淡入；统计卡被点名高亮从边框 0→1.5px（内容横跳）改为 outline；复制、保存回执统一停 1600ms（原来 1600/2000 混用）、文字交叉淡；设置滑块松手后本地先跟手，等后端回读最多 1.5 秒再对齐（原来把手落后鼠标、可能回跳）。
+- 你要求的：
+  - 共用：`ui/src/lib/motion.ts`（新）；`ui/src/global.css`（`@theme` 两条曲线和 Tailwind 默认过渡、`--motion-*` 五档、减少动态效果两条规则、`[data-hud-block]` 过渡、GoButton / `.hud-press` / 挂件改用变量和 `data-hover`、折叠箭头）；`ui/src/ui/`（button 去 `transition-all` 加按下态，switch、tabs 去 `transition-all`，select / tooltip / dropdown-menu / dialog 的进出时长与幅度）。
+  - 侧栏（hud）：`HUDScene.tsx`（`data-motion`、小签 `still`）；`scene/HUDExpandedSurface.tsx`（回弹、三种视图交叉淡、换内容叠着换、刘海填色过渡、`FoldScope`）；`scene/NotchSurface.tsx`（回弹、可打断）；`scene/SideTags.tsx`（小签淡入淡出）；`scene/PendantShell.tsx`（`data-hover`、移开摆回）；`scene/StubFoot.tsx`（新，票根读数与方章换场）；`scene/HUDMarkStrip.tsx`（接上 `StubFoot`）；`permissions/FoldButton.tsx`（`FoldRows` / `FoldRow` / `FoldList` / `FoldScope`、箭头）；`panel/fold-store.ts`（`moving()`）；`permissions/ApprovalContent.tsx`、`alerts/CompletionAlertView.tsx`、`panel/PlaceRows.tsx`、`panel/RelayRows.tsx`（行套 `FoldRow`）；`panel/relay-tray.ts`（`trayFlick`、`TRAY_SETTLE`）、`panel/SessionsSection.tsx`（接上甩动判断）；`usage-meter/UsageBars.tsx`、`UsageRing.tsx`、`panel/TokenChartSection.tsx`、`IndexingSection.tsx`、`AgentBoard.tsx`、`ResetCreditsRow.tsx`、`HoverPanel.tsx`、`model.ts`（数据与悬停过渡改用共用值）。
+  - 窗口（app）：`lib/Motion.tsx`、`lib/moves.ts`、`motion.css`（新，`useFold` 等）；`settings/slide-hold.ts`、`Slide.tsx`（新，滑块跟手）；`settings/receipt.css`（开关滑动、按钮按下）、`settings.css`；`sessions/DayHeader.tsx`、`Folded.tsx`；`settings/agent-plugins/receipt.tsx`；统计 `ProviderCard.tsx`、`UsageChart.tsx`、`QuotaHistory.tsx`、`StatsTheme.tsx`、`ActivityHeatmap.tsx` 等（逐个见 PR 文件列表）。
+  - 测试：`ui/test/motion.test.ts`（新）、`ui/test/pendant-sway.test.ts`（改为认 `data-hover`，新增「移开摆回」一条）、`hud/test/fold-store.test.ts`（2 条）、`hud/test/relay-tray.test.ts`（甩动 1 条）、`app/test/slide-hold.test.ts`、`app/test/moves.test.ts`（新，禁止窗口里手写时长和曲线）。
+  - 文档：`docs/DECIDED.md` 9 行；`docs/LESSONS.md` L-74。
+- 我顺手改的：
+  - `scene/AirmailEdges.tsx`（新）：从 `HUDExpandedSurface.tsx` 挪出航空斜纹边，给 300 行棘轮腾行；行为不变。
+  - 几处注释并成一行、`HUDScene.tsx` 减动画判断写法，给棘轮腾行；`src/tooling/file-size-baseline.json` 收紧。
+  - `model.ts` 删掉没人用的 `HUD_METRICS.ease`。
+- 同类：全项目搜了 `transition-all`、手写毫秒、`ease` / `ease-in-out` / 各种 `cubic-bezier`，侧栏和窗口里管状态变化的都换成共用值；小人、纸飞机、等待线等已定动效的时长和曲线没动；`app/test/moves.test.ts` 防窗口里再手写。
+- 测试：见下方「测试」补记。
+- 本轮新坑：L-74。
+
 ## 接力审核门：经代理回读 PR 提交失败时直连再读一次（#527）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 13 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-24 13:22`（`date '+%F %H:%M'` 记录）。来由：11-23 夜里本机代理 127.0.0.1:8086 坏了，驿窗按通过结束前回读 PR 提交失败，#510 第 3 轮通过被记「版本待核」、多跑一轮。

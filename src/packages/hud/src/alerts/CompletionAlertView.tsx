@@ -17,7 +17,7 @@ import {
   cardInks,
   type Inks,
 } from "../permissions/ListCard";
-import { cardFolds, FoldButton } from "../permissions/FoldButton";
+import { cardFolds, FoldButton, FoldList } from "../permissions/FoldButton";
 import { BotSeal } from "../panel/BotStamp";
 import { buttonFace } from "./button-face";
 import { DismissAll } from "./DismissAll";
@@ -38,10 +38,8 @@ import {
   sessionReplies,
 } from "./reply-list";
 
-/**
- * The replies waiting, as a list card like the waiting card's: newest first
- * and open, grouped by sidebar section; each line goes back to its session.
- */
+/** The replies waiting, as a list card like the waiting card's: newest first
+ * and open, grouped by sidebar section; each line goes back to its session. */
 export function CompletionAlertView({
   replies,
   snapshot,
@@ -75,9 +73,8 @@ export function CompletionAlertView({
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
   );
 
-  // Only ↗ goes back, and only once the session is in front are its
-  // replies put away; where it could not get there, the line says why a few
-  // seconds and may be tried again (#220).
+  // Only ↗ goes back, and only once the session is in front are its replies
+  // put away; where it could not, the line says why and may retry (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     const reason = failureOf(
@@ -95,8 +92,7 @@ export function CompletionAlertView({
     Boolean(sessionToOpen(entry) && services?.openSession) &&
     !failure(entry.id);
 
-  // The owner's own replies on the receipt; a review's on the lower slip of
-  // the reviews' paper (#145).
+  // The owner's replies on the receipt; a review's on the reviews' slip (#145).
   const handoffs = snapshot.handoffs ?? [];
   const review = (entry: ApprovalEntry) => isReviewReply(entry, handoffs);
   const reviews = groups.flatMap((group) => group.entries.filter(review));
@@ -107,8 +103,7 @@ export function CompletionAlertView({
     entry?.kind === "reply"
       ? handoffFor(snapshot.handoffs, entry.event.source, entry.event.sessionId)
       : undefined;
-  // A relay's reply on the receipt sits in the airmail frame; a review's is
-  // on the reviews' paper already.
+  // A relay's reply on the receipt sits in the airmail frame.
   const framed = (entry: ApprovalEntry | undefined) =>
     Boolean(entry && relayOf(entry) && !review(entry));
   const line = (
@@ -124,8 +119,7 @@ export function CompletionAlertView({
     const bot = entry.session?.bot;
     const handoff = relayOf(entry);
     const inFrame = framed(entry);
-    // A handoff's reply is titled by the handoff: its question is the
-    // whole brief.
+    // A handoff's reply is titled by the handoff (its question is the brief).
     const title =
       handoff?.title ?? entryTitle(entry, newsTitle(entry.event, zh));
 
@@ -241,22 +235,28 @@ export function CompletionAlertView({
       className="hud-reply-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      {groups
-        .filter((group) => group.entries.some((entry) => !review(entry)))
-        .map((group) => (
-          <div key={group.section ?? ""} style={cardColumn(0)}>
-            {group.entries
-              .filter((entry) => !review(entry))
-              .map((entry, index, list) =>
-                line(entry, index, inks, paper, list[index - 1]),
-              )}
+      <FoldList
+        items={groups.filter((group) => group.entries.some((e) => !review(e)))}
+        keyOf={(group) => group.section ?? ""}
+        row={(group) => (
+          <div style={cardColumn(0)}>
+            <FoldList
+              items={group.entries.filter((entry) => !review(entry))}
+              keyOf={(entry) => entry.id}
+              row={(entry, index, list) =>
+                line(entry, index, inks, paper, list[index - 1])
+              }
+            />
           </div>
-        ))}
+        )}
+      />
       {reviews.length > 0 && (
         <ReviewSlip paper={paper} zh={zh}>
-          {reviews.map((entry, index) =>
-            line(entry, index, reviewInks, reviewPaper),
-          )}
+          <FoldList
+            items={reviews}
+            keyOf={(entry) => entry.id}
+            row={(entry, index) => line(entry, index, reviewInks, reviewPaper)}
+          />
         </ReviewSlip>
       )}
       <FoldButton

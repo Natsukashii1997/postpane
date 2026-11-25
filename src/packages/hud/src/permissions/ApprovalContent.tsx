@@ -28,7 +28,7 @@ import {
   type ApprovalEntry,
 } from "./approval-list";
 import { EntryRow, cardInks } from "./ListCard";
-import { cardFolds, FoldButton } from "./FoldButton";
+import { cardFolds, FoldButton, FoldRow, FoldRows } from "./FoldButton";
 import type { NewsSeal } from "./PaperSeal";
 
 export function ApprovalContent({
@@ -161,57 +161,67 @@ export function ApprovalContent({
       className="hud-approval-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      {groups.map((group) => (
-        <div key={group.section ?? ""} style={cardColumn(0)}>
-          {group.entries.map((entry, index) => {
-            const open = entry.kind === "request" && entry.id === selected.id;
-            const target = sessionToOpen(entry);
-            return (
-              <div
-                key={entry.id}
-                className={open ? "hud-open-request" : undefined}
-                style={{
-                  borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
-                }}
-              >
-                <EntryRow
-                  entry={entry}
-                  open={open}
-                  title={entryTitle(entry, fallbackTitle(entry))}
-                  summary={summaryOf(entry)}
-                  canOpen={
-                    Boolean(target && services?.openSession) &&
-                    !failure(entry.id)
-                  }
-                  onSelect={() => select(entry.id)}
-                  onOpen={() => void goBack(entry)}
-                  inks={inks}
-                  light={light}
-                  zh={zh}
-                />
-                {failure(entry.id) && (
-                  <OpenNotice
-                    text={failure(entry.id)!}
-                    light={light}
-                    style={{ padding: "0 0 10px 30px", marginTop: -4 }}
-                  />
-                )}
-                {open &&
-                  entry.kind === "request" &&
-                  openDetail(
-                    entry.request,
-                    goesToStart(
-                      entry,
-                      Boolean(services?.openSession) && !failure(entry.id),
-                    )
-                      ? () => void goBack(entry)
-                      : undefined,
-                  )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      <FoldRows>
+        {groups.map((group) => (
+          <FoldRow key={group.section ?? ""}>
+            <div style={cardColumn(0)}>
+              <FoldRows>
+                {group.entries.map((entry, index) => {
+                  const open =
+                    entry.kind === "request" && entry.id === selected.id;
+                  const target = sessionToOpen(entry);
+                  return (
+                    <FoldRow key={entry.id}>
+                      <div
+                        className={open ? "hud-open-request" : undefined}
+                        style={{
+                          borderTop:
+                            index > 0 ? `1px dotted ${inks.line}` : undefined,
+                        }}
+                      >
+                        <EntryRow
+                          entry={entry}
+                          open={open}
+                          title={entryTitle(entry, fallbackTitle(entry))}
+                          summary={summaryOf(entry)}
+                          canOpen={
+                            Boolean(target && services?.openSession) &&
+                            !failure(entry.id)
+                          }
+                          onSelect={() => select(entry.id)}
+                          onOpen={() => void goBack(entry)}
+                          inks={inks}
+                          light={light}
+                          zh={zh}
+                        />
+                        {failure(entry.id) && (
+                          <OpenNotice
+                            text={failure(entry.id)!}
+                            light={light}
+                            style={{ padding: "0 0 10px 30px", marginTop: -4 }}
+                          />
+                        )}
+                        {open &&
+                          entry.kind === "request" &&
+                          openDetail(
+                            entry.request,
+                            goesToStart(
+                              entry,
+                              Boolean(services?.openSession) &&
+                                !failure(entry.id),
+                            )
+                              ? () => void goBack(entry)
+                              : undefined,
+                          )}
+                      </div>
+                    </FoldRow>
+                  );
+                })}
+              </FoldRows>
+            </div>
+          </FoldRow>
+        ))}
+      </FoldRows>
       <FoldButton
         hidden={hidden}
         unfolded={unfolded}

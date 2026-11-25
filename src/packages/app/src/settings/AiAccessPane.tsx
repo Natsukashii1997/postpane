@@ -4,7 +4,6 @@
 // PostPane only reads. AGENTS.md 「AI 接入」 says the same; change both.
 import { useEffect, useState, type ReactNode } from "react";
 import { HUDArtwork } from "@agent-hud/hud/HUDArtwork";
-import { TooltipProvider } from "@agent-hud/ui/components/tooltip";
 import { monthDayTime, snapshotLanguage } from "@agent-hud/ui/format";
 import { useFormat } from "@agent-hud/ui/format-context";
 import {
@@ -12,6 +11,7 @@ import {
   Pill,
   Row,
   Section,
+  Tooltips,
   useText,
   type SettingsPaneProps,
 } from "./SettingsPrimitives";
@@ -78,7 +78,7 @@ export function AiAccessPane({
   const path = (text: string) => <span className="ai-access-path">{text}</span>;
 
   return (
-    <TooltipProvider>
+    <Tooltips>
       <Page>
         <Section
           title={t("Default executor", "默认执行方")}
@@ -336,6 +336,6 @@ export function AiAccessPane({
           )}
         </Section>
       </Page>
-    </TooltipProvider>
+    </Tooltips>
   );
 }

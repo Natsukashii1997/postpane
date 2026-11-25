@@ -252,7 +252,6 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
                       boxShadow: `inset 0 0 0 1.5px ${
                         light ? "rgba(184,128,0," : "rgba(255,210,63,"
                       }${lit === block.key ? 0.7 : 0})`,
-                      transition: "box-shadow 0.45s ease-out",
                     }}
                   >
                     {block.content}

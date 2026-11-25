@@ -17,6 +17,7 @@ import { removedKey, useRemovedSessions } from "./removed-sessions";
 import { ReviewRows } from "./ReviewSlip";
 import { RunningMark } from "./RunningMark";
 import { LiveRow } from "./SessionsSection";
+import { FoldRow, FoldRows } from "../permissions/FoldButton";
 import { foldStore } from "./fold-store";
 import { GRID, noButtonChrome, tabular } from "./theme";
 
@@ -56,42 +57,45 @@ export function PlaceRows({
   const count =
     rows.waiting.length + rows.running.length + (rows.folded ? 1 : 0);
   const row = (entry: LiveSession, index: number) => (
-    <LiveRow
-      key={removedKey(entry)}
-      entry={entry}
-      handoff={handoffFor(
-        snapshot.handoffs,
-        entry.session.source,
-        entry.session.id,
-      )}
-      waits={
-        entry.session.source === "claude"
-          ? snapshot.relayLaunches?.find(
-              (launch) => launch.session === entry.session.id,
-            )
-          : undefined
-      }
-      now={now}
-      light={light}
-      first={index === 0}
-      last={index === count - 1}
-      onStats={onStats}
-      open={openKey === removedKey(entry)}
-      onOpen={(open) =>
-        setOpenKey((key) =>
-          open ? removedKey(entry) : key === removedKey(entry) ? null : key,
-        )
-      }
-      onRemove={() => {
-        setOpenKey(null);
-        remove(entry);
-      }}
-    />
+    <FoldRow key={removedKey(entry)}>
+      <LiveRow
+        entry={entry}
+        handoff={handoffFor(
+          snapshot.handoffs,
+          entry.session.source,
+          entry.session.id,
+        )}
+        waits={
+          entry.session.source === "claude"
+            ? snapshot.relayLaunches?.find(
+                (launch) => launch.session === entry.session.id,
+              )
+            : undefined
+        }
+        now={now}
+        light={light}
+        first={index === 0}
+        last={index === count - 1}
+        onStats={onStats}
+        open={openKey === removedKey(entry)}
+        onOpen={(open) =>
+          setOpenKey((key) =>
+            open ? removedKey(entry) : key === removedKey(entry) ? null : key,
+          )
+        }
+        onRemove={() => {
+          setOpenKey(null);
+          remove(entry);
+        }}
+      />
+    </FoldRow>
   );
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
     <>
-      {rows.waiting.map((entry, index) => row(entry, index))}
+      <FoldRows>
+        {rows.waiting.map((entry, index) => row(entry, index))}
+      </FoldRows>
       {rows.folded > 0 && (
         <button
           type="button"
@@ -151,9 +155,11 @@ export function PlaceRows({
           />
         </button>
       )}
-      {rows.running.map((entry, index) =>
-        row(entry, rows.waiting.length + (rows.folded ? 1 : 0) + index),
-      )}
+      <FoldRows>
+        {rows.running.map((entry, index) =>
+          row(entry, rows.waiting.length + (rows.folded ? 1 : 0) + index),
+        )}
+      </FoldRows>
     </>
   );
 }

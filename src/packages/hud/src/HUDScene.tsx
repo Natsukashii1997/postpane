@@ -213,9 +213,8 @@ export function HUDScene({
     () => ({ ...sourceConfig, ...dragPreview }),
     [sourceConfig, dragPreview],
   );
-  const reduced = useReducedMotion();
   const reduceMotion = Boolean(
-    reduced || !config.animations || !snapshot.settings.animations,
+    useReducedMotion() || !config.animations || !snapshot.settings.animations,
   );
   const id = useId().replaceAll(":", "");
   const scene = useRef<HTMLElement>(null);
@@ -593,8 +592,7 @@ export function HUDScene({
     lastMark.current = hovered;
   }, [hovered, pointerInside]);
   // A peek left on its mark grows into its agent's own panel, as a click on
-  // the mark opens it (#202); the line along its foot runs out over the same
-  // wait.
+  // the mark opens it (#202); the line along its foot runs out meanwhile.
   const [expandMeter, setExpandMeter] = useState<{
     key: string;
     ms: number;
@@ -1035,6 +1033,7 @@ export function HUDScene({
           data-hover={state.phase}
           data-pinned={pinned}
           data-appearance={light ? "light" : "dark"}
+          data-motion={reduceMotion ? "reduce" : "full"}
           aria-label={`PostPane ${config.mode === "notch" ? "Classic" : config.mode === "logos" ? "Dynamic" : "Simple"} preview`}
           style={{
             position: "relative",
@@ -1202,6 +1201,7 @@ export function HUDScene({
             zh={snapshotLanguage(snapshot) === "zh"}
             notchWidth={config.notchWidth}
             sessions={snapshot.sessions}
+            still={reduceMotion}
             onFront={news.select}
           />
           <HUDExpandedSurface

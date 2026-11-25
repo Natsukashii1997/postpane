@@ -4,6 +4,23 @@
 @source ".";
 @custom-variant dark (&:is(.dark *));
 
+/* The one motion language (lib/motion.ts says what each is for; its test
+ * keeps the two in step). Tailwind's own transition-* and ease-* utilities
+ * take these too, so a utility class moves like hand-written CSS. */
+@theme {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --default-transition-duration: 120ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root {
+  --motion-press: 60ms;
+  --motion-quick: 120ms;
+  --motion-exit: 140ms;
+  --motion-enter: 200ms;
+  --motion-data: 240ms;
+}
+
 @theme inline {
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -340,14 +357,26 @@ a:focus-visible {
 .statistics-heatmap-cell[data-state="instant-open"] {
   box-shadow: inset 0 0 0 1px var(--heatmap-outline);
 }
+/* Less motion, asked by the system or by the side bar's own 动画 switch
+ * (HUDScene sets data-motion="reduce" for either): things change at once.
+ * A loop plays its one near-instant round and rests, rather than landing on
+ * a random frame of an endless one every frame and flickering. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+.hud-scene[data-motion="reduce"] *,
+.hud-scene[data-motion="reduce"] *::before,
+.hud-scene[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 /* Half blocks follow PanelLines.swift without changing shadcn primitives. */
@@ -535,10 +564,10 @@ a:focus-visible {
   background: transparent;
   color: var(--go-ink);
   transition:
-    background-color 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease,
-    transform 0.12s ease;
+    background-color var(--motion-quick) var(--ease-out),
+    border-color var(--motion-quick) var(--ease-out),
+    color var(--motion-quick) var(--ease-out),
+    transform var(--motion-quick) var(--ease-out);
 }
 .hud-go-button:not([aria-disabled="true"]):hover {
   border-color: var(--go-strong);
@@ -553,13 +582,22 @@ a:focus-visible {
 .hud-go-button:not([aria-disabled="true"]):active {
   transform: translateY(1px) scale(0.92);
   background: color-mix(in srgb, var(--go-strong) 26%, transparent);
-  transition-duration: 0.06s;
+  transition-duration: var(--motion-press);
+}
+/* A quota block lit when a notice names it (HoverPanel): the amber ring
+ * comes and goes at the pace of a value changing. */
+[data-hud-block] {
+  transition: box-shadow var(--motion-data) var(--ease-out);
+}
+/* 「展开其余 n 条 ⌄ / 收起」: the chevron turns over with the rows. */
+.hud-list-fold-chevron {
+  transition: transform var(--motion-enter) var(--ease-out);
 }
 /* A card's text buttons (知道了, 查看接力, 回到会话): the same give. */
 .hud-press {
   transition:
-    filter 0.12s ease,
-    transform 0.12s ease;
+    filter var(--motion-quick) var(--ease-out),
+    transform var(--motion-quick) var(--ease-out);
 }
 .hud-press:not([aria-disabled="true"]):hover {
   filter: brightness(1.18);
@@ -567,7 +605,7 @@ a:focus-visible {
 .hud-press:not([aria-disabled="true"]):active {
   transform: translateY(1px) scale(0.97);
   filter: brightness(0.9);
-  transition-duration: 0.06s;
+  transition-duration: var(--motion-press);
 }
 @media (prefers-reduced-motion: reduce) {
   .hud-go-button,
@@ -582,13 +620,13 @@ a:focus-visible {
 /* The sway, blink and twinkle play only under the pointer (#103): at rest
  * the ball stays still and costs nothing to draw. Each starts just before
  * its move, so a hover shows it within half a second. */
-.hud-app-pendant[data-motion="on"]:hover .hud-pendant-sway {
+.hud-app-pendant[data-motion="on"][data-hover="true"] .hud-pendant-sway {
   animation: hud-pendant-sway 7s ease-in-out -4.2s infinite;
 }
-.hud-app-pendant[data-motion="on"]:hover .hud-pendant-lid {
+.hud-app-pendant[data-motion="on"][data-hover="true"] .hud-pendant-lid {
   animation: hud-pendant-blink 6.4s ease-in-out -5.6s infinite;
 }
-.hud-app-pendant[data-motion="on"]:hover .hud-pendant-star {
+.hud-app-pendant[data-motion="on"][data-hover="true"] .hud-pendant-star {
   animation: hud-pendant-twinkle 9s ease-in-out -3.2s infinite;
 }
 .hud-app-pendant[data-open="true"] .hud-app-pendant-ball {
@@ -735,16 +773,20 @@ a:focus-visible {
 }
 /* It sways like the cat, from the shared rule: a hover swings the cord and
  * ball at once while the broom sweeps (#240). */
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-lid {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-lid {
   animation: hud-disk-blink 5.2s ease-in-out -4.6s infinite;
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-spark-a {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-spark-a {
   animation: hud-pendant-twinkle 8s ease-in-out -3.4s infinite;
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-spark-b {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-spark-b {
   animation: hud-pendant-twinkle 8s ease-in-out -7.4s infinite;
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-bubble {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-bubble {
   animation: hud-disk-bubble 4.6s ease-out -4.2s infinite;
 }
 .hud-app-pendant[data-app="disk"][data-motion="on"]
@@ -829,10 +871,12 @@ a:focus-visible {
 .hud-app-pendant[data-level="critical"] .hud-disk-puff {
   background: #e08670;
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-broom {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-broom {
   animation: hud-disk-sweep 4.6s ease-in-out -3.4s infinite;
 }
-.hud-app-pendant[data-app="disk"][data-motion="on"]:hover .hud-disk-puff {
+.hud-app-pendant[data-app="disk"][data-motion="on"][data-hover="true"]
+  .hud-disk-puff {
   animation: hud-disk-puff 4.6s ease-out -3.4s infinite;
 }
 /* Twice, quicker than the cat and out of step with it. */

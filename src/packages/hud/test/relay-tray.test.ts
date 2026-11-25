@@ -6,6 +6,7 @@ import {
   launchKind,
   launchLine,
   stepBlock,
+  trayFlick,
   trayKinds,
   trayReady,
   trayText,
@@ -124,4 +125,36 @@ test("words gone before they were seen taken are not said to be taken", () => {
     launchLine({ kind: "review", state: "lost", reason: null }, false).text,
     "Review request unaccounted for; no handoff in an hour",
   );
+});
+
+test("a flick opens or closes the tray however short; a slow let-go goes by half", () => {
+  let now = 0;
+  const at = (ms: number) => (now = ms);
+  const flick = trayFlick(() => now);
+  // 30 points left in 40 ms: a flick, open though far from half of 310.
+  at(0);
+  flick.note(0);
+  at(40);
+  flick.note(-30);
+  assert.equal(flick.opens(-30, 310), true);
+  // Open, flicked back right 30 points: it closes though still past half.
+  at(1000);
+  flick.note(-310);
+  at(1040);
+  flick.note(-280);
+  assert.equal(flick.opens(-280, 310), false);
+  // Dragged slowly to 60 points and let go: not past half, it closes.
+  at(2000);
+  flick.note(0);
+  at(2400);
+  flick.note(-60);
+  at(2800);
+  flick.note(-60);
+  assert.equal(flick.opens(-60, 310), false);
+  // Slowly past half: it opens.
+  at(4000);
+  flick.note(-100);
+  at(4400);
+  flick.note(-200);
+  assert.equal(flick.opens(-200, 310), true);
 });

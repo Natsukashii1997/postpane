@@ -61,6 +61,7 @@ import { snapshotLanguage } from "@agent-hud/ui/format";
 import type { AgentPluginItem } from "./settings/AgentPluginsPane";
 import { SettingsNavigation } from "./settings/SettingsNavigation";
 import { LoadingState } from "./LoadingState";
+import { TOOLTIP_DELAY, useArrival } from "./lib/Motion";
 
 export type {
   AgentPluginContext,
@@ -429,6 +430,7 @@ function AppContent({
   useEffect(() => {
     settingsScroll.current?.scrollTo({ top: 0 });
   }, [page]);
+  const settingsBody = useArrival<HTMLDivElement>(page, "translateY(4px)");
   // The running app's own version: a release is stamped with its version when
   // it is built (0.6.0-beta.1), which a product's front end cannot know.
   // `version` stands in outside the app.
@@ -831,7 +833,7 @@ function AppContent({
   return provide(
     <PanelServicesProvider value={panelServices}>
       <SettingsNavigation.Provider value={setPage}>
-        <TooltipProvider delayDuration={400}>
+        <TooltipProvider delayDuration={TOOLTIP_DELAY}>
           <div
             className="apple-app"
             data-theme={theme}
@@ -934,7 +936,11 @@ function AppContent({
                       <span>{pageOf}</span>
                     </div>
                   </header>
-                  <div className="settings-pane-content" data-page={pageOf}>
+                  <div
+                    className="settings-pane-content"
+                    data-page={pageOf}
+                    ref={settingsBody}
+                  >
                     {error && (
                       <Alert variant="destructive">
                         <CircleHelp />
@@ -966,13 +972,7 @@ function AppContent({
                         {extensionPages
                           .find((item) => item.id === page)
                           ?.render({ snapshot, request: extensionRequest })}
-                        {(page === "general" ||
-                          page === "prices" ||
-                          page === "relays" ||
-                          page === "display" ||
-                          page === "agents" ||
-                          page === "agent-plugins" ||
-                          page === "ai-access") && (
+                        {pages.some((item) => item.id === page) && (
                           <SettingsPane
                             page={page}
                             settingsProps={settingsProps}

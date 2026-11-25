@@ -56,6 +56,9 @@ import {
 import { snapshotLanguage, systemTimeZone } from "@agent-hud/ui/format";
 import { indexingText } from "@agent-hud/ui/text/indexing";
 import { listenTo } from "./lib/native.ts";
+import { moves } from "./lib/moves";
+import { Fold } from "./lib/Motion";
+import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
 
 interface StatisticsProps {
   snapshot: Snapshot;
@@ -225,8 +228,12 @@ function Segments({
               boxShadow: "none",
               background:
                 value === choice.value ? theme.selected : "transparent",
-              transition:
-                "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease",
+              transition: moves(
+                "quick",
+                "background-color",
+                "color",
+                "box-shadow",
+              ),
             }}
           >
             {choice.label}
@@ -424,7 +431,8 @@ export default function Statistics({
       const target =
         document.getElementById(`agent-${highlightedVendor}`) ??
         document.getElementById(`api-${highlightedVendor}`);
-      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const behavior = systemReducesMotion() ? "auto" : "smooth";
+      target?.scrollIntoView({ behavior, block: "center" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [highlightedVendor, Boolean(data)]);
@@ -638,7 +646,7 @@ export default function Statistics({
                 size={10}
                 style={{
                   transform: modelsExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                  transition: "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  transition: moves("quick", "transform"),
                 }}
               />
               {t("Models", "模型")} ·{" "}
@@ -720,119 +728,103 @@ export default function Statistics({
             </button>
           )}
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateRows: modelsExpanded ? "1fr" : "0fr",
-            opacity: modelsExpanded ? 1 : 0,
-            visibility: modelsExpanded ? "visible" : "hidden",
-            pointerEvents: modelsExpanded ? "auto" : "none",
-            transition:
-              "grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease",
-          }}
-        >
-          <div style={{ overflow: "hidden", minHeight: 0 }}>
-            <div style={{ display: "grid", gap: 6, paddingTop: 8 }}>
-              <button
-                type="button"
-                onClick={() => setModels(null)}
-                style={{
-                  ...plain,
-                  ...row,
-                  color: theme.secondary,
-                  fontSize: 11,
-                }}
-              >
-                <Check
-                  size={11}
-                  style={{ opacity: selectedModels === null ? 1 : 0 }}
-                />
-                {t("All models", "全部模型")}
-                {selectedModels !== null &&
-                  (zh ? " · 清除筛选" : " · Clear filter")}
-              </button>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
-                  gap: "6px 16px",
-                }}
-              >
-                {modelChoices.map((model) => {
-                  const value = data?.models.find(
-                    (entry) => entry.id === model.id,
-                  );
-                  const checked = selectedModels?.includes(model.id) ?? false;
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      role="checkbox"
-                      aria-checked={checked}
-                      aria-label={`Include ${model.name} from ${model.provider}`}
-                      title={`${model.provider} · ${model.name}`}
-                      onClick={() => pickModel(model.id)}
+        <Fold open={modelsExpanded}>
+          <div style={{ display: "grid", gap: 6, paddingTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => setModels(null)}
+              style={{
+                ...plain,
+                ...row,
+                color: theme.secondary,
+                fontSize: 11,
+              }}
+            >
+              <Check
+                size={11}
+                style={{ opacity: selectedModels === null ? 1 : 0 }}
+              />
+              {t("All models", "全部模型")}
+              {selectedModels !== null &&
+                (zh ? " · 清除筛选" : " · Clear filter")}
+            </button>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+                gap: "6px 16px",
+              }}
+            >
+              {modelChoices.map((model) => {
+                const value = data?.models.find(
+                  (entry) => entry.id === model.id,
+                );
+                const checked = selectedModels?.includes(model.id) ?? false;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={checked}
+                    aria-label={`Include ${model.name} from ${model.provider}`}
+                    title={`${model.provider} · ${model.name}`}
+                    onClick={() => pickModel(model.id)}
+                    style={{
+                      ...plain,
+                      ...row,
+                      width: "100%",
+                      textAlign: "left",
+                      color: checked ? theme.text : theme.secondary,
+                      fontSize: 11,
+                      padding: "3px 4px",
+                      borderRadius: 0,
+                      background: checked ? theme.segment : "transparent",
+                    }}
+                  >
+                    <span
+                      aria-hidden
                       style={{
-                        ...plain,
-                        ...row,
-                        width: "100%",
-                        textAlign: "left",
-                        color: checked ? theme.text : theme.secondary,
-                        fontSize: 11,
-                        padding: "3px 4px",
+                        width: 13,
+                        height: 13,
+                        flexShrink: 0,
                         borderRadius: 0,
-                        background: checked ? theme.segment : "transparent",
+                        border: `1px solid ${checked ? theme.text : theme.divider}`,
+                        background: checked ? theme.text : "transparent",
+                        color: theme.ground,
+                        display: "inline-grid",
+                        placeItems: "center",
                       }}
                     >
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 13,
-                          height: 13,
-                          flexShrink: 0,
-                          borderRadius: 0,
-                          border: `1px solid ${checked ? theme.text : theme.divider}`,
-                          background: checked ? theme.text : "transparent",
-                          color: theme.ground,
-                          display: "inline-grid",
-                          placeItems: "center",
-                        }}
-                      >
-                        {checked && <Check size={9} strokeWidth={3} />}
-                      </span>
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 6,
-                          height: 6,
-                          flexShrink: 0,
-                          borderRadius: 0,
-                          background: modelColor(model.id, theme),
-                        }}
-                      />
-                      <HUDLogo
-                        source={model.provider}
-                        size={12}
-                        light={light}
-                      />
-                      <span style={truncate}>{model.name}</span>
-                      <span style={{ marginLeft: "auto", ...number }}>
-                        {value ? compact(value.selectedTokens) : "—"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {!modelChoices.length && (
-                <span style={{ color: theme.secondary, fontSize: 11 }}>
-                  {loading
-                    ? t("Loading models…", "正在加载模型…")
-                    : t("No recorded models", "暂无已记录的模型")}
-                </span>
-              )}
+                      {checked && <Check size={9} strokeWidth={3} />}
+                    </span>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 6,
+                        height: 6,
+                        flexShrink: 0,
+                        borderRadius: 0,
+                        background: modelColor(model.id, theme),
+                      }}
+                    />
+                    <HUDLogo source={model.provider} size={12} light={light} />
+                    <span style={truncate}>{model.name}</span>
+                    <span style={{ marginLeft: "auto", ...number }}>
+                      {value ? compact(value.selectedTokens) : "—"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            {!modelChoices.length && (
+              <span style={{ color: theme.secondary, fontSize: 11 }}>
+                {loading
+                  ? t("Loading models…", "正在加载模型…")
+                  : t("No recorded models", "暂无已记录的模型")}
+              </span>
+            )}
           </div>
-        </div>
+        </Fold>
         {data ? (
           <UsageChart data={data} theme={theme} />
         ) : (

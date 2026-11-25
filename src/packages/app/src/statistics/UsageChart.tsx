@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { tokenPlot } from "../lib/statistics";
+import { HoverTip, dataProgress } from "../lib/Motion";
+import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
 import type { StatisticsResponse } from "../lib/types";
 import {
   card,
@@ -223,21 +225,17 @@ export const UsageChart = memo(function UsageChart({
   useEffect(() => {
     if (width <= 0) return;
     const prev = currentBarsRef.current;
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = systemReducesMotion();
     if (prev === null || reduceMotion) {
       currentBarsRef.current = targetBars;
       paint(targetBars, hoveredRef.current);
       return;
     }
     const from = prev;
-    const duration = 240;
     const startTime = performance.now();
     let frame = 0;
     const animate = (now: number) => {
-      const t = Math.min(1, Math.max(0, (now - startTime) / duration));
-      const eased = 1 - Math.pow(1 - t, 3);
+      const { t, share: eased } = dataProgress(startTime, now);
       const interpolated = interpolateBars(from, targetBars, eased);
       currentBarsRef.current = interpolated;
       paint(interpolated, hoveredRef.current);
@@ -356,66 +354,70 @@ export const UsageChart = memo(function UsageChart({
                   : "No recorded token usage in this range"}
           </div>
         )}
-        {inspected && inspectedColumn && (
-          <div
-            role="tooltip"
-            style={{
-              ...card(theme),
-              position: "absolute",
-              zIndex: 10,
-              pointerEvents: "none",
-              bottom: 108,
-              left: Math.max(
-                0,
-                Math.min(
-                  width - Math.min(width, 280),
-                  ((inspectedColumn.start - plot.start) /
-                    (plot.end - plot.start)) *
-                    width -
-                    130,
+        <HoverTip
+          show={Boolean(inspected && inspectedColumn)}
+          style={{
+            ...card(theme),
+            position: "absolute",
+            zIndex: 10,
+            pointerEvents: "none",
+            bottom: 108,
+            left: !inspectedColumn
+              ? 0
+              : Math.max(
+                  0,
+                  Math.min(
+                    width - Math.min(width, 280),
+                    ((inspectedColumn.start - plot.start) /
+                      (plot.end - plot.start)) *
+                      width -
+                      130,
+                  ),
                 ),
-              ),
-              width: Math.min(width, 280),
-              background: theme.ground,
-              boxShadow: "0 5px 18px #0002",
-              fontSize: 11,
-            }}
-          >
-            <div style={{ color: theme.secondary, marginBottom: 5 }}>
-              {dateLabel(
-                Math.max(inspectedColumn.start, start),
-                data.query.timeZone,
-                zh,
-              )}
-            </div>
-            <strong style={{ ...number, fontSize: 14 }}>
-              {integer(inspected.selectedTokens)} {zh ? "Token" : "tokens"}
-            </strong>
-            {data.models
-              .filter((model) => (inspected.models[model.id] ?? 0) > 0)
-              .map((model) => (
-                <div key={model.id} style={{ ...row, marginTop: 5 }}>
-                  <Swatch color={modelColor(model.id, theme)} />
-                  <HUDLogo
-                    source={model.provider}
-                    size={11}
-                    light={theme.light}
-                  />
-                  <span style={truncate}>{model.name}</span>
-                  <span style={{ marginLeft: "auto", ...number }}>
-                    {integer(inspected.models[model.id])}
-                  </span>
-                </div>
-              ))}
-            {inspectedColumn.partial && (
-              <div style={{ color: theme.secondary, marginTop: 5 }}>
-                {zh
-                  ? "仅统计所选范围内的部分时段"
-                  : "Partial period within the selected range"}
+            width: Math.min(width, 280),
+            background: theme.ground,
+            boxShadow: "0 5px 18px #0002",
+            fontSize: 11,
+          }}
+        >
+          {inspected && inspectedColumn && (
+            <>
+              <div style={{ color: theme.secondary, marginBottom: 5 }}>
+                {dateLabel(
+                  Math.max(inspectedColumn.start, start),
+                  data.query.timeZone,
+                  zh,
+                )}
               </div>
-            )}
-          </div>
-        )}
+              <strong style={{ ...number, fontSize: 14 }}>
+                {integer(inspected.selectedTokens)} {zh ? "Token" : "tokens"}
+              </strong>
+              {data.models
+                .filter((model) => (inspected.models[model.id] ?? 0) > 0)
+                .map((model) => (
+                  <div key={model.id} style={{ ...row, marginTop: 5 }}>
+                    <Swatch color={modelColor(model.id, theme)} />
+                    <HUDLogo
+                      source={model.provider}
+                      size={11}
+                      light={theme.light}
+                    />
+                    <span style={truncate}>{model.name}</span>
+                    <span style={{ marginLeft: "auto", ...number }}>
+                      {integer(inspected.models[model.id])}
+                    </span>
+                  </div>
+                ))}
+              {inspectedColumn.partial && (
+                <div style={{ color: theme.secondary, marginTop: 5 }}>
+                  {zh
+                    ? "仅统计所选范围内的部分时段"
+                    : "Partial period within the selected range"}
+                </div>
+              )}
+            </>
+          )}
+        </HoverTip>
       </div>
       {/* The labels name the selected range and sit where it lies on the
           plot, a part of a bucket in from either edge. */}
@@ -493,21 +495,17 @@ export const Sparkline = memo(function Sparkline({
   useEffect(() => {
     if (!width) return;
     const prev = currentRatiosRef.current;
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = systemReducesMotion();
     if (prev === null || reduceMotion) {
       currentRatiosRef.current = targetRatios;
       paint(targetRatios);
       return;
     }
     const from = prev;
-    const duration = 240;
     const startTime = performance.now();
     let frame = 0;
     const animate = (now: number) => {
-      const t = Math.min(1, Math.max(0, (now - startTime) / duration));
-      const eased = 1 - Math.pow(1 - t, 3);
+      const { t, share: eased } = dataProgress(startTime, now);
       const next = targetRatios.map((target, idx) => {
         const src =
           from.length === targetRatios.length

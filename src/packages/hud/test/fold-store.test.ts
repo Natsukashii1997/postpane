@@ -76,3 +76,26 @@ test("lists fold back when the card closes, even with a tag still out", () => {
   assert.deepEqual(closesWith(false, true), { handoff: false, folds: true });
   assert.deepEqual(closesWith(false, false), { handoff: true, folds: true });
 });
+
+test("only a fold just opened or folded moves its rows", () => {
+  const store = foldStore();
+  let toggle = () => {};
+  const Grab = () => {
+    toggle = store.use("claude:running")[1];
+    return null;
+  };
+  renderToStaticMarkup(createElement(Grab));
+  // Rows that come and go for other reasons (an answer, a removal) just go.
+  assert.equal(store.moving(), false);
+  toggle();
+  assert.equal(store.moving(), true);
+});
+
+test("the copy that measures the panel draws a fold's rows at once", () => {
+  // Only the panel in view lets rows move (FoldScope): the hidden copy
+  // keeps the paper at the list's new height from the first frame.
+  const surface = read("scene/HUDExpandedSurface.tsx");
+  assert.match(surface, /<FoldScope\s+moves=\{!reduceMotion\}/);
+  const fold = read("permissions/FoldButton.tsx");
+  assert.match(fold, /const FoldMotion = createContext\(false\)/);
+});

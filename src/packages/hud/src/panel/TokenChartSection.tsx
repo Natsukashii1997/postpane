@@ -15,7 +15,7 @@ import type {
 } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
 import { formatTokens } from "../quota-metrics";
-import { HUD_METRICS, sourcesForMark } from "../model";
+import { sourcesForMark } from "../model";
 import { usePanelQuery } from "../PanelContext";
 import {
   agentColor,
@@ -31,11 +31,9 @@ import { useFormat } from "@agent-hud/ui/format-context";
 import { dateFormat, numberFormat, systemTimeZone } from "@agent-hud/ui/format";
 import { hexAlpha } from "../tokens";
 import { orderedModels, visibleModelCounts } from "./model-visibility";
+import { EASE_OUT, MOTION } from "@agent-hud/ui/lib/motion";
 
-const moving: Transition = {
-  duration: HUD_METRICS.duration,
-  ease: HUD_METRICS.ease,
-};
+const moving: Transition = { duration: MOTION.data, ease: EASE_OUT };
 
 export function SourceTokenChart({
   snapshot,
@@ -301,7 +299,7 @@ export function SourceTokenChart({
                               : agentColor(slot, light),
                             transition: still
                               ? undefined
-                              : `flex-grow ${HUD_METRICS.duration}s cubic-bezier(${HUD_METRICS.ease.join(",")})`,
+                              : "flex-grow var(--motion-data) var(--ease-out)",
                           }}
                         />
                       ))}

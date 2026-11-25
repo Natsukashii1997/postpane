@@ -7,6 +7,43 @@ export type TrayKind = "review" | "test" | "cont" | "disc" | "rm";
 /** Each block's width; the tray is as wide as its blocks. */
 export const TRAY_BLOCK = 62;
 
+/** A flick this fast (points a millisecond) opens or closes the tray
+ * whichever way it went, however short; slower, the tray goes the way the
+ * row was let go past half its width (owner chose 改, 2026-11-25). */
+export const FLICK_SPEED = 0.35;
+/** A let-go row slides to rest on the shared move. */
+export const TRAY_SETTLE = "transform var(--motion-enter) var(--ease-out)";
+/** How far back a let-go looks for the flick's speed. */
+const FLICK_WINDOW_MS = 80;
+
+/** Where a dragged or swiped row has been lately, to tell a flick. */
+export function trayFlick(clock: () => number = () => performance.now()) {
+  let samples: { x: number; at: number }[] = [];
+  return {
+    /** The row is now at `x`; a pause starts a new gesture. */
+    note(x: number) {
+      const at = clock();
+      const last = samples[samples.length - 1];
+      if (last && at - last.at > 2 * FLICK_WINDOW_MS) samples = [];
+      samples.push({ x, at });
+      samples = samples.filter((one) => at - one.at <= FLICK_WINDOW_MS * 2);
+    },
+    /** Let go at `x`, `width` the open tray's: does it end open? */
+    opens(x: number, width: number): boolean {
+      const last = samples[samples.length - 1];
+      const first = samples.find(
+        (one) => last && last.at - one.at <= FLICK_WINDOW_MS,
+      );
+      samples = [];
+      if (last && first && last.at > first.at) {
+        const speed = (last.x - first.x) / (last.at - first.at);
+        if (Math.abs(speed) >= FLICK_SPEED) return speed < 0;
+      }
+      return x < -width / 2;
+    },
+  };
+}
+
 /** The blocks a row's tray shows: a Claude Code session on this machine,
  * or a Codex thread (#282), can hand its work over (it calls
  * `relay_to_chatgpt` itself); any other only leaves the sidebar. */

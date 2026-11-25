@@ -29,6 +29,8 @@ import {
   launchLine,
   stepBlock,
   TRAY_BLOCK,
+  TRAY_SETTLE,
+  trayFlick,
   trayKinds,
   trayReady,
   trayText,
@@ -69,8 +71,7 @@ export function RepliedRow({
   const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
-  // As a live row (#220): where it could not get there, the second line
-  // says why a few seconds.
+  // As a live row (#220): where it could not go, the second line says why.
   const goBack = async () => {
     if (!canOpen) return;
     const reason = failureOf(await services?.openSession?.(session), zh);
@@ -229,8 +230,7 @@ export function LiveRow({
   const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
-  // Where it could not get there, the second line says why a few seconds,
-  // then ↗ may be tried again (#220).
+  // Where it could not go, the second line says why, then ↗ may retry (#220).
   const goBack = async () => {
     if (!canOpen) return;
     const reason = failureOf(await services?.openSession?.(session), zh);
@@ -263,6 +263,7 @@ export function LiveRow({
   } | null>(null);
   const dragged = useRef(false);
   const wheelEnd = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [flick] = useState(trayFlick);
   const kinds = trayKinds(session);
   const solo = kinds.length === 1;
   const trayWidth = solo ? removeWidth : kinds.length * TRAY_BLOCK;
@@ -273,10 +274,11 @@ export function LiveRow({
       Math.max(solo ? -trayWidth * 1.6 : -trayWidth - 40, to),
     );
     setDrag(offset.current);
+    flick.note(offset.current);
   };
   const settle = () => {
     setDrag(null);
-    onOpen(offset.current < -trayWidth / 2);
+    onOpen(flick.opens(offset.current, trayWidth));
   };
   useEffect(() => () => clearTimeout(wheelEnd.current), []);
   const row = useRef<HTMLDivElement>(null);
@@ -287,8 +289,7 @@ export function LiveRow({
     setHot(index);
     blocks.current[index]?.focus();
   };
-  // ← opened the tray: its first block takes the keyboard once it is open,
-  // never after it closed again.
+  // ← opened the tray: its first block takes the keyboard once open, not after.
   const focusOnOpen = useRef(false);
   useEffect(() => {
     if (!open) {
@@ -308,8 +309,7 @@ export function LiveRow({
     const timer = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
-  // A handoff asked and not answered yet: another pick waits for it, and
-  // only the latest one's answer is said.
+  // A handoff not answered yet: another pick waits; only the latest is said.
   const launching = useRef(false);
   const asked = useRef(0);
   const pick = async (kind: TrayKind) => {
@@ -541,7 +541,7 @@ export function LiveRow({
             cursor: "pointer",
             opacity: hover && !x ? 0.78 : 1,
             transform: x ? `translateX(${x}px)` : undefined,
-            transition: drag === null ? "transform 0.18s ease" : undefined,
+            transition: drag === null ? TRAY_SETTLE : undefined,
           }}
         >
           {waiting ? (
