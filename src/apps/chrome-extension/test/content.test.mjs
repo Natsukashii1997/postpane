@@ -127,8 +127,9 @@ test("a reply to a prompt ChatGPT made an attachment is told with that prompt's 
   const done = (await turns(page)).filter((m) => m.phase === "complete");
   assert.deepEqual(
     done.map((m) => [m.messageId, m.promptId, m.prompt]),
-    [["m7", "p7", "粘贴的文本.txt文档"]],
+    [["m7", "p7", null]],
   );
+  assert.equal(done[0].unreadable, true);
 });
 
 // #507 review round 5, P1-04: an answer begins before its prompt is drawn.
@@ -903,7 +904,9 @@ test("a stop button going away does not make a reply before the newest prompt ne
 // answer nothing known yet.
 test("a reply with no prompt drawn yet is not taken as answered", async () => {
   const page = await open(() => {
-    for (const node of document.querySelectorAll("[data-user-message-bubble]"))
+    for (const node of document.querySelectorAll(
+      '[data-user-message-bubble], [data-chatgpt-search-unit-key$=":user"]',
+    ))
       node.remove();
   });
   const answer = await reread(page);
@@ -1061,4 +1064,53 @@ test("an answer written within the second read is not told stopped", async () =>
   await page.waitForTimeout(3500);
   const phases = (await turns(page)).map((m) => m.phase);
   assert.ok(!phases.includes("stopped"), JSON.stringify(phases));
+});
+
+// #431: the attachment user unit is constructed from the documented unit key.
+test("an attachment-only user turn is reported as unreadable instead of the old prompt", async () => {
+  const page = await open();
+  await page.evaluate(async () => {
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+    await new Promise((r) => setTimeout(r, 600));
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="attachment:0:user" data-chatgpt-search-message-ids="p-attachment"><svg></svg></div>' +
+          '<div data-chatgpt-search-unit-key="attachment:1:assistant" data-chatgpt-search-message-ids="a-attachment"><p data-d-component="text">附件回答</p></div>',
+      );
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+  });
+  await page.waitForFunction(() =>
+    window.told.some((m) => m.type === "turn" && m.phase === "complete"),
+  );
+  const done = (await turns(page)).filter((m) => m.phase === "complete");
+  assert.equal(done[0].prompt, null);
+  assert.equal(done[0].unreadable, true);
+  assert.equal(done[0].promptId, "p-attachment");
+  await page.close();
+});
+
+// #431: retain #509's decided search across all prompts, even when the last
+// user unit has no bubble. This unit is constructed, not a live DOM capture.
+test("a known request before an unreadable latest user unit is still found", async () => {
+  const page = await withTurns(
+    prompt(7, "【驿窗送审 h1~send5】\n审核") +
+      '<div data-chatgpt-search-unit-key="attachment:0:user" data-chatgpt-search-message-ids="p8"><svg></svg></div>',
+  );
+  const said = await ask(page, {
+    conversation: await page.evaluate(
+      () => location.href.split("/c/")[1] ?? null,
+    ),
+    request: "h1~send5",
+    after: "p7",
+  });
+  assert.deepEqual(
+    [said.loaded, said.there, said.promptId, said.unreadable],
+    [true, true, "p7", true],
+  );
+  await page.close();
 });

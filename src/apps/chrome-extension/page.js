@@ -100,23 +100,16 @@
     return text.trim();
   }
 
-  /** Whether a prompt shows: its bubble, or a turn with words of its own
-   * (an attachment's name). One drawn with neither is history still
-   * loading, not a prompt yet (#356 P2-04). */
-  const promptShows = (node) =>
-    node.matches(SEL.user) ||
-    !!node.querySelector(SEL.user) ||
-    !!shownText(node);
+  // The newest user unit counts even without text (#431): skipping it
+  // would pair its answer with an older prompt. A file name is not its words.
+  const newestPrompt = (doc) => newest(doc, SEL.prompt);
+  const hasPrompt = (doc) => !!newestPrompt(doc);
 
-  const newestPrompt = (doc) => newest(doc, SEL.prompt, promptShows);
-
-  /** The newest prompt's words: its bubble's, or the turn's own when it has
-   * none (an attachment's name). */
   function lastPrompt(doc) {
     const node = newestPrompt(doc)?.node;
     if (!node) return null;
     const bubble = node.matches(SEL.user) ? node : node.querySelector(SEL.user);
-    return bubble ? bubble.textContent.trim() : shownText(node);
+    return bubble?.textContent.trim() || null;
   }
 
   /** ChatGPT's message id of the newest prompt (#410): the one thing that
@@ -650,6 +643,7 @@
     title,
     lastReply,
     lastPrompt,
+    hasPrompt,
     lastPromptId,
     answered,
     marked,

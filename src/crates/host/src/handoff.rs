@@ -56,6 +56,8 @@ mod held;
 mod lines;
 #[path = "handoff/notice/desk.rs"]
 mod notice;
+#[path = "handoff/answers/desk_prompt.rs"]
+mod prompt;
 #[path = "handoff/answers/desk_reread.rs"]
 mod reread;
 pub mod settings;
@@ -466,23 +468,6 @@ impl Desk {
     fn launches(&self) -> MutexGuard<'_, HashMap<String, Launch>> {
         self.launches.lock().unwrap_or_else(|p| p.into_inner())
     }
-    /// Keeps the swipes (held, so a newer state is never overwritten).
-    /// One line in `chatgpt/turns.jsonl` for a turn the extension reported:
-    /// its conversation, phase, message id, how long the reply was and what
-    /// the desk made of it (`taken`, `unused`, `early`, `caught-up`,
-    /// `evicted`). Never the words themselves. A lost reply is then traced to
-    /// the extension (no line) or to the desk (a line that says why); what
-    /// each read again found is there too (`heard_reread`, #457).
-    fn note_turn(&self, message: &Value, at: i64, outcome: &str) {
-        self.append_turn(&json!({
-            "at": at,
-            "conversation": message["conversation"],
-            "phase": message["phase"],
-            "messageId": message["messageId"],
-            "replyChars": message["reply"].as_str().map(|r| r.chars().count()),
-            "outcome": outcome,
-        }));
-    }
     /// Adds `line` to `chatgpt/turns.jsonl`, moved aside once it grew too big.
     fn append_turn(&self, line: &Value) {
         use std::io::Write;
@@ -504,6 +489,7 @@ impl Desk {
         }
     }
 
+    /// Keeps the swipes (held, so a newer state is never overwritten).
     fn keep_launches(&self, launches: &HashMap<String, Launch>) {
         let Some(data) = &self.data else { return };
         let path = launches_path(data);
@@ -999,6 +985,9 @@ impl Desk {
     fn take(&self, message: &Value, conversation: &str, at: i64) -> bool {
         if message["phase"] == "start" {
             return self.change(|book| book.working(conversation, at));
+        }
+        if message["unreadable"] == true {
+            return self.unreadable_prompt(conversation, at);
         }
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();

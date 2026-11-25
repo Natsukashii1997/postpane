@@ -133,7 +133,9 @@ impl Desk {
     /// How the turn log names what became of a turn: `taken`, `unmatched`
     /// (another prompt's answer) or `unused`.
     pub(super) fn outcome(&self, took: bool, message: &Value, conversation: &str) -> &'static str {
-        if took {
+        if message["phase"] == "complete" && message["unreadable"] == true {
+            "unreadable"
+        } else if took {
             "taken"
         } else if self.unmatched(message, conversation) {
             "unmatched"
