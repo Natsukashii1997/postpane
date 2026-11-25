@@ -45,7 +45,7 @@
   - 帧率（`frames.txt`，CPU 4 倍降速，改前改后各 3 次）：中位帧 16.7–33.3ms 两边一样，最差帧都是首帧 200–500ms，噪声大，没测出变差。WKWebView 真机帧率未测。
   - 真实环境：上一版（`ce0db67`）装机冒烟过；本版装机见「发布与回读」。挂件摆回、小签淡入淡出、方章离场、托盘甩动、刘海回弹的观感都要常浩实机看。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/`（`rest/`、`fold/`、`settings/`、`swap/`）。
-- 发布与回读：合并后从 main 打包装机，见下一节或 PR 评论。
+- 发布与回读：分支 `0d830d9` 打包，`install.sh motion-polish`：产物 `1bce2b00156a` / 已装 `1bce2b00156a`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 528 个像素不同；装前装后 600 个像素不同（0.06%），范围 `[895, 323, 931, 591]` 只在小人那一列（L-35 守住）；没有「想访问文稿」弹窗（`screen-after-install-2.png`）。第一次装后票根左边的竖签（Codex 1、ChatGPT 8、Hermes 1）没了，换回上一版 `17d222b2a4ef` 重启也一样没有，判为重启清掉了内存里的提醒，不是本次改的；之后用 `--takeover` 重装回本版（接管的是自己回滚的那份）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/PostPane-17d222b2a4ef.app" /Applications/PostPane.app; open /Applications/PostPane.app`。合并后从 main 重打重装。
 - 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-74。
 
