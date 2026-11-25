@@ -45,6 +45,14 @@ export const GEOMETRY = {
   bounce: 0,
 } as const;
 
+/** The notch's shape: smaller and opened far more often than the sidebar's
+ * card, so the same spring a little quicker (GPT review, 2026-11-25). */
+export const NOTCH_GEOMETRY = { ...GEOMETRY, visualDuration: 0.26 } as const;
+
+/** The spring for a shape grown out of the notch or beside the sidebar. */
+export const springFor = (notch: boolean) =>
+  notch ? NOTCH_GEOMETRY : GEOMETRY;
+
 /** The CSS form of a curve. */
 export function cssCurve([x1, y1, x2, y2]: Curve): string {
   return `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`;

@@ -15,16 +15,24 @@ export const FLICK_SPEED = 0.35;
 export const TRAY_SETTLE = "transform var(--motion-enter) var(--ease-out)";
 /** How far back a let-go looks for the flick's speed. */
 const FLICK_WINDOW_MS = 80;
+/** And how far the row must have moved in this gesture before speed counts:
+ * a quick twitch is not a swipe (GPT review, 2026-11-25). */
+export const FLICK_TRAVEL = 12;
 
 /** Where a dragged or swiped row has been lately, to tell a flick. */
 export function trayFlick(clock: () => number = () => performance.now()) {
   let samples: { x: number; at: number }[] = [];
+  let from: number | null = null;
   return {
     /** The row is now at `x`; a pause starts a new gesture. */
     note(x: number) {
       const at = clock();
       const last = samples[samples.length - 1];
-      if (last && at - last.at > 2 * FLICK_WINDOW_MS) samples = [];
+      if (last && at - last.at > 2 * FLICK_WINDOW_MS) {
+        samples = [];
+        from = null;
+      }
+      from ??= x;
       samples.push({ x, at });
       samples = samples.filter((one) => at - one.at <= FLICK_WINDOW_MS * 2);
     },
@@ -34,8 +42,10 @@ export function trayFlick(clock: () => number = () => performance.now()) {
       const first = samples.find(
         (one) => last && last.at - one.at <= FLICK_WINDOW_MS,
       );
+      const travel = from === null ? 0 : Math.abs(x - from);
       samples = [];
-      if (last && first && last.at > first.at) {
+      from = null;
+      if (last && first && last.at > first.at && travel >= FLICK_TRAVEL) {
         const speed = (last.x - first.x) / (last.at - first.at);
         if (Math.abs(speed) >= FLICK_SPEED) return speed < 0;
       }

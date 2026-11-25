@@ -23,7 +23,23 @@
   - 几处注释并成一行、`HUDScene.tsx` 减动画判断写法，给棘轮腾行；`src/tooling/file-size-baseline.json` 收紧。
   - `model.ts` 删掉没人用的 `HUD_METRICS.ease`。
 - 同类：全项目搜了 `transition-all`、手写毫秒、`ease` / `ease-in-out` / 各种 `cubic-bezier`，侧栏和窗口里管状态变化的都换成共用值；小人、纸飞机、等待线等已定动效的时长和曲线没动；`app/test/moves.test.ts` 防窗口里再手写。
-- 测试：见下方「测试」补记。
+- GPT 方案顾问（思维评审，接力卡 `h1a211896fd701`，第 1 轮返修）逐条处理：
+  - 已改：刘海回弹 0.32 → 0.26 秒（`NOTCH_GEOMETRY`，侧栏外框仍 0.32）；托盘甩动另要这次手势至少滑过 12 点才看速度（`FLICK_TRAVEL`）；「收起」时退出中的行不再接点击。各补一条测试。
+  - 不改并说明：票根读数「高频时跳过动画」——读数随快照变，几秒到几分钟一次，且已用等宽数字；「交叉淡时交互归属」——侧栏三种视图、小签退出时已 `pointerEvents: none`，设置切页是同一节点淡入，不叠放。
+  - 转单 #538：加载反馈 300ms 后才出现、出错回执不自动消失、回执文案统一；减少动态效果分两级。
+  - 交常浩：挂件摆回 0.4 秒（常浩已批）GPT 建议 0.18–0.22 秒，没改，在会话里问。
+- 测试：
+  - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
+  - `pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
+- 验证（替身通过，环境是无头 Chromium + 场景预览台 1480 改前 / 1481 改后，设置页开发服务 1420，数据目录用证据目录里的假数据）：
+  - 「展开 / 收起」逐帧（`fold/fold-trace-1480.txt` 改前：点「收起」第一帧按钮从 953 跳到 654、纸还 1089，之后空纸缩；`fold-trace-1481.txt` 改后：末尾 4 行约 140ms 淡到 0，高度和纸一起从 1089 收到 790，按钮跟着纸走）。
+  - 设置开关逐帧（`settings/switch-trace.txt`：墨块 0% → 52% → 80% → 93% → … → 100%，约 120ms）；按钮按住时 `translate: 0px 1px`、`scale 0.98`。
+  - 静止对比：场景预览台 27 个场景 × 2 状态（`rest/`）只有小人姿势不同；设置 5 页 × 深浅色（`settings/before-*`、`after3-*`）差别只在实时数据（检查时间、额度数、预览条里智能体排序）。
+  - 帧率（`frames.txt`，CPU 4 倍降速，改前改后各 3 次）：中位帧 16.7–33.3ms 两边一样，最差帧都是首帧 200–500ms，噪声大，没测出变差。WKWebView 真机帧率未测。
+  - 真实环境：上一版（`ce0db67`）装机冒烟过；本版装机见「发布与回读」。挂件摆回、小签淡入淡出、方章离场、托盘甩动、刘海回弹的观感都要常浩实机看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/`（`rest/`、`fold/`、`settings/`、`swap/`）。
+- 发布与回读：合并后从 main 打包装机，见下一节或 PR 评论。
+- 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-74。
 
 ## 接力审核门：经代理回读 PR 提交失败时直连再读一次（#527）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 13 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）

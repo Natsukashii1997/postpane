@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { EASE_OUT, GEOMETRY, MOTION } from "@agent-hud/ui/lib/motion";
+import { EASE_OUT, MOTION, springFor } from "@agent-hud/ui/lib/motion";
 import type {
   Approval,
   IslandEvent,
@@ -176,18 +176,18 @@ export function HUDExpandedSurface({
   }, [atNotchRow, settle]);
   const inNotchRow = atNotchRow && rowSettled;
   const rowLight = inNotchRow ? false : light;
-  // The tag in front handed to another agent stands where that agent's tag
-  // hung; sliding there, it crossed the other tags and the pointer (#238).
+  // A tag handed to another agent stands at once where that one hung (#238).
   const tagAgent = !open && (request || event) ? focusedVendor?.key : undefined;
   const lastTagAgent = useRef(tagAgent);
   const swapped = frontTagSwapped(lastTagAgent.current, tagAgent);
   useEffect(() => {
     lastTagAgent.current = tagAgent;
   });
-  // A spring keeps the card's speed when it is turned back halfway, so
-  // opening and closing again mid-way joins up instead of jolting.
+  // A spring keeps the card's speed when turned back halfway (notch: quicker).
   const transition =
-    reduceMotion || dragging || swapped ? { duration: 0 } : GEOMETRY;
+    reduceMotion || dragging || swapped
+      ? { duration: 0 }
+      : springFor(config.mode === "notch");
   const from = {
     left: flared && horizontal(edge) ? strip.x - 8 : strip.x,
     top: strip.y,

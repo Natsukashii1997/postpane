@@ -47,15 +47,8 @@ test("磁盘瘦身 sways from the same rule as the cat, not its own", () => {
   );
 });
 
-test("a pendant let go mid-swing eases back upright instead of snapping", () => {
-  // The swing keys on the shell's own hover flag, so a leave can read the
-  // angle before the swing stops and ease it back (owner chose 改, 2026-11-25).
+test("the swing keys on the pendant's own hover flag, not :hover", () => {
+  // So a leave can read the angle before the swing stops and ease it back
+  // (owner chose 改, 2026-11-25; the shell's side: hud/test/pendant-settle).
   assert.doesNotMatch(css, /:hover \.hud-(pendant-sway|disk-broom)\s*\{/);
-  const shell = readFileSync(
-    new URL("../../hud/src/scene/PendantShell.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(shell, /data-hover=\{hover\}/);
-  assert.match(shell, /onPointerLeave=\{\(\) => \{\s*if \(!still\) settle\(root\.current\);/);
-  assert.match(shell, /const SWINGS = "\.hud-pendant-sway, \.hud-disk-broom";/);
 });

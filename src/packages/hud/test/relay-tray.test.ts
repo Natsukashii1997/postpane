@@ -158,3 +158,13 @@ test("a flick opens or closes the tray however short; a slow let-go goes by half
   flick.note(-200);
   assert.equal(flick.opens(-200, 310), true);
 });
+
+test("a quick twitch shorter than a swipe is not taken for a flick", () => {
+  let now = 0;
+  const flick = trayFlick(() => now);
+  // 8 points in 10 ms is fast, but the row barely moved: closed, by half.
+  flick.note(-6);
+  now = 10;
+  flick.note(-14);
+  assert.equal(flick.opens(-14, 310), false);
+});

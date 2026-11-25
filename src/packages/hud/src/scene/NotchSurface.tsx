@@ -6,7 +6,7 @@ import {
   useMotionValueEvent,
   useTransform,
 } from "motion/react";
-import { GEOMETRY } from "@agent-hud/ui/lib/motion";
+import { GEOMETRY, NOTCH_GEOMETRY } from "@agent-hud/ui/lib/motion";
 import HUDGlow, { type GlowAlert } from "../HUDGlow";
 import { islandPath, type HUDRect } from "../geometry";
 import {
@@ -104,12 +104,12 @@ export function useNotchGeometry(
     // Each value springs from where it is at the speed it has, so turning
     // the notch back halfway carries on instead of starting again from rest.
     const moves = [
-      animate(x, frame.x, GEOMETRY),
-      animate(y, frame.y, GEOMETRY),
-      animate(width, frame.width, GEOMETRY),
-      animate(height, frame.height, GEOMETRY),
-      animate(shoulder, flare, GEOMETRY),
-      animate(corner, radius, GEOMETRY),
+      animate(x, frame.x, NOTCH_GEOMETRY),
+      animate(y, frame.y, NOTCH_GEOMETRY),
+      animate(width, frame.width, NOTCH_GEOMETRY),
+      animate(height, frame.height, NOTCH_GEOMETRY),
+      animate(shoulder, flare, NOTCH_GEOMETRY),
+      animate(corner, radius, NOTCH_GEOMETRY),
     ];
     return () => moves.forEach((move) => move.stop());
   }, [

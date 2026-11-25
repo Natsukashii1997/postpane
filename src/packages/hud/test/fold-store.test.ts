@@ -99,3 +99,9 @@ test("the copy that measures the panel draws a fold's rows at once", () => {
   const fold = read("permissions/FoldButton.tsx");
   assert.match(fold, /const FoldMotion = createContext\(false\)/);
 });
+
+test("rows a fold takes away stop taking clicks while they fade", () => {
+  const fold = read("permissions/FoldButton.tsx");
+  const shut = fold.slice(fold.indexOf("shut:"), fold.indexOf("open:"));
+  assert.equal(shut.match(/pointerEvents: "none"/g)?.length, 2);
+});

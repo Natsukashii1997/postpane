@@ -57,15 +57,18 @@ const ROW: Variants = {
           height: 0,
           opacity: 0,
           overflow: "hidden",
+          // Leaving, it no longer takes a click meant for what stays.
+          pointerEvents: "none",
           transition: {
             height: GEOMETRY,
             opacity: { duration: MOTION.exit, ease: EASE_OUT },
           },
         }
-      : { opacity: 0, transition: { duration: 0 } },
+      : { opacity: 0, pointerEvents: "none", transition: { duration: 0 } },
   open: {
     height: "auto",
     opacity: 1,
+    pointerEvents: "auto",
     transition: {
       height: GEOMETRY,
       opacity: { duration: MOTION.enter, ease: EASE_OUT },

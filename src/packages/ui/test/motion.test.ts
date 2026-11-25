@@ -5,9 +5,12 @@ import {
   EASE_OUT,
   EASE_SWING,
   MOTION,
+  GEOMETRY,
   MOTION_MS,
+  NOTCH_GEOMETRY,
   cssCurve,
   eased,
+  springFor,
 } from "../src/lib/motion.ts";
 
 const css = readFileSync(new URL("../src/global.css", import.meta.url), "utf8");
@@ -65,3 +68,10 @@ test("eased follows its curve from rest to rest", () => {
 function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+test("the notch springs a little quicker than the sidebar's card, the same way", () => {
+  assert.ok(NOTCH_GEOMETRY.visualDuration < GEOMETRY.visualDuration);
+  assert.equal(NOTCH_GEOMETRY.bounce, 0);
+  assert.equal(springFor(true), NOTCH_GEOMETRY);
+  assert.equal(springFor(false), GEOMETRY);
+});
