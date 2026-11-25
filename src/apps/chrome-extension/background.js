@@ -684,16 +684,24 @@ async function drawnInFront(tabId, ask) {
     // The person chose a tab meanwhile: this one is not put over it.
     if (!Array.isArray(fronts) || moved()) return false;
     const front = fronts.find((t) => t.active);
-    // Not known to be in front in time, it is not read as if it were; the
-    // tab that was in front is put back all the same, in case it came late.
-    const put = await chromeSays(() => chrome.tabs.update(tabId, active));
-    // The person chose a tab while it was being put in front: theirs comes
-    // back if this one, done after, went over it, and nothing is read.
-    if (moved()) {
-      const theirs = chosen().at(-1).tabId;
-      const now = await chromeSays(() => chrome.tabs.get(tabId));
-      if (now?.active && seen.at(-1)?.tabId === tabId)
-        await chromeSays(() => chrome.tabs.update(theirs, active));
+    // Not known to be in front in time, it is not read as if it were. The
+    // ask is not over for that: Chrome may still put it in front.
+    const putting = Promise.resolve()
+      .then(() => chrome.tabs.update(tabId, active))
+      .catch(() => null);
+    const put = await chromeSays(() => putting);
+    // The person moved in its window from the start (#518, owner
+    // 2026-11-24): nothing is put back, theirs not either, and nothing is
+    // read. Who made the last move is not guessed: Chrome does not say, and
+    // a guess put tabs over the person's choice (#507 review P2-05). The
+    // ChatGPT tab may stay in front; the person moves it.
+    if (moved()) return false;
+    // Not in front in time: watched `LATE_PUT` more. Come with the window
+    // untouched, the tab that was in front comes back (#518).
+    if (!put) {
+      const late = await by(Date.now() + LATE_PUT, () => putting);
+      if (late && front && !moved())
+        await chromeSays(() => chrome.tabs.update(front.id, active));
       return false;
     }
     let told = false;
@@ -721,6 +729,8 @@ async function drawnInFront(tabId, ask) {
 }
 const FRONT_TRIES = 3;
 const FRONT_PAUSE = 1500;
+/** How long a put in front not answered in time is watched (#518). */
+const LATE_PUT = 10000;
 
 async function focus(conversation) {
   const tabId = tabFor(conversation);

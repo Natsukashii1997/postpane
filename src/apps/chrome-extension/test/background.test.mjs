@@ -939,8 +939,9 @@ test("a tab put in front for a read is moved back from only while it and its win
   };
   assert.deepEqual(await read(false, [true, true], choosingAsTabIs(2)), []);
   assert.equal(tabs.find((tab) => tab.active).id, 4);
-  // ...or while it is being put in front, which Chrome does after: theirs
-  // comes back, and it is not read.
+  // ...or while it is being put in front, which Chrome does after: nothing
+  // is put back, theirs not either, and it is not read (#518: who made the
+  // last move is not guessed; the ChatGPT tab may stay in front).
   const late = (chrome) => {
     const { update } = chrome.tabs;
     chrome.tabs.update = async (id, to) => {
@@ -948,8 +949,8 @@ test("a tab put in front for a read is moved back from only while it and its win
       return update(id, to);
     };
   };
-  assert.deepEqual(await read(false, [true, true], late), [2, 4], "late");
-  assert.equal(tabs.find((tab) => tab.active).id, 4);
+  assert.deepEqual(await read(false, [true, true], late), [2], "late");
+  assert.equal(tabs.find((tab) => tab.active).id, 2);
   assert.deepEqual(await read(true), [2], "the person's choice stays");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
   // The tab in front of its window still, but the person went to another
@@ -3029,4 +3030,52 @@ test("a page whose handle cannot prove the sign's token is not trusted", async (
     kit.called.filter(([, name]) => name === "proveInPage").at(-1),
     [2, "proveInPage", ["MAIN"]],
   );
+});
+
+// #518 (owner 2026-11-24): a put in front Chrome answers only after its
+// wait is not over: watched a while more, and come with the window as the
+// person left it, the tab that was in front comes back; the person having
+// moved in the window, nothing. Moves in other windows are not theirs here.
+test("a tab put in front late is moved back from only with its window untouched", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const tabs = [
+    { id: 2, url: `https://chatgpt.com/c/${conversation}`, windowId: 1 },
+    { id: 3, url: "https://chatgpt.com/", windowId: 1, active: true },
+    { id: 4, url: "https://chatgpt.com/", windowId: 1 },
+    { id: 5, url: "https://example.com/", windowId: 2, active: true },
+  ];
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const read = async (meanwhile) => {
+    tabs.forEach((tab) => (tab.active = tab.id === 3 || tab.id === 5));
+    const posted = [];
+    const fronted = [];
+    const { listeners, chrome } = load(tabs, {
+      posted,
+      fronted,
+      watched: [conversation],
+      answers: Array(5).fill({ ok: true, undrawn: true, loaded: true }),
+      now: true,
+      parked: [10000],
+    });
+    await tick();
+    listeners.message(page, { tab: { id: 2 } });
+    const { update } = chrome.tabs;
+    let letGo;
+    const landed = new Promise((done) => (letGo = done));
+    chrome.tabs.update = (id, to) =>
+      id === 2 ? landed.then(() => update(id, to)) : update(id, to);
+    const done = listeners.port({ type: "reread", conversation });
+    for (let ticks = 0; ticks < 20; ticks++) await tick();
+    meanwhile(chrome);
+    letGo();
+    await done;
+    return { fronted, found: posted.find((m) => m.type === "reread") };
+  };
+  const untouched = await read(() => {});
+  assert.deepEqual(untouched.fronted, [2, 3], "come late, put back");
+  assert.equal(untouched.found.outcome, "undrawn", "not read as in front");
+  const moved = await read((chrome) => chrome.tabs.activate(4));
+  assert.deepEqual(moved.fronted, [2], "the person moved: nothing");
+  const elsewhere = await read((chrome) => chrome.tabs.activate(5));
+  assert.deepEqual(elsewhere.fronted, [2, 3], "another window is not this one");
 });
