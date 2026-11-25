@@ -22,6 +22,7 @@ pub mod files;
 mod manifest;
 mod sending;
 pub mod shadow;
+mod texts;
 mod turns;
 pub mod version;
 mod watched;
@@ -31,6 +32,7 @@ pub use manifest::{
 };
 pub use sending::SendFailed;
 use sending::Unasked;
+use texts::refused;
 pub use turns::{completion, started};
 use watched::{add_watched, watch_message, watched_entry};
 pub use watched::{load_watched, save_watched, Watched};
@@ -385,13 +387,6 @@ fn not_connected() -> String {
         "ChatGPT 插件没有连上驿窗",
         "The ChatGPT extension is not connected",
     )
-}
-fn refused(reason: &str) -> String {
-    if l10n::chinese() {
-        format!("ChatGPT 插件没能完成：{reason}")
-    } else {
-        format!("The ChatGPT extension could not finish: {reason}")
-    }
 }
 
 /// The channel the app runs while it is open.

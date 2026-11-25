@@ -379,3 +379,55 @@ fn a_review_that_cannot_be_kept_first_does_not_go() {
     let h = desk.lock().list.last().cloned().unwrap();
     assert!(h.gate.pending.is_none(), "left as it was");
 }
+
+/// #434：补格式成为最新提问后，只收它的回答；同时覆盖提问编号和正文归属。
+#[test]
+fn the_latest_format_owns_the_answer_instead_of_the_older_ask() {
+    for with_id in [false, true] {
+        let (_temp, desk) = desk_of(5);
+        let lines = Fake::default();
+        if with_id {
+            *lines.asked_as.borrow_mut() = Some("ask-id".into());
+        }
+        let Started::Opening { handoff, .. } = ruled(&desk, &lines, "s1", "L2", None, 1).unwrap()
+        else {
+            panic!()
+        };
+        let original = asked().unwrap();
+        desk.observe(&reply_as(Some(original.clone()), "缺少末尾格式", "m1"), 3);
+        if with_id {
+            *lines.asked_as.borrow_mut() = Some("format-id".into());
+        }
+        desk.drive(&lines, 4);
+        let format = asked().unwrap();
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(kept.last_asked().unwrap().kind, StepKind::Format);
+        assert_ne!(format, original);
+        let reply = |prompt: String, id: &str, message: &str| {
+            let mut turn = reply_as(Some(prompt), "```rust\nlet x = 1;\n```\n返修意见", message);
+            if with_id {
+                turn["promptId"] = json!(id);
+            }
+            turn
+        };
+        let before = kept.last_reply().cloned();
+        desk.observe(&reply(original, "ask-id", "old-ask-answer"), 5);
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().last_reply().cloned(),
+            before
+        );
+        desk.observe(&reply(format, "format-id", "format-answer"), 6);
+        let kept = desk.lock().get(&handoff.id).cloned().unwrap();
+        assert_eq!(
+            kept.last_reply().unwrap().key.as_deref(),
+            Some("format-answer")
+        );
+        assert!(kept
+            .last_reply()
+            .unwrap()
+            .text
+            .as_deref()
+            .unwrap()
+            .contains("```rust"));
+    }
+}

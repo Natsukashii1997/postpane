@@ -51,6 +51,21 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 
 `reason` 取值：`not-watched`、`no-composer`、`busy`（正在生成）、`other-conversation`（#507 复审 P1-03：页面这时显示的不是这段话的会话，没点发送；已经放进输入框的字按归属清掉，清不掉或不敢清的回报带 `left: true`，驿窗把「输入框里留着没清掉的字」写进这次没送成的说明）、`send-failed`、`composer-mismatch`（输入框里的字和要送的话对不上：多出旧稿，或少了一截、发送键却亮着，比如长文被转成附件，#429）、`timeout`、`tab-closed`。插件收到 `send-failed`、`composer-mismatch` 会把标签页切到前台、清空输入框再试一次；输入框外的附件块清不掉，留着附件时两次都报 `composer-mismatch`，交常浩到页面上移除。
 
+
+发送失败的界面说明（#434，按界面语言显示；不改变 `pressed` 和送达未确认的处理）：
+
+| 原因码 | 中文说明和下一步 |
+| --- | --- |
+| `composer-mismatch` | 输入框里的字和要送的话对不上，可能多出旧稿、长文被转成附件，或留着上次的附件。请到 ChatGPT 页面移除附件、清空输入框后，在接力卡上重试。 |
+| `no-composer` | 没有找到 ChatGPT 输入框。请打开对应的 ChatGPT 标签页，确认已登录、页面已加载后重试。 |
+| `busy` | ChatGPT 还在写回答。请等这个会话写完后再重试。 |
+| `send-failed` | 没有确认这段话已发出。请先到 ChatGPT 页面核对是否已有这段话，再按接力卡提示处理，避免重复发送。 |
+| `timeout` | 等待 ChatGPT 页面超时。请打开对应标签页，先核对这段话是否已发出，再按接力卡提示处理。 |
+| `tab-closed` | ChatGPT 标签页已关闭或无法访问。请打开对应会话，核对这段话是否已发出，再按接力卡提示处理。 |
+| `not-watched` | 这个 ChatGPT 会话不在接力名单里。请从接力卡打开对应会话后重试。 |
+| `other-conversation` | ChatGPT 页面已切到别的会话，这段话没有发送。请切回接力对应的会话，检查输入框后重试。 |
+| 其他原因 | ChatGPT 插件没能完成这次操作。请到对应的 ChatGPT 页面核对是否已发出，再按接力卡提示处理。 |
+
 标签页失效（#507，插件 0.2.7 起）：Chrome 回收的标签页还在插件的名单里，但不应答。2026-11-21 两次送审和一次补格式因此回了不带 `pressed` 的 `tab-closed` 或一直没答话，被记成送达未确认；一个会话被重读 128 次全是 `unreachable`。真实 Chromium 156 实测（2026-11-22，证据 `…/evidence/2026-11-22-507-tab-revive/real-chromium/`）：标签页被回收后**编号会换**，旧编号 `chrome.tabs.get` 报不存在、发消息报「Receiving end does not exist」，触发的是 `onReplaced` 不是 `onRemoved`；换了编号的那个标签页 `discarded: true`、注入脚本被拒、重载后恢复正常。现在：
 
 - 发送和重读都先找一个「自己答应显示这个会话」的标签页（`reach`）。候选先取名单里记着这个会话的，再取网址是这个会话的（被回收的标签页挂在旧编号下，要靠网址找回）。逐个问页面在不在、显示哪个会话（`alive`，2 秒内要答）：
