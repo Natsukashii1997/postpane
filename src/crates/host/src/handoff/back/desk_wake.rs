@@ -18,7 +18,7 @@ impl Desk {
         let due = self.lock().waiting_to_wake(now);
         let mut changed = false;
         for (id, session, prompt) in due {
-            let Ok(_sending) = self.claim(&id) else {
+            let Ok(_sending) = self.claim_back(&id) else {
                 continue;
             };
             let taken = lines

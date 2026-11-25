@@ -22,7 +22,7 @@ impl Desk {
         now: i64,
     ) -> Result<bool, String> {
         let id = handoff.id.as_str();
-        let _sending = self.claim(id)?;
+        let _sending = self.claim_back(id)?;
         if self.lock().returned_already(id, text) {
             return Ok(false);
         }

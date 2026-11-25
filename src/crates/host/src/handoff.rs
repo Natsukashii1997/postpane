@@ -29,7 +29,7 @@ pub(crate) struct Rule {
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     sync::{Condvar, Mutex, MutexGuard},
 };
@@ -42,6 +42,8 @@ mod back;
 #[path = "handoff/answers/desk_belongs.rs"]
 mod belongs;
 pub(crate) mod book;
+#[path = "handoff/sending/desk_claim.rs"]
+mod claiming;
 #[path = "handoff/answers/desk_driver.rs"]
 mod driver;
 #[path = "handoff/gate/desk.rs"]
@@ -249,8 +251,9 @@ pub(crate) struct Desk {
     /// sent (`caught_up`); oldest first.
     early: Mutex<Vec<Early>>,
     /// Handoffs with words on their way now: a second sending waits, so the
-    /// same words are not sent twice side by side.
-    sending: Mutex<HashSet<String>>,
+    /// same words are not sent twice side by side. The value is true only
+    /// toward ChatGPT: sending back to the doer does not hold its turns.
+    sending: Mutex<HashMap<String, bool>>,
     /// Words being sent to ChatGPT, by handoff, until they are known to have
     /// gone in: in time, or told by the extension after the wait (#223).
     asking: Mutex<HashMap<String, Asking>>,
@@ -313,18 +316,6 @@ struct Early {
     at: i64,
 }
 
-/// A handoff's words on their way; let go when dropped.
-struct Sending<'a>(&'a Desk, String);
-impl Drop for Sending<'_> {
-    fn drop(&mut self) {
-        self.0
-            .sending
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(&self.1);
-    }
-}
-
 impl Desk {
     /// The handoffs kept in `data`; none kept in the demo. Conversations
     /// that were opening when the app stopped count as failed, to retry.
@@ -354,7 +345,7 @@ impl Desk {
             ),
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
-            sending: Mutex::new(HashSet::new()),
+            sending: Mutex::new(HashMap::new()),
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
             undrawn: Mutex::new(HashMap::new()),
@@ -392,17 +383,6 @@ impl Desk {
             return desk;
         }
         desk(book)
-    }
-    /// Claims `id` for sending, or says words are already on their way.
-    fn claim(&self, id: &str) -> Result<Sending<'_>, String> {
-        let mut sending = self.sending.lock().unwrap_or_else(|p| p.into_inner());
-        if !sending.insert(id.to_owned()) {
-            return Err(l10n::text(
-                "上一段还在送，等它送完再试。",
-                "Words are still on their way; try again once they arrive.",
-            ));
-        }
-        Ok(Sending(self, id.to_owned()))
     }
     fn lock(&self) -> MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(|p| p.into_inner())
@@ -1057,7 +1037,9 @@ impl Desk {
             self.sending
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
-                .contains(&id)
+                .get(&id)
+                .copied()
+                .unwrap_or(false)
         })
     }
 
@@ -1351,7 +1333,7 @@ impl Desk {
     /// or, for an end, once it could not (#316): the card says which.
     fn auto_back(&self, lines: &dyn Lines, id: &str, next: Next, now: i64) -> bool {
         // A person's button sending meanwhile: theirs goes.
-        let Ok(_sending) = self.claim(id) else {
+        let Ok(_sending) = self.claim_back(id) else {
             return false;
         };
         let Some(handoff) = self
