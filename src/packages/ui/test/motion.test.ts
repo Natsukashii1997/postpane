@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import {
   EASE_OUT,
   EASE_SWING,
@@ -74,4 +74,42 @@ test("the notch springs a little quicker than the sidebar's card, the same way",
   assert.equal(NOTCH_GEOMETRY.bounce, 0);
   assert.equal(springFor(true), NOTCH_GEOMETRY);
   assert.equal(springFor(false), GEOMETRY);
+});
+
+test("动画 off rests the running dots as the system's less motion does (ENG-09)", () => {
+  for (const scope of [
+    /@media \(prefers-reduced-motion: reduce\) \{[^@]*?\.hud-running-grid > span \{\s*opacity: 0\.55;/,
+    /\.hud-scene\[data-motion="reduce"\] \.hud-running-grid > span \{\s*animation: none;\s*opacity: 0\.55;/,
+  ])
+    assert.match(css, scope);
+});
+
+test("one-off moves take the shared paces; the few kept are named (ENG-11)", () => {
+  // The pendant's lift, eye glow and press were set with the pendant
+  // (owner 2026-11-06, #159) and keep their own timing.
+  const kept = [
+    "transition: transform 0.18s ease;",
+    "transition: opacity 0.2s ease;",
+    "transition-duration: 0.08s;",
+  ];
+  const literal = [
+    ...css.matchAll(
+      /^\s*(transition|transition-duration|animation)\s*:[^;]*\d(ms|s)\b[^;]*;/gm,
+    ),
+  ]
+    .map((m) => m[0].trim())
+    .filter((rule) => !/infinite|0\.01ms/.test(rule))
+    .filter((rule) => !kept.includes(rule));
+  assert.deepEqual(literal, []);
+  // Tailwind durations in the shared parts are the language's paces; 80 is
+  // a small popover closing, quicker than a panel's exit.
+  const ui = new URL("../src/ui/", import.meta.url);
+  for (const file of readdirSync(ui))
+    for (const [, ms] of readFileSync(new URL(file, ui), "utf8").matchAll(
+      /duration-(\d+)/g,
+    ))
+      assert.ok(
+        [...Object.values(MOTION_MS), 80].includes(Number(ms)),
+        `${file}: duration-${ms}`,
+      );
 });

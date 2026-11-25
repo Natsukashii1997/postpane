@@ -22,6 +22,9 @@ export { cardFolds };
  * is the folded or unfolded one from the first frame. */
 const FoldMotion = createContext(false);
 const Moving = createContext(false);
+/** A card's list was opened or folded just now (WorkSections' `Folded`):
+ * the rows drawn inside it move with that fold. */
+export const ListFolding = createContext(false);
 
 /** The panel in view: a box whose folds may move. */
 export function FoldScope({
@@ -44,8 +47,19 @@ export function FoldScope({
  * on the paper's own spring, so the list and the paper move together instead
  * of the rows vanishing and the empty paper shrinking after them (owner
  * chose 改, 2026-11-25). Wrap a list's rows, each in a keyed `FoldRow`. */
-export function FoldRows({ children }: { children: ReactNode }) {
-  const moving = useContext(FoldMotion) && cardFolds.moving();
+export function FoldRows({
+  moving: folding = false,
+  children,
+}: {
+  /** This list's own fold was opened or folded just now (a store's third
+   * value); a card list around it counts too. Nothing else moves rows. */
+  moving?: boolean;
+  children: ReactNode;
+}) {
+  // Rows inside rows that move (a group's own list) move with them.
+  const list = useContext(ListFolding);
+  const parent = useContext(Moving);
+  const moving = useContext(FoldMotion) && (folding || list || parent);
   return (
     <Moving.Provider value={moving}>
       <AnimatePresence initial={false} custom={moving}>
@@ -88,13 +102,15 @@ export function FoldList<T>({
   items,
   keyOf,
   row,
+  moving,
 }: {
   items: readonly T[];
   keyOf: (item: T) => string;
   row: (item: T, index: number, list: readonly T[]) => ReactNode;
+  moving?: boolean;
 }) {
   return (
-    <FoldRows>
+    <FoldRows moving={moving}>
       {items.map((item, index, list) => (
         <FoldRow key={keyOf(item)}>{row(item, index, list)}</FoldRow>
       ))}

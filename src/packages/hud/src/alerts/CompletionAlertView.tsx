@@ -38,8 +38,7 @@ import {
   sessionReplies,
 } from "./reply-list";
 
-/** The replies waiting, as a list card like the waiting card's: newest first
- * and open, grouped by sidebar section; each line goes back to its session. */
+/** Replies waiting, as a list card: newest first, grouped, each to its session. */
 export function CompletionAlertView({
   replies,
   snapshot,
@@ -61,7 +60,7 @@ export function CompletionAlertView({
   const inks = cardInks(paper, light);
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
-  const [unfolded, toggleFold] = cardFolds.use("replies");
+  const [unfolded, toggleFold, folding] = cardFolds.use("replies");
   // The reply whose row was clicked: it opens in place of the newest.
   const [chosen, setChosen] = useState<string | null>(null);
   const card = useHandoffCard();
@@ -73,8 +72,7 @@ export function CompletionAlertView({
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
   );
 
-  // Only ↗ goes back, and only once the session is in front are its replies
-  // put away; where it could not, the line says why and may retry (#220).
+  // Only ↗ goes back; replies go once the session is in front, else say why (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     const reason = failureOf(
@@ -236,6 +234,7 @@ export function CompletionAlertView({
       style={{ ...cardColumn(0), position: "relative" }}
     >
       <FoldList
+        moving={folding}
         items={groups.filter((group) => group.entries.some((e) => !review(e)))}
         keyOf={(group) => group.section ?? ""}
         row={(group) => (
@@ -253,6 +252,7 @@ export function CompletionAlertView({
       {reviews.length > 0 && (
         <ReviewSlip paper={paper} zh={zh}>
           <FoldList
+            moving={folding}
             items={reviews}
             keyOf={(entry) => entry.id}
             row={(entry, index) => line(entry, index, reviewInks, reviewPaper)}

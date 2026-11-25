@@ -17,6 +17,7 @@ import { HUDArtwork as HUDLogo } from "../HUDArtwork";
 import { CompactAlertView } from "../IslandNews";
 import type { ReplyChip } from "../alerts/reply-list";
 import { FoldScope } from "../permissions/FoldButton";
+import { PresentButton, PresentDiv } from "./Present";
 import { RequestDeliveryNotice } from "../permissions/RequestDeliveryNotice";
 import { SourceHoverPanel } from "../HoverPanel";
 import type { HUDRect } from "../geometry";
@@ -153,11 +154,10 @@ export function HUDExpandedSurface({
   /** Where the receipt's sheet sits in the frame, clear of the dock. */
   paperInset?: Insets;
 }) {
-  // A hardware notch's row stays dark whatever the appearance, at rest and
-  // while a reminder shows its wings, so it stays one with the camera
-  // housing: black. What opens out of the row takes the look itself (Open
-  // HUDLook.inNotchRow). A closing panel keeps its own look while it shrinks and the row's takes over once it is
-  // back in the row; at once, a light panel would turn into a black block.
+  // A hardware notch's row stays black whatever the appearance, at rest and
+  // with a reminder's wings, one with the camera housing; what opens out of it
+  // takes the look itself (Open HUDLook.inNotchRow). A closing panel keeps its
+  // look while it shrinks and darkens once back in the row.
   const atNotchRow =
     config.mode === "notch" && config.hasNotch && !open && !peek;
   const settle = reduceMotion ? 0 : HUD_METRICS.duration;
@@ -454,7 +454,7 @@ export function HUDExpandedSurface({
                   >
                     <AnimatePresence initial={false} mode="popLayout">
                       {view === "peek" && focusedVendor ? (
-                        <motion.button
+                        <PresentButton
                           // Keyed by agent: one receipt fades into the next.
                           key={`peek-${focusedVendor.key}`}
                           {...swap(true)}
@@ -503,9 +503,9 @@ export function HUDExpandedSurface({
                               }
                             />
                           )}
-                        </motion.button>
+                        </PresentButton>
                       ) : view === "tag" ? (
-                        <motion.div key="tag" {...swap(true)}>
+                        <PresentDiv key="tag" {...swap(true)}>
                           <CompactAlertView
                             request={request}
                             event={event}
@@ -528,9 +528,9 @@ export function HUDExpandedSurface({
                               showPanelStats?.();
                             }}
                           />
-                        </motion.div>
+                        </PresentDiv>
                       ) : (
-                        <motion.div
+                        <PresentDiv
                           key="panel"
                           {...swap(false)}
                           style={{
@@ -540,7 +540,7 @@ export function HUDExpandedSurface({
                           }}
                         >
                           <AnimatePresence mode="popLayout">
-                            <motion.div
+                            <PresentDiv
                               key={
                                 request || (event && !inUsagePanel)
                                   ? "alert-stack"
@@ -610,9 +610,9 @@ export function HUDExpandedSurface({
                                   language={snapshotLanguage(snapshot)}
                                 />
                               </div>
-                            </motion.div>
+                            </PresentDiv>
                           </AnimatePresence>
-                        </motion.div>
+                        </PresentDiv>
                       )}
                     </AnimatePresence>
                   </FoldScope>

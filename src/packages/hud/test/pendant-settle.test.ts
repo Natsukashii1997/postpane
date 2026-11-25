@@ -17,5 +17,12 @@ test("a pendant let go mid-swing eases back upright instead of snapping", () => 
   );
   assert.match(shell, /const SWINGS = "\.hud-pendant-sway, \.hud-disk-broom";/);
   // Added onto the swing, so a pointer back mid-way picks it up from there.
-  assert.match(shell, /composite: "add"/);
+  assert.match(shell, /composite: ADDS \? "add" : "replace"/);
+  // One settle per part: a second leave replaces the first (ENG-05).
+  assert.match(
+    shell,
+    /settling\.get\(part\)\?\.cancel\(\);\s*settling\.delete\(part\);/,
+  );
+  // Where WebKit cannot add animations, coming back ends the settle (ENG-10).
+  assert.match(shell, /onPointerEnter=\{\(\) => \{\s*resume\(root\.current\);/);
 });

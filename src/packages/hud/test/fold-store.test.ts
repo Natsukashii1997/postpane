@@ -77,18 +77,32 @@ test("lists fold back when the card closes, even with a tag still out", () => {
   assert.deepEqual(closesWith(false, false), { handoff: true, folds: true });
 });
 
-test("only a fold just opened or folded moves its rows", () => {
+test("only the list just opened or folded moves its rows, not another list", () => {
   const store = foldStore();
   let toggle = () => {};
-  const Grab = () => {
-    toggle = store.use("claude:running")[1];
+  const seen: Record<string, boolean> = {};
+  const List = ({ name, grab }: { name: string; grab?: boolean }) => {
+    const [, flip, moving] = store.use(name);
+    if (grab) toggle = flip;
+    seen[name] = moving;
     return null;
   };
-  renderToStaticMarkup(createElement(Grab));
+  const draw = () =>
+    renderToStaticMarkup(
+      createElement(
+        "b",
+        null,
+        createElement(List, { name: "claude:running", grab: true }),
+        createElement(List, { name: "codex:waiting" }),
+      ),
+    );
+  draw();
   // Rows that come and go for other reasons (an answer, a removal) just go.
-  assert.equal(store.moving(), false);
+  assert.deepEqual(seen, { "claude:running": false, "codex:waiting": false });
   toggle();
-  assert.equal(store.moving(), true);
+  draw();
+  // ENG-03: another list changing in the same moment does not move.
+  assert.deepEqual(seen, { "claude:running": true, "codex:waiting": false });
 });
 
 test("the copy that measures the panel draws a fold's rows at once", () => {
@@ -112,4 +126,15 @@ test("rows a fold takes away stop taking clicks while they fade", () => {
     fold,
     /const present = useIsPresent\(\);\s*return \(\s*<motion\.div\s+inert=\{!present\}/,
   );
+});
+
+test("「在跑 n」 moves the running rows by its own fold, not the cards'", () => {
+  // ENG-01: the board's fold was a store of its own, and the rows read the
+  // cards' store, so they never moved when 「在跑 n」 opened.
+  const rows = read("panel/PlaceRows.tsx");
+  assert.match(rows, /const \[open, toggle, folding\] = boardFolds\.use\(/);
+  assert.match(rows, /<FoldRows moving=\{folding\}>\s*\{rows\.running\.map/);
+  // A card list hands its own fold down to the rows drawn in it.
+  const sections = read("panel/WorkSections.tsx");
+  assert.match(sections, /<ListFolding\.Provider value=\{folding\}>/);
 });

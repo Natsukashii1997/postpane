@@ -34,8 +34,21 @@
   - 减少动态效果下循环停在哪：0.01ms、只跑一次后元素回到自身样式，项目里这些循环的静止样式就是 100% 关键帧那一帧；重新挂载会重跑一次 0.01ms，看不出来。
   - 「动画」开关作用范围：现在只管侧栏，三个窗口只看系统设置；补进 #538 评论，由那张定。
   - 票根读数位数变化：读数那一格左右用绝对定位固定，内容居中，位数变不推动别的东西。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
+  - 工程审查第 1 轮返修后：`pnpm run check` 原样 `check exit 0`（`check-7.txt`）；`pnpm test`（`test-9.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 540`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。新测试：`hud/test/present.test.ts`、fold-store 两条、moves 两条、motion 两条、pendant-settle 加断言。装机的包 `1bce2b00156a` 不含这一轮。
   - 送代码审查前自查改了一处：`FoldRow` 展开时 `pointerEvents` 从 `"auto"` 改成 `"inherit"`，免得把外层（拖动时）关掉的点击又打开；补断言。之后 `pnpm run check` 原样 `check exit 0`（`check-6.txt`），`pnpm test`（`test-8.txt`）6 套全过，数字同下一条。装机的包 `1bce2b00156a` 不含这一处。
   - 最终一版：`pnpm run check` 原样 `check exit 0`（`check-5.txt`）；`pnpm test`（`test-7.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 534`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
   - 之前一版：`pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
@@ -59,6 +72,18 @@
   - 文档：`docs/chatgpt-channel.md` 审核门一句；`docs/DECIDED.md` 一行。
 - 我顺手改的：#528 加的 `MEND_AGAIN_MS` 导出在正式构建里报「没用到的导入」警告（我上一张留下的），改成只在测试里导出（`book.rs`、`sending/book_unsure.rs`，行数不变）。
 - 同类：驿窗里另外的联网读取（额度、云端会话）不走 `git ls-remote`，不在这张范围；没有别处读 PR 提交。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：先只挪代码、不加兜底，`test result: FAILED. 2 passed; 3 failed`（`red.txt`；没失败的两条守的是「一次成功就不再读」「PR 不存在不再读」）；实现后接力模块 `test result: ok. 231 passed; 0 failed`（`green.txt`）；正式构建 `cargo build -p agent-hud-host` 无警告。
   - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1158 passed（1153 + 5），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-24-527-head-direct/`。
@@ -80,6 +105,18 @@
   - 文档：`docs/chatgpt-channel.md` #466 那段补格式一句改写；`docs/DECIDED.md` 加 2026-11-24 一行，2026-11-20（①）那行备注补「补格式那块已由 #528 定下」。
 - 我顺手改的：无。
 - 同类：会话发起的送审没点发送早由 #466 处理；补格式是剩下唯一一处「没点发送仍按送达未确认」的发送，没有别处。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：只加常量、不改行为时 `test result: FAILED. 0 passed; 2 failed`（`red.txt`；旧代码第一次没点发送就停下、不再补）；实现后接力模块 `test result: ok. 226 passed; 0 failed`（`green.txt`）。
   - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1153 passed（1151 + 2），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`check.txt`、`test.txt`、`node.txt`）。
@@ -109,6 +146,18 @@
   - 文档：`docs/chatgpt-channel.md` 送达未确认一段补三处；`docs/DECIDED.md` 登记 2026-11-24 一行。
 - 我顺手改的：`docs/LESSONS.md` L-69 补「提升：已提升为全局 G-49」（agent-kit#125，PR agent-kit#126 等合并）。
 - 同类：搜了接力里的计数（`+= 1`）和不写盘的字段（`serde(skip)`），命中 3 处：重读（发送失败本来就不计）、没画出（按插件回报计）、写作闸（设计上由插件重启后补报），都不用改。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：第一批 5 条在旧代码上 `test result: FAILED. 1 passed; 4 failed`（`red.txt`；没失败那条守的是「会话已重送就不通知」，旧代码本来就不通知）；独立审查后补 3 条，`FAILED. 5 passed; 3 failed`（`red-r1.txt`）；改后接力模块 `test result: ok. 224 passed; 0 failed`（`green-r1.txt`）。
   - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1151 passed（基线 1143 + 新增 8），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`check2.txt`、`test2.txt`、`node2.txt`）。第一次全量 `check exit 1`：`FIND_MOST` 只在测试配置下导出、正式构建找不到，`book.rs` 多一行超了 300 行棘轮名单的上限 1579；合进原有导出行后过了。
@@ -189,6 +238,18 @@
   - `platform/src/os/macos/mod.rs`、`linux/mod.rs`：两家各写一遍的「调脚本、失败换提示」合进 `unix::open_url` / `unix::reveal`，macos/mod.rs 变短，`file-size-baseline.json` 收紧（337 → 333）。
   - 「Could not reveal transcript」同属没翻译的提示，一并改中文、记原因（行为变化已列在上面）。
   - `docs/LESSONS.md`：L-71。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：红为编译失败 `cannot find function run`，绿 `4 passed; 0 failed`；输出在 `evidence/2026-11-23-517-open-reason/red.txt`。
   - 变基到 `2429481`（含 #508）后：`pnpm run check` 退出 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1133 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。输出在同目录 `check3.txt`、`test3.txt`、`node3.txt`。
@@ -214,6 +275,18 @@
   - `host/src/lib.rs`：只把 `tauri::Builder::default()` 换成 `shell::web_content_hooks(tauri::Builder::default())`，行数不变。
   - `docs/LESSONS.md`：L-67。
 - 我顺手改的：无。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿：红 `test result: FAILED. 0 passed; 2 failed`（`left: []`），绿 `2 passed; 0 failed`；输出在 `evidence/2026-11-22-512-process-log/red.txt`、`green.txt`。
   - 变基前：`pnpm run check` 退出 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1117 passed / 0 failed，前端 `ℹ pass 516` / `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。变基到 `6dd1bea`（含 #513、#514）后重跑的结果写在 PR 描述。
@@ -282,6 +355,18 @@
 - 真实 Chromium 里查出并修掉一处（开工 `2026-11-22 15:43`，接手会话）：给 `find` 加了 4 条真实 Chromium 测试（`adf3881`），全量里其中一条失败。写探针在真实 Chromium 156 里跑 10 轮：重载一个在前台的标签页时，旧页面卸载途中会因为被隐藏（`visibilitychange`）再报到一次，插件把它当成新页面已经到了，去问一个正在离开的页面，10 轮里 8 轮报 `unread`（`real-chromium-find/probe-reload-report-before.log`）。替身测试测不出来。修法：`content.js` 在 `pagehide` 之后不再因为被隐藏而报到，从缓存回来（`pageshow` 且 `persisted`）时再报一次。修后 10 轮全是 `there`，每轮只收到新页面报到一次（`probe-reload-report-after.log`）。加 1 条真实 Chromium 测试（前台标签页重载后等新页面再读，连跑 3 个会话）：修前第 2 个会话就失败（`red-r4-front.log`），修后过。行为变化：页面卸载时不再多报一次「在、但隐藏了」，对驿窗看到的标签页状态没有可见影响（新页面马上会报到）。
 - 跟上 #508 第 3 轮审查的修法（开工 `2026-11-22 16:46`，接手会话）：把 #508 的 `c297be3` 合进本分支（`91e27cc`，冲突在 `CURRENT.md`、`docs/DECIDED.md`、`chromium.test.mjs`，两边都留）。`find` 不用改：它走 `reach`，只重载 Chrome 说已卸载的标签页这条规则只管 `reach` 里的候选；`find` 自己重载的是「答了在、显示这个会话、没在写」的标签页，有活页面但确定没在写，重载是要读到页面最新的样子。
   - 测试：合并加修复后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1126 passed / 0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 170`（含真实 Chromium 11 条），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` 原样结果 `ℹ pass 64` / `ℹ fail 0`（`check-r5.log`、`test-r5.log`、`rules-r5.log`）。仍是替身通过，未在真实环境验证。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿（G-40）。插件：3 条新测试在没有实现时 `ℹ pass 51` / `ℹ fail 3`（`red-plugin.log`），实现后 `ℹ pass 54` / `ℹ fail 0`。驿窗：临时让 `find_unsure` 不去找、`heard_found` 不入账，`cargo test -p agent-hud-host --lib handoff` 得 `test result: FAILED. 202 passed; 3 failed`（`red-host.log`）；还原后 `test result: ok. 205 passed; 0 failed`（`green-host.log`）。
   - `pnpm run check` 通过（`check exit 0`）。第一遍 `check exit 1`：三个新文件还没 `git add`，开头查 `src/` 下没提交文件那一步拦下的，加进暂存区后重跑。
@@ -371,6 +456,18 @@
   - 返修测试：新断言放在上一轮受审实现（`fc096b6`，临时副本）上跑都失败：第一次问标签页时换的那条 `actual: [ 2, 4 ]`（应为 `[]`，`red-r8-plugin.log`），切到前台途中换的那条去掉前一条单独跑 `actual: [ 2 ]`（应为 `[ 2, 4 ]`，`red-r8-plugin-late.log`）。实现后三条全量见下面「测试」的第 7 轮那一行。仍是替身通过。第 8 轮没有送：常浩这次授权的是 1 轮，等他再定。
 - 第 8 轮审查（受审 `23c21e5`，常浩在本会话回「送第 8 轮」后送出）：结论「需修改」，P0 0、P1 0，只剩 P2-05 三处边界：恢复判断用了全浏览器最后一次激活事件、没限定窗口；切到前台的请求超时后迟到完成会绕过保护；`tabs.onActivated` 分不清是谁切的，常浩自己点回 ChatGPT 标签页会被当成插件的切换。三处对照代码都成立。P2-05 已连续返修 5 轮（第 4～8 轮），第 3 处是 Chrome 接口本身给不出来源，停下请常浩定。常浩 2026-11-22 经驿窗侧栏（回到统筹会话「驿窗接力｜进度与根治核查」，本会话在它的记录里核对过原话）回「先合并另开单」：接受 P2-05 这三处暂不关，另开 #518，换成保守规则（发现常浩动过就什么都不切回；超时的切换在时限内继续盯；只看目标窗口），规则待他确认。
 - 合 main 时坑编号撞号：main 上 #516 先合进了 L-67（窗口空白、网页进程重载），本节原来的 L-67、L-68、L-69 顺延为 L-68、L-69、L-70，本节和 LESSONS 都已改，PR 描述同步；main 那条和它在 #516 一节的引用没动。合并后三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1129 passed / 0 failed，其余各套 `ℹ fail 0`（`check-merge2.log`、`test-merge2.log`）。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿（G-40）。插件：5 条新测试在旧代码上 `ℹ pass 46` / `ℹ fail 5`（`red-plugin.log`），实现后 `ℹ pass 51` / `ℹ fail 0`。驿窗：临时关掉三处实现（重启只记一次的判断、读不到的退避、把转回后的 2 小时加回去）跑 `cargo test -p agent-hud-host --lib handoff`，`test result: FAILED. 195 passed; 5 failed`（2 条新测试加 3 条跟着 2 小时去掉改的，`red-host.log`）；还原后 `test result: ok. 200 passed; 0 failed`（`green-host.log`）。第一遍红没编译过（新测试调了私有的 `live_mut`），改掉后重跑的。
   - `pnpm run check` 通过（`check exit 0`）。
@@ -403,6 +500,18 @@
   - 开发桥白名单写成 `Set<NativeMethod>`，6 个写方法照旧不放；`vite-config` 加工作区依赖 `@agent-hud/protocol`，`pnpm-lock.yaml` 跟着改了 3 行（L-66）。
   - host 新增 `events.rs`（18 个事件名常量 + 内部用的 `SNAPSHOT`），9 个文件的事件名字面量改用常量。
   - 行数：`HUDSurface.tsx`、`App.tsx`、`use-hud-config.ts` 变短，基线已收紧；`host/src/lib.rs` 白名单上限 1126 → 1127（挂 `events` 模块一行）。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
 - 测试：
   - 新测试先红后绿（G-40）：同一条命令里临时删 `COMMANDS` 的 `quit_app`、把 `events.rs` 的 `hud:clock` 改成 `hud:clocks`、在 `app/src` 加一个 `import { invoke as call } from "@tauri-apps/api/core"` 的文件，`ℹ pass 0` / `ℹ fail 3`；还原后 `ℹ pass 3` / `ℹ fail 0`。
   - `pnpm run check` 通过（`check exit 0`；第一次被包边界检查拦下测试里的 `new URL("../../../../")`，改成 `join(import.meta.dirname, …)` 读文件，同 `hud/test/director-cases.test.ts`）。

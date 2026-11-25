@@ -8,20 +8,41 @@ const SWINGS = ".hud-pendant-sway, .hud-disk-broom";
  * instead of snapping from up to 13° (2026-11-25, owner chose 改). */
 const SETTLE_MS = 400;
 
+/** The settle each swinging part has playing: one at a time (ENG-05). */
+const settling = new WeakMap<Element, Animation>();
+/** Whether this WebKit adds one animation onto another (Safari 16 and later;
+ * WebKit's own check). Without it a settle replaces the swing, so a pointer
+ * back mid-way stops the settle and lets the swing take over (ENG-10). */
+const ADDS =
+  typeof KeyframeEffect !== "undefined" &&
+  Boolean(new KeyframeEffect(null, []).composite);
+
 /** Before the swing stops, take each swinging part from where it is now back
  * to rest, so the leave reads as the pendant coming to a stop: quick at first,
  * then easing in, with no second swing. It adds onto the swing rather than
- * replacing it, so a pointer back mid-way picks the swing up from there. */
+ * replacing it, so a pointer back mid-way picks the swing up from there; a
+ * second leave starts from all of it, swing and settle, and replaces the
+ * first settle rather than piling onto it. */
 function settle(root: HTMLElement | null) {
   for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? []) {
     const from = getComputedStyle(part).transform;
+    settling.get(part)?.cancel();
+    settling.delete(part);
     if (from === "none" || from === "") continue;
-    part.animate([{ transform: from }, { transform: "none" }], {
+    const back = part.animate([{ transform: from }, { transform: "none" }], {
       duration: SETTLE_MS,
       easing: cssCurve(EASE_OUT),
-      composite: "add",
+      composite: ADDS ? "add" : "replace",
     });
+    settling.set(part, back);
   }
+}
+
+/** The pointer is back: where settles cannot add onto the swing, end them. */
+function resume(root: HTMLElement | null) {
+  if (ADDS) return;
+  for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? [])
+    settling.get(part)?.cancel();
 }
 
 const SHADOW =
@@ -142,7 +163,10 @@ export function PendantShell({
       data-motion={still ? "still" : "on"}
       data-hover={hover}
       data-open={open}
-      onPointerEnter={() => setHover(true)}
+      onPointerEnter={() => {
+        resume(root.current);
+        setHover(true);
+      }}
       onPointerLeave={() => {
         if (!still) settle(root.current);
         setHover(false);

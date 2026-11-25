@@ -65,3 +65,19 @@ export function arrive(
  * pops nothing, short enough to feel like an answer once it stops. The
  * Statistics window's charts answer at once instead. */
 export const TOOLTIP_DELAY = 400;
+
+/** A fold's two keyframes: from where it is now (`now`, mid-way through a
+ * move that was turned back) or else from shut (opening) or from `full`
+ * (closing), to `full` and seen, or to nothing and gone. */
+export function foldFrames(
+  open: boolean,
+  full: number,
+  now: { height: number; opacity: number } | null,
+): Keyframe[] {
+  const from =
+    now ?? (open ? { height: 0, opacity: 0 } : { height: full, opacity: 1 });
+  return [
+    { height: `${from.height}px`, opacity: from.opacity },
+    { height: `${open ? full : 0}px`, opacity: open ? 1 : 0 },
+  ];
+}

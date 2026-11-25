@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { moves, scaledFill } from "../src/lib/moves.ts";
+import { foldFrames, moves, scaledFill } from "../src/lib/moves.ts";
 
 test("an inline transition takes the language's pace and curve", () => {
   assert.equal(
@@ -59,4 +59,34 @@ test("the windows write no pace or curve of their own", () => {
     found.map(({ at, line }) => `${at} ${line.trim()}`),
     [],
   );
+});
+
+test("a fold closing from fully open fades out as it shuts (ENG-02)", () => {
+  assert.deepEqual(foldFrames(false, 120, null), [
+    { height: "120px", opacity: 1 },
+    { height: "0px", opacity: 0 },
+  ]);
+  assert.deepEqual(foldFrames(true, 120, null), [
+    { height: "0px", opacity: 0 },
+    { height: "120px", opacity: 1 },
+  ]);
+  // Turned back half way, it goes on from where it is.
+  assert.deepEqual(foldFrames(false, 120, { height: 70, opacity: 0.6 }), [
+    { height: "70px", opacity: 0.6 },
+    { height: "0px", opacity: 0 },
+  ]);
+});
+
+test("rows reordered mid-slide start from where they are on screen (ENG-06)", () => {
+  const motion = readFileSync(
+    fileURLToPath(new URL("../src/lib/Motion.tsx", import.meta.url)),
+    "utf8",
+  );
+  const flip = motion.slice(motion.indexOf("export function useFlip"));
+  // offsetTop leaves out a slide still playing; the box on screen does not.
+  assert.doesNotMatch(
+    flip.slice(0, flip.indexOf("return useCallback")),
+    /offsetTop/,
+  );
+  assert.match(flip, /sliding\.current\.get\(id\)\?\.cancel\(\);/);
 });

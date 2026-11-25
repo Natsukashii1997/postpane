@@ -30,6 +30,7 @@ import { SourceIndexing } from "./panel/IndexingSection";
 import { blockListed } from "./panel/agent-board";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
+import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
 
 export { SOURCE_PANEL } from "./panel/theme";
 
@@ -78,6 +79,7 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
     [contentWidth, setContentWidth] = useState<number>();
   const scroller = useRef<HTMLDivElement>(null);
   const [lit, setLit] = useState<string | null>(null);
+  const moves = config.animations && snapshot.settings.animations;
   useEffect(() => {
     setLit(null);
     const box = scroller.current;
@@ -97,7 +99,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
         box.getBoundingClientRect().top +
         box.scrollTop -
         8;
-      box.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      // Less motion (the system's or 动画 off) jumps there (ENG-04).
+      const behavior = moves && !systemReducesMotion() ? "smooth" : "auto";
+      box.scrollTo({ top: Math.max(0, top), behavior });
     };
     reach();
     // A board just grown from a peek gets its height capped a frame later;
@@ -485,14 +489,9 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
       </footer>
     </div>
   );
-  // The panel's charts move as the HUD does: not at all when animations are
-  // off (the setting, a picture) or the system asks for reduced motion.
+  // The panel's charts move as the HUD does: not with 动画 off or less motion.
   return (
-    <MotionConfig
-      reducedMotion={
-        config.animations && snapshot.settings.animations ? "user" : "always"
-      }
-    >
+    <MotionConfig reducedMotion={moves ? "user" : "always"}>
       {panel}
     </MotionConfig>
   );

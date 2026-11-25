@@ -48,7 +48,7 @@ export function PlaceRows({
   const inks = useBoardInks(light);
   const { remove } = useRemovedSessions();
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [open, toggle] = boardFolds.use(
+  const [open, toggle, folding] = boardFolds.use(
     fold ? agentArtworkKey(fold) : undefined,
   );
   const rows = fold
@@ -155,7 +155,7 @@ export function PlaceRows({
           />
         </button>
       )}
-      <FoldRows>
+      <FoldRows moving={folding}>
         {rows.running.map((entry, index) =>
           row(entry, rows.waiting.length + (rows.folded ? 1 : 0) + index),
         )}

@@ -6,13 +6,13 @@
 import { useSyncExternalStore } from "react";
 
 export interface FoldStore {
-  /** Whether `key`'s list is open, and a way to open or fold it. */
-  use(key: string | undefined): [boolean, () => void];
+  /** Whether `key`'s list is open, a way to open or fold it, and whether it
+   * was opened or folded just now: rows that fold brings or takes move, where
+   * rows that come and go for any other reason (an answer, a removal, another
+   * list's fold) just appear or go. */
+  use(key: string | undefined): [boolean, () => void, boolean];
   /** Folds every list back. */
   reset(): void;
-  /** A list was opened or folded just now: rows it brings or takes move,
-   * where rows that come and go for any other reason just appear or go. */
-  moving(): boolean;
 }
 
 /** Long enough for a fold's rows to start moving on the renders it causes. */
@@ -20,7 +20,7 @@ const MOVING_MS = 600;
 
 export function foldStore(): FoldStore {
   const open = new Set<string>();
-  let toggledAt = Number.NEGATIVE_INFINITY;
+  const toggledAt = new Map<string, number>();
   const listeners = new Set<() => void>();
   const changed = () => listeners.forEach((listener) => listener());
   const subscribe = (listener: () => void) => {
@@ -34,17 +34,17 @@ export function foldStore(): FoldStore {
       const toggle = () => {
         if (!key) return;
         if (!open.delete(key)) open.add(key);
-        toggledAt = Date.now();
+        toggledAt.set(key, Date.now());
         changed();
       };
-      return [isOpen, toggle];
+      const at = key ? toggledAt.get(key) : undefined;
+      return [isOpen, toggle, at !== undefined && Date.now() - at < MOVING_MS];
     },
     reset() {
       if (!open.size) return;
       open.clear();
       changed();
     },
-    moving: () => Date.now() - toggledAt < MOVING_MS,
   };
 }
 

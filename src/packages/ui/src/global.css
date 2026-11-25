@@ -431,7 +431,7 @@ a:focus-visible {
 }
 .session-share-row {
   border-radius: 6px;
-  transition: background-color 140ms ease;
+  transition: background-color var(--motion-quick) var(--ease-out);
 }
 .session-share-row:hover {
   background: color-mix(in srgb, currentColor 5%, transparent);
@@ -446,7 +446,8 @@ a:focus-visible {
   padding: 40px 20px;
   text-align: center;
   color: var(--muted-foreground);
-  animation: loading-state-in 240ms ease-out 120ms both;
+  animation: loading-state-in var(--motion-enter) var(--ease-out)
+    var(--motion-quick) both;
 }
 .loading-state-spinner {
   width: 22px;
@@ -508,6 +509,11 @@ a:focus-visible {
   .hud-running-grid > span {
     opacity: 0.55;
   }
+}
+/* 动画 off rests the 3×3 dots the same way, not on their own delays (ENG-09). */
+.hud-scene[data-motion="reduce"] .hud-running-grid > span {
+  animation: none;
+  opacity: 0.55;
 }
 
 /* 随手记 pendant on the resting HUD (hud/src/scene/AppPendant.tsx); its shell

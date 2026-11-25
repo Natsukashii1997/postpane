@@ -17,7 +17,7 @@ import {
   cssCurve,
   systemReducesMotion,
 } from "@agent-hud/ui/lib/motion";
-import { arrive, type Pace } from "./moves";
+import { arrive, foldFrames, type Pace } from "./moves";
 
 export { TOOLTIP_DELAY, dataProgress, moves, scaledFill } from "./moves";
 
@@ -48,21 +48,17 @@ export function useFold<T extends HTMLElement>(open: boolean) {
       return;
     }
     // Where it is now, mid-way through the last move if one is playing.
-    const height = element.getBoundingClientRect().height;
-    const opacity = running ? Number(getComputedStyle(element).opacity) : 0;
+    const now = running && {
+      height: element.getBoundingClientRect().height,
+      opacity: Number(getComputedStyle(element).opacity),
+    };
     running?.cancel();
     const full = element.getBoundingClientRect().height;
     element.style.overflow = "hidden";
-    const animation = element.animate(
-      [
-        {
-          height: `${running ? height : open ? 0 : full}px`,
-          opacity: running ? opacity : open ? 0 : 1,
-        },
-        { height: `${open ? full : 0}px`, opacity: open ? 1 : 0 },
-      ],
-      { duration: open ? MOTION_MS.enter : MOTION_MS.exit, easing: curve },
-    );
+    const animation = element.animate(foldFrames(open, full, now || null), {
+      duration: open ? MOTION_MS.enter : MOTION_MS.exit,
+      easing: curve,
+    });
     playing.current = animation;
     animation.onfinish = () => {
       playing.current = null;
@@ -121,14 +117,20 @@ export const useDrillArrival = (deeper: boolean) =>
  */
 export function useFlip(order: readonly string[]) {
   const nodes = useRef(new Map<string, HTMLElement>());
+  const sliding = useRef(new Map<string, Animation>());
   const key = order.join("\n");
   const drawn = useRef(key);
   const before = useRef<Map<string, number> | null>(null);
-  // Read before the new order reaches the page, like getSnapshotBeforeUpdate.
+  // Read before the new order reaches the page, like getSnapshotBeforeUpdate:
+  // where each row is on screen, part way through its last slide included,
+  // so reordering again mid-slide carries on instead of jumping.
   if (drawn.current !== key) {
     drawn.current = key;
     before.current = new Map(
-      [...nodes.current].map(([id, node]) => [id, node.offsetTop]),
+      [...nodes.current].map(([id, node]) => [
+        id,
+        node.getBoundingClientRect().top,
+      ]),
     );
   }
   useLayoutEffect(() => {
@@ -136,12 +138,19 @@ export function useFlip(order: readonly string[]) {
     before.current = null;
     if (!tops || systemReducesMotion()) return;
     for (const [id, node] of nodes.current) {
-      const by = (tops.get(id) ?? node.offsetTop) - node.offsetTop;
+      sliding.current.get(id)?.cancel();
+      sliding.current.delete(id);
+      const at = node.getBoundingClientRect().top;
+      const by = (tops.get(id) ?? at) - at;
       if (!by || !node.animate) continue;
-      node.animate(
+      const slide = node.animate(
         [{ transform: `translateY(${by}px)` }, { transform: "none" }],
         { duration: MOTION_MS.enter, easing: curve },
       );
+      sliding.current.set(id, slide);
+      slide.onfinish = () => {
+        if (sliding.current.get(id) === slide) sliding.current.delete(id);
+      };
     }
   }, [key]);
   return useCallback(

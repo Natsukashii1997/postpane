@@ -61,7 +61,7 @@ export function ApprovalContent({
   const inks = cardInks(paper, light);
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
-  const [unfolded, toggleFold] = cardFolds.use("approvals");
+  const [unfolded, toggleFold, folding] = cardFolds.use("approvals");
   const entries: ApprovalEntry[] = [
     ...requests.map((request): ApprovalEntry => ({
       kind: "request",
@@ -161,11 +161,11 @@ export function ApprovalContent({
       className="hud-approval-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      <FoldRows>
+      <FoldRows moving={folding}>
         {groups.map((group) => (
           <FoldRow key={group.section ?? ""}>
             <div style={cardColumn(0)}>
-              <FoldRows>
+              <FoldRows moving={folding}>
                 {group.entries.map((entry, index) => {
                   const open =
                     entry.kind === "request" && entry.id === selected.id;
