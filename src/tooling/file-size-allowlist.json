@@ -1,7 +1,7 @@
 {
   "src/crates/host/src/handoff.rs": {
-    "max": 2001,
-    "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单；7a 批 3 子模块按概念放进 gate/back/answers/sending/notice 目录，13 个 #[path] 声明各多一行（1984 → 1997）；2026-11-22 修 clippy 把 then/unwrap_or_else 改成 if/else 多 2 行，按函数拆见 #511；#509 送达未确认后去会话里找：Lines 加 find 的声明（2 行）、observe 加 found 一支（1 行），实现都在 handoff/sending/desk_finding.rs 和 book_finding.rs（1999 → 2001）"
+    "max": 2006,
+    "reason": "#175 后台续接：主体已拆到 handoff/wake.rs，这里只剩 Lines 的三个方法声明与委托、auto_back 里会话已停的分支；拆分本文件原有代码另开单；7a 批 3 子模块按概念放进 gate/back/answers/sending/notice 目录，13 个 #[path] 声明各多一行（1984 → 1997）；2026-11-22 修 clippy 把 then/unwrap_or_else 改成 if/else 多 2 行，按函数拆见 #511；#509 送达未确认后去会话里找：Lines 加 find 的声明（2 行）、observe 加 found 一支（1 行），实现都在 handoff/sending/desk_finding.rs 和 book_finding.rs（1999 → 2001）；#526 点了停止、一个字没写出时页面报 stopped，observe 加一支只交给写作闸（含一行注释，2001 → 2006），实现在 gate/book_writing.rs"
   },
   "src/crates/host/src/handoff/book.rs": {
     "max": 1579,

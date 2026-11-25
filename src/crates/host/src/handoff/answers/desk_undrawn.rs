@@ -35,37 +35,25 @@ impl Desk {
         else {
             return false;
         };
-        // Reads that reach no page come further apart (#507).
-        if let Some((_, missed)) = self
-            .reread_at
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .get_mut(&id)
-        {
-            let reached = !matches!(
-                message["outcome"].as_str(),
-                Some("unreachable" | "unopened")
-            );
-            *missed = if reached { 0 } else { *missed + 1 };
-        }
+        let changed = self.change(|book| book.reread_result(&id, message["outcome"].as_str(), now));
         let times = {
             let mut undrawn = self.undrawn.lock().unwrap_or_else(|p| p.into_inner());
             if message["outcome"] != "undrawn" {
                 undrawn.remove(&id);
-                return false;
+                return changed;
             }
             let times = undrawn.entry(id.clone()).or_default();
             *times += 1;
             *times
         };
         if times < UNDRAWN_TIMES {
-            return false;
+            return changed;
         }
         self.undrawn
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(&id);
-        self.change(|book| book.stop_undrawn(&id, &undrawn_halt(), now))
+        self.change(|book| book.stop_undrawn(&id, &undrawn_halt(), now)) || changed
     }
 }
 

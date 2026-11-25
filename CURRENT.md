@@ -70,6 +70,58 @@
 - 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-74。
 
+## 接力写作闸：点了停止、一个字没写出时页面报 stopped，驿窗立即解除（#526）（2026-11-24，Claude，常浩看改动确认后在会话里回「12改」；已提交，PR 见描述，已登记 DECIDED.md，接在 #518 后面）
+
+- 时间：开工 `2026-11-24 13:44`（`date '+%F %H:%M'` 记录）。来由：拍板清单第 12 项。写作闸（11-22 定，只认同一轮「写完」才解除）在常浩点了停止、一个字没写出时听不到「写完」，会挡满 30 分钟。改的是已定内容：发过改动确认（原定、改成什么、风险「思考阶段被误判提前解除」、备选「缩到 5 分钟」），常浩回「12改」。
+- 改变的行为：页面在停止按钮消失后 600 毫秒读一次、再隔 2 秒读一次，两次都是「没在生成、最新提问没变、它后面没有回答或只有空占位」，报 `turn` 的 `stopped`（带开始时记下的提问编号）；驿窗按同一轮「写完」的规矩立即解除写作闸，别的什么都不做。两次之间写出了字就不报。其余照 11-22 那行（30 分钟出口还在）。
+- 你要求的：
+  - `src/apps/chrome-extension/content.js`：`unwritten`、`watchStop`、`STOP_AGAIN`；插件 0.2.9 → 0.2.10（#518 已升到 0.2.9、还没发布，两张合并后常浩重新加载一次）。
+  - `src/crates/platform/src/clients/chatgpt/mod.rs`：`stopped` 原样转给驿窗，不记事件。
+  - `src/crates/host/src/handoff.rs`：`observe` 加一支，只交给写作闸（`heard_writing` 本来就把非「开始」的阶段当结束，不用改）。
+  - 测试：`content.test.mjs` 3 条（一字未写报、只有空占位报、两次之间写出字不报），`handoff/tests/writing.rs` 1 条（别的提问停了不解除、这一轮停了就放行）。
+  - 文档：`docs/chatgpt-channel.md` 两处；`docs/DECIDED.md` 新一行，11-22 那行备注「部分已被取代」。
+- 我顺手改的：
+  - 通道层 `mod.rs` 在 300 行棘轮基线里只许变短，加一支要多 5 行；把只是「回合变成事件」的四个纯函数（`turn_at`、`turn_title`、`started`、`completion`）原样挪到新文件 `turns.rs`（542 → 470 行，基线跟着收紧），`tests_unix.rs` 补一行引用。
+  - `src/tooling/file-size-allowlist.json`：`handoff.rs` 上限 2001 → 2006，理由写明。
+  - `src/packages/app/test/picture-queries.test.ts`：第一次全量时这条在负载 22 下失败（20 毫秒的时限过了 1 秒多才回来，`picture-rerun.txt` 单独重跑 3 次都过），断言「1 秒内回来」放宽到 10 秒，原意「不等永远不回的查询」不变。同类：搜了测试里 `Date.now() - started <` 这种写法，只此一处。
+- 同类：插件报给驿窗的回合阶段只有开始、完成两种，「停了」是第三种；没有别处要认它。
+- 测试：
+  - 新测试先红后绿：页面 3 条在旧代码上 `ℹ pass 1` / `ℹ fail 2`（`red-page.txt`；过的那条守「写出字就不报」），驿窗 1 条 `FAILED. 0 passed; 1 failed`（`red-host.txt`）；改后页面测试 `ℹ pass 32` / `ℹ fail 0`，驿窗接力模块 `ok. 232 passed`，通道层 `ok. 272 passed`。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1159 passed（1158 + 1），前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 188`（185 + 3），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`（`check2.txt`、`test2.txt`；第一次全量前端那条见上）；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`（`node.txt`）。
+  - 证据目录 `~/Library/Application Support/postpane/evidence/2026-11-24-526-stop-empty/`。
+- 审查：没送 ChatGPT，没另做独立审查。
+- 验证：页面测试在真实 Chromium（Playwright）里加载 `content.js` 跑，但页面是本地夹具不是真 chatgpt.com，属替身通过。真实页面未验：要在 chatgpt.com 上发一句、马上点停止，看 `turns.jsonl` 里有没有 `stopped`、接力能不能立刻发。
+- 截图：无界面改动。
+- 发布与回读：（#518 审查通过、两张合并后从 main 装机，请常浩重新加载插件 0.2.10）
+- 与授权不一致之处、遗留问题、范围外发现：本分支从 #518 的分支拉出（都改插件版本和同几份文档），PR 连带 #518 的提交，#518 先合并后只剩自己的。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 接力：读回信时临时切前台再切回，改用保守规则（#518）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 4 项）；已提交，PR 见描述，已登记 DECIDED.md，送 L2 审查见下）
+
+- 时间：开工 `2026-11-24 13:32`（`date '+%F %H:%M'` 记录）。来由：#508 审查第 4～8 轮在 `drawnInFront` 里一轮轮找出更细的时机边界（#507-P2-05），常浩 11-22 定「先合并另开单」；issue 提的保守规则这次经「全按推荐」确认。
+- 改变的行为（动手前已在会话里列出）：
+  - 正在把 ChatGPT 标签页切到前台时常浩换了标签页：原来插件的切换若后完成、盖住了常浩选的，就把他选的切回来；现在什么都不切回，他选的也不再切回来，不读。代价（issue 写明、常浩已知）：ChatGPT 标签页可能留在前台，要自己切回。
+  - 切到前台的请求 3 秒没回音：原来不读、不切回；现在不读，再盯 10 秒，迟到完成且这个窗口没被动过就切回原来那个，动过就不动。
+  - 判断只看目标窗口，别的窗口里的切换不算。
+- 你要求的：
+  - `src/apps/chrome-extension/background.js`：`drawnInFront` 去掉「把常浩选的切回来」那一支；切前台请求留着（`putting`），没回音时用 `LATE_PUT`（10 秒）再盯。插件版本 `manifest.json` 0.2.8 → 0.2.9。
+  - 测试 `test/background.test.mjs`：原「正在切过去时换了标签页」那条预期从 `[2, 4]` 改成 `[2]`（照批准的行为改）；新加一条三种情形（迟到且没动过 → 切回；迟到但动过 → 不动；别的窗口里切换 → 仍切回），迟到用测试手里放行的 Promise，两窗口夹具。
+  - 文档：`docs/chatgpt-channel.md` 时限一段两处；`docs/DECIDED.md` 一行。
+- 我顺手改的：无。
+- 同类：插件里另一处切前台是 `focus()`（常浩点「跳回」时主动切，不切回），不是同类。
+- 测试：
+  - 新测试先红后绿：旧代码上 `ℹ pass 0` / `ℹ fail 2`（`red.txt`：「late」实得 `[2, 4]`、「come late, put back」实得 `[2]`）；改后插件后台测试 `ℹ pass 82` / `ℹ fail 0`（`green.txt`）。
+  - `pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1158 passed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 185`（184 + 1），注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。
+  - 证据目录 `~/Library/Application Support/postpane/evidence/2026-11-24-518-front-guard/`。
+- 审查：照 issue 送 ChatGPT L2，审查链接 #507 的 `r1a2019f9b8302`（结果见下）。
+- 验证：替身通过：标签页切换由测试替身代替。真实 Chrome 未验：要等一次「回信没画出来、插件切前台读」时常浩正好在换标签页。
+- 截图：无界面改动。
+- 发布与回读：（审查通过、合并后从 main 装机，并请常浩在 Chrome 里重新加载插件 0.2.9）
+- 与授权不一致之处、遗留问题、范围外发现：无。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 接力审核门：经代理回读 PR 提交失败时直连再读一次（#527）（2026-11-24，Claude，常浩看「接力根治」拍板清单后经 agent-hud 插件回「全按推荐」（第 13 项）；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-24 13:22`（`date '+%F %H:%M'` 记录）。来由：11-23 夜里本机代理 127.0.0.1:8086 坏了，驿窗按通过结束前回读 PR 提交失败，#510 第 3 轮通过被记「版本待核」、多跑一轮。

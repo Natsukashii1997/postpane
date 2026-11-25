@@ -259,9 +259,6 @@ pub(crate) struct Desk {
     /// How many of each handoff's steps the sidebar has flown a letter for
     /// (#171); those kept from before a restart count as flown.
     tossed: Mutex<HashMap<String, usize>>,
-    /// When the extension was last asked to read each quiet handoff's
-    /// conversation again (#356).
-    reread_at: Mutex<HashMap<String, (i64, u32)>>,
     /// How many reads in a row found each handoff's answer undrawn (#457).
     undrawn: Mutex<HashMap<String, u32>>,
     /// When the notices began (`notices_since`): trouble from before is not
@@ -360,7 +357,6 @@ impl Desk {
             sending: Mutex::new(HashSet::new()),
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
-            reread_at: Mutex::new(HashMap::new()),
             undrawn: Mutex::new(HashMap::new()),
             telling: Mutex::new(0),
             told_out: Condvar::new(),
@@ -1071,6 +1067,11 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
+            // Stopped before a word was written (#526): only its pen ends.
+            (Some("turn"), Some("stopped")) => {
+                self.lock().heard_writing(conversation, message, now);
+                false
+            }
             (Some("turn"), Some("start" | "complete")) => {
                 self.lock().heard_writing(conversation, message, now);
                 // Held while deciding and taking, so `caught_up` and this

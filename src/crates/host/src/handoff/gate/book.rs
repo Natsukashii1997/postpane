@@ -8,8 +8,11 @@ use super::gate_io::{reviewed_commit, same_commit};
 use super::{exit, review_exit, Exit, Flaw, Handoff, Next, Review, Step, StepKind};
 use serde::{Deserialize, Serialize};
 
+#[path = "../answers/book_reread.rs"]
+mod reading;
 #[path = "book_writing.rs"]
 mod writing;
+pub use reading::Reading;
 
 /// Reviews one leave of the person's gives, unless set otherwise.
 pub const LIMIT: u32 = 5;
@@ -53,6 +56,9 @@ pub struct Gate {
     /// and the last prompt whose end was heard (`book_writing.rs`). Of this run only.
     #[serde(skip)]
     pub writing: writing::Pen,
+    /// 自动重读的进度：重启后保留次数、间隔和停读状态（#433）。
+    #[serde(default)]
+    pub rereading: Reading,
 }
 
 fn is_zero_at(at: &i64) -> bool {

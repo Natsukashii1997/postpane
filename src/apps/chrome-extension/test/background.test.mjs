@@ -360,7 +360,7 @@ test("reading again loads a tab again that Chrome unloaded", async () => {
 // answer waited for; loading it again would end that. It is left as it is,
 // and the conversation read in a tab made for it. A script that is not done
 // being put in (a frozen tab's) does not hold the read up.
-test("reading again leaves a tab as it is that says nothing and takes no script in time: another is made and read", async () => {
+test("reading again leaves an unresponsive tab alone and does not make another", async () => {
   const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
   const posted = [];
   const reloaded = [];
@@ -381,9 +381,10 @@ test("reading again leaves a tab as it is that says nothing and takes no script 
   listeners.message(page, { tab: { id: 2 } });
   await listeners.port({ type: "reread", conversation });
   assert.deepEqual(reloaded, []);
-  assert.deepEqual(asked, [[99, "reread"]]);
+  assert.deepEqual(asked, []);
+  assert.equal(tabs.length, 1, "没有另开标签页");
   const [found] = posted.filter((m) => m.type === "reread");
-  assert.equal(found.outcome, "told");
+  assert.equal(found.outcome, "unreachable");
   assert.equal("reloaded" in found, false);
 });
 
@@ -939,8 +940,9 @@ test("a tab put in front for a read is moved back from only while it and its win
   };
   assert.deepEqual(await read(false, [true, true], choosingAsTabIs(2)), []);
   assert.equal(tabs.find((tab) => tab.active).id, 4);
-  // ...or while it is being put in front, which Chrome does after: theirs
-  // comes back, and it is not read.
+  // ...or while it is being put in front, which Chrome does after: nothing
+  // is put back, theirs not either, and it is not read (#518: who made the
+  // last move is not guessed; the ChatGPT tab may stay in front).
   const late = (chrome) => {
     const { update } = chrome.tabs;
     chrome.tabs.update = async (id, to) => {
@@ -948,8 +950,8 @@ test("a tab put in front for a read is moved back from only while it and its win
       return update(id, to);
     };
   };
-  assert.deepEqual(await read(false, [true, true], late), [2, 4], "late");
-  assert.equal(tabs.find((tab) => tab.active).id, 4);
+  assert.deepEqual(await read(false, [true, true], late), [2], "late");
+  assert.equal(tabs.find((tab) => tab.active).id, 2);
   assert.deepEqual(await read(true), [2], "the person's choice stays");
   assert.equal(tabs.find((tab) => tab.active).id, 4);
   // The tab in front of its window still, but the person went to another
@@ -1068,8 +1070,7 @@ test("a read again says whether it was told, in front or not, still written, or 
     assert.equal(read.minimized, false);
   }
   // A tab that cannot be reached even with a script put in (the stub
-  // refuses tab 1 one), loaded as Chrome has it: left as it is, and the one
-  // made for the conversation does not report here.
+  // refuses tab 1 one): left as it is, with no replacement tab made.
   const posted = [];
   const { listeners } = load(
     [
@@ -1084,7 +1085,7 @@ test("a read again says whether it was told, in front or not, still written, or 
   );
   await new Promise((resolve) => setImmediate(resolve));
   await listeners.port({ type: "reread", conversation });
-  assert.equal(readsOf(posted)[0]?.outcome, "unopened");
+  assert.equal(readsOf(posted)[0]?.outcome, "unreachable");
   // One not on the watch list says nothing.
   const none = [];
   const other = load(tabs(), {
@@ -3028,5 +3029,77 @@ test("a page whose handle cannot prove the sign's token is not trusted", async (
   assert.deepEqual(
     kit.called.filter(([, name]) => name === "proveInPage").at(-1),
     [2, "proveInPage", ["MAIN"]],
+  );
+});
+
+// #518 (owner 2026-11-24): a put in front Chrome answers only after its
+// wait is not over: watched a while more, and come with the window as the
+// person left it, the tab that was in front comes back; the person having
+// moved in the window, nothing. Moves in other windows are not theirs here.
+test("a tab put in front late is moved back from only with its window untouched", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const tabs = [
+    { id: 2, url: `https://chatgpt.com/c/${conversation}`, windowId: 1 },
+    { id: 3, url: "https://chatgpt.com/", windowId: 1, active: true },
+    { id: 4, url: "https://chatgpt.com/", windowId: 1 },
+    { id: 5, url: "https://example.com/", windowId: 2, active: true },
+  ];
+  const page = { type: "page", conversation, hidden: true, streaming: false };
+  const read = async (meanwhile) => {
+    tabs.forEach((tab) => (tab.active = tab.id === 3 || tab.id === 5));
+    const posted = [];
+    const fronted = [];
+    const { listeners, chrome } = load(tabs, {
+      posted,
+      fronted,
+      watched: [conversation],
+      answers: Array(5).fill({ ok: true, undrawn: true, loaded: true }),
+      now: true,
+      parked: [10000],
+    });
+    await tick();
+    listeners.message(page, { tab: { id: 2 } });
+    const { update } = chrome.tabs;
+    let letGo;
+    const landed = new Promise((done) => (letGo = done));
+    chrome.tabs.update = (id, to) =>
+      id === 2 ? landed.then(() => update(id, to)) : update(id, to);
+    const done = listeners.port({ type: "reread", conversation });
+    for (let ticks = 0; ticks < 20; ticks++) await tick();
+    meanwhile(chrome);
+    letGo();
+    await done;
+    return { fronted, found: posted.find((m) => m.type === "reread") };
+  };
+  const untouched = await read(() => {});
+  assert.deepEqual(untouched.fronted, [2, 3], "come late, put back");
+  assert.equal(untouched.found.outcome, "undrawn", "not read as in front");
+  const moved = await read((chrome) => chrome.tabs.activate(4));
+  assert.deepEqual(moved.fronted, [2], "the person moved: nothing");
+  const elsewhere = await read((chrome) => chrome.tabs.activate(5));
+  assert.deepEqual(elsewhere.fronted, [2, 3], "another window is not this one");
+});
+
+// #433：常浩关掉会话后，自动重读不反复新开标签页。
+test("automatic rereads never reopen a closed conversation tab", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const posted = [];
+  let created = 0;
+  const { listeners } = load([], {
+    posted,
+    watched: [conversation],
+    now: true,
+    onCreate: () => {
+      created++;
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  for (let i = 0; i < 3; i++) {
+    await listeners.port({ type: "reread", conversation });
+  }
+  assert.equal(created, 0);
+  assert.deepEqual(
+    posted.filter((m) => m.type === "reread").map((m) => m.outcome),
+    ["unreachable", "unreachable", "unreachable"],
   );
 });

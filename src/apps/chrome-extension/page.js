@@ -375,8 +375,6 @@
 
   // --- Composer ------------------------------------------------------------
 
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
   function sendReady(doc) {
     const button = doc.querySelector(SEL.send);
     return button &&
@@ -386,13 +384,42 @@
       : null;
   }
 
-  async function waitFor(check, ms) {
-    for (let waited = 0; waited <= ms; waited += 100) {
-      const value = check();
-      if (value) return value;
-      await sleep(100);
-    }
-    return null;
+  async function waitFor(check, ms, doc = document) {
+    const until = Date.now() + ms;
+    const first = check();
+    if (first) return first;
+    if (ms <= 0) return null;
+    return new Promise((resolve, reject) => {
+      let timer;
+      const finish = (value, error) => {
+        observer.disconnect();
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const probe = () => {
+        try {
+          // A delayed timer or DOM change cannot extend this wait.
+          if (Date.now() >= until) return finish(null);
+          const value = check();
+          if (value) finish(value);
+        } catch (error) {
+          finish(null, error);
+        }
+      };
+      const observer = new MutationObserver(probe);
+      observer.observe(doc, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+      });
+      const expire = () => {
+        if (Date.now() < until) timer = setTimeout(expire, until - Date.now());
+        else finish(null);
+      };
+      timer = setTimeout(expire, ms);
+    });
   }
 
   const bare = (text) => text.replace(/\s/g, "");
@@ -505,6 +532,7 @@
       const got = await waitFor(
         check,
         Math.max(0, Math.min(ms, until - Date.now())),
+        doc,
       );
       timely();
       return got;
@@ -601,12 +629,17 @@
     const started = await waitFor(
       () => streaming(doc) || !sendReady(doc),
       5000,
+      doc,
     );
     if (!started) return { ok: false, reason: "send-failed", pressed: true };
-    const promptId = await waitFor(() => {
-      const id = lastPromptId(doc);
-      return id && id !== before ? id : null;
-    }, 3000);
+    const promptId = await waitFor(
+      () => {
+        const id = lastPromptId(doc);
+        return id && id !== before ? id : null;
+      },
+      3000,
+      doc,
+    );
     return promptId ? { ok: true, promptId } : { ok: true };
   }
 

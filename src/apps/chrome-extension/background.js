@@ -388,7 +388,7 @@ const making = new Map();
  * With none left one is made, unless `TABS_MOST` show the conversation
  * already: then PostPane hears the words did not go, or the read reached
  * nothing, and asks again later. */
-async function reach(conversation, until) {
+async function reach(conversation, until, makeMissing = true) {
   const passed = new Set();
   const next = async () => {
     for (const [tabId, page] of pages)
@@ -420,6 +420,7 @@ async function reach(conversation, until) {
     if (again) return { tabId, reloaded: true };
     if (again === false) return { reloaded: true };
   }
+  if (!makeMissing) return {};
   // Said at once, before anything is waited for: another looking for a tab
   // meanwhile waits for this one.
   const asked = {};
@@ -488,7 +489,7 @@ async function tabShowing(conversation) {
 
 // PostPane heard nothing of a turn it waits on (#356): the tab tells its
 // newest reply again. A tab whose script was cut off (the extension
-// reloaded) gets one first; a closed one is opened, as for sending. What the
+// reloaded) gets one first; a closed one stays closed (#433). What the
 // read found, and how the tab stood, goes back to PostPane (#457).
 async function reread(conversation) {
   if (!watched.has(conversation)) return;
@@ -503,7 +504,7 @@ async function reread(conversation) {
  * none is there), so the read is of this conversation and no other (#507
  * review P2-01). */
 async function readAgain(conversation) {
-  const at = await reach(conversation, Date.now() + REACH_BY);
+  const at = await reach(conversation, Date.now() + REACH_BY, false);
   const reloaded = at.reloaded && { reloaded: true };
   if (at.tabId === undefined)
     return { outcome: at.made ? "unopened" : "unreachable", ...reloaded };
@@ -684,16 +685,24 @@ async function drawnInFront(tabId, ask) {
     // The person chose a tab meanwhile: this one is not put over it.
     if (!Array.isArray(fronts) || moved()) return false;
     const front = fronts.find((t) => t.active);
-    // Not known to be in front in time, it is not read as if it were; the
-    // tab that was in front is put back all the same, in case it came late.
-    const put = await chromeSays(() => chrome.tabs.update(tabId, active));
-    // The person chose a tab while it was being put in front: theirs comes
-    // back if this one, done after, went over it, and nothing is read.
-    if (moved()) {
-      const theirs = chosen().at(-1).tabId;
-      const now = await chromeSays(() => chrome.tabs.get(tabId));
-      if (now?.active && seen.at(-1)?.tabId === tabId)
-        await chromeSays(() => chrome.tabs.update(theirs, active));
+    // Not known to be in front in time, it is not read as if it were. The
+    // ask is not over for that: Chrome may still put it in front.
+    const putting = Promise.resolve()
+      .then(() => chrome.tabs.update(tabId, active))
+      .catch(() => null);
+    const put = await chromeSays(() => putting);
+    // The person moved in its window from the start (#518, owner
+    // 2026-11-24): nothing is put back, theirs not either, and nothing is
+    // read. Who made the last move is not guessed: Chrome does not say, and
+    // a guess put tabs over the person's choice (#507 review P2-05). The
+    // ChatGPT tab may stay in front; the person moves it.
+    if (moved()) return false;
+    // Not in front in time: watched `LATE_PUT` more. Come with the window
+    // untouched, the tab that was in front comes back (#518).
+    if (!put) {
+      const late = await by(Date.now() + LATE_PUT, () => putting);
+      if (late && front && !moved())
+        await chromeSays(() => chrome.tabs.update(front.id, active));
       return false;
     }
     let told = false;
@@ -721,6 +730,8 @@ async function drawnInFront(tabId, ask) {
 }
 const FRONT_TRIES = 3;
 const FRONT_PAUSE = 1500;
+/** How long a put in front not answered in time is watched (#518). */
+const LATE_PUT = 10000;
 
 async function focus(conversation) {
   const tabId = tabFor(conversation);
