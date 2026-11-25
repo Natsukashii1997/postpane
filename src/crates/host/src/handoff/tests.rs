@@ -2,6 +2,7 @@
 //! sent and answer as told, and the helpers that open a desk and a review.
 //! The tests themselves are in `tests/`, a file to a subject.
 mod asked_id;
+mod back_early;
 mod background_run;
 mod book_states;
 mod codex;
@@ -41,6 +42,7 @@ struct Fake {
     sent: RefCell<Vec<(String, String, String)>>,
     /// What happens while words are being sent.
     on_send: Option<Box<dyn Fn()>>,
+    on_reply: Option<Box<dyn Fn()>>,
     /// What happens while a conversation is being opened.
     on_open: Option<Box<dyn Fn()>>,
     /// What happens while who began the session's turn is read.
@@ -180,6 +182,9 @@ impl Lines for Fake {
         }
     }
     fn reply(&self, doer: &str, session: &str, id: &str, text: &str) -> Result<(), Unsent> {
+        if let Some(during) = &self.on_reply {
+            during();
+        }
         if self.reply_fails.get() > 0 {
             self.reply_fails.set(self.reply_fails.get() - 1);
             return Err(Unsent::Failed("会话的待发送目录写不进".into()));
