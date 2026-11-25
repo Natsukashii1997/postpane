@@ -877,3 +877,75 @@ test("submit reports the id of the prompt it sent", async () => {
   assert.deepEqual(result, { ok: true, promptId: "p9" });
   await fresh.close();
 });
+
+// #433：后台计时器一秒才醒一次，仍按墙钟截止，不累计轮询次数。
+test("a throttled composer wait expires by wall time", async () => {
+  const fresh = await browser.newPage();
+  try {
+    await fresh.setContent("<main></main>");
+    await fresh.addScriptTag({ path: script });
+    const result = await fresh.evaluate(async () => {
+      const nativeTimer = window.setTimeout.bind(window);
+      let now = 0;
+      let timers = 0;
+      Date.now = () => now;
+      window.setTimeout = (callback, ms) => {
+        timers++;
+        return nativeTimer(() => {
+          now += Math.max(1000, ms);
+          callback();
+        }, 0);
+      };
+      const answer = await PostPanePage.submit(document, "送审正文");
+      return { answer, elapsed: now, timers };
+    });
+    assert.deepEqual(result.answer, {
+      ok: false,
+      reason: "no-composer",
+      pressed: false,
+    });
+    assert.equal(result.elapsed, 15000);
+    assert.equal(result.timers, 1);
+  } finally {
+    await fresh.close();
+  }
+});
+
+// #433：条件通过 DOM 变化唤醒，不等后台标签页被限流的计时器。
+test("DOM changes wake composer waits while timers are parked", async () => {
+  const fresh = await browser.newPage();
+  try {
+    await fresh.setContent(fixture);
+    await fresh.addScriptTag({ path: script });
+    const answer = await fresh.evaluate(async () => {
+      const nativeTimer = window.setTimeout.bind(window);
+      const box = document.querySelector(".ProseMirror");
+      const parent = box.parentElement;
+      box.remove();
+      document.addEventListener("paste", (event) => {
+        event.preventDefault();
+        box.textContent += event.clipboardData.getData("text/plain");
+      });
+      // The test's watchdog uses the original timer; page timers never fire.
+      window.setTimeout = () => 0;
+      document.getElementById("slot").addEventListener("click", () => {
+        const prompt = document.createElement("div");
+        prompt.setAttribute("data-chatgpt-search-unit-key", "new:user");
+        prompt.setAttribute("data-chatgpt-search-message-ids", "new-prompt");
+        prompt.textContent = "送审正文";
+        document.querySelector("main").append(prompt);
+      });
+      const result = PostPanePage.submit(document, "送审正文");
+      queueMicrotask(() => parent.prepend(box));
+      return Promise.race([
+        result,
+        new Promise((resolve) =>
+          nativeTimer(() => resolve("未被 DOM 唤醒"), 500),
+        ),
+      ]);
+    });
+    assert.deepEqual(answer, { ok: true, promptId: "new-prompt" });
+  } finally {
+    await fresh.close();
+  }
+});

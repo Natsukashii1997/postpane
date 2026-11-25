@@ -18,12 +18,15 @@ fn a_quiet_review_is_read_again_and_its_answer_taken_once() {
         &("reread".into(), "c-new".into(), String::new())
     );
     let first = at + QUIET_MS;
+    desk.observe(
+        &json!({"type":"reread","conversation":"c-new","outcome":"streaming"}),
+        first + 1,
+    );
     assert_eq!(desk.reread(&lines, first + AGAIN_MS - 1), 0, "asked lately");
     assert_eq!(desk.reread(&lines, first + AGAIN_MS), 1);
-    // The app started again: what the last one asked is not kept, and
-    // the phase began before, so the conversation is read at once.
+    // #433：重启保留重读间隔，不立即重复读。
     let restarted = Desk::new(Some(temp.path().join("data")));
-    assert_eq!(restarted.reread(&lines, first + AGAIN_MS + 1), 1);
+    assert_eq!(restarted.reread(&lines, first + AGAIN_MS + 1), 0);
     // ChatGPT starts: three minutes from now on.
     let started = first + AGAIN_MS + 2;
     assert!(desk.observe(&turn("start", ""), started));
@@ -282,7 +285,7 @@ fn reads_that_reach_nothing_come_further_apart() {
         )
     };
     assert_eq!(desk.reread(&lines, now), 1);
-    for missed in 1..=MISSES_MOST + 2 {
+    for missed in 1..=MISSES_MOST {
         heard(
             if missed % 2 == 0 {
                 "unopened"
@@ -300,4 +303,81 @@ fn reads_that_reach_nothing_come_further_apart() {
     heard("streaming", now + 1);
     assert_eq!(desk.reread(&lines, now + AGAIN_MS - 1), 0);
     assert_eq!(desk.reread(&lines, now + AGAIN_MS), 1);
+}
+
+/// #433：答不上的自动重读最多五次，重启前后的次数合算，停读后只记一步。
+#[test]
+fn unanswered_reads_are_bounded_across_restarts_and_can_be_resumed() {
+    use super::super::reread::{AGAIN_MS, QUIET_MS};
+    let (temp, desk) = desk();
+    let lines = Fake::default();
+    let handoff = opened(&desk, &lines);
+    let mut now = desk.lock().get(&handoff.id).unwrap().phase_at + QUIET_MS;
+    let fail = |desk: &Desk, outcome: &str, at: i64| {
+        desk.observe(
+            &json!({"type":"reread","conversation":"c-new","outcome":outcome}),
+            at,
+        );
+    };
+    for attempt in 0..3 {
+        assert_eq!(desk.reread(&lines, now), 1);
+        fail(&desk, "unloaded", now + 1);
+        now += AGAIN_MS << (attempt + 1);
+    }
+    let restarted = Desk::new(Some(temp.path().join("data")));
+    for attempt in 3..5 {
+        assert_eq!(restarted.reread(&lines, now), 1);
+        fail(&restarted, "waiting", now + 1);
+        now += AGAIN_MS << (attempt + 1).min(4);
+    }
+    assert_eq!(sent_as(&lines, "reread").len(), 5);
+    assert_eq!(restarted.reread(&lines, now), 0, "达到上限后不再读");
+    let kept = restarted.lock().get(&handoff.id).cloned().unwrap();
+    assert!(!kept.auto);
+    let steps = kept.steps.len();
+    assert!(kept
+        .steps
+        .last()
+        .unwrap()
+        .text
+        .as_deref()
+        .unwrap()
+        .contains("5"));
+    let again = Desk::new(Some(temp.path().join("data")));
+    assert_eq!(again.reread(&lines, now + AGAIN_MS * 100), 0);
+    assert_eq!(again.lock().get(&handoff.id).unwrap().steps.len(), steps);
+    again.act(&lines, &handoff.id, "resume", now + 1).unwrap();
+    assert_eq!(again.reread(&lines, now + 1 + QUIET_MS), 1);
+}
+
+/// 插件没回报结果也不能无限重读；混合没画出结果时仍通知刷新卡片。
+#[test]
+fn silent_or_undrawn_reads_stop_once_and_late_answers_still_arrive() {
+    use super::super::reread::{AGAIN_MS, QUIET_MS};
+    for undrawn in [false, true] {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        let handoff = opened(&desk, &lines);
+        let mut now = desk.lock().get(&handoff.id).unwrap().phase_at + QUIET_MS;
+        for attempt in 0..5 {
+            assert_eq!(desk.reread(&lines, now), 1);
+            if undrawn {
+                let outcome = if attempt < 3 { "unloaded" } else { "undrawn" };
+                let changed = desk.observe(
+                    &json!({"type":"reread","conversation":"c-new","outcome":outcome}),
+                    now + 1,
+                );
+                if attempt == 4 {
+                    assert!(changed, "停读后通知刷新卡片");
+                }
+            }
+            now += AGAIN_MS << (attempt + 1).min(4);
+        }
+        assert_eq!(desk.reread(&lines, now), 0);
+        let steps = desk.lock().get(&handoff.id).unwrap().steps.len();
+        assert_eq!(desk.reread(&lines, now + AGAIN_MS * 100), 0);
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().steps.len(), steps);
+        assert!(desk.observe(&turn("complete", FIX), now + 1));
+        assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
+    }
 }
