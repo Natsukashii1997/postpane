@@ -15,7 +15,8 @@ pub(super) const MISSES_MOST: u32 = 4;
 /// How soon a read the channel could not pass on is tried again: the
 /// extension may be back at once, and the refresh comes every second.
 pub(super) const RETRY_MS: i64 = 15 * 1000;
-/// 待常浩定：给页面多次恢复机会，又不让答不上的接力空转一整天。
+/// 常浩 2026-11-25 定（按推荐）：给页面多次恢复机会，又不让答不上的接力空转一整天；
+/// 到上限停读并暂停自动往返，在接力卡点「继续自动」重新计数。
 pub(super) const READ_MOST: u32 = 5;
 
 impl Desk {
