@@ -87,7 +87,7 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
         OUTBOUND_LIMIT,
     )
     .unwrap();
-    assert!(sending.join().unwrap().unwrap_err().contains("busy"));
+    assert_eq!(sending.join().unwrap().unwrap_err(), refused("busy"));
 
     // A finished turn is recorded as a completion in the hook inbox.
     write_frame(
@@ -295,7 +295,7 @@ fn a_send_that_did_not_go_says_whether_send_was_pressed() {
             not_pressed,
             "{said}"
         );
-        assert!(failed.text().contains(said["reason"].as_str().unwrap()));
+        assert_eq!(failed.text(), refused(said["reason"].as_str().unwrap()));
     }
 }
 
@@ -329,4 +329,67 @@ fn a_shadow_file_others_may_read_is_not_written_to() {
     let told = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"complete","outcome":"read"});
     assert!(shadow::keep(&data, true, &told, 1).is_err());
     assert_eq!(std::fs::read_to_string(shadow::path(&data)).unwrap(), "");
+}
+
+/// #434：所有已知失败原因都有说明和下一步，未知原因也不透出裸码。
+#[test]
+fn failure_reasons_explain_the_next_action_without_raw_codes() {
+    for (reason, zh, en) in [
+        (
+            "composer-mismatch",
+            "输入框里的字和要送的话对不上",
+            "The composer does not match the words to send",
+        ),
+        (
+            "no-composer",
+            "没有找到 ChatGPT 输入框",
+            "The ChatGPT composer was not found",
+        ),
+        (
+            "busy",
+            "ChatGPT 还在写回答",
+            "ChatGPT is still writing an answer",
+        ),
+        (
+            "send-failed",
+            "没有确认这段话已发出",
+            "Sending these words was not confirmed",
+        ),
+        (
+            "timeout",
+            "等待 ChatGPT 页面超时",
+            "Waiting for the ChatGPT page timed out",
+        ),
+        (
+            "tab-closed",
+            "ChatGPT 标签页已关闭或无法访问",
+            "The ChatGPT tab is closed or unreachable",
+        ),
+        (
+            "not-watched",
+            "这个 ChatGPT 会话不在接力名单里",
+            "This ChatGPT conversation is not on the handoff list",
+        ),
+        (
+            "other-conversation",
+            "ChatGPT 页面已切到别的会话",
+            "The ChatGPT page has moved to another conversation",
+        ),
+        (
+            "future-plugin-code",
+            "ChatGPT 插件没能完成这次操作",
+            "The ChatGPT extension could not finish this action",
+        ),
+    ] {
+        let text = refused(reason);
+        assert!(
+            text.starts_with(if l10n::chinese() { zh } else { en }),
+            "{reason}: {text}"
+        );
+        assert!(
+            text.contains(if l10n::chinese() { "请" } else { "Please" }),
+            "{reason}: {text}"
+        );
+        assert!(!text.contains(reason), "{reason}: {text}");
+    }
 }
