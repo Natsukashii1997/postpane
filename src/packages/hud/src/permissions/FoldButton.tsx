@@ -73,7 +73,8 @@ const ROW: Variants = {
   open: {
     height: "auto",
     opacity: 1,
-    pointerEvents: "auto",
+    // Back to whatever the card around it says (a drag turns it off there).
+    pointerEvents: "inherit",
     transition: {
       height: GEOMETRY,
       opacity: { duration: MOTION.enter, ease: EASE_OUT },

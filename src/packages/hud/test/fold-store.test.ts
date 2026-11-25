@@ -104,6 +104,9 @@ test("rows a fold takes away stop taking clicks while they fade", () => {
   const fold = read("permissions/FoldButton.tsx");
   const shut = fold.slice(fold.indexOf("shut:"), fold.indexOf("open:"));
   assert.equal(shut.match(/pointerEvents: "none"/g)?.length, 2);
+  // Arrived, it follows the card again rather than forcing clicks on.
+  const open = fold.slice(fold.indexOf("open:"), fold.indexOf("transitionEnd"));
+  assert.match(open, /pointerEvents: "inherit"/);
   // Nor the keyboard: a leaving row is inert until it is gone.
   assert.match(
     fold,

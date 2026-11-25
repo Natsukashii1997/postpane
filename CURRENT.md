@@ -36,6 +36,7 @@
   - 票根读数位数变化：读数那一格左右用绝对定位固定，内容居中，位数变不推动别的东西。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
+  - 送代码审查前自查改了一处：`FoldRow` 展开时 `pointerEvents` 从 `"auto"` 改成 `"inherit"`，免得把外层（拖动时）关掉的点击又打开；补断言。之后 `pnpm run check` 原样 `check exit 0`（`check-6.txt`），`pnpm test`（`test-8.txt`）6 套全过，数字同下一条。装机的包 `1bce2b00156a` 不含这一处。
   - 最终一版：`pnpm run check` 原样 `check exit 0`（`check-5.txt`）；`pnpm test`（`test-7.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 534`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
   - 之前一版：`pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
 - 验证（替身通过，环境是无头 Chromium + 场景预览台 1480 改前 / 1481 改后，设置页开发服务 1420，数据目录用证据目录里的假数据）：
