@@ -810,7 +810,7 @@ test("a prompt ChatGPT made an attachment is still the newest prompt, known by i
   );
   assert.equal(
     await two.evaluate(() => PostPanePage.lastPrompt(document)),
-    "粘贴的文本 (1).txt文档",
+    null,
   );
   assert.equal(
     await two.evaluate(() => PostPanePage.lastPromptId(document)),
@@ -949,3 +949,28 @@ test("DOM changes wake composer waits while timers are parked", async () => {
     await fresh.close();
   }
 });
+
+// #431: constructed attachment units, not checked against a live attachment page.
+for (const old of [false, true]) {
+  test(`an unreadable newest user unit never falls back to an older bubble (${old})`, async () => {
+    const fresh = await browser.newPage();
+    await fresh.setContent(old ? fixture : "<main></main>");
+    await fresh.evaluate(() =>
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          '<div data-chatgpt-search-unit-key="attachment:0:user" data-chatgpt-search-message-ids="p-attachment"><svg></svg></div>' +
+            '<div data-chatgpt-search-unit-key="attachment:1:assistant" data-chatgpt-search-message-ids="a-attachment"><p data-d-component="text">附件回答</p></div>',
+        ),
+    );
+    await fresh.addScriptTag({ path: script });
+    const got = await fresh.evaluate(() => ({
+      prompt: PostPanePage.lastPrompt(document),
+      id: PostPanePage.lastPromptId(document),
+      answered: PostPanePage.answered(document),
+    }));
+    assert.deepEqual(got, { prompt: null, id: "p-attachment", answered: true });
+    await fresh.close();
+  });
+}

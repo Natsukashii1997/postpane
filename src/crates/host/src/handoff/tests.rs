@@ -22,6 +22,7 @@ mod swipes;
 mod thinking;
 mod told;
 mod undrawn;
+mod unreadable_prompt;
 mod unsure;
 mod words_back;
 mod writing;
