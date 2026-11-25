@@ -1071,6 +1071,11 @@ impl Desk {
     pub(crate) fn observe(&self, message: &Value, now: i64) -> bool {
         let conversation = message["conversation"].as_str().unwrap_or("");
         match (message["type"].as_str(), message["phase"].as_str()) {
+            // Stopped before a word was written (#526): only its pen ends.
+            (Some("turn"), Some("stopped")) => {
+                self.lock().heard_writing(conversation, message, now);
+                false
+            }
             (Some("turn"), Some("start" | "complete")) => {
                 self.lock().heard_writing(conversation, message, now);
                 // Held while deciding and taking, so `caught_up` and this

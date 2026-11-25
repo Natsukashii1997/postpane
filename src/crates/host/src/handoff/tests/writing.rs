@@ -197,3 +197,19 @@ fn an_answer_never_heard_to_end_holds_words_no_longer_than_an_answer_may_take() 
     held(&desk, &lines, 5 + book::REPLY_WAIT_MS);
     goes(&desk, &lines, 5 + book::REPLY_WAIT_MS + 1);
 }
+
+// #526 (owner 2026-11-24 「12改」): the person stopped an answer before a
+// word of it was written; its page says so, and words go at once instead of
+// after `REPLY_WAIT_MS`. Another turn's stop is not this one's end.
+#[test]
+fn an_answer_stopped_before_a_word_lets_words_go() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    sent_back(&desk, &lines);
+    desk.observe(&own("start", "p9"), 10);
+    held(&desk, &lines, 11);
+    desk.observe(&own("stopped", "p8"), 12);
+    held(&desk, &lines, 13);
+    desk.observe(&own("stopped", "p9"), 14);
+    goes(&desk, &lines, 15);
+}
