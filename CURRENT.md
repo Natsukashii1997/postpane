@@ -46,6 +46,13 @@
   - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
   - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
   - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
+- GPT 工程审查第 2 轮（受审 `02e7839`，返修，P0 0、P1 0；ENG-01、04、05、06、09、11 已验证关闭，ENG-02 判定不成立；新提 ENG-17、18）逐条处理：
+  - ENG-03 已修（同一列表）：600ms 窗口里同一列表因回答、移除增减的行也跟着动。`foldStore.use` 第三个值改为折叠时刻，`FoldRows` 记下上次画的折叠时刻和行（画完才记），新判定 `rowsMove`：折叠引起的那次渲染动；窗口内行没变照常动；窗口内行变了是别的原因，直接出现消失；嵌套列表经 `ParentFold` 各按各的行判。测试 `fold-store.test.ts` 两条。
+  - ENG-08 已修：托盘块加 `onBlur`，指针或焦点离开都收提示（和 `onPointerLeave` 共用 `cool`）。
+  - ENG-07 已修（不认 `inert` 的旧 WebKit）、焦点交接转单 #541：`scene/Present.tsx` 新 `useLeaving`，退场时除 `inert` 外还在捕获阶段吞掉点击和按键、放掉焦点，折叠行 `FoldRow` 共用。系统 WKWebView 实测（`webkit-r2/leaving.txt`）：退场视图拿不到焦点、点击和回车到不了；去掉 `inert` 模拟旧 WebKit 照样拦住；改前同测法焦点、点击、按键都到了（`leaving-old.txt`）。焦点交给新视图：main 上视图即时替换，本来也没有交接，属新功能，转 #541。
+  - ENG-10 已修：叠加能力从只看接口改成在隐藏小块上实际叠一次（新 `scene/adds-onto.ts`：CSS 动画 10px 加回位 10px 要得 20px），Safari 16.0/16.1 那种有接口叠错的会走替换。实测（`webkit-r2/adds-onto.txt`）：本机判支持，首次 6ms；同测法换成替换读到 10；帧间隔只摇摆 191 帧中位 10ms、超 20ms 2 帧，20 次回位 831 帧中位 10ms、最长 35ms、超 20ms 2 帧。没测 Safari 16.0/16.1、macOS 12.0～12.3 的真实 WebKit（本机只有 macOS 27）。退化路径移回时 1.3° 回 0 的小跳保留：只在不支持叠加时出现，改前离开就从最多 13° 直接跳回。
+  - ENG-17 已修：跳到某家的滚动挪到新 `panel/spotlight.ts`（`useSpotlight`），到位时读当前「动画」开关，中途关掉立即到位（HoverPanel.tsx 551 → 511 行，基线已收紧）。
+  - ENG-18 已修：`useFold` 走减少动态效果那条路时，把被取消动画设的 `overflow` 还原。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
   - 工程审查第 1 轮返修后：`pnpm run check` 原样 `check exit 0`（`check-7.txt`）；`pnpm test`（`test-9.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 540`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。新测试：`hud/test/present.test.ts`、fold-store 两条、moves 两条、motion 两条、pendant-settle 加断言。装机的包 `1bce2b00156a` 不含这一轮。

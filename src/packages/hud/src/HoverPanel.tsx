@@ -30,7 +30,7 @@ import { SourceIndexing } from "./panel/IndexingSection";
 import { blockListed } from "./panel/agent-board";
 import { missingReadingNotice } from "./panel/account-labels";
 import { snapshotLanguage } from "@agent-hud/ui/format";
-import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
+import { useSpotlight } from "./panel/spotlight";
 
 export { SOURCE_PANEL } from "./panel/theme";
 
@@ -77,47 +77,8 @@ export const SourceHoverPanel = memo(function SourceHoverPanel({
   const [draftError, setDraftError] = useState<string | null>(null);
   const panelElement = useRef<HTMLDivElement>(null),
     [contentWidth, setContentWidth] = useState<number>();
-  const scroller = useRef<HTMLDivElement>(null);
-  const [lit, setLit] = useState<string | null>(null);
   const moves = config.animations && snapshot.settings.animations;
-  useEffect(() => {
-    setLit(null);
-    const box = scroller.current;
-    if (!spotlight || !box) return;
-    const block = [
-      ...box.querySelectorAll<HTMLElement>("[data-hud-block]"),
-    ].find(
-      (element) =>
-        vendorKey(
-          (element.dataset.hudBlock ?? "").replace(/^(api|sessions):/, ""),
-        ) === spotlight,
-    );
-    if (!block) return;
-    const reach = () => {
-      const top =
-        block.getBoundingClientRect().top -
-        box.getBoundingClientRect().top +
-        box.scrollTop -
-        8;
-      // Less motion (the system's or 动画 off) jumps there (ENG-04).
-      const behavior = moves && !systemReducesMotion() ? "smooth" : "auto";
-      box.scrollTo({ top: Math.max(0, top), behavior });
-    };
-    reach();
-    // A board just grown from a peek gets its height capped a frame later;
-    // only then can it scroll, so it reaches again as its size settles.
-    const sized = new ResizeObserver(reach);
-    sized.observe(box);
-    setLit(block.dataset.hudBlock ?? null);
-    const timer = setTimeout(() => {
-      sized.disconnect();
-      setLit(null);
-    }, 1200);
-    return () => {
-      sized.disconnect();
-      clearTimeout(timer);
-    };
-  }, [spotlight]);
+  const { scroller, lit } = useSpotlight(spotlight, moves);
   useEffect(() => {
     const element = panelElement.current;
     if (!element) return;

@@ -90,3 +90,19 @@ test("rows reordered mid-slide start from where they are on screen (ENG-06)", ()
   );
   assert.match(flip, /sliding\.current\.get\(id\)\?\.cancel\(\);/);
 });
+
+test("a fold cut short by less motion leaves no clip behind (ENG-18)", () => {
+  const motion = readFileSync(
+    fileURLToPath(new URL("../src/lib/Motion.tsx", import.meta.url)),
+    "utf8",
+  );
+  const fold = motion.slice(
+    motion.indexOf("export function useFold"),
+    motion.indexOf("// Where it is now"),
+  );
+  // The way that skips the move puts back what the move it cancels set.
+  assert.match(
+    fold,
+    /running\?\.cancel\(\);\s*\/\/[^\n]*\n\s*if \(running && element\) element\.style\.overflow = "";/,
+  );
+});

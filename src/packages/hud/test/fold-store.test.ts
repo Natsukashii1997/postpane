@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cardFolds, foldStore } from "../src/panel/fold-store.ts";
+import { cardFolds, foldStore, rowsMove } from "../src/panel/fold-store.ts";
 import { closesWith } from "../src/scene/close-with-sidebar.ts";
 
 // #430: the sidebar draws a panel twice, the one in view and a hidden copy
@@ -84,7 +84,7 @@ test("only the list just opened or folded moves its rows, not another list", () 
   const List = ({ name, grab }: { name: string; grab?: boolean }) => {
     const [, flip, moving] = store.use(name);
     if (grab) toggle = flip;
-    seen[name] = moving;
+    seen[name] = moving > 0;
     return null;
   };
   const draw = () =>
@@ -103,6 +103,52 @@ test("only the list just opened or folded moves its rows, not another list", () 
   draw();
   // ENG-03: another list changing in the same moment does not move.
   assert.deepEqual(seen, { "claude:running": true, "codex:waiting": false });
+});
+
+// ENG-03, second round: within a fold's window, the same list's rows changing
+// for another reason (an answer, a removal) moved as if the fold took them.
+test("only the rows a fold itself brings or takes move, not a later change", () => {
+  const fold = 1000;
+  // Not folded just now: nothing moves.
+  assert.equal(rowsMove(null, 0, "a"), false);
+  assert.equal(rowsMove({ fold: 0, rows: "a" }, 0, "a\nb"), false);
+  // The render the fold causes moves what it brings or takes.
+  assert.equal(rowsMove({ fold: 0, rows: "a" }, fold, "a\nb\nc"), true);
+  // A list first drawn inside a fold (a group the fold brought) moves too.
+  assert.equal(rowsMove(null, fold, "x\ny"), true);
+  // Later renders in the window keep the fold's rows moving...
+  assert.equal(rowsMove({ fold, rows: "a\nb\nc" }, fold, "a\nb\nc"), true);
+  // ...but rows that change then (an answer came, one was removed) do not.
+  assert.equal(rowsMove({ fold, rows: "a\nb\nc" }, fold, "a\nc"), false);
+  assert.equal(rowsMove({ fold, rows: "a\nb\nc" }, fold, "a\nb\nc\nd"), false);
+  // Folding again inside the window is a fold of its own.
+  assert.equal(rowsMove({ fold, rows: "a\nb\nc" }, fold + 300, "a"), true);
+});
+
+test("each list goes by its rows: a group's list by its own, under the card's fold", () => {
+  const fold = read("permissions/FoldButton.tsx");
+  assert.match(
+    fold,
+    /const moving = useContext\(FoldMotion\) && rowsMove\(seen\.current, fold, rows\);/,
+  );
+  // What it saw is kept once drawn, not while drawing (a render may repeat).
+  assert.match(
+    fold,
+    /useLayoutEffect\(\(\) => \{\s*seen\.current = \{ fold, rows \};/,
+  );
+  assert.match(fold, /<ParentFold\.Provider value=\{fold\}>/);
+  assert.doesNotMatch(
+    fold,
+    /useContext\(Moving\);\s*const moving = useContext\(FoldMotion\) &&/,
+  );
+});
+
+// ENG-08: the tray's hint stayed up once the keyboard moved on (Tab to
+// 「收起」), and a fold's moving rows cut it off.
+test("a tray block's hint goes when the pointer or the focus leaves it", () => {
+  const tray = read("panel/SessionsSection.tsx");
+  assert.match(tray, /onPointerLeave=\{\(\) => cool\(index\)\}/);
+  assert.match(tray, /onBlur=\{\(\) => cool\(index\)\}/);
 });
 
 test("the copy that measures the panel draws a fold's rows at once", () => {
@@ -124,7 +170,7 @@ test("rows a fold takes away stop taking clicks while they fade", () => {
   // Nor the keyboard: a leaving row is inert until it is gone.
   assert.match(
     fold,
-    /const present = useIsPresent\(\);\s*return \(\s*<motion\.div\s+inert=\{!present\}/,
+    /const leaving = useLeaving<HTMLDivElement>\(\);\s*return \(\s*<motion\.div\s+\{\.\.\.leaving\}/,
   );
 });
 

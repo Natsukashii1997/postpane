@@ -44,6 +44,8 @@ export function useFold<T extends HTMLElement>(open: boolean) {
     playing.current = null;
     if (!element || systemReducesMotion() || !element.animate) {
       running?.cancel();
+      // A move cut short leaves no clip behind (ENG-18).
+      if (running && element) element.style.overflow = "";
       if (!open) setShown(false);
       return;
     }

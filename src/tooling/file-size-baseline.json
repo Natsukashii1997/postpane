@@ -104,7 +104,7 @@
   "src/packages/hud/src/BotMark.tsx": 416,
   "src/packages/hud/src/HUDGlow.tsx": 830,
   "src/packages/hud/src/HUDScene.tsx": 1432,
-  "src/packages/hud/src/HoverPanel.tsx": 551,
+  "src/packages/hud/src/HoverPanel.tsx": 511,
   "src/packages/hud/src/IslandNews.tsx": 358,
   "src/packages/hud/src/alerts/CompactAlertView.tsx": 582,
   "src/packages/hud/src/alerts/CompletionAlertView.tsx": 408,

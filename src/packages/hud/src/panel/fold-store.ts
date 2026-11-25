@@ -6,11 +6,11 @@
 import { useSyncExternalStore } from "react";
 
 export interface FoldStore {
-  /** Whether `key`'s list is open, a way to open or fold it, and whether it
-   * was opened or folded just now: rows that fold brings or takes move, where
-   * rows that come and go for any other reason (an answer, a removal, another
-   * list's fold) just appear or go. */
-  use(key: string | undefined): [boolean, () => void, boolean];
+  /** Whether `key`'s list is open, a way to open or fold it, and when it was
+   * opened or folded just now (0 if not): the rows that fold brings or takes
+   * move (`rowsMove`), where rows that come and go for any other reason (an
+   * answer, a removal, another list's fold) just appear or go. */
+  use(key: string | undefined): [boolean, () => void, number];
   /** Folds every list back. */
   reset(): void;
 }
@@ -38,7 +38,11 @@ export function foldStore(): FoldStore {
         changed();
       };
       const at = key ? toggledAt.get(key) : undefined;
-      return [isOpen, toggle, at !== undefined && Date.now() - at < MOVING_MS];
+      return [
+        isOpen,
+        toggle,
+        at !== undefined && Date.now() - at < MOVING_MS ? at : 0,
+      ];
     },
     reset() {
       if (!open.size) return;
@@ -46,6 +50,27 @@ export function foldStore(): FoldStore {
       changed();
     },
   };
+}
+
+/** What a list drew last: the fold it saw (`use`'s third value) and its rows. */
+export interface RowsSeen {
+  fold: number;
+  rows: string;
+}
+
+/** Whether the rows a list draws now come and go with its fold. The render a
+ * fold causes (a fold the list has not seen yet, or a list first drawn inside
+ * one) moves whatever rows it brings or takes. Later in the fold's window the
+ * rows keep moving while they stay the same rows, but a change of rows then
+ * has another cause, an answer or a removal, and those just appear or go
+ * (ENG-03). */
+export function rowsMove(
+  seen: RowsSeen | null,
+  fold: number,
+  rows: string,
+): boolean {
+  if (!fold) return false;
+  return !seen || seen.fold !== fold || seen.rows === rows;
 }
 
 /** The cards' 「展开其余 n 条」 lists: folded again once the sidebar closes,

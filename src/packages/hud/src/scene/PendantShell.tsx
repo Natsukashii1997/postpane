@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { EASE_OUT, cssCurve } from "@agent-hud/ui/lib/motion";
 import type { PendantLayout, PendantRect } from "../app-pendant";
+import { addsOnto } from "./adds-onto";
 
 /** What swings under the pointer: the cord and ball, and 磁盘瘦身's broom. */
 const SWINGS = ".hud-pendant-sway, .hud-disk-broom";
@@ -10,12 +11,9 @@ const SETTLE_MS = 400;
 
 /** The settle each swinging part has playing: one at a time (ENG-05). */
 const settling = new WeakMap<Element, Animation>();
-/** Whether this WebKit adds one animation onto another (Safari 16 and later;
- * WebKit's own check). Without it a settle replaces the swing, so a pointer
- * back mid-way stops the settle and lets the swing take over (ENG-10). */
-const ADDS =
-  typeof KeyframeEffect !== "undefined" &&
-  Boolean(new KeyframeEffect(null, []).composite);
+// Where WebKit cannot add one animation onto another (`addsOnto`), a settle
+// replaces the swing, and a pointer back mid-way stops the settle and lets
+// the swing take over from upright (ENG-10).
 
 /** Before the swing stops, take each swinging part from where it is now back
  * to rest, so the leave reads as the pendant coming to a stop: quick at first,
@@ -32,7 +30,7 @@ function settle(root: HTMLElement | null) {
     const back = part.animate([{ transform: from }, { transform: "none" }], {
       duration: SETTLE_MS,
       easing: cssCurve(EASE_OUT),
-      composite: ADDS ? "add" : "replace",
+      composite: addsOnto() ? "add" : "replace",
     });
     settling.set(part, back);
   }
@@ -40,7 +38,7 @@ function settle(root: HTMLElement | null) {
 
 /** The pointer is back: where settles cannot add onto the swing, end them. */
 function resume(root: HTMLElement | null) {
-  if (ADDS) return;
+  if (addsOnto()) return;
   for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? [])
     settling.get(part)?.cancel();
 }

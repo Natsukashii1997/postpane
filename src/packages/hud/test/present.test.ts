@@ -7,7 +7,22 @@ const read = (path: string) =>
 
 test("a view on its way out takes no key press (ENG-07)", () => {
   const present = read("scene/Present.tsx");
-  assert.equal(present.match(/inert=\{!useIsPresent\(\)\}/g)?.length, 2);
+  assert.equal(
+    present.match(/\{\.\.\.useLeaving<HTML\w+Element>\(\)\}/g)?.length,
+    2,
+  );
+  // Old WebKit ignores inert (before macOS 12.4): the view leaving also
+  // swallows clicks and keys and lets go of focus, round 2 of ENG-07.
+  // Measured in the system WKWebView: evidence webkit-r2/leaving*.txt.
+  const leaving = present.slice(present.indexOf("export function useLeaving"));
+  for (const part of [
+    /inert: true/,
+    /onClickCapture: stop/,
+    /onKeyDownCapture: stop/,
+    /onFocusCapture: letGo/,
+    /ref\.current\?\.contains\(held\)\)\s*held\.blur\(\)/,
+  ])
+    assert.match(leaving, part);
   // The card's three views and the panel's content cross-fade through them.
   const surface = read("scene/HUDExpandedSurface.tsx");
   assert.match(surface, /<PresentButton\s+\/\/[^\n]*\n\s*key=\{`peek-/);

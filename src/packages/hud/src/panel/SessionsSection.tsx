@@ -283,8 +283,9 @@ export function LiveRow({
   useEffect(() => () => clearTimeout(wheelEnd.current), []);
   const row = useRef<HTMLDivElement>(null);
   const blocks = useRef<(HTMLButtonElement | null)[]>([]);
-  // The block under the pointer or the keyboard: its hint shows.
+  // The block under pointer or keyboard shows its hint till it leaves (ENG-08).
   const [hot, setHot] = useState<number | null>(null);
+  const cool = (i: number) => setHot((at) => (at === i ? null : at));
   const focusBlock = (index: number) => {
     setHot(index);
     blocks.current[index]?.focus();
@@ -396,10 +397,9 @@ export function LiveRow({
                   if (ready) void pick(kind);
                 }}
                 onPointerEnter={() => setHot(index)}
-                onPointerLeave={() =>
-                  setHot((at) => (at === index ? null : at))
-                }
+                onPointerLeave={() => cool(index)}
                 onFocus={() => setHot(index)}
+                onBlur={() => cool(index)}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
                     event.preventDefault();

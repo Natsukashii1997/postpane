@@ -1,19 +1,19 @@
 // The list cards' fold, moved out of ListCard.tsx for the 300-line ratchet.
 import {
+  Children,
   createContext,
+  isValidElement,
   useContext,
+  useLayoutEffect,
+  useRef,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  AnimatePresence,
-  motion,
-  useIsPresent,
-  type Variants,
-} from "motion/react";
+import { AnimatePresence, motion, type Variants } from "motion/react";
 import { EASE_OUT, GEOMETRY, MOTION } from "@agent-hud/ui/lib/motion";
-import { cardFolds } from "../panel/fold-store";
+import { cardFolds, rowsMove, type RowsSeen } from "../panel/fold-store";
 import { GRID } from "../panel/theme";
+import { useLeaving } from "../scene/Present";
 import type { Inks } from "./ListCard";
 export { cardFolds };
 
@@ -22,9 +22,11 @@ export { cardFolds };
  * is the folded or unfolded one from the first frame. */
 const FoldMotion = createContext(false);
 const Moving = createContext(false);
-/** A card's list was opened or folded just now (WorkSections' `Folded`):
- * the rows drawn inside it move with that fold. */
-export const ListFolding = createContext(false);
+/** When a card's list was opened or folded just now (WorkSections' `Folded`,
+ * 0 if not): the lists drawn inside it go by that fold. */
+export const ListFolding = createContext(0);
+/** The fold of the list a list is drawn in, for a group's own list. */
+const ParentFold = createContext(0);
 
 /** The panel in view: a box whose folds may move. */
 export function FoldScope({
@@ -48,24 +50,32 @@ export function FoldScope({
  * of the rows vanishing and the empty paper shrinking after them (owner
  * chose 改, 2026-11-25). Wrap a list's rows, each in a keyed `FoldRow`. */
 export function FoldRows({
-  moving: folding = false,
+  moving: own = 0,
   children,
 }: {
-  /** This list's own fold was opened or folded just now (a store's third
-   * value); a card list around it counts too. Nothing else moves rows. */
-  moving?: boolean;
+  /** When this list's own fold was opened or folded just now (a store's
+   * third value); a card list or a list around it counts too. */
+  moving?: number;
   children: ReactNode;
 }) {
-  // Rows inside rows that move (a group's own list) move with them.
-  const list = useContext(ListFolding);
-  const parent = useContext(Moving);
-  const moving = useContext(FoldMotion) && (folding || list || parent);
+  const fold = Math.max(own, useContext(ListFolding), useContext(ParentFold));
+  const rows = Children.toArray(children)
+    .map((row) => (isValidElement(row) ? String(row.key) : ""))
+    .join("\n");
+  // Only the rows that fold itself brings or takes move (`rowsMove`).
+  const seen = useRef<RowsSeen | null>(null);
+  const moving = useContext(FoldMotion) && rowsMove(seen.current, fold, rows);
+  useLayoutEffect(() => {
+    seen.current = { fold, rows };
+  });
   return (
-    <Moving.Provider value={moving}>
-      <AnimatePresence initial={false} custom={moving}>
-        {children}
-      </AnimatePresence>
-    </Moving.Provider>
+    <ParentFold.Provider value={fold}>
+      <Moving.Provider value={moving}>
+        <AnimatePresence initial={false} custom={moving}>
+          {children}
+        </AnimatePresence>
+      </Moving.Provider>
+    </ParentFold.Provider>
   );
 }
 
@@ -107,7 +117,7 @@ export function FoldList<T>({
   items: readonly T[];
   keyOf: (item: T) => string;
   row: (item: T, index: number, list: readonly T[]) => ReactNode;
-  moving?: boolean;
+  moving?: number;
 }) {
   return (
     <FoldRows moving={moving}>
@@ -122,10 +132,10 @@ export function FoldList<T>({
 export function FoldRow({ children }: { children: ReactNode }) {
   const moving = useContext(Moving);
   // Leaving, it is out of the keyboard's reach too, not only the pointer's.
-  const present = useIsPresent();
+  const leaving = useLeaving<HTMLDivElement>();
   return (
     <motion.div
-      inert={!present}
+      {...leaving}
       custom={moving}
       variants={ROW}
       initial={moving ? "shut" : false}
