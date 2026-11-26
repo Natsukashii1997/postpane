@@ -781,10 +781,9 @@ let live = new Set();
 const inUse = new Map();
 
 /** Which handoff's opening each conversation came of, as the tab `open`
- * made showed it when the opening was over, or as its page first said it
- * soon after: a handoff whose opening failed knows none of them (#542 review
- * P1-01). Kept in local storage, past the browser starting again (round 2,
- * P1-01 path C), the newest `STRAYS_MOST`. */
+ * made showed it when the opening was over: a handoff whose opening failed
+ * knows none of them (#542 review P1-01). Kept in local storage, past the
+ * browser starting again (round 2, P1-01 path C), the newest `STRAYS_MOST`. */
 let strays = {};
 const STRAYS_MOST = 200;
 const straysRead = chrome.storage.local
@@ -799,10 +798,36 @@ let blank = {};
 const blankRead = (chrome.storage.session?.get("blank") ?? Promise.resolve({}))
   .then((kept) => (blank = { ...kept?.blank, ...blank }))
   .catch(() => {});
-/** How long after its opening a blank tab's page saying its conversation
- * makes that conversation the handoff's (round 2, P1-01 path B); past that,
- * the page may be Changhao's. */
-const ADOPT_MS = 10 * 60 * 1000;
+/** The tabs `open` made whose tab Chrome did not say how it stood when the
+ * opening was over, by id, with the request: noted as soon as it does
+ * (round 3, P2-12). */
+const unowned = new Map();
+
+/** The conversations Changhao went on with himself after their relays
+ * ended: their tabs are his now, and not closed (round 3, P2-11, owner
+ * 2026-11-27). Local storage, the newest `STRAYS_MOST`. */
+let taken = {};
+const takenRead = chrome.storage.local
+  .get("taken")
+  .then((kept) => (taken = { ...kept?.taken, ...taken }))
+  .catch(() => {});
+
+/** An answer began in `conversation`: when its relay had ended, PostPane
+ * sends nothing there, so the words were Changhao's own. */
+async function goneOn(message) {
+  const conversation = message.conversation;
+  if (message.phase !== "start" || message.again || !conversation) return;
+  await straysRead;
+  if (!ended.has(conversation) && !endedRelays.has(strays[conversation]))
+    return;
+  await takenRead;
+  delete taken[conversation];
+  taken[conversation] = true;
+  const all = Object.keys(taken);
+  for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
+    delete taken[old];
+  chrome.storage.local.set({ taken }).catch(() => {});
+}
 
 function keepStray(conversation, relay) {
   delete strays[conversation];
@@ -820,26 +845,51 @@ function keepBlank() {
  * id>~<try>"), and looks at the ended relays' tabs again: it was passed over
  * while it opened (round 2, P1-01 path A). */
 async function own(tabId, request) {
-  const relay = request?.split("~")[0];
-  if (relay) {
-    const tab = await chromeSays(() => chrome.tabs.get(tabId));
-    const conversation = tab ? conversationOf(tab) : null;
-    await Promise.all([straysRead, blankRead]);
-    if (conversation) keepStray(conversation, relay);
-    else if (tab && chatgptPath(tab) !== null) {
-      blank[tabId] = { relay, path: chatgptPath(tab), at: Date.now() };
-      keepBlank();
-    }
-  }
+  await noteOwner(tabId, request);
   closeEnded();
 }
 
-/** A blank tab's page said it shows `conversation`: the handoff's, if soon
- * after its opening; else the tab is not known as the handoff's any more. */
-function adopt(tabId, conversation) {
-  const mine = blank[tabId];
-  if (!mine || !conversation) return;
-  if (Date.now() - mine.at < ADOPT_MS) keepStray(conversation, mine.relay);
+/** Notes whose tab `tabId` is, as it stands now; false when Chrome does not
+ * say (round 3, P2-12: not known is not gone), and it is tried again. */
+async function noteOwner(tabId, request) {
+  const relay = request?.split("~")[0];
+  if (!relay) return true;
+  const tab = await tabNow(tabId);
+  if (tab === undefined) {
+    unowned.set(tabId, request);
+    return false;
+  }
+  unowned.delete(tabId);
+  if (!tab) return true;
+  const conversation = conversationOf(tab);
+  await Promise.all([straysRead, blankRead]);
+  if (conversation) keepStray(conversation, relay);
+  else if (chatgptPath(tab) !== null) {
+    blank[tabId] = { relay, path: chatgptPath(tab) };
+    keepBlank();
+  }
+  return true;
+}
+
+/** `tabId` as Chrome has it; null when there is no such tab; undefined
+ * when Chrome does not say in `CHROME_BY`, or fails for another reason. */
+function tabNow(tabId) {
+  return new Promise((done) => {
+    const timer = setTimeout(() => done(undefined), CHROME_BY);
+    chrome.tabs
+      .get(tabId)
+      .then(done, (error) =>
+        done(/no tab/i.test(String(error?.message)) ? null : undefined),
+      )
+      .finally(() => clearTimeout(timer));
+  });
+}
+
+/** A blank tab's page said it shows a conversation: whether that came of
+ * the opening or of Changhao going to another cannot be told (round 3,
+ * P1-04), so the tab is not known as the handoff's any more, and kept. */
+function unblank(tabId, conversation) {
+  if (!conversation || !(tabId in blank)) return;
   delete blank[tabId];
   keepBlank();
 }
@@ -933,6 +983,7 @@ function due(tab, relay) {
   const conversation = conversationOf(tab);
   if (conversation) {
     if (inUse.has(conversation) || live.has(conversation)) return false;
+    if (taken[conversation]) return false;
     return ended.has(conversation) || endedRelays.has(strays[conversation]);
   }
   const mine = blank[tab.id];
@@ -955,8 +1006,11 @@ async function closeSome() {
   const relay = new Set(groups.map((group) => group.id));
   const tabs = await chromeSays(() => chrome.tabs.query({}));
   if (!Array.isArray(tabs)) return true;
-  await Promise.all([straysRead, blankRead]);
   let left = false;
+  // Tabs whose owner Chrome did not let be noted yet (round 3, P2-12).
+  for (const [tabId, request] of [...unowned])
+    if (!(await noteOwner(tabId, request))) left = true;
+  await Promise.all([straysRead, blankRead, takenRead]);
   const close = async (tab, how) => {
     if (unloaded(tab)) {
       // A blank tab unloaded cannot say it is still the one opened.
@@ -1626,8 +1680,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     pages.set(tabId, page);
     for (const check of waiters.get(tabId) || []) check(page);
     statusSoon();
-    // A blank tab's first conversation is its handoff's (#542).
-    adopt(tabId, message.conversation);
+    // A blank tab showing a conversation is not known as the handoff's (#542).
+    unblank(tabId, message.conversation);
     // A page back, or moved on: an ended relay's may be closed now (#542).
     closeEnded();
   } else if (message.type === "turn") {
@@ -1638,6 +1692,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     post({ ...message, tab: tabId });
     // An answer done: its tab writes no more, and may be closed now (#542).
     if (message.phase !== "start") closeEnded();
+    // Begun after its relay ended: Changhao's own, and his tab now (#542).
+    else goneOn(message);
     if (message.phase === "complete")
       shadowRead(message.conversation, "complete", {
         pagePromptId: message.promptId ?? null,
@@ -1653,6 +1709,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     delete blank[tabId];
     keepBlank();
   }
+  unowned.delete(tabId);
   statusSoon();
 });
 
@@ -1665,6 +1722,10 @@ chrome.tabs.onReplaced.addListener((added, removed) => {
     blank[added] = blank[removed];
     delete blank[removed];
     keepBlank();
+  }
+  if (unowned.has(removed)) {
+    unowned.set(added, unowned.get(removed));
+    unowned.delete(removed);
   }
   statusSoon();
 });
