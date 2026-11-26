@@ -35,7 +35,7 @@ use sending::Unasked;
 use texts::refused;
 pub use turns::{completion, started};
 use watched::{add_watched, tell_watch, watched_entry};
-pub use watched::{load_watched, save_watched, Watched};
+pub use watched::{load_watched, save_watched, Ended, Watched};
 
 // A Unix socket; Windows has no transport yet.
 #[cfg(unix)]
@@ -156,8 +156,8 @@ struct State {
     /// The names conversations being opened are to be listed under, by request.
     names: HashMap<String, String>,
     watched: Vec<Watched>,
-    /// The conversations every handoff of which ended, and the handoffs that did (#542).
-    ended: (Vec<String>, Vec<String>),
+    /// What ended, for the extension to close their tabs (#542).
+    ended: Ended,
 }
 /// Told of what the extension reports: turns starting and finishing,
 /// conversations opened and words sent (late ones too).

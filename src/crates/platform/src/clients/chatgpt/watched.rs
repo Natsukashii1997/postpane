@@ -61,17 +61,32 @@ pub(super) fn watch_message(list: &[Watched], shadow: bool) -> Value {
     }
     message
 }
+/// What PostPane tells the extension of handoffs that ended, for it to close
+/// their tabs (#542), in order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Ended {
+    /// The conversations every handoff of which is closed.
+    pub conversations: Vec<String>,
+    /// The handoffs closed: a tab one opened is closed by it, though its
+    /// opening failed and it never had a conversation (review P1-01).
+    pub handoffs: Vec<String>,
+    /// The conversations a handoff not closed has: a tab of one is kept,
+    /// whatever opened it (review round 2, P2-09).
+    pub live: Vec<String>,
+}
 /// The watch message for the list `state` keeps: with the shadow switch
-/// as kept in `data`, and the conversations and handoffs that ended (#542),
-/// each when any did.
+/// as kept in `data`, and what ended (#542), each part when it holds any.
 pub(super) fn watch_of(state: &State, data: &Path) -> Value {
     let mut message = watch_message(&state.watched, shadow::on(data));
-    let (conversations, handoffs) = &state.ended;
-    if !conversations.is_empty() {
-        message["ended"] = json!(conversations);
-    }
-    if !handoffs.is_empty() {
-        message["endedRelays"] = json!(handoffs);
+    let ended = &state.ended;
+    for (key, list) in [
+        ("ended", &ended.conversations),
+        ("endedRelays", &ended.handoffs),
+        ("live", &ended.live),
+    ] {
+        if !list.is_empty() {
+            message[key] = json!(list);
+        }
     }
     message
 }

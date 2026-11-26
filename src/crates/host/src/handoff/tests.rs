@@ -90,7 +90,7 @@ struct Fake {
     /// Passing a look on to the extension fails (#524).
     find_fails: std::cell::Cell<bool>,
     /// What the extension was told ended each time (#542).
-    told_ended: RefCell<Vec<(Vec<String>, Vec<String>)>>,
+    told_ended: RefCell<Vec<agent_hud_runtime::chatgpt::Ended>>,
 }
 
 impl Fake {
@@ -159,10 +159,8 @@ impl Lines for Fake {
         }
         Ok(self.asked_as.borrow().clone())
     }
-    fn ended(&self, conversations: &[String], handoffs: &[String]) {
-        self.told_ended
-            .borrow_mut()
-            .push((conversations.to_vec(), handoffs.to_vec()));
+    fn ended(&self, ended: &agent_hud_runtime::chatgpt::Ended) {
+        self.told_ended.borrow_mut().push(ended.clone());
     }
     fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String> {
         self.sent

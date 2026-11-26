@@ -246,12 +246,17 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
 
     // Conversations whose handoffs all ended are told with the list (#542),
     // once each time they change.
-    channel.ended(&["68a1".into()], &["h1".into()]);
+    let ended = Ended {
+        conversations: vec!["68a1".into()],
+        handoffs: vec!["h1".into()],
+        live: vec![],
+    };
+    channel.ended(&ended);
     assert_eq!(
         next(&mut extension),
         json!({"type":"watch","conversations":["68a1","68b2"],"ended":["68a1"],"endedRelays":["h1"]})
     );
-    channel.ended(&["68a1".into()], &["h1".into()]);
+    channel.ended(&ended);
     channel.reread("68b2").unwrap();
     assert_eq!(
         next(&mut extension)["type"],

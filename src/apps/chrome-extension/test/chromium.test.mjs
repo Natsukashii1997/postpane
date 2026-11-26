@@ -532,28 +532,60 @@ test("an ended relay's tabs in the relay group are closed, and only those; taken
 
 // #542 review P1-01: an opening that failed left a tab whose conversation
 // PostPane never heard of; once its handoff ended, it is closed by the
-// handoff, kept across the worker in session storage.
-test("the tab a failed opening left is closed once its handoff ended", async () => {
+// handoff: by its conversation, kept in local storage past a restart; a
+// blank one, while its page says it is still that blank page.
+test("the tabs a failed opening left are closed once its handoff ended", async () => {
+  const made = async (url) => {
+    const tabId = await worker.evaluate(async (url) => {
+      const tab = await chrome.tabs.create({ url, active: false });
+      await group(tab.id);
+      return tab.id;
+    }, url);
+    // Its page there, so the tab shows what it does.
+    for (let tries = 0; tries < 50; tries++) {
+      if (await worker.evaluate((tabId) => pages.has(tabId), tabId)) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return tabId;
+  };
   const id = conversation(34);
-  const tabId = await worker.evaluate(async (url) => {
-    const tab = await chrome.tabs.create({ url, active: false });
-    await group(tab.id);
-    return tab.id;
-  }, address(id));
-  // Its page there, so the tab shows the conversation.
-  await listed(id);
-  await worker.evaluate((tabId) => own(tabId, "h9a1~1"), tabId);
+  const shown = await made(address(id));
+  const blankTab = await made("https://chatgpt.com/");
+  await worker.evaluate((tabId) => own(tabId, "h9a1~1"), shown);
+  await worker.evaluate((tabId) => own(tabId, "h9a1~2"), blankTab);
   assert.deepEqual(
     await worker.evaluate(
-      async () => (await chrome.storage.session.get("owned")).owned,
+      async () => (await chrome.storage.local.get("strays")).strays,
     ),
-    { [tabId]: { relay: "h9a1", conversation: id } },
+    { [id]: "h9a1" },
+  );
+  assert.equal(
+    await worker.evaluate(
+      async (tabId) =>
+        (await chrome.storage.session.get("blank")).blank[tabId].path,
+      blankTab,
+    ),
+    "/",
   );
   await inFront();
   await worker.evaluate(() =>
     onHost({ type: "watch", conversations: [], endedRelays: ["h9a1"] }),
   );
-  for (let tries = 0; tries < 50 && (await tabsAt(id)).length; tries++)
+  const exists = (tabId) =>
+    worker.evaluate(
+      (tabId) =>
+        chrome.tabs.get(tabId).then(
+          () => true,
+          () => false,
+        ),
+      tabId,
+    );
+  for (let tries = 0; tries < 50; tries++) {
+    if (!(await exists(shown)) && !(await exists(blankTab))) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.deepEqual(await tabsAt(id), []);
+  }
+  assert.deepEqual(
+    [await exists(shown), await exists(blankTab)],
+    [false, false],
+  );
 });

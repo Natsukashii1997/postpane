@@ -114,10 +114,9 @@ pub(crate) trait Lines {
     fn reread(&self, conversation: &str) -> Result<(), String>;
     /// Asks whether the words sent as `request` are in `conversation` (#509).
     fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String>;
-    /// Tells the extension the conversations every handoff of which ended,
-    /// and the handoffs that did, to close their tabs (#542); nothing where
-    /// there is no extension.
-    fn ended(&self, _conversations: &[String], _handoffs: &[String]) {}
+    /// Tells the extension what ended, to close their tabs (#542); nothing
+    /// where there is no extension.
+    fn ended(&self, _ended: &agent_hud_runtime::chatgpt::Ended) {}
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):

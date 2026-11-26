@@ -63,10 +63,10 @@ impl Lines for AppLines<'_> {
             .ok_or("The ChatGPT channel is unavailable")?;
         state.channel()?.find(conversation, request, after)
     }
-    fn ended(&self, conversations: &[String], handoffs: &[String]) {
+    fn ended(&self, ended: &agent_hud_runtime::chatgpt::Ended) {
         if let Some(state) = self.0.try_state::<crate::chatgpt::ChatGpt>() {
             if let Ok(channel) = state.channel() {
-                channel.ended(conversations, handoffs);
+                channel.ended(ended);
             }
         }
     }

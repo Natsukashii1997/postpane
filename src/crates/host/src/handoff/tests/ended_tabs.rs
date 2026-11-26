@@ -5,13 +5,15 @@
 use super::*;
 use crate::handoff::book::IDLE_END_MS;
 
+/// What the extension was last told ended: conversations and handoffs.
 fn last(lines: &Fake) -> (Vec<String>, Vec<String>) {
-    lines
+    let ended = lines
         .told_ended
         .borrow()
         .last()
         .cloned()
-        .unwrap_or_default()
+        .unwrap_or_default();
+    (ended.conversations, ended.handoffs)
 }
 
 #[test]

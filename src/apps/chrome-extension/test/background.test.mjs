@@ -195,7 +195,10 @@ function load(
       get: async (id) => windows[id] ?? { state: "normal", focused: true },
     },
     tabGroups: {
-      query: async ({ title }) => groups.filter((g) => g.title === title),
+      query: async ({ title }) => {
+        if (faults.groups) throw new Error("No groups");
+        return groups.filter((g) => g.title === title);
+      },
     },
     scripting: {
       // As Chrome: a script already registered, or not registered, throws.
@@ -3271,6 +3274,9 @@ test("a tab words are going into is not closed meanwhile, though its conversatio
   assert.deepEqual(removed, []);
   release();
   await sending;
+  // Done with it, the tab is looked at again (round 2, P2-10).
+  await settleLong();
+  assert.deepEqual(removed, [2]);
 });
 
 // #542 review P1-01: a handoff whose opening failed knows no conversation
@@ -3381,4 +3387,157 @@ test("a tab left open while its page wrote is closed once its answer is done", a
   );
   await settleLong();
   assert.deepEqual(removed, [2]);
+});
+
+// #542 review round 2, P1-01 path A: the handoff ended while its opening
+// was still on; once the opening is over, its tab is looked at again.
+test("a tab whose handoff ended while it opened is closed once the opening is over", async () => {
+  const tabs = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    now: true,
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 99: true },
+    onCreate: (tab) =>
+      Object.assign(tab, { url: `https://chatgpt.com/c/${ENDED}`, groupId: 7 }),
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// Round 2, P1-03: no conversation is not an identity. A blank tab a failed
+// opening left is closed only while its page says it is still that blank
+// page; not once it went to another site, nor unloaded.
+test("a blank tab a failed opening left is closed only as the same blank page", async () => {
+  const run = async (after) => {
+    const tabs = [];
+    const removed = [];
+    const asked = [];
+    const { listeners } = load(tabs, {
+      now: true,
+      removed,
+      asked,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      onCreate: (tab) => Object.assign(tab, { groupId: 7 }),
+    });
+    await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+    await settleLong();
+    after(tabs[0]);
+    await listeners.port({
+      type: "watch",
+      conversations: [],
+      endedRelays: ["h7"],
+    });
+    await settleLong();
+    return { removed, asked: asked.filter(([, op]) => op === "closable") };
+  };
+  const same = await run(() => {});
+  assert.deepEqual(same.removed, [99], "still the blank page");
+  const away = await run((tab) =>
+    Object.assign(tab, { url: "https://example.com/", discarded: true }),
+  );
+  assert.deepEqual(away.removed, [], "taken to another site");
+  const unloadedBlank = await run((tab) =>
+    Object.assign(tab, { discarded: true }),
+  );
+  assert.deepEqual(unloadedBlank.removed, [], "cannot say it is the same");
+  assert.deepEqual(unloadedBlank.asked, []);
+});
+
+// Round 2, P1-01 path B: the page of a blank tab says its conversation soon
+// after: that conversation is the handoff's.
+test("a blank tab whose page says its conversation soon after is closed by it", async () => {
+  const tabs = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    now: true,
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 99: true },
+    onCreate: (tab) => Object.assign(tab, { groupId: 7 }),
+  });
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  tabs[0].url = `https://chatgpt.com/c/${ENDED}`;
+  listeners.message(
+    { type: "page", conversation: ENDED, hidden: true },
+    { tab: { id: 99 } },
+  );
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// Round 2, P1-01 path C and P2-09: whose a conversation's tab is outlives the
+// browser starting again (new tab ids); a conversation PostPane heard of but
+// no handoff took (a try given up on) is no reason to keep it, one a
+// handoff not ended has is.
+test("a conversation a failed opening came to is closed by its handoff, after a restart too", async () => {
+  const at = (id) => ({
+    id,
+    url: `https://chatgpt.com/c/${ENDED}`,
+    windowId: 1,
+    active: false,
+    groupId: 7,
+  });
+  const kept = { strays: { [ENDED]: "h7" } };
+  const first = [];
+  const one = load([at(41)], {
+    removed: first,
+    stored: { ...kept },
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 41: true },
+  });
+  await one.listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    endedRelays: ["h7"],
+    live: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(first, [], "a handoff not ended has it");
+  const removed = [];
+  const { listeners } = load([at(41)], {
+    removed,
+    stored: { ...kept },
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 41: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [41]);
+});
+
+// Round 2, P2-04: Chrome not saying which groups there are is not "none":
+// looked at again later.
+test("Chrome not answering for the groups has the tabs looked at again later", async () => {
+  const waits = [];
+  const { listeners } = load([], {
+    waits,
+    faults: { groups: true },
+    groups: [{ id: 7, title: "驿窗接力" }],
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.ok(waits.includes(5 * 60 * 1000), JSON.stringify(waits));
 });

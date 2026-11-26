@@ -9,7 +9,7 @@
 - 你要求的：
   - `src/crates/host/src/handoff/back/desk_ended.rs`（新）：`ended_conversations` 从接力记录算出「全部 closed」的会话；`Desk::tell_ended` 每次刷新快照告诉通道。`handoff.rs`：`Lines` 加 `ended`（默认什么都不做）、挂新文件、`projection` 里调一次；`sending/desk_lines.rs` 接到通道。
   - `src/crates/platform/src/clients/chatgpt/`：`State` 记 `ended`；`commands.rs` 的 `Channel::ended` 名单变了才发一次 `watch`；`watched.rs` 的 `watch_of` / `tell_watch` 把 `ended` 带上（只在非空时）。
-  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，`due` 判一个标签页该不该关（跳过前台的、正在 `open` 的、正在送话 / 查找 / 重读 / 切前台的会话），没页面的直接关，其余先问页面 `closable`，关前再判一次；换标签页、页面报到、回答写完时再看一遍，没关成的 5 分钟后再看。`open` 拆出 `openIn`，结束时 `own` 记下标签页归哪条接力。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
+  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，`due` 判一个标签页该不该关（跳过前台的、正在 `open` 的、正在送话 / 查找 / 重读 / 切前台的、`live` 里的会话），显示着会话又没页面的直接关，其余先问页面 `closable`，关前再判一次；换标签页、页面报到、回答写完、手上的活做完时再看一遍，没关成的 5 分钟后再看。`open` 拆出 `openIn`，结束时 `own` 记下标签页归哪条接力（`strays` / `blank`）。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
   - 文档：`docs/chatgpt-channel.md`（`watch` 一行、「接力结束关标签页」一段），`src/crates/host/src/handoff/README.md`（`back/` 一行），`docs/DECIDED.md` 新一行。
 - 我顺手改的：`content.js` 把 `reload` 里那段「显示这个会话、没在写、没草稿」的判断提成 `idleFor`，`reload` 行为不变；`mod.rs` 里两处「拼 watch 再发」合成 `tell_watch` 一行（300 行棘轮只许变短，加字段要腾出两行）。没改变别的行为。
 - 同类：搜了插件里所有 `chrome.tabs.create`（`open`、`make`、`focus` 三处）。`open`、`make` 开的都进组，会被关；`focus` 新开的不进组、不关（常浩点接力卡要看的）。没有别处开标签页。
@@ -33,6 +33,12 @@
   - P2-05 已修：只认 `https://chatgpt.com` 的 `/c/<id>` 和 `/g/<项目>/c/<id>`，跳转中按要去的网址认。
   - P2-06（关前一瞬间草稿竞态）、P2-07（只管最近 200 条）、P2-08（点接力卡看过、切走后关）：常浩 11-26 回「都按推荐」，即接受、接受、保持现状，已登记 DECIDED.md。
   - 返修测试：新测试在上一版代码上 `ℹ pass 0` / `ℹ fail 3`（插件，`red-round2-plugin.log`）、把快照顺序改回去 `FAILED. 1 passed; 1 failed`（驿窗，`red-round2-host.log`）；真实 Chromium 一共 `ℹ pass 17`（`chromium-round2.log`）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 205`，其余同上；`ℹ pass 64` / `ℹ fail 0`（`round2/`）。
+- 第 2 轮 ChatGPT 审查（返修，P1 2）怎么处理的：P1-02、P2-03 对方判定不成立，P2-05 已验证关闭；P2-06～08 常浩已定。
+  - P1-01 三条路径已修：打开途中接力就被结束（`own` 记完立刻再看一遍）；页面晚报会话（空白页 10 分钟内报出的会话记到这条接力名下）；浏览器重启（有会话的按会话存进 `chrome.storage.local` 的 `strays`，重启后还认得；空白页存 `chrome.storage.session`，重启后认不出、不关，写进通道文档）。
+  - P1-03 已修：「没有会话」不当作身份。空白页只在还停在原来那个 chatgpt.com 路径、页面亲口答「可以关」时才关；去了别的网站、被 Chrome 回收的空白页都不关。
+  - P2-09 已修：驿窗多发 `live`（没结束的接力占着的会话），插件用它代替原来的「名单里有就不关」：重试时被放弃那一次开出的会话在名单里、却没有接力在用，接力结束后会关。
+  - P2-10 已修：会话的送话 / 查找 / 重读 / 切前台做完时再看一遍。P2-04 补齐：Chrome 没答出标签组、关前那次查询没答，都 5 分钟后再看。
+  - 测试：新测试在第 2 轮那版代码上 `ℹ pass 0` / `ℹ fail 6`（`round3/red-plugin.log`）；真实 Chromium `ℹ pass 17`（`round3/chromium.log`，这条仍是测试直接开标签页再调 `own`，没有真走一遍超时失败的 `open`）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 210`，前端 516、MCP 9、插件 14、注入脚本 11；`ℹ pass 64` / `ℹ fail 0`（`round3/`）。
 - 本轮新坑：无。
 - skill 进化：无。
 

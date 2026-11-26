@@ -1,7 +1,8 @@
 //! 接力结束后关掉它的 ChatGPT 标签页（#542）：每次刷新告诉插件哪些会话的接力都已结束、
-//! 哪些接力已结束，插件只关「驿窗接力」组里的标签页。
+//! 哪些接力已结束、哪些会话还有接力在用，插件只关「驿窗接力」组里的标签页。
 use super::{Desk, Lines};
 use crate::handoff::book::{Book, Status};
+use agent_hud_runtime::chatgpt::Ended;
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -9,19 +10,20 @@ use std::collections::BTreeSet;
 /// handoff still opening, open or failed has is not: a failed one's tab is
 /// where Changhao looks at what went wrong, and it may still bind.
 pub(crate) fn ended_conversations(book: &Book) -> Vec<String> {
-    let mut ended = BTreeSet::new();
-    let mut kept = BTreeSet::new();
-    for handoff in &book.list {
-        let Some(conversation) = handoff.chatgpt_conversation.as_deref() else {
-            continue;
-        };
-        if handoff.status == Status::Closed {
-            ended.insert(conversation);
-        } else {
-            kept.insert(conversation);
-        }
-    }
-    ended.difference(&kept).map(|c| (*c).to_owned()).collect()
+    let live = live_conversations(book);
+    let closed = book.list.iter().filter(|h| h.status == Status::Closed);
+    let ended = closed
+        .filter_map(|h| h.chatgpt_conversation.clone())
+        .filter(|conversation| !live.contains(conversation));
+    ended.collect::<BTreeSet<_>>().into_iter().collect()
+}
+
+/// The conversations a handoff not closed (opening, open or failed) has, in
+/// order: a tab of one is kept, whatever opened it (review round 2, P2-09).
+pub(crate) fn live_conversations(book: &Book) -> Vec<String> {
+    let live = book.list.iter().filter(|h| h.status != Status::Closed);
+    let conversations = live.filter_map(|h| h.chatgpt_conversation.clone());
+    conversations.collect::<BTreeSet<_>>().into_iter().collect()
 }
 
 /// The handoffs closed, in order (#542 review P1-01): a tab one opened is
@@ -33,17 +35,21 @@ pub(crate) fn ended_handoffs(book: &Book) -> Vec<String> {
 }
 
 impl Desk {
-    /// The snapshot's handoffs as of `now`, and then the extension told which
-    /// conversations and handoffs ended (#542): told after, so one the
-    /// snapshot ends (24 hours idle) is told at once (review P2-03). The
-    /// channel says them again only when they change.
+    /// The snapshot's handoffs as of `now`, and then the extension told what
+    /// ended (#542): told after, so one the snapshot ends (24 hours idle) is
+    /// told at once (review P2-03). The channel says it again only when it
+    /// changes.
     pub(crate) fn projection_told(&self, lines: &dyn Lines, now: i64) -> Value {
         let snapshot = self.projection(now);
-        let (conversations, handoffs) = {
+        let ended = {
             let book = self.lock();
-            (ended_conversations(&book), ended_handoffs(&book))
+            Ended {
+                conversations: ended_conversations(&book),
+                handoffs: ended_handoffs(&book),
+                live: live_conversations(&book),
+            }
         };
-        lines.ended(&conversations, &handoffs);
+        lines.ended(&ended);
         snapshot
     }
 }
@@ -90,6 +96,7 @@ mod tests {
         let open = book.begin("s2", None, "t", None, "brief", 12).id;
         assert!(book.opened(&open, "c3", 13));
         assert!(ended_handoffs(&book).is_empty());
+        assert_eq!(live_conversations(&book), ["c3"]);
         assert!(book.end(&failed, 14));
         assert!(book.end(&open, 15));
         let mut both = vec![failed, open];
