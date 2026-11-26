@@ -242,15 +242,16 @@
     if (command.op === "submit") {
       // Words for a conversation go into no other (#507 review P1-03): the
       // tab may show another since it was asked whether it is there. Looked
-      // to here, and by page.js before each thing it does to the box.
+      // to here, and by page.js before each thing it does to the box. A
+      // conversation of null: words that open one go from a new chat's page
+      // only, not one Changhao moved the tab on to (#542 round 4, P1-06).
       const here = () => page.conversationId(location.href);
-      if (command.conversation && here() !== command.conversation) {
+      const bound = "conversation" in command;
+      if (bound && here() !== command.conversation) {
         reply({ ok: false, reason: "other-conversation", pressed: false });
         return false;
       }
-      const shows = command.conversation
-        ? () => here() === command.conversation
-        : undefined;
+      const shows = bound ? () => here() === command.conversation : undefined;
       page.submit(document, command.text, command.until, shows).then(
         (result) => {
           if (result.ok) expecting = true;
@@ -304,6 +305,20 @@
         reply({ ok: true, streaming: page.streaming(document), told, loaded });
       }, 600);
       return true;
+    }
+    // Whether this page shows `conversation` opened with the words `text`
+    // (#542 round 4, P1-06), with its title and newest prompt's id.
+    if (command.op === "opened") {
+      const shown = page.conversationId(location.href);
+      reply({
+        conversation: shown,
+        title: page.title(document),
+        promptId: page.lastPromptId(document),
+        ours:
+          shown === command.conversation &&
+          page.opened(document, command.text, command.promptId),
+      });
+      return false;
     }
     // Whether this page is there, and which conversation it shows (#507).
     if (command.op === "alive") {

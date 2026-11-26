@@ -551,7 +551,34 @@ test("the tabs a failed opening left are closed once its handoff ended", async (
   const id = conversation(34);
   const shown = await made(address(id));
   const blankTab = await made("https://chatgpt.com/");
-  await worker.evaluate((tabId) => own(tabId, "h9a1~1"), shown);
+  // The words may have gone: the conversation is the handoff's as its page
+  // shows them as its only prompt (round 4, P1-06); before, it does not.
+  const own1 = () =>
+    worker.evaluate(
+      (tabId) => own(tabId, "h9a1~1", { conversation: null, text: "第 1 轮" }),
+      shown,
+    );
+  await own1();
+  assert.equal(
+    (await worker.evaluate(() => chrome.storage.local.get("strays"))).strays?.[
+      id
+    ],
+    undefined,
+  );
+  const page = context.pages().find((page) => page.url() === address(id));
+  await page.evaluate(() => {
+    for (const node of document.querySelectorAll(
+      '[data-chatgpt-search-unit-key$=":user"]',
+    ))
+      node.remove();
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:8:user"><div data-user-message-bubble="true">第 1 轮</div></div>',
+      );
+  });
+  await own1();
   await worker.evaluate((tabId) => own(tabId, "h9a1~2"), blankTab);
   assert.deepEqual(
     await worker.evaluate(

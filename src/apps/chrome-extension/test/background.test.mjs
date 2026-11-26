@@ -64,6 +64,10 @@ function load(
     groups = [],
     removed = [],
     closable = {},
+    // Round 4, P1-06: what a tab's page says asked whether it shows the
+    // words it was opened with; by default, that it does when it shows the
+    // conversation asked of.
+    opened = {},
   } = {},
 ) {
   const listeners = {};
@@ -174,6 +178,13 @@ function load(
           asked.push([tabId, message.op]);
           if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
           return closable[tabId];
+        }
+        if (message.op === "opened") {
+          asked.push([tabId, message.op]);
+          if (tabId in opened) return opened[tabId];
+          const tab = tabs.find((tab) => tab.id === tabId);
+          const shown = tab?.url?.split("/c/")[1] ?? null;
+          return { conversation: shown, ours: shown === message.conversation };
         }
         // #507: whether the page is there, and which conversation it shows.
         if (message.op === "alive") {
@@ -3156,6 +3167,15 @@ const LIVE = "7bf8fd58-d1a5-94ff-ac0f-c0a29771878f";
 const settleLong = async () => {
   for (let i = 0; i < 30; i++) await tick();
 };
+/** A tab an opening makes, `more` to it, whose page says at once it is a
+ * new chat's: the words go in (round 4, P1-06). `api` is what `load` gave. */
+const madeBlank = (api, more) => (tab) => {
+  Object.assign(tab, more);
+  api.listeners.message(
+    { type: "page", conversation: null, hidden: true },
+    { tab: { id: tab.id } },
+  );
+};
 
 test("conversations PostPane says ended have their tabs in the relay group closed, and only those", async () => {
   const at = (id, conversation, more = {}) => ({
@@ -3294,15 +3314,22 @@ test("a tab words are going into is not closed meanwhile, though its conversatio
 test("the tab a failed opening made is closed once its handoff ended", async () => {
   const tabs = [];
   const removed = [];
-  const { listeners } = load(tabs, {
-    now: true,
-    removed,
-    groups: [{ id: 7, title: "驿窗接力" }],
-    closable: { 99: true },
-    // The words went in and the address came, but the page never said so.
-    onCreate: (tab) =>
-      Object.assign(tab, { url: `https://chatgpt.com/c/${ENDED}`, groupId: 7 }),
-  });
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      // The words went in and the address came, but the page never said so;
+      // asked, it shows them.
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
   await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
   await settleLong();
   await listeners.port({
@@ -3403,14 +3430,20 @@ test("a tab left open while its page wrote is closed once its answer is done", a
 test("a tab whose handoff ended while it opened is closed once the opening is over", async () => {
   const tabs = [];
   const removed = [];
-  const { listeners } = load(tabs, {
-    now: true,
-    removed,
-    groups: [{ id: 7, title: "驿窗接力" }],
-    closable: { 99: true },
-    onCreate: (tab) =>
-      Object.assign(tab, { url: `https://chatgpt.com/c/${ENDED}`, groupId: 7 }),
-  });
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
   await listeners.port({
     type: "watch",
     conversations: [],
@@ -3570,18 +3603,24 @@ test("a tab whose owner Chrome did not let be noted at once is noted later", asy
   const waits = [];
   // The first ask is the grouping's; the second, as the opening ends, fails.
   const faults = { getAt: { 99: 2 } };
-  const { listeners } = load(tabs, {
-    now: true,
-    removed,
-    waits,
-    faults,
-    groups: [{ id: 7, title: "驿窗接力" }],
-    closable: { 99: true },
-    // The page never says, so `ready` gives up and Chrome is asked of the
-    // tab only as the opening ends.
-    onCreate: (tab) =>
-      Object.assign(tab, { url: `https://chatgpt.com/c/${ENDED}`, groupId: 7 }),
-  });
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      waits,
+      faults,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      // The page never says its address, so `ready` gives up and Chrome is
+      // asked of the tab only as the opening ends.
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
   await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
   await settleLong();
   await listeners.port({
@@ -3651,13 +3690,25 @@ test("a conversation Changhao went on with after its relay ended is not closed",
   });
   await settleLong();
   listeners.message(
-    { type: "turn", phase: "start", conversation: ENDED, prompt: "再问一句" },
+    {
+      type: "turn",
+      phase: "start",
+      conversation: ENDED,
+      prompt: "再问一句",
+      promptId: P(41),
+    },
     { tab: { id: 2 } },
   );
   await settleLong();
   closable[2] = true;
   listeners.message(
-    { type: "turn", phase: "complete", conversation: ENDED, reply: "好" },
+    {
+      type: "turn",
+      phase: "complete",
+      conversation: ENDED,
+      promptId: P(41),
+      reply: "好",
+    },
     { tab: { id: 2 } },
   );
   await settleLong();
@@ -3677,4 +3728,228 @@ test("a conversation Changhao went on with after its relay ended is not closed",
   });
   await settleLong();
   assert.deepEqual(again, []);
+});
+
+// Round 4, P1-05: whose a prompt is goes by its id, not by when it is heard
+// of. One the extension put in is PostPane's though its answer begins only
+// after the relay ended; one it did not is Changhao's, though heard of
+// before PostPane says the relay ended.
+const endedTab = () => ({
+  id: 2,
+  url: `https://chatgpt.com/c/${ENDED}`,
+  windowId: 1,
+  active: false,
+  groupId: 7,
+});
+const turn = (listeners, phase, promptId, tabId = 2) =>
+  listeners.message(
+    { type: "turn", phase, conversation: ENDED, promptId, reply: "好" },
+    { tab: { id: tabId } },
+  );
+/** A relay whose conversation is `ENDED`, its words sent once; what the page
+ * answers of the sending is `answer`. */
+async function sentOnce(answer) {
+  const removed = [];
+  const closable = { 2: false };
+  const { listeners } = load([endedTab()], {
+    now: true,
+    removed,
+    closable,
+    answers: [answer],
+    groups: [{ id: 7, title: "驿窗接力" }],
+  });
+  listeners.message(
+    { type: "page", conversation: ENDED, hidden: true },
+    { tab: { id: 2 } },
+  );
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    live: [ENDED],
+  });
+  await listeners.port({
+    type: "send",
+    requestId: "s1",
+    conversation: ENDED,
+    text: "补格式",
+  });
+  await settleLong();
+  const end = async () => {
+    await listeners.port({
+      type: "watch",
+      conversations: [ENDED],
+      ended: [ENDED],
+    });
+    await settleLong();
+  };
+  const done = async (promptId) => {
+    closable[2] = true;
+    turn(listeners, "complete", promptId);
+    await settleLong();
+  };
+  return { listeners, removed, end, done };
+}
+
+test("an answer to the words PostPane sent, begun only after its relay ended, is not Changhao's", async () => {
+  // Its id seen as the words went in.
+  const known = await sentOnce({ ok: true, promptId: P(51) });
+  await known.end();
+  turn(known.listeners, "start", P(51));
+  await settleLong();
+  await known.done(P(51));
+  assert.deepEqual(known.removed, [2], "id seen");
+  // Its id not seen: the next prompt heard of is theirs.
+  const unseen = await sentOnce({ ok: true });
+  await unseen.end();
+  turn(unseen.listeners, "start", P(52));
+  await settleLong();
+  await unseen.done(P(52));
+  assert.deepEqual(unseen.removed, [2], "id not seen");
+});
+
+test("a prompt of Changhao's heard of before PostPane says its relay ended is his all the same", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(61) });
+  turn(sent.listeners, "start", P(62));
+  await settleLong();
+  await sent.end();
+  await sent.done(P(62));
+  assert.deepEqual(sent.removed, []);
+});
+
+test("words PostPane sends again into a conversation Changhao went on with make it the relay's again", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(71) });
+  turn(sent.listeners, "start", P(72));
+  await settleLong();
+  await sent.listeners.port({
+    type: "send",
+    requestId: "s2",
+    conversation: ENDED,
+    text: "下一轮",
+  });
+  await settleLong();
+  await sent.end();
+  await sent.done(P(71));
+  assert.deepEqual(sent.removed, [2]);
+});
+
+test("a new conversation's beginning, told again as it has its address, is PostPane's", async () => {
+  const tabs = [];
+  const removed = [];
+  const closable = { 99: false };
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      closable,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      onCreate: madeBlank(api, { groupId: 7 }),
+      // The words go in, their id not seen; the page has its address.
+      sendGates: [
+        async () => {
+          tabs[0].url = `https://chatgpt.com/c/${ENDED}`;
+          listeners.message(
+            { type: "page", conversation: ENDED, hidden: true },
+            { tab: { id: 99 } },
+          );
+        },
+      ],
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  // Begun on the new chat's page, told again once it has its address.
+  turn(listeners, "start", P(81), 99);
+  await settleLong();
+  closable[99] = true;
+  turn(listeners, "complete", P(81), 99);
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// Round 4, P1-06: Changhao moved the tab an opening made on to a
+// conversation of his own: the words do not go there, nor is it the
+// handoff's, nor closed with it.
+const HIS = "8c09ae69-e2a1-a5aa-bd01-d1b30298898a";
+async function movedOn(how) {
+  const tabs = [];
+  const removed = [];
+  const asked = [];
+  const posted = [];
+  const stored = {};
+  const api = {};
+  const toHis = () => {
+    tabs[0].url = `https://chatgpt.com/c/${HIS}`;
+    api.listeners.message(
+      { type: "page", conversation: HIS, hidden: true },
+      { tab: { id: 99 } },
+    );
+  };
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      asked,
+      posted,
+      stored,
+      closable: { 99: true },
+      groups: [{ id: 7, title: "驿窗接力" }],
+      onCreate:
+        how === "before"
+          ? (tab) => {
+              Object.assign(tab, { groupId: 7 });
+              api.listeners.message(
+                { type: "page", conversation: null, hidden: true },
+                { tab: { id: tab.id } },
+              );
+              toHis();
+            }
+          : madeBlank(api, { groupId: 7 }),
+      // As the words went in, the tab moved on; the page says so.
+      sendGates: how === "after" ? [async () => toHis()] : [],
+      opened: { 99: { conversation: HIS, ours: false } },
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  return {
+    removed,
+    submitted: asked.some(([, op]) => op === "submit"),
+    opened: posted.find((m) => m.type === "opened"),
+    strays: stored.strays ?? {},
+    watched: stored.watched ?? [],
+  };
+}
+
+test("an opening whose tab was moved on to another conversation before the words went sends nothing there", async () => {
+  const before = await movedOn("before");
+  assert.equal(before.submitted, false);
+  assert.equal(before.opened.ok, false);
+  assert.equal(before.opened.reason, "other-conversation");
+  assert.deepEqual(before.strays, {});
+  assert.deepEqual(before.removed, []);
+});
+
+test("a conversation an opening's tab was moved on to, not showing its words, is not the handoff's", async () => {
+  const after = await movedOn("after");
+  assert.equal(after.submitted, true);
+  assert.equal(after.opened.ok, false);
+  assert.equal(after.opened.reason, "unconfirmed");
+  assert.ok(!after.watched.includes(HIS));
+  assert.deepEqual(after.strays, {});
+  assert.deepEqual(after.removed, []);
 });

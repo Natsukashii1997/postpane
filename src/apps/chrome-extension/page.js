@@ -636,6 +636,30 @@
     return promptId ? { ok: true, promptId } : { ok: true };
   }
 
+  /** Whether `text`, sent on a new chat's page, is the prompt of the
+   * conversation this page shows (#542 review round 4, P1-06): Changhao may
+   * have moved the tab on to one of his own meanwhile. Its newest prompt is
+   * `promptId`, the one the words became; or, that not known, it holds one
+   * prompt only, whose words begin as these do. A prompt with no words of
+   * its own (ChatGPT made a long paste an attachment, #410) counts only for
+   * words that long: a short one is not drawn yet, and asked again. */
+  function opened(doc, text, promptId) {
+    if (promptId && lastPromptId(doc) === promptId) return true;
+    const keyOf = (node) =>
+      node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
+    const turns = new Set(
+      [...doc.querySelectorAll(SEL.prompt)].map((node) => keyOf(node)),
+    );
+    if (turns.size !== 1) return false;
+    const node = newestPrompt(doc).node;
+    const bubble = node.matches(SEL.user) ? node : node.querySelector(SEL.user);
+    const words = bubble ? bare(shownText(bubble)) : "";
+    const want = bare(text);
+    if (!words) return want.length > PIECE;
+    const head = Math.min(100, want.length);
+    return words.slice(0, head) === want.slice(0, head);
+  }
+
   globalThis.PostPanePage = {
     SEL,
     conversationId,
@@ -647,6 +671,7 @@
     lastPromptId,
     answered,
     marked,
+    opened,
     drafting,
     reveal,
     markdown,
