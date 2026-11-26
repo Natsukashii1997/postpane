@@ -116,7 +116,7 @@ pub enum Verdict {
     Revise,
 }
 
-/// An engineering review's risk level (#217, multi-agent MA-02): what the
+/// An engineering review's risk level (#217, agent-kit review contract): what the
 /// review asks for, not how many it gets (#347). L0 is not sent at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Risk {

@@ -1,5 +1,5 @@
-//! The review gate's own doings on the host (#347, multi-agent MA-02
-//! v0.3): asking ChatGPT once to mend an answer's last lines, reading a
+//! The review gate's own doings on the host (#347, agent-kit review
+//! contract): asking ChatGPT once to mend an answer's last lines, reading a
 //! pull request's current commit before a pass ends the handoff, and the
 //! words for both. What the answers mean, PostPane does not judge.
 use super::guard::Held;
@@ -52,7 +52,7 @@ impl Desk {
         named.map(str::to_owned).or_else(|| book::head_in(brief))
     }
     /// An engineering review of a pull request goes only with the full
-    /// commit under review (MA-02 §4): else no pass could be checked.
+    /// commit under review (review contract §4): else no pass could be checked.
     pub(super) fn head_needed(pr: Option<&str>, head: Option<&str>) -> Result<(), String> {
         let full = |h: &str| h.len() == 40 && h.chars().all(|c| c.is_ascii_hexdigit());
         match (pr, head) {
