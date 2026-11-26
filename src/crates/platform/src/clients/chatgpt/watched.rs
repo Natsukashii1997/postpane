@@ -1,7 +1,7 @@
 //! The watched list (docs/chatgpt-channel.md): the conversations PostPane
 //! opened, which the extension may send to. Kept in
 //! `<data>/chatgpt/watched.json` and told to the extension whole.
-use super::{agent, folder, write_private};
+use super::{agent, folder, post_locked, shadow, write_private, State};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -60,6 +60,20 @@ pub(super) fn watch_message(list: &[Watched], shadow: bool) -> Value {
         message["shadow"] = json!(true);
     }
     message
+}
+/// The watch message for the list `state` keeps: with the shadow switch
+/// as kept in `data`, and the conversations that ended (#542) when any did.
+pub(super) fn watch_of(state: &State, data: &Path) -> Value {
+    let mut message = watch_message(&state.watched, shadow::on(data));
+    if !state.ended.is_empty() {
+        message["ended"] = json!(state.ended);
+    }
+    message
+}
+/// Tells the extension the list `state` keeps, if one is connected.
+pub(super) fn tell_watch(state: &mut State, data: &Path) {
+    let watch = watch_of(state, data);
+    post_locked(state, &watch);
 }
 /// Adds a conversation to the list, or names it again; whether it changed.
 /// A name PostPane gave is not replaced by the tab's.

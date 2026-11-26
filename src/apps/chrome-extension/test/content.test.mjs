@@ -794,6 +794,43 @@ test("asked to load again to look, a page writing, holding a draft or showing an
   await page.close();
 });
 
+// #542: an ended relay's tab is closed only when its page says it may: it
+// shows the conversation, writes nothing and holds no words in hand.
+test("asked whether it may be closed, a page says no while writing, holding a draft or showing another conversation", async () => {
+  const closable = (page, conversation) =>
+    page.evaluate(
+      (conversation) =>
+        new Promise((resolve) =>
+          window.listener({ op: "closable", conversation }, {}, resolve),
+        ),
+      conversation,
+    );
+  const page = await open();
+  const conversation = await page.evaluate(
+    () => location.href.split("/c/")[1] ?? null,
+  );
+  await page.evaluate(() => (window.stillHere = true));
+  assert.equal(await closable(page, conversation), true);
+  assert.equal(await closable(page, "another"), false);
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  assert.equal(await closable(page, conversation), false, "a draft");
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "";
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  assert.equal(await closable(page, conversation), false, "writing");
+  assert.equal(
+    await page.evaluate(() => window.stillHere),
+    true,
+    "the page is not loaded again",
+  );
+  await page.close();
+});
+
 // #356: words sent and not answered yet leave the reply before them as the
 // last one; it is an older turn's, so asking again tells nothing.
 test("asked to read again before the newest prompt is answered, nothing is told", async () => {

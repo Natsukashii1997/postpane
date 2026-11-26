@@ -2,6 +2,32 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力结束后自动关掉它的 ChatGPT 标签页（#542）（2026-11-26，Claude，常浩看四点推荐后回「按推荐开工」；已提交，PR 见描述，已登记 DECIDED.md；未发布）
+
+- 时间：开工 `2026-11-26 22:30`（`date '+%F %H:%M'` 记录）。来由：常浩 11-25「送由 gpt 评审的会话，如果完了就在 Chrome 关闭，不然他一直开着占我内存」；交换文件 21–25 GB。插件每次接力都开标签页、从不关（整个插件没有 `tabs.remove`）。
+- 改变的行为（动手前已在会话里列出，常浩回「按推荐开工」）：接力结束后，插件关掉「驿窗接力」组里显示这条会话的标签页。原来一直开着。四点：① 接力 `closed`、同一会话没有别的接力在开着或失败着才关，失败的不关；② 驿窗随名单（`watch` 的 `ended`）告诉插件，插件连上时补关；③ 只关组内的，组外的不碰，窗口当前标签页等切走再关，页面在写回答或有草稿的不关；④ 存量走同一套逻辑。
+- 你要求的：
+  - `src/crates/host/src/handoff/back/desk_ended.rs`（新）：`ended_conversations` 从接力记录算出「全部 closed」的会话；`Desk::tell_ended` 每次刷新快照告诉通道。`handoff.rs`：`Lines` 加 `ended`（默认什么都不做）、挂新文件、`projection` 里调一次；`sending/desk_lines.rs` 接到通道。
+  - `src/crates/platform/src/clients/chatgpt/`：`State` 记 `ended`；`commands.rs` 的 `Channel::ended` 名单变了才发一次 `watch`；`watched.rs` 的 `watch_of` / `tell_watch` 把 `ended` 带上（只在非空时）。
+  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，跳过前台的、正在送话 / 查找 / 重读 / 切前台的会话（`using` / `inUse`），没页面的直接关，其余先问页面 `closable`，关前再查一次；`tabs.onActivated` 时再看一遍。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
+  - 文档：`docs/chatgpt-channel.md`（`watch` 一行、「接力结束关标签页」一段），`src/crates/host/src/handoff/README.md`（`back/` 一行），`docs/DECIDED.md` 新一行。
+- 我顺手改的：`content.js` 把 `reload` 里那段「显示这个会话、没在写、没草稿」的判断提成 `idleFor`，`reload` 行为不变；`mod.rs` 里两处「拼 watch 再发」合成 `tell_watch` 一行（300 行棘轮只许变短，加字段要腾出两行）。没改变别的行为。
+- 同类：搜了插件里所有 `chrome.tabs.create`（`open`、`make`、`focus` 三处）。`open`、`make` 开的都进组，会被关；`focus` 新开的不进组、不关（常浩点接力卡要看的）。没有别处开标签页。
+- 测试：
+  - 新测试先红后绿：插件后台 3 条在旧代码上 `ℹ pass 1` / `ℹ fail 2`（`red-plugin.log`；过的那条守「正在送话时不关」，临时去掉 `inUse` 判断后它红、还原后绿）；页面 1 条在旧代码上一直等不到回答（`red-content.log`）；Rust 新 4 条在 `unimplemented!` 桩上 `FAILED`（`red-rust.log`）。
+  - 真实 Chromium（Playwright 加载插件本身）新 1 条：组内的关掉、组外同一会话的不动、带草稿的留着、前台的等切走才关、被回收的（换了编号）也关、再送话会重开；`ℹ pass 1`（`chromium-new.log`）。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`（第一次卡在 `check-test-paths`：测试把临时目录本身当数据目录，改成 `temp.path().join("data")`）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1178 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 201`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。
+  - 证据目录 `~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/`。
+- 验证：替身通过（Playwright 自带的 Chromium 加载插件，本机 HTTPS 夹具顶替 chatgpt.com，不是常浩的 Chrome、不是真 chatgpt.com）。未在真实环境验证：要先装新版驿窗、常浩在 chrome://extensions 重新加载插件 0.2.12，再跑一条接力、结束后看那个标签页有没有关、他自己开的有没有被碰。11-26 查 Chrome，`/c/` 标签页只剩 1 个且不属于任何接力，存量目前没有要清的。
+- 截图：无界面改动。
+- 发布与回读：未发布（合并和装机等常浩点头）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 常浩点接力卡把一个已结束接力的组内标签页切到前台看，切走后它会被关（计划里的「切走再关」）；要不要在这时把它移出组、留下来，没做，等常浩定。
+  - 接力记录只留最新 200 条，更早的会话不在 `ended` 里，它们的标签页不会被关（目前没有这样的标签页）。
+  - 开着的 #442（`relay_end`）也会把接力改成 `closed`；这里按状态算，不用另接。两边都改 `handoff.rs`，后合的那张要变基。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 接力写作闸：点了停止、一个字没写出时页面报 stopped，驿窗立即解除（#526）（2026-11-24，Claude，常浩看改动确认后在会话里回「12改」；已提交，PR 见描述，已登记 DECIDED.md，接在 #518 后面）
 
 - 时间：开工 `2026-11-24 13:44`（`date '+%F %H:%M'` 记录）。来由：拍板清单第 12 项。写作闸（11-22 定，只认同一轮「写完」才解除）在常浩点了停止、一个字没写出时听不到「写完」，会挡满 30 分钟。改的是已定内容：发过改动确认（原定、改成什么、风险「思考阶段被误判提前解除」、备选「缩到 5 分钟」），常浩回「12改」。

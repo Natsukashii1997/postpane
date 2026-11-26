@@ -231,6 +231,13 @@
   window.addEventListener("pagehide", left);
   window.addEventListener("pageshow", back);
 
+  /** Whether this page shows `conversation`, writes nothing and holds no
+   * words of Changhao's in hand: loading it again or closing it loses
+   * nothing (#509 round 1 P1-03, #542). */
+  const idleFor = (conversation) =>
+    page.conversationId(location.href) === conversation &&
+    !page.streaming(document) &&
+    !page.drafting(document);
   function onCommand(command, _sender, reply) {
     if (command.op === "submit") {
       // Words for a conversation go into no other (#507 review P1-03): the
@@ -329,16 +336,18 @@
       });
       return false;
     }
-    // Loads this page again to look (#509 round 1 P1-03), only when it shows
-    // `conversation`, writes nothing and holds no words of Changhao's in
-    // hand: told and done in one go, so nothing starts between the two.
+    // Loads this page again to look (#509 round 1 P1-03), only when it is
+    // idle: told and done in one go, so nothing starts between the two.
     if (command.op === "reload") {
-      const idle =
-        page.conversationId(location.href) === command.conversation &&
-        !page.streaming(document) &&
-        !page.drafting(document);
+      const idle = idleFor(command.conversation);
       reply(idle);
       if (idle) location.reload();
+      return false;
+    }
+    // Whether an ended relay's tab may be closed (#542); the extension
+    // closes it, and nothing is done to the page here.
+    if (command.op === "closable") {
+      reply(idleFor(command.conversation));
       return false;
     }
     if (command.op === "state") {

@@ -457,3 +457,75 @@ test("a tab in front loaded again to look is read once its new page is there", a
     await page.close();
   }
 });
+
+// #542: an ended relay's tabs are closed, in Chrome as it is: the ones the
+// extension made, in its group; not Changhao's own, nor one in front, nor
+// one holding a draft. A discarded one has a new id and is closed too. A
+// conversation taken on again gets a tab again.
+test("an ended relay's tabs in the relay group are closed, and only those; taken on again, it gets one", async () => {
+  const made = async (n) => {
+    const id = conversation(n);
+    await worker.evaluate((id) => watched.add(id), id);
+    const got = await worker.evaluate((id) => make(id, Date.now() + 15000), id);
+    assert.ok(got.tabId, JSON.stringify(got));
+    const grouped = await worker.evaluate(
+      async (tabId) => (await chrome.tabs.get(tabId)).groupId,
+      got.tabId,
+    );
+    assert.notEqual(grouped, -1, "made in the relay group");
+    return { id, tabId: got.tabId };
+  };
+  const plain = await made(30);
+  // Changhao's own tab of the same conversation, outside the group.
+  const own = await context.newPage();
+  await own.goto(address(plain.id));
+  const discarded = await made(31);
+  const draft = await made(32);
+  const front = await made(33);
+  const page = (id) => context.pages().find((p) => p.url() === address(id));
+  await page(draft.id).evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  await inFront();
+  await discard(discarded.tabId);
+  await worker.evaluate(
+    (tabId) => chrome.tabs.update(tabId, { active: true }),
+    front.tabId,
+  );
+  const ids = [plain.id, discarded.id, draft.id, front.id];
+  await worker.evaluate(
+    (ids) => onHost({ type: "watch", conversations: ids, ended: ids }),
+    ids,
+  );
+  const count = async (id) => (await tabsAt(id)).length;
+  const settled = async (want) => {
+    for (let tries = 0; tries < 50; tries++) {
+      const now = await Promise.all(ids.map(count));
+      if (JSON.stringify(now) === JSON.stringify(want)) return now;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return Promise.all(ids.map(count));
+  };
+  // His own stays; the discarded one goes; the draft and the one in front
+  // stay.
+  assert.deepEqual(await settled([1, 0, 1, 1]), [1, 0, 1, 1]);
+  assert.equal(own.isClosed(), false);
+  assert.equal(
+    await page(draft.id).evaluate(
+      () => document.querySelector(".ProseMirror").textContent,
+    ),
+    "还没发的问题",
+  );
+  // Another tab made active: the one in front is closed now.
+  await inFront();
+  assert.deepEqual(await settled([1, 0, 1, 0]), [1, 0, 1, 0]);
+  // Taken on by a new handoff: no longer ended, and words for it make a
+  // tab again.
+  await worker.evaluate(
+    (ids) => onHost({ type: "watch", conversations: ids }),
+    ids,
+  );
+  const sent = await worker.evaluate((id) => send(id, "下一轮"), discarded.id);
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.equal(await count(discarded.id), 1);
+});

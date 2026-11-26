@@ -63,6 +63,13 @@ impl Lines for AppLines<'_> {
             .ok_or("The ChatGPT channel is unavailable")?;
         state.channel()?.find(conversation, request, after)
     }
+    fn ended(&self, conversations: &[String]) {
+        if let Some(state) = self.0.try_state::<crate::chatgpt::ChatGpt>() {
+            if let Ok(channel) = state.channel() {
+                channel.ended(conversations);
+            }
+        }
+    }
     fn reread(&self, conversation: &str) -> Result<(), String> {
         let state = self
             .0

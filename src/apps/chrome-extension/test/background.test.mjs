@@ -59,6 +59,11 @@ function load(
     // Waits of these lengths do not end, though `now`: what is waited for
     // comes first, or never.
     parked = [],
+    // #542: the tab groups, the tabs closed, and what each tab's page says
+    // asked whether it may be closed (unanswered when not named).
+    groups = [],
+    removed = [],
+    closable = {},
   } = {},
 ) {
   const listeners = {};
@@ -124,6 +129,12 @@ function load(
         fronted.push(tabId);
         if (active) activate(tabId);
       },
+      remove: async (tabId) => {
+        const at = tabs.findIndex((tab) => tab.id === tabId);
+        if (at < 0) throw new Error(`No tab with id: ${tabId}.`);
+        tabs.splice(at, 1);
+        removed.push(tabId);
+      },
       onActivated: {
         addListener: (fn) => activated.add(fn),
         removeListener: (fn) => activated.delete(fn),
@@ -139,6 +150,13 @@ function load(
       sendMessage: async (tabId, message) => {
         if (message.op === "state") return null;
         if (hung.has(tabId)) return new Promise(() => {});
+        // #542: whether the page may be closed; a page that does not know
+        // the question (an older script) answers nothing.
+        if (message.op === "closable") {
+          asked.push([tabId, message.op]);
+          if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
+          return closable[tabId];
+        }
         // #507: whether the page is there, and which conversation it shows.
         if (message.op === "alive") {
           if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
@@ -166,6 +184,9 @@ function load(
     },
     windows: {
       get: async (id) => windows[id] ?? { state: "normal", focused: true },
+    },
+    tabGroups: {
+      query: async ({ title }) => groups.filter((g) => g.title === title),
     },
     scripting: {
       // As Chrome: a script already registered, or not registered, throws.
@@ -3102,4 +3123,142 @@ test("automatic rereads never reopen a closed conversation tab", async () => {
     posted.filter((m) => m.type === "reread").map((m) => m.outcome),
     ["unreachable", "unreachable", "unreachable"],
   );
+});
+
+// #542: every relay opened a ChatGPT tab and none was ever closed; on
+// 2026-11-25 Changhao's swap stood at 21–25 GB. PostPane names the
+// conversations every handoff of which has ended; their tabs in the relay
+// group are closed, and no other.
+const ENDED = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+const LIVE = "7bf8fd58-d1a5-94ff-ac0f-c0a29771878f";
+const settleLong = async () => {
+  for (let i = 0; i < 30; i++) await tick();
+};
+
+test("conversations PostPane says ended have their tabs in the relay group closed, and only those", async () => {
+  const at = (id, conversation, more = {}) => ({
+    id,
+    url: `https://chatgpt.com/c/${conversation}`,
+    windowId: 1,
+    active: false,
+    groupId: 7,
+    ...more,
+  });
+  const tabs = [
+    at(2, ENDED),
+    // Changhao's own, outside the group.
+    at(3, ENDED, { groupId: -1 }),
+    // A live handoff's.
+    at(4, LIVE),
+    // In front of its window: he may be looking at it.
+    at(5, ENDED, { active: true, windowId: 2 }),
+    // Discarded: no page in it to lose anything.
+    at(6, ENDED, { discarded: true }),
+    // Its page holds words not sent, or is writing.
+    at(8, ENDED),
+    // Its page says nothing (an older script, or frozen).
+    at(9, ENDED),
+    // In another group of the same name's look, but not the relay's.
+    at(10, ENDED, { groupId: 11 }),
+  ];
+  const asked = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    asked,
+    removed,
+    groups: [
+      { id: 7, title: "驿窗接力" },
+      { id: 11, title: "别的" },
+    ],
+    closable: { 2: true, 8: false },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED, LIVE],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed.sort(), [2, 6]);
+  assert.deepEqual(
+    asked
+      .filter(([, op]) => op === "closable")
+      .map(([id]) => id)
+      .sort(),
+    [2, 8, 9],
+    "a discarded tab is not asked; one in front, outside the group or live is not looked at",
+  );
+  // A list naming none ended closes nothing more.
+  await listeners.port({ type: "watch", conversations: [ENDED, LIVE] });
+  await settleLong();
+  assert.deepEqual(removed.sort(), [2, 6]);
+});
+
+test("an ended conversation's tab left in front is closed once another tab of its window is", async () => {
+  const tabs = [
+    {
+      id: 5,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: true,
+      groupId: 7,
+    },
+    { id: 12, url: "https://example.com/", windowId: 1, active: false },
+  ];
+  const removed = [];
+  const { listeners, chrome } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 5: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "not while he may be looking at it");
+  chrome.tabs.activate(12);
+  await settleLong();
+  assert.deepEqual(removed, [5]);
+});
+
+test("a tab words are going into is not closed meanwhile, though its conversation ended", async () => {
+  // A new handoff may take an ended conversation on (#542): PostPane names
+  // it ended no more by its next list, but one sent before may be in hand.
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  let release;
+  const { listeners } = load(tabs, {
+    removed,
+    watched: [ENDED],
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true },
+    sendGates: [() => new Promise((resolve) => (release = resolve))],
+  });
+  await settleLong();
+  const sending = listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation: ENDED,
+    text: "第 2 轮",
+  });
+  await settleLong();
+  assert.ok(release, "the words reached the page");
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, []);
+  release();
+  await sending;
 });

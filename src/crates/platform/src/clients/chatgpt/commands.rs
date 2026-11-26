@@ -1,6 +1,7 @@
 //! Commands told to the extension that wait for no answer: bring a
-//! conversation's tab forward (`focus`), or read it again (`reread`, #356).
-use super::{agent, Channel, CURRENT};
+//! conversation's tab forward (`focus`), read it again (`reread`, #356), or
+//! close the ended ones' tabs (`ended`, #542).
+use super::{agent, tell_watch, Channel, CURRENT};
 use agent_hud_core::l10n;
 use serde_json::json;
 use std::sync::Weak;
@@ -22,6 +23,17 @@ impl Channel {
         self.shared.post(
             &json!({"type":"find","conversation":conversation,"request":request,"after":after}),
         )
+    }
+    /// Tells the extension the conversations every handoff of which ended
+    /// (#542), with the watched list: their tabs in the relay group are
+    /// closed. Told again only when they change.
+    pub fn ended(&self, conversations: &[String]) {
+        let mut state = self.shared.lock();
+        if state.ended == conversations {
+            return;
+        }
+        state.ended = conversations.to_vec();
+        tell_watch(&mut state, &self.shared.data);
     }
     /// Asks the extension to tell the newest reply of a watched conversation
     /// again, once written (#356): a finished turn whose word was lost still

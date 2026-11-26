@@ -34,7 +34,7 @@ pub use sending::SendFailed;
 use sending::Unasked;
 use texts::refused;
 pub use turns::{completion, started};
-use watched::{add_watched, watch_message, watched_entry};
+use watched::{add_watched, tell_watch, watched_entry};
 pub use watched::{load_watched, save_watched, Watched};
 
 // A Unix socket; Windows has no transport yet.
@@ -156,6 +156,8 @@ struct State {
     /// The names conversations being opened are to be listed under, by request.
     names: HashMap<String, String>,
     watched: Vec<Watched>,
+    /// Watched or not, the conversations every handoff of which ended (#542).
+    ended: Vec<String>,
 }
 /// Told of what the extension reports: turns starting and finishing,
 /// conversations opened and words sent (late ones too).
@@ -201,8 +203,7 @@ impl Shared {
         // What the one before said of itself is not this one's (#493).
         state.hello = Value::Null;
         state.last_seen = Some(now_ms());
-        let watch = watch_message(&state.watched, shadow::on(&self.data));
-        post_locked(&mut state, &watch);
+        tell_watch(&mut state, &self.data);
         id
     }
     pub(crate) fn detach(&self, id: u64) {
@@ -273,8 +274,7 @@ impl Shared {
                                 agent_hud_core::note!("{error}");
                             }
                         }
-                        let watch = watch_message(&state.watched, shadow::on(&self.data));
-                        post_locked(&mut state, &watch);
+                        tell_watch(&mut state, &self.data);
                     }
                 }
                 let ok = message["ok"] == true;

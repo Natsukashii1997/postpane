@@ -1,3 +1,4 @@
+use super::watched::{watch_message, watch_of};
 use super::*;
 
 #[test]
@@ -87,6 +88,25 @@ fn the_watched_list_is_kept_between_runs() {
     assert_eq!(
         watch_message(&read, true),
         json!({"type":"watch","conversations":["68a1","68b2"],"shadow":true})
+    );
+}
+
+// #542: the conversations every handoff of which ended ride with the list,
+// only when there are any: their tabs in the relay group are closed.
+#[test]
+fn the_watch_list_names_the_ended_conversations_when_there_are_any() {
+    let mut state = State::default();
+    add_watched(&mut state.watched, "68a1", "", false, 1);
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    assert_eq!(
+        watch_of(&state, &data),
+        json!({"type":"watch","conversations":["68a1"]})
+    );
+    state.ended = vec!["68a1".into()];
+    assert_eq!(
+        watch_of(&state, &data),
+        json!({"type":"watch","conversations":["68a1"],"ended":["68a1"]})
     );
 }
 

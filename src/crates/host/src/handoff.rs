@@ -46,6 +46,8 @@ pub(crate) mod book;
 mod claiming;
 #[path = "handoff/answers/desk_driver.rs"]
 mod driver;
+#[path = "handoff/back/desk_ended.rs"]
+mod ended;
 #[path = "handoff/gate/desk.rs"]
 mod gate;
 #[path = "handoff/gate/desk_guard.rs"]
@@ -112,6 +114,9 @@ pub(crate) trait Lines {
     fn reread(&self, conversation: &str) -> Result<(), String>;
     /// Asks whether the words sent as `request` are in `conversation` (#509).
     fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String>;
+    /// Tells the extension the conversations every handoff of which ended,
+    /// to close their tabs (#542); nothing where there is no extension.
+    fn ended(&self, _conversations: &[String]) {}
     /// Whether words left for a Claude Code session would reach it.
     fn reaches(&self, doer: &str, session: &str) -> Result<(), String>;
     /// Leaves words for a Claude Code session running now, under `id` (#257):
@@ -1662,6 +1667,7 @@ pub(crate) fn projection(app: &tauri::AppHandle, desk: &Desk) -> Value {
     desk.wake_queued(&lines, now);
     desk.reread(&lines, now);
     desk.tell(&lines, now);
+    desk.tell_ended(&lines);
     desk.projection(now)
 }
 
