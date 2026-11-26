@@ -9,6 +9,7 @@
 | 改需求、加功能 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | 构建、测试、打包 | [docs/development.md](docs/development.md)、[docs/platform-builds.md](docs/platform-builds.md)；下面「运行」 |
 | 接客户端、改钩子、审批卡 | [docs/agent-contract.md](docs/agent-contract.md)、[docs/client-hooks.md](docs/client-hooks.md) |
+| 改接力流程（送审、回信、转回、出错怎么处理）、接新执行方 | [docs/接力规范.md](docs/接力规范.md)（含「状态 × 异常事件」全表，改了处理要同步那一格） |
 | 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
 | 加或改 AI 功能、MCP 工具、读取哪家数据 | 下面「AI 接入」一节；改完同步设置 →「AI 接入」页 |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |

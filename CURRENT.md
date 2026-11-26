@@ -2,6 +2,29 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力治本第 0、1 步：补装 7 个已合并的接力修复；接力规范与「状态 × 异常事件」全表（#544、#545）（2026-11-27，Claude，常浩确认问题清单并回「清单没问题，先装机」「#539 分支最新版」「开始第 1 步」；已提交，PR 见描述，已装机回读）
+
+- 时间：开工 `2026-11-27 00:05`（`date '+%F %H:%M'` 记录）。来由：常浩 11-26 跨项目复盘第 9 条「先不加功能，把网页一改就坏这些问题真的解决掉，把制度梳理清楚、跑通」。先只读出问题清单（`docs/design/接力治本-问题清单-2026-11-27.md`，12 条），常浩确认后做第 0 步装机、第 1 步规范。
+- 改了哪些文件：
+  - 你要求的：`docs/design/接力治本-问题清单-2026-11-27.md`（问题清单，含第 0 步结果、#539 现场结论）；`docs/接力规范.md`（新，角色、一段话的一生、失败三档、不丢不重复、认网页约定、全表摘要、接新执行方要做的事，每条标〔现行〕或〔目标 #544-n〕）；`docs/接力异常全表.md`（新，15 种异常 × 各阶段，代码位置、测试、证据类型，36 个空格各标由 #544 哪一步处理，8 处文档与代码不一致）。
+  - 我顺手改的：`AGENTS.md` 导航表加一行指向接力规范；`docs/LESSONS.md` 新坑 L-74。
+  - 没改代码，没改已有行为。
+- 测试：`node --test tests/*.test.mjs` 原样 `ℹ pass 64` / `ℹ fail 0`；`node scripts/check-rules.mjs`「通用规则检查通过」。纯文档改动，`pnpm run check`、`pnpm test` 本分支未跑；装机那一包（`9ab0578`）跑过三条全量，见下。
+- 验证：
+  - 第 0 步（真实环境）：装前已装二进制是 11-25 17:00 `claude/motion-polish` 打的包，搜不到 #433、#431 的提示文字；装后四串（#433「已停止自动重读」、#431「提问读不到」、#524、#528）都在，应用按插件 0.2.11 打包，和 Chrome 里一致。
+  - #539 第 4 轮现场（Claude in Chrome，常浩的 Chrome 新开标签页只读，未发消息、未点按钮，看完关掉）：会话里只有第 2、3 轮，第 4 轮提问编号 `96110618…` 不存在，不在生成，无报错 → 提问没送进去，需重送。证据 `evidence/2026-11-27-relay-fixes-install/539-round4-page-check.md`。
+  - 全表：只读子 agent 逐格对照代码取证（没跑测试）；我复核了 E11 两格（`answers/book_reread.rs` 的 `reread_result` 遇 `told` 清零计数；`content.js` 空占位判 `undrawn`），属实。装机后 #539 那单仍在每 2 分钟重读（`turns.jsonl` 该回信编号的 `unmatched` 到 01:13 共 255 行，其中装机后 18 行），是 E11 第 1 格在真实环境的证据。
+- 截图：无界面改动。装机冒烟图 `evidence/2026-11-27-relay-fixes-install/smoke-*.png`、`after-install-screen.png`。
+- 发布与回读：常浩选装 `claude/motion-polish` 最新 `9ab0578`（已含 main `6181233`）。临时 worktree 里 `pnpm run check` exit 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1175 passed，前端 `ℹ pass 546`，MCP 9，插件 14，Chrome 插件 196，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。`install.sh relay-fixes-install --takeover`：产物 `51a88434773b` / 已装 `51a88434773b`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2108 个像素不同。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-27-relay-fixes-install/PostPane-1bce2b00156a.app" /Applications/PostPane.app; open /Applications/PostPane.app`。临时 worktree 已删。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 装的是未合并的 #539 分支（常浩选的），#539 合并后要从 main 重装一次。
+  - 装完弹出「PostPane 想访问钥匙串中的 Claude Safe Storage」授权框，由常浩自己点；是否每次重装都弹未核实。
+  - `postpane.log` 00:25 有一行后台续接 Claude 失败「OAuth session expired」：Claude 命令行登录可能过期，后台续接会失败，不在本单范围。
+  - 每日自检 9:00 是否可以、新建 launchd 任务：等常浩回。
+  - 主线：接力治本｜✅2/8（0 装机、1 规范）▶ 无 ⏳ 2 认网页收口与体检、3 判活按信号（改动确认）、4 不丢不重复与回程、5 静默停摆、6 每日自检（要批）、7 真实环境验收。
+- 本轮新坑：L-74。
+- skill 进化：无。
+
 ## 接力写作闸：点了停止、一个字没写出时页面报 stopped，驿窗立即解除（#526）（2026-11-24，Claude，常浩看改动确认后在会话里回「12改」；已提交，PR 见描述，已登记 DECIDED.md，接在 #518 后面）
 
 - 时间：开工 `2026-11-24 13:44`（`date '+%F %H:%M'` 记录）。来由：拍板清单第 12 项。写作闸（11-22 定，只认同一轮「写完」才解除）在常浩点了停止、一个字没写出时听不到「写完」，会挡满 30 分钟。改的是已定内容：发过改动确认（原定、改成什么、风险「思考阶段被误判提前解除」、备选「缩到 5 分钟」），常浩回「12改」。
