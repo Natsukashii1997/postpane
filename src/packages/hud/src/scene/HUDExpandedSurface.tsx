@@ -248,7 +248,7 @@ export function HUDExpandedSurface({
     >
       <AnimatePresence initial={false} custom={dragging}>
         {(config.mode === "notch" || cardVisible) && (
-          <motion.div
+          <PresentDiv
             key={config.mode === "notch" ? "notch-shell" : "hud-card"}
             className={`hud-expanded-surface ${detached ? "hud-detached-card" : ""} ${peek ? "hud-peek" : ""}`}
             initial={
@@ -421,7 +421,7 @@ export function HUDExpandedSurface({
             )}
             <AnimatePresence initial={false}>
               {cardVisible && (
-                <motion.div
+                <PresentDiv
                   key="surface-content"
                   initial={false}
                   animate={{ opacity: 1 }}
@@ -616,10 +616,10 @@ export function HUDExpandedSurface({
                       )}
                     </AnimatePresence>
                   </FoldScope>
-                </motion.div>
+                </PresentDiv>
               )}
             </AnimatePresence>
-          </motion.div>
+          </PresentDiv>
         )}
       </AnimatePresence>
     </div>

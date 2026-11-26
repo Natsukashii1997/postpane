@@ -13,20 +13,27 @@ test("a view on its way out takes no key press (ENG-07)", () => {
   );
   // Old WebKit ignores inert (before macOS 12.4): the view leaving also
   // swallows clicks and keys and lets go of focus, round 2 of ENG-07.
-  // Measured in the system WKWebView: evidence webkit-r2/leaving*.txt.
+  // Measured in the system WKWebView: evidence webkit-r2/leaving*.txt and,
+  // for the card leaving with its views inside, webkit-r3/r3*.txt.
   const leaving = present.slice(present.indexOf("export function useLeaving"));
   for (const part of [
     /inert: true/,
     /onClickCapture: stop/,
     /onKeyDownCapture: stop/,
     /onFocusCapture: letGo/,
-    /ref\.current\?\.contains\(held\)\)\s*held\.blur\(\)/,
+    // Round 3: hidden from VoiceOver, and out of Tab's order.
+    /"aria-hidden": true/,
+    /control\.tabIndex = -1;/,
+    /view\.contains\(held\)\) held\.blur\(\)/,
   ])
     assert.match(leaving, part);
   // The card's three views and the panel's content cross-fade through them.
   const surface = read("scene/HUDExpandedSurface.tsx");
   assert.match(surface, /<PresentButton\s+\/\/[^\n]*\n\s*key=\{`peek-/);
   assert.match(surface, /<PresentDiv key="tag"/);
-  assert.equal(surface.match(/<PresentDiv\b/g)?.length, 3);
+  // ENG-19: the whole card and its content layer leave through it too, or
+  // a view inside them, itself still present, kept taking keys.
+  assert.equal(surface.match(/<PresentDiv\b/g)?.length, 5);
+  assert.doesNotMatch(surface, /<motion\.div\b/);
   assert.doesNotMatch(surface, /<motion\.(button|div)[^>]*\{\.\.\.swap\(/);
 });

@@ -1,47 +1,6 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { EASE_OUT, cssCurve } from "@agent-hud/ui/lib/motion";
 import type { PendantLayout, PendantRect } from "../app-pendant";
-import { addsOnto } from "./adds-onto";
-
-/** What swings under the pointer: the cord and ball, and 磁盘瘦身's broom. */
-const SWINGS = ".hud-pendant-sway, .hud-disk-broom";
-/** The pointer leaves mid-swing: it eases back upright over this long
- * instead of snapping from up to 13° (2026-11-25, owner chose 改). */
-const SETTLE_MS = 400;
-
-/** The settle each swinging part has playing: one at a time (ENG-05). */
-const settling = new WeakMap<Element, Animation>();
-// Where WebKit cannot add one animation onto another (`addsOnto`), a settle
-// replaces the swing, and a pointer back mid-way stops the settle and lets
-// the swing take over from upright (ENG-10).
-
-/** Before the swing stops, take each swinging part from where it is now back
- * to rest, so the leave reads as the pendant coming to a stop: quick at first,
- * then easing in, with no second swing. It adds onto the swing rather than
- * replacing it, so a pointer back mid-way picks the swing up from there; a
- * second leave starts from all of it, swing and settle, and replaces the
- * first settle rather than piling onto it. */
-function settle(root: HTMLElement | null) {
-  for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? []) {
-    const from = getComputedStyle(part).transform;
-    settling.get(part)?.cancel();
-    settling.delete(part);
-    if (from === "none" || from === "") continue;
-    const back = part.animate([{ transform: from }, { transform: "none" }], {
-      duration: SETTLE_MS,
-      easing: cssCurve(EASE_OUT),
-      composite: addsOnto() ? "add" : "replace",
-    });
-    settling.set(part, back);
-  }
-}
-
-/** The pointer is back: where settles cannot add onto the swing, end them. */
-function resume(root: HTMLElement | null) {
-  if (addsOnto()) return;
-  for (const part of root?.querySelectorAll<HTMLElement>(SWINGS) ?? [])
-    settling.get(part)?.cancel();
-}
+import { resume, settle } from "./settle";
 
 const SHADOW =
   "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))";

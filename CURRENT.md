@@ -53,6 +53,10 @@
   - ENG-10 已修：叠加能力从只看接口改成在隐藏小块上实际叠一次（新 `scene/adds-onto.ts`：CSS 动画 10px 加回位 10px 要得 20px），Safari 16.0/16.1 那种有接口叠错的会走替换。实测（`webkit-r2/adds-onto.txt`）：本机判支持，首次 6ms；同测法换成替换读到 10；帧间隔只摇摆 191 帧中位 10ms、超 20ms 2 帧，20 次回位 831 帧中位 10ms、最长 35ms、超 20ms 2 帧。没测 Safari 16.0/16.1、macOS 12.0～12.3 的真实 WebKit（本机只有 macOS 27）。退化路径移回时 1.3° 回 0 的小跳保留：只在不支持叠加时出现，改前离开就从最多 13° 直接跳回。
   - ENG-17 已修：跳到某家的滚动挪到新 `panel/spotlight.ts`（`useSpotlight`），到位时读当前「动画」开关，中途关掉立即到位（HoverPanel.tsx 551 → 511 行，基线已收紧）。
   - ENG-18 已修：`useFold` 走减少动态效果那条路时，把被取消动画设的 `overflow` 还原。
+- GPT 工程审查第 3 轮（受审 `0679038`，返修，P0 0、P1 0；ENG-03、08、17、18 已验证关闭；ENG-03 一条失败路径审查方核对 motion 14.3.0 源码后自行撤回）逐条处理：
+  - ENG-07 已修：`useLeaving` 退场时另加 `aria-hidden`，并把视图里能拿焦点的元素设 `tabIndex=-1`（视图一会儿就卸载，不用还原），旧 WebKit 不认 inert 时也不在 Tab 顺序和 VoiceOver 里。
+  - ENG-19 已修（main 上就有，同类顺手修）：整张卡（`hud-card`）和内容层（`surface-content`）退场也走 `PresentDiv`，里层视图自身仍在场时一样不可交互。实测（`webkit-r3/r3.txt`）：卡退场期间里层按钮拿不到焦点、点击和回车到不了、tabIndex -1，去掉 inert 一样；改前对照（`r3-old.txt`）焦点、点击、按键都到了。
+  - ENG-10 已修：回位整体挪到新 `scene/settle.ts`，真实回位抽成 `settleBack`，探测直接用它：底下 CSS `rotate(4deg)`，从 3° 的矩阵回到 none、叠加，起点要得 7°。实测叠加 7.00°、替换 3.00°；真实回位序列平滑。退化路径的 1.3° 小跳写进 `settle.ts` 注释，请常浩确认接受。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
   - 工程审查第 1 轮返修后：`pnpm run check` 原样 `check exit 0`（`check-7.txt`）；`pnpm test`（`test-9.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 540`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。新测试：`hud/test/present.test.ts`、fold-store 两条、moves 两条、motion 两条、pendant-settle 加断言。装机的包 `1bce2b00156a` 不含这一轮。
