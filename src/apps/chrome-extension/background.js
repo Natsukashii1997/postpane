@@ -885,9 +885,16 @@ let heads = [];
 const HEAD = 100;
 const HEADS_MOST = 50;
 const HEADS_FOR = 7 * 24 * 60 * 60 * 1000;
+// Those past their week are let go as they are read, too (round 6).
 const headsRead = chrome.storage.local
   .get("heads")
-  .then((kept) => (heads = [...(kept?.heads ?? []), ...heads]))
+  .then(
+    (kept) =>
+      (heads = [
+        ...(kept?.heads ?? []).filter((h) => Date.now() - h.at < HEADS_FOR),
+        ...heads,
+      ]),
+  )
   .catch(() => {});
 const bare = (text) => (text ?? "").replace(/\s/g, "");
 
@@ -909,12 +916,24 @@ function outOf(entry) {
   heads = heads.filter((h) => h !== entry);
   chrome.storage.local.set({ heads }).catch(() => {});
 }
-/** What of `heads` a prompt showing `words` is. */
+/** What of `heads` a prompt showing `words` is: the one it begins as; none
+ * when two or more do, which of them is not known (round 6). */
 function headOf(words) {
   const shown = bare(words);
   if (!shown) return undefined;
-  return heads.find((h) => shown.slice(0, h.head.length) === h.head);
+  const like = heads.filter((h) => shown.slice(0, h.head.length) === h.head);
+  return like.length === 1 ? like[0] : undefined;
 }
+
+/** The prompts of Changhao's whose hold on their conversation a prompt of
+ * the extension's after them let go (round 6, P2-11), by conversation,
+ * the newest `ASK_IDS`: told of again later (its answer done or stopped,
+ * from another tab), they do not take it back. Local storage. */
+let freed = {};
+const freedRead = chrome.storage.local
+  .get("freed")
+  .then((kept) => (freed = { ...kept?.freed, ...freed }))
+  .catch(() => {});
 
 /** Prompt `promptId` in `conversation` is the extension's, its words begun
  * to go at `since`: noted; and a conversation Changhao went on with before
@@ -922,7 +941,7 @@ function headOf(words) {
  * whose came last is not known (round 5). */
 async function ownPrompt(conversation, promptId, since) {
   if (!conversation || !promptId) return;
-  await Promise.all([asksRead, takenRead]);
+  await Promise.all([asksRead, takenRead, freedRead]);
   const ids = (asks[conversation] ?? []).filter((id) => id !== promptId);
   delete asks[conversation];
   asks[conversation] = [...ids, promptId].slice(-ASK_IDS);
@@ -931,8 +950,17 @@ async function ownPrompt(conversation, promptId, since) {
     delete asks[old];
   chrome.storage.local.set({ asks }).catch(() => {});
   if (conversation in taken && (taken[conversation].at ?? 0) < since) {
+    const his = taken[conversation].id;
     delete taken[conversation];
     chrome.storage.local.set({ taken }).catch(() => {});
+    if (!his) return;
+    const gone = (freed[conversation] ?? []).filter((id) => id !== his);
+    delete freed[conversation];
+    freed[conversation] = [...gone, his].slice(-ASK_IDS);
+    const all = Object.keys(freed);
+    for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
+      delete freed[old];
+    chrome.storage.local.set({ freed }).catch(() => {});
   }
 }
 
@@ -955,17 +983,27 @@ async function goneOn(message) {
     message.promptId ?? (phase === "stopped" ? message.newest : null);
   if (!["start", "complete", "stopped"].includes(phase)) return;
   if (!conversation || !promptId) return;
-  await Promise.all([asksRead, headsRead, straysRead, takenRead]);
+  await Promise.all([asksRead, headsRead, straysRead, takenRead, freedRead]);
   if (asks[conversation]?.includes(promptId)) return;
+  // Only a relay's conversation is looked at: words alike elsewhere take no
+  // head away (round 6).
+  if (!relays(conversation)) return;
   const head = headOf(message.prompt);
   if (head) {
     outOf(head);
     return ownPrompt(conversation, promptId, head.at);
   }
-  if (!relays(conversation)) return;
-  if (taken[conversation]?.id === promptId) return;
+  // One whose hold was let go is not his again by being told again.
+  if (freed[conversation]?.includes(promptId)) return;
+  // When it began, as its page told it; else as heard (later: kept longer).
+  const at = Math.min(
+    phase === "start" && Number.isFinite(message.at) ? message.at : Date.now(),
+    taken[conversation]?.id === promptId ? taken[conversation].at : Infinity,
+  );
+  if (taken[conversation]?.id === promptId && taken[conversation].at === at)
+    return;
   delete taken[conversation];
-  taken[conversation] = { id: promptId, at: Date.now() };
+  taken[conversation] = { id: promptId, at };
   const all = Object.keys(taken);
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete taken[old];

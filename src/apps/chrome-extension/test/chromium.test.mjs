@@ -670,3 +670,74 @@ test("an opening is confirmed by the prompt its words became, not by where the t
   assert.equal(kept.asks?.[HIS], undefined);
   assert.deepEqual(kept.asks?.["6af7ec47-c0f4-83ee-9b9e-0000000000a1"], ["p9"]);
 });
+
+// #542 review round 6, P2-11: two pages of one conversation, in Chrome as
+// it is. Changhao asks in one and stops the answer; PostPane's words go in
+// by the other and let his hold go; his stop, told seconds later, does not
+// take the conversation back.
+test("a stop told late of a prompt PostPane's words let go keeps it let go", async () => {
+  const { page: mine, id } = await open(40);
+  const his = await context.newPage();
+  await his.goto(address(id));
+  const listedTwice = () =>
+    worker.evaluate(
+      (id) => [...pages.values()].filter((p) => p.conversation === id).length,
+      id,
+    );
+  for (let tries = 0; tries < 50 && (await listedTwice()) < 2; tries++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  await worker.evaluate(() => {
+    const told = goneOn;
+    self.heard = [];
+    self.goneOn = (message) => {
+      heard.push(message.phase);
+      return told(message);
+    };
+  });
+  const kept = (key) =>
+    worker.evaluate(
+      async ([key, id]) => (await chrome.storage.local.get(key))[key]?.[id],
+      [key, id],
+    );
+  const until = async (check, what) => {
+    for (let tries = 0; tries < 100; tries++) {
+      if (await check()) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(what);
+  };
+  // He asks; the answer begins.
+  await his.evaluate(() => {
+    const turn = document.createElement("div");
+    turn.dataset.chatgptSearchUnitKey = "h:0:user";
+    turn.dataset.chatgptSearchMessageIds = "pHis";
+    turn.innerHTML = "<div data-user-message-bubble>我自己的问题</div>";
+    document.querySelector("main").append(turn);
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  await until(async () => (await kept("taken"))?.id === "pHis", "his");
+  // PostPane's words go in by the other page.
+  const sent = await worker.evaluate(
+    (id) => send(id, "【驿窗送审 h9d1~send1】\n下一轮"),
+    id,
+  );
+  assert.equal(sent.ok, true);
+  assert.equal(sent.promptId, "p9");
+  await until(async () => (await kept("taken")) === undefined, "let go");
+  assert.deepEqual(await kept("freed"), ["pHis"]);
+  // He stops it, nothing written: told after 2.6 s.
+  await his.evaluate(() => {
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+    document.querySelector("main").append(document.createElement("i"));
+  });
+  await until(
+    () => worker.evaluate(() => heard.includes("stopped")),
+    "stopped",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(await kept("taken"), undefined);
+  await mine.close();
+  await his.close();
+});

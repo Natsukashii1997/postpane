@@ -4085,3 +4085,108 @@ test("no two functions of the worker share a name", () => {
   const twice = names.filter((name, at) => names.indexOf(name) !== at);
   assert.deepEqual(twice, []);
 });
+
+// Round 6, P2-11: a prompt of Changhao's whose hold PostPane's later words
+// let go does not take it back, told again late (its answer stopped, from
+// another tab); a new prompt of his does.
+test("a prompt of Changhao's let go by PostPane's words after it does not take the conversation back when told again", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(77) }, async () => {}, {
+    tab3: true,
+    before: async (listeners) => {
+      turn(listeners, "start", P(76), { prompt: MINE, tab: 3 });
+      await settleLong();
+    },
+  });
+  assert.equal(sent.stored.taken?.[ENDED], undefined, "let go");
+  sent.listeners.message(
+    {
+      type: "turn",
+      phase: "stopped",
+      conversation: ENDED,
+      promptId: P(76),
+      newest: P(76),
+      prompt: MINE,
+    },
+    { tab: { id: 3 } },
+  );
+  await settleLong();
+  assert.equal(sent.stored.taken?.[ENDED], undefined, "told again");
+  await sent.end();
+  await sent.done(P(77), SENT);
+  assert.ok(sent.removed.includes(2), JSON.stringify(sent.removed));
+  // A new one of his takes it.
+  turn(sent.listeners, "start", P(78), { prompt: MINE, tab: 3 });
+  await settleLong();
+  assert.equal(sent.stored.taken?.[ENDED]?.id, P(78));
+});
+
+// Round 6, P1-05: words alike are the extension's only in a relay's
+// conversation, and only as one of its words: two of them alike prove
+// neither; those past their week, kept from before, prove nothing.
+test("words alike prove a prompt the extension's only once, in a relay's conversation, within the week", async () => {
+  // Two openings of words alike, neither's prompt known.
+  const twice = await sentOnce({ ok: true });
+  await twice.listeners.port({
+    type: "send",
+    requestId: "s2",
+    conversation: ENDED,
+    text: SENT,
+  });
+  await settleLong();
+  await twice.end();
+  turn(twice.listeners, "start", P(84), { prompt: SENT });
+  await settleLong();
+  await twice.done(P(84), SENT);
+  assert.deepEqual(twice.removed, [], "two alike");
+  // Another conversation, not a relay's, takes no head away.
+  const elsewhere = await sentOnce({ ok: true });
+  elsewhere.listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(85),
+      prompt: SENT,
+    },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  await elsewhere.end();
+  turn(elsewhere.listeners, "start", P(86), { prompt: SENT });
+  await settleLong();
+  await elsewhere.done(P(86), SENT);
+  assert.deepEqual(elsewhere.removed, [2], "still there");
+  // Kept from more than a week ago.
+  const clock = { now: 2_000_000_000 };
+  const stored = {
+    heads: [
+      { head: "【驿窗送审h7~old】旧", at: clock.now - 8 * 24 * 3600 * 1000 },
+    ],
+  };
+  const removed = [];
+  const closable = { 2: false };
+  const again = load([endedTab(2)], {
+    now: true,
+    clock,
+    removed,
+    stored,
+    closable,
+    groups: [{ id: 7, title: "驿窗接力" }],
+  });
+  const ended = () =>
+    again.listeners.port({
+      type: "watch",
+      conversations: [ENDED],
+      ended: [ENDED],
+    });
+  await ended();
+  await settleLong();
+  turn(again.listeners, "complete", P(87), {
+    prompt: "【驿窗送审 h7~old】\n旧",
+  });
+  await settleLong();
+  closable[2] = true;
+  await ended();
+  await settleLong();
+  assert.deepEqual(removed, [], "a week old");
+});
