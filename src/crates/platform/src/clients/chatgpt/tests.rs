@@ -103,10 +103,16 @@ fn the_watch_list_names_the_ended_conversations_when_there_are_any() {
         watch_of(&state, &data),
         json!({"type":"watch","conversations":["68a1"]})
     );
-    state.ended = vec!["68a1".into()];
+    state.ended = (vec!["68a1".into()], vec![]);
     assert_eq!(
         watch_of(&state, &data),
         json!({"type":"watch","conversations":["68a1"],"ended":["68a1"]})
+    );
+    // A handoff that ended with no conversation of its own (review P1-01).
+    state.ended = (vec![], vec!["h1".into()]);
+    assert_eq!(
+        watch_of(&state, &data),
+        json!({"type":"watch","conversations":["68a1"],"endedRelays":["h1"]})
     );
 }
 

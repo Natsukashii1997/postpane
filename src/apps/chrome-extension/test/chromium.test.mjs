@@ -529,3 +529,31 @@ test("an ended relay's tabs in the relay group are closed, and only those; taken
   assert.equal(sent.ok, true, JSON.stringify(sent));
   assert.equal(await count(discarded.id), 1);
 });
+
+// #542 review P1-01: an opening that failed left a tab whose conversation
+// PostPane never heard of; once its handoff ended, it is closed by the
+// handoff, kept across the worker in session storage.
+test("the tab a failed opening left is closed once its handoff ended", async () => {
+  const id = conversation(34);
+  const tabId = await worker.evaluate(async (url) => {
+    const tab = await chrome.tabs.create({ url, active: false });
+    await group(tab.id);
+    return tab.id;
+  }, address(id));
+  // Its page there, so the tab shows the conversation.
+  await listed(id);
+  await worker.evaluate((tabId) => own(tabId, "h9a1~1"), tabId);
+  assert.deepEqual(
+    await worker.evaluate(
+      async () => (await chrome.storage.session.get("owned")).owned,
+    ),
+    { [tabId]: { relay: "h9a1", conversation: id } },
+  );
+  await inFront();
+  await worker.evaluate(() =>
+    onHost({ type: "watch", conversations: [], endedRelays: ["h9a1"] }),
+  );
+  for (let tries = 0; tries < 50 && (await tabsAt(id)).length; tries++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.deepEqual(await tabsAt(id), []);
+});

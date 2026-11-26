@@ -55,6 +55,7 @@ async function onHost(message) {
     case "watch":
       watched = new Set(message.conversations || []);
       ended = new Set(message.ended || []);
+      endedRelays = new Set(message.endedRelays || []);
       closeEnded();
       await chrome.storage.local.set({ watched: [...watched] });
       await setShadow(message.shadow === true);
@@ -62,7 +63,11 @@ async function onHost(message) {
       break;
     case "open": {
       const begun = generation;
-      const result = await open(message.text, message.project);
+      const result = await open(
+        message.text,
+        message.project,
+        message.requestId,
+      );
       post({ type: "opened", requestId: message.requestId, ...result });
       wrote(result.conversation, result, { begun });
       break;
@@ -219,35 +224,43 @@ async function submit(tabId, text, until, conversation) {
   }
 }
 
-async function open(text, project) {
+async function open(text, project, request) {
   const tab = await chrome.tabs.create({ url: project || HOME, active: false });
   opening.set(tab.id, true);
   await group(tab.id);
   try {
-    if (!(await ready(tab.id, 30000))) return { ok: false, reason: "timeout" };
-    const result = await submit(tab.id, text);
-    if (!result.ok) return result;
-    const page = await ready(tab.id, 60000, (p) => !!p.conversation);
-    if (!page) return { ok: false, reason: "timeout" };
-    watched.add(page.conversation);
-    await chrome.storage.local.set({ watched: [...watched] });
-    statusSoon();
-    const state =
-      (await chrome.tabs
-        .sendMessage(tab.id, { op: "state" })
-        .catch(() => null)) ?? {};
-    // The prompt's id ties its answer to it (#410); a new conversation's
-    // page may only show it once it has its address.
-    const promptId = result.promptId ?? state.promptId ?? null;
-    return {
-      ok: true,
-      conversation: page.conversation,
-      title: state.title || "",
-      ...(promptId && { promptId }),
-    };
+    return await openIn(tab, text);
   } finally {
     opening.delete(tab.id);
+    // Whose it is: a handoff whose opening failed knows no conversation, and
+    // its tab is closed by this once it ended (#542 review P1-01).
+    await own(tab.id, request);
   }
+}
+
+/** Puts `text` into the new chat in `tab` and waits for its conversation. */
+async function openIn(tab, text) {
+  if (!(await ready(tab.id, 30000))) return { ok: false, reason: "timeout" };
+  const result = await submit(tab.id, text);
+  if (!result.ok) return result;
+  const page = await ready(tab.id, 60000, (p) => !!p.conversation);
+  if (!page) return { ok: false, reason: "timeout" };
+  watched.add(page.conversation);
+  await chrome.storage.local.set({ watched: [...watched] });
+  statusSoon();
+  const state =
+    (await chrome.tabs
+      .sendMessage(tab.id, { op: "state" })
+      .catch(() => null)) ?? {};
+  // The prompt's id ties its answer to it (#410); a new conversation's
+  // page may only show it once it has its address.
+  const promptId = result.promptId ?? state.promptId ?? null;
+  return {
+    ok: true,
+    conversation: page.conversation,
+    title: state.title || "",
+    ...(promptId && { promptId }),
+  };
 }
 
 /** How long a page has to say it is there (#507); and, when it did not, to
@@ -755,10 +768,33 @@ async function focus(conversation) {
  * in the relay group are closed (#542). Every relay opened one and none was
  * closed: on 2026-11-25 Changhao's swap stood at 21–25 GB. */
 let ended = new Set();
+/** The handoffs PostPane says ended (#542 review P1-01): a tab one of them
+ * opened is closed by it too, though its opening failed and no
+ * conversation was ever known of it. */
+let endedRelays = new Set();
 /** The conversations being sent to, looked for, read or brought forward
  * now, by how many: a tab of one is not closed meanwhile. A new handoff may
  * take an ended conversation on, and the list that says so come later. */
 const inUse = new Map();
+/** The tabs `open` made, by id: the handoff they were made for and the
+ * conversation each showed when its opening was over (null: none). Kept in
+ * session storage, which the browser empties as it starts again, when tab
+ * ids begin again too. */
+let owned = {};
+const ownedRead = (chrome.storage.session?.get("owned") ?? Promise.resolve({}))
+  .then((kept) => (owned = { ...kept?.owned, ...owned }))
+  .catch(() => {});
+function keepOwned() {
+  chrome.storage.session?.set({ owned }).catch(() => {});
+}
+async function own(tabId, request) {
+  const relay = request?.split("~")[0];
+  if (!relay) return;
+  const tab = await chromeSays(() => chrome.tabs.get(tabId));
+  await ownedRead;
+  owned[tabId] = { relay, conversation: tab ? conversationOf(tab) : null };
+  keepOwned();
+}
 
 /** Runs `work` on `conversation` with its tabs kept open meanwhile. */
 async function using(conversation, work) {
@@ -773,16 +809,25 @@ async function using(conversation, work) {
 
 let closing = null;
 let closeAgain = false;
-/** Closes the tabs of ended conversations that may be closed now; asked
- * again while it runs, it runs once more after. */
+/** How soon tabs that could not be closed are looked at again, while none
+ * of the things that may let them be (an answer done, a page back, another
+ * tab in front) is heard of (#542 review P2-04). */
+const CLOSE_AGAIN_MS = 5 * 60 * 1000;
+let closeLater = null;
+/** Closes the tabs of ended relays that may be closed now; asked again while
+ * it runs, it runs once more after. */
 function closeEnded() {
-  if (!ended.size) return;
+  if (!ended.size && !endedRelays.size) return;
   if (closing) {
     closeAgain = true;
     return;
   }
   closing = closeSome()
-    .catch(() => {})
+    .catch(() => false)
+    .then((left) => {
+      clearTimeout(closeLater);
+      closeLater = left ? setTimeout(closeEnded, CLOSE_AGAIN_MS) : null;
+    })
     .finally(() => {
       closing = null;
       if (closeAgain) {
@@ -792,9 +837,20 @@ function closeEnded() {
     });
 }
 
-/** The conversation at a tab's address, if any. */
-const conversationOf = (tab) =>
-  (tab.url || tab.pendingUrl || "").match(/\/c\/([0-9a-f-]+)/)?.[1] ?? null;
+/** The conversation a tab shows or is on its way to, if it is a chatgpt.com
+ * conversation's address, a project's too (#542 review P2-05): where it goes
+ * first, then where it is. */
+function conversationOf(tab) {
+  try {
+    const url = new URL(tab.pendingUrl || tab.url || "");
+    if (url.origin !== HOME.slice(0, -1)) return null;
+    return (
+      url.pathname.match(/^(?:\/g\/[^/]+)?\/c\/([0-9a-f-]+)\/?$/)?.[1] ?? null
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** What `tabId`'s page answers `message` with in `ALIVE_BY`; undefined when
  * it says nothing (an older script that does not know the question answers
@@ -809,42 +865,57 @@ function pageSays(tabId, message) {
   });
 }
 
-/** Closes each tab in the relay group showing an ended conversation, but
- * not one in front of its window (Changhao may be looking at it: it is
- * closed once another tab of the window is), nor one whose page is writing,
- * holds words not sent or says nothing. One Chrome unloaded holds no page,
- * and is closed. Tabs outside the group, his own, are not looked at. */
+/** Whether `tab` is to be closed, as it stands: in the relay group, not in
+ * front, not being opened, its conversation in no work now; and the tab of
+ * a conversation that ended, or one an ended handoff opened that shows
+ * what it showed then (or a conversation that ended). A conversation
+ * PostPane knows and has not said ended keeps it. */
+function due(tab, relay) {
+  if (!relay.has(tab.groupId) || tab.active || opening.has(tab.id))
+    return false;
+  const conversation = conversationOf(tab);
+  if (conversation && inUse.has(conversation)) return false;
+  if (conversation && ended.has(conversation)) return true;
+  const mine = owned[tab.id];
+  if (!mine || !endedRelays.has(mine.relay)) return false;
+  if (conversation && watched.has(conversation)) return false;
+  return conversation === mine.conversation;
+}
+
+/** Closes each tab `due` says is to be: one Chrome unloaded holds no page,
+ * and is closed; another only when its page says it shows what it did,
+ * writes nothing and holds no words not sent. Tabs outside the group, his
+ * own, are not looked at. Whether any was left that may be closed later. */
 async function closeSome() {
   const groups = await chromeSays(() =>
     chrome.tabGroups.query({ title: GROUP }),
   );
-  if (!Array.isArray(groups) || !groups.length) return;
+  if (!Array.isArray(groups) || !groups.length) return false;
   const relay = new Set(groups.map((group) => group.id));
   const tabs = await chromeSays(() => chrome.tabs.query({}));
-  if (!Array.isArray(tabs)) return;
-  const shut = (tab) => {
-    const conversation = conversationOf(tab);
-    return ended.has(conversation) && !inUse.has(conversation);
-  };
+  // Chrome not saying: looked at again later.
+  if (!Array.isArray(tabs)) return true;
+  await ownedRead;
+  let left = false;
   const close = async (tab) => {
     if (!unloaded(tab)) {
       const said = await pageSays(tab.id, {
         op: "closable",
         conversation: conversationOf(tab),
       });
-      if (said !== true) return;
+      if (said !== true) return (left = true);
     }
     // As it stands now: brought forward, or taken on, since it was asked.
     const now = await chromeSays(() => chrome.tabs.get(tab.id));
-    if (!now || now.active || !relay.has(now.groupId) || !shut(now)) return;
-    await chromeSays(() => chrome.tabs.remove(tab.id));
+    if (!now || !due(now, relay)) return;
+    if (!(await chromeSays(() => chrome.tabs.remove(tab.id)))) left = true;
   };
-  const due = tabs.filter((t) => relay.has(t.groupId) && !t.active && shut(t));
-  await Promise.all(due.map(close));
+  await Promise.all(tabs.filter((tab) => due(tab, relay)).map(close));
+  return left;
 }
 
-// A tab of an ended conversation left in front is closed once Changhao
-// makes another of its window active.
+// A tab of an ended relay left in front is closed once Changhao makes
+// another of its window active.
 chrome.tabs.onActivated.addListener(() => closeEnded());
 
 // --- Status ------------------------------------------------------------------
@@ -1486,12 +1557,16 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     pages.set(tabId, page);
     for (const check of waiters.get(tabId) || []) check(page);
     statusSoon();
+    // A page back, or moved on: an ended relay's may be closed now (#542).
+    closeEnded();
   } else if (message.type === "turn") {
     // A new chat's first start, before it has an address, says nothing yet.
     if (!message.conversation) return;
     // Which tab told it: a beginning whose prompt is not known yet is ended
     // only by the same tab's end (#507 review round 5, P1-04).
     post({ ...message, tab: tabId });
+    // An answer done: its tab writes no more, and may be closed now (#542).
+    if (message.phase !== "start") closeEnded();
     if (message.phase === "complete")
       shadowRead(message.conversation, "complete", {
         pagePromptId: message.promptId ?? null,
@@ -1503,13 +1578,23 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   pages.delete(tabId);
+  if (tabId in owned) {
+    delete owned[tabId];
+    keepOwned();
+  }
   statusSoon();
 });
 
 // A tab Chrome discards gets a new id (#507, Chromium 156): the one it had
 // is no tab's from then on.
-chrome.tabs.onReplaced.addListener((_added, removed) => {
+chrome.tabs.onReplaced.addListener((added, removed) => {
   pages.delete(removed);
+  // Still the handoff's, under the id Chrome gave it (#542).
+  if (removed in owned) {
+    owned[added] = owned[removed];
+    delete owned[removed];
+    keepOwned();
+  }
   statusSoon();
 });
 

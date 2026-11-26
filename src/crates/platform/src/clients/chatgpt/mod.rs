@@ -156,8 +156,8 @@ struct State {
     /// The names conversations being opened are to be listed under, by request.
     names: HashMap<String, String>,
     watched: Vec<Watched>,
-    /// Watched or not, the conversations every handoff of which ended (#542).
-    ended: Vec<String>,
+    /// The conversations every handoff of which ended, and the handoffs that did (#542).
+    ended: (Vec<String>, Vec<String>),
 }
 /// Told of what the extension reports: turns starting and finishing,
 /// conversations opened and words sent (late ones too).

@@ -62,11 +62,16 @@ pub(super) fn watch_message(list: &[Watched], shadow: bool) -> Value {
     message
 }
 /// The watch message for the list `state` keeps: with the shadow switch
-/// as kept in `data`, and the conversations that ended (#542) when any did.
+/// as kept in `data`, and the conversations and handoffs that ended (#542),
+/// each when any did.
 pub(super) fn watch_of(state: &State, data: &Path) -> Value {
     let mut message = watch_message(&state.watched, shadow::on(data));
-    if !state.ended.is_empty() {
-        message["ended"] = json!(state.ended);
+    let (conversations, handoffs) = &state.ended;
+    if !conversations.is_empty() {
+        message["ended"] = json!(conversations);
+    }
+    if !handoffs.is_empty() {
+        message["endedRelays"] = json!(handoffs);
     }
     message
 }

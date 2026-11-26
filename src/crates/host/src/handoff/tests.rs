@@ -7,6 +7,7 @@ mod background_run;
 mod book_states;
 mod codex;
 mod driver;
+mod ended_tabs;
 mod find_tell;
 mod finding;
 mod held_back;
@@ -88,6 +89,8 @@ struct Fake {
     reread_fails: std::cell::Cell<bool>,
     /// Passing a look on to the extension fails (#524).
     find_fails: std::cell::Cell<bool>,
+    /// What the extension was told ended each time (#542).
+    told_ended: RefCell<Vec<(Vec<String>, Vec<String>)>>,
 }
 
 impl Fake {
@@ -155,6 +158,11 @@ impl Lines for Fake {
             return Err(SendFailed::Unsure(error));
         }
         Ok(self.asked_as.borrow().clone())
+    }
+    fn ended(&self, conversations: &[String], handoffs: &[String]) {
+        self.told_ended
+            .borrow_mut()
+            .push((conversations.to_vec(), handoffs.to_vec()));
     }
     fn find(&self, conversation: &str, request: &str, after: Option<&str>) -> Result<(), String> {
         self.sent

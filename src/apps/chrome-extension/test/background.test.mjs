@@ -91,6 +91,15 @@ function load(
       onMessage: event("message"),
     },
     storage: {
+      // #542: what lives as long as the browser does.
+      session: (() => {
+        const kept = {};
+        return {
+          get: async () => JSON.parse(JSON.stringify(kept)),
+          set: async (values) =>
+            Object.assign(kept, JSON.parse(JSON.stringify(values))),
+        };
+      })(),
       local: {
         get: async (keys) => {
           if (faults.restore && [keys].flat().includes("shadowLedger"))
@@ -284,6 +293,7 @@ function load(
     clearTimeout() {},
     crypto: globalThis.crypto,
     TextEncoder,
+    URL,
     // `clock`: the time the script reads, moved by the test.
     ...(clock && { Date: { now: () => clock.now } }),
   });
@@ -3261,4 +3271,114 @@ test("a tab words are going into is not closed meanwhile, though its conversatio
   assert.deepEqual(removed, []);
   release();
   await sending;
+});
+
+// #542 review P1-01: a handoff whose opening failed knows no conversation
+// (the page did not say its address in time); once it ended, the tab it
+// opened is closed all the same, by the handoff.
+test("the tab a failed opening made is closed once its handoff ended", async () => {
+  const tabs = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    now: true,
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 99: true },
+    // The words went in and the address came, but the page never said so.
+    onCreate: (tab) =>
+      Object.assign(tab, { url: `https://chatgpt.com/c/${ENDED}`, groupId: 7 }),
+  });
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h8"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "another handoff's end");
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// #542 review P2-05: only a chatgpt.com conversation's address counts, and
+// where a tab is going comes before where it was.
+test("only a chatgpt.com conversation address names an ended conversation", async () => {
+  const tabs = [
+    {
+      id: 2,
+      url: `https://example.com/redirect?next=/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+    {
+      id: 3,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      pendingUrl: `https://chatgpt.com/c/${LIVE}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+    {
+      id: 4,
+      url: `https://chatgpt.com/g/g-p-abc/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true, 3: true, 4: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [4], "a project's conversation counts");
+});
+
+// #542 review P2-04: a tab left open as its page was writing is closed once
+// the answer is done, with nothing else changed.
+test("a tab left open while its page wrote is closed once its answer is done", async () => {
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  const closable = { 2: false };
+  const { listeners } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable,
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "writing");
+  closable[2] = true;
+  listeners.message(
+    { type: "turn", phase: "complete", conversation: ENDED, reply: "好" },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  assert.deepEqual(removed, [2]);
 });

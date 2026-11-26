@@ -9,7 +9,7 @@
 - 你要求的：
   - `src/crates/host/src/handoff/back/desk_ended.rs`（新）：`ended_conversations` 从接力记录算出「全部 closed」的会话；`Desk::tell_ended` 每次刷新快照告诉通道。`handoff.rs`：`Lines` 加 `ended`（默认什么都不做）、挂新文件、`projection` 里调一次；`sending/desk_lines.rs` 接到通道。
   - `src/crates/platform/src/clients/chatgpt/`：`State` 记 `ended`；`commands.rs` 的 `Channel::ended` 名单变了才发一次 `watch`；`watched.rs` 的 `watch_of` / `tell_watch` 把 `ended` 带上（只在非空时）。
-  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，跳过前台的、正在送话 / 查找 / 重读 / 切前台的会话（`using` / `inUse`），没页面的直接关，其余先问页面 `closable`，关前再查一次；`tabs.onActivated` 时再看一遍。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
+  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，`due` 判一个标签页该不该关（跳过前台的、正在 `open` 的、正在送话 / 查找 / 重读 / 切前台的会话），没页面的直接关，其余先问页面 `closable`，关前再判一次；换标签页、页面报到、回答写完时再看一遍，没关成的 5 分钟后再看。`open` 拆出 `openIn`，结束时 `own` 记下标签页归哪条接力。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
   - 文档：`docs/chatgpt-channel.md`（`watch` 一行、「接力结束关标签页」一段），`src/crates/host/src/handoff/README.md`（`back/` 一行），`docs/DECIDED.md` 新一行。
 - 我顺手改的：`content.js` 把 `reload` 里那段「显示这个会话、没在写、没草稿」的判断提成 `idleFor`，`reload` 行为不变；`mod.rs` 里两处「拼 watch 再发」合成 `tell_watch` 一行（300 行棘轮只许变短，加字段要腾出两行）。没改变别的行为。
 - 同类：搜了插件里所有 `chrome.tabs.create`（`open`、`make`、`focus` 三处）。`open`、`make` 开的都进组，会被关；`focus` 新开的不进组、不关（常浩点接力卡要看的）。没有别处开标签页。
@@ -25,6 +25,14 @@
   - 常浩点接力卡把一个已结束接力的组内标签页切到前台看，切走后它会被关（计划里的「切走再关」）；要不要在这时把它移出组、留下来，没做，等常浩定。
   - 接力记录只留最新 200 条，更早的会话不在 `ended` 里，它们的标签页不会被关（目前没有这样的标签页）。
   - 开着的 #442（`relay_end`）也会把接力改成 `closed`；这里按状态算，不用另接。两边都改 `handoff.rs`，后合的那张要变基。
+- 第 1 轮 ChatGPT 审查（返修，P1 2、P2 6）怎么处理的：
+  - P1-01 已修：失败接力没有会话编号时关不掉。驿窗多发一份 `endedRelays`（已结束的接力 id），插件按 `open` 的 `requestId` 记下每个标签页是哪条接力开的、当时显示哪个会话（`chrome.storage.session`），接力结束后照同样的规矩关；后来显示了别的、还在用的会话就不关。`open` 原来的结果不变。
+  - P1-02 判定不成立：`Book::opened` 只在 `Desk::open` 和 `opened_late` 两处调用，绑的都是 `open()` 刚新开的会话，编号不可能已经在 `ended` 里；照旧加了一道：正在 `open` 的标签页不关。
+  - P2-03 改了顺序：先出快照、后算名单。原来 `desk.tell` 已先用同一时刻跑过 24 小时收尾，实际不会晚一拍，按审查意见改成不依赖这一点。
+  - P2-04 已修：页面报到、回答写完或停下时再看一遍，没关成的 5 分钟后再看。
+  - P2-05 已修：只认 `https://chatgpt.com` 的 `/c/<id>` 和 `/g/<项目>/c/<id>`，跳转中按要去的网址认。
+  - P2-06（关前一瞬间草稿竞态）、P2-07（只管最近 200 条）、P2-08（点接力卡看过、切走后关）待常浩定。
+  - 返修测试：新测试在上一版代码上 `ℹ pass 0` / `ℹ fail 3`（插件，`red-round2-plugin.log`）、把快照顺序改回去 `FAILED. 1 passed; 1 failed`（驿窗，`red-round2-host.log`）；真实 Chromium 一共 `ℹ pass 17`（`chromium-round2.log`）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 205`，其余同上；`ℹ pass 64` / `ℹ fail 0`（`round2/`）。
 - 本轮新坑：无。
 - skill 进化：无。
 

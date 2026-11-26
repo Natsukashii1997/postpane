@@ -24,15 +24,15 @@ impl Channel {
             &json!({"type":"find","conversation":conversation,"request":request,"after":after}),
         )
     }
-    /// Tells the extension the conversations every handoff of which ended
-    /// (#542), with the watched list: their tabs in the relay group are
-    /// closed. Told again only when they change.
-    pub fn ended(&self, conversations: &[String]) {
+    /// Tells the extension the conversations every handoff of which ended,
+    /// and the handoffs that did (#542), with the watched list: their tabs in
+    /// the relay group are closed. Told again only when they change.
+    pub fn ended(&self, conversations: &[String], handoffs: &[String]) {
         let mut state = self.shared.lock();
-        if state.ended == conversations {
+        if state.ended.0 == conversations && state.ended.1 == handoffs {
             return;
         }
-        state.ended = conversations.to_vec();
+        state.ended = (conversations.to_vec(), handoffs.to_vec());
         tell_watch(&mut state, &self.shared.data);
     }
     /// Asks the extension to tell the newest reply of a watched conversation
