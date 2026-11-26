@@ -93,6 +93,7 @@
   }
 
   function tellComplete(reply, extra = {}) {
+    const prompt = page.lastPrompt(document);
     reported = reply.messageId;
     expecting = false;
     done = page.lastPromptId(document) ?? done;
@@ -101,7 +102,8 @@
       phase: "complete",
       conversation: page.conversationId(location.href),
       title: page.title(document),
-      prompt: page.lastPrompt(document),
+      prompt,
+      ...(prompt === null && { unreadable: true }),
       // Which prompt it answers, by ChatGPT's id (#410): PostPane holds the
       // answer to the words it sent by it, not by how the page draws them.
       promptId: page.lastPromptId(document),
@@ -311,7 +313,7 @@
     // more than one, none taken. See `PostPanePage.marked`.
     if (command.op === "asked") {
       const here = page.conversationId(location.href) === command.conversation;
-      const loaded = here && !!page.lastPrompt(document);
+      const loaded = here && page.hasPrompt(document);
       const found = loaded
         ? page.marked(document, command.request, command.after)
         : { marked: [], anchored: false, unreadable: false };

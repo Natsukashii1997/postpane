@@ -29,7 +29,7 @@ pub(crate) struct Rule {
 use agent_hud_runtime::l10n;
 use serde_json::{json, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::PathBuf,
     sync::{Condvar, Mutex, MutexGuard},
 };
@@ -42,6 +42,8 @@ mod back;
 #[path = "handoff/answers/desk_belongs.rs"]
 mod belongs;
 pub(crate) mod book;
+#[path = "handoff/sending/desk_claim.rs"]
+mod claiming;
 #[path = "handoff/answers/desk_driver.rs"]
 mod driver;
 #[path = "handoff/gate/desk.rs"]
@@ -54,6 +56,8 @@ mod held;
 mod lines;
 #[path = "handoff/notice/desk.rs"]
 mod notice;
+#[path = "handoff/answers/desk_prompt.rs"]
+mod prompt;
 #[path = "handoff/answers/desk_reread.rs"]
 mod reread;
 pub mod settings;
@@ -249,8 +253,9 @@ pub(crate) struct Desk {
     /// sent (`caught_up`); oldest first.
     early: Mutex<Vec<Early>>,
     /// Handoffs with words on their way now: a second sending waits, so the
-    /// same words are not sent twice side by side.
-    sending: Mutex<HashSet<String>>,
+    /// same words are not sent twice side by side. The value is true only
+    /// toward ChatGPT: sending back to the doer does not hold its turns.
+    sending: Mutex<HashMap<String, bool>>,
     /// Words being sent to ChatGPT, by handoff, until they are known to have
     /// gone in: in time, or told by the extension after the wait (#223).
     asking: Mutex<HashMap<String, Asking>>,
@@ -313,18 +318,6 @@ struct Early {
     at: i64,
 }
 
-/// A handoff's words on their way; let go when dropped.
-struct Sending<'a>(&'a Desk, String);
-impl Drop for Sending<'_> {
-    fn drop(&mut self) {
-        self.0
-            .sending
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(&self.1);
-    }
-}
-
 impl Desk {
     /// The handoffs kept in `data`; none kept in the demo. Conversations
     /// that were opening when the app stopped count as failed, to retry.
@@ -354,7 +347,7 @@ impl Desk {
             ),
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
-            sending: Mutex::new(HashSet::new()),
+            sending: Mutex::new(HashMap::new()),
             asking: Mutex::new(HashMap::new()),
             launches: Mutex::new(launches),
             undrawn: Mutex::new(HashMap::new()),
@@ -392,17 +385,6 @@ impl Desk {
             return desk;
         }
         desk(book)
-    }
-    /// Claims `id` for sending, or says words are already on their way.
-    fn claim(&self, id: &str) -> Result<Sending<'_>, String> {
-        let mut sending = self.sending.lock().unwrap_or_else(|p| p.into_inner());
-        if !sending.insert(id.to_owned()) {
-            return Err(l10n::text(
-                "上一段还在送，等它送完再试。",
-                "Words are still on their way; try again once they arrive.",
-            ));
-        }
-        Ok(Sending(self, id.to_owned()))
     }
     fn lock(&self) -> MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(|p| p.into_inner())
@@ -486,23 +468,6 @@ impl Desk {
     fn launches(&self) -> MutexGuard<'_, HashMap<String, Launch>> {
         self.launches.lock().unwrap_or_else(|p| p.into_inner())
     }
-    /// Keeps the swipes (held, so a newer state is never overwritten).
-    /// One line in `chatgpt/turns.jsonl` for a turn the extension reported:
-    /// its conversation, phase, message id, how long the reply was and what
-    /// the desk made of it (`taken`, `unused`, `early`, `caught-up`,
-    /// `evicted`). Never the words themselves. A lost reply is then traced to
-    /// the extension (no line) or to the desk (a line that says why); what
-    /// each read again found is there too (`heard_reread`, #457).
-    fn note_turn(&self, message: &Value, at: i64, outcome: &str) {
-        self.append_turn(&json!({
-            "at": at,
-            "conversation": message["conversation"],
-            "phase": message["phase"],
-            "messageId": message["messageId"],
-            "replyChars": message["reply"].as_str().map(|r| r.chars().count()),
-            "outcome": outcome,
-        }));
-    }
     /// Adds `line` to `chatgpt/turns.jsonl`, moved aside once it grew too big.
     fn append_turn(&self, line: &Value) {
         use std::io::Write;
@@ -524,6 +489,7 @@ impl Desk {
         }
     }
 
+    /// Keeps the swipes (held, so a newer state is never overwritten).
     fn keep_launches(&self, launches: &HashMap<String, Launch>) {
         let Some(data) = &self.data else { return };
         let path = launches_path(data);
@@ -1020,6 +986,9 @@ impl Desk {
         if message["phase"] == "start" {
             return self.change(|book| book.working(conversation, at));
         }
+        if message["unreadable"] == true {
+            return self.unreadable_prompt(conversation, at);
+        }
         let reply = message["reply"].as_str().unwrap_or("");
         let message_id = message["messageId"].as_str();
         let (prompt, prompt_id) = (message["prompt"].as_str(), message["promptId"].as_str());
@@ -1057,7 +1026,9 @@ impl Desk {
             self.sending
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
-                .contains(&id)
+                .get(&id)
+                .copied()
+                .unwrap_or(false)
         })
     }
 
@@ -1351,7 +1322,7 @@ impl Desk {
     /// or, for an end, once it could not (#316): the card says which.
     fn auto_back(&self, lines: &dyn Lines, id: &str, next: Next, now: i64) -> bool {
         // A person's button sending meanwhile: theirs goes.
-        let Ok(_sending) = self.claim(id) else {
+        let Ok(_sending) = self.claim_back(id) else {
             return false;
         };
         let Some(handoff) = self
