@@ -235,13 +235,6 @@ async function open(text, project, request) {
     return (result = await openIn(tab, text));
   } finally {
     opening.delete(tab.id);
-    if (result.ok) {
-      await asked(result.conversation, result.promptId, false);
-      // No id of the words seen, here nor as it opened: the next one heard
-      // of in it is theirs (round 4, P1-05).
-      if (!asks[result.conversation]?.ids.length)
-        await expect(result.conversation);
-    }
     // Whose it is: a handoff whose opening failed knows no conversation, and
     // its tab is closed by this once it ended (#542 review P1-01); a
     // conversation only when the words may have gone into it, and it shows
@@ -262,12 +255,19 @@ async function openIn(tab, text) {
   if (!first) return { ok: false, reason: "timeout" };
   if (first.conversation)
     return { ok: false, reason: "other-conversation", pressed: false };
+  const entry = await goingOut(text);
   const result = await submit(tab.id, text, undefined, null);
+  if (result.pressed === false) outOf(entry);
   if (!result.ok) return result;
   const page = await ready(tab.id, 60000, (p) => !!p.conversation);
   if (!page) return { ok: false, reason: "timeout" };
   const state = await proven(tab.id, page.conversation, text, result.promptId);
   if (!state) return { ok: false, reason: "unconfirmed", pressed: true };
+  // Its prompt, as the page that sent it, or the one prompt showing the
+  // words, has it (round 4 and 5, P1-05).
+  const own = result.promptId ?? state.promptId;
+  if (own) outOf(entry);
+  await ownPrompt(page.conversation, own, entry.at);
   watched.add(page.conversation);
   await chrome.storage.local.set({ watched: [...watched] });
   statusSoon();
@@ -542,13 +542,11 @@ async function send(conversation, text) {
   const { tabId } = await reach(conversation, until);
   if (tabId === undefined)
     return { ok: false, reason: "timeout", pressed: false };
-  // An answer begun to these words is PostPane's (round 4, P1-05).
-  await expect(conversation);
+  // A prompt of these words is the extension's (round 4, P1-05).
+  const entry = await goingOut(text);
   const result = await submit(tabId, text, until, conversation);
-  if (result.promptId) asked(conversation, result.promptId, true);
-  else if (result.pressed === false) unexpect(conversation);
-  // Sent to again: the conversation is a relay's again, not his.
-  if (result.ok || result.pressed !== false) untake(conversation);
+  if (result.promptId || result.pressed === false) outOf(entry);
+  await ownPrompt(conversation, result.promptId, entry.at);
   return result;
 }
 
@@ -867,45 +865,75 @@ const takenRead = chrome.storage.local
   .then((kept) => (taken = { ...kept?.taken, ...taken }))
   .catch(() => {});
 
-/** The prompts the extension put into each conversation (round 4,
- * P1-05): by ChatGPT's id (`ids`, the newest `ASK_IDS`), and how many it put
- * in whose id it has not seen (`next`), each the next unknown one heard of
- * in it. Local storage, the newest `STRAYS_MOST` conversations. */
+/** The prompts the extension is known to have put into each conversation,
+ * by ChatGPT's id, the newest `ASK_IDS` (round 4, P1-05): known by the page
+ * that sent them, as it still showed the conversation (`page.js` `press`),
+ * or by their words (`heads`). Local storage, the newest `STRAYS_MOST`
+ * conversations. */
 let asks = {};
 const ASK_IDS = 20;
 const asksRead = chrome.storage.local
   .get("asks")
   .then((kept) => (asks = { ...kept?.asks, ...asks }))
   .catch(() => {});
+/** What the extension sent, whose prompt is not known yet (round 5): the
+ * words' first `HEAD` characters, spaces aside, and when they began to go.
+ * A prompt beginning so is the extension's, in whichever conversation; no
+ * other is, however it came or when (not the next one heard of, nor one in
+ * a tab being opened). The newest `HEADS_MOST`, a week at most. */
+let heads = [];
+const HEAD = 100;
+const HEADS_MOST = 50;
+const HEADS_FOR = 7 * 24 * 60 * 60 * 1000;
+const headsRead = chrome.storage.local
+  .get("heads")
+  .then((kept) => (heads = [...(kept?.heads ?? []), ...heads]))
+  .catch(() => {});
+const bare = (text) => (text ?? "").replace(/\s/g, "");
 
-/** Changes what is known of the prompts put into `conversation`. */
-async function keepAsk(conversation, change) {
-  await asksRead;
-  const ask = asks[conversation] ?? { ids: [], next: 0 };
-  change(ask);
-  ask.ids = ask.ids.slice(-ASK_IDS);
+/** Notes that `text` begins to go; what it was noted as. */
+async function goingOut(text) {
+  await headsRead;
+  const entry = { head: bare(text).slice(0, HEAD), at: Date.now() };
+  if (!entry.head) return entry;
+  heads = [...heads.filter((h) => entry.at - h.at < HEADS_FOR), entry].slice(
+    -HEADS_MOST,
+  );
+  chrome.storage.local.set({ heads }).catch(() => {});
+  return entry;
+}
+/** The words noted as `entry` are not waited for any more: they did not
+ * go, or their prompt is known. */
+function outOf(entry) {
+  if (!heads.includes(entry)) return;
+  heads = heads.filter((h) => h !== entry);
+  chrome.storage.local.set({ heads }).catch(() => {});
+}
+/** What of `heads` a prompt showing `words` is. */
+function headOf(words) {
+  const shown = bare(words);
+  if (!shown) return undefined;
+  return heads.find((h) => shown.slice(0, h.head.length) === h.head);
+}
+
+/** Prompt `promptId` in `conversation` is the extension's, its words begun
+ * to go at `since`: noted; and a conversation Changhao went on with before
+ * then is a relay's again (P2-11). One he went on with since is still his:
+ * whose came last is not known (round 5). */
+async function ownPrompt(conversation, promptId, since) {
+  if (!conversation || !promptId) return;
+  await Promise.all([asksRead, takenRead]);
+  const ids = (asks[conversation] ?? []).filter((id) => id !== promptId);
   delete asks[conversation];
-  asks[conversation] = ask;
+  asks[conversation] = [...ids, promptId].slice(-ASK_IDS);
   const all = Object.keys(asks);
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete asks[old];
   chrome.storage.local.set({ asks }).catch(() => {});
-}
-/** Words go into `conversation` whose id is not known yet. */
-const expect = (conversation) =>
-  keepAsk(conversation, (ask) => (ask.next += 1));
-/** Words that were to go did not. */
-const unexpect = (conversation) =>
-  keepAsk(conversation, (ask) => (ask.next = Math.max(0, ask.next - 1)));
-/** The extension's words in `conversation` became prompt `promptId`; one
- * of those expected, when `counted`. */
-async function asked(conversation, promptId, counted) {
-  if (!conversation || !promptId) return;
-  await keepAsk(conversation, (ask) => {
-    if (ask.ids.includes(promptId)) return;
-    ask.ids.push(promptId);
-    if (counted) ask.next = Math.max(0, ask.next - 1);
-  });
+  if (conversation in taken && (taken[conversation].at ?? 0) < since) {
+    delete taken[conversation];
+    chrome.storage.local.set({ taken }).catch(() => {});
+  }
 }
 
 /** Whether `conversation` is one a relay has, or had. */
@@ -915,35 +943,32 @@ const relays = (conversation) =>
   ended.has(conversation) ||
   conversation in strays;
 
-/** A prompt was begun or answered in `conversation`, from tab `tabId`: one
- * the extension did not put in was Changhao's own, and the conversation
- * his till words go into it again (round 3, P2-11; round 4, P1-05). Told
- * by the prompt's id, not by when it came: whether its relay ended, as
- * PostPane last said, may be said before or after. One whose id is not
- * known yet tells nothing; in a tab being opened, or with words of the
- * extension's whose id was not seen, it is theirs. */
-async function goneOn(message, tabId) {
-  const { conversation, promptId } = message;
-  if (!["start", "complete"].includes(message.phase)) return;
+/** A prompt was begun, answered or stopped in `conversation`: one the
+ * extension is not known to have put in is Changhao's own, and the
+ * conversation his (round 3, P2-11; round 4 and 5, P1-05). Told by the
+ * prompt's id and words, not by when it came: whether its relay ended may
+ * be said before or after. A stopped answer whose beginning did not name
+ * its prompt names the newest. One with no id tells nothing. */
+async function goneOn(message) {
+  const { conversation, phase } = message;
+  const promptId =
+    message.promptId ?? (phase === "stopped" ? message.newest : null);
+  if (!["start", "complete", "stopped"].includes(phase)) return;
   if (!conversation || !promptId) return;
-  await Promise.all([asksRead, straysRead, takenRead]);
-  const ask = asks[conversation];
-  if (ask?.ids.includes(promptId)) return;
-  if (opening.has(tabId)) return asked(conversation, promptId, false);
-  if (ask?.next > 0) return asked(conversation, promptId, true);
+  await Promise.all([asksRead, headsRead, straysRead, takenRead]);
+  if (asks[conversation]?.includes(promptId)) return;
+  const head = headOf(message.prompt);
+  if (head) {
+    outOf(head);
+    return ownPrompt(conversation, promptId, head.at);
+  }
   if (!relays(conversation)) return;
+  if (taken[conversation]?.id === promptId) return;
   delete taken[conversation];
-  taken[conversation] = true;
+  taken[conversation] = { id: promptId, at: Date.now() };
   const all = Object.keys(taken);
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete taken[old];
-  chrome.storage.local.set({ taken }).catch(() => {});
-}
-/** Words went into `conversation` again: it is a relay's, not his. */
-async function untake(conversation) {
-  await takenRead;
-  if (!(conversation in taken)) return;
-  delete taken[conversation];
   chrome.storage.local.set({ taken }).catch(() => {});
 }
 
@@ -1818,7 +1843,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     post({ ...message, tab: tabId });
     // Asked by Changhao, not by PostPane: his tab now (#542); and an answer
     // done, its tab writes no more, and may be closed now, once that is known.
-    goneOn(message, tabId)
+    goneOn(message)
       .catch(() => {})
       .then(() => {
         if (message.phase !== "start") closeEnded();

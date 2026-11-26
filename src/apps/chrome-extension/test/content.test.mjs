@@ -535,6 +535,46 @@ test("words that open a conversation go from a new chat's page only", async () =
   await blank.close();
 });
 
+// Round 5, review test 5: moved on to a conversation of his as send was
+// pressed, before the words' prompt showed: the newest prompt there is not
+// told as theirs.
+test("words sent from a page moved on as they went name no prompt of the page it went to", async () => {
+  const page = await at("/", () => {
+    document.getElementById("slot").addEventListener("click", () => {
+      history.pushState({}, "", "/c/6aed31aa-e880-83ee-9327-cd83363c9024");
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="h1:0:user" data-chatgpt-search-message-ids="pHis"><div data-user-message-bubble="true">我自己的问题</div></div>`,
+        );
+    });
+  });
+  const sent = await command(page, {
+    op: "submit",
+    text: "第 1 轮",
+    conversation: null,
+  });
+  assert.deepEqual(sent, { ok: true });
+  // Not moved on, the prompt the words became is told.
+  const stay = await at("/", () => {
+    document.getElementById("slot").addEventListener("click", () => {
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="n1:0:user" data-chatgpt-search-message-ids="pNew"><div data-user-message-bubble="true">第 1 轮</div></div>`,
+        );
+    });
+  });
+  assert.deepEqual(
+    await command(stay, { op: "submit", text: "第 1 轮", conversation: null }),
+    { ok: true, promptId: "pNew" },
+  );
+  await page.close();
+  await stay.close();
+});
+
 test("asked whether it shows the words it was opened with, a page answers by its prompts", async () => {
   const LONG = "长".repeat(7000);
   // The page holding one prompt only: `words`, or none of its own (null).
@@ -584,9 +624,14 @@ test("asked whether it shows the words it was opened with, a page answers by its
       );
   assert.equal(await opened([newest], "x", { promptId: "p9" }), true);
   assert.equal(await opened([newest], "x", { promptId: "p8" }), false);
-  // No words of its own: a long paste ChatGPT made a file; a short one is
-  // not drawn yet.
-  assert.equal(await opened(one(null), LONG), true);
+  // Its id known and not the newest: no other proof counts (round 5).
+  assert.equal(
+    await opened(one("第 1 轮"), "第 1 轮", { promptId: "p8" }),
+    false,
+  );
+  // No words of its own: no proof, a long paste ChatGPT made a file or not
+  // (round 5).
+  assert.equal(await opened(one(null), LONG), false);
   assert.equal(await opened(one(null), "第 1 轮"), false);
   // Another conversation than the one asked of.
   const other = await at(

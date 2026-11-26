@@ -143,6 +143,10 @@
           phase: "stopped",
           conversation,
           promptId: prompt,
+          // Whose the stopped prompt was, when its beginning did not name it
+          // (#542 review round 5): the extension's or Changhao's.
+          newest,
+          prompt: page.lastPrompt(document),
           at: Date.now(),
         });
       }, STOP_AGAIN);

@@ -604,3 +604,11 @@
 - 正确做法：查「修了还在犯」先确认修复在不在已装的包里：在 `/Applications/PostPane.app/Contents/MacOS/PostPane` 里搜那次修复新加的提示文字（中文串直接按 UTF-8 字节搜），比打包时间更可靠。一批合并的最后一个会话负责从 main（或已含最新 main 的分支）装机回读，交接里写装的提交号。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-relay-fixes-install/`（装前备份 `PostPane-1bce2b00156a.app`，装后二进制检索结果写在 #544 问题清单第 1 条）。
 - 升级：〔提醒〕未升级。#544-6 每日自检会比对已装版本落后 main 几个接力修复，做完改〔机检〕。
+
+## L-75 插件后台是普通脚本，新加的函数和已有的同名，后一个悄悄顶掉前一个，不报错（2026-11-27）
+
+- 现象：#542 第 5 轮返修给后台加了 `sending(text)`，文件里已有 `sending(conversation)`（送话途中记账用）。脚本照常加载，`send` 调到的却是新函数，按文字认提问的几条测试一直不过，换了几种写法都以为是逻辑问题。
+- 根因：`background.js` 是 Chrome 插件的普通脚本（不是模块），同名的 `function` 声明后者覆盖前者，没有任何报错；文件近 1900 行，起名前没搜。
+- 正确做法：在插件后台新加函数前先 `grep -n "function 名字"`。`test/background.test.mjs` 的「no two functions of the worker share a name」会查顶层同名函数。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round6/`。
+- 升级：〔机检〕测试已加。

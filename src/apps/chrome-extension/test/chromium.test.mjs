@@ -39,6 +39,27 @@ const fixture = readFileSync(
       turn.innerHTML = "<div data-user-message-bubble></div>";
       turn.firstChild.textContent = window.sent;
       document.querySelector("main").append(turn);
+      // #542 round 5: a project's new chat gets its address a moment after
+      // the words go (ok); or Changhao moves the tab on to a conversation of
+      // his own as they go, before they show (his).
+      const at = (id) => history.pushState({}, "", "/c/" + id);
+      if (location.pathname === "/g/g-p-ok/project")
+        setTimeout(() => {
+          at("6af7ec47-c0f4-83ee-9b9e-0000000000a1");
+          document.querySelector("main").append(document.createElement("i"));
+        }, 300);
+      if (location.pathname === "/g/g-p-his/project") {
+        at("6af7ec47-c0f4-83ee-9b9e-0000000000a2");
+        for (const node of document.querySelectorAll(
+          '[data-chatgpt-search-unit-key$=":user"]',
+        ))
+          node.remove();
+        const his = document.createElement("div");
+        his.dataset.chatgptSearchUnitKey = "h:0:user";
+        his.dataset.chatgptSearchMessageIds = "pHis";
+        his.innerHTML = "<div data-user-message-bubble>我自己的问题</div>";
+        document.querySelector("main").append(his);
+      }
     });
   </script></body>`,
 );
@@ -615,4 +636,37 @@ test("the tabs a failed opening left are closed once its handoff ended", async (
     [await exists(shown), await exists(blankTab)],
     [false, false],
   );
+});
+
+// #542 review round 5, P1-06: an opening in Chrome as it is, its page the
+// extension's own scripts. The words' prompt is the one the page that sent
+// them showed; moved on to a conversation of Changhao's as they went, the
+// opening is not confirmed, and that conversation is not the handoff's.
+test("an opening is confirmed by the prompt its words became, not by where the tab went", async () => {
+  const opened = (project, request) =>
+    worker.evaluate(
+      ([project, request]) =>
+        open("第 1 轮", `https://chatgpt.com${project}`, request),
+      [project, request],
+    );
+  const ok = await opened("/g/g-p-ok/project", "h9c1~1");
+  assert.deepEqual(
+    { ...ok, title: undefined },
+    {
+      ok: true,
+      conversation: "6af7ec47-c0f4-83ee-9b9e-0000000000a1",
+      title: undefined,
+      promptId: "p9",
+    },
+  );
+  const his = await opened("/g/g-p-his/project", "h9c2~1");
+  assert.deepEqual(his, { ok: false, reason: "unconfirmed", pressed: true });
+  const kept = await worker.evaluate(() =>
+    chrome.storage.local.get(["strays", "watched", "asks"]),
+  );
+  const HIS = "6af7ec47-c0f4-83ee-9b9e-0000000000a2";
+  assert.equal(kept.strays?.[HIS], undefined);
+  assert.ok(!kept.watched.includes(HIS));
+  assert.equal(kept.asks?.[HIS], undefined);
+  assert.deepEqual(kept.asks?.["6af7ec47-c0f4-83ee-9b9e-0000000000a1"], ["p9"]);
 });

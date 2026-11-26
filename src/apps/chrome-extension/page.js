@@ -532,7 +532,7 @@
     };
     try {
       timely();
-      return await press(doc, text, wait, timely, put);
+      return await press(doc, text, wait, timely, put, shows);
     } catch (error) {
       if (error !== LATE && error !== ELSEWHERE) throw error;
       // Out of time, the page may show another conversation as well.
@@ -570,7 +570,7 @@
     return !!bare(box.textContent);
   }
 
-  async function press(doc, text, wait, timely, put = {}) {
+  async function press(doc, text, wait, timely, put = {}, shows = () => true) {
     if (streaming(doc)) return unsent("busy");
     const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
@@ -625,26 +625,33 @@
       doc,
     );
     if (!started) return { ok: false, reason: "send-failed", pressed: true };
+    // The prompt the words became: read only while the page shows what it
+    // did as send was pressed (#542 review round 5, P1-06). Moved on since,
+    // the newest prompt is another conversation's, not these words'.
+    const moved = {};
     const promptId = await waitFor(
       () => {
+        if (!shows()) return moved;
         const id = lastPromptId(doc);
         return id && id !== before ? id : null;
       },
       3000,
       doc,
     );
-    return promptId ? { ok: true, promptId } : { ok: true };
+    return promptId && promptId !== moved
+      ? { ok: true, promptId }
+      : { ok: true };
   }
 
   /** Whether `text`, sent on a new chat's page, is the prompt of the
    * conversation this page shows (#542 review round 4, P1-06): Changhao may
    * have moved the tab on to one of his own meanwhile. Its newest prompt is
-   * `promptId`, the one the words became; or, that not known, it holds one
-   * prompt only, whose words begin as these do. A prompt with no words of
-   * its own (ChatGPT made a long paste an attachment, #410) counts only for
-   * words that long: a short one is not drawn yet, and asked again. */
+   * `promptId`, the one the words became as the page that sent them showed
+   * it; with that known, nothing else counts (round 5). Not known: it holds
+   * one prompt only, whose words begin as these do. One with no words of
+   * its own (ChatGPT made a long paste an attachment, #410) is no proof. */
   function opened(doc, text, promptId) {
-    if (promptId && lastPromptId(doc) === promptId) return true;
+    if (promptId) return lastPromptId(doc) === promptId;
     const keyOf = (node) =>
       node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
     const turns = new Set(
@@ -653,12 +660,20 @@
     if (turns.size !== 1) return false;
     const node = newestPrompt(doc).node;
     const bubble = node.matches(SEL.user) ? node : node.querySelector(SEL.user);
-    const words = bubble ? bare(shownText(bubble)) : "";
-    const want = bare(text);
-    if (!words) return want.length > PIECE;
-    const head = Math.min(100, want.length);
+    return begins(bubble ? shownText(bubble) : "", text);
+  }
+
+  /** Whether the words a prompt shows, `shown`, begin as `text` does: its
+   * first `HEAD` characters, spaces aside (#542 review round 5). No words
+   * is no proof. */
+  function begins(shown, text) {
+    const words = bare(shown ?? "");
+    const want = bare(text ?? "");
+    if (!words || !want) return false;
+    const head = Math.min(HEAD, want.length);
     return words.slice(0, head) === want.slice(0, head);
   }
+  const HEAD = 100;
 
   globalThis.PostPanePage = {
     SEL,
@@ -672,6 +687,7 @@
     answered,
     marked,
     opened,
+    begins,
     drafting,
     reveal,
     markdown,
