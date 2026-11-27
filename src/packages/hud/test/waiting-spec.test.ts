@@ -1,6 +1,7 @@
 // 侧栏「等待处理」与「积压事项」规范版 (owner, 2026-11-28, 都按推荐): the
 // first line opens, a reply too; an open reply reads its closing; the
-// backlog's WAIT tag in violet, its wait beside the title, 继续 / 停止 after
+// backlog's own stalled ring and no type tag (owner, 2026-11-28 第 3 版), its
+// wait beside the title, quiet 继续 / 停止 after
 // the question; and every tag takes its colour from one place.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +9,6 @@ import { readFileSync } from "node:fs";
 import type { Approval, IslandEvent, Session } from "@agent-hud/protocol";
 import {
   REPLY_BADGE,
-  WAIT_BADGE,
   approvalGroups,
   openEntryId,
   requestBadge,
@@ -92,14 +92,15 @@ test("an open reply prints its closing small and its next step large, without th
   assert.equal(replyMessage(event, undefined), "本次完成：改好");
 });
 
-test("WAIT is a tag of its own in violet, on dark and light paper", () => {
-  assert.equal(tagTone(WAIT_BADGE), "wait");
-  assert.equal(tagColor("wait", false), "#c391f2");
-  assert.equal(tagColor("wait", true), "#7a3fae");
-  const others = (["ask", "reply", "start", "permission"] as const).map(
-    (tone) => tagColor(tone, false),
+test("the backlog's stalled ring is violet on dark and light paper, apart from the tags' colours", () => {
+  assert.equal(paperOf(false).violet, "#c391f2");
+  assert.equal(paperOf(true).violet, "#7a3fae");
+  const tags = (["ask", "reply", "start", "permission"] as const).map((tone) =>
+    tagColor(tone, false),
   );
-  assert.ok(!others.includes(tagColor("wait", false)));
+  assert.ok(!tags.includes(paperOf(false).violet));
+  // WAIT is gone: a backlog line carries no type tag (owner, 2026-11-28).
+  assert.equal(tagTone("WAIT"), "permission");
 });
 
 test("the sidebar's REPLY tag is the open card's blue; a permission one ochre (bug, 2026-11-28)", () => {
@@ -131,15 +132,21 @@ test("a backlog line says how long it has waited, as the waiting list writes it"
   assert.equal(backlogWaited(quiet, now, true), "52 小时 10 分");
 });
 
-test("the backlog's buttons read 继续 / 停止, its question whole, its tag WAIT", () => {
+test("a backlog line is a running row's form: its stalled ring, its question, quiet 继续 / 停止", () => {
   const fold = read("panel/BacklogFold.tsx");
   assert.ok(!fold.includes("不做了"), "「不做了」 is now 「停止」");
-  assert.match(fold, /"停止"/);
-  assert.match(fold, /"继续"/);
-  assert.match(fold, /tone="primary"[\s\S]*"继续"[\s\S]*tone="danger"/);
-  // WAIT on the backlog's line, in its own tone, beside how long it waited.
-  const row = read("panel/SessionsSection.tsx");
-  assert.match(row, /backlog \? WAIT_BADGE/);
-  assert.match(row, /tone=\{backlog \? "wait" : "ask"\}/);
+  assert.match(
+    fold,
+    /tone="quiet"[\s\S]*"继续"[\s\S]*tone="quietStop"[\s\S]*"停止"/,
+  );
+  assert.match(fold, /tone="quietSure"/);
+  // Its head in yellow, the rule grey as the other sections' (owner, 2026-11-28).
+  assert.match(fold, /color=\{paper\.ochre\}/);
   assert.match(fold, /backlogWaited\(entry, now, zh\)/);
+  // The mark column takes the backlog's own hourglass, never a tag.
+  const row = read("panel/SessionsSection.tsx");
+  assert.match(row, /backlog \? \(\s*<BacklogMark/);
+  assert.ok(!/WAIT_BADGE|"WAIT"/.test(row));
+  const mark = read("panel/BacklogMark.tsx");
+  assert.match(mark, /hud-backlog-stall/);
 });

@@ -164,15 +164,19 @@ export function PlaceRows({
 }
 
 /** A section's head: 「等待处理 · n」 or 「正在进行 · n」 and a rule to the
- * edge, one form on every agent's card (owner, 2026-11-14). */
+ * edge, one form on every agent's card (owner, 2026-11-14); 「积压事项」's
+ * words in yellow (owner, 2026-11-28). */
 export function SessionsHeading({
   light,
   count,
   children,
+  color,
 }: {
   light: boolean;
   count: ReactNode;
   children: ReactNode;
+  /** The words' colour, where not the caption grey. */
+  color?: string;
 }) {
   const inks = useBoardInks(light);
   return (
@@ -187,7 +191,7 @@ export function SessionsHeading({
         color: inks.secondary,
       }}
     >
-      <span style={{ whiteSpace: "nowrap" }}>
+      <span style={{ whiteSpace: "nowrap", color }}>
         {children} ·{" "}
         <span style={{ letterSpacing: 0, ...tabular }}>{count}</span>
       </span>

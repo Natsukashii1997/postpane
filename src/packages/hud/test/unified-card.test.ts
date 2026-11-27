@@ -156,7 +156,11 @@ test("卡片整体一套左对齐线：图标线 0、文字线 30，各块都引
   );
   // Session rows and the fold line: the mark column, then the words.
   const live = read("panel/SessionsSection.tsx");
-  assert.match(live, /\$\{waiting \? "auto" : `\$\{GRID\.mark\}px`\}/);
+  // A backlog line keeps the mark column for its own mark (owner, 2026-11-28).
+  assert.match(
+    live,
+    /\$\{waiting && !backlog \? "auto" : `\$\{GRID\.mark\}px`\}/,
+  );
   assert.equal(live.match(/padding: "8px 6px 8px 0"/g)?.length, 2);
   const place = read("panel/PlaceRows.tsx");
   assert.match(place, /`\$\{GRID\.mark\}px minmax\(0, 1fr\) 26px`/);

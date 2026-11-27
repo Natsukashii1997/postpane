@@ -8,8 +8,8 @@ import { failureOf } from "../open-result";
 import type { Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { WAIT_BADGE } from "../permissions/approval-list";
 import { BacklogLine, type BacklogSlot } from "./BacklogLine";
+import { BacklogMark } from "./BacklogMark";
 import { clipped, GRID, noButtonChrome, tabular } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
@@ -18,7 +18,7 @@ import { liveSessionLine } from "./live-line";
 import { useBoardInks } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
-import { usePaper } from "../paper";
+import { paperOf, usePaper } from "../paper";
 import type { DeskChat } from "../chatgpt-desk";
 import { replyTime } from "../scene/hermes-peek";
 import { dateFormat } from "@agent-hud/ui/format";
@@ -40,6 +40,8 @@ import {
 // A listed session's row (`LiveRow`) and a replied chat's (`RepliedRow`);
 // the sessions section that lists them is SourceSessions.tsx (ADR-0001 C1).
 
+/** A row's second line, under its title. */
+const underTitle = { gridColumn: "2 / 3", marginTop: 2, fontSize: 12 } as const;
 /** How far a row slides to show its Remove button alone. */
 const removeWidth = 72;
 
@@ -166,9 +168,7 @@ export function RepliedRow({
       ) : (
         <span
           style={{
-            gridColumn: "2 / 3",
-            marginTop: 2,
-            fontSize: 12,
+            ...underTitle,
             color: inks.secondary,
           }}
         >
@@ -541,7 +541,7 @@ export function LiveRow({
           style={{
             position: "relative",
             display: "grid",
-            gridTemplateColumns: `${waiting ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
+            gridTemplateColumns: `${waiting && !backlog ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
             columnGap: GRID.gap,
             alignItems: "center",
             padding: "8px 6px 8px 0",
@@ -551,12 +551,17 @@ export function LiveRow({
             transition: drag === null ? "transform 0.18s ease" : undefined,
           }}
         >
-          {waiting ? (
+          {backlog ? (
+            <BacklogMark
+              label={zh ? "积压" : "Backlog"}
+              color={(paper ?? paperOf(light)).violet}
+            />
+          ) : waiting ? (
             <ApprovalTag
-              label={backlog ? WAIT_BADGE : zh ? "等你" : "WAITING"}
-              tone={backlog ? "wait" : "ask"}
+              label={zh ? "等你" : "WAITING"}
+              tone="ask"
               light={light}
-              color={backlog ? undefined : inks.red}
+              color={inks.red}
             />
           ) : (
             <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
@@ -629,9 +634,7 @@ export function LiveRow({
             <span
               role="status"
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: notice.ok ? inks.green : inks.red,
                 ...clipped,
               }}
@@ -642,9 +645,7 @@ export function LiveRow({
             <span
               role="status"
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: launchLine(waits, zh).ok ? inks.secondary : inks.red,
                 ...clipped,
               }}
@@ -687,9 +688,7 @@ export function LiveRow({
           ) : (
             <span
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: inks.secondary,
                 ...clipped,
               }}

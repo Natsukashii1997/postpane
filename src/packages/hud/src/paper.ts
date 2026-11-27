@@ -35,7 +35,7 @@ export interface Paper {
   /** The one ochre: a permission's tag, 「回」, a warning, a halted relay
    * (#308: the four ambers made one, the 赭金 picked for 「回」 in #304). */
   ochre: string;
-  /** The backlog's WAIT tag: a request waited on 48 hours (owner,
+  /** The backlog's mark: a request waited on 48 hours (owner,
    * 2026-11-28), apart from the red, blue, green and ochre. */
   violet: string;
   /** A wash of ink under a command or a picked answer. */

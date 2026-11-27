@@ -1,10 +1,10 @@
 // 积压事项 (owner chose 甲 on 2026-11-27, #563; moved 2026-11-28): a section
 // below 「正在进行」, its head of the same form, 「积压事项 · n」 and a rule,
-// folded until clicked. Opened, each line as the panel lists it under a
-// violet WAIT, how long it has waited beside its title, what it asks whole,
-// then 「继续」 (back to its session) and 「停止」, which asks once and then
-// tells the session the work is off (规范版, owner 2026-11-28).
-import { ArrowUpRight, X } from "lucide-react";
+// folded until clicked. Opened, each line in a running row's form (owner,
+// 2026-11-28 第 3 版): the backlog's own mark and no tag, how long it has
+// waited beside its title, what it asks whole, then quiet 「继续」 (back to
+// its session) and 「停止」, which asks once and then tells the session the
+// work is off.
 import type { Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePanelServices } from "../PanelContext";
@@ -56,17 +56,15 @@ export function BacklogFold({
         actions: (
           <>
             <CardButton
-              tone="primary"
+              tone="quiet"
               light={light}
-              icon={<ArrowUpRight size={9} strokeWidth={2.6} />}
               onClick={() => void services?.openSession?.(entry.session)}
             >
               {t("Carry on", "继续")}
             </CardButton>
             <CardButton
-              tone="danger"
+              tone="quietStop"
               light={light}
-              icon={<X size={9} strokeWidth={2.6} />}
               onClick={() => ask(removedKey(entry))}
             >
               {t("Stop", "停止")}
@@ -83,7 +81,7 @@ export function BacklogFold({
             flexWrap: "wrap",
             alignItems: "center",
             gap: 6,
-            margin: "8px 0 2px",
+            margin: "6px 0 2px",
             fontSize: 12,
             color: paper.red,
           }}
@@ -93,10 +91,14 @@ export function BacklogFold({
               ? `确定停止？会替你给这个会话发「${STOP_WORDS}」`
               : "Stop it? The session is told the work is off."}
           </span>
-          <CardButton tone="confirm" light={light} onClick={() => stop(entry)}>
+          <CardButton
+            tone="quietSure"
+            light={light}
+            onClick={() => stop(entry)}
+          >
             {t("Stop", "停止")}
           </CardButton>
-          <CardButton tone="secondary" light={light} onClick={() => ask(null)}>
+          <CardButton tone="quiet" light={light} onClick={() => ask(null)}>
             {t("Cancel", "取消")}
           </CardButton>
         </div>
@@ -121,7 +123,11 @@ export function BacklogFold({
           cursor: "pointer",
         }}
       >
-        <SessionsHeading light={light} count={entries.length}>
+        <SessionsHeading
+          light={light}
+          count={entries.length}
+          color={paper.ochre}
+        >
           {zh ? "积压事项" : "BACKLOG"}
         </SessionsHeading>
       </button>
