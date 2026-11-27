@@ -1,6 +1,6 @@
 // 积压事项 (owner, 2026-11-27, #563): whatever waits on you, of any kind,
-// once it has waited 48 hours, sinks to one folded line at the bottom of
-// 「等待处理」. It no longer counts as waiting on you nor lights the sidebar's
+// once it has waited 48 hours, moves to its own folded section below
+// 「正在进行」 (owner, 2026-11-28). It no longer counts as waiting on you nor lights the sidebar's
 // tag; opened, each line can be carried on or stopped.
 import { useMemo } from "react";
 import type { Approval, RequestDecision } from "@agent-hud/protocol";

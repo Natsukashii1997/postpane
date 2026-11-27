@@ -1,5 +1,6 @@
-// 积压事项 (owner chose 甲 on 2026-11-27, #563): one folded line at the foot
-// of 「等待处理」; opened, each line as the panel lists it, then 「继续」
+// 积压事项 (owner chose 甲 on 2026-11-27, #563; moved 2026-11-28): a section
+// below 「正在进行」, its head of the same form, 「积压事项 · n」 and a rule,
+// folded until clicked; opened, each line as the panel lists it, then 「继续」
 // (back to its session) and 「不做了」, which asks once and then tells the
 // session the work is off.
 import { useState, type CSSProperties } from "react";
@@ -11,7 +12,7 @@ import { cardFolds } from "../permissions/FoldButton";
 import { cardInks } from "../permissions/ListCard";
 import type { LiveSession } from "./agent-board";
 import { STOP_WORDS, stopDecision } from "./backlog";
-import { PlaceRows } from "./PlaceRows";
+import { PlaceRows, SessionsHeading } from "./PlaceRows";
 import { removedKey, useRemovedSessions } from "./removed-sessions";
 import { GRID } from "./theme";
 
@@ -64,24 +65,19 @@ export function BacklogFold({
         aria-expanded={open}
         onClick={toggle}
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          width: "fit-content",
-          padding: `6px 0 10px ${GRID.text}px`,
+          display: "block",
+          width: "100%",
+          padding: "8px 0 0",
           border: 0,
           background: "transparent",
-          color: paper.ochre,
-          fontSize: 12,
+          textAlign: "left",
+          font: "inherit",
           cursor: "pointer",
         }}
       >
-        {zh
-          ? `积压事项 · ${entries.length} · 超过 48 小时没处理`
-          : `Backlog · ${entries.length} · waiting over 48 hours`}
-        <span aria-hidden style={{ fontSize: 10 }}>
-          {open ? "⌃" : "⌄"}
-        </span>
+        <SessionsHeading light={light} count={entries.length}>
+          {zh ? "积压事项" : "BACKLOG"}
+        </SessionsHeading>
       </button>
       {open &&
         entries.map((entry) => {

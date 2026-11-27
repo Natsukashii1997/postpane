@@ -152,14 +152,6 @@ export function WorkSections({
           {zh ? "暂无等待处理的事" : "Nothing waiting on you"}
         </Empty>
       )}
-      <BacklogFold
-        snapshot={snapshot}
-        entries={backlog}
-        light={light}
-        now={now}
-        place={place}
-        onStats={onStats}
-      />
       {(card || runningCount > 0) && (
         <div style={{ paddingTop: card || waitingCount > 0 ? 8 : 0 }}>
           <SessionsHeading light={light} count={runningCount}>
@@ -183,6 +175,15 @@ export function WorkSections({
           )}
         </div>
       )}
+      {/* 积压事项 below 正在进行, a section of the same form (owner, 2026-11-28, #563). */}
+      <BacklogFold
+        snapshot={snapshot}
+        entries={backlog}
+        light={light}
+        now={now}
+        place={place}
+        onStats={onStats}
+      />
     </>
   );
 }
