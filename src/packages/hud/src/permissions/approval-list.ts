@@ -13,6 +13,8 @@ export type TagTone = "ask" | "permission" | "reply" | "start";
 export const REPLY_BADGE = "REPLY";
 /** A handoff card's tag: the session proposed moving to a new one (#245). */
 export const START_BADGE = "START";
+/** Requests waited on 48 hours are the backlog, not waiting (#563). */
+export { currentRequests } from "../panel/backlog.ts";
 
 /** A request's folded tag beside the dock, boxed as a reply's REPLY is
  * (owner, 2026-11-08, #243): ANSWER for a question, PLAN for a plan,
@@ -26,6 +28,8 @@ export function requestBadge({
 } {
   // A handoff card asks the person to switch sessions (#245).
   if (badge === START_BADGE) return { label: START_BADGE, tone: "start" };
+  // A reply waiting on you: its next step to answer (#562).
+  if (badge === REPLY_BADGE) return { label: REPLY_BADGE, tone: "reply" };
   if (kind === "question") return { label: "ANSWER", tone: "ask" };
   if (kind === "plan") return { label: "PLAN", tone: "ask" };
   return { label: "APPROVE", tone: "permission" };

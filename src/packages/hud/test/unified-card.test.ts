@@ -8,6 +8,7 @@ import { liveSessions } from "../src/panel/agent-board.ts";
 import { RUNNING_SHOWN, splitWork } from "../src/panel/place-sessions.ts";
 import { approvalGroups } from "../src/permissions/approval-list.ts";
 import { scene } from "./scenes/scenes.ts";
+import { NOW } from "./scenes/build.ts";
 
 const read = (path: string) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -17,7 +18,7 @@ test("等待处理在前、正在进行在后，待核对排在等待处理最�
   const live = liveSessions(snapshot.sessions, snapshot.approvals).filter(
     (entry) => entry.session.source === "claude",
   );
-  const { waiting, running } = splitWork(live);
+  const { waiting, running } = splitWork(live, NOW);
   assert.deepEqual(
     waiting.map((entry) => entry.session.id),
     ["c-ask"],
@@ -26,7 +27,7 @@ test("等待处理在前、正在进行在后，待核对排在等待处理最�
   const stale = { ...waiting[0], stale: true };
   const fresh = { ...waiting[0], session: { ...waiting[0].session, id: "x" } };
   assert.deepEqual(
-    splitWork([stale, fresh]).waiting.map((entry) => entry.session.id),
+    splitWork([stale, fresh], NOW).waiting.map((entry) => entry.session.id),
     ["x", "c-ask"],
   );
 });

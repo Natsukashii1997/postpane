@@ -5,6 +5,7 @@ import type { PanelLayout, Session, Snapshot } from "@agent-hud/protocol";
 import { agentArtworkKey as vendorKey } from "../agent-artwork.ts";
 import { sourceID, sourcesForMark } from "../resting-agents.ts";
 import type { LiveSession } from "./agent-board.ts";
+import { inBacklog } from "./backlog.ts";
 
 /** Past this many running sessions, a place's fold into one line. */
 export const RUNNING_FOLD = 3;
@@ -91,28 +92,32 @@ export function boardPlaces(
 
 /** The board's 「等你」 line: each place with sessions waiting on you, not
  * those 「待核对」, and how many. Hermes waits on no one (ADR-0001). */
-export function boardWaiting(places: readonly BoardPlace[]) {
+export function boardWaiting(places: readonly BoardPlace[], now = Date.now()) {
   return places
     .filter((place) => vendorKey(place.source) !== "hermes")
     .map((place) => ({
       key: place.key,
       source: place.source,
       count: place.rows.filter(
-        (entry) => entry.status === "waiting" && !entry.stale,
+        (entry) =>
+          entry.status === "waiting" && !entry.stale && !inBacklog(entry, now),
       ).length,
     }))
     .filter((place) => place.count > 0);
 }
 
-/** The waiting rows, 「待核对」 last, and the running ones. */
-/** On one agent's card (owner, 2026-11-14): 「等待处理」 then 「正在进行」. */
-export function splitWork(entries: readonly LiveSession[]) {
+/** On one agent's card (owner, 2026-11-14): 「等待处理」 then 「正在进行」:
+ * the waiting rows, 「待核对」 last, those waited on 48 hours apart as the
+ * backlog (#563), and the running ones. */
+export function splitWork(entries: readonly LiveSession[], now = Date.now()) {
   const waiting = entries.filter((entry) => entry.status === "waiting");
+  const current = waiting.filter((entry) => !inBacklog(entry, now));
   return {
     waiting: [
-      ...waiting.filter((entry) => !entry.stale),
-      ...waiting.filter((entry) => entry.stale),
+      ...current.filter((entry) => !entry.stale),
+      ...current.filter((entry) => entry.stale),
     ],
+    backlog: waiting.filter((entry) => inBacklog(entry, now)),
     running: entries.filter((entry) => entry.status === "running"),
   };
 }

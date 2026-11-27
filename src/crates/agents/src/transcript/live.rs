@@ -182,30 +182,7 @@ pub struct Turn {
     pub message: Option<String>,
 }
 
-pub fn last_paragraph(text: &str) -> Option<String> {
-    let mut lines = Vec::new();
-    for line in text.lines().rev() {
-        if line.trim().is_empty() {
-            if !lines.is_empty() {
-                break;
-            }
-        } else {
-            lines.push(line);
-        }
-    }
-    lines.reverse();
-    let joined = lines.join("\n");
-    let last = joined.trim();
-    if last.is_empty() {
-        return None;
-    }
-    if last.chars().count() <= 240 {
-        Some(last.to_owned())
-    } else {
-        let prefix: String = last.chars().take(240).collect();
-        Some(format!("{}…", prefix.trim_end()))
-    }
-}
+pub use super::closing::last_paragraph;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct LiveLog {

@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  RequestDecision,
   Session,
   SourcePreferences,
   SessionsQuery,
@@ -31,6 +32,9 @@ export interface PanelServices {
   /** Resolves true once the session is in front, else the reason it could
    * not be reached, which the line says until it may be tried again (#220). */
   openSession?(session: Session): Promise<Opened>;
+  /** Answers a request, as its card's buttons do: the backlog's 「不做了」
+   * (#563). */
+  decide?(id: string, decision: RequestDecision): void | Promise<void>;
   /** Opens the Feishu chat of a Hermes ask; resolves as openSession does. */
   openFeishuChat?(chatId: string): Promise<Opened>;
   /** Settings, on the page with this id, such as "agent-plugins". */

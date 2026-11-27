@@ -15,6 +15,7 @@ import { cardFolds, FoldButton } from "../permissions/FoldButton";
 import { cardInks } from "../permissions/ListCard";
 import type { GroupedRelay } from "../relay-groups";
 import type { LiveSession } from "./agent-board";
+import { BacklogFold } from "./BacklogFold";
 import { RelayRows } from "./RelayRows";
 import { useBoardInks } from "./AgentBoard";
 import { PlaceRows, SessionsHeading } from "./PlaceRows";
@@ -55,7 +56,7 @@ export function WorkSections({
   };
 }) {
   const zh = useFormat().language === "zh";
-  const { waiting, running } = splitWork(entries);
+  const { waiting, backlog, running } = splitWork(entries, now);
   const relaysWaiting = relays?.waiting ?? [];
   const relaysRunning = relays?.running ?? [];
   const waitingCount =
@@ -151,6 +152,14 @@ export function WorkSections({
           {zh ? "暂无等待处理的事" : "Nothing waiting on you"}
         </Empty>
       )}
+      <BacklogFold
+        snapshot={snapshot}
+        entries={backlog}
+        light={light}
+        now={now}
+        place={place}
+        onStats={onStats}
+      />
       {(card || runningCount > 0) && (
         <div style={{ paddingTop: card || waitingCount > 0 ? 8 : 0 }}>
           <SessionsHeading light={light} count={runningCount}>

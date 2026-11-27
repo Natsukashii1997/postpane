@@ -723,6 +723,119 @@ const claudeHandoff: Scene = {
   }),
 };
 
+/** A reply waiting on you, as the ASK card is laid out (#562): REPLY, what
+ * it did small, its next step large, the replies it names as choices. */
+const claudeReplyCard: Scene = {
+  key: "claude-reply-card",
+  title:
+    "Claude 回复等你决定：REPLY 签、小字内容、白字下一步、选项、跳过 / 提交",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-reply",
+        title: "驿窗交接卡｜只挂一个标识",
+        state: "waiting",
+        lastAgo: 2,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      (() => {
+        const card = approval(
+          "claude",
+          "c-reply",
+          "question",
+          2,
+          "#558 做完后回「做完了，装机合并」；还没做完回『先等等』。",
+        );
+        return {
+          ...card,
+          badge: "REPLY",
+          detail:
+            "去掉三种虚线签，PR #561 已推送。\n〔等你决定〕代码和测试都好了，差装机实测。",
+          questions: card.questions?.map((q) => ({
+            ...q,
+            header: null,
+            options: [
+              { label: "做完了，装机合并", description: null },
+              { label: "先等等", description: null },
+            ],
+          })),
+        };
+      })(),
+    ],
+  }),
+};
+
+/** 积压事项 (#563): two asks from today, two waited on past 48 hours, sunk
+ * to one folded line at the foot of 「等待处理」. */
+const claudeBacklog: Scene = {
+  key: "claude-backlog",
+  title:
+    "Claude 两条新的等你、两条超过 48 小时：沉到「积压事项」一行，展开有继续 / 不做了",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-new1",
+        title: "大学业务｜2027 增长 T 型拆解",
+        state: "waiting",
+        lastAgo: 21 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-new2",
+        title: "侧边栏｜双端需求上新通知",
+        state: "waiting",
+        lastAgo: 28 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-old1",
+        title: "月度用户策略｜Skill 批1上线进度",
+        state: "waiting",
+        lastAgo: 431 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-old2",
+        title: "Mac 合盖｜防休眠核查",
+        state: "waiting",
+        lastAgo: 398 * 60,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      approval(
+        "claude",
+        "c-new1",
+        "question",
+        21 * 60,
+        "【交接】大学增长战略｜荧光笔完整版自查与发布",
+      ),
+      approval(
+        "claude",
+        "c-new2",
+        "question",
+        28 * 60,
+        "「模块整合」下掉了哪些模块？",
+      ),
+      approval("claude", "c-old1", "question", 431 * 60, "合并 PR #44 吗？"),
+      approval(
+        "claude",
+        "c-old2",
+        "question",
+        398 * 60,
+        "设置好 Amphetamine 后，要我现在开始测试吗？",
+      ),
+    ],
+  }),
+};
+
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
@@ -737,6 +850,8 @@ export const SCENES: readonly Scene[] = [
   claudeBusy,
   claudeManyAsks,
   claudeHandoff,
+  claudeReplyCard,
+  claudeBacklog,
   hermesDesks,
   hermesTrouble,
   relayStopped,
