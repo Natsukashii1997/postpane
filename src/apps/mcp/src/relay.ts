@@ -1,5 +1,5 @@
 // The relay_to_chatgpt tool's words and fields (#347, the review gate of
-// multi-agent MA-02 v0.3), moved out of index.ts for the 300-line ratchet.
+// agent-kit 协同/审查契约.md), moved out of index.ts for the 300-line ratchet.
 import * as z from "zod/v4";
 
 export const relayDescription = [

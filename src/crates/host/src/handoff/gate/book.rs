@@ -1,4 +1,4 @@
-//! The review gate (#347, multi-agent MA-02 v0.3): ChatGPT says whether a
+//! The review gate (#347, agent-kit 协同/审查契约.md): ChatGPT says whether a
 //! review is done; PostPane keeps the hard rules only — a cap on the
 //! reviews one leave of the person's gives (`reviewLimit`, 5 by default),
 //! the review chain that counts across handoffs and pull requests, the
@@ -164,7 +164,7 @@ impl Handoff {
             Ok(None) => return Next::BadTail(Flaw::NoExit),
             Err(flaw) => return Next::BadTail(flaw),
         };
-        // The commit it says it reviewed (MA-02 §4): a pass holds for that
+        // The commit it says it reviewed (review contract §4): a pass holds for that
         // one only.
         if let Some(head) = &self.gate.head {
             match reviewed_commit(reply) {
