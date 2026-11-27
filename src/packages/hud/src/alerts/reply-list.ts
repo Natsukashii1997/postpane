@@ -51,24 +51,6 @@ export function openReplyId(
     : newestReply(entries)?.id;
 }
 
-/** What going back to a reply's session puts away: every reply waiting from
- * that session (#220). */
-export function sessionReplies(
-  entries: readonly ApprovalEntry[],
-  entry: ApprovalEntry,
-): string[] {
-  if (entry.kind !== "reply" || !entry.event.sessionId) return [entry.id];
-  const { source, sessionId } = entry.event;
-  return entries
-    .filter(
-      (each) =>
-        each.kind === "reply" &&
-        each.event.source === source &&
-        each.event.sessionId === sessionId,
-    )
-    .map((each) => each.id);
-}
-
 /** The card's list: newest first in one list, the newest open (owner,
  * 2026-11-14: no sections). */
 export function replyGroups(entries: readonly ApprovalEntry[], limit?: number) {
