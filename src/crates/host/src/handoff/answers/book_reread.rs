@@ -71,7 +71,10 @@ impl Book {
         if read.epoch != h.phase_at || read.stopped {
             return false;
         }
-        if matches!(outcome, Some("told" | "streaming")) {
+        // An answer told and taken moved the phase on (checked above); one
+        // told but not taken is an older round's and brings nothing (#539
+        // round 4, 2026-11-26: read for twelve hours past the limit).
+        if outcome == Some("streaming") {
             if read.attempts == 0 {
                 return false;
             }
