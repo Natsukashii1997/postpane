@@ -37,9 +37,13 @@ pub(super) fn ended<'a>(sessions: &'a [Value], outcomes: &[&str]) -> Vec<Ended<'
 
 /// Whether a Claude turn that ended stands on the sidebar as a card already:
 /// a next-step box of its own, or a reply whose closing waits on the owner
-/// (#562). Its card is the news; a reply beside it would tell it twice.
+/// (#562). Its card is the news; a reply beside it would tell it twice. A
+/// closing whose next step is done in another session stands as a card only
+/// when one is up for it: folded into that session's card, it is told as a
+/// reply (2026-11-28).
 fn stands_as_card(session: &Value) -> bool {
     use agent_hud_agents::transcript::closing::{asks_owner, closing};
+    use agent_hud_agents::transcript::elsewhere::elsewhere;
     let facts = &session["liveFacts"];
     session["source"] == agent_hud_agents::claude::AGENT.id
         && (facts["requests"]
@@ -48,7 +52,9 @@ fn stands_as_card(session: &Value) -> bool {
             || facts["message"]
                 .as_str()
                 .and_then(closing)
-                .is_some_and(|c| asks_owner(&c.status) && !c.next.is_empty()))
+                .is_some_and(|c| {
+                    asks_owner(&c.status) && !c.next.is_empty() && elsewhere(&c.next).is_none()
+                }))
 }
 
 impl Tracker {
@@ -102,5 +108,31 @@ mod tests {
             .map(|e| e["sessionId"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(told, ["done", "codex"]);
+    }
+
+    #[test]
+    fn a_step_done_in_another_session_is_told_as_a_reply_unless_it_points_there() {
+        let mut tracker = Tracker::new();
+        let at = tracker.started + 1_000;
+        let elsewhere = "**本次完成**：核对了。\n**当前状态**：〔等你决定〕规则会话在等你。\n**下一步**：到[规则更新](#local_a1)回话。";
+        let sessions = [
+            // Folded into that session's card: no card here, so told as a reply.
+            ended("claude", "folded", elsewhere, json!([]), at),
+            // Pointing there with a card of its own: the card is the news.
+            ended(
+                "claude",
+                "points",
+                elsewhere,
+                json!([{"kind": "question"}]),
+                at,
+            ),
+        ];
+        tracker.completions(&sessions, at + 1_000);
+        let told = tracker
+            .events
+            .iter()
+            .map(|e| e["sessionId"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(told, ["folded"]);
     }
 }

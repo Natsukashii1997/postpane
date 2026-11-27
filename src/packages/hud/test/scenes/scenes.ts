@@ -1,6 +1,6 @@
 // The workplace scenes (#349, ADR-0001 「验收场景」): each the state one
 // acceptance case needs, shared by the contract tests and the scene preview.
-import type { HermesCronJob, Snapshot } from "@agent-hud/protocol";
+import type { HermesCronJob, Session, Snapshot } from "@agent-hud/protocol";
 import {
   approval,
   at,
@@ -768,6 +768,121 @@ const claudeReplyCard: Scene = {
   }),
 };
 
+/** A next step done in another session (owner, 2026-11-28, 「丙」): that
+ * session has no card, so this one points there, 跳过 / 前往, no answer. */
+const claudeReplyElsewhere: Scene = {
+  key: "claude-reply-elsewhere",
+  title:
+    "Claude 回复的下一步在别的会话、那边没有卡：指路卡（去处 + 跳过 / 前往），没有选项和输入行",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-multi",
+        title: "多模型协同｜三家分岗工作链",
+        state: "waiting",
+        lastAgo: 1,
+        asks: "question",
+      }),
+      {
+        ...session({
+          place: "claude",
+          id: "c-rules",
+          title: "规则更新｜卡兹克 CLAUDE.md 采纳项复评与落地",
+          state: "idle",
+          lastAgo: 3,
+        }),
+        navigationTarget: { kind: "claude-desktop", id: "local_rules" },
+      } as Session,
+    ],
+    approvals: [
+      (() => {
+        const card = approval(
+          "claude",
+          "c-multi",
+          "question",
+          1,
+          '到「规则更新｜卡兹克 CLAUDE.md 采纳项复评与落地」回话。推荐回"只合并"，先不装机：新开一两个会话看看新规则读起来对不对，再回"装"。想一步到位就回"合并并装"。',
+        );
+        return {
+          ...card,
+          badge: "REPLY",
+          detail:
+            '核对了 PR #153 的现状（开着、检查通过、可合并、b4e662d、4 个文件 +115/−59），并读了规则会话的完整结论。\n〔等你决定〕规则会话在等你回"合并并装"或"只合并"。',
+          questions: card.questions?.map((q) => ({
+            ...q,
+            header: null,
+            options: [],
+          })),
+          elsewhere: {
+            sessionId: "c-rules",
+            title: "规则更新｜卡兹克 CLAUDE.md 采纳项复评与落地",
+          },
+        };
+      })(),
+    ],
+  }),
+};
+
+/** The same step when that session has a card: the words go onto it as a
+ * 「转来」 line, and the finished session has no card (2026-11-28). */
+const claudeReplyForwarded: Scene = {
+  key: "claude-reply-forwarded",
+  title:
+    "Claude 回复的下一步在别的会话、那边有卡：那张卡多一行「转来」，选项提交进那个会话",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-multi",
+        title: "多模型协同｜三家分岗工作链",
+        state: "idle",
+        lastAgo: 1,
+      }),
+      session({
+        place: "claude",
+        id: "c-rules",
+        title: "规则更新｜卡兹克 CLAUDE.md 采纳项复评与落地",
+        state: "waiting",
+        lastAgo: 3,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      (() => {
+        const card = approval(
+          "claude",
+          "c-rules",
+          "question",
+          3,
+          "回『合并并装』或『只合并』。",
+        );
+        return {
+          ...card,
+          badge: "REPLY",
+          detail:
+            "规则 PR #153 审查通过，检查全绿，可以合并。\n〔等你决定〕装机后所有会话都按新规则执行。",
+          questions: card.questions?.map((q) => ({
+            ...q,
+            header: null,
+            options: [
+              { label: "合并并装", description: null },
+              { label: "只合并", description: null },
+            ],
+          })),
+          forwardedFrom: [
+            {
+              sessionId: "c-multi",
+              title: "多模型协同",
+              note: '推荐回"只合并"，先不装机：新开一两个会话看看新规则读起来对不对，再回"装"。想一步到位就回"合并并装"。',
+            },
+          ],
+        };
+      })(),
+    ],
+  }),
+};
+
 /** 积压事项 (#563): two asks from today, two waited on past 48 hours, sunk
  * to one folded line at the foot of 「等待处理」. */
 const claudeBacklog: Scene = {
@@ -913,6 +1028,8 @@ export const SCENES: readonly Scene[] = [
   claudeManyAsks,
   claudeHandoff,
   claudeReplyCard,
+  claudeReplyElsewhere,
+  claudeReplyForwarded,
   claudeBacklog,
   claudeReplyFirst,
   hermesDesks,

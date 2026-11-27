@@ -171,6 +171,9 @@ pub(crate) struct ClaudeDesktop {
     /// The keys of questions whose session the host has reached since they
     /// were asked: their cards stay answerable while they stand.
     pub(crate) reached: HashSet<String>,
+    /// The keys of next steps folded into another session's card: they stay
+    /// away once that card is answered, while they stand (2026-11-28).
+    pub(crate) forwarded: HashSet<String>,
 }
 
 impl ClaudeDesktop {
