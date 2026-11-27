@@ -1126,9 +1126,9 @@ impl Book {
         handoff.updated_at = now;
         true
     }
-    /// Auto round trips waiting too long stop: ChatGPT not answering within
-    /// `REPLY_WAIT_MS` (`no_answer`), words queued for a session not taken
-    /// within `QUEUE_WAIT_MS` (`no_wake`). Not one back with Claude (owner,
+    /// Auto round trips waiting too long stop: ChatGPT not answering, by
+    /// what it was last seen doing (`Handoff::waited_out`), words queued for
+    /// a session not taken within `QUEUE_WAIT_MS` (`no_wake`). Not one back with Claude (owner,
     /// 2026-11-22, #507): two hours stopped it, all 7 times with the session
     /// still mending; one never handed over again ends in a day (`idle`).
     pub fn overdue(&mut self, now: i64, no_answer: &str, no_wake: &str) -> bool {
@@ -1136,21 +1136,18 @@ impl Book {
             .list
             .iter()
             .filter(|h| h.auto && h.status == Status::Open)
-            .filter_map(|h| {
-                let waited = now - h.phase_at;
-                match h.phase {
-                    Phase::Delivered | Phase::Working if waited > REPLY_WAIT_MS => {
-                        Some((h.id.clone(), no_answer.to_owned()))
-                    }
-                    Phase::Returned if h.queued_at.is_some_and(|at| now - at > QUEUE_WAIT_MS) => {
-                        Some((h.id.clone(), no_wake.to_owned()))
-                    }
-                    _ => None,
+            .filter_map(|h| match h.phase {
+                Phase::Delivered | Phase::Working => {
+                    h.waited_out(now, no_answer).map(|why| (h.id.clone(), why))
                 }
+                Phase::Returned if h.queued_at.is_some_and(|at| now - at > QUEUE_WAIT_MS) => {
+                    Some((h.id.clone(), no_wake.to_owned()))
+                }
+                _ => None,
             })
             .collect::<Vec<_>>();
         for (id, reason) in &late {
-            if self.stop(id, reason, true, now) && reason == no_answer {
+            if self.stop(id, reason, true, now) && reason != no_wake {
                 self.caused_last(id, Cause::NoAnswer);
             }
         }
