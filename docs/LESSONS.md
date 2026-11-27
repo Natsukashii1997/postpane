@@ -604,3 +604,11 @@
 - 正确做法：查「修了还在犯」先确认修复在不在已装的包里：在 `/Applications/PostPane.app/Contents/MacOS/PostPane` 里搜那次修复新加的提示文字（中文串直接按 UTF-8 字节搜），比打包时间更可靠。一批合并的最后一个会话负责从 main（或已含最新 main 的分支）装机回读，交接里写装的提交号。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-relay-fixes-install/`（装前备份 `PostPane-1bce2b00156a.app`，装后二进制检索结果写在 #544 问题清单第 1 条）。
 - 升级：〔提醒〕未升级。#544-6 每日自检会比对已装版本落后 main 几个接力修复，做完改〔机检〕。
+
+## L-75 驿窗从图形界面启动、环境里没有代理变量，它启动的 claude 直连 Anthropic 被拒（403），登录续不上，Claude 额度和卡上暗印跟着消失（2026-11-28）
+
+- 现象：11-27 一天里本机 Claude Code 命令行登录掉了 6 次（`postpane.log` 00:25、11:18、14:42、20:41、23:48，11-28 00:29 都是接力回信唤醒报 `OAuth session expired and could not be refreshed`）。每次掉线，驿窗的 Claude 额度变成「过期」，卡上的周额度暗印（#319）和票根数字按设计不再显示；有待处理时卡上不放额度区块，「已退出登录」的提示也看不到，看上去像暗印被改坏了。常浩在终端重登，浏览器显示授权成功，终端却报 `OAuth error: Request failed with status code 403`。
+- 根因：本机直连 api.anthropic.com、platform.claude.com 一律 403（IPv4、IPv6 都是，`curl --noproxy '*'`），经本机代理 127.0.0.1:8086 才通。`claude` 只认环境变量里的代理、不认 Mac 系统代理；驿窗自己的 HTTP 走系统代理（连接都落在 8086），可它从程序坞或登录项启动时环境里没有代理变量，启动的 claude（读额度引擎、接力回信唤醒、开新会话）全部直连。登录凭据隔几小时要续期，由正在跑的 claude 去续，碰上不带代理的那个就失败。和全局坑里 11-14 数字分身那条（交互终端缺代理）是同一类，第二次出现。
+- 正确做法：驿窗启动时环境里没有任何代理变量、系统代理开着，就把系统代理写进自己的环境（`HTTPS_PROXY`/`HTTP_PROXY` 大小写两套，`NO_PROXY` 留本机地址），之后启动的子程序都继承（`platform/src/child_proxy.rs`，#567）；启动日志写一行 `Programs started from here go through the system proxy …`。判断「登好了」以 `claude auth status` 为 `loggedIn: true` 为准，不以浏览器页面为准；在桌面应用的 Bash 里验证要用 `env -i HOME=$HOME USER=$USER PATH=…` 去掉桌面应用的变量。终端一侧由 `~/.zshrc` 的 `claude` 包装函数自动带系统代理（不进仓库）。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-567-child-proxy/`（`red.txt` `green.txt` `check.txt` `test.txt`，隔离启动日志在 `sandbox-home/`，`zshrc.before` 为改前备份）。
+- 升级：〔结构〕已升级（2026-11-28，#567）：驿窗启动时统一补系统代理，所有子程序继承，不再逐处带。可提议提升为全局坑：并进全局坑 11-14 那条，补「图形界面应用启动的命令行工具」这一面。

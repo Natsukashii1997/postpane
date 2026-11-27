@@ -224,3 +224,22 @@ test("clicking a reply's row opens it in place of the newest (#220)", async () =
   // A chosen reply that was put away hands back to the newest.
   assert.equal(openReplyId(entries, "gone"), "new");
 });
+
+test("going back to a session puts away all its replies, and only its (#220)", async () => {
+  const { sessionReplies } = await import("../src/alerts/reply-list.ts");
+  const entries = replyEntries(
+    [
+      reply("a1", "2026-11-05T10:00:00Z", { sessionId: "a" }),
+      reply("b1", "2026-11-05T10:30:00Z", { sessionId: "b" }),
+      reply("a2", "2026-11-05T11:00:00Z", { sessionId: "a" }),
+      reply("x1", "2026-11-05T11:10:00Z", { sessionId: "a", source: "codex" }),
+      reply("n1", "2026-11-05T11:20:00Z", { sessionId: undefined }),
+      reply("n2", "2026-11-05T11:30:00Z", { sessionId: undefined }),
+    ],
+    [],
+  );
+  const pick = (id: string) => entries.find((entry) => entry.id === id)!;
+  assert.deepEqual(sessionReplies(entries, pick("a2")).sort(), ["a1", "a2"]);
+  // A reply that names no session goes alone.
+  assert.deepEqual(sessionReplies(entries, pick("n2")), ["n2"]);
+});
