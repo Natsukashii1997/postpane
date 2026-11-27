@@ -868,7 +868,9 @@ const unowned = new Map();
 
 /** The conversations Changhao went on with himself after their relays
  * ended: their tabs are his now, and not closed (round 3, P2-11, owner
- * 2026-11-27). Local storage, the newest `STRAYS_MOST`. */
+ * 2026-11-27). By conversation, each prompt of his not let go by when it
+ * began (`{[promptId]: at}`, the newest `ASK_IDS`): one told late does not
+ * stand in for another (round 7). Local storage, the newest `STRAYS_MOST`. */
 let taken = {};
 const takenRead = chrome.storage.local
   .get("taken")
@@ -967,19 +969,24 @@ async function ownPrompt(conversation, promptId, since) {
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete asks[old];
   chrome.storage.local.set({ asks }).catch(() => {});
-  if (conversation in taken && (taken[conversation].at ?? 0) < since) {
-    const his = taken[conversation].id;
-    delete taken[conversation];
-    chrome.storage.local.set({ taken }).catch(() => {});
-    if (!his) return;
-    const gone = (freed[conversation] ?? []).filter((id) => id !== his);
-    delete freed[conversation];
-    freed[conversation] = [...gone, his].slice(-ASK_IDS);
-    const all = Object.keys(freed);
-    for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
-      delete freed[old];
-    chrome.storage.local.set({ freed }).catch(() => {});
-  }
+  // His prompts begun before these words: let go; any begun after stand.
+  const his = Object.entries(taken[conversation] ?? {});
+  const before = his.filter(([, at]) => at < since).map(([id]) => id);
+  if (!before.length) return;
+  const after = his.filter(([, at]) => !(at < since));
+  if (after.length) taken[conversation] = Object.fromEntries(after);
+  else delete taken[conversation];
+  chrome.storage.local.set({ taken }).catch(() => {});
+  const gone = (freed[conversation] ?? []).filter((id) => !before.includes(id));
+  delete freed[conversation];
+  freed[conversation] = [...gone, ...before].slice(-ASK_IDS);
+  const freedAll = Object.keys(freed);
+  for (const old of freedAll.slice(
+    0,
+    Math.max(0, freedAll.length - STRAYS_MOST),
+  ))
+    delete freed[old];
+  chrome.storage.local.set({ freed }).catch(() => {});
 }
 
 /** Whether `conversation` is one a relay has, or had. */
@@ -1013,15 +1020,20 @@ async function goneOn(message) {
   }
   // One whose hold was let go is not his again by being told again.
   if (freed[conversation]?.includes(promptId)) return;
-  // When it began, as its page told it; else as heard (later: kept longer).
+  // When it began, as its page told it (a start's `at`, an end's
+  // `begunAt`); else as heard, later than it was: let go later, not sooner.
+  const told = phase === "start" ? message.at : message.begunAt;
+  const mine = taken[conversation] ?? {};
   const at = Math.min(
-    phase === "start" && Number.isFinite(message.at) ? message.at : Date.now(),
-    taken[conversation]?.id === promptId ? taken[conversation].at : Infinity,
+    Number.isFinite(told) ? told : Date.now(),
+    mine[promptId] ?? Infinity,
   );
-  if (taken[conversation]?.id === promptId && taken[conversation].at === at)
-    return;
+  if (mine[promptId] === at) return;
+  const prompts = Object.entries({ ...mine, [promptId]: at })
+    .sort(([, a], [, b]) => a - b)
+    .slice(-ASK_IDS);
   delete taken[conversation];
-  taken[conversation] = { id: promptId, at };
+  taken[conversation] = Object.fromEntries(prompts);
   const all = Object.keys(taken);
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete taken[old];

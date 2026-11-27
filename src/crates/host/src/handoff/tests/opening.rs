@@ -549,3 +549,35 @@ fn an_openings_words_go_named_by_their_request_and_its_answer_still_counts() {
     assert!(desk.observe(&turn("complete", GATE_PASS), 4));
     assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
 }
+
+/// #542 review round 7, P1-07: the line left out is the opening's own
+/// request, no other: a prompt naming another request is not its answer,
+/// its words the same, or sharing the start a long brief keeps. No prompt
+/// id was seen as it opened (`asked_as` is none), so words decide.
+#[test]
+fn an_openings_answer_is_not_a_prompt_naming_another_request() {
+    let long = format!("{}\n末尾这段不在摘录里", "长".repeat(700));
+    for (brief, other) in [
+        ("改动如下".to_owned(), "改动如下".to_owned()),
+        (long.clone(), format!("{}\n别的结尾", "长".repeat(700))),
+    ] {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        assert!(lines.asked_as.borrow().is_none());
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, &brief, false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(&lines, &handoff.id, &brief, None, || 2).unwrap();
+        shown(&format!("【驿窗送审 h-other~0】\n{other}"));
+        assert!(!desk.observe(&turn("complete", GATE_PASS), 3), "{other:.8}");
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().phase,
+            Phase::Delivered
+        );
+        shown(&format!("【驿窗送审 {}~0】\n{brief}", handoff.id));
+        assert!(desk.observe(&turn("complete", GATE_PASS), 4));
+    }
+}

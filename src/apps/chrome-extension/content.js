@@ -109,6 +109,9 @@
       promptId: page.lastPromptId(document),
       reply: reply.markdown,
       messageId: reply.messageId ?? null,
+      // When the turn it ends began, as told here (#542 round 7): its
+      // prompt's, not when this is heard.
+      ...(begunAt && begun === page.lastPromptId(document) && { begunAt }),
       at: Date.now(),
       ...extra,
     });
@@ -147,6 +150,7 @@
           // (#542 review round 5): the extension's or Changhao's.
           newest,
           prompt: page.lastPrompt(document),
+          ...(begunAt && { begunAt }),
           at: Date.now(),
         });
       }, STOP_AGAIN);

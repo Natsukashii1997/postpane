@@ -730,7 +730,7 @@ test("a stop told late of a prompt PostPane's words let go keeps it let go", asy
     slot.type = "button";
     slot.setAttribute("aria-label", "停止");
   });
-  await until(async () => (await kept("taken"))?.id === "pHis", "his");
+  await until(async () => "pHis" in ((await kept("taken")) ?? {}), "his");
   // PostPane's words go in by the other page.
   const sent = await worker.evaluate(
     (id) => send(id, "【驿窗送审 h9d1~send1】\n下一轮"),

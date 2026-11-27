@@ -4017,7 +4017,7 @@ test("a new conversation's beginning, told again as it has its address, is PostP
     { tab: { id: 98 } },
   );
   await settleLong();
-  assert.equal(stored.taken?.[LIVE]?.id, P(92), "his, words alike");
+  assert.ok(P(92) in (stored.taken?.[LIVE] ?? {}), "his, words alike");
   // Begun on the new chat's page, told again once it has its address.
   turn(listeners, "start", P(91), { tab: 99, prompt: OPENING });
   await settleLong();
@@ -4055,7 +4055,7 @@ test("words with no request named prove no prompt the extension's", async () => 
     { tab: { id: 98 } },
   );
   await settleLong();
-  assert.equal(stored.taken?.[LIVE]?.id, P(93));
+  assert.ok(P(93) in (stored.taken?.[LIVE] ?? {}));
 });
 
 // Round 4 and 5, P1-06: Changhao moved the tab an opening made on to a
@@ -4193,7 +4193,7 @@ test("a prompt of Changhao's let go by PostPane's words after it does not take t
   // A new one of his takes it.
   turn(sent.listeners, "start", P(78), { prompt: MINE, tab: 3 });
   await settleLong();
-  assert.equal(sent.stored.taken?.[ENDED]?.id, P(78));
+  assert.deepEqual(Object.keys(sent.stored.taken?.[ENDED] ?? {}), [P(78)]);
 });
 
 // Round 6, P1-05: words alike are the extension's only in a relay's
@@ -4265,4 +4265,47 @@ test("words alike prove a prompt the extension's only once, in a relay's convers
   await ended();
   await settleLong();
   assert.deepEqual(removed, [], "a week old");
+});
+
+// Round 7, P2-11: his prompts are kept each by when it began; one told late
+// stands in for no other. P1 began before PostPane's words Q, P2 after;
+// P1's start is heard only after P2's, and Q's prompt known only after
+// both: Q lets P1 go, and P2 still holds the conversation.
+test("a prompt of Changhao's told late stands in for no later one of his", async () => {
+  const sent = await sentOnce(
+    { ok: true },
+    async (listeners, clock) => {
+      turn(listeners, "start", P(102), { prompt: MINE, tab: 3, at: clock.now });
+      await settleLong();
+    },
+    { tab3: true },
+  );
+  const q = sent.stored.heads.at(-1).at;
+  turn(sent.listeners, "start", P(101), { prompt: MINE, tab: 3, at: q - 5 });
+  await settleLong();
+  turn(sent.listeners, "start", P(103), { prompt: SENT });
+  await settleLong();
+  assert.deepEqual(Object.keys(sent.stored.taken?.[ENDED] ?? {}), [P(102)]);
+  assert.deepEqual(sent.stored.freed?.[ENDED], [P(101)]);
+  await sent.end();
+  await sent.done(P(103), SENT);
+  assert.deepEqual(sent.removed, []);
+});
+
+// An end whose beginning was not heard tells when its turn began
+// (`begunAt`): kept from then, not from when it is heard.
+test("an end of a prompt of his counts from when its turn began, as told", async () => {
+  // Heard while the words go, begun well before them.
+  const sent = await sentOnce(
+    { ok: true, promptId: P(104) },
+    async (listeners, clock) => {
+      turn(listeners, "complete", P(105), {
+        prompt: MINE,
+        begunAt: clock.now - 50,
+      });
+      await settleLong();
+    },
+  );
+  assert.equal(sent.stored.taken?.[ENDED], undefined);
+  assert.deepEqual(sent.stored.freed?.[ENDED], [P(105)]);
 });

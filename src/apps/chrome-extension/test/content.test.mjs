@@ -74,7 +74,10 @@ test("a reply streamed without pause is reported once when it ends", async () =>
   assert.equal(done[0].messageId, "m3");
   assert.equal(done[0].reply, "字".repeat(40) + "。结论：通过");
   assert.equal(done[0].prompt, "请审核这次改动");
-  assert.ok((await turns(page)).some((m) => m.phase === "start"));
+  const start = (await turns(page)).find((m) => m.phase === "start");
+  assert.ok(start);
+  // #542 round 7: the end tells when its turn began, as the start did.
+  assert.equal(done[0].begunAt, start.at);
 });
 
 test("after its own send, a reply counts even if no stop button was seen", async () => {

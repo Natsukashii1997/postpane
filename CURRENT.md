@@ -63,6 +63,10 @@
   - P1-06 已修：`opened` 没编号时同样要求送出的话带请求号行，常浩会话里只有一条正文完全相同的提问也报 `unconfirmed`；`own` 的二次证明走同一条规则。
   - P2-11 已修：被清掉的那条提问记进 `freed`，它迟到的回合（别的标签页的写完、停止）不再把会话认回去；`taken` 记页面报的开始时间。
   - 测试：Rust 新 1 条（新开会话发出的话带请求号、带请求号的提问照样认回信、别的话不认），在改前的驿窗上 `FAILED. 0 passed; 1 failed`；插件后台新 3 条、页面改 1 条、真实 Chromium 新 2 条（两个页面实例的迟到停止；不带请求号的话打开、他的会话里一条完全相同的提问），在 `793c725` / `4e7a6e2` 上都红（`round7/red*.log`，真实 Chromium 旧代码把他的会话当成打开成功、编号是他那条）。真实 Chromium 跑整套时一次挂在已有的「前台标签页重载后读取」（`try 12`），再跑两遍 19 条都过，偶发，与本改动无关。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1182 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 231`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round7/`。
+- 第 7 轮 ChatGPT 审查（受审 `2fc20e6`，返修，P1 1、P2 1；P1-05、P1-06 已验证关闭）。之后又把 main（#548）合进分支（`ba92f15`）。本轮（2026-11-27）处理：
+  - P1-07 已修：驿窗认新开会话那一轮的回信时，只在页面提问第一行正好是这条接力自己的请求号（`handoff.request()`）时去掉它再比（`answers/desk_belongs.rs` 的 `held_to`，前缀用已有的 `tagged(request, "")` 拼）；别的请求号开头的，正文完全一样、或长文前 600 字一样，都不认。Rust 新测试 1 条（两种反例，`asked_as` 为空走文字比对），在 `2fc20e6` 上 `FAILED`。
+  - P2-11 已修：`taken` 改成按提问各记一条（编号 → 开始时间，每个会话最近 20 条），一条迟到的不再顶掉另一条；插件的提问被证明时只放掉比它早开始的那几条。`content.js` 的 `complete`、`stopped` 带上页面记下的这一轮开始时间（`begunAt`）。审查要求的「插件再送 R 之后仍保留 P2」与常浩 11-27 定的 P2-11（插件的提问被证明、常浩那条更早就重新归接力）冲突，没照做；照做的是其中真正的漏洞：Q 在 P1、P2 之间送出，P1 的开始迟到、Q 的证明更晚才到时，P2 被一起丢掉。插件后台新 2 条、页面 1 条断言，在 `2fc20e6` 上都红（`round8/`）。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`（第一次因 `book_unsure.rs` 加函数后 303 行超棘轮，改成在 `held_to` 里用已有的 `tagged` 拼前缀，那个文件不动）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1186 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 237`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round8/`。
 - 本轮新坑：L-75。
 - skill 进化：无。
 
