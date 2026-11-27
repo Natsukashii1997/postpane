@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 驿窗启动的子程序继承 Mac 系统代理，claude 登录续期不再因直连 403 失败（#567）（2026-11-28，Claude，常浩回「做甲乙两条」；已提交，未装机：真实机器上正装着别的会话 #566 的测试包）
+
+- 时间：开工 `2026-11-28 00:46`（`date '+%F %H:%M'` 记录）。来由：常浩截图说展开卡上的周额度暗印（#319）又看不到了，要求恢复并「确保这个问题以后不会再发生」。查实暗印代码没坏：本机 Claude Code 命令行登录过期，Claude 额度变成「过期」，暗印按设计不画；登录反复掉的根子是驿窗启动的 claude 不带代理、直连 Anthropic 被拒（L-75）。常浩带代理重登后，00:38 驿窗读回额度（本周 95%，吃紧）。
+- 行为变化（动手前已在会话里列出）：驿窗启动时，环境里一个代理变量都没有而 Mac 系统代理开着，就把系统代理写进自己的环境（`HTTPS_PROXY`/`HTTP_PROXY` 大小写两套，`NO_PROXY`/`no_proxy` 为 `localhost,127.0.0.1,::1`），之后启动的所有子程序（claude、codex、git 等）都继承；已有代理变量或系统代理没开时照旧。
+- 你要求的：`platform/src/child_proxy.rs`（新：判断要补哪些变量、启动时写进环境，5 条测试）；`platform/src/os/macos/proxy.rs`（新：读 `scutil --proxy`，HTTPS 优先、其次 HTTP，IPv6 加方括号，4 条测试）；`os/linux`、`os/windows` 各加 `system_proxy` 返回 None（这两个系统先不读）；`os/unix/mod.rs` 加 `script_output`（复用现有带时限的脚本执行）；`host/src/lib.rs` 启动入口在建任何线程前调用，日志记一行；`runtime/src/lib.rs` 转出；`docs/LESSONS.md` 新增 L-75。终端一侧 `~/.zshrc` 加 `claude` 包装函数（不进仓库，改前备份在证据目录 `zshrc.before`）。
+- 我顺手改的：`os/macos/mod.rs` 的 `legacy_preferences` 只转一手的包装函数改成 `pub(crate) use legacy_preferences::read as legacy_preferences;`（行为不变，腾出行数过 300 行棘轮）。
+- 同类：搜了驿窗启动子程序的地方（`accounts/engine.rs`、`mcp_clients.rs` 的 `run_client_in`、`delivery/process`），都是在继承的环境上追加变量、没有 `env_clear`，启动时补一次全部覆盖，不逐处改。
+- 测试：新测试先在打桩实现上跑出红 `test result: FAILED. 3 passed; 6 failed`（`red.txt`），改后 `test result: ok. 9 passed; 0 failed`（`green.txt`）。`pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1189 failed 0，前端 `ℹ pass 534` `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-567-child-proxy/`。
+- 验证：替身通过。按 E-24 用 `env -i HOME=<证据目录/sandbox-home> PATH=/usr/bin:/bin:/usr/sbin:/sbin` 启动打好的包（环境里没有代理变量，和从程序坞启动一样），日志第二行 `Programs started from here go through the system proxy http://127.0.0.1:8086 (#567)`；前后 `installed_plugins.json` 的 shasum 一致；按自己记下的进程号停掉。未在真实环境验证：没装进 /Applications，子程序实际继承、登录续期不再掉线要装机后看 `postpane.log` 和后续几天有没有 `OAuth session expired`。终端包装函数已实测：干净环境下 `zsh -ic 'claude -p …'` 回复 ok（改前同样命令 403）。
+- 截图：无界面改动。
+- 发布与回读：未发布。`install.sh 567-child-proxy` 停在 L-05 检查：00:51 已装的是 `reply-one-per-session`（`tmp/565-with-560`，PR #566）的测试包，那个会话正在实机验，没有 `--takeover`。
+- 与授权不一致之处、遗留问题、范围外发现：范围比会话里最初说的「驿窗启动 claude 时带代理」大，codex、git 等子程序也一并走代理（动手前已列出）。暗印在「读不到额度」时悄悄消失、原因看不到，常浩这次选了先不做提示（方案丙）。
+- 本轮新坑：L-75。可提议提升为全局坑：并进全局坑 11-14「交互终端缺代理」那条，补图形界面应用这一面。
+
 ## 侧栏 REPLY 每个会话只出现一次，新回复顶替旧行（#565）（2026-11-28，Claude，常浩附截图要求「每个会话都是出现一次……并改好」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-28 00:05`（按建 worktree 的时间，约数）。来由：常浩截图里回复卡同一会话出现 2～3 行（「Claude 收尾｜…」「【交接】数字分身…」「Antigravity｜代理登录修复」）；实机快照 `islandEvents` 里同一会话有 4 条回复事件，侧栏队列每条回复各占一行，只有「失败」按会话顶替旧行。

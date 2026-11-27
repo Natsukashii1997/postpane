@@ -11,10 +11,12 @@ mod app_cookies;
 mod apps;
 mod legacy_history;
 mod process;
+mod proxy;
 mod secrets;
 pub(crate) use app_cookies::{app_cookie, unseal_safe_storage};
 pub(crate) use apps::{activate_app, app_running, ACTIVATES_APPS};
 pub(crate) use process::{codex_cli_on_port, parent_processes, process_runs};
+pub(crate) use proxy::system_proxy;
 pub(crate) use secrets::stored_secret;
 /// Darwin exposes another process's environment through KERN_PROCARGS2.
 pub(crate) const READS_PROCESS_ENVIRONMENT: bool = true;
@@ -22,9 +24,7 @@ pub(crate) const READS_PROCESS_ENVIRONMENT: bool = true;
 /// (`claude stop`, then `claude://resume`), verified with Claude Code 2.1.300.
 pub(crate) const MOVES_CLAUDE_JOBS: bool = true;
 mod legacy_preferences;
-pub(crate) fn legacy_preferences() -> Result<Option<serde_json::Value>, String> {
-    legacy_preferences::read()
-}
+pub(crate) use legacy_preferences::read as legacy_preferences;
 pub(crate) const VALIDATION: &str = "macos-live-verified";
 pub(crate) const PORTABLE_VALIDATION: &str = "live-verified";
 /// The operating system whose facts the agents' descriptors give here.
