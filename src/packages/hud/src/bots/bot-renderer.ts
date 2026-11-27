@@ -13,6 +13,7 @@ import { easeInOut } from "./bot-moves";
 import type { BotSign } from "./bot-state";
 import { finPath, finSilhouette } from "./bot-fins";
 import { paintWater, whaleTag } from "./bot-whale-paint";
+import { floatTag, paintFloat } from "./bot-float-paint";
 import { drawAvatar } from "./bot-avatar-paint";
 import { paintSign, signBox } from "./bot-signs";
 import { layHairline } from "./bot-hairline";
@@ -115,6 +116,7 @@ export function botRenderLook(motion: BotMotion) {
     motion.limbs,
     motion.flap,
     motion.water,
+    motion.air && [motion.air, motion.pose],
     motion.sign,
     motion.lit,
     motion.helper,
@@ -822,6 +824,8 @@ function drawBody(
     if (m.dressed > 0) weather(context, form, motion, m.dressed);
   } else if (motion.water && m.dressed > 0)
     paintWater(context, motion.water, m.dressed);
+  else if (motion.air && m.dressed > 0)
+    paintFloat(context, motion.air, motion.pose, m.dressed);
   else if (motion.ring !== null && m.dressed > 0)
     progressRing(context, form, motion.ring, m.dressed);
   context.translate(0, (s.settle ?? 0) * m.eased);
@@ -1093,10 +1097,8 @@ export function drawBot(
   context.save();
   bare(context, form, motion);
   context.restore();
-  if (options.signs !== false && motion.sign && form.spec.cloud)
-    cloudSign(context, motion, motion.sign, signAlpha(motion));
-  else if (options.signs !== false && motion.sign && form.spec.whale)
-    whaleTag(context, motion.sign, motion.water?.tag ?? 1, signAlpha(motion));
+  if (options.signs !== false && motion.sign && ownSign(form))
+    ownTag(context, form, motion);
   else if (options.signs !== false && motion.sign && !form.spec.avatar) {
     const t = context.getTransform(),
       side = Math.hypot(t.a, t.b),
@@ -1113,13 +1115,19 @@ export function drawBot(
       },
       form.light,
       motion.lit,
-      motion.sign === "ellipsis" || motion.sign === "z"
-        ? morph(motion.morph).dressed
-        : 1,
+      signAlpha(motion),
     );
   }
   context.restore();
 }
+/** The cloud's sign, the whale's droplet or Antigravity's planet tag instead of the shared sign. */
+const ownSign = (f: BotForm) => f.spec.cloud || f.spec.whale || f.spec.float;
+const ownTag = (c: CanvasRenderingContext2D, form: BotForm, m: BotMotion) =>
+  form.spec.cloud
+    ? cloudSign(c, m, m.sign!, signAlpha(m))
+    : form.spec.whale
+      ? whaleTag(c, m.sign!, m.water?.tag ?? 1, signAlpha(m))
+      : floatTag(c, m.sign!, m.air?.tag ?? 1, signAlpha(m));
 const signAlpha = (motion: BotMotion) =>
   motion.sign === "ellipsis" || motion.sign === "z"
     ? morph(motion.morph).dressed
@@ -1146,17 +1154,9 @@ export function renderBot(
   context.save();
   bare(context, form, motion, true);
   context.restore();
-  if (motion.sign && form.spec.cloud)
-    cloudSign(context, motion, motion.sign, signAlpha(motion));
-  if (motion.sign && form.spec.whale)
-    whaleTag(context, motion.sign, motion.water?.tag ?? 1, signAlpha(motion));
+  if (motion.sign && ownSign(form)) ownTag(context, form, motion);
   context.resetTransform();
-  if (
-    motion.sign &&
-    !form.spec.avatar &&
-    !form.spec.cloud &&
-    !form.spec.whale
-  ) {
+  if (motion.sign && !form.spec.avatar && !ownSign(form)) {
     const place = signBox(form, side, outline);
     paintSign(
       context,

@@ -2,6 +2,32 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，常浩回「覆盖装机」后已发布 `628de7f4b999` 回读通过；常浩经驿窗回「Accepted, merge」验收，已登记 DECIDED.md）
+
+- 时间：开工 `2026-11-27 16:10`。来由：#554。常浩刚开通 Antigravity，它进了侧栏；要求调顺序、并按 GPT 小花的场景范围做它的动作库。小人动效按记忆只出一版。
+- 侧栏顺序：不在代码里，在侧栏布局 `hud.agents`。已经用 `draft_hud` 放进草稿：`[claude, codex, chatgpt, antigravity, hermes, deepseek]`，离屏截图核对过顺序。**要常浩悬停侧栏、在面板里点「保存」**；装机会重启应用，草稿会丢，装完已重放（见「发布与回读」）。
+- 改变的行为（动手前已在会话里列出）：① Antigravity 在侧栏改成常驻小人（`stays: true`），闲着不再显示图标；② 它的动作从通用动作换成自己的一套；别家小人走的分支不变。
+- 动作（场景 → 动作）：待机 悬浮 + 地影（飘高影子变小变淡）+ 每 8 秒一颗小黄石子往上飘；打招呼 往上飘、朝鼠标那边歪、那侧闪两颗星；开工 下蹲 → 脚底喷火蹿高 → 飘回；思考 头顶三颗彩色卫星绕圈，眼睛和身子跟着前面那颗（不挂省略号）；压缩上下文 一缩一放，卫星螺旋钻进钻出；改文件 3 秒一阵、每半秒往左/右歪一格、头顶蹦火星；跑命令 3 秒一阵脚底喷火、升高、抖；读文件 身边托一页纸、读到的行变蓝、眼睛逐行扫；长命令 土星环轨道、蓝卫星 6 秒一圈、后半圈藏到身子后面；其他干活 小火苗一阵阵；等批准 飞高上下蹦；问问题 飞高左右摇；方案待确认 飞高点头；看审批卡 停在高处看卡；三种找你都带左上角橙色星球牌（带环的小星球）! ? ≡；回复完成 空翻一圈撒四色星；长活完成 翻两圈；额度重置 飞更高翻一圈撒 8 颗星；打盹 沉低、歪着、弯线闭眼、慢呼吸、淡蓝梦泡，不挂 Z；出错 反重力失灵直直掉地、压扁、扬灰尘、红色星球牌 ×，过一会儿再飘起；额度用完 慢慢沉地坐着、紫色星球牌沙漏；卡住重试 半空不动；没新消息 悬浮 + 通用变淡。
+- 改了哪些文件：
+  - 新 `hud/src/bots/bot-float.ts`：按状态算每一帧的高度、角度、伸缩、眼睛朝向和身边的东西；读的是鲸鱼同一份 cue。
+  - 新 `hud/src/bots/bot-float-sky.ts`：卫星、星、火苗、灰尘、石子、梦泡、火星的形状与位置。
+  - 新 `hud/src/bots/bot-float-paint.ts`：画火苗、纸、土星环、星和点；地影抵消姿态（身子飘起来影子留在地上），用 `destination-over` 垫在身子后面；左上角星球牌。
+  - `bot-spec.ts`：`antigravity` 加 `float: true`、`stays: true`；`BotSpec` 加 `float` 开关。
+  - `bot-motion.ts`：鲸鱼的 `swim()` 接口改成鲸鱼 / Antigravity 共用（`ownSea`），Antigravity 开工和打招呼不叠共用的「跳一下」；思考不挂省略号、打盹不挂 Z 沿用鲸鱼的写法。
+  - `bot-renderer.ts`：画天空和地影一处接入；云、鲸鱼、Antigravity 三家的标识合成一个 `ownTag`；重绘判定键加上天空和姿态（地影跟姿态变）。
+  - 300 行棘轮（纯搬移，行为不变）：`BotSpec` 类型挪到 `bot-spec-types.ts`、原处转出；`BotMotion.aim`、`poseIsRest` 挪成 `bot-motion-parts.ts` 的 `aimAt`、`isRestPose`。基线 `bot-spec` 399 → 361、`bot-motion` 1532 → 1530，`bot-renderer` 仍 1191。
+  - 新 `hud/test/antigravity-float.test.ts`：18 条（只有 Antigravity 会飘并常驻、外形不变；没开关的小人没有天空；待机悬浮不落地、石子；打招呼朝鼠标歪 + 那侧闪星；开工先蹲后喷火蹿高；思考三颗卫星在头顶、眼睛跟、无省略号；压缩卫星螺旋进；改文件两边歪 + 火星；跑命令一阵喷火一阵歇；读文件纸在右、三行轮流、眼睛看纸；长命令 6 秒一圈；找你飞高、蹦、牌鼓、问问题摇、看卡停；标识走星球牌；完成翻一圈 4 星、长活两圈、重置 8 星；打盹歪着弯线闭眼梦泡无 Z；出错落地扬尘红 × 再飘起；额度用完沉地坐着；卡住不动）。
+- 测试：
+  - 新测试在 main 快照上跑是红的（`bot-float.ts` 不存在，`ℹ pass 0`，`red-on-main.txt`）；先写的实现、后写的测试，不是严格的先红后绿。改后 `ℹ pass 18` / `ℹ fail 0`。
+  - `pnpm run check` 退出码 0（`check.log`）；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」，Rust 合计 `1178 passed; 0 failed`，前端 `ℹ pass 534` / `ℹ fail 0`，其余 `ℹ pass 9`、`ℹ pass 14`、`ℹ pass 200`、`ℹ pass 11` 均 `ℹ fail 0`（`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.log`）。
+- 验证：定格胶片页（真实 `BotMotion` 按模拟时间逐帧推进，走 `BotMark` 同一条 `renderBot` + CSS 姿态路径，Chromium，替身）逐个场景截帧自查两轮，改过：开工的速度线跟着身子走像腿 → 改成脚底喷火；火苗太细 → 两层水滴形；卫星压住头顶 → 环上移；长命令轨道后半圈压在脸上 → 后半圈画到身后；改文件火星、完成的星、梦泡太小 → 放大；星球牌太大 → 缩到 1.1 倍、往左上挪；共用的「跳一下」抵消了开工的下蹲 → Antigravity 不叠。预览页放进票根看：地影在撕线上方，不碰。
+- 预览：https://claude.ai/artifact/FfbPChjxN1Rh7oy9L5BPyf （真实代码打包，现在 vs 新动作，31 号票根 + 放大，按新顺序排的侧栏一排）。
+- 截图与证据：`~/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/`：`before-after-strip.png`、`check.log`、`test.log`、`node.log`、`red-on-main.txt`、`build.log`；预览脚手架在 `preview/`（`entry.tsx`、`frames.tsx`、`build.sh`、`rebuild-frames.sh`、`out/`，`old/` 是 main 快照）。
+- 发布与回读：常浩经驿窗侧栏回「覆盖装机」，`install.sh 554-antigravity-moves --takeover`：装前 `d49ed6e89c8e`（`install-548-539` 合并包，含未合并的 #539）已备份到证据目录 `PostPane-d49ed6e89c8e.app`；产物 `628de7f4b999` / 已装 `628de7f4b999`，签名一致；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/PostPane-d49ed6e89c8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机截屏（`before-after-strip.png`，由 `smoke-before-1.png`、`smoke-after-1-1.png` 裁出）：装后 Antigravity 排第 4、是常驻小人、正在打盹；其余五家与装前一致。重启后顺序仍是第 4 位，但 `draft_hud` 回读的已保存列表里还没有 antigravity，请常浩在面板里再点一次「保存」。装上的包不含 #539，#539 合并后要从 main 重打重装。动作只看到打盹一种，其余动作没在实机上逐个验。
+- 与授权不一致之处、遗留问题、范围外发现：常浩看预览和实机截图后经驿窗回「Accepted, merge」，已验收并按他的话合并；实机只看到打盹，其余 21 个动作以预览为准。合并后主目录没拉（postpane 不在拉齐名单，请他回合并时没写「拉主目录等于上线」的提示）。顺序要他在面板里点「保存」。
+- 本轮新坑：无
+- skill 进化：无
+
 ## 接力治本第 2 步：重读时做页面体检，页面改版几分钟内说清认不出什么；认网页的写法收口（#548）（2026-11-27，Claude，常浩确认问题清单第 2 条后回「开始第 2 步」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机与端到端验证见下）
 
 - 时间：开工 `2026-11-27 01:27`（按建分支的时间，约数）。来由：#544 验收第 1、2 条；全表 E10 空格 26–30（页面认不出时只表现为「30 分钟没回信」或误诊）。

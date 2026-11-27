@@ -113,3 +113,23 @@ export function petalRatchet(time: number) {
     part = done < ticks ? easeOut(clamp01((inner - done * 0.3) / 0.1)) : 0;
   return 30 * (cycles * ticks + done + part);
 }
+/** A pose with nothing moved. */
+export const isRestPose = (p: BotPose) =>
+  p.x === 0 &&
+  p.y === 0 &&
+  p.rotation === 0 &&
+  p.scaleX === 1 &&
+  p.scaleY === 1 &&
+  p.footing === 0;
+/** Where eyes look towards a point: a share that grows with distance, none up close. */
+export function aimAt(
+  center: readonly [number, number],
+  target: readonly [number, number],
+): readonly [number, number] {
+  const dx = target[0] - center[0],
+    dy = target[1] - center[1],
+    distance = Math.hypot(dx, dy);
+  if (distance < 1) return [0, 0];
+  const share = distance / (distance + 120);
+  return [(dx / distance) * share, (dy / distance) * share];
+}
