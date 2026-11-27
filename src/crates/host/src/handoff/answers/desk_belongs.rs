@@ -27,7 +27,7 @@
 //! whose prompt is only that attachment counts for words long enough to
 //! have been made one.
 use super::Desk;
-use crate::handoff::book::{Book, Handoff, StepKind, EXCERPT};
+use crate::handoff::book::{untagged, Book, Handoff, StepKind, EXCERPT};
 use serde_json::Value;
 
 /// The words without their spaces and inline-code marks, and without
@@ -91,6 +91,15 @@ fn attached(prompt: &str) -> bool {
 
 /// Whether `prompt`, held to as the module says, is `asked` as a step keeps it.
 fn held_to(prompt: &str, asked: &str) -> bool {
+    // An opening's words go named by their request (#542 review round 6,
+    // owner 2026-11-27 「甲」), and its step keeps them as they were given:
+    // the page's line naming the request is left out for them. Words kept
+    // with theirs (sent later) are held to it whole.
+    let prompt = if untagged(asked) == asked {
+        untagged(prompt)
+    } else {
+        prompt
+    };
     // A step keeps `EXCERPT` characters and marks the cut with 「…」.
     let kept = asked.strip_suffix('…').filter(|_| cut(asked));
     [true, false].into_iter().any(|fences| {

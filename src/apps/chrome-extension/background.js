@@ -898,10 +898,18 @@ const headsRead = chrome.storage.local
   .catch(() => {});
 const bare = (text) => (text ?? "").replace(/\s/g, "");
 
-/** Notes that `text` begins to go; what it was noted as. */
+/** Notes that `text` begins to go; what it was noted as. Only words whose
+ * first line names their request (「【驿窗送审 <request>】」, PostPane's
+ * `book::tagged`) are noted: others alike are no proof (round 6, owner
+ * 2026-11-27 「甲」). */
 async function goingOut(text) {
   await headsRead;
-  const entry = { head: bare(text).slice(0, HEAD), at: Date.now() };
+  const first = (text ?? "").split("\n", 1)[0];
+  const named = /^【驿窗送审 [^】\n]+】$/.test(first);
+  const entry = {
+    head: named ? bare(text).slice(0, HEAD) : "",
+    at: Date.now(),
+  };
   if (!entry.head) return entry;
   heads = [...heads.filter((h) => entry.at - h.at < HEADS_FOR), entry].slice(
     -HEADS_MOST,

@@ -664,16 +664,28 @@
   }
 
   /** Whether the words a prompt shows, `shown`, begin as `text` does: its
-   * first `HEAD` characters, spaces aside (#542 review round 5). No words
-   * is no proof. */
+   * first `HEAD` characters, spaces aside (#542 review round 5). Only words
+   * whose first line names their request (`named`) can be told so: words
+   * alike are not proof they are these (round 6, owner 2026-11-27 「甲」). No
+   * words is no proof. */
   function begins(shown, text) {
     const words = bare(shown ?? "");
     const want = bare(text ?? "");
-    if (!words || !want) return false;
+    if (!words || !named(text)) return false;
     const head = Math.min(HEAD, want.length);
     return words.slice(0, head) === want.slice(0, head);
   }
   const HEAD = 100;
+  /** Whether `text`'s first line names the request it went as:
+   * 「【驿窗送审 <request>】」. */
+  const named = (text) => {
+    const first = (text ?? "").split("\n", 1)[0];
+    return (
+      first.startsWith(OWN) &&
+      first.endsWith("】") &&
+      first.length > OWN.length + 1
+    );
+  };
 
   globalThis.PostPanePage = {
     SEL,

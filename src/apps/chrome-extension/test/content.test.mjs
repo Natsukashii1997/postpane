@@ -609,8 +609,21 @@ test("asked whether it shows the words it was opened with, a page answers by its
     await page.close();
     return said.ours;
   };
-  // Its only prompt, beginning as the words do; spaces aside.
-  assert.equal(await opened(one("第 1 轮\n请审核"), "第 1 轮 请审核"), true);
+  // Its only prompt, beginning as the words do, their first line naming
+  // their request; spaces aside.
+  const NAMED = "【驿窗送审 h7~0】\n第 1 轮 请审核";
+  assert.equal(
+    await opened(one("【驿窗送审 h7~0】\n第 1 轮\n请审核"), NAMED),
+    true,
+  );
+  // Round 6: the same words with no request named are no proof: a prompt
+  // of his own may be just these.
+  assert.equal(await opened(one("第 1 轮 请审核"), "第 1 轮 请审核"), false);
+  assert.equal(await opened(one("第 1 轮 请审核"), NAMED), false);
+  assert.equal(
+    await opened(one("【驿窗送审 h8~0】\n第 1 轮 请审核"), NAMED),
+    false,
+  );
   // Another's words, or more than one prompt: one of his own.
   assert.equal(await opened(one("我自己的问题"), "第 1 轮"), false);
   assert.equal(await opened([() => {}], "请审核这次改动"), false);

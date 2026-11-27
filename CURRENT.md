@@ -57,6 +57,12 @@
   - P2-11：随 P1-05 修。
   - 顺手：返修时新加的 `sending(text)` 和后台已有的 `sending(conversation)` 同名，普通脚本里后者悄悄被顶掉（L-75）；改名，并加测试查后台顶层同名函数。
   - 测试：照审查列的 8 类补齐。新测试在 `c5dd449` 上：插件后台 `ℹ pass 3` / `ℹ fail 6`（过的三条守保留下来的行为：送话后重新归接力、按原文认新会话首次开始、无同名函数），页面 `ℹ fail 2`，真实 Chromium 端到端 `open` 1 条 `ℹ fail 1`（`round6/red-*.log`）。送话途中插入常浩提问用的是送话进行中的真实交错（`sendGates`），发送后换页用真实 `page.submit`（页面测试和真实 Chromium）。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 227`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 18`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round6/`。
+- 第 6 轮 ChatGPT 审查（受审 `793c725`，返修，P1 2、P2 1）：L-75 改名已验证。本轮（2026-11-27）处理：
+  - 根子在新开会话的话没有唯一标识。问常浩后他选「甲：加这一行」（已登记 DECIDED.md）：驿窗 `Desk::open` 发出前用续审同一个 `book::tagged` 加「【驿窗送审 <接力号~第几次>】」；Ask 步骤照旧记原话，驿窗按回信认这次审核时（`answers/desk_belongs.rs` 的 `held_to`），记的话不带请求号的，先去掉页面提问开头的请求号行再比，续审的比法不变。
+  - P1-05 已修：插件只记、只认第一行带请求号的话（`heads`），不带的开头再像也不算；只在接力用过的会话里认；两段以上同时对上不认；读回存储时清过期的。
+  - P1-06 已修：`opened` 没编号时同样要求送出的话带请求号行，常浩会话里只有一条正文完全相同的提问也报 `unconfirmed`；`own` 的二次证明走同一条规则。
+  - P2-11 已修：被清掉的那条提问记进 `freed`，它迟到的回合（别的标签页的写完、停止）不再把会话认回去；`taken` 记页面报的开始时间。
+  - 测试：Rust 新 1 条（新开会话发出的话带请求号、带请求号的提问照样认回信、别的话不认），在改前的驿窗上 `FAILED. 0 passed; 1 failed`；插件后台新 3 条、页面改 1 条、真实 Chromium 新 2 条（两个页面实例的迟到停止；不带请求号的话打开、他的会话里一条完全相同的提问），在 `793c725` / `4e7a6e2` 上都红（`round7/red*.log`，真实 Chromium 旧代码把他的会话当成打开成功、编号是他那条）。真实 Chromium 跑整套时一次挂在已有的「前台标签页重载后读取」（`try 12`），再跑两遍 19 条都过，偶发，与本改动无关。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1182 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 231`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round7/`。
 - 本轮新坑：L-75。
 - skill 进化：无。
 

@@ -57,7 +57,9 @@ const fixture = readFileSync(
         const his = document.createElement("div");
         his.dataset.chatgptSearchUnitKey = "h:0:user";
         his.dataset.chatgptSearchMessageIds = "pHis";
-        his.innerHTML = "<div data-user-message-bubble>我自己的问题</div>";
+        // His only prompt is the very words the opening's are, no request
+        // named (#542 round 6).
+        his.innerHTML = "<div data-user-message-bubble>第 1 轮</div>";
         document.querySelector("main").append(his);
       }
     });
@@ -576,7 +578,11 @@ test("the tabs a failed opening left are closed once its handoff ended", async (
   // shows them as its only prompt (round 4, P1-06); before, it does not.
   const own1 = () =>
     worker.evaluate(
-      (tabId) => own(tabId, "h9a1~1", { conversation: null, text: "第 1 轮" }),
+      (tabId) =>
+        own(tabId, "h9a1~1", {
+          conversation: null,
+          text: "【驿窗送审 h9a1~1】\n第 1 轮",
+        }),
       shown,
     );
   await own1();
@@ -596,7 +602,7 @@ test("the tabs a failed opening left are closed once its handoff ended", async (
       .querySelector("main")
       .insertAdjacentHTML(
         "beforeend",
-        '<div data-chatgpt-search-unit-key="x:8:user"><div data-user-message-bubble="true">第 1 轮</div></div>',
+        '<div data-chatgpt-search-unit-key="x:8:user"><div data-user-message-bubble="true">【驿窗送审 h9a1~1】\n第 1 轮</div></div>',
       );
   });
   await own1();
@@ -643,11 +649,15 @@ test("the tabs a failed opening left are closed once its handoff ended", async (
 // them showed; moved on to a conversation of Changhao's as they went, the
 // opening is not confirmed, and that conversation is not the handoff's.
 test("an opening is confirmed by the prompt its words became, not by where the tab went", async () => {
-  const opened = (project, request) =>
+  const opened = (project, request, named = true) =>
     worker.evaluate(
-      ([project, request]) =>
-        open("第 1 轮", `https://chatgpt.com${project}`, request),
-      [project, request],
+      ([project, request, named]) =>
+        open(
+          named ? `【驿窗送审 ${request}】\n第 1 轮` : "第 1 轮",
+          `https://chatgpt.com${project}`,
+          request,
+        ),
+      [project, request, named],
     );
   const ok = await opened("/g/g-p-ok/project", "h9c1~1");
   assert.deepEqual(
@@ -661,6 +671,10 @@ test("an opening is confirmed by the prompt its words became, not by where the t
   );
   const his = await opened("/g/g-p-his/project", "h9c2~1");
   assert.deepEqual(his, { ok: false, reason: "unconfirmed", pressed: true });
+  // Words with no request named (an older PostPane's), his only prompt the
+  // very same: no proof either (round 6).
+  const bare = await opened("/g/g-p-his/project", "h9c3~1", false);
+  assert.deepEqual(bare, { ok: false, reason: "unconfirmed", pressed: true });
   const kept = await worker.evaluate(() =>
     chrome.storage.local.get(["strays", "watched", "asks"]),
   );

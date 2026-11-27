@@ -3940,9 +3940,13 @@ test("a stopped answer whose beginning named no prompt is told by the newest", a
   assert.deepEqual(sent.removed, []);
 });
 
+// What PostPane opens a conversation with: its first line names the
+// request (round 6, owner 2026-11-27 「甲」).
+const OPENING = "【驿窗送审 h7~1】\n第 1 轮";
 test("a new conversation's beginning, told again as it has its address, is PostPane's by its words", async () => {
   const tabs = [];
   const removed = [];
+  const stored = {};
   const closable = { 99: false };
   const api = {};
   const { listeners } = Object.assign(
@@ -3952,6 +3956,7 @@ test("a new conversation's beginning, told again as it has its address, is PostP
       removed,
       closable,
       groups: [{ id: 7, title: "驿窗接力" }],
+      stored,
       onCreate: madeBlank(api, { groupId: 7 }),
       // The words go in, their id not seen; the page has its address.
       sendGates: [
@@ -3965,21 +3970,66 @@ test("a new conversation's beginning, told again as it has its address, is PostP
       ],
     }),
   );
-  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await listeners.port({ type: "open", requestId: "h7~1", text: OPENING });
   await settleLong();
   await listeners.port({
     type: "watch",
-    conversations: [ENDED],
+    conversations: [ENDED, LIVE],
     ended: [ENDED],
   });
   await settleLong();
+  // Round 6: Changhao asks the same words, no request named, in another
+  // relay's conversation: his, and no head is taken away by it.
+  listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(92),
+      prompt: "第 1 轮",
+    },
+    { tab: { id: 98 } },
+  );
+  await settleLong();
+  assert.equal(stored.taken?.[LIVE]?.id, P(92), "his, words alike");
   // Begun on the new chat's page, told again once it has its address.
-  turn(listeners, "start", P(91), { tab: 99, prompt: "第 1 轮" });
+  turn(listeners, "start", P(91), { tab: 99, prompt: OPENING });
   await settleLong();
   closable[99] = true;
-  turn(listeners, "complete", P(91), { tab: 99, prompt: "第 1 轮" });
+  turn(listeners, "complete", P(91), { tab: 99, prompt: OPENING });
   await settleLong();
   assert.deepEqual(removed, [99]);
+});
+
+test("words with no request named prove no prompt the extension's", async () => {
+  // An older PostPane's opening, its words not named; his prompt the same.
+  const tabs = [];
+  const stored = {};
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      stored,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      onCreate: madeBlank(api, { groupId: 7 }),
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({ type: "watch", conversations: [LIVE], live: [LIVE] });
+  listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(93),
+      prompt: "第 1 轮",
+    },
+    { tab: { id: 98 } },
+  );
+  await settleLong();
+  assert.equal(stored.taken?.[LIVE]?.id, P(93));
 });
 
 // Round 4 and 5, P1-06: Changhao moved the tab an opening made on to a

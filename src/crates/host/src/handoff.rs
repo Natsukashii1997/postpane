@@ -949,7 +949,11 @@ impl Desk {
             // (#347), the same words its 「ask」 step records and an answer
             // is held to (#356).
             let brief = kept.as_deref().unwrap_or(brief);
-            let opened = lines.open(brief, project, &title, &request);
+            // Named by its request as words sent later are (#542 review
+            // round 6, owner 2026-11-27 「甲」): the extension knows the
+            // prompt they became by it, and no prompt of the person's.
+            let sent = book::tagged(&request, brief);
+            let opened = lines.open(&sent, project, &title, &request);
             self.change(|book| match &opened {
                 Ok((conversation, asked_id)) => {
                     book.opened(id, conversation, now()) | book.asked_as(id, asked_id.as_deref())
