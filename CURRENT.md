@@ -9,10 +9,10 @@
   - 你要求的（恢复）：`src/packages/hud/src/alerts/news-lanes.ts`、`reply-list.ts`、`CompletionAlertView.tsx`、`test/reply-list.test.ts`、`test/reply-queue-keep.test.ts`、`test/scenes/scenes.ts` 取回 `1ac0ab1` 的版本；`docs/DECIDED.md` 补回那一行；`CURRENT.md` 补回 #565 一节（放在 #567 一节下面）。
   - 我顺手改的：`docs/LESSONS.md` 新坑 L-76。
 - 同类：比对了 #568 改动的全部 18 个文件，和它主题（子程序继承系统代理）无关的只有上面 8 个，都是 #566 的；其余 10 个是 #567 自己的，没动。
-- 测试：见 PR 描述。
-- 验证：见 PR 描述。
+- 测试：见下「发布与回读」（合并包）；本分支单独的三条全量见 PR 描述。
+- 验证：装前侧栏截图（`evidence/2026-11-28-569-combo/smoke-before-1.png`，当时装的是 #567 会话的包 `2e53e13`）里，常浩开着 Claude 面板，能看到一张真实的 REPLY 下一步卡（REPLY 签、小字、白字下一步、选项、跳过 / 提交），和积压事项旧版式。新包的去重与积压事项新版式未在实机看（悬停面板我控制不了），留给常浩。
 - 截图：无界面改动（恢复已验收的行为）。
-- 发布与回读：随「本分支 + #564 + #560」合并包装机，见 PR 描述。
+- 发布与回读：合并包 `3265645` = main `7575cf9` + 本分支 `61736b4` + #564 `781c0f7` + #560 `fd3cdeb`（`turns.rs` 冲突照 #564 那次合法，`CURRENT.md`、`LESSONS.md` 两边都留）。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1214 passed，前端 `ℹ pass 540`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。`install.sh 569-combo --takeover`（原装 #567 会话的 `bb4da8175097`，它同意覆盖）：产物 `e07012a3446d` / 已装 `e07012a3446d`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2143 个像素不同。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-569-combo/PostPane-bb4da8175097.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
 - 与授权不一致之处、遗留问题、范围外发现：#560 分支也用了 L-75～L-79，和 main 的 L-75、本 PR 的 L-76 撞号，#560 变基时要改编号。
 - 本轮新坑：L-76。
 

@@ -616,7 +616,7 @@
 ## L-76 换底后整份提交，把别人刚合并的改动当成自己的删除带进 PR，squash 合并后已验收的功能整段消失（2026-11-28）
 
 - 现象：#566（同一会话的回复只占一行，常浩 11-28 验收并合并，`1ac0ab1`）合并 9 分钟后，#568（子程序继承系统代理）squash 合并进 main（`7575cf9`），#566 改的 6 个文件原样回到 #566 之前，DECIDED 里那一行、CURRENT 里那一节也没了。之后在 main 上合的包都没有去重，侧栏同一会话又出现好几行。没有任何测试失败：被退回的测试也一起退回了。
-- 根因：#568 的分支提交 `99296b6` 父提交已经是 `1ac0ab1`，内容却带着 #566 之前的 6 个文件，即「先换了底、工作区还是旧文件，再整份提交」（例如 `git reset --soft origin/main` 后 `git add -A`，或把旧 worktree 的文件拷过来）。这样提交在 git 看来就是「删掉 #566 的改动」，合并不冲突，评审只看 PR 主题也看不出来。
+- 根因（#567 会话查实）：分支从 `bdcbc19` 开出，提交前为了把 WIP 压成一个提交跑了 `git reset --soft origin/main`。几个 worktree 共用远端引用，origin/main 已被别的会话 fetch 到 `1ac0ab1`；soft reset 只挪了 HEAD，索引和工作区还是 `bdcbc19` 加自己的改动，于是提交 `99296b6` 的父提交是 `1ac0ab1`、内容却是 #566 之前的样子，在 git 看来就是「删掉 #566 的改动」，合并不冲突。合并前查的是 `git log 分支..origin/main`（为空），盖住了问题；PR 的文件列表没逐个核对。
 - 正确做法：推送、开 PR、合并前都看一眼 `git diff --stat origin/main...HEAD`，列出的文件必须都是自己这张 issue 的；出现不相干的文件（尤其是刚合并的别的 PR 的文件）就停下，从 `origin/main` 重新拉分支、只 cherry-pick 自己的提交。换底用 `git rebase origin/main` 或 `git merge origin/main`，不用 `reset --soft` 再整份提交。合并包、装机前核对一下已验收的功能还在（如本条用 `git show <提交>:<文件> | grep` 查关键函数）。
 - 证据：`git show --stat 99296b6`（含 6 个 hud 文件和 DECIDED、CURRENT）；`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空。
 - 升级：〔提醒〕未升级。可做成〔机检〕：推送前钩子比对本分支改到的文件和 merge-base 之后 main 上别的提交改过的文件，有重叠且是「改回旧内容」就拒绝推送；先出提案等常浩定。
