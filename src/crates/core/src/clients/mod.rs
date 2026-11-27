@@ -4,5 +4,6 @@
 //! its client's folder in `agents` once those seams have an interface
 //! (docs/agent-contract.md).
 pub(crate) mod antigravity;
+pub(crate) mod antigravity_whole;
 pub(crate) mod claude_desktop;
 pub(crate) mod workbuddy;

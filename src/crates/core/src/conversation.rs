@@ -284,7 +284,7 @@ pub(super) fn page(
         if bytes.len() > MAX_LINE {
             continue;
         }
-        if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
+        if let Ok(value) = clients::antigravity_whole::line(source, path, &bytes) {
             context.read(rule, &value);
             for item in (reader_items.read)(&value, start) {
                 let mut entry = row(item);

@@ -683,3 +683,11 @@
 - 正确做法：业务判断（消息有没有被答完）不读经过显示偏好过滤的数据；快照里没有时，用会话页 `session_detail` 自带的 `session.liveFacts`。改显示偏好的过滤时，搜一遍谁还在读快照里的这个字段。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red-live-off.txt`、`green-live-off.txt`、实机第四次 `get_message`）。
 - 升级：〔提醒〕部分升级（2026-11-27，#558）：messaging 测试 `a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry`，未接进必经检查。`stored::answer` 同样只看快照，驿窗没接会话存储所以没改，接的时候要一起改。Antigravity 实时状态默认关、要不要像 ChatGPT 一样检测到后补开一次，待常浩定。
+
+## L-79 Antigravity 的 `transcript.jsonl` 会截断长字段，完整内容在旁边的 `transcript_full.jsonl`；用短消息验收测不出（2026-11-27）
+
+- 现象：#560 用短消息验收全过；多模型协同会话经 `start_session` 发了约 1.9 万字节的送审包（`m-fa3b7d6821af`），Gemini 21:48 已写完回复，`get_message` 却一直 `started`、`answer: null`。
+- 根因：Antigravity 写 `transcript.jsonl` 时把长字段截短：这一行带 `truncated_fields: ["content", …]`，正文只留头尾，中间换成一行 `<truncated N bytes>`；完整的同一步（同一个 `step_index`）写在同目录的 `transcript_full.jsonl`。驿窗只读 `transcript.jsonl`。以常浩身份发送的消息按全文指纹认（`PromptForm::Own`），截断后的提问指纹对不上，找不到这一轮；就算找到了，回复也是截断的，不是「整段回复」。
+- 正确做法：会话页读到带 `truncated_fields` 的 Antigravity 行时，按 `step_index` 去 `transcript_full.jsonl` 取整条（`core/clients/antigravity_whole.rs`，按文件长度和修改时间缓存一份步号→偏移的索引）。用量和实时状态仍读 `transcript.jsonl`：用量账本按「来源文件 + 事件键」做主键，换来源文件可能把历史用量算两遍，所以没有整体改读完整版。凡是「把回复交给别人」的功能，验收要带一条长消息和一条长回复。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/r6/`（会话 `f2e8fb04`：`transcript.jsonl` 提问 1939 字、回复 1789 字，`transcript_full.jsonl` 提问 8426 字、回复 17370 字；修后 `get_message` 的结果）。
+- 升级：〔提醒〕部分升级（2026-11-27，#560）：`antigravity_whole` 两条测试，未接进必经检查。

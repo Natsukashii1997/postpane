@@ -194,6 +194,7 @@
   - P3-01 钩子判「未答的提问」改成和 `TURNS` 一样，只排除 SYSTEM；P3-02 `page_id` 按客户端限定，判结束时按快照 id 精确匹配；快照 liveFacts 为空对象 `{}` 时也改看会话页。
   - 每条新测试都先临时换回旧写法跑出红，证据在 `r5/red-*.txt`。
   - 返修后 `a88b866` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1196 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `2042a24ea279`，真实环境 `start_session` 第 5 次 `m-57203ff68420` → done，回复「驿窗 560 返修后已收到」。
+- 长消息读不到回复（多模型协同会话报的 `m-fa3b7d6821af`，L-79）：Antigravity 的 `transcript.jsonl` 会把长字段截断（`truncated_fields`，正文中间换成 `<truncated N bytes>`），完整内容在 `transcript_full.jsonl`。新增 `core/clients/antigravity_whole.rs`：会话页读到被截断的行，按 `step_index` 回填完整那一行；用量和实时状态仍读 `transcript.jsonl`（换来源文件可能把历史用量算两遍）。`conversation.rs` 只改一行。测试：Rust `1198 passed, 0 failed`；`pnpm test` 第一遍在负载 150 下 Chrome 插件套件 4 败（两次失败的不是同一批测试，那套代码没改），负载降到约 40 后重跑 exit 0、各套 `ℹ fail 0`；`pnpm run check` exit 0；根目录 `ℹ pass 65` `ℹ fail 0`。装机 `05f150bd7f38`，`get_message m-fa3b7d6821af` → done，回复完整。
 - skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
