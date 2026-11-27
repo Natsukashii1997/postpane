@@ -19,11 +19,12 @@ const PENDING: usize = 70;
 /// out: the prompt is before it.
 pub(super) fn current(
     query: &dyn Fn(&str, Value) -> crate::Result<Value>,
+    id: &str,
     caller: &Caller,
 ) -> Option<Option<Value>> {
     let last_prompt = |from| {
         let mut prompt = None;
-        let read = pages(query, &caller.session_id, from, |row, _| {
+        let read = pages(query, id, from, |row, _| {
             if row["isPrompt"] == true {
                 prompt = Some(row.clone());
             }
@@ -43,8 +44,7 @@ pub(super) fn current(
     }
 }
 
-pub(super) fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
-    let id = &message.to.session_id;
+pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Found> {
     let from = message
         .turn
         .as_ref()
@@ -229,7 +229,7 @@ mod tests {
             session_id: "deepseek:session-a".into(),
             turn_id: None,
         };
-        assert_eq!(current(&query, &caller), None);
+        assert_eq!(current(&query, &caller.session_id, &caller), None);
     }
 
     #[test]
@@ -270,7 +270,7 @@ mod tests {
             id: Some("3".into()),
             cursor: 40,
         });
-        let found = answer(&host, &message).unwrap();
+        let found = answer(&host, "deepseek:session-a", &message).unwrap();
         assert_eq!(found.turn.id.as_deref(), Some("3"));
         assert!(found.done);
         assert_eq!(found.answer.as_deref(), Some("hello back"));

@@ -74,7 +74,11 @@ pub fn prompt_row(text: &str) -> Value {
 pub fn current_prompt(host: &Host<'_>, caller: &Caller) -> Option<Option<Value>> {
     match stored(host, &caller.client) {
         Some(store) => stored::current(store, host.snapshot, caller),
-        None => paged::current(host.query, caller),
+        None => paged::current(
+            host.query,
+            page_id(host.snapshot, &caller.session_id),
+            caller,
+        ),
     }
 }
 
@@ -90,8 +94,21 @@ pub struct Found {
 pub fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
     match stored(host, &message.to.client) {
         Some(store) => stored::answer(store, host.snapshot, message),
-        None => paged::answer(host, message),
+        None => paged::answer(
+            host,
+            page_id(host.snapshot, &message.to.session_id),
+            message,
+        ),
     }
+}
+
+/// The id the app's pages know a session by: the snapshot's. A start's
+/// receipt and a client's own tools name some sessions without the client
+/// prefix the snapshot puts before them (`antigravity:…`).
+fn page_id<'a>(snapshot: &'a Value, id: &'a str) -> &'a str {
+    crate::find(snapshot, id)
+        .and_then(|session| session["id"].as_str())
+        .unwrap_or(id)
 }
 
 /// Whether a row of turn `theirs`, read after turn `ours`, is of a later

@@ -2107,6 +2107,48 @@ fn an_antigravity_answer_the_store_cannot_tie_to_the_message_flies_only_its_repl
     assert_eq!(world.get(&json!(id))["state"], "replied");
 }
 
+/// A start's receipt names an Antigravity session by its bare id; the app's
+/// snapshot and pages know it as `antigravity:<id>`. Its answer is read from
+/// the pages under the snapshot's id (postpane#558: the first answer of a
+/// session started in Antigravity 2.35.2 stayed `started`).
+#[test]
+fn an_antigravity_start_named_by_its_bare_id_is_read_under_the_snapshots_id() {
+    let mut world = World::on();
+    let full = format!("antigravity:{ANTIGRAVITY}");
+    let project = world.fixture.home().join("project");
+    world.snapshot["sessions"].as_array_mut().unwrap().push(json!(
+        {"id":full,"source":"antigravity","title":"Plan the film","cwd":project,"state":"idle","parentId":null,"liveFacts":{}}
+    ));
+    let sent = world.send(("claude", CLAUDE), &full, "Plan the film");
+    let id = sent["id"].as_str().unwrap().to_owned();
+    let mut message = world.messaging.journal.find(&id).unwrap().clone();
+    assert_eq!(
+        message.to.session_id, full,
+        "a send names the snapshot's id"
+    );
+    message.kind = Kind::Start;
+    message.to.session_id = ANTIGRAVITY.into();
+    world.messaging.journal.replace(message.clone());
+    let words = words::compose(
+        false,
+        message.form,
+        &party(&world.snapshot, "claude", CLAUDE),
+        "antigravity",
+        &id,
+        None,
+        "Plan the film",
+    );
+    world.transcripts.prompt(&full, "step-0", &words);
+    world.transcripts.reply(&full, "step-0", "Planned.");
+    world.live(
+        &full,
+        json!({"turnId":"step-0","turnStartedAt":"2026-10-22T01:00:00Z","endedAt":"2026-10-22T01:03:00Z"}),
+    );
+    let done = world.get(&json!(id));
+    assert_eq!(done["state"], "done", "{done}");
+    assert_eq!(done["answer"], "Planned.");
+}
+
 impl Preferences {
     /// The app's settings that say these choices.
     fn settings(&self) -> Value {
