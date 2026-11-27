@@ -530,7 +530,14 @@ async function readAgain(conversation) {
   const told = answer?.undrawn
     ? await drawnInFront(tabId, ask)
     : !!answer?.told;
-  return { outcome: outcomeOf(answer, told), ...stood, fronted, ...reloaded };
+  const missing = answer?.missing?.length && { missing: answer.missing };
+  return {
+    outcome: outcomeOf(answer, told),
+    ...stood,
+    fronted,
+    ...reloaded,
+    ...missing,
+  };
 }
 /** How long a read has to get to a tab that shows the conversation. */
 const REACH_BY = 45000;
@@ -623,6 +630,9 @@ async function loadIdle(tabId, conversation, until) {
 /** What a read's answer comes to: told, or why not. */
 function outcomeOf(answer, told) {
   if (!answer) return "unreachable";
+  // The page cannot find what PostPane reads (#548): whatever else it said
+  // rests on reading it.
+  if (answer.missing?.length) return "changed";
   if (told) return "told";
   if (answer.undrawn) return "undrawn";
   if (answer.streaming) return "streaming";
