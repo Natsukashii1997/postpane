@@ -167,6 +167,25 @@
 - 与授权不一致之处、遗留问题、范围外发现：常浩同轮提出侧栏三处困惑，已出方案页 https://claude.ai/artifact/YQxPFTSoqWweCMWVC5sTfB（源文件 `docs/design/侧栏行动化三版预览-2026-11-27.html`，未进仓库），等他挑 3 处。Claude 收尾稳定给按钮框另开会话（任务卡，待常浩点开始）。
 - 主线：侧栏行动化｜✅ 0 ▶ 1 ❓ 3 📌 1：① 只留类型签（本 PR，等 #558 实机做完装机合并）▶；② 回复按收尾状态分流、主文字换成下一步、按钮一键做 ❓；③ 48 小时积压区 + 「不做了」❓；④ 积压区名字 ❓；⑤ Claude 收尾一律带按钮框（另开会话）📌。
 - 本轮新坑：无。
+## Antigravity 2.35.2 桌面版经驿窗能开会话、能读回复：认发现文件里的令牌，补齐 get_message 判完成的三处断点（#558）（2026-11-27，Claude，多模型协同会话转来常浩的目标「经驿窗新开 Antigravity 会话交任务」；已提交，PR 见描述；本分支包已装机 `4f01917620a7` 回读通过，未合并）
+
+- 时间：开工 `2026-11-27 20:47`（`date '+%F %H:%M'` 记录）。来由：#558。桌面版开着、没有 agy 进程时，`start_session`（antigravity）、`send_message` 被拒「没有已登录且正在运行的 Antigravity 服务」，卡住 MA-04 第一次试跑。
+- 你要求的（验收句「`start_session` 新开成功，`get_message` 能读到回复」要求的四处，前一处修好才露出后一处）：
+  1. 发现：2.35.2 的 language_server 从标准输入拿 host 令牌，参数里没有 `--csrf_token`；新版把端口和令牌写在 `~/.gemini/antigravity*/daemon/*.json`。新 `clients/antigravity/daemon.rs` 读它，`running.rs` 只在参数里没令牌时按 pid 对上发现文件才用，过期文件不认；旧版和 agy 命令行照旧（L-75）。
+  2. 完成事件的轮次：`antigravity/hooks.rs` 的 `enrich` 把 `turnId` 写成回复那一步，会话记录按提问那一步编号，对不上就判不出最新一轮；改成往回找开启这一轮的提问步（L-76）。
+  3. 会话 id：start 回执记裸 UUID，快照和 `session_detail` 认 `antigravity:<uuid>`；读会话页前统一换成快照 id（`transcript::page_id`，L-77）。
+  4. 判结束的数据：侧栏「实时状态」关着的那家，快照里没有 liveFacts；本机 Antigravity 正是关的。改成快照里没有时用会话页自带的 `session.liveFacts`（L-78）。
+- 改变的行为（动手前已在会话里列出）：① 任何一家「实时状态」关着时，`get_message` 原来永远停在 started，现在按会话页的 liveFacts 判出 done 并给回复；快照里有 liveFacts 的照旧。② Antigravity 完成事件的 `turnId` 从回复步改成提问步（和会话记录一致）。③ 2.35+ 桌面版从「认不出」变成能读额度、能收发消息。
+- 我顺手改的：进程发现从 `service.rs` 搬到 `running.rs`（300 行棘轮，`service.rs` 基线 662→476）；`docs/accounts.md` 补一段发现文件；测试夹具 `session_detail` 能带 `session.liveFacts`；LESSONS L-75～78。
+- 同类：见各提交正文「同类：」一行。范围外发现：`delivery/antigravity/mod.rs` 的 `call` 按 `"no running Antigravity service"` 判不可用，和实际报错对不上，`agy -p` 兜底从移植起没走到过（改了会在没开桌面版时改由命令行无头开会话，属行为变化，没改）；`stored::answer` 同样只看快照 liveFacts（驿窗没接会话存储，没改）。
+- 测试：新测试先在旧逻辑上跑红（`red.txt` 2 failed、`red-hooks.txt` 2 failed、`red-bare-id.txt`、`red-live-off.txt` 各 1 failed）。最终版本 `36c660b` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1190 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`r4/`）。
+- 验证：真实环境通过。桌面版 2.35.2 开着、agy 进程数 0：`start_session`（folder 空）第 4 次 `m-8e6f70a778cb` → done，回复「驿窗 558 第四次已收到」；`send_message` 续发 `m-85c21e82de73` → done，回复「驿窗 558 续发已收到」；修前修后每一步的现象见证据目录 `real-env.md`。
+- 截图：无界面改动；装机冒烟图在各 `evidence/2026-11-27-558-agy-hub-r*/`。
+- 发布与回读：本分支包装了 4 次，最后一次 `4f01917620a7`，产物与已装 `shasum` 一致，签名证书一致；回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub-r4/PostPane-70b60e21467d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。第一次装机接管了 #554 分支的包（#554 已合并进 main，本分支含它）。
+- 与授权不一致之处、遗留问题：
+  - 待常浩定：本机 Antigravity「实时状态」是关的（`presentation.json` `sources.antigravity.live: false`，首次见到时还没检测到、默认存成了关；ChatGPT 有 `DETECTED_LATE` 检测到后补开一次，Antigravity 没有）。关着时侧栏只显示空闲，#554 实机「只看到打盹」很可能是这个原因（未核实）。要不要打开、要不要把 Antigravity 加进 `DETECTED_LATE`，没动。
+  - 测试时在 Antigravity 里留了 4 个「驿窗连通性测试…」会话，可删。
+- 本轮新坑：L-75、L-76、L-77、L-78。
 - skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
