@@ -195,6 +195,12 @@
   - 每条新测试都先临时换回旧写法跑出红，证据在 `r5/red-*.txt`。
   - 返修后 `a88b866` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1196 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `2042a24ea279`，真实环境 `start_session` 第 5 次 `m-57203ff68420` → done，回复「驿窗 560 返修后已收到」。
 - 长消息读不到回复（多模型协同会话报的 `m-fa3b7d6821af`，L-79）：Antigravity 的 `transcript.jsonl` 会把长字段截断（`truncated_fields`，正文中间换成 `<truncated N bytes>`），完整内容在 `transcript_full.jsonl`。新增 `core/clients/antigravity_whole.rs`：会话页读到被截断的行，按 `step_index` 回填完整那一行；用量和实时状态仍读 `transcript.jsonl`（换来源文件可能把历史用量算两遍）。`conversation.rs` 只改一行。测试：Rust `1198 passed, 0 failed`；`pnpm test` 第一遍在负载 150 下 Chrome 插件套件 4 败（两次失败的不是同一批测试，那套代码没改），负载降到约 40 后重跑 exit 0、各套 `ℹ fail 0`；`pnpm run check` exit 0；根目录 `ℹ pass 65` `ℹ fail 0`。装机 `05f150bd7f38`，`get_message m-fa3b7d6821af` → done，回复完整。
+- MA-02 第 2 轮返修（受审 `323430e`，P2-01、P2-03、P3-01～03 已验证关闭；待修 P1-01、P2-02、P2-04，已在 `2d38464` 修完）：
+  - P1-01 端口归属不等于连得到：三个平台的 `listening_ports` 改成返回监听地址（lsof 脚本 `-Fn` → `-Fnt` 读地址族；Windows 带上 `local_addr`）。发现文件来的服务只认 IPv4 `127.0.0.1` 或 `0.0.0.0` 上的监听（实际连接写死 `127.0.0.1`），`127.0.0.2`、其他网卡、IPv6 都不认；命令行来的服务、Windows 导航和 macOS 认 codex 进程两处仍按端口比对，行为不变。
+  - P2-04 发现文件只写了 HTTP 端口时，不再拿令牌去试进程其他端口的 HTTPS。
+  - P2-02 `turnKnown: false` 的完成先叠在旧轮次上、日志追上后改名，岛事件原来会按两个键各提醒一次；`Tracker::completions` 另按「同一会话、同一结束时刻」去重。
+  - 行为变化（动手前已在会话里列出）：上面三条。实机 Antigravity 监听的就是 `127.0.0.1`，不受影响。
+  - 每条新测试都先在旧逻辑上跑出红，证据在 `r7/red-*.txt`。`2d38464` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1201 passed, 0 failed`，六套全过）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `85ce451e68d7`（旧版在负载 185 下 10 秒没退出，脚本没覆盖；退出后重跑），回滚见 `r7/install.txt`。真实环境 agy 进程数 0：`start_session` `m-e5e1578b47cb` → done「收到，r7」，`send_message` `m-82e84ffcef1d` → done「续发也通」（`r7/real-env.md`）。
 - skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
