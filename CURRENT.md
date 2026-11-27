@@ -2,7 +2,7 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
-## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，未装机（实机上是 #548 + #539 的合并包，等常浩定要不要覆盖）；未验收，未登记 DECIDED.md）
+## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，常浩回「覆盖装机」后已发布 `628de7f4b999` 回读通过；未验收，未登记 DECIDED.md）
 
 - 时间：开工 `2026-11-27 16:10`。来由：#554。常浩刚开通 Antigravity，它进了侧栏；要求调顺序、并按 GPT 小花的场景范围做它的动作库。小人动效按记忆只出一版。
 - 侧栏顺序：不在代码里，在侧栏布局 `hud.agents`。已经用 `draft_hud` 放进草稿：`[claude, codex, chatgpt, antigravity, hermes, deepseek]`，离屏截图核对过顺序。**要常浩悬停侧栏、在面板里点「保存」**；装机会重启应用，草稿会丢，装完已重放（见「发布与回读」）。
@@ -22,9 +22,9 @@
   - `pnpm run check` 退出码 0（`check.log`）；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」，Rust 合计 `1178 passed; 0 failed`，前端 `ℹ pass 534` / `ℹ fail 0`，其余 `ℹ pass 9`、`ℹ pass 14`、`ℹ pass 200`、`ℹ pass 11` 均 `ℹ fail 0`（`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.log`）。
 - 验证：定格胶片页（真实 `BotMotion` 按模拟时间逐帧推进，走 `BotMark` 同一条 `renderBot` + CSS 姿态路径，Chromium，替身）逐个场景截帧自查两轮，改过：开工的速度线跟着身子走像腿 → 改成脚底喷火；火苗太细 → 两层水滴形；卫星压住头顶 → 环上移；长命令轨道后半圈压在脸上 → 后半圈画到身后；改文件火星、完成的星、梦泡太小 → 放大；星球牌太大 → 缩到 1.1 倍、往左上挪；共用的「跳一下」抵消了开工的下蹲 → Antigravity 不叠。预览页放进票根看：地影在撕线上方，不碰。
 - 预览：https://claude.ai/artifact/FfbPChjxN1Rh7oy9L5BPyf （真实代码打包，现在 vs 新动作，31 号票根 + 放大，按新顺序排的侧栏一排）。
-- 截图与证据：`~/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/`：`check.log`、`test.log`、`node.log`、`red-on-main.txt`、`build.log`；预览脚手架在 `preview/`（`entry.tsx`、`frames.tsx`、`build.sh`、`rebuild-frames.sh`、`out/`，`old/` 是 main 快照）。
-- 发布与回读：未发布。包已打好（`target/release/bundle/macos/PostPane.app`，`build.log`），`install.sh 554-antigravity-moves` 停在 L-05：已装的是 `install-548-539` worktree 的合并包（`797bf2135caf`，11-27 10:04 装，含未合并的 #539），没加 `--takeover`。因为没重启，侧栏顺序草稿还在。
-- 与授权不一致之处、遗留问题、范围外发现：常浩还没看实物，动作和星球牌等他看预览和侧栏后定；PR 等他回「验收」再合并（观感类）。顺序草稿要他点「保存」。
+- 截图与证据：`~/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/`：`before-after-strip.png`、`check.log`、`test.log`、`node.log`、`red-on-main.txt`、`build.log`；预览脚手架在 `preview/`（`entry.tsx`、`frames.tsx`、`build.sh`、`rebuild-frames.sh`、`out/`，`old/` 是 main 快照）。
+- 发布与回读：常浩经驿窗侧栏回「覆盖装机」，`install.sh 554-antigravity-moves --takeover`：装前 `d49ed6e89c8e`（`install-548-539` 合并包，含未合并的 #539）已备份到证据目录 `PostPane-d49ed6e89c8e.app`；产物 `628de7f4b999` / 已装 `628de7f4b999`，签名一致；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/PostPane-d49ed6e89c8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机截屏（`before-after-strip.png`，由 `smoke-before-1.png`、`smoke-after-1-1.png` 裁出）：装后 Antigravity 排第 4、是常驻小人、正在打盹；其余五家与装前一致。重启后顺序仍是第 4 位，但 `draft_hud` 回读的已保存列表里还没有 antigravity，请常浩在面板里再点一次「保存」。装上的包不含 #539，#539 合并后要从 main 重打重装。动作只看到打盹一种，其余动作没在实机上逐个验。
+- 与授权不一致之处、遗留问题、范围外发现：常浩还没看实物，动作和星球牌等他看预览和侧栏后定；PR 等他回「验收」再合并（观感类）。顺序要他在面板里点「保存」。
 - 本轮新坑：无
 - skill 进化：无
 
