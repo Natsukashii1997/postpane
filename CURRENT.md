@@ -2,18 +2,19 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
-## 交接卡只挂一个 START，去掉重复的「切换会话」虚线签（#559）（2026-11-27，Claude，常浩问「切换会话为什么会同时出现两个标识，没必要」；已提交，PR 见描述；未装机：#558 的包正装着做实机，没覆盖）
+## 侧栏卡只留类型签：去掉「切换会话」「下一步」「新任务」三种虚线行动签（#559）（2026-11-27，Claude，常浩问「切换会话为什么会同时出现两个标识，没必要」，随后说「切换会话、下一步这种行为指引……都是可以统一去掉的」；已提交，PR 见描述；未装机：#558 的包正装着做实机，没覆盖）
 
 - 时间：开工 `2026-11-27 21:39`（`date '+%F %H:%M'` 记录）。来由：侧栏交接卡上方同时挂着绿色 START 小签（#245，2026-11-08 定）和问题分区标题「切换会话」（红色虚线签），说的是同一件事。
-- 改变的行为：交接卡（Claude 桌面应用 `start_session` 带「【交接】」标题的卡）原来在 START 下面再挂一枚红色虚线「切换会话」签，改成只留 START。新任务卡「新任务」、下一步卡「下一步」不变；收起时的一行提示「待切换会话」不变。已定的 START 小签不动。
-- 你要求的：`src/crates/agents/src/claude/transcript.rs` 的 `desktop_ask_view`：交接卡的问题不再带分区标题（`header` 为 null），前端本来就是有标题才画签。
-- 我顺手改的：`src/packages/hud/test/approval-list.test.ts` 交接卡测试数据的 `header` 跟着改成 null；场景预览台补一个 `claude-handoff` 场景（`src/packages/hud/test/scenes/scenes.ts`，两张交接卡：能在侧栏开始的、只能到 Claude 里开始的）。
+- 改变的行为：Claude 桌面应用的三种卡原来在类型签下面再挂一枚红色虚线签：交接卡「切换会话」、下一步卡「下一步」、新任务卡「新任务」。改成都不挂，只留类型签（交接卡 START，其余 ASK）。收起时的一行提示「待切换会话」不变；已定的 START 小签不动；Claude Code 自己提问（AskUserQuestion）带的分区标题不在这次范围。
+- 你要求的：`src/crates/agents/src/claude/transcript.rs` 的 `desktop_ask_view`：三种卡的问题都不再带分区标题（`header` 为 null），前端本来就是有标题才画签；`claude_desktop.rs` 加两条断言（交接卡、下一步卡都没有标题）。
+- 我顺手改的：`src/packages/hud/test/approval-list.test.ts`、`src/packages/hud/test/scenes/build.ts` 测试数据的 `header` 跟着改成 null；场景预览台补一个 `claude-handoff` 场景（`src/packages/hud/test/scenes/scenes.ts`，两张交接卡：能在侧栏开始的、只能到 Claude 里开始的）。
 - 同类：搜了 `切换会话` / `Switch session` 和前端所有画 `header` 的地方（`HandoffStartCard`、`PermissionQuestionCard` 两处），只有 Rust 这一个来源，一处改掉即可。
-- 测试：新断言旧代码上 `test result: FAILED. 0 passed; 1 failed`（`red.txt`）；改后 `pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-559-handoff-one-tag/`。
+- 测试：两条新断言在旧代码上各自 `test result: FAILED. 0 passed; 1 failed`（`red.txt`、`red-next-step.txt`）；只去掉交接卡那一版：`pnpm run check` 退出码 0、`pnpm test`「全量测试汇总：6 套，失败 0 套」；扩到三种签后：`pnpm run check` 退出码 0，`pnpm test`「全量测试汇总：6 套，失败 2 套」（Rust `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 计时失败，单独重跑 `ok. 1 passed`；Chrome 插件 3 条真浏览器计时测试，单独重跑仍 `ℹ fail 3`，当时机器负载 134，本 PR 不碰 Chrome 插件代码，**合并前要在负载正常时重跑全过**）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-559-handoff-one-tag/`。
 - 验证：替身通过。场景预览台（127.0.0.1:1482，`?scene=claude-handoff&panel&still`，浏览器内置面板，Chromium 不是 WKWebView）展开两张卡，都只有 START，页面上没有「切换会话」签。真实环境未验：需装机后在一张真实交接卡上看。
 - 截图：`scene-claude-handoff.png`（场景预览台）。
 - 发布与回读：未发布。`install.sh` 报现在装着的是 `claude/558-agy-hub`（21:36 装、PR #560 未合并）的包，停下没装（L-05）；#558 实机做完后再装本包、和改前对比 START 小签（AGENTS.md「没打算改、但碰到同一处代码」），再合并。
-- 与授权不一致之处、遗留问题、范围外发现：无。
+- 与授权不一致之处、遗留问题、范围外发现：常浩同轮提出侧栏三处困惑，已出方案页 https://claude.ai/artifact/YQxPFTSoqWweCMWVC5sTfB（源文件 `docs/design/侧栏行动化三版预览-2026-11-27.html`，未进仓库），等他挑 3 处。Claude 收尾稳定给按钮框另开会话（任务卡，待常浩点开始）。
+- 主线：侧栏行动化｜✅ 0 ▶ 1 ❓ 3 📌 1：① 只留类型签（本 PR，等 #558 实机做完装机合并）▶；② 回复按收尾状态分流、主文字换成下一步、按钮一键做 ❓；③ 48 小时积压区 + 「不做了」❓；④ 积压区名字 ❓；⑤ Claude 收尾一律带按钮框（另开会话）📌。
 - 本轮新坑：无。
 - skill 进化：无。
 
