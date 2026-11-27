@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 侧栏「等待处理」与「积压事项」按规范版改 7 项；小签 REPLY 回到蓝色（#562 #563）（2026-11-28，Claude，常浩在「侧栏等待处理｜展开与积压卡规范」会话看规范版回「都按推荐」、补按钮位置和「继续 / 停止」、说「转给那个会话」，经交接卡转来；已提交、已推送 PR #564，已登记 DECIDED.md，未装机）
+
+- 时间：开工 `2026-11-28 04:41`（按交接卡转来的时间，约数）。来由：常浩 11-28 定了一套规范版（https://claude.ai/artifact/F46pSwSMyFUjq2CfyDTdGK ），7 项加小签 REPLY 变黄的 bug，做进 PR #564。开工前用 `list_events` 和会话记录核了原话（04:26「都按推荐」，04:31 补按钮位置、字数工整和「转给那个会话」）。
+- 行为变化（动手前已在会话里列出）：「等待处理」默认展开排第一的那条，REPLY 也能展开，同一时间只展开一条，只能回 Claude 里答的提问不再被拉进前 4 条；展开的 REPLY 小字写收尾、大字写下一步、右下「知道了」（只从驿窗收起，不往会话里发东西）；回复摘要去掉 Markdown 星号；积压签由红色「等你」换成紫色 WAIT；积压按钮「继续 / 不做了」改「继续 / 停止」，跟在问你最后一行右边，确认改「停止 / 取消」；小签 REPLY 由黄回到蓝，审批类的黄收成纸面 ochre。积压标题行补等了多久、问你全文换行（只加内容）。
+- 你要求的：`permissions/approval-list.ts`（`openEntryId` 默认展开第一条）、`permissions/ApprovalContent.tsx`（回复也能展开、只保留点选的那条在视野里、`drop` 收起回复）、`permissions/ReplyDetail.tsx`（新：展开的 REPLY）、`permissions/reply-closing.ts`（新：读回复的收尾、去星号）、`permissions/tag-tone.ts`（新：类型签取色唯一入口 `toneInk`，加 WAIT / `wait`）、`paper.ts`（`violet`）、`alerts/CompactAlertView.tsx`（小签改走 `toneInk`）、`panel/BacklogFold.tsx`（WAIT、等了多久、继续 / 停止）、`panel/BacklogLine.tsx`（新：问你全文 + 按钮跟在最后一行）、`panel/backlog.ts`（`backlogWaited`）、`panel/SessionsSection.tsx` 与 `panel/PlaceRows.tsx`（积压行的写法，保留左滑）、`scene/NewsCard.tsx`；`docs/design/卡片版式规范.md` 加「组件一致性」；`docs/DECIDED.md` 两行。
+- 我顺手改的：`permissions/CardButton.tsx`（新：卡片按钮一份，ASK 卡的提交 / 跳过 / 返回 / 知道了 / 打开智能体插件也换成它，样式不变，`PermissionQuestionCard.tsx` 少 63 行）；`alerts/reply-list.ts` 的 `replyMessage` 去星号（普通回复卡的摘要和正文跟着去掉）；`panel/fold-store.ts` 加 `pickStore`，展开哪条、哪条在问「确定停止」两份侧栏共用（#430 同一个问题），关侧栏时复位（`scene/close-with-sidebar.ts`）；`panel/theme.ts` 加 `clipped`，`SessionsSection.tsx` 6 处重复的截断样式收成它；`ApprovalContent` 去掉不再用的 `selected` 参数；场景预览台加 `claude-reply-first`、积压场景换长问句；`file-size-baseline.json` 收紧 3 个文件。
+- 同类：搜了各处给类型签自己取色的写法（`tone ===`、`ApprovalTag color=`），只有 `CompactAlertView` 一处另取，已改；搜了显示回复原文的地方，`ApprovalContent` 摘要和回复卡共用的 `replyMessage` 两处，都去掉星号。
+- 测试：新测试 `src/packages/hud/test/waiting-spec.test.ts` 和实现一起写，事后放回改动前的代码上跑，因缺 `WAIT_BADGE` 等导出整份失败（先红是事后补验，不是先写测试）。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1193，前端 `ℹ pass 543` `ℹ fail 0`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。场景文件在全量跑的过程中改过，补跑侧栏包 `node --test src/packages/hud/test/*.test.ts` `ℹ pass 462` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-564-spec/`。
+- 验证：替身通过（场景预览台 127.0.0.1:1482，1440×900）。`claude-reply-first`：第一条 REPLY 默认展开，小字收尾、下一步大字、右下「知道了」，只能回 Claude 里答的提问在「展开其余 2 条」里；`claude-backlog`（纸面卡）：紫色 WAIT、「398 小时」、长问句最后一行和「继续 / 停止」同行，短句这一行放不下按钮时另起一行，按钮和文字至少隔 10 像素；`claude-reply-card`：小签 REPLY 颜色读回 `rgb(143, 176, 236)`（纸面蓝）。预览台里面板被侧栏场景层盖住，积压标题是用页面脚本点开的。未在真实侧栏验证。
+- 截图：证据目录 `scene-reply-first.jpg`、`scene-backlog-paper.jpg`、`scene-backlog-notch.jpg`（场景预览台，非实机）。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：刘海模式（没有纸面）下主按钮沿用 ASK 卡在刘海里的绿色，规范版只画了纸面；和 ASK 卡一致，没另改。
+- 本轮新坑：无
+
 ## 驿窗启动的子程序继承 Mac 系统代理，claude 登录续期不再因直连 403 失败（#567）（2026-11-28，Claude，常浩回「做甲乙两条」；已提交，未装机：真实机器上正装着别的会话 #566 的测试包）
 
 - 时间：开工 `2026-11-28 00:46`（`date '+%F %H:%M'` 记录）。来由：常浩截图说展开卡上的周额度暗印（#319）又看不到了，要求恢复并「确保这个问题以后不会再发生」。查实暗印代码没坏：本机 Claude Code 命令行登录过期，Claude 额度变成「过期」，暗印按设计不画；登录反复掉的根子是驿窗启动的 claude 不带代理、直连 Anthropic 被拒（L-75）。常浩带代理重登后，00:38 驿窗读回额度（本周 95%，吃紧）。
