@@ -186,6 +186,13 @@
   - 待常浩定：本机 Antigravity「实时状态」是关的（`presentation.json` `sources.antigravity.live: false`，首次见到时还没检测到、默认存成了关；ChatGPT 有 `DETECTED_LATE` 检测到后补开一次，Antigravity 没有）。关着时侧栏只显示空闲，#554 实机「只看到打盹」很可能是这个原因（未核实）。要不要打开、要不要把 Antigravity 加进 `DETECTED_LATE`，没动。
   - 测试时在 Antigravity 里留了 4 个「驿窗连通性测试…」会话，可删。
 - 本轮新坑：L-75、L-76、L-77、L-78。
+- MA-02 第 1 轮返修（审查链 `r1a21d3e4c3c00`，受审 `8bf3b91`，P1 1、P2 3、P3 2，全部已修）：
+  - P1-01 发现文件里的端口没和进程绑定：`running::candidates` 只用该进程正在监听的端口（`listening_ports(pid)`），读不到监听端口就不用文件；命令行来的照旧。
+  - P2-01 目录符号链接：存储目录和 `daemon` 目录是链接的不读（文件本身原来就不读链接）。检查和打开之间的竞态没处理，理由写在回信里：端口已经绑定到进程，文件改不了信任对象。
+  - P2-02 超长轮次的回退轮次：钩子认不出轮次时标 `turnKnown: false`，`HookEvent::completed_turn` 让 overlay 保留会话记录的轮次，同一轮不会在两个名字下各结束一次。
+  - P2-03 发现文件的位置改用 `AGENT.discovery.storage`，和会话记录一致（认 `GEMINI_CLI_HOME`）。`hud_tools::antigravity` 的注释说 Antigravity 不认这个变量，两边不一致，没改它。
+  - P3-01 钩子判「未答的提问」改成和 `TURNS` 一样，只排除 SYSTEM；P3-02 `page_id` 按客户端限定，判结束时按快照 id 精确匹配；快照 liveFacts 为空对象 `{}` 时也改看会话页。
+  - 每条新测试都先临时换回旧写法跑出红，证据在 `r5/red-*.txt`。
 - skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）

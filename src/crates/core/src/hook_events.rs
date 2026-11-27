@@ -514,7 +514,7 @@ impl HookEvidence {
             session["state"] = json!("idle");
             advance(session, completion.at_ms);
             let facts = facts(session);
-            facts["turnId"] = completion.data["turnId"].clone();
+            facts["turnId"] = completion.completed_turn(&facts["turnId"]);
             facts["outcome"] = json!("completed");
             facts["endedAt"] = iso(completion.at_ms);
             facts["activity"] = Value::Null;
@@ -719,5 +719,34 @@ mod tests {
         assert_eq!(rows[0]["state"], "idle");
         assert_eq!(rows[0]["liveFacts"]["outcome"], "completed");
         assert_eq!(rows[0]["liveFacts"]["endedAt"], iso(at));
+    }
+
+    /// A completion that could not tell its turn keeps the log's, so the
+    /// turn ends once under one name (postpane#560 P2-02).
+    #[test]
+    fn an_antigravity_completion_that_cannot_tell_its_turn_keeps_the_logs() {
+        let at = 1_792_470_000_000i64;
+        let stop = |data: Value| HookEvent {
+            source: "antigravity".into(),
+            session_id: "antigravity:a1".into(),
+            kind: "completion".into(),
+            at_ms: at + 5_000,
+            data,
+        };
+        let ended = |data: Value| {
+            let mut evidence = HookEvidence::default();
+            assert!(evidence.ingest(&[stop(data)], at + 5_000));
+            let mut session = json!({"source":"antigravity","id":"antigravity:a1","state":"running","updatedAt":iso(at),
+                "liveFacts":{"turnId":"step-0","turnStartedAt":iso(at),"lastEventAt":iso(at)}});
+            evidence.overlay(&mut session, at + 6_000, None, None);
+            assert_eq!(session["liveFacts"]["endedAt"], iso(at + 5_000));
+            session["liveFacts"]["turnId"].clone()
+        };
+        assert_eq!(
+            ended(json!({"turnId":"stop-1","turnKnown":false})),
+            "step-0"
+        );
+        assert_eq!(ended(json!({"turnId":"step-0"})), "step-0");
+        assert_eq!(ended(json!({"turnId":"step-9"})), "step-9");
     }
 }

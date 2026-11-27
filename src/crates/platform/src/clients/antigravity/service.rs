@@ -139,19 +139,8 @@ impl Service {
             if Instant::now() >= deadline {
                 break;
             }
-            let ports = match server.https {
-                Some(port) => vec![port],
-                None => crate::os::listening_ports(server.pid).unwrap_or_default(),
-            };
-            let mut candidates = ports
-                .into_iter()
-                .filter(|_| !server.token.is_empty())
-                .map(|port| ("https", port, server.token.clone()))
-                .collect::<Vec<_>>();
-            if let Some((port, token)) = server.extension {
-                candidates.push(("http", port, token));
-            }
-            for (scheme, port, token) in candidates {
+            let listening = crate::os::listening_ports(server.pid).unwrap_or_default();
+            for (scheme, port, token) in running::candidates(&server, &listening) {
                 if Instant::now() >= deadline {
                     break;
                 }

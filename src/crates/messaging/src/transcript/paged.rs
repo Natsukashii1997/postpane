@@ -110,10 +110,15 @@ pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Fou
     })?;
     let (found, started) = turn?;
     // The snapshot leaves a session's live facts out while its client's live
-    // status is off on the HUD; its pages still carry the collector's.
-    let live = crate::find(host.snapshot, id)
+    // status is off on the HUD; its pages still carry the collector's. `id`
+    // is the snapshot's own (`page_id`), so it is matched as it is.
+    let live = host.snapshot["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|session| session["id"] == id)
         .map(|session| &session["liveFacts"])
-        .filter(|live| live.is_object())
+        .filter(|live| live.as_object().is_some_and(|facts| !facts.is_empty()))
         .or(read.live.as_ref());
     let ended_at = live
         .map(|live| &live["endedAt"])

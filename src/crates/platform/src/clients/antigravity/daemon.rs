@@ -1,11 +1,16 @@
 //! Antigravity's desktop app (2.35+, `--subclient_type hub`) starts its
 //! language server with the host token on stdin, so the command line carries no
 //! CSRF credential. The server instead publishes its own loopback ports and
-//! credential in a same-user file, `~/.gemini/antigravity*/daemon/*.json`
+//! credential in a same-user file, `<storage>/daemon/*.json` (storage is
+//! `~/.gemini/antigravity`, or under `GEMINI_CLI_HOME`)
 //! (`pid`, `httpsPort`, `httpPort`, `csrfToken`). A file counts only for the
 //! running Antigravity language server whose pid it names; the credential is
 //! never logged or returned.
-use std::{fs, io::Read, path::Path};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 const MAX_FILE: u64 = 4096;
 
@@ -17,22 +22,20 @@ pub(super) struct Published {
     pub token: String,
 }
 
-/// Every well-formed discovery file under `home`. Unreadable, oversized,
-/// linked or malformed files are skipped; matching to a process is the caller's.
-pub(super) fn published(home: &Path) -> Vec<Published> {
-    let Ok(roots) = fs::read_dir(home.join(".gemini")) else {
-        return Vec::new();
-    };
+/// Every well-formed discovery file in the `daemon` folder of each of
+/// Antigravity's storage folders. A storage or `daemon` folder that is a
+/// link, and a file that is not a plain file, are not read; unreadable,
+/// oversized or malformed files are skipped. Matching a file to a running
+/// process, and its ports to that process, is the caller's.
+pub(super) fn published(storage: &[PathBuf]) -> Vec<Published> {
+    let real_dir = |path: &Path| fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir());
     let mut found = Vec::new();
-    for root in roots.flatten() {
-        if !root
-            .file_name()
-            .to_str()
-            .is_some_and(|name| name.starts_with("antigravity"))
-        {
+    for root in storage {
+        let daemon = root.join("daemon");
+        if !real_dir(root) || !real_dir(&daemon) {
             continue;
         }
-        let Ok(files) = fs::read_dir(root.path().join("daemon")) else {
+        let Ok(files) = fs::read_dir(&daemon) else {
             continue;
         };
         for file in files.flatten() {
@@ -81,9 +84,9 @@ mod tests {
     use super::*;
 
     /// Shape written by Antigravity 2.35.2 (`daemon/hub_<httpPort>.json`).
-    const HUB: &str = r#"{"pid":92483,"httpsPort":53120,"httpPort":53121,"lsVersion":"2.35.2","csrfToken":"fixture-hub-token"}"#;
+    pub(super) const HUB: &str = r#"{"pid":92483,"httpsPort":53120,"httpPort":53121,"lsVersion":"2.35.2","csrfToken":"fixture-hub-token"}"#;
 
-    fn hub() -> Published {
+    pub(super) fn hub() -> Published {
         Published {
             pid: 92483,
             https: Some(53120),
@@ -118,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn scans_only_antigravity_daemon_folders_and_skips_bad_files() {
+    fn reads_each_storage_daemon_folder_and_skips_bad_files() {
         let home = tempfile::tempdir().unwrap();
         let write = |relative: &str, body: &str| {
             let path = home.path().join(relative);
@@ -137,10 +140,16 @@ mod tests {
             &format!("{HUB}{}", " ".repeat(MAX_FILE as usize)),
         );
         write(".gemini/other/daemon/hub_1.json", HUB);
-        let mut found = published(home.path());
+        let storage = ["antigravity", "antigravity-cli", "antigravity-ide"]
+            .map(|name| home.path().join(".gemini").join(name));
+        let mut found = published(&storage);
         found.sort_by_key(|server| server.pid);
         assert_eq!(found.iter().map(|s| s.pid).collect::<Vec<_>>(), [5, 92483]);
         assert_eq!(found[1], hub());
-        assert!(published(&home.path().join("missing")).is_empty());
+        assert!(published(&[home.path().join("missing")]).is_empty());
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "daemon_tests_unix.rs"]
+mod unix_tests;

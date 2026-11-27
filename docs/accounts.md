@@ -122,8 +122,11 @@ Every readable running Antigravity language server also contributes its
 email/team account. A server's loopback credential comes from its command line
 (older desktop builds, the `agy` CLI) or, for the 2.35+ desktop app whose server
 receives its host token on stdin, from the same-user discovery file
-`~/.gemini/antigravity*/daemon/*.json` that names that server's running pid
-(`httpsPort`, `httpPort`, `csrfToken`); a file naming any other pid is ignored. Identified CLI weekly and five-hour windows take precedence
+`<storage>/daemon/*.json` (storage as for its transcripts: `~/.gemini/antigravity*`,
+or under `GEMINI_CLI_HOME`) that names that server's running pid (`httpsPort`,
+`httpPort`, `csrfToken`). A file naming any other pid is ignored, and a port it
+names is used only if that process listens on it; linked storage or `daemon`
+folders and linked files are not read. Identified CLI weekly and five-hour windows take precedence
 over that same account's native model-family totals, whose window lengths are
 unknown. The original CLI observation time remains visible even when a native
 service is running. Different native team identities remain separate because

@@ -12,6 +12,20 @@ pub struct HookEvent {
     pub kind: String,
     pub data: Value,
 }
+impl HookEvent {
+    /// The turn a completion ends: its own, unless it could not tell which
+    /// (`turnKnown: false`: Antigravity's Stop read a tail without the prompt)
+    /// and the log already names one. A callback's own time-made id would
+    /// make the log's turn end a second time under another name
+    /// (postpane#560 P2-02).
+    pub fn completed_turn(&self, logged: &Value) -> Value {
+        if self.data["turnKnown"] == false && logged.is_string() {
+            logged.clone()
+        } else {
+            self.data["turnId"].clone()
+        }
+    }
+}
 fn event(source: &str, session: &str, now: i64, kind: &str, data: Value) -> HookEvent {
     HookEvent {
         source: source.into(),

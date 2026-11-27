@@ -2168,12 +2168,24 @@ fn an_antigravity_start_named_by_its_bare_id_is_read_under_the_snapshots_id() {
 /// facts its own pages carry (postpane#558: Antigravity's live status was off).
 #[test]
 fn a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry() {
+    // The snapshot leaves the facts out, or (postpane#560) keeps an empty object.
+    ends_by_the_facts_its_pages_carry(None);
+    ends_by_the_facts_its_pages_carry(Some(json!({})));
+}
+fn ends_by_the_facts_its_pages_carry(snapshot_live: Option<Value>) {
     let mut world = World::on();
     let full = format!("antigravity:{ANTIGRAVITY}");
     let project = world.fixture.home().join("project");
-    world.snapshot["sessions"].as_array_mut().unwrap().push(json!(
+    let mut session = json!(
         {"id":full,"source":"antigravity","title":"Plan the film","cwd":project,"state":"idle","parentId":null}
-    ));
+    );
+    if let Some(live) = snapshot_live {
+        session["liveFacts"] = live;
+    }
+    world.snapshot["sessions"]
+        .as_array_mut()
+        .unwrap()
+        .push(session);
     let sent = world.send(("claude", CLAUDE), &full, "Plan the film");
     let id = sent["id"].as_str().unwrap().to_owned();
     let message = world.messaging.journal.find(&id).unwrap().clone();

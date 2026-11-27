@@ -6,7 +6,31 @@ pub(super) struct Server {
     pub extension: Option<(u16, String)>,
     /// The HTTPS port a discovery file names; else every listening port is tried.
     pub https: Option<u16>,
+    /// The credential and ports came from a discovery file, not the process's
+    /// own command line: a port it names counts only if the process listens on it.
+    pub from_file: bool,
     priority: u8,
+}
+
+/// The endpoints to try for `server`, given the ports its process listens
+/// on: HTTPS with its token, then its extension port over HTTP. A discovery
+/// file only says which of the process's own ports to use; one naming a port
+/// the process does not listen on is not tried (postpane#560 P1-01).
+pub(super) fn candidates(server: &Server, listening: &[u16]) -> Vec<(&'static str, u16, String)> {
+    let owned = |port: &u16| !server.from_file || listening.contains(port);
+    let https = match server.https {
+        Some(port) => vec![port],
+        None => listening.to_vec(),
+    };
+    let mut found = https
+        .into_iter()
+        .filter(|port| !server.token.is_empty() && owned(port))
+        .map(|port| ("https", port, server.token.clone()))
+        .collect::<Vec<_>>();
+    if let Some((port, token)) = server.extension.as_ref().filter(|(port, _)| owned(port)) {
+        found.push(("http", *port, token.clone()));
+    }
+    found
 }
 fn flag(command: &str, name: &str) -> Option<String> {
     let target = format!("--{name}");
@@ -37,9 +61,21 @@ fn flag(command: &str, name: &str) -> Option<String> {
 
 pub(super) fn servers() -> Result<Vec<Server>, String> {
     let published = crate::os::home_dir()
-        .map(|home| super::daemon::published(&home))
+        .map(|home| super::daemon::published(&storage(&home)))
         .unwrap_or_default();
     Ok(parse_servers(crate::os::processes()?, &published))
+}
+
+/// Antigravity's storage folders, where its servers publish themselves,
+/// found the way its transcripts are (`GEMINI_CLI_HOME`, else `~/.gemini`).
+fn storage(home: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let env = std::env::vars().collect::<crate::os::Environment>();
+    agent_hud_agents::antigravity::AGENT
+        .discovery
+        .storage
+        .iter()
+        .flat_map(|location| crate::os::resolve(home, &env, location))
+        .collect()
 }
 
 /// Credentials come from the command line (older apps, the `agy` CLI) or,
@@ -80,6 +116,7 @@ fn parse_servers(
             token,
             extension,
             https: None,
+            from_file: false,
             priority: if cli { 1 } else { 0 },
         };
         if server.token.is_empty() && server.extension.is_none() {
@@ -89,6 +126,7 @@ fn parse_servers(
             server.token = file.token.clone();
             server.https = file.https;
             server.extension = file.http.map(|port| (port, file.token.clone()));
+            server.from_file = true;
         }
         result.push(server);
     }
@@ -230,6 +268,51 @@ mod tests {
         assert_eq!((server.pid, server.token.as_str()), (7, "fixture-hub"));
         assert_eq!(server.https, Some(53120));
         assert_eq!(server.extension, Some((53121, "fixture-hub".to_owned())));
+    }
+
+    /// A discovery file names the process's ports; only those the process
+    /// listens on are tried (postpane#560 P1-01).
+    #[test]
+    fn a_discovery_file_port_counts_only_if_its_process_listens_on_it() {
+        let found = parse_servers(vec![process(7, HUB_SERVER, HUB_ARGS)], &[hub_file(7)]);
+        let server = &found[0];
+        assert!(server.from_file);
+        assert_eq!(
+            candidates(server, &[53120, 53121, 53498]),
+            [
+                ("https", 53120, "fixture-hub".to_owned()),
+                ("http", 53121, "fixture-hub".to_owned()),
+            ]
+        );
+        // The file points at ports another process holds.
+        assert!(candidates(server, &[53498]).is_empty());
+        assert!(candidates(server, &[]).is_empty());
+        assert_eq!(
+            candidates(server, &[53121]),
+            [("http", 53121, "fixture-hub".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_command_line_server_tries_every_port_it_listens_on_and_its_extension() {
+        let found = parse_servers(
+            vec![process(
+                9,
+                "/Applications/Antigravity.app/language_server",
+                "server --csrf_token t --extension_server_port 4000",
+            )],
+            &[],
+        );
+        let server = &found[0];
+        assert!(!server.from_file);
+        assert_eq!(
+            candidates(server, &[5000, 5001]),
+            [
+                ("https", 5000, "t".to_owned()),
+                ("https", 5001, "t".to_owned()),
+                ("http", 4000, "t".to_owned()),
+            ]
+        );
     }
 
     #[test]

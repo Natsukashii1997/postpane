@@ -655,7 +655,7 @@
 
 - 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。
 - 根因：`clients/antigravity` 的发现只从 language_server 启动参数读 `--csrf_token` / `--extension_server_port`。2.35.2 桌面版改成 `--subclient_type hub --https_server_port 0 --read_host_bridge_token_from_stdin`，参数里没有令牌，进程被整个跳过；新版把端口和令牌写在 `~/.gemini/antigravity/daemon/hub_<httpPort>.json`（0600，`pid`、`httpsPort`、`httpPort`、`csrfToken`）。不带令牌直接调，服务回 `401 missing CSRF token`。
-- 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
+- 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认；文件里写的端口必须是那个进程正在监听的（`listening_ports(pid)`），否则文件就不只是给令牌、而是在决定驿窗信任谁（#560 审查 P1-01）。发现文件的位置跟会话记录用同一套（认 `GEMINI_CLI_HOME`）。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
 - 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red.txt` 新测试在旧逻辑上失败、`green.txt`、全量测试输出、实机记录）。
 - 升级：〔提醒〕部分升级（2026-11-27，#558）：`running.rs` 新版启动参数与发现文件夹具测试、`daemon.rs` 发现文件测试，未接进必经检查。
