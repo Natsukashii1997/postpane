@@ -1106,6 +1106,31 @@ test("a read again says whether it was told, in front or not, still written, or 
       "unloaded",
       false,
     ],
+    // #548: a page that cannot find what PostPane reads says what, told or not.
+    [
+      Array(10).fill({
+        ok: true,
+        streaming: false,
+        told: false,
+        loaded: false,
+        missing: ["answers"],
+      }),
+      "changed",
+      false,
+    ],
+    [
+      [
+        {
+          ok: true,
+          streaming: false,
+          told: true,
+          loaded: true,
+          missing: ["prompt-ids"],
+        },
+      ],
+      "changed",
+      false,
+    ],
   ];
   for (const [answers, outcome, fronted] of cases) {
     const posted = [];
@@ -1119,6 +1144,7 @@ test("a read again says whether it was told, in front or not, still written, or 
     await listeners.port({ type: "reread", conversation });
     const [read] = readsOf(posted);
     assert.equal(read?.outcome, outcome, JSON.stringify(answers[0]));
+    assert.deepEqual(read.missing, answers.at(-1).missing, outcome);
     assert.equal(read.fronted, fronted, outcome);
     assert.equal(read.active, false);
     assert.equal(read.minimized, false);

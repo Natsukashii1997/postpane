@@ -44,6 +44,9 @@ pub enum Trouble {
     /// A review looked for `FIND_MOST` times is still not known to have
     /// gone in: the person has it (#524).
     Lost,
+    /// The page lacks what PostPane reads, so it cannot read the answer
+    /// (#548): what it lacks, as the step says.
+    PageChanged(String),
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -63,6 +66,8 @@ pub enum Cause {
     Absent,
     /// `lost_finding`: a review looked for long is still not known (#524).
     Lost,
+    /// `page_changed`: the page lacks what PostPane reads (#548).
+    PageChanged,
 }
 
 impl Step {
@@ -101,6 +106,9 @@ impl Handoff {
             }
             Cause::Absent if self.live() => Trouble::Absent,
             Cause::Lost if self.live() && self.unanswered().is_some() => Trouble::Lost,
+            Cause::PageChanged if self.live() => {
+                Trouble::PageChanged(step.text.clone().unwrap_or_default())
+            }
             _ => return None,
         };
         Some((at, trouble))
@@ -140,6 +148,39 @@ impl Book {
             return false;
         }
         self.caused_last(id, Cause::Undrawn);
+        true
+    }
+    /// Reads again found the page lacks what PostPane reads (#548), while
+    /// `id` waits on ChatGPT: a round trip on stops for `reason`; one
+    /// stopped already gets the reason as a step, once for this wait.
+    /// Whether it changed.
+    pub fn page_changed(&mut self, id: &str, reason: &str, now: i64) -> bool {
+        let Some(h) = self
+            .get(id)
+            .filter(|h| h.live() && matches!(h.phase, Phase::Delivered | Phase::Working))
+        else {
+            return false;
+        };
+        if h.auto {
+            return self.stop(id, reason, true, now) && {
+                self.caused_last(id, Cause::PageChanged);
+                true
+            };
+        }
+        let since = h.phase_at;
+        let said = h
+            .steps
+            .iter()
+            .any(|s| s.at >= since && s.cause == Some(Cause::PageChanged));
+        let Some(h) = self.get_mut(id).filter(|_| !said) else {
+            return false;
+        };
+        h.steps.push(
+            Step::new(now, StepKind::Fail, Some(reason))
+                .by_auto()
+                .caused(Cause::PageChanged),
+        );
+        h.updated_at = now;
         true
     }
     /// The step `overdue` just put down for `id` is of trouble `cause`.

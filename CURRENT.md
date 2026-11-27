@@ -66,6 +66,33 @@
 - 本轮新坑：L-75。
 - skill 进化：无。
 
+## 接力治本第 2 步：重读时做页面体检，页面改版几分钟内说清认不出什么；认网页的写法收口（#548）（2026-11-27，Claude，常浩确认问题清单第 2 条后回「开始第 2 步」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机与端到端验证见下）
+
+- 时间：开工 `2026-11-27 01:27`（按建分支的时间，约数）。来由：#544 验收第 1、2 条；全表 E10 空格 26–30（页面认不出时只表现为「30 分钟没回信」或误诊）。
+- 改变的行为（动手前已在会话里列出）：重读时插件做页面体检，缺了插件要认的东西就报 `changed` + `missing`；同一张接力隔几分钟连续两次都是 `changed`，驿窗停下自动往返，卡上写「ChatGPT 页面改版：驿窗认不出 X」，通知发起会话一次（不是没回信、别重送），写一行 `postpane.log`。原来要等 30 分钟、说成「ChatGPT 没回信」。实现时调整一处并已告知：自动往返已停着的接力也通知一次（它之前收到的是「30 分钟没回信」，要更正成真实原因）。页面还在画历史时也会缺项，靠「隔几分钟连续两次」排除。
+- 你要求的：
+  - 插件：`page.js` 加 `shape(doc, held)`（查输入框；会话里有驿窗的话时再查对话轮次、提问编号、回答格子、提问文字）、`WATCHED`、`SEL.ids`；`content.js` 重读回复带 `missing`，盯的属性改用 `page.WATCHED`；`background.js` 有缺项就报 `changed` 并转 `missing`；版本 0.2.11 → 0.2.12。
+  - 驿窗：`answers/desk_undrawn.rs` 连续计数改为「同一种结果连着几次」（`undrawn`、`changed` 两种），`changed` 两次就 `page_changed`，turns.jsonl 记 `missing`；`notice/book.rs` 新 `Cause::PageChanged`、`Trouble::PageChanged`、`Book::page_changed`；`notice/desk.rs` 通知文字；`handoff.rs` 计数字段类型改一行。
+  - `scripts/check-rules.mjs` 新规则 `page`：插件里 `page.js`、`data.js`、`mark.js` 之外不许出现选择器。
+  - 文档：`docs/chatgpt-channel.md`（`changed`、页面体检、2026-11-27 页面结构实测）、`docs/接力规范.md` 第 6 节和全表摘要、`docs/接力异常全表.md` E10、`docs/DECIDED.md` 一行。
+- 我顺手改的：`page.js` 里提问编号属性名原来写了 3 处，合成一处；影子读取认得的页面结果加 `changed`（`platform/.../shadow.rs`）；更正 `evidence/2026-11-27-544-page-probe/real-page-structure.md` 里「空输入框时也有发送键」（见下）。
+- 同类：搜了插件里所有选择器写法（`querySelector`、`aria-label`、`data-*`），`page.js`、`data.js`、`mark.js` 之外只有 `content.js` 那一处，已收；驿窗 Rust 侧按提问文字比对的老兜底没动（给缺编号的老记录用，另看）。
+- 测试：
+  - 新测试先红后绿：插件页面 `ℹ fail 3`（`red-content.txt`）、插件后台 `ℹ fail 1`（`red-background.txt`）、规则 `ℹ fail 1`（`red-check-rules.txt`）、驿窗 `FAILED. 1 passed; 2 failed`（`red-host.txt`；过的那条守「中间夹别的结果就重新计数」，旧代码本来不停）；改后都过。
+  - 旧测试改了 2 条预期（「a reply with no prompt drawn yet…」「asked to read again, a tab checks its conversation…」）：页面还在画历史时现在也报缺项，照批准的行为改。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test` 第一次「全量测试汇总：6 套，失败 1 套」：Chrome 插件 `ℹ pass 199` / `ℹ fail 1`，失败的是真实 Chromium 那条「a page too busy to answer…」跑了 229 秒（当时负载 38–44，同批另一条正常测试跑了 17 分钟）；单独重跑 `chromium.test.mjs` `ℹ pass 15` / `ℹ fail 0`，整套插件 `ℹ pass 200` / `ℹ fail 0`（`rerun-chromium.txt`、`rerun-extension.txt`）；其余：Rust 1178 passed，前端 516，MCP 9，插件 14，注入脚本 11，各 fail 0。`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-27-544-page-probe/`。
+- 验证：
+  - 真实页面（常浩的 Chrome，新开标签页、已结束接力的会话，只读；改名只改本地 DOM，测完改回关掉；`real-page-shape-check.md`）：第一版查发送键，页面完好也误报——输入框空着时 ChatGPT 把发送键换成「开始语音」，已去掉这一项；第二版：完好 `[]`，回答格子 / 提问编号 / 提问文字 / 输入框 / 对话轮次分别改名各报对应一项，改回 `[]`。
+  - 插件 → 驿窗 → 接力卡 → 通知这一整条：替身通过（`page_changed.rs`、`background.test.mjs`）。真实环境端到端在合并后做：常浩同意装「本分支 + #539」的合并包、重载插件、发一条测试接力（「驿窗自检，只回 OK」），在那个标签页本地改名看卡片和通知；结果写进下一节。
+- 截图：无界面改动（卡上文字走原有停因显示）。
+- 发布与回读：见下一节（合并后装机）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 停止键只在写回答时出现，体检查不了（全表 E10 空格 27 仍在）。
+  - 送话那一路没改（`no-composer` 等原因照旧）。
+  - 主线：接力治本｜✅ 0 装机、1 规范、2 页面体检（端到端待验）⏳ 3 判活按信号（改动确认）、4 不丢不重复与回程、5 静默停摆、6 每日自检（要批）、7 真实环境验收。
+- 本轮新坑：无（「空输入框时发送键被换走」记在通道文档和证据里，属页面事实，不是做法上的坑）。
+- skill 进化：无。
+
 ## 接力治本第 0、1 步：补装 7 个已合并的接力修复；接力规范与「状态 × 异常事件」全表（#544、#545）（2026-11-27，Claude，常浩确认问题清单并回「清单没问题，先装机」「#539 分支最新版」「开始第 1 步」；已提交，PR 见描述，已装机回读）
 
 - 时间：开工 `2026-11-27 00:05`（`date '+%F %H:%M'` 记录）。来由：常浩 11-26 跨项目复盘第 9 条「先不加功能，把网页一改就坏这些问题真的解决掉，把制度梳理清楚、跑通」。先只读出问题清单（`docs/design/接力治本-问题清单-2026-11-27.md`，12 条），常浩确认后做第 0 步装机、第 1 步规范。

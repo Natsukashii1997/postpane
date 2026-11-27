@@ -16,6 +16,7 @@ mod mend_late;
 mod mend_unsent;
 mod not_pressed;
 mod opening;
+mod page_changed;
 mod read_again;
 mod review_gate;
 mod round_trip;
