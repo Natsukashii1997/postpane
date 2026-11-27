@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 设计规范失效审核：卡片版式规范写成「每种元素放在哪」，新增 `check:card-layout` 机检（2026-11-28，Claude，常浩要求「深度审核，说清楚原因并修复，确保以后不再犯」，经 #564 会话转来；已提交，PR 见描述；无需发布）
+
+- 时间：开工 `2026-11-28 05:17`（`date '+%F %H:%M'` 记录）。来由：积压事项的 WAIT 签放进了图标列（常浩 11-28 05:11 指出），同类界面规范错误反复出现，他写的全局 DESIGN.md 没约束住。
+- 改了哪些文件：
+  - 你要求的：`docs/design/卡片版式规范.md`（开头写什么时候读、要连全局 `ui-system/docs/design-spec/DESIGN.md` 一起读；新增「每种元素放在哪」表、「同一种事，同一种行」、11-28 正反例；例外第 1 条写明只管章；新增「画预览、规范版时」「机器查的几条」）；`src/tooling/check-card-layout.mjs`（新：基线与命令行）、`src/tooling/card-layout-rules.mjs`（新：读 TSX 查三条：类型签进图标列、缩进写死数字、签自己挑颜色）、`src/tooling/card-layout-baseline.json`（新：16 处旧问题）；`package.json` 加 `check:card-layout` 并接进 `check`，根目录开发依赖加 `@babel/parser` 7.29.9（理由：机检要读 TSX 语法树，仓库里的 TypeScript 7 不再带可调用的解析器；这个版本已在依赖树里，离线装上）；`scripts/check-rules.mjs` 的 `ALLOWED_DEPS` 加它；`tests/check-card-layout.test.mjs`（新：9 条，第一条用 #564 分支 `f8cebde` 原样摘出的 WAIT 写法）；`AGENTS.md`「做什么事之前读哪份」那一行改成「动侧栏任何界面，含画预览和规范版」并指向两份规范和机检；`.agents/skills/postpane-round/SKILL.md` 测试一步加界面自查；`docs/LESSONS.md` 新坑 L-80。
+  - 我顺手改的：记忆 `same-component-same-style.md`（原写「全局版在 CLAUDE.md 第 9 节」，实际没有，已改正）、`postpane-one-left-grid.md`（补类型签不进图标列）。
+- 同类：搜了 hud 全部 TSX 的网格行、`ApprovalTag` 调用、按 tone 挑颜色的分支：16 处旧问题（写死数字 10 处、签自己挑颜色 6 处）记进基线，这次不改界面代码；用 #564 分支当前代码跑，新增 3 处（WAIT 进图标列、WAIT/等你共用签自己传颜色、ApprovalContent 多一处文字线 30）。
+- 测试：`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（含新的 `check-card-layout.test.mjs` 9 条）；`pnpm test` 第一遍「全量测试汇总：6 套，失败 1 套」，失败的是 Chrome 插件（`ℹ pass 198` / `ℹ fail 2`，`chromium.test.mjs` 两条真实 Chromium 计时测试，本 PR 没改插件），单独重跑 `pnpm run test:extension` `ℹ pass 200` / `ℹ fail 0`；合进最新 main 后在 `b1497a4` 上三条重跑：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1189 failed 0，前端 `ℹ pass 542`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（证据子目录 `merged-b1497a4/`）。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-design-rules-audit/`（`check.log`、`test.log`、`extension-rerun.log`、`node-tests.log`）。新测试和机检是一起写的，没有先跑出红；用 #564 分支原样代码跑机检报错，算这次的「红」。
+- 验证：机检在 #564 分支 `f8cebde` 与当前头 `bf96b01` 的 `src/packages/hud/src` 上跑（`git archive` 到临时目录），都报 `SessionsSection.tsx:555` 类型签进了图标列。审核报告：https://claude.ai/artifact/DpgUQnEQcG36yE9xJ2uYRf。界面纠正盘点（50 条，带会话出处）在共享笔记 `界面纠正清单-2026-11-28.md`。
+- 截图：无界面改动。
+- 发布与回读：无需发布（只改规范、检查、文档）。
+- 与授权不一致之处、遗留问题、范围外发现：#564 合并前要改掉上面 3 处才过 `pnpm run check`（第一处正是常浩 05:11 要它改的）。#553 把 `scripts/check-rules.mjs` 换成 agent-kit 共用实现，后合的一方要把 `@babel/parser` 挪进新白名单。全局 CLAUDE.md、`ui-system` DESIGN.md、three-versions skill 三处改动只出了提案（报告第六节），等常浩定。16 处旧问题和把 `ApprovalTag` 按章、类型签、套餐标签拆开，要改界面代码，等 #564 合并后另开一单。
+- 本轮新坑：L-80。
+
 ## 接力传信动画精修：细线白信封装信、连续对折成纸飞机（#570）（2026-11-28，Claude，常浩三版里选甲「细线」、改动确认回「改」：侧栏、刘海、互发消息一起换；已提交、未装机）
 
 - 时间：开工 `2026-11-28 04:39`（`date '+%F %H:%M'` 记录）。来由：常浩要接力纸飞机动画「再做 3 种版式」，两轮预览后定：保留折信封，普通白信封，细线画法（设计稿 https://claude.ai/artifact/MMBm4NF9wcdPqELQr1cS2h 甲）。
