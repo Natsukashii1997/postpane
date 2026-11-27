@@ -620,3 +620,11 @@
 - 正确做法：推送、开 PR、合并前都看一眼 `git diff --stat origin/main...HEAD`，列出的文件必须都是自己这张 issue 的；出现不相干的文件（尤其是刚合并的别的 PR 的文件）就停下，从 `origin/main` 重新拉分支、只 cherry-pick 自己的提交。换底用 `git rebase origin/main` 或 `git merge origin/main`，不用 `reset --soft` 再整份提交。合并包、装机前核对一下已验收的功能还在（如本条用 `git show <提交>:<文件> | grep` 查关键函数）。
 - 证据：`git show --stat 99296b6`（含 6 个 hud 文件和 DECIDED、CURRENT）；`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空。
 - 升级：〔提醒〕未升级。可做成〔机检〕：推送前钩子比对本分支改到的文件和 merge-base 之后 main 上别的提交改过的文件，有重叠且是「改回旧内容」就拒绝推送；先出提案等常浩定。
+
+## L-77 三版预览里的「现状」是凭印象复刻的：真实代码早有信纸飞进信封、信封连续变形成飞机，复刻版却画成淡入淡出替换，常浩拿它当参照挑方案（2026-11-28）
+
+- 现象：#570 出接力动画三版预览时，为了对比，在预览页里手写了一块「现状」画板。写的时候只看了实机截图和故事注释，没读 `FlightLayer` 的画法，把「信封淡出、飞机淡入」「信纸凭空在信封里」当成现状；开工实现时才发现真实代码一直是 6 点裁切连续变形，信纸也是从发信方飞进信封的。常浩两轮都是拿这块不准的「现状」做参照，觉得「不好看」「把折信封做没了」。
+- 根因：预览页的「现状」是另写的替身，不是真实组件；替身画得比真实的差，新方案就显得更好，比较失真。
+- 正确做法：预览页里要放「现状」做参照时，用真实组件截出来（场景预览台 `pnpm --filter @agent-hud/hud run scenes`，飞行有「飞：送审 / 回信 / 送不出去」三个按钮，暂停在指定时刻：`[...document.querySelectorAll('.hud-flight *')].flatMap(e => e.getAnimations()).forEach(a => { a.pause(); a.currentTime = T })`），或者先读真实画法再复刻，并在页面上写明「按代码复刻、哪里有出入」。凭印象复刻的不放进对比。
+- 证据：`docs/design/接力动画三版预览-2026-11-28.html` 的「现状」画板；真实画法见 `src/packages/hud/src/scene/flight-plan.ts` 改前的 `story()`（`shape` 关键帧 ENVELOPE→PLANE、`letter` 从 `from` 飞到 `start`）。
+- 升级：〔文字〕本条。场景预览台已能触发真实飞行（#570），之后做飞行相关预览直接截真实组件。

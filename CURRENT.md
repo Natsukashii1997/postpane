@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力传信动画精修：细线白信封装信、连续对折成纸飞机（#570）（2026-11-28，Claude，常浩三版里选甲「细线」、改动确认回「改」：侧栏、刘海、互发消息一起换；已提交，装机见下）
+
+- 时间：开工 `2026-11-28 04:39`（`date '+%F %H:%M'` 记录）。来由：常浩要接力纸飞机动画「再做 3 种版式」，两轮预览后定：保留折信封，普通白信封，细线画法（设计稿 https://claude.ai/artifact/MMBm4NF9wcdPqELQr1cS2h 甲）。
+- 行为变化（动手前已在会话里发改动确认，常浩回「改」）：接力和智能体互发消息的飞行，侧栏与刘海两种模式都换成新画法；约 2.5 秒 → 约 2.9 秒；虚线航迹换成渐淡小烟点；地上加影子；绕圈时纸飞机侧身翻过来、落地端正；送不出去改成失速翻滚、半路散开回信封；信纸落地时刻 `LETTER_LANDS_MS` 跟着变（约 2.88 秒），「审」章等信落地才盖的等待也跟着变长；减弱动效下的静态信封换成新画法。
+- 你要求的：`scene/flight-paper.ts`（新：白信封、纸飞机的 6 点裁切形状与下半边、飞机三面画法，翻身 `rollAt`、影子 `shadowAt`、信纸滑进信封 `letterClip`、失速翻滚 `tumble`、装信时刻 `PACK`）；`scene/flight-plan.ts` 的 `story()`（装信、封口两面翻、合上轻压、侧身、影子、小烟点、展开交信、失速翻滚；`STORY` 各段与 `handIn`；返回 `delivered`、`roll`、`shadow`、`puffs`）；`scene/flight-craft.tsx`（新：信封、封口、纸飞机、信纸、影子、数字的画法）；`scene/FlightLayer.tsx`（接上翻身、影子、下半边、小烟点；信纸移到最上层好滑进信封；接住时刻用 `delivered`）；`relay-stamps.ts`（`LETTER_LANDS_MS` 用 `handIn`）。
+- 我顺手改的：航线几何整块拆到 `scene/flight-route.ts`（行为不变，flight-plan 照旧转出，腾出行数过 300 行棘轮）；删掉没人用的 `pathData`；场景预览台 `preview/main.tsx` 加「飞：送审 / 回信 / 送不出去」三个按钮，能触发真实飞行；`file-size-baseline.json` 收紧（FlightLayer 925→716、flight-plan 834→692）。
+- 同类：搜了「收信时刻」`STORY.deliver * 0.7`，命中 3 处（FlightLayer 两处、relay-stamps 一处），都改成 `STORY.handIn` / `story.delivered`。
+- 测试：新测试先跑出红 `ℹ pass 6` / `ℹ fail 4`（`red.txt`）。改后 `node --test src/packages/hud/test/flight-plan.test.ts src/packages/hud/test/flight-paper.test.ts` `ℹ pass 14` / `ℹ fail 0`。`pnpm run check` 退出码 0（`check.txt`）。`pnpm test` 第一次失败 2 套：前端 `relay-stamps` 一条（信纸落地上限写死 2600，本轮带出，已改为 2600–3100），Rust `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 计时超窗（285 秒 < 290，机器忙；本轮没碰 Rust，单跑 `test result: ok. 1 passed`）；重跑 `全量测试汇总：6 套，失败 0 套`，Rust `test result` 合计 1189 passed、0 failed（`test2.txt`）。`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.txt`）。
+- 验证：替身通过。场景预览台（Chromium，真实 HUDScene + FlightLayer，`?scene=two-relays`，浅色、深色），用新加的按钮触发送审、回信、送不出去，暂停在 450 / 680 / 1010 / 1450 / 2330 / 2640 / 2800 毫秒和失败的 1780 / 2250 / 2520 毫秒逐帧看。刘海模式没在预览台看（预览台只有侧栏）；真实接力里的飞行要等下一次接力或互发消息时看，驿窗的 WKWebView 未验。
+- 截图：`evidence/2026-11-28-570-relay-paper/frames-scene-preview.png`（预览台 4 倍放大四帧）。
+- 发布与回读：见本节末尾装机记录。
+- 与授权不一致之处、遗留问题、范围外发现：预览阶段的「现状」画板是凭印象复刻的，和真实画法有出入（L-77），常浩两轮是拿它做参照；本轮实现照真实画法改，故事顺序没变。
+- 本轮新坑：L-77。
+- skill 进化：无。
 ## 恢复被 #568 冲掉的 #566「同一会话只出现一次」：代码、测试、场景、DECIDED 登记、交接一节（#569）（2026-11-28，Claude，常浩 11-28 已验收并让合并 #566；属回到已定行为，不改已定内容；已提交，PR 见描述）
 
 - 时间：开工 `2026-11-28 04:55`（`date '+%F %H:%M'` 记录）。来由：给 #564 打合并包前核对 main，发现 #568（`7575cf9`）的 squash 提交把 #566 改的 6 个文件原样退回 #566 之前（`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空），还删了 DECIDED 里 11-28「单一任务会话」那一行和 CURRENT 里 #565 一节；#568 的分支提交 `99296b6` 父提交就是 `1ac0ab1`，退回是它自己带进去的。之后在这个 main 上合的包（#567 会话装的 `2e53e13`）、#561 分支（`3b6908e`）都没有去重。
