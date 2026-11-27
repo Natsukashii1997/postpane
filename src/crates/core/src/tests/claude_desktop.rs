@@ -577,6 +577,8 @@ fn a_claude_desktop_box_sends_a_button_label_or_the_users_own_words_and_a_dismis
         },
         None,
     );
+    // The ASK tag says it already: no 「下一步」 heading beside it (#559).
+    assert!(view["questions"][0]["header"].is_null());
     let words =
         |decision: Value| agent_hud_agents::claude::transcript::desktop_ask_words(&view, &decision);
     assert_eq!(

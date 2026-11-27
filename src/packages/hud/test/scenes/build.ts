@@ -127,7 +127,7 @@ export function approval(
             {
               id: "q1",
               answerKey: "q1",
-              header: "下一步",
+              header: null,
               question: summary,
               multiSelect: false,
               options: [

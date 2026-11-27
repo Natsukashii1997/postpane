@@ -1099,11 +1099,6 @@ pub fn desktop_ask_view(
     } else {
         "mcp__ccd_turn__wrap_up"
     };
-    let header = match ask.kind.as_str() {
-        "offer" => Some(crate::l10n::text("新任务", "New task")),
-        "handoff" => None, // its START tag says it already (#559)
-        _ => Some(crate::l10n::text("下一步", "Next step")),
-    };
     let options = ask
         .options
         .iter()
@@ -1112,7 +1107,8 @@ pub fn desktop_ask_view(
     let question = json!({
         "id": ask.id,
         "question": ask.question,
-        "header": header,
+        // No heading: the card's type tag (ASK, START) says it already (#559).
+        "header": null,
         "options": options,
         "multiSelect": false,
         "answerKey": ask.id,
