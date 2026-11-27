@@ -134,10 +134,10 @@
   "src/packages/hud/src/permissions/PermissionQuestionCard.tsx": 698,
   "src/packages/hud/src/quota-metrics.ts": 327,
   "src/packages/hud/src/scene/AgentPeek.tsx": 436,
-  "src/packages/hud/src/scene/FlightLayer.tsx": 925,
+  "src/packages/hud/src/scene/FlightLayer.tsx": 716,
   "src/packages/hud/src/scene/HUDExpandedSurface.tsx": 635,
   "src/packages/hud/src/scene/HUDMarkStrip.tsx": 608,
-  "src/packages/hud/src/scene/flight-plan.ts": 834,
+  "src/packages/hud/src/scene/flight-plan.ts": 691,
   "src/packages/hud/src/scene/useHUDInteraction.ts": 385,
   "src/packages/hud/src/scene/useHUDLayout.ts": 385,
   "src/packages/ui/src/format.ts": 682
