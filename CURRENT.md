@@ -2,6 +2,26 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 侧栏 REPLY 每个会话只出现一次，新回复顶替旧行（#565）（2026-11-28，Claude，常浩附截图要求「每个会话都是出现一次……并改好」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-28 00:05`（按建 worktree 的时间，约数）。来由：常浩截图里回复卡同一会话出现 2～3 行（「Claude 收尾｜…」「【交接】数字分身…」「Antigravity｜代理登录修复」）；实机快照 `islandEvents` 里同一会话有 4 条回复事件，侧栏队列每条回复各占一行，只有「失败」按会话顶替旧行。
+- 改变的行为（动手前已在会话里列出）：回复卡、「等待处理」里的 REPLY 行、折起的回复小签和印章上的计数，同一会话（同一家 + 同一会话 id）只占一行；同一会话再回复，新回复在原位置顶替旧行，显示最新那条，计数按会话数算。没有会话 id 的回复照旧一条一行。
+- 你要求的：`src/packages/hud/src/alerts/news-lanes.ts`（`reconcileIslandCards` 新回复按 `replyLine` 找同一会话的旧行原位顶替）。
+- 我顺手改的：删掉 `reply-list.ts` 的 `sessionReplies`（回到会话时收起这个会话的全部回复；现在每个会话只有一行，`CompletionAlertView.tsx` 改成只收这一行）及其测试；场景预览台加场景 `replies-again`（`test/scenes/scenes.ts`）。
+- 同类：搜了 `islandEvents` 的所有读取处，侧栏只有 `IslandNews` 的队列一个入口，回复卡、等待处理卡、小签、印章都从它取，改这一处全部跟着变。
+- 测试：
+  - 新测试先红：`reply-queue-keep.test.ts` `ℹ pass 10` / `ℹ fail 2`（`red-reply-queue-keep.txt`；另 2 条守边界：别家同号、没会话 id、失败与回复分开，本来就过）；改后过。
+  - 三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1180 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-28-reply-one-per-session/`。
+- 验证：场景预览台（替身）新场景 `replies-again`：Claude 同一会话连回 3 次，悬停 Claude 票根，「等待处理 · 1」只一行「整理周报模板」，时间是最新那次。
+- 截图：`scene-replies-again.jpg`（场景预览台，非实机）。
+- 发布与回读：常浩选「装合并包」：本分支 `d98a0a4` + #560 `fd3cdeb` 合在临时分支（合并提交 `004fb00`，只 `CURRENT.md` 冲突、两节都留），合并包三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1201 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`combo-*.txt`）。`install.sh 565-reply-one-per-session --takeover`（原装的是 #560 分支 `2d38464` 的包 `85ce451e68d7`）：产物 `e0f0b96d9422` / 已装 `e0f0b96d9422`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2314 个像素不同；装后无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-565-reply-one-per-session/PostPane-85ce451e68d7.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机：本机 `claude -p` 在同一会话 `44c224bd…` 连发两轮（「驿窗自检第 1/2 轮，只回 OK」，工作目录 `evidence/2026-11-28-565-reply-one-per-session/selftest`），驿窗快照里收到这个会话 2 条回复事件（`event:1`、`event:2`）。侧栏上显示几行没验：离屏截图不画回复提醒，驿窗后台控制权限常浩拒绝了；结论「部分」，界面那一下留给常浩悬停 Claude 票根看。常浩看过实机后回「验收，然后合并」，已登记 DECIDED.md。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 同一会话既有等你回答的请求（ASK）又有一条回复时，仍各占一行（请求和回复是两类，回复不该顶掉要你决定的请求）。要不要也合成一行，等常浩定。
+  - 侧栏上现在已经堆着的重复行：装机会重启驿窗，队列清空，之后按新规矩来。
+- 本轮新坑：无。
+- skill 进化：无。
+
 ## 侧栏行动化 2、3：要你动手的回复做成「下一步卡」（#562）；等你超过 48 小时沉到「积压事项」（#563）（2026-11-27，Claude，常浩选「第一处选甲，但是如图其实现在这样就行……你不要完全给我变了；第二处选甲，名字叫做积压事项」；已提交，PR 见描述，叠在 PR #561 上；未装机：#558 的包正装着做实机）
 
 - 时间：开工 `2026-11-27 23:00`（接着同一会话做）。来由：常浩反馈回复几十条却不告诉他下一步，要点进会话读最后一句；久挂的条目（最久约 431 小时）永远挂在侧栏。
