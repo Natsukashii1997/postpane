@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 下一步在别的会话：并到那个会话的卡上，或改成指路卡（2026-11-28，Claude，常浩看三版预览后回「选丙」；已提交，未装机）
+
+- 时间：开工 `2026-11-28 05:20`（按建 worktree 的时间，约数）。来由：常浩截图里「多模型协同」会话的 REPLY 卡下一步是「到[规则更新](#local_…)回话」，侧栏却给了「输入回答 / 跳过 / 提交」，在这里提交话会送进做完了的会话；三版预览 https://claude.ai/artifact/YBPzjQux75zyby4TJAt29X 选丙。
+- 行为变化（动手前已在会话里列出）：只在下一步链接到**别的** Claude 会话时变。① 那个会话在侧栏有卡：本会话不出卡、只发普通 REPLY（原来 #564 这种轮不发），那张卡多一行「〈来源〉转来：…」，那张卡答完或收起后这条不再冒出来；② 那个会话没有卡：本会话出指路卡，去处 + 跳过 / 前往，没有选项和输入行（原来下一步里的『X』做成选项、提交进本会话）；前往打开那个会话并收起；在那边说过话后自动收起；③ 会话找不到：「这个会话已不在」只留跳过；④ 卡上的 `[名字](#local_…)` 显示成「名字」。
+- 你要求的：`agents/transcript/elsewhere.rs`（新：认出下一步里的会话链接、链接换成「名字」、去掉「到 X 回话。」那句的转来文字，3 条测试）；`agents/transcript/closing.rs`（下一步指向别的会话时不出选项）；`claude/transcript/desktop_tabs.rs`（新：`session_of_tab` 按 `local_…` 找 Claude Code 会话）；`core/sessions/reply_elsewhere.rs`（新：每张卡照常 / 并过去 / 指路，3 条测试）；`core/sessions/desktop_asks.rs`（卡片同步里接上路由，给卡加 `elsewhere`、`forwardedFrom`）；`core/island_events/turns.rs`（并过去的那轮照普通回复发 REPLY，1 条测试）；`core/tests/claude_desktop.rs`（端到端 3 条：并到那张卡、指路、会话已不在）；`protocol`（两个字段）；`hud/permissions/ElsewhereCard.tsx`（新：指路卡）、`ForwardedNote.tsx`（新：赭色「转来」一行，取侧栏上的会话名）、`RequestActions.tsx`、`ApprovalContent.tsx`（前往：打开那个会话，成功后收起卡）、`PermissionQuestionCard.tsx`（问题下面放转来那行）；场景预览台 `claude-reply-elsewhere`、`claude-reply-forwarded`。
+- 我顺手改的：`sync_claude_desktop_asks` 整个挪到 `core/sessions/desktop_asks.rs`、桌面标签读取 `desktop_tab` 挪到 `claude/transcript/desktop_tabs.rs`（300 行棘轮：`sessions.rs`、`claude/transcript.rs` 都变短，已收紧基线）；`PermissionQuestionCard.tsx` 一处 style 写成一行（腾行数，行为不变）。
+- 同类：搜了显示下一步原文的地方：侧栏卡的 question / title / summary 都出自 `desktop_ask_view` 一处，链接在那里统一换掉；「新回复」展开（`ReplyDetail`）显示回复原文，链接仍是 `[名字](#local_…)`，这次没改（不在丙的范围，交给常浩定）。
+- 测试：新测试和实现一起写，没有先在旧代码上跑出红（字段原来不存在，旧代码上必然失败，但没实跑）。`pnpm run check` 退出码 0。`pnpm test`：Rust 合计 `1203 passed; 0 failed`，前端 `ℹ pass 543 ℹ fail 0`，汇总「6 套，失败 1 套」：Chrome 插件 `ℹ pass 199 ℹ fail 1`（`a tab in front loaded again to look is read once its new page is there`，1014ms）；本分支没改插件代码，单独重跑两次 `ℹ pass 200 ℹ fail 0`，按偶发记，没修。`node --test tests/*.test.mjs`：`ℹ pass 65` / `ℹ fail 0`。日志在证据目录 `2026-11-28-reply-elsewhere/`（`check.log`、`test.log`、`extension-rerun-1.log`、`-2.log`、`node-test.log`）。
+- 验证：替身通过（场景预览台 127.0.0.1:1487，1440×900）。`claude-reply-elsewhere`：REPLY 签、小字收尾、白字下一步（链接显示成「规则更新｜…」）、灰底「下一步在这个会话」+ 会话名、跳过 / 前往，没有选项；`claude-reply-forwarded`：规则会话的卡在下一步下面多一行赭色「多模型协同｜三家分岗工作链 转来：推荐回"只合并"…」，选项「合并并装 / 只合并 / 其他」照旧。真实侧栏未验：没装机；前往在场景里不会真的打开会话。
+- 截图：证据目录 `2026-11-28-reply-elsewhere/scene-elsewhere-pointer.jpg`、`scene-forwarded-note.jpg`（场景预览台，非实机）。
+- 发布与回读：未发布。叠在 #564（`claude/562-reply-next-card`）上，要等 #564 合并后再合。
+- 与授权不一致之处、遗留问题、范围外发现：分支接在 #564 那个会话本地还没推的 `73bfc1f` 上；它推之前，本 PR 的对比会带上它那 3 个提交。端到端测试第一次用了真实的标签 id，桌面索引会读本机真实的 Claude 目录，撞上了真实会话，已改用假 id（测试里写了注释）。已登记 DECIDED.md。
+- 本轮新坑：无
+
 ## 侧栏「等待处理」与「积压事项」按规范版改 7 项；小签 REPLY 回到蓝色（#562 #563）（2026-11-28，Claude，常浩在「侧栏等待处理｜展开与积压卡规范」会话看规范版回「都按推荐」、补按钮位置和「继续 / 停止」、说「转给那个会话」，经交接卡转来；已提交、已推送 PR #564，已登记 DECIDED.md，未装机）
 
 - 时间：开工 `2026-11-28 04:41`（按交接卡转来的时间，约数）。来由：常浩 11-28 定了一套规范版（https://claude.ai/artifact/F46pSwSMyFUjq2CfyDTdGK ），7 项加小签 REPLY 变黄的 bug，做进 PR #564。开工前用 `list_events` 和会话记录核了原话（04:26「都按推荐」，04:31 补按钮位置、字数工整和「转给那个会话」）。
