@@ -651,3 +651,11 @@
 - 正确做法：侧栏「单位是单一任务会话」，带 `parentId` 的子任务不单独出回复和失败提醒（`ended()` 已过滤）。查「同一个东西出现好几次」先从实机快照取出那几行的编号和父编号，再决定按什么去重；造场景时把「标题相同、编号不同」和「子任务」各造一个。
 - 证据：快照 `islandEvents.items` 里 9:29–9:53 的 completion 行 `sessionId` 为 `agent-a7350e0a…`、`agent-a96fb22c…`、`agent-a033c91c…`、`agent-ad83d7d9…` 等，`sessions` 里对应 `parentId` 都是 `b633847f-c6e5-47dd-ae61-0d8c9ac92606`；测试 `island_events::turns::tests::a_subagent_that_answers_or_fails_is_not_a_line_of_its_own`。
 - 升级：〔机检〕已升级（2026-11-28，#578 的 PR）：测试 `a_subagent_that_answers_or_fails_is_not_a_line_of_its_own` 守住子任务不出行；「先拿实机编号再定去重」只靠本条提醒。
+## L-75 客户端升级后把本地服务的令牌从启动参数挪进发现文件，驿窗只看启动参数，整家报「没有正在运行的服务」（2026-11-27）
+
+- 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。
+- 根因：`clients/antigravity` 的发现只从 language_server 启动参数读 `--csrf_token` / `--extension_server_port`。2.35.2 桌面版改成 `--subclient_type hub --https_server_port 0 --read_host_bridge_token_from_stdin`，参数里没有令牌，进程被整个跳过；新版把端口和令牌写在 `~/.gemini/antigravity/daemon/hub_<httpPort>.json`（0600，`pid`、`httpsPort`、`httpPort`、`csrfToken`）。不带令牌直接调，服务回 `401 missing CSRF token`。
+- 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
+- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red.txt` 新测试在旧逻辑上失败、`green.txt`、全量测试输出、实机记录）。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：`running.rs` 新版启动参数与发现文件夹具测试、`daemon.rs` 发现文件测试，未接进必经检查。

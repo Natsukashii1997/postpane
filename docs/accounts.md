@@ -119,7 +119,11 @@ disconnecting a configuration removes its readings from the selected sources.
 Unknown percentages remain unavailable.
 
 Every readable running Antigravity language server also contributes its
-email/team account. Identified CLI weekly and five-hour windows take precedence
+email/team account. A server's loopback credential comes from its command line
+(older desktop builds, the `agy` CLI) or, for the 2.35+ desktop app whose server
+receives its host token on stdin, from the same-user discovery file
+`~/.gemini/antigravity*/daemon/*.json` that names that server's running pid
+(`httpsPort`, `httpPort`, `csrfToken`); a file naming any other pid is ignored. Identified CLI weekly and five-hour windows take precedence
 over that same account's native model-family totals, whose window lengths are
 unknown. The original CLI observation time remains visible even when a native
 service is running. Different native team identities remain separate because
