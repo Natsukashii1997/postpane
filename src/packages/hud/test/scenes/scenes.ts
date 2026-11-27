@@ -664,6 +664,65 @@ const nineRelays: Scene = {
   }),
 };
 
+/** A handoff card as Claude's sidebar sends it: the START tag, no heading
+ * beside it (#559); one the sidebar can start, one only Claude can. */
+function handoffCard(
+  sessionId: string,
+  minutesAgo: number,
+  title: string,
+  startsHere: boolean,
+) {
+  const card = approval("claude", sessionId, "question", minutesAgo, title);
+  return {
+    ...card,
+    badge: "START",
+    answersQuestion: startsHere,
+    answerNote: startsHere
+      ? null
+      : "这个会话的 Claude 进程已经停了（Claude 重启、关掉或回收过它）。在 Claude 里给它发一句话让它重新运行，就能在 Agent HUD 里回答。",
+    questions: card.questions?.map((q) => ({
+      ...q,
+      header: null,
+      options: [],
+    })),
+  };
+}
+
+const claudeHandoff: Scene = {
+  key: "claude-handoff",
+  title:
+    "Claude 两张交接卡：一张能在侧栏开始，一张只能到 Claude 里开始；都只挂 START，不另挂「切换会话」",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-hand",
+        title: "驿窗｜交接卡标识",
+        state: "waiting",
+        lastAgo: 3,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-hand-off",
+        title: "大学业务｜2027 增长 T 型拆解",
+        state: "waiting",
+        lastAgo: 21 * 60,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      handoffCard("c-hand", 3, "【交接】驿窗｜交接卡只挂一个标识", true),
+      handoffCard(
+        "c-hand-off",
+        21 * 60,
+        "【交接】大学增长战略｜荧光笔完整版自查与发布",
+        false,
+      ),
+    ],
+  }),
+};
+
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
@@ -677,6 +736,7 @@ export const SCENES: readonly Scene[] = [
   everything,
   claudeBusy,
   claudeManyAsks,
+  claudeHandoff,
   hermesDesks,
   hermesTrouble,
   relayStopped,

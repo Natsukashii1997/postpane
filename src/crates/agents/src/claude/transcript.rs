@@ -1100,9 +1100,9 @@ pub fn desktop_ask_view(
         "mcp__ccd_turn__wrap_up"
     };
     let header = match ask.kind.as_str() {
-        "offer" => crate::l10n::text("新任务", "New task"),
-        "handoff" => crate::l10n::text("切换会话", "Switch session"),
-        _ => crate::l10n::text("下一步", "Next step"),
+        "offer" => Some(crate::l10n::text("新任务", "New task")),
+        "handoff" => None, // its START tag says it already (#559)
+        _ => Some(crate::l10n::text("下一步", "Next step")),
     };
     let options = ask
         .options
