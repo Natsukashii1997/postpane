@@ -24,16 +24,19 @@ import {
   entryTitle,
   findSession,
   goesToStart,
+  openEntryId,
   sessionToOpen,
   type ApprovalEntry,
 } from "./approval-list";
 import { EntryRow, cardInks } from "./ListCard";
 import { cardFolds, FoldButton } from "./FoldButton";
+import { cardPicks } from "../panel/fold-store";
 import type { NewsSeal } from "./PaperSeal";
+import { plainText } from "./reply-closing";
+import { ReplyDetail } from "./ReplyDetail";
 
 export function ApprovalContent({
   requests,
-  selected,
   select,
   decide,
   openSettings,
@@ -41,9 +44,9 @@ export function ApprovalContent({
   language,
   sessions = [],
   replies = [],
+  drop,
 }: {
   requests: Approval[];
-  selected: Approval;
   select: (id: string) => void;
   decide?: (id: string, decision: RequestDecision) => void | Promise<void>;
   /** Settings, on a page such as "agent-plugins", with the HUD put away. */
@@ -54,6 +57,8 @@ export function ApprovalContent({
   sessions?: Session[];
   /** Replies waiting in the queue, listed under the requests. */
   replies?: IslandEvent[];
+  /** Puts these replies away: an open reply's 知道了. */
+  drop?: (ids: readonly string[]) => void;
 }) {
   const zh = language?.startsWith("zh") ?? false;
   // Beside the dock the card is a receipt (HUDExpandedSurface prints it).
@@ -80,10 +85,15 @@ export function ApprovalContent({
       session: findSession(sessions, event.sessionId, event.source),
     })),
   ];
-  // One list, newest first, no sections (owner, 2026-11-14).
+  // The first line as listed opens, a reply too, one at a time; the one
+  // picked stays open while it is listed (owner, 2026-11-28).
+  const [picked, pick] = cardPicks.use();
+  const openId = openEntryId(entries, picked);
+  // One list, newest first, no sections (owner, 2026-11-14); only a line
+  // picked is kept in view, so one asked only in Claude stays folded.
   const { groups, hidden } = approvalGroups(
     entries,
-    selected.id,
+    picked,
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
     undefined,
     () => null,
@@ -110,7 +120,7 @@ export function ApprovalContent({
   const summaryOf = (entry: ApprovalEntry) =>
     entry.kind === "request"
       ? (entry.request.summary ?? entry.request.title)
-      : entry.event.message?.trim() || newsTitle(entry.event, zh);
+      : plainText(entry.event.message?.trim() || newsTitle(entry.event, zh));
 
   const openDetail = (request: Approval, goStart?: () => void) => {
     const isQuestion =
@@ -164,7 +174,7 @@ export function ApprovalContent({
       {groups.map((group) => (
         <div key={group.section ?? ""} style={cardColumn(0)}>
           {group.entries.map((entry, index) => {
-            const open = entry.kind === "request" && entry.id === selected.id;
+            const open = entry.id === openId;
             const target = sessionToOpen(entry);
             return (
               <div
@@ -183,7 +193,10 @@ export function ApprovalContent({
                     Boolean(target && services?.openSession) &&
                     !failure(entry.id)
                   }
-                  onSelect={() => select(entry.id)}
+                  onSelect={() => {
+                    pick(entry.id);
+                    if (entry.kind === "request") select(entry.id);
+                  }}
                   onOpen={() => void goBack(entry)}
                   inks={inks}
                   light={light}
@@ -195,6 +208,16 @@ export function ApprovalContent({
                     light={light}
                     style={{ padding: "0 0 10px 30px", marginTop: -4 }}
                   />
+                )}
+                {open && entry.kind === "reply" && (
+                  <div style={{ padding: "14px 0 20px 30px" }}>
+                    <ReplyDetail
+                      message={entry.event.message?.trim() || ""}
+                      light={light}
+                      zh={zh}
+                      dismiss={drop && (() => drop([entry.id]))}
+                    />
+                  </div>
                 )}
                 {open &&
                   entry.kind === "request" &&

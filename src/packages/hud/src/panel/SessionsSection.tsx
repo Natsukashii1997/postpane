@@ -8,7 +8,9 @@ import { failureOf } from "../open-result";
 import type { Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { GRID, noButtonChrome, tabular } from "./theme";
+import { WAIT_BADGE } from "../permissions/approval-list";
+import { BacklogLine, type BacklogSlot } from "./BacklogLine";
+import { clipped, GRID, noButtonChrome, tabular } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
 import type { LiveSession } from "./agent-board";
@@ -128,10 +130,7 @@ export function RepliedRow({
           fontSize: 13.5,
           fontWeight: 600,
           color: inks.text,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          minWidth: 0,
+          ...clipped,
         }}
       >
         {chat.title?.trim() || (zh ? "（未命名会话）" : "(untitled session)")}
@@ -200,8 +199,12 @@ export function LiveRow({
   open,
   onOpen,
   onRemove,
+  backlog,
 }: {
   entry: LiveSession;
+  /** A backlog line: WAIT, how long it has waited, its question whole and
+   * its buttons (owner, 2026-11-28). */
+  backlog?: BacklogSlot;
   /** The handoff it is in: its second line says how that goes. */
   handoff?: Handoff;
   /** Its swipe's words not taken up yet: said before any handoff. */
@@ -250,7 +253,11 @@ export function LiveRow({
       ? "暂时无法回到原会话"
       : "Session return unavailable";
   const waiting = entry.status === "waiting";
-  const since = waiting ? null : runningSince(session, now, language);
+  const since = backlog
+    ? backlog.since
+    : waiting
+      ? null
+      : runningSince(session, now, language);
   const bot = session.bot ?? null;
   const slot = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -546,10 +553,10 @@ export function LiveRow({
         >
           {waiting ? (
             <ApprovalTag
-              label={zh ? "等你" : "WAITING"}
-              tone="ask"
+              label={backlog ? WAIT_BADGE : zh ? "等你" : "WAITING"}
+              tone={backlog ? "wait" : "ask"}
               light={light}
-              color={inks.red}
+              color={backlog ? undefined : inks.red}
             />
           ) : (
             <RunningMark label={zh ? "在跑" : "Running"} color={inks.green} />
@@ -567,10 +574,7 @@ export function LiveRow({
                 fontSize: 13.5,
                 fontWeight: 600,
                 color: inks.text,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {session.liveFacts?.prompt?.trim() ||
@@ -629,10 +633,7 @@ export function LiveRow({
                 marginTop: 2,
                 fontSize: 12,
                 color: notice.ok ? inks.green : inks.red,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {notice.text}
@@ -645,10 +646,7 @@ export function LiveRow({
                 marginTop: 2,
                 fontSize: 12,
                 color: launchLine(waits, zh).ok ? inks.secondary : inks.red,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {launchLine(waits, zh).text}
@@ -674,15 +672,18 @@ export function LiveRow({
               />
               <span
                 style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  minWidth: 0,
+                  ...clipped,
                 }}
               >
                 {progressLine(handoff, now, zh)}
               </span>
             </span>
+          ) : backlog ? (
+            <BacklogLine
+              text={liveSessionLine(entry, language)}
+              slot={backlog}
+              inks={inks}
+            />
           ) : (
             <span
               style={{
@@ -690,10 +691,7 @@ export function LiveRow({
                 marginTop: 2,
                 fontSize: 12,
                 color: inks.secondary,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {session.client === "claude-cloud"

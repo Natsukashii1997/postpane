@@ -18,6 +18,7 @@ import { ReviewRows } from "./ReviewSlip";
 import { RunningMark } from "./RunningMark";
 import { LiveRow } from "./SessionsSection";
 import { foldStore } from "./fold-store";
+import type { BacklogSlot } from "./BacklogLine";
 import { GRID, noButtonChrome, tabular } from "./theme";
 
 /** The places whose running rows are open: shared, so the panel's hidden
@@ -35,6 +36,7 @@ export function PlaceRows({
   now,
   onStats,
   fold,
+  backlog,
 }: {
   snapshot: Snapshot;
   entries: readonly LiveSession[];
@@ -42,6 +44,8 @@ export function PlaceRows({
   now: number;
   onStats?: () => void;
   fold?: string;
+  /** Each backlog line's slot: its rows are the backlog's. */
+  backlog?: (entry: LiveSession) => BacklogSlot;
 }) {
   const zh = useFormat().language === "zh";
   const inks = useBoardInks(light);
@@ -86,6 +90,7 @@ export function PlaceRows({
         setOpenKey(null);
         remove(entry);
       }}
+      backlog={backlog?.(entry)}
     />
   );
   const Chevron = open ? ChevronDown : ChevronRight;

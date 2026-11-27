@@ -35,6 +35,9 @@ export interface Paper {
   /** The one ochre: a permission's tag, 「回」, a warning, a halted relay
    * (#308: the four ambers made one, the 赭金 picked for 「回」 in #304). */
   ochre: string;
+  /** The backlog's WAIT tag: a request waited on 48 hours (owner,
+   * 2026-11-28), apart from the red, blue, green and ochre. */
+  violet: string;
   /** A wash of ink under a command or a picked answer. */
   fill: string;
   /** Ink at `alpha`. */
@@ -62,6 +65,7 @@ export function paperOf(
     green: light ? "#2f7d4f" : "#6cc59a",
     word: light ? "#46566e" : "#b2bdcf",
     ochre: light ? "#99591a" : "#dba15a",
+    violet: light ? "#7a3fae" : "#c391f2",
     fill: `rgba(${ink},${light ? 0.07 : 0.08})`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,
@@ -88,6 +92,7 @@ export function relayPaperOf(
     green: "#2a7a4c",
     word: "#3b4a61",
     ochre: "#8a4f14",
+    violet: "#7a3fae",
     fill: `rgba(${ink},0.07)`,
     text: (alpha) => `rgba(${ink},${Math.min(1, alpha + 0.08)})`,
     bleed,

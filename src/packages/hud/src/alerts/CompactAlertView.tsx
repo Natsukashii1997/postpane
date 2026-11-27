@@ -22,7 +22,7 @@ import {
   requestBadge,
   requestTitle,
   tagColor,
-  type TagTone,
+  toneInk,
 } from "../permissions/approval-list";
 import type { ReplyChip } from "./reply-list";
 
@@ -320,14 +320,9 @@ export function CompactAlertView({
       : onDismissAndStats;
 
   // A request printed on paper: its boxed ANSWER / PLAN / APPROVE tag with
-  // the count, as a reply's REPLY tag (#243).
+  // the count, as a reply's REPLY tag (#243), its colour from the one place
+  // every tag takes it: REPLY blue as in the open card (owner, 2026-11-28).
   const asked = request ? requestBadge(request) : null;
-  const askedColor = (tone: TagTone, on: Paper) =>
-    tone === "ask"
-      ? on.red
-      : tone === "start"
-        ? on.green
-        : paperLevel("warning", on);
   const printedWhat =
     request && paper && asked ? (
       <ApprovalTag
@@ -336,7 +331,7 @@ export function CompactAlertView({
         light={light}
         count={requestCount}
         ink={paper.ink}
-        color={askedColor(asked.tone, paper)}
+        color={toneInk(asked.tone, paper)}
       />
     ) : null;
 
@@ -422,7 +417,7 @@ export function CompactAlertView({
     const count = request ? requestCount : (reply?.count ?? 1);
     const countColor = asked
       ? paper
-        ? askedColor(asked.tone, paper)
+        ? toneInk(asked.tone, paper)
         : tagColor(asked.tone, light)
       : (failedInk ?? paper?.blue ?? tagColor("reply", light));
     return (

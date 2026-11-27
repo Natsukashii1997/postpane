@@ -4,15 +4,10 @@ import type {
   RequestDecision,
   Session,
 } from "@agent-hud/protocol";
-import { paperOf, type Paper } from "../paper.ts";
+import { REPLY_BADGE, START_BADGE, type TagTone } from "./tag-tone.ts";
+// A tag's colour has one place of its own (owner, 2026-11-28).
+export * from "./tag-tone.ts";
 
-/** What a tag's colour says: the agent asks you (ASK, PLAN), it needs a
- * permission (BASH, EDIT, MCP, READ and the rest), or a session replied. */
-export type TagTone = "ask" | "permission" | "reply" | "start";
-
-export const REPLY_BADGE = "REPLY";
-/** A handoff card's tag: the session proposed moving to a new one (#245). */
-export const START_BADGE = "START";
 /** Requests waited on 48 hours are the backlog, not waiting (#563). */
 export { currentRequests } from "../panel/backlog.ts";
 
@@ -34,31 +29,6 @@ export function requestBadge({
   if (kind === "plan") return { label: "PLAN", tone: "ask" };
   return { label: "APPROVE", tone: "permission" };
 }
-
-export function tagTone(badge: string): TagTone {
-  if (badge === "ASK" || badge === "PLAN") return "ask";
-  if (badge === REPLY_BADGE) return "reply";
-  if (badge === START_BADGE) return "start";
-  return "permission";
-}
-
-/** A tag's ink in the HUD's appearance: the paper's red for asking, its
- * ochre for a permission (#308), its blue for a reply. */
-export function tagColor(tone: TagTone, light: boolean): string {
-  const paper = paperOf(light);
-  return tone === "ask"
-    ? paper.red
-    : tone === "reply"
-      ? paper.blue
-      : tone === "start"
-        ? paper.green
-        : paper.ochre;
-}
-
-/** A badge's ink on `paper`, as its tag prints it: a queued request's box
- * beside a notice (#308). */
-export const tagInk = (badge: string, paper: Paper) =>
-  tagColor(tagTone(badge), paper.light);
 
 /** One line of the waiting list: a request, or a reply waiting beside them. */
 export type ApprovalEntry =
@@ -235,6 +205,16 @@ export function orderEntries(entries: readonly ApprovalEntry[]) {
     tucked(entry) ? 2 : entry.kind === "reply" ? 1 : 0;
   return [...entries].sort((a, b) => rank(a) - rank(b) || time(b) - time(a));
 }
+
+/** The line the waiting card opens, one at a time: the one picked while
+ * listed, else the first as listed, a reply too (owner, 2026-11-28). */
+export const openEntryId = (
+  entries: readonly ApprovalEntry[],
+  picked: string | null,
+) =>
+  entries.some((entry) => entry.id === picked)
+    ? picked
+    : (orderEntries(entries)[0]?.id ?? null);
 
 export interface ApprovalGroup {
   /** The Claude sidebar section; null for the lines in none. */
