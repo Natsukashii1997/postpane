@@ -65,7 +65,7 @@ pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Fou
     let mut turn: Option<(Turn, Option<String>)> = None;
     let mut last = None;
     let mut later = false;
-    pages(host.query, id, from, |row, cursor| {
+    let read = pages(host.query, id, from, |row, cursor| {
         let Some((found, started)) = &turn else {
             if is_message(row, message) && !before(row) {
                 turn = Some((
@@ -109,7 +109,12 @@ pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Fou
         true
     })?;
     let (found, started) = turn?;
-    let live = crate::find(host.snapshot, id).map(|session| &session["liveFacts"]);
+    // The snapshot leaves a session's live facts out while its client's live
+    // status is off on the HUD; its pages still carry the collector's.
+    let live = crate::find(host.snapshot, id)
+        .map(|session| &session["liveFacts"])
+        .filter(|live| live.is_object())
+        .or(read.live.as_ref());
     let ended_at = live
         .map(|live| &live["endedAt"])
         .filter(|at| !at.is_null())
@@ -136,6 +141,8 @@ pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Fou
 struct Read {
     /// It was a tail page that left earlier rows out.
     cut: bool,
+    /// The live facts the last page read carried (`session.liveFacts`).
+    live: Option<Value>,
 }
 
 /// Visits every message row from `from` (the transcript's tail when None) to
@@ -154,6 +161,7 @@ fn pages(
 ) -> Option<Read> {
     let mut cursor = from;
     let mut looks = 0;
+    let mut live = None;
     for _ in 0..PAGES + PENDING {
         let params = match cursor {
             Some(cursor) => {
@@ -165,6 +173,9 @@ fn pages(
         if cursor.is_none() && page["endMessageCursor"].is_null() {
             cursor = Some(0);
             continue;
+        }
+        if page["session"]["liveFacts"].is_object() {
+            live = Some(page["session"]["liveFacts"].clone());
         }
         let rows = page["messages"].as_array().filter(|rows| !rows.is_empty());
         // Still decoding up to the cursor, or the look ended right at it with
@@ -190,23 +201,24 @@ fn pages(
         let start = page["messageCursor"].as_u64().unwrap_or(0);
         for row in rows.into_iter().flatten() {
             if !visit(row, start) {
-                return Some(Read { cut: false });
+                return Some(Read { cut: false, live });
             }
         }
         if cursor.is_none() {
             // A tail page reads to the end in one look.
             return Some(Read {
                 cut: page["messagesTruncatedBefore"] == true,
+                live,
             });
         }
         match page["nextMessageCursor"].as_u64() {
             Some(next) if Some(next) != cursor && page["messagesComplete"] != true => {
                 cursor = Some(next)
             }
-            _ => return Some(Read { cut: false }),
+            _ => return Some(Read { cut: false, live }),
         }
     }
-    Some(Read { cut: false })
+    Some(Read { cut: false, live })
 }
 
 #[cfg(test)]
