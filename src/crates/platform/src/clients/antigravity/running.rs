@@ -1,10 +1,12 @@
 //! Running Antigravity language servers and the `agy` CLI, found from the
 //! process list, with the loopback credential each one can be called with.
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 pub(super) struct Server {
     pub pid: u32,
     pub token: String,
     pub extension: Option<(u16, String)>,
-    /// The HTTPS port a discovery file names; else every listening port is tried.
+    /// The HTTPS port a discovery file names; a command-line server's every
+    /// listening port is tried instead.
     pub https: Option<u16>,
     /// The credential and ports came from a discovery file, not the process's
     /// own command line: a port it names counts only if the process listens on it.
@@ -12,15 +14,32 @@ pub(super) struct Server {
     priority: u8,
 }
 
-/// The endpoints to try for `server`, given the ports its process listens
-/// on: HTTPS with its token, then its extension port over HTTP. A discovery
-/// file only says which of the process's own ports to use; one naming a port
-/// the process does not listen on is not tried (postpane#560 P1-01).
-pub(super) fn candidates(server: &Server, listening: &[u16]) -> Vec<(&'static str, u16, String)> {
-    let owned = |port: &u16| !server.from_file || listening.contains(port);
+/// The endpoints to try for `server`, given the addresses its process
+/// listens on: HTTPS with its token, then its extension port over HTTP.
+/// Calls go to 127.0.0.1, so a port a discovery file names counts only if
+/// the process listens on it there or on every IPv4 address, and a file
+/// without an HTTPS port names none (postpane#560 P1-01, P2-04). A server's
+/// own command line is trusted for every port it listens on, as before.
+pub(super) fn candidates(
+    server: &Server,
+    listening: &[SocketAddr],
+) -> Vec<(&'static str, u16, String)> {
+    let reachable = |address: &&SocketAddr| {
+        !server.from_file
+            || matches!(address.ip(), IpAddr::V4(ip) if ip == Ipv4Addr::LOCALHOST || ip.is_unspecified())
+    };
+    let mut ports = listening
+        .iter()
+        .filter(reachable)
+        .map(SocketAddr::port)
+        .collect::<Vec<_>>();
+    ports.sort_unstable();
+    ports.dedup();
+    let owned = |port: &u16| !server.from_file || ports.contains(port);
     let https = match server.https {
         Some(port) => vec![port],
-        None => listening.to_vec(),
+        None if server.from_file => Vec::new(),
+        None => ports.clone(),
     };
     let mut found = https
         .into_iter()
@@ -270,25 +289,61 @@ mod tests {
         assert_eq!(server.extension, Some((53121, "fixture-hub".to_owned())));
     }
 
+    fn at(address: &str) -> SocketAddr {
+        address.parse().unwrap()
+    }
+
     /// A discovery file names the process's ports; only those the process
-    /// listens on are tried (postpane#560 P1-01).
+    /// listens on where calls go, 127.0.0.1 (or every IPv4 address), are
+    /// tried (postpane#560 P1-01).
     #[test]
     fn a_discovery_file_port_counts_only_if_its_process_listens_on_it() {
         let found = parse_servers(vec![process(7, HUB_SERVER, HUB_ARGS)], &[hub_file(7)]);
         let server = &found[0];
         assert!(server.from_file);
+        let both = [
+            ("https", 53120, "fixture-hub".to_owned()),
+            ("http", 53121, "fixture-hub".to_owned()),
+        ];
+        let on = |host: &str| [at(&format!("{host}:53120")), at(&format!("{host}:53121"))];
         assert_eq!(
-            candidates(server, &[53120, 53121, 53498]),
-            [
-                ("https", 53120, "fixture-hub".to_owned()),
-                ("http", 53121, "fixture-hub".to_owned()),
-            ]
+            candidates(
+                server,
+                &[on("127.0.0.1"), [at("127.0.0.1:53498"); 2]].concat()
+            ),
+            both
         );
+        assert_eq!(
+            candidates(server, &on("0.0.0.0")),
+            both,
+            "every IPv4 address"
+        );
+        // The process holds the ports, but not where calls go: another
+        // process can hold 127.0.0.1 with the same port.
+        for host in ["192.168.1.20", "127.0.0.2", "[::1]", "[::]"] {
+            assert!(candidates(server, &on(host)).is_empty(), "{host}");
+        }
         // The file points at ports another process holds.
-        assert!(candidates(server, &[53498]).is_empty());
+        assert!(candidates(server, &[at("127.0.0.1:53498")]).is_empty());
         assert!(candidates(server, &[]).is_empty());
         assert_eq!(
-            candidates(server, &[53121]),
+            candidates(server, &[at("127.0.0.1:53121")]),
+            [("http", 53121, "fixture-hub".to_owned())]
+        );
+    }
+
+    /// A discovery file without an HTTPS port names none: its token goes to
+    /// its HTTP port only, not to every port the process listens on
+    /// (postpane#560 P2-04).
+    #[test]
+    fn a_discovery_file_with_only_an_http_port_tries_only_that_port() {
+        let file = Published {
+            https: None,
+            ..hub_file(7)
+        };
+        let found = parse_servers(vec![process(7, HUB_SERVER, HUB_ARGS)], &[file]);
+        assert_eq!(
+            candidates(&found[0], &[at("127.0.0.1:53121"), at("127.0.0.1:53122")]),
             [("http", 53121, "fixture-hub".to_owned())]
         );
     }
@@ -306,7 +361,7 @@ mod tests {
         let server = &found[0];
         assert!(!server.from_file);
         assert_eq!(
-            candidates(server, &[5000, 5001]),
+            candidates(server, &[at("127.0.0.1:5000"), at("[::1]:5001")]),
             [
                 ("https", 5000, "t".to_owned()),
                 ("https", 5001, "t".to_owned()),

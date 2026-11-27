@@ -61,16 +61,28 @@ impl Tracker {
         at > self.started && at <= now && self.seen.insert(key.into(), at).is_none()
     }
 
-    /// Each finished turn, told once as a reply.
+    /// Each finished turn, told once as a reply. One ending told under one
+    /// name is not told again under another: a Stop that could not tell its
+    /// turn takes the log's, which can change as the log catches up, while
+    /// the ending's time stays the Stop's (postpane#560 P2-02).
     pub(super) fn completions(&mut self, sessions: &[Value], now: i64) {
         for Ended {
             at, key, session, ..
         } in ended(sessions, &["completed"])
         {
-            let facts = &session["liveFacts"];
-            if !self.fresh(&key, at, now) || stands_as_card(session) {
+            let ending = format!(
+                "{}:{}@ended:{at}",
+                session["source"].as_str().unwrap_or(""),
+                session["id"].as_str().unwrap_or("")
+            );
+            if self.seen.contains_key(&ending)
+                || !self.fresh(&key, at, now)
+                || stands_as_card(session)
+            {
                 continue;
             }
+            self.seen.insert(ending, at);
+            let facts = &session["liveFacts"];
             self.push(&key,json!({"kind":"completion","at":iso(at),"startedAt":facts["turnStartedAt"],"source":session["source"],"sessionId":session["id"],"turnId":facts["turnId"],"title":session["title"],"model":session["model"],"message":facts["message"],"prompt":facts["prompt"],"navigationTarget":session["navigationTarget"],"cwd":session["cwd"],"logPath":session["logPath"]}));
         }
     }
@@ -79,6 +91,8 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hook_events::HookEvidence;
+    use agent_hud_agents::HookEvent;
 
     fn ended(source: &str, id: &str, message: &str, requests: Value, at: i64) -> Value {
         json!({"id": id, "source": source, "title": id, "liveFacts": {"turnId": "t1", "outcome": "completed",
@@ -136,5 +150,42 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(ids, ["parent"]);
         assert_eq!(events[0]["kind"], "completion");
+    }
+
+    /// An Antigravity Stop that could not tell its turn takes the log's,
+    /// and a log that catches up later names it again: one reply is told
+    /// for that one ending, not one per name (postpane#560 P2-02, round 2).
+    #[test]
+    fn a_completion_renamed_by_a_log_that_caught_up_is_told_once() {
+        let mut tracker = Tracker::new();
+        let at = tracker.started + 10_000;
+        let mut evidence = HookEvidence::default();
+        let stop = HookEvent {
+            source: "antigravity".into(),
+            session_id: "antigravity:a1".into(),
+            kind: "completion".into(),
+            at_ms: at,
+            data: json!({"turnId":"stop-1","turnKnown":false,"message":"好了"}),
+        };
+        assert!(evidence.ingest(&[stop], at));
+        let look = |tracker: &mut Tracker, turn: &str, started: i64, now: i64| {
+            let mut session = json!({"source":"antigravity","id":"antigravity:a1","state":"running",
+                "updatedAt":iso(started),"liveFacts":{"turnId":turn,"turnStartedAt":iso(started),"lastEventAt":iso(started)}});
+            evidence.overlay(&mut session, now, None, None);
+            assert_eq!(
+                session["liveFacts"]["turnId"], turn,
+                "the log's turn stands"
+            );
+            tracker.update(&[session], &[], &[], &[], now);
+            tracker
+                .events
+                .iter()
+                .filter(|event| event["kind"] == "completion")
+                .count()
+        };
+        // The log still shows the turn before; then it reads the new prompt,
+        // its last line still older than the Stop.
+        assert_eq!(look(&mut tracker, "step-0", at - 9_000, at + 1_000), 1);
+        assert_eq!(look(&mut tracker, "step-2", at - 2_000, at + 2_000), 1);
     }
 }
