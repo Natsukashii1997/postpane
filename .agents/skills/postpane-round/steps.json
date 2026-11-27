@@ -101,7 +101,7 @@
         "pnpm (run )?test\\b",
         "node --test tests/",
         "cargo test",
-        "node scripts/check-rules\\.mjs",
+        "git-hooks/check-rules\\.mjs",
         "node --test ",
         "pnpm (run )?typecheck",
         "tsc --noEmit",

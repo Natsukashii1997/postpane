@@ -1,0 +1,13 @@
+{
+  "说明": [
+    "推送前检查的实现在 agent-kit git-hooks/（写法见那里的 config.mjs），本仓库只写和默认值不同的地方。",
+    "pnpm run check 和 pnpm test（六套）超过 3 分钟，推送前只跑 tests/ 下的 .mjs；全量合并前按《工程流程》第 5 节在干净 worktree 跑。",
+    "扫描 src 下的三个包目录，跳过 dist、target；prettier 只用于格式化，@playwright/test 给扩展测试用。"
+  ],
+  "prePushTests": "node --test tests/*.test.mjs",
+  "checkRules": {
+    "scan": ["src/packages", "src/apps", "src/tooling"],
+    "skipDirs": ["node_modules", "dist", "target"],
+    "allowedDeps": ["@playwright/test", "prettier"]
+  }
+}

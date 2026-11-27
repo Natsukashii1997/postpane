@@ -46,9 +46,9 @@ bash scripts/setup-worktree.sh           # 新目录备环境：先定构建目�
 pnpm run check                           # 先查 src/ 下有没有没提交的文件（L-13、L-43），再格式、类型、构建、边界检查、cargo check
 pnpm test                                # Rust + 前端 + MCP + 插件 + Chrome 插件 + 注入脚本：六套都跑完再汇总，任何一套失败整体非零（L-47）
 pnpm --filter @agent-hud/desktop exec tauri build --bundles app   # 打包；不要用 --bundle（生成 DMG 时会自动启动应用）
-node --test tests/*.test.mjs             # 交接格式 + 通用规则（含自测）
-node scripts/check-rules.mjs             # 只跑通用规则检查
-git config core.hooksPath scripts/hooks   # 装提交、推送前的必经检查（每个克隆、每台电脑各一次；不用 --no-verify 绕过）
+node --test tests/*.test.mjs             # 交接格式
+node ~/Library/Application\ Support/agent-kit/runtime/git-hooks/check-rules.mjs .   # 只跑通用规则检查（共用实现在 agent-kit git-hooks/，本仓库设置在 scripts/hooks.json）
+git config core.hooksPath scripts/hooks   # 装提交、推送前的必经检查（每个克隆、每台电脑各一次；不用 --no-verify 绕过）；钩子只转发到 agent-kit 共用实现，本机先在 agent-kit 跑 node tools/install.mjs --apply
 ```
 
 安装：先退出正在运行的应用，再用 `ditto` 把打出的 `.app` 复制到 `/Applications`。
@@ -76,7 +76,8 @@ docs/
   templates/handoff.md  交接一节的骨架
   其余               上游技术文档（开发、接入约定、钩子、会话数据、平台构建等）
 scripts/
-  check-rules.mjs    通用规则检查（只查机器能判定的）
+  hooks/             提交、推送前钩子：只转发到 agent-kit 共用实现（git-hooks/）
+  hooks.json         本仓库的钩子设置：推送前跑哪些测试、规则检查扫哪些目录、依赖白名单
   setup-worktree.sh  新 worktree 备环境（见「运行」）
 tests/               node:test 测试（协作骨架）
 ```
@@ -118,7 +119,7 @@ single-context：根目录 `GLOSSARY.md` 与 `docs/adr/`，用到时再建。见
 ## 规则
 
 - 验证用的备份、日志等证据放 `~/Library/Application Support/postpane/evidence/`，不放 `/tmp`（全局坑 G-01）；私人数据与完整日志不进仓库。
-- 本机服务只监听 127.0.0.1；新增依赖先改 `scripts/check-rules.mjs` 的 `ALLOWED_DEPS`，并在交接里说明理由（`check-rules` 会查）。
+- 本机服务只监听 127.0.0.1；新增依赖先改 `scripts/hooks.json` 的 `checkRules.allowedDeps`，并在交接里说明理由（`check-rules` 会查）。
 - 页面上的时间经统一的格式化函数按北京时间显示，不直接截取 ISO 字符串（全局坑 G-02，`check-rules` 会查）。
 - 默认只做电脑版；涉及 UI 时每次出 3 版明显不同的方案并附可打开的预览。
 - 源文件 300 行棘轮（`pnpm run check` 里的 `check:file-size`）：`src/` 下 `.rs` `.ts` `.tsx` `.mjs` 自己的代码（不含测试）超过 300 行的记在 `src/tooling/file-size-baseline.json`，只许变短，新文件不许超；变短后跑 `node src/tooling/check-file-size.mjs --update` 收紧基线。确有理由要超的，写进 `src/tooling/file-size-allowlist.json`：`{ "路径": { "max": 上限, "reason": "一句理由" } }`。
