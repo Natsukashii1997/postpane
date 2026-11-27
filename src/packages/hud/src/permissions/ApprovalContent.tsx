@@ -6,6 +6,7 @@ import type {
 } from "@agent-hud/protocol";
 import RequestActions from "../RequestActions";
 import { cardColumn } from "../card-column";
+import { GRID } from "../panel/theme";
 import {
   clientDisplayName,
   newsTitle,
@@ -137,7 +138,7 @@ export function ApprovalContent({
         ? summary
         : null;
     return (
-      <div style={{ ...cardColumn(14), padding: "14px 0 20px 30px" }}>
+      <div style={{ ...cardColumn(14), padding: `14px 0 20px ${GRID.text}px` }}>
         {question && (
           <div
             style={{
@@ -206,11 +207,14 @@ export function ApprovalContent({
                   <OpenNotice
                     text={failure(entry.id)!}
                     light={light}
-                    style={{ padding: "0 0 10px 30px", marginTop: -4 }}
+                    style={{
+                      padding: `0 0 10px ${GRID.text}px`,
+                      marginTop: -4,
+                    }}
                   />
                 )}
                 {open && entry.kind === "reply" && (
-                  <div style={{ padding: "14px 0 20px 30px" }}>
+                  <div style={{ padding: `14px 0 20px ${GRID.text}px` }}>
                     <ReplyDetail
                       message={entry.event.message?.trim() || ""}
                       light={light}
