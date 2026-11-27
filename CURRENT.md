@@ -2,6 +2,18 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 交接卡只挂一个 START，去掉重复的「切换会话」虚线签（#559）（2026-11-27，Claude，常浩问「切换会话为什么会同时出现两个标识，没必要」；已提交，PR 见描述；未装机：#558 的包正装着做实机，没覆盖）
+
+- 时间：开工 `2026-11-27 21:39`（`date '+%F %H:%M'` 记录）。来由：侧栏交接卡上方同时挂着绿色 START 小签（#245，2026-11-08 定）和问题分区标题「切换会话」（红色虚线签），说的是同一件事。
+- 改变的行为：交接卡（Claude 桌面应用 `start_session` 带「【交接】」标题的卡）原来在 START 下面再挂一枚红色虚线「切换会话」签，改成只留 START。新任务卡「新任务」、下一步卡「下一步」不变；收起时的一行提示「待切换会话」不变。已定的 START 小签不动。
+- 你要求的：`src/crates/agents/src/claude/transcript.rs` 的 `desktop_ask_view`：交接卡的问题不再带分区标题（`header` 为 null），前端本来就是有标题才画签。
+- 我顺手改的：`src/packages/hud/test/approval-list.test.ts` 交接卡测试数据的 `header` 跟着改成 null；场景预览台补一个 `claude-handoff` 场景（`src/packages/hud/test/scenes/scenes.ts`，两张交接卡：能在侧栏开始的、只能到 Claude 里开始的）。
+- 同类：搜了 `切换会话` / `Switch session` 和前端所有画 `header` 的地方（`HandoffStartCard`、`PermissionQuestionCard` 两处），只有 Rust 这一个来源，一处改掉即可。
+- 测试：新断言旧代码上 `test result: FAILED. 0 passed; 1 failed`（`red.txt`）；改后 `pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-559-handoff-one-tag/`。
+- 验证：替身通过。场景预览台（127.0.0.1:1482，`?scene=claude-handoff&panel&still`，浏览器内置面板，Chromium 不是 WKWebView）展开两张卡，都只有 START，页面上没有「切换会话」签。真实环境未验：需装机后在一张真实交接卡上看。
+- 截图：`scene-claude-handoff.png`（场景预览台）。
+- 发布与回读：未发布。`install.sh` 报现在装着的是 `claude/558-agy-hub`（21:36 装、PR #560 未合并）的包，停下没装（L-05）；#558 实机做完后再装本包、和改前对比 START 小签（AGENTS.md「没打算改、但碰到同一处代码」），再合并。
+- 与授权不一致之处、遗留问题、范围外发现：无。
 ## 侧栏 REPLY 每个会话只出现一次，新回复顶替旧行（#565）（2026-11-28，Claude，常浩附截图要求「每个会话都是出现一次……并改好」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-28 00:05`（按建 worktree 的时间，约数）。来由：常浩截图里回复卡同一会话出现 2～3 行（「Claude 收尾｜…」「【交接】数字分身…」「Antigravity｜代理登录修复」）；实机快照 `islandEvents` 里同一会话有 4 条回复事件，侧栏队列每条回复各占一行，只有「失败」按会话顶替旧行。

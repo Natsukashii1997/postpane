@@ -314,7 +314,7 @@ test("a handoff card its client can answer starts from the sidebar with 「开�
     id: "toolu_hand",
     answerKey: "toolu_hand",
     question: "【交接】驿窗｜下一步",
-    header: "切换会话",
+    header: null,
     options: [],
     multiSelect: false,
   };

@@ -736,6 +736,8 @@ fn a_handoff_card_hangs_a_start_tag_until_the_user_moves_on() {
     assert_eq!(card["sessionId"], handing);
     assert_eq!(card["badge"], "START");
     assert_eq!(card["title"], "【交接】驿窗｜START 小签");
+    // The START tag says it already: no 「切换会话」 heading beside it (#559).
+    assert!(card["questions"][0]["header"].is_null(), "{card:?}");
     // With no host that reaches the session it can only be started in Claude's own window.
     assert_eq!(card["answersQuestion"], false);
     assert!(card["answerNote"].is_string());
