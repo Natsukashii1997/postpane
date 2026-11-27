@@ -301,6 +301,20 @@ const replies: Scene = {
   }),
 };
 
+const repliesAgain: Scene = {
+  key: "replies-again",
+  title: "Claude 同一个会话连着回了 3 次、另一个会话回 1 次：每个会话只一行",
+  snapshot: snapshot({
+    sessions: running.map((s) => ({ ...s, state: "idle" as const })),
+    events: [
+      { ...reply("claude", "c-run", 6, "整理周报模板"), id: "done:c-run:1" },
+      reply("codex", "x-run", 5, "补齐解析器测试"),
+      { ...reply("claude", "c-run", 3, "整理周报模板"), id: "done:c-run:2" },
+      { ...reply("claude", "c-run", 1, "整理周报模板"), id: "done:c-run:3" },
+    ],
+  }),
+};
+
 const claudeBusy: Scene = {
   key: "claude-busy",
   title:
@@ -908,6 +922,7 @@ export const SCENES: readonly Scene[] = [
   reviews,
   failed,
   replies,
+  repliesAgain,
   everything,
   claudeBusy,
   claudeManyAsks,

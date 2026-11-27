@@ -16,6 +16,20 @@
 - 与授权不一致之处、遗留问题、范围外发现：刘海模式（没有纸面）下主按钮沿用 ASK 卡在刘海里的绿色，规范版只画了纸面；和 ASK 卡一致，没另改。
 - 本轮新坑：无
 
+## 恢复被 #568 冲掉的 #566「同一会话只出现一次」：代码、测试、场景、DECIDED 登记、交接一节（#569）（2026-11-28，Claude，常浩 11-28 已验收并让合并 #566；属回到已定行为，不改已定内容；已提交，PR 见描述）
+
+- 时间：开工 `2026-11-28 04:55`（`date '+%F %H:%M'` 记录）。来由：给 #564 打合并包前核对 main，发现 #568（`7575cf9`）的 squash 提交把 #566 改的 6 个文件原样退回 #566 之前（`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空），还删了 DECIDED 里 11-28「单一任务会话」那一行和 CURRENT 里 #565 一节；#568 的分支提交 `99296b6` 父提交就是 `1ac0ab1`，退回是它自己带进去的。之后在这个 main 上合的包（#567 会话装的 `2e53e13`）、#561 分支（`3b6908e`）都没有去重。
+- 改了哪些文件：
+  - 你要求的（恢复）：`src/packages/hud/src/alerts/news-lanes.ts`、`reply-list.ts`、`CompletionAlertView.tsx`、`test/reply-list.test.ts`、`test/reply-queue-keep.test.ts`、`test/scenes/scenes.ts` 取回 `1ac0ab1` 的版本；`docs/DECIDED.md` 补回那一行；`CURRENT.md` 补回 #565 一节（放在 #567 一节下面）。
+  - 我顺手改的：`docs/LESSONS.md` 新坑 L-76。
+- 同类：比对了 #568 改动的全部 18 个文件，和它主题（子程序继承系统代理）无关的只有上面 8 个，都是 #566 的；其余 10 个是 #567 自己的，没动。
+- 测试：见下「发布与回读」（合并包）；本分支单独的三条全量见 PR 描述。
+- 验证：装前侧栏截图（`evidence/2026-11-28-569-combo/smoke-before-1.png`，当时装的是 #567 会话的包 `2e53e13`）里，常浩开着 Claude 面板，能看到一张真实的 REPLY 下一步卡（REPLY 签、小字、白字下一步、选项、跳过 / 提交），和积压事项旧版式。新包的去重与积压事项新版式未在实机看（悬停面板我控制不了），留给常浩。
+- 截图：无界面改动（恢复已验收的行为）。
+- 发布与回读：合并包 `3265645` = main `7575cf9` + 本分支 `61736b4` + #564 `781c0f7` + #560 `fd3cdeb`（`turns.rs` 冲突照 #564 那次合法，`CURRENT.md`、`LESSONS.md` 两边都留）。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1214 passed，前端 `ℹ pass 540`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。`install.sh 569-combo --takeover`（原装 #567 会话的 `bb4da8175097`，它同意覆盖）：产物 `e07012a3446d` / 已装 `e07012a3446d`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2143 个像素不同。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-569-combo/PostPane-bb4da8175097.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：#560 分支也用了 L-75～L-79，和 main 的 L-75、本 PR 的 L-76 撞号，#560 变基时要改编号。
+- 本轮新坑：L-76。
+
 ## 驿窗启动的子程序继承 Mac 系统代理，claude 登录续期不再因直连 403 失败（#567）（2026-11-28，Claude，常浩回「做甲乙两条」；已提交，未装机：真实机器上正装着别的会话 #566 的测试包）
 
 - 时间：开工 `2026-11-28 00:46`（`date '+%F %H:%M'` 记录）。来由：常浩截图说展开卡上的周额度暗印（#319）又看不到了，要求恢复并「确保这个问题以后不会再发生」。查实暗印代码没坏：本机 Claude Code 命令行登录过期，Claude 额度变成「过期」，暗印按设计不画；登录反复掉的根子是驿窗启动的 claude 不带代理、直连 Anthropic 被拒（L-75）。常浩带代理重登后，00:38 驿窗读回额度（本周 95%，吃紧）。
