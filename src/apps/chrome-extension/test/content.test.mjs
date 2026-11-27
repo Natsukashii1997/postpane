@@ -863,11 +863,13 @@ test("asked to read again, a tab checks its conversation and says whether its hi
     ))
       node.remove();
   });
+  // #548: what it lacks is told; see "a reply with no prompt drawn yet".
   assert.deepEqual(await reread(page), {
     ok: true,
     streaming: false,
     told: false,
     loaded: false,
+    missing: ["prompt-ids", "answers", "bubbles"],
   });
   assert.equal(
     (await turns(page)).filter((m) => m.phase === "complete").length,
@@ -910,11 +912,14 @@ test("a reply with no prompt drawn yet is not taken as answered", async () => {
       node.remove();
   });
   const answer = await reread(page);
+  // #548: it says it lacks turns; PostPane acts only on two reads minutes
+  // apart, past a history still drawing.
   assert.deepEqual(answer, {
     ok: true,
     streaming: false,
     told: false,
     loaded: false,
+    missing: ["turns"],
   });
 });
 
@@ -1113,4 +1118,56 @@ test("a known request before an unreadable latest user unit is still found", asy
     [true, true, "p7", true],
   );
   await page.close();
+});
+
+// #548 page check: each thing PostPane reads that a reread cannot find on
+// the page is told by name, so a redesign is not taken for ChatGPT being
+// slow. A page with all of it says nothing more.
+test("asked to read again, a page with everything PostPane reads tells nothing missing", async () => {
+  const page = await open();
+  const answer = await reread(page);
+  assert.equal(answer.told, true);
+  assert.equal(answer.missing, undefined);
+});
+
+test("asked to read again, a page whose answers or message ids go by another name tells what is missing", async () => {
+  const ids = await open(() => {
+    const from = "data-chatgpt-search-message-ids";
+    for (const node of document.querySelectorAll(`[${from}]`)) {
+      node.setAttribute("data-message-ids", node.getAttribute(from));
+      node.removeAttribute(from);
+    }
+  });
+  assert.deepEqual((await reread(ids)).missing, ["prompt-ids"]);
+  const answers = await open(() => {
+    for (const node of document.querySelectorAll(
+      '[data-chatgpt-search-unit-key$=":assistant"]',
+    ))
+      node.setAttribute("data-chatgpt-search-unit-key", "x:9:reply");
+  });
+  assert.deepEqual((await reread(answers)).missing, ["answers"]);
+});
+
+// Not the send button: on the real page an empty composer shows a voice
+// button in its place (2026-11-27).
+test("asked to read again, a page without the composer tells it is missing, and one with no send button does not", async () => {
+  const box = await open(() =>
+    document.querySelector(".ProseMirror").classList.remove("ProseMirror"),
+  );
+  assert.deepEqual((await reread(box)).missing, ["composer"]);
+  const voice = await open(() => {
+    document.getElementById("slot").type = "button";
+    document.getElementById("slot").setAttribute("aria-label", "开始语音");
+  });
+  assert.equal((await reread(voice)).missing, undefined);
+});
+
+test("asked to read again, a page with no turns of the conversation tells they are missing", async () => {
+  const page = await open(() => {
+    for (const node of document.querySelectorAll("[data-turn-key]"))
+      node.remove();
+  });
+  const answer = await reread(page);
+  assert.equal(answer.loaded, false);
+  assert.deepEqual(answer.missing, ["turns"]);
 });

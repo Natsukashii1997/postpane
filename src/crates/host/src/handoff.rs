@@ -264,8 +264,8 @@ pub(crate) struct Desk {
     /// How many of each handoff's steps the sidebar has flown a letter for
     /// (#171); those kept from before a restart count as flown.
     tossed: Mutex<HashMap<String, usize>>,
-    /// How many reads in a row found each handoff's answer undrawn (#457).
-    undrawn: Mutex<HashMap<String, u32>>,
+    /// Reads in a row that found each handoff's answer undrawn (#457), or its page changed (#548).
+    undrawn: Mutex<HashMap<String, (String, u32)>>,
     /// When the notices began (`notices_since`): trouble from before is not
     /// told of (#318), so an upgrade tells no session of an old one.
     since: i64,

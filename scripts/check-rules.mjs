@@ -8,6 +8,7 @@ const RULES = {
   listen: '本机服务只监听 127.0.0.1（AGENTS.md 规则）',
   deps: '依赖只许 ALLOWED_DEPS 里的；要加依赖，先改 scripts/check-rules.mjs 的 ALLOWED_DEPS，并在交接里说明理由（AGENTS.md 规则）',
   time: '页面上的时间经统一的格式化函数按北京时间显示，不直接截取 ISO 字符串（全局坑 G-02）；截取的确实是北京时间字符串时，在行内注释写「北京时间」',
+  page: 'ChatGPT 页面长什么样（选择器、属性名、按钮文字）只许写在插件的适配文件 page.js（画面）、data.js（对话数据）、mark.js 里，别的插件文件调用它们（#548，docs/接力规范.md 第 6 节）；页面一改只改这一处',
   lessons: 'docs/LESSONS.md 每条坑都要有「- 升级：」一行，开头是〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，后面写状态和去处，如「- 升级：〔提醒〕未升级。」「- 升级：〔机检〕已升级（2026-11-19，#405）：install.sh 的装机锁」；层级怎么选见全局 LESSONS「怎么升级」',
 };
 // 要扫的源码目录，按项目结构改；不存在的目录跳过
@@ -21,6 +22,10 @@ const LISTEN_OK = /\.listen\(\s*[\w.]+\s*,\s*['"]127\.0\.0\.1['"]/;
 const ALLOWED_DEPS = ['@playwright/test', 'prettier'];
 // LESSONS「升级」行开头的层级词，口径同全局 LESSONS「怎么升级」（agent-kit hooks/lessons-remind.mjs 的 LEVELS）
 const LEVELS = ['结构', '机检', '体检', '文字', '提醒'];
+// 插件里认 ChatGPT 页面的写法：只许在适配文件里（#548）。网址、域名不算页面结构。
+const PAGE_DIR = 'src/apps/chrome-extension';
+const PAGE_OK = ['page.js', 'data.js', 'mark.js'];
+const PAGE = /querySelector|\.closest\(|\.matches\(|aria-label|data-testid|data-chatgpt|data-user-message|data-turn|ProseMirror|contenteditable|backend-api/;
 
 function files(dir) {
   if (!fs.existsSync(dir)) return [];
@@ -38,6 +43,7 @@ export function checkRules(root) {
     fs.readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
       if (TIME.some(r => r.test(text)) && !TIME_OK.test(text)) hit(file, i + 1, 'time', text);
       if (text.includes('.listen(') && !LISTEN_OK.test(text)) hit(file, i + 1, 'listen', text);
+      if (pageFile(root, file) && PAGE.test(text)) hit(file, i + 1, 'page', text);
     });
   const pkgFile = path.join(root, 'package.json');
   if (fs.existsSync(pkgFile)) {
@@ -47,6 +53,12 @@ export function checkRules(root) {
   }
   checkLessons(root, hit);
   return found;
+}
+
+// 插件目录下、不在测试目录里、又不是适配文件的源码
+function pageFile(root, file) {
+  const rel = path.relative(path.join(root, PAGE_DIR), file);
+  return !rel.startsWith('..') && !rel.split(path.sep).includes('test') && !PAGE_OK.includes(rel);
 }
 
 // LESSONS 每条 L-xx 都要有以层级词开头的「升级」行；代码块里的格式样例和标题带 <占位> 的不算条目。

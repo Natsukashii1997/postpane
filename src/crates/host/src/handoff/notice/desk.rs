@@ -107,6 +107,10 @@ fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
             "ChatGPT 已经答完，但它所在的标签页没画出回信（那个 Chrome 窗口多半不在屏幕上），驿窗读不到，自动往返已经停下，这次接力交常浩处理。常浩点开那个 ChatGPT 标签页，驿窗就能收下回信：{}。先不要再调用 relay_to_chatgpt 重送，请向常浩说明回信已在 ChatGPT 里，点开那个标签页就能收回。",
             later(handoff)
         ),
+        // Not ChatGPT being slow: what to fix is PostPane's extension (#548).
+        Trouble::PageChanged(what) => format!(
+            "{what}。这不是 ChatGPT 没回信：页面改了样子，驿窗读不到回信，这次接力交常浩处理（要先修驿窗的 Chrome 插件）。先不要再调用 relay_to_chatgpt 重送，请向常浩说明是 ChatGPT 页面改版、驿窗认不出页面。"
+        ),
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
         // The round trip may stay stopped (review of #524, P2): an earlier
