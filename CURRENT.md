@@ -15,7 +15,7 @@
 - 验证：场景预览台（替身）新场景 `replies-again`：Claude 同一会话连回 3 次，悬停 Claude 票根，「等待处理 · 1」只一行「整理周报模板」，时间是最新那次。
 - 截图：`scene-replies-again.jpg`（场景预览台，非实机）。
 - 发布与回读：常浩选「装合并包」：本分支 `d98a0a4` + #560 `fd3cdeb` 合在临时分支（合并提交 `004fb00`，只 `CURRENT.md` 冲突、两节都留），合并包三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1201 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`combo-*.txt`）。`install.sh 565-reply-one-per-session --takeover`（原装的是 #560 分支 `2d38464` 的包 `85ce451e68d7`）：产物 `e0f0b96d9422` / 已装 `e0f0b96d9422`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2314 个像素不同；装后无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-565-reply-one-per-session/PostPane-85ce451e68d7.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
-- 实机：本机 `claude -p` 在同一会话 `44c224bd…` 连发两轮（「驿窗自检第 1/2 轮，只回 OK」，工作目录 `evidence/2026-11-28-565-reply-one-per-session/selftest`），驿窗快照里收到这个会话 2 条回复事件（`event:1`、`event:2`）。侧栏上显示几行没验：离屏截图不画回复提醒，驿窗后台控制权限常浩拒绝了；结论「部分」，界面那一下留给常浩悬停 Claude 票根看。
+- 实机：本机 `claude -p` 在同一会话 `44c224bd…` 连发两轮（「驿窗自检第 1/2 轮，只回 OK」，工作目录 `evidence/2026-11-28-565-reply-one-per-session/selftest`），驿窗快照里收到这个会话 2 条回复事件（`event:1`、`event:2`）。侧栏上显示几行没验：离屏截图不画回复提醒，驿窗后台控制权限常浩拒绝了；结论「部分」，界面那一下留给常浩悬停 Claude 票根看。常浩看过实机后回「验收，然后合并」，已登记 DECIDED.md。
 - 与授权不一致之处、遗留问题、范围外发现：
   - 同一会话既有等你回答的请求（ASK）又有一条回复时，仍各占一行（请求和回复是两类，回复不该顶掉要你决定的请求）。要不要也合成一行，等常浩定。
   - 侧栏上现在已经堆着的重复行：装机会重启驿窗，队列清空，之后按新规矩来。
