@@ -193,6 +193,7 @@
   - P2-03 发现文件的位置改用 `AGENT.discovery.storage`，和会话记录一致（认 `GEMINI_CLI_HOME`）。`hud_tools::antigravity` 的注释说 Antigravity 不认这个变量，两边不一致，没改它。
   - P3-01 钩子判「未答的提问」改成和 `TURNS` 一样，只排除 SYSTEM；P3-02 `page_id` 按客户端限定，判结束时按快照 id 精确匹配；快照 liveFacts 为空对象 `{}` 时也改看会话页。
   - 每条新测试都先临时换回旧写法跑出红，证据在 `r5/red-*.txt`。
+  - 返修后 `a88b866` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1196 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `2042a24ea279`，真实环境 `start_session` 第 5 次 `m-57203ff68420` → done，回复「驿窗 560 返修后已收到」。
 - skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
