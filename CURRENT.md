@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 恢复被 #568 冲掉的 #566「同一会话只出现一次」：代码、测试、场景、DECIDED 登记、交接一节（#569）（2026-11-28，Claude，常浩 11-28 已验收并让合并 #566；属回到已定行为，不改已定内容；已提交，PR 见描述）
+
+- 时间：开工 `2026-11-28 04:55`（`date '+%F %H:%M'` 记录）。来由：给 #564 打合并包前核对 main，发现 #568（`7575cf9`）的 squash 提交把 #566 改的 6 个文件原样退回 #566 之前（`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空），还删了 DECIDED 里 11-28「单一任务会话」那一行和 CURRENT 里 #565 一节；#568 的分支提交 `99296b6` 父提交就是 `1ac0ab1`，退回是它自己带进去的。之后在这个 main 上合的包（#567 会话装的 `2e53e13`）、#561 分支（`3b6908e`）都没有去重。
+- 改了哪些文件：
+  - 你要求的（恢复）：`src/packages/hud/src/alerts/news-lanes.ts`、`reply-list.ts`、`CompletionAlertView.tsx`、`test/reply-list.test.ts`、`test/reply-queue-keep.test.ts`、`test/scenes/scenes.ts` 取回 `1ac0ab1` 的版本；`docs/DECIDED.md` 补回那一行；`CURRENT.md` 补回 #565 一节（放在 #567 一节下面）。
+  - 我顺手改的：`docs/LESSONS.md` 新坑 L-76。
+- 同类：比对了 #568 改动的全部 18 个文件，和它主题（子程序继承系统代理）无关的只有上面 8 个，都是 #566 的；其余 10 个是 #567 自己的，没动。
+- 测试：见 PR 描述。
+- 验证：见 PR 描述。
+- 截图：无界面改动（恢复已验收的行为）。
+- 发布与回读：随「本分支 + #564 + #560」合并包装机，见 PR 描述。
+- 与授权不一致之处、遗留问题、范围外发现：#560 分支也用了 L-75～L-79，和 main 的 L-75、本 PR 的 L-76 撞号，#560 变基时要改编号。
+- 本轮新坑：L-76。
+
 ## 驿窗启动的子程序继承 Mac 系统代理，claude 登录续期不再因直连 403 失败（#567）（2026-11-28，Claude，常浩回「做甲乙两条」；已提交，未装机：真实机器上正装着别的会话 #566 的测试包）
 
 - 时间：开工 `2026-11-28 00:46`（`date '+%F %H:%M'` 记录）。来由：常浩截图说展开卡上的周额度暗印（#319）又看不到了，要求恢复并「确保这个问题以后不会再发生」。查实暗印代码没坏：本机 Claude Code 命令行登录过期，Claude 额度变成「过期」，暗印按设计不画；登录反复掉的根子是驿窗启动的 claude 不带代理、直连 Anthropic 被拒（L-75）。常浩带代理重登后，00:38 驿窗读回额度（本周 95%，吃紧）。
@@ -15,6 +29,26 @@
 - 发布与回读：未发布。`install.sh 567-child-proxy` 停在 L-05 检查：00:51 已装的是 `reply-one-per-session`（`tmp/565-with-560`，PR #566）的测试包，那个会话正在实机验，没有 `--takeover`。
 - 与授权不一致之处、遗留问题、范围外发现：范围比会话里最初说的「驿窗启动 claude 时带代理」大，codex、git 等子程序也一并走代理（动手前已列出）。暗印在「读不到额度」时悄悄消失、原因看不到，常浩这次选了先不做提示（方案丙）。
 - 本轮新坑：L-75。可提议提升为全局坑：并进全局坑 11-14「交互终端缺代理」那条，补图形界面应用这一面。
+
+## 侧栏 REPLY 每个会话只出现一次，新回复顶替旧行（#565）（2026-11-28，Claude，常浩附截图要求「每个会话都是出现一次……并改好」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-28 00:05`（按建 worktree 的时间，约数）。来由：常浩截图里回复卡同一会话出现 2～3 行（「Claude 收尾｜…」「【交接】数字分身…」「Antigravity｜代理登录修复」）；实机快照 `islandEvents` 里同一会话有 4 条回复事件，侧栏队列每条回复各占一行，只有「失败」按会话顶替旧行。
+- 改变的行为（动手前已在会话里列出）：回复卡、「等待处理」里的 REPLY 行、折起的回复小签和印章上的计数，同一会话（同一家 + 同一会话 id）只占一行；同一会话再回复，新回复在原位置顶替旧行，显示最新那条，计数按会话数算。没有会话 id 的回复照旧一条一行。
+- 你要求的：`src/packages/hud/src/alerts/news-lanes.ts`（`reconcileIslandCards` 新回复按 `replyLine` 找同一会话的旧行原位顶替）。
+- 我顺手改的：删掉 `reply-list.ts` 的 `sessionReplies`（回到会话时收起这个会话的全部回复；现在每个会话只有一行，`CompletionAlertView.tsx` 改成只收这一行）及其测试；场景预览台加场景 `replies-again`（`test/scenes/scenes.ts`）。
+- 同类：搜了 `islandEvents` 的所有读取处，侧栏只有 `IslandNews` 的队列一个入口，回复卡、等待处理卡、小签、印章都从它取，改这一处全部跟着变。
+- 测试：
+  - 新测试先红：`reply-queue-keep.test.ts` `ℹ pass 10` / `ℹ fail 2`（`red-reply-queue-keep.txt`；另 2 条守边界：别家同号、没会话 id、失败与回复分开，本来就过）；改后过。
+  - 三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1180 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-28-reply-one-per-session/`。
+- 验证：场景预览台（替身）新场景 `replies-again`：Claude 同一会话连回 3 次，悬停 Claude 票根，「等待处理 · 1」只一行「整理周报模板」，时间是最新那次。
+- 截图：`scene-replies-again.jpg`（场景预览台，非实机）。
+- 发布与回读：常浩选「装合并包」：本分支 `d98a0a4` + #560 `fd3cdeb` 合在临时分支（合并提交 `004fb00`，只 `CURRENT.md` 冲突、两节都留），合并包三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1201 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`combo-*.txt`）。`install.sh 565-reply-one-per-session --takeover`（原装的是 #560 分支 `2d38464` 的包 `85ce451e68d7`）：产物 `e0f0b96d9422` / 已装 `e0f0b96d9422`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2314 个像素不同；装后无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-565-reply-one-per-session/PostPane-85ce451e68d7.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机：本机 `claude -p` 在同一会话 `44c224bd…` 连发两轮（「驿窗自检第 1/2 轮，只回 OK」，工作目录 `evidence/2026-11-28-565-reply-one-per-session/selftest`），驿窗快照里收到这个会话 2 条回复事件（`event:1`、`event:2`）。侧栏上显示几行没验：离屏截图不画回复提醒，驿窗后台控制权限常浩拒绝了；结论「部分」，界面那一下留给常浩悬停 Claude 票根看。常浩看过实机后回「验收，然后合并」，已登记 DECIDED.md。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 同一会话既有等你回答的请求（ASK）又有一条回复时，仍各占一行（请求和回复是两类，回复不该顶掉要你决定的请求）。要不要也合成一行，等常浩定。
+  - 侧栏上现在已经堆着的重复行：装机会重启驿窗，队列清空，之后按新规矩来。
+- 本轮新坑：无。
+- skill 进化：无。
 
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
 
