@@ -92,6 +92,12 @@ fn inspect(script: &str, args: &[&OsStr]) -> Result<String, String> {
     })
 }
 const BOUND: Duration = Duration::from_secs(3);
+/// What a fixed script printed, within the inspection bound; None when it
+/// failed or took too long.
+#[cfg(target_os = "macos")]
+pub(super) fn script_output(script: &str) -> Option<String> {
+    run(script, &[], BOUND).ok()
+}
 /// Which way a script failed. None carries its output.
 enum Failure {
     Start,

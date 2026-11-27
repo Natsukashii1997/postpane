@@ -860,6 +860,10 @@ pub fn run_with_options(
     if let Some(status) = agent_hud_runtime::hooks::entry(&arguments) {
         std::process::exit(status);
     }
+    // Before any thread starts: the programs started from here inherit the
+    // system proxy a GUI app is not given, or `claude` goes direct, is
+    // refused and loses its sign-in (#567).
+    let proxy = agent_hud_runtime::inherit_system_proxy();
     let demo = demo::wanted(&arguments);
     let mut demo_script = match demo::script(&arguments) {
         Ok(script) => script,
@@ -891,6 +895,11 @@ pub fn run_with_options(
         }
     };
     agent_hud_runtime::app_log::start(demo);
+    if let Some(proxy) = proxy {
+        agent_hud_runtime::note!(
+            "Programs started from here go through the system proxy {proxy} (#567)"
+        );
+    }
     shell::web_content_hooks(tauri::Builder::default())
         .manage(options.clone())
         .manage(AppState { demo })

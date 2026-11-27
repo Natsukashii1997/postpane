@@ -230,36 +230,18 @@ export function reconcileIslandCards(
     const line = takeLine(next, arrived);
     const event = line.event;
     next = line.queue;
-    const card: LaneCard = {
+    next.push({
       type: "news",
       id: event.id,
       at: event.at,
       event,
       inUsagePanel:
         event.kind !== "completion" && !isFailure(event) && inUsagePanel,
-    };
-    // A session that answers again keeps its one line, now its newest reply.
-    const key = replyLine(event);
-    const at = key
-      ? next.findIndex(
-          (each) => each.type === "news" && replyLine(each.event) === key,
-        )
-      : -1;
-    if (at >= 0) next[at] = card;
-    else next.push(card);
+    });
   }
   // Persistent requests are never evicted by a burst of informational events;
   // a new notice is kept, an older one makes room (#221).
   return roomForNews(next);
-}
-
-/** The line a reply is told on: its source and session, the sidebar's unit
- * being one session (owner, 2026-11-28); a reply naming no session has a
- * line of its own. */
-function replyLine(event: IslandEvent): string | null {
-  return event.kind === "completion" && event.sessionId
-    ? `${event.source}:${event.sessionId}`
-    : null;
 }
 
 /** The queue with at most `limit` notices: past that, the oldest notice that
