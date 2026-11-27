@@ -2,7 +2,7 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
-## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，常浩回「覆盖装机」后已发布 `628de7f4b999` 回读通过；未验收，未登记 DECIDED.md）
+## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，常浩回「覆盖装机」后已发布 `628de7f4b999` 回读通过；常浩经驿窗回「Accepted, merge」验收，已登记 DECIDED.md）
 
 - 时间：开工 `2026-11-27 16:10`。来由：#554。常浩刚开通 Antigravity，它进了侧栏；要求调顺序、并按 GPT 小花的场景范围做它的动作库。小人动效按记忆只出一版。
 - 侧栏顺序：不在代码里，在侧栏布局 `hud.agents`。已经用 `draft_hud` 放进草稿：`[claude, codex, chatgpt, antigravity, hermes, deepseek]`，离屏截图核对过顺序。**要常浩悬停侧栏、在面板里点「保存」**；装机会重启应用，草稿会丢，装完已重放（见「发布与回读」）。
@@ -24,7 +24,7 @@
 - 预览：https://claude.ai/artifact/FfbPChjxN1Rh7oy9L5BPyf （真实代码打包，现在 vs 新动作，31 号票根 + 放大，按新顺序排的侧栏一排）。
 - 截图与证据：`~/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/`：`before-after-strip.png`、`check.log`、`test.log`、`node.log`、`red-on-main.txt`、`build.log`；预览脚手架在 `preview/`（`entry.tsx`、`frames.tsx`、`build.sh`、`rebuild-frames.sh`、`out/`，`old/` 是 main 快照）。
 - 发布与回读：常浩经驿窗侧栏回「覆盖装机」，`install.sh 554-antigravity-moves --takeover`：装前 `d49ed6e89c8e`（`install-548-539` 合并包，含未合并的 #539）已备份到证据目录 `PostPane-d49ed6e89c8e.app`；产物 `628de7f4b999` / 已装 `628de7f4b999`，签名一致；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/PostPane-d49ed6e89c8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机截屏（`before-after-strip.png`，由 `smoke-before-1.png`、`smoke-after-1-1.png` 裁出）：装后 Antigravity 排第 4、是常驻小人、正在打盹；其余五家与装前一致。重启后顺序仍是第 4 位，但 `draft_hud` 回读的已保存列表里还没有 antigravity，请常浩在面板里再点一次「保存」。装上的包不含 #539，#539 合并后要从 main 重打重装。动作只看到打盹一种，其余动作没在实机上逐个验。
-- 与授权不一致之处、遗留问题、范围外发现：常浩还没看实物，动作和星球牌等他看预览和侧栏后定；PR 等他回「验收」再合并（观感类）。顺序要他在面板里点「保存」。
+- 与授权不一致之处、遗留问题、范围外发现：常浩看预览和实机截图后经驿窗回「Accepted, merge」，已验收并按他的话合并；实机只看到打盹，其余 21 个动作以预览为准。合并后主目录没拉（postpane 不在拉齐名单，请他回合并时没写「拉主目录等于上线」的提示）。顺序要他在面板里点「保存」。
 - 本轮新坑：无
 - skill 进化：无
 
