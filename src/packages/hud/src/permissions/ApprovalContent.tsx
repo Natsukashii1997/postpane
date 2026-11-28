@@ -112,6 +112,20 @@ export function ApprovalContent({
       void decide?.(entry.request.id, { kind: "leave" });
   };
 
+  // 前往 on a card pointing to another session: there, and the card put
+  // away; where it could not get there, the line says why (#220).
+  const goElsewhere = (request: Approval) => {
+    const to = request.elsewhere?.sessionId
+      ? findSession(sessions, request.elsewhere.sessionId, request.source)
+      : undefined;
+    if (!to?.navigationTarget || !services?.openSession) return undefined;
+    return async () => {
+      const reason = failureOf(await services.openSession!(to), zh);
+      if (reason) fail(request.id, reason);
+      else void decide?.(request.id, { kind: "leave" });
+    };
+  };
+
   const fallbackTitle = (entry: ApprovalEntry) =>
     entry.kind === "request"
       ? (projectName(entry.request.cwd) ??
@@ -159,6 +173,8 @@ export function ApprovalContent({
           language={language}
           onOpenSettings={openSettings}
           onGoStart={goStart}
+          onGoElsewhere={goElsewhere(request)}
+          titleOf={(id) => findSession(sessions, id, request.source)?.title}
           onDecision={
             decide ? (decision) => decide(request.id, decision) : undefined
           }

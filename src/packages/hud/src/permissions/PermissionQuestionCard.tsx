@@ -60,6 +60,7 @@ export function PermissionQuestionCard({
   answer,
   openSettings,
   goStart,
+  note,
 }: {
   request: Approval;
   disabled: boolean;
@@ -72,6 +73,8 @@ export function PermissionQuestionCard({
   /** A handoff card's 去开始 in place of 知道了: back to its session, where
    * the person starts the new one, the card put away (#247). */
   goStart?: () => void;
+  /** Under the question: what another session sent the owner here to do. */
+  note?: ReactNode;
 }) {
   const t = (en: string, cn: string) => (zh ? cn : en);
   const [answers, setAnswers] = useState<Record<string, Draft>>(
@@ -376,13 +379,7 @@ export function PermissionQuestionCard({
       {detailText && <div style={context}>{detailText}</div>}
       <div style={cardColumn(6)}>
         {(q.header || questions.length > 1) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {q.header && heading(q.header)}
             <span style={{ flex: 1 }} />
             {questions.length > 1 && (
@@ -408,6 +405,7 @@ export function PermissionQuestionCard({
           )}
         </div>
       </div>
+      {note}
       <div style={cardColumn(4)}>
         {q.options.map((option) => {
           const chosen = value.selected.includes(option.label);

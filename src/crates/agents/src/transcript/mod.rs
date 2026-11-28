@@ -4,6 +4,7 @@
 //! own folder (`<client>/transcript.rs`).
 pub mod carried_usage;
 pub mod closing;
+pub mod elsewhere;
 pub mod items;
 pub mod kept_names;
 pub mod live;
