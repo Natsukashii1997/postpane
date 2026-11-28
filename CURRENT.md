@@ -12,7 +12,7 @@
   - 空格 4、5：会话听说过「送达状态未知」的话，之后迟到确认或在会话里找到，卡上另记一步、通知会话「更正」（`notice/book.rs` `corrected`、`Pending.said`、`desk_asking.rs`、`book_finding.rs`、`book_mending.rs`；开头「驿窗接力「…」更正：」，`book_leave.rs` 认得是驿窗自己的话）。
   - 空格 15：别的接力绑走同一会话，被顶替的卡记原因、通知发起会话（`notice/book.rs` `take_over`）。
 - 我顺手改的：`shadow.rs`、`book.rs`、`book_unsure.rs` 按行数棘轮拆挪；三条旧测试（`finding.rs`、`mend_late.rs`、`words_back.rs`）按种类找那一步；设置「AI 接入」页和 AGENTS.md 影子读取说明（文字在 `AiAccessPane.tsx`，交接简报写的 `ai-access.ts` 里没有）。
-- 已登记 DECIDED.md：新加 A、B 两行，#488、#528 两行备注部分取代（提交号写「见 PR 合并提交」）。
+- 已登记 DECIDED.md：新加 A、B 两行，行内写明部分取代 #488、#528 哪一句；旧行不动（改原有行属合并例外）；提交号写「见 PR 合并提交」。
 - 测试：`pnpm run check` 通过；`node --test tests/*.test.mjs` `ℹ pass 83` / `ℹ fail 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1263 failed 0，前端 `ℹ pass 586`，MCP 10，插件 14，Chrome 插件 244，注入脚本 11，各 `ℹ fail 0`）。原文 `evidence/2026-11-28-544-finish/full-test.log`。
 - 验证：替身通过（宿主假 Lines、插件接口替身、白名单单测）。真实环境：已装版本（16:35）二进制里搜得到 #589 的「标签页已经关了」「Chrome 插件没连上」，main 上到 #589 的接力修复都已装；`postpane.log` 第 119–125 行今天 16:45–17:19 有 5 行「PostPane stopped handoff …」，#557「驿窗自己停下写 postpane.log」这一条通过（真实环境）。本 PR 的改动未在真实环境验。记录 `evidence/2026-11-28-544-finish/real-checks.md`。
 - 截图：无界面改动（卡上和通知是文字）。
