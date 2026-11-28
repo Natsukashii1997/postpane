@@ -989,15 +989,26 @@ async function ownPrompt(conversation, promptId, since) {
   }
   // His prompts begun before these words: let go; any begun after stand.
   const his = Object.entries(taken[conversation] ?? {});
-  const before = his.filter(([, at]) => at < since).map(([id]) => id);
-  if (!before.length) return;
-  const after = his.filter(([, at]) => !(at < since));
-  if (after.length) taken[conversation] = Object.fromEntries(after);
-  else delete taken[conversation];
-  chrome.storage.local.set({ taken }).catch(() => {});
-  const gone = (freed[conversation] ?? []).filter((id) => !before.includes(id));
+  letGo(
+    conversation,
+    his.filter(([, at]) => at < since).map(([id]) => id),
+  );
+}
+
+/** Changhao's prompts `ids` in `conversation` hold it no more, and are not
+ * his again when told of again, from whichever tab (`freed`, round 9). */
+function letGo(conversation, ids) {
+  if (!ids.length) return;
+  const mine = taken[conversation] ?? {};
+  if (ids.some((id) => id in mine)) {
+    const left = Object.entries(mine).filter(([id]) => !ids.includes(id));
+    if (left.length) taken[conversation] = Object.fromEntries(left);
+    else delete taken[conversation];
+    chrome.storage.local.set({ taken }).catch(() => {});
+  }
+  const gone = (freed[conversation] ?? []).filter((id) => !ids.includes(id));
   delete freed[conversation];
-  freed[conversation] = [...gone, ...before].slice(-ASK_IDS);
+  freed[conversation] = [...gone, ...ids].slice(-ASK_IDS);
   const freedAll = Object.keys(freed);
   for (const old of freedAll.slice(
     0,
@@ -1049,8 +1060,10 @@ async function goneOn(message) {
   // `begunAt`); else as heard, later than it was: let go later, not sooner.
   const told = phase === "start" ? message.at : message.begunAt;
   // Begun, as its page says, before words of the extension's since known to
-  // be there: let go already, though first told of now (round 8).
-  if (Number.isFinite(told) && told < ownedSince[conversation]) return;
+  // be there: let go already, though first told of now (round 8); and so for
+  // good, whatever another tab tells of it, before or after (round 9).
+  if (Number.isFinite(told) && told < ownedSince[conversation])
+    return letGo(conversation, [promptId]);
   const mine = taken[conversation] ?? {};
   const at = Math.min(
     Number.isFinite(told) ? told : Date.now(),

@@ -4338,6 +4338,38 @@ test("a prompt of Changhao's begun before PostPane's words, told first after the
   assert.deepEqual(later.removed, []);
 });
 
+// Round 9, P2-11: a prompt shown old by when it began stays let go though
+// another tab tells of it with no beginning, before or after.
+test("a prompt of his shown older than PostPane's words takes nothing, whichever tab tells of it first", async () => {
+  for (const oldFirst of [true, false]) {
+    const sent = await sentOnce(
+      { ok: true, promptId: P(120) },
+      async () => {},
+      { tab3: true },
+    );
+    const since = sent.stored.ownedSince[ENDED];
+    const old = () =>
+      turn(sent.listeners, "start", P(121), {
+        prompt: MINE,
+        tab: 3,
+        at: since - 5,
+      });
+    const untimed = () =>
+      turn(sent.listeners, "complete", P(121), { prompt: MINE, tab: 2 });
+    if (oldFirst) old();
+    else untimed();
+    await settleLong();
+    if (oldFirst) untimed();
+    else old();
+    await settleLong();
+    assert.equal(sent.stored.taken?.[ENDED], undefined, `oldFirst ${oldFirst}`);
+    assert.ok(sent.stored.freed?.[ENDED]?.includes(P(121)));
+    await sent.end();
+    await sent.done(P(120), SENT);
+    assert.ok(sent.removed.includes(2), JSON.stringify(sent.removed));
+  }
+});
+
 // An end whose beginning was not heard tells when its turn began
 // (`begunAt`): kept from then, not from when it is heard.
 test("an end of a prompt of his counts from when its turn began, as told", async () => {
