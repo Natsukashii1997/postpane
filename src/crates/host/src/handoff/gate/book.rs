@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 mod reading;
 #[path = "book_writing.rs"]
 mod writing;
-pub use reading::Reading;
+pub use reading::{Reading, Waited};
 
 /// Reviews one leave of the person's gives, unless set otherwise.
 pub const LIMIT: u32 = 5;
