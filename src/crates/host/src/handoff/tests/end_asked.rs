@@ -158,7 +158,7 @@ fn postpane_s_own_words_are_known_by_how_they_are_written() {
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
     let notice =
-        super::super::notice::notice_text(&handoff, &crate::handoff::book::Trouble::NoAnswer);
+        super::super::notice::notice_text(&handoff, &crate::handoff::book::Trouble::Unconfirmed);
     let swipe = super::super::launch_text("review", "L1").unwrap();
     for words in [notice, swipe] {
         let turn = (Opener::Plugin(words.clone()), 9);

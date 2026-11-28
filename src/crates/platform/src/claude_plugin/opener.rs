@@ -43,7 +43,7 @@ pub fn current_turn(claude_config: &Path, session: &str) -> Option<(Opener, i64)
         .find(|value| {
             // A line Claude Code says began a turn (`origin`) does, though
             // not a prompt: another Claude session's message, marked meta
-            // (#439, L-81).
+            // (#439, L-90).
             let begins = claude_prompt(value)
                 || (value["type"] == "user" && value["origin"]["kind"].is_string());
             value["isSidechain"] != true && begins && !interrupted(value)
