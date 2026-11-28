@@ -651,6 +651,46 @@
 - 正确做法：侧栏「单位是单一任务会话」，带 `parentId` 的子任务不单独出回复和失败提醒（`ended()` 已过滤）。查「同一个东西出现好几次」先从实机快照取出那几行的编号和父编号，再决定按什么去重；造场景时把「标题相同、编号不同」和「子任务」各造一个。
 - 证据：快照 `islandEvents.items` 里 9:29–9:53 的 completion 行 `sessionId` 为 `agent-a7350e0a…`、`agent-a96fb22c…`、`agent-a033c91c…`、`agent-ad83d7d9…` 等，`sessions` 里对应 `parentId` 都是 `b633847f-c6e5-47dd-ae61-0d8c9ac92606`；测试 `island_events::turns::tests::a_subagent_that_answers_or_fails_is_not_a_line_of_its_own`。
 - 升级：〔机检〕已升级（2026-11-28，#578 的 PR）：测试 `a_subagent_that_answers_or_fails_is_not_a_line_of_its_own` 守住子任务不出行；「先拿实机编号再定去重」只靠本条提醒。
+## L-84 客户端升级后把本地服务的令牌从启动参数挪进发现文件，驿窗只看启动参数，整家报「没有正在运行的服务」（2026-11-27）
+
+- 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。
+- 根因：`clients/antigravity` 的发现只从 language_server 启动参数读 `--csrf_token` / `--extension_server_port`。2.35.2 桌面版改成 `--subclient_type hub --https_server_port 0 --read_host_bridge_token_from_stdin`，参数里没有令牌，进程被整个跳过；新版把端口和令牌写在 `~/.gemini/antigravity/daemon/hub_<httpPort>.json`（0600，`pid`、`httpsPort`、`httpPort`、`csrfToken`）。不带令牌直接调，服务回 `401 missing CSRF token`。
+- 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认；文件里写的端口必须是那个进程正在监听的（`listening_ports(pid)`），否则文件就不只是给令牌、而是在决定驿窗信任谁（#560 审查 P1-01）。发现文件的位置跟会话记录用同一套（认 `GEMINI_CLI_HOME`）。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
+- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red.txt` 新测试在旧逻辑上失败、`green.txt`、全量测试输出、实机记录）。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：`running.rs` 新版启动参数与发现文件夹具测试、`daemon.rs` 发现文件测试，未接进必经检查。
+
+## L-85 同一轮在两处各有一套编号规则：完成事件按回复那一步编号、会话记录按提问那一步编号，get_message 永远判不出 Antigravity 这轮结束（2026-11-27）
+
+- 现象：#558 修好发现后，经驿窗 `start_session` 新开的 Antigravity 会话 3 秒内就回了「驿窗 558 已收到」，侧栏显示空闲、`hud_session` 的 liveFacts 有 `endedAt` 和 `outcome: completed`，`get_message` 却一直是 `started`、`answer: null`。
+- 根因：Stop 钩子的 `antigravity/hooks.rs` `enrich` 把完成事件的 `turnId` 写成 `step-<PLANNER_RESPONSE 的 step_index>`（这次是 `step-1`）；会话记录的 `transcript::TURNS` 按开启这一轮的 `USER_INPUT` 编号（`step-0`）。messaging 的 `stored::answer` 用 liveFacts 的 `turnId` 认「这是最新一轮」，对不上就只能等下一轮开始才算结束。从上游移植起（`04a6f2f`）就这样，和桌面版新旧无关。
+- 正确做法：同一个概念（这里是「一轮」）的编号只按一处规则来，另一处照它推导；改完成事件、钩子补字段这类代码时，拿会话记录那边的测试数据（messaging 测试里 `turnId: step-5`、回复 `step-8:text`）对一遍。验证「能读到回复」要看 `get_message` 变成 `done`，看到侧栏空闲、回复写进记录不算。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red-hooks.txt` 旧逻辑 `left: "step-1" right: "step-0"`、`green-hooks.txt`、实机前后两次 `get_message`）。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：`antigravity::hooks::tests` 两条，未接进必经检查。
+
+## L-86 同一个会话两种 id 写法：start 回执记裸 UUID、快照和会话页认 `antigravity:<uuid>`，按记下的 id 去查就「找不到会话」（2026-11-27）
+
+- 现象：L-85 修好后，liveFacts 的 `turnId` 已经对上，`get_message` 仍停在 `started`；`hud_session` 用裸 UUID 查回「Session was not found; refresh first」，带 `antigravity:` 前缀才查得到。
+- 根因：`start_session` 的回执用 Antigravity 返回的裸 cascade id 记收件会话；驿窗快照、`session_detail` 给 Antigravity、DeepSeek Harness 的 id 前面加了客户端前缀。`send_message` 发出前已经换成快照 id（`send.rs` 的 `target["id"]`），start 没换；`snapshot::find` 两种写法都认，所以列表、状态看着都正常，只有按 id 查会话页那一步落空。messaging 测试里 `ANTIGRAVITY` 是裸 id，快照里也是裸的，测不出来。
+- 正确做法：按 id 去查别的接口之前，先经快照换成快照里的那个 id（`transcript::page_id`）；测试夹具里 Antigravity 的快照 id 要带 `antigravity:` 前缀，和真实快照一致。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red-bare-id.txt` 旧逻辑停在 `queued`、`green-bare-id.txt`、实机第三次 `get_message`）。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：messaging 测试 `an_antigravity_start_named_by_its_bare_id_is_read_under_the_snapshots_id`，未接进必经检查。
+
+## L-87 显示偏好挡住了业务判断：侧栏「实时状态」关着的那家，快照里没有 liveFacts，get_message 永远判不出这一轮结束（2026-11-27）
+
+- 现象：L-85、L-86 修好后，日志里那条消息已经认出所在的轮次（`turn: step-0`、指纹对），`get_message` 仍停在 `started`；`hud_session` 的 `session.liveFacts` 有 `endedAt`，`hud_snapshot` 里同一个会话的 `liveFacts` 却是 null。
+- 根因：`hud/src/presentation.rs` 在某家 `sources.<家>.live == false`（设置 →「智能体」→「实时状态：在侧栏上显示运行和等待中的会话」）时，从快照里删掉它的 liveFacts、状态记成 idle。messaging 的 `paged::answer` 只看快照的 liveFacts。本机 `presentation.json` 里 Antigravity 是 `live: false`：`apply_live_status_defaults` 在它第一次出现、还没检测到时存成了关，之后检测到也不会改（只有 `DETECTED_LATE` 里的 ChatGPT 会补开一次）。#554 实机「只看到打盹」很可能也是这个原因（未核实）。
+- 正确做法：业务判断（消息有没有被答完）不读经过显示偏好过滤的数据；快照里没有时，用会话页 `session_detail` 自带的 `session.liveFacts`。改显示偏好的过滤时，搜一遍谁还在读快照里的这个字段。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red-live-off.txt`、`green-live-off.txt`、实机第四次 `get_message`）。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：messaging 测试 `a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry`，未接进必经检查。`stored::answer` 同样只看快照，驿窗没接会话存储所以没改，接的时候要一起改。Antigravity 实时状态默认关、要不要像 ChatGPT 一样检测到后补开一次，待常浩定。
+
+## L-88 Antigravity 的 `transcript.jsonl` 会截断长字段，完整内容在旁边的 `transcript_full.jsonl`；用短消息验收测不出（2026-11-27）
+
+- 现象：#560 用短消息验收全过；多模型协同会话经 `start_session` 发了约 1.9 万字节的送审包（`m-fa3b7d6821af`），Gemini 21:48 已写完回复，`get_message` 却一直 `started`、`answer: null`。
+- 根因：Antigravity 写 `transcript.jsonl` 时把长字段截短：这一行带 `truncated_fields: ["content", …]`，正文只留头尾，中间换成一行 `<truncated N bytes>`；完整的同一步（同一个 `step_index`）写在同目录的 `transcript_full.jsonl`。驿窗只读 `transcript.jsonl`。以常浩身份发送的消息按全文指纹认（`PromptForm::Own`），截断后的提问指纹对不上，找不到这一轮；就算找到了，回复也是截断的，不是「整段回复」。
+- 正确做法：会话页读到带 `truncated_fields` 的 Antigravity 行时，按 `step_index` 去 `transcript_full.jsonl` 取整条（`core/clients/antigravity_whole.rs`，按文件长度和修改时间缓存一份步号→偏移的索引）。用量和实时状态仍读 `transcript.jsonl`：用量账本按「来源文件 + 事件键」做主键，换来源文件可能把历史用量算两遍，所以没有整体改读完整版。凡是「把回复交给别人」的功能，验收要带一条长消息和一条长回复。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/r6/`（会话 `f2e8fb04`：`transcript.jsonl` 提问 1939 字、回复 1789 字，`transcript_full.jsonl` 提问 8426 字、回复 17370 字；修后 `get_message` 的结果）。
+- 升级：〔提醒〕部分升级（2026-11-27，#560）：`antigravity_whole` 两条测试，未接进必经检查。
 
 ## L-89 想让一个值滑过去，它的规则却带 `!important`：重要声明在层叠里压过过渡，值一下就跳到终点（2026-11-25）
 

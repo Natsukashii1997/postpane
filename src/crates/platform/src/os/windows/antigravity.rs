@@ -101,7 +101,7 @@ unsafe extern "system" {
 
 /// TCP_TABLE_OWNER_PID_LISTENER, filtered before use to the target PID and
 /// listeners reachable on IPv4 loopback. Do not probe unrelated services.
-pub(super) fn listening_ports(pid: u32) -> Result<Vec<u16>, String> {
+pub(super) fn listening_ports(pid: u32) -> Result<Vec<std::net::SocketAddr>, String> {
     const AF_INET: u32 = 2;
     const TCP_TABLE_OWNER_PID_LISTENER: u32 = 3;
     const INSUFFICIENT_BUFFER: u32 = 122;
@@ -149,8 +149,11 @@ pub(super) fn listening_ports(pid: u32) -> Result<Vec<u16>, String> {
             .filter(|row| {
                 row.pid == pid && (row.local_addr == 0 || row.local_addr.to_ne_bytes()[0] == 127)
             })
-            .map(|row| u16::from_be(row.local_port as u16))
-            .filter(|port| *port != 0)
+            .map(|row| {
+                let ip = std::net::Ipv4Addr::from(row.local_addr.to_ne_bytes());
+                std::net::SocketAddr::from((ip, u16::from_be(row.local_port as u16)))
+            })
+            .filter(|address| address.port() != 0)
             .collect::<Vec<_>>();
         ports.sort_unstable();
         ports.dedup();
@@ -166,8 +169,14 @@ mod tests {
     fn listener_ports_are_owned_by_the_requested_process() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        assert!(listening_ports(std::process::id()).unwrap().contains(&port));
-        assert!(!listening_ports(0).unwrap().contains(&port));
+        let held = |pid| {
+            listening_ports(pid)
+                .unwrap()
+                .iter()
+                .any(|a| a.port() == port)
+        };
+        assert!(held(std::process::id()));
+        assert!(!held(0));
     }
     #[test]
     fn malformed_process_probe_fails_without_exposing_output() {

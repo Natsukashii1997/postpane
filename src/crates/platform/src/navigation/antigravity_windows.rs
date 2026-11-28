@@ -139,7 +139,7 @@ pub(super) fn open(home: &Path, id: &str, _cwd: Option<&str>) -> Result<bool, St
         return Ok(false);
     }
     let mut candidates = candidates.windows.into_iter().filter(|(_, pid)| {
-        crate::os::listening_ports(*pid).is_ok_and(|ports| ports.contains(&port))
+        crate::os::listening_ports(*pid).is_ok_and(|held| held.iter().any(|at| at.port() == port))
     });
     let Some((window, _)) = candidates.next() else {
         return Ok(false);

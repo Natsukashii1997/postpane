@@ -77,7 +77,9 @@ pub(crate) fn codex_cli_on_port(
         let Some(identity) = identity(pid) else {
             continue;
         };
-        if super::listening_ports(pid as u32).is_ok_and(|ports| ports.contains(&port)) {
+        if super::listening_ports(pid as u32)
+            .is_ok_and(|held| held.iter().any(|at| at.port() == port))
+        {
             matches.push((pid, identity));
         }
     }

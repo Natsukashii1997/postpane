@@ -169,7 +169,7 @@ pub(crate) fn processes() -> Result<Vec<ProcessInfo>, String> {
         include_str!("../../../scripts/macos/process-arguments.sh"),
     )
 }
-pub(crate) fn listening_ports(pid: u32) -> Result<Vec<u16>, String> {
+pub(crate) fn listening_ports(pid: u32) -> Result<Vec<std::net::SocketAddr>, String> {
     super::unix::listening_ports(
         include_str!("../../../scripts/macos/listening-ports.sh"),
         pid,
