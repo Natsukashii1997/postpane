@@ -27,6 +27,12 @@ impl Desk {
     pub(crate) fn reread(&self, lines: &dyn Lines, now: i64) -> usize {
         self.lose_unfound(now);
         if !lines.connected() {
+            // What the wait ends on is said as it is (#544): not read, not
+            // "no answer". Kept only when it changes; this runs every second.
+            let off = self.lock().unread_while_off();
+            if off {
+                self.change(|_| ());
+            }
             return 0;
         }
         self.find_unsure(lines, now);
