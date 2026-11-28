@@ -60,7 +60,7 @@
 - GPT 工程审查第 4 轮（受审 `b37e2c8`，返修，P0 0、P1 0；ENG-10 已验证关闭，notch 结构和 #574 合并解法核对通过；新提 ENG-20 待决策）逐条处理：
   - ENG-07 已修：退场视图的根元素本身（小收据是一个按钮）也移出 Tab 顺序；记下原来的 tabindex，视图退到一半被叫回（同一个 key）时还原。实测（`webkit-r4/r4-new.txt`）：小收据单独退场时根按钮 tabindex -1；叫回后 3、0 原样恢复。改前对照（`r4-old.txt`）根按钮没移出，叫回后一直卡在 -1（第 3 轮改法带出来的，一并修好）。真实 Tab 键和 VoiceOver 没测。
   - ENG-19 已修：旧 WebKit 退场期间在捕获阶段拦下按下、拖动、松手、取消和滚轮（只停传递、不阻止默认），会话行的左滑托盘手势起不来。实测去掉 inert 后五种事件都到不了；改前对照五种都到了。
-  - ENG-20 待常浩定：不支持叠加的旧 WebKit 上，回位途中移回挂件会跳约 1.3°。
+  - ENG-20 常浩 2026-11-28 回「接受」：不支持叠加的旧 WebKit 上，回位途中移回挂件会跳约 1.3°，作为兼容降级保留，已登记 DECIDED.md。
 - 测试：
   - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
   - 工程审查第 1 轮返修后：`pnpm run check` 原样 `check exit 0`（`check-7.txt`）；`pnpm test`（`test-9.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 540`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。新测试：`hud/test/present.test.ts`、fold-store 两条、moves 两条、motion 两条、pendant-settle 加断言。装机的包 `1bce2b00156a` 不含这一轮。
