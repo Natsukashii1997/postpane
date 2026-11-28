@@ -71,6 +71,9 @@ function load(
     // words it was opened with; by default, that it does when it shows the
     // conversation asked of.
     opened = {},
+    // #544 gap 13: waits of these lengths go to `held` too, for the test to
+    // run (the reconnect after PostPane went away).
+    holdsWaits = [],
   } = {},
 ) {
   const listeners = {};
@@ -316,7 +319,8 @@ function load(
     // as a timer does, after what is already on its way.
     setTimeout: (fn, ms) => {
       waits.push(ms);
-      if (held && ms === 20000) return held.push(fn);
+      if (held && (ms === 20000 || holdsWaits.includes(ms)))
+        return held.push(fn);
       if (now && !parked.includes(ms)) setImmediate(fn);
       return 0;
     },
@@ -4560,4 +4564,53 @@ test("an end of a prompt of his counts from when its turn began, as told", async
   );
   assert.equal(sent.stored.taken?.[ENDED], undefined);
   assert.deepEqual(sent.stored.freed?.[ENDED], [P(105)]);
+});
+
+// #544 gap 13: what a page told while PostPane was away is not dropped: an
+// answer done waits, and is told once the port is back, after hello.
+test("an answer done while PostPane is away is told once it is back", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const tabs = [
+    { id: 2, url: `https://chatgpt.com/c/${conversation}`, windowId: 1 },
+  ];
+  const posted = [];
+  const held = [];
+  const { listeners } = load(tabs, {
+    posted,
+    held,
+    holdsWaits: [5000],
+    watched: [conversation],
+  });
+  for (let ticks = 0; ticks < 10; ticks++) await tick();
+  listeners.gone();
+  posted.length = 0;
+  const done = {
+    type: "turn",
+    phase: "complete",
+    conversation,
+    promptId: "p1",
+    messageId: "m1",
+    reply: "回信",
+  };
+  listeners.message(done, { tab: { id: 2 } });
+  listeners.message(
+    { type: "turn", phase: "start", conversation, promptId: "p2" },
+    { tab: { id: 2 } },
+  );
+  for (let ticks = 0; ticks < 10; ticks++) await tick();
+  assert.deepEqual(posted, [], "away: nothing goes");
+  assert.equal(held.length, 1, "the reconnect is due");
+  held.shift()();
+  for (let ticks = 0; ticks < 10; ticks++) await tick();
+  const types = posted.map((m) => [m.type, m.phase ?? null]);
+  assert.deepEqual(types.slice(0, 2), [
+    ["hello", null],
+    ["turn", "complete"],
+  ]);
+  assert.equal(posted[1].messageId, "m1");
+  assert.equal(
+    posted.filter((m) => m.type === "turn" && m.phase === "complete").length,
+    1,
+    "told once",
+  );
 });

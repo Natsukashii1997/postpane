@@ -317,6 +317,14 @@ fn a_send_that_did_not_go_says_whether_send_was_pressed() {
         );
         assert_eq!(failed.text(), refused(said["reason"].as_str().unwrap()));
     }
+    // #544 gap 12: the extension gone while it sends (its worker stopped by
+    // Chrome): not known whether it pressed, so not as never pressed.
+    let sender = channel.clone();
+    let sending = std::thread::spawn(move || sender.send_as("68a1", "第 2 轮", Some("h1~send3")));
+    assert_eq!(next(&mut extension)["type"], "send");
+    drop(extension);
+    let failed = sending.join().unwrap().unwrap_err();
+    assert!(matches!(failed, SendFailed::Unsure(_)), "{failed:?}");
 }
 
 /// #488: what a shadow read found is kept for this user alone.

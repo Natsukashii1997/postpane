@@ -127,6 +127,7 @@ chatgpt.com 标签页（内容脚本）⇄ 插件后台 ⇄ Chrome Native Messag
 - `turn complete` 变成一条 completion 事件，侧栏照常弹「新回复」回执；回复全文不截断。
 - `turn start` 变成一条 running 的 session-observation，会话显示「在答」，直到回复完成；ChatGPT 只报一次开始，没有心跳，15 分钟还没完成（多半是标签页关了）就不再算在答。它和回复一样写进 hook 收件箱（ChatGPT 没有直连应用的钩子通道，收件箱是唯一的路）；收件箱只为「自己的通道报回合」的客户端收这类记录（#206 之前一律拒收，「在答」从没显示过）。
 - 对话与审核（#145）：名单里的会话（驿窗经 `open` 开的）算「审核」，其余是常浩自己开的「对话」；两种事件都带 `review`，快照里的 ChatGPT 会话带 `review: true | false`。只读得到 Chrome 里 chatgpt.com 的对话，手机端、Mac 桌面应用看不到。
+- 插件和驿窗断开时（驿窗重启、桥接程序连不上，#544 全表空格 13，插件 0.2.15 起）：这段时间里页面报的「答完」（`turn complete`）和迟到的 `sent`、`opened`（`ok: true`）先暂存在插件后台，最多 20 条、最旧的先丢；连回驿窗、发过 `hello` 后按原来的顺序补报，再让各页重报一遍正在写的状态。插件后台被 Chrome 停掉时暂存跟着丢，那些回信仍靠重读找回。别的消息（快照、标签页名单）不暂存，连回后会重新报。
 - 插件装上、更新或重新加载时（#206）：Chrome 不给已开着的 chatgpt.com 标签页装新内容脚本，旧脚本跟插件断开，这些标签页里的对话就一直报不上来（接力会话由插件新开标签页，不受影响）。所以插件后台在 `runtime.onInstalled` 时给每个已开的 chatgpt.com 标签页补装 `page.js`、`content.js`（要 `scripting` 权限）；同一页面再装一次时，旧的一份先停下、新的一份接手，不重复报；断开的旧脚本发消息出错就自己停下。
 - 新会话在首页发出，ChatGPT 开始回答时地址里还没有会话 id，那次 `turn start` 不带 `conversation`；地址变成 `/c/<id>` 时若仍在生成，插件带上新 id 再报一次 `turn start`，接力才会进入 `working`。
 - 名单 = 驿窗经 `open` 新开过的会话，存 `<数据目录>/chatgpt/watched.json`（1c 的接力会话也在其中，见下）。
