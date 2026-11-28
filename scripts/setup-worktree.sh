@@ -21,7 +21,7 @@ if [ -f "$HOME/.cargo/env" ]; then source "$HOME/.cargo/env"; fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 if [ -n "${CARGO_TARGET_DIR:-}" ]; then
-  echo "构建目录：$CARGO_TARGET_DIR（共用）"
+  echo "构建目录：${CARGO_TARGET_DIR}（共用）"
 else
   echo "构建目录：$ROOT/target（本 worktree 自己的）"
 fi

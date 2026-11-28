@@ -4301,7 +4301,11 @@ test("a prompt of Changhao's begun before PostPane's words, told first after the
   });
   const since = late.stored.ownedSince?.[ENDED];
   assert.ok(Number.isFinite(since), "when the words began is kept");
-  turn(late.listeners, "start", P(111), { prompt: MINE, tab: 3, at: since - 5 });
+  turn(late.listeners, "start", P(111), {
+    prompt: MINE,
+    tab: 3,
+    at: since - 5,
+  });
   await settleLong();
   assert.equal(late.stored.taken?.[ENDED], undefined, "begun before");
   await late.end();
@@ -4312,8 +4316,16 @@ test("a prompt of Changhao's begun before PostPane's words, told first after the
     tab3: true,
   });
   const from = later.stored.ownedSince[ENDED];
-  turn(later.listeners, "start", P(113), { prompt: MINE, tab: 3, at: from - 5 });
-  turn(later.listeners, "start", P(114), { prompt: MINE, tab: 3, at: from + 5 });
+  turn(later.listeners, "start", P(113), {
+    prompt: MINE,
+    tab: 3,
+    at: from - 5,
+  });
+  turn(later.listeners, "start", P(114), {
+    prompt: MINE,
+    tab: 3,
+    at: from + 5,
+  });
   turn(later.listeners, "start", P(115), { prompt: MINE, tab: 3 });
   await settleLong();
   assert.deepEqual(

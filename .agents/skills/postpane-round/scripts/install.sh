@@ -49,7 +49,7 @@ if [[ "$MODE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}- ]]; then
   exit 2
 fi
 if [ ! -x "$NEW/$BIN" ]; then
-  echo "找不到产物：$NEW/$BIN（先 pnpm --filter @agent-hud/desktop exec tauri build --bundles app）" >&2
+  echo "找不到产物：$NEW/${BIN}（先 pnpm --filter @agent-hud/desktop exec tauri build --bundles app）" >&2
   exit 1
 fi
 
@@ -88,7 +88,7 @@ mkdir -p "$E"
 OLD=$(hash12 "$APP")
 BACKUP="$E/PostPane-$OLD.app"
 [ -d "$BACKUP" ] || ditto "$APP" "$BACKUP"
-echo "装前 $OLD，已备份到 $BACKUP"
+echo "装前 ${OLD}，已备份到 $BACKUP"
 # L-35：装前截一张侧栏，装后对比。截不到不拦装机，装后照样查小人在不在动。
 node "$HERE/smoke.mjs" shot "$E/smoke-before" || echo "装前没截到侧栏（旧应用没在跑、锁屏或没有屏幕录制权限），装后只查小人在不在动。"
 

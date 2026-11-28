@@ -9,6 +9,7 @@ const RULES = {
   deps: '依赖只许 ALLOWED_DEPS 里的；要加依赖，先改 scripts/check-rules.mjs 的 ALLOWED_DEPS，并在交接里说明理由（AGENTS.md 规则）',
   time: '页面上的时间经统一的格式化函数按北京时间显示，不直接截取 ISO 字符串（全局坑 G-02）；截取的确实是北京时间字符串时，在行内注释写「北京时间」',
   page: 'ChatGPT 页面长什么样（选择器、属性名、按钮文字）只许写在插件的适配文件 page.js（画面）、data.js（对话数据）、mark.js 里，别的插件文件调用它们（#548，docs/接力规范.md 第 6 节）；页面一改只改这一处',
+  shell: 'shell 脚本里变量后面紧跟中文要写成 ${变量}：macOS 自带的 bash 3.2 在 UTF-8 语言环境下会把中文字节当成变量名的一部分，set -u 下直接退出（L-82）',
   lessons: 'docs/LESSONS.md 每条坑都要有「- 升级：」一行，开头是〔结构〕〔机检〕〔体检〕〔文字〕〔提醒〕之一，后面写状态和去处，如「- 升级：〔提醒〕未升级。」「- 升级：〔机检〕已升级（2026-11-19，#405）：install.sh 的装机锁」；层级怎么选见全局 LESSONS「怎么升级」',
 };
 // 要扫的源码目录，按项目结构改；不存在的目录跳过
@@ -26,6 +27,9 @@ const LEVELS = ['结构', '机检', '体检', '文字', '提醒'];
 // 插件里认 ChatGPT 页面的写法：只许在适配文件里（#548）。网址、域名不算页面结构。
 const PAGE_DIR = 'src/apps/chrome-extension';
 const PAGE_OK = ['page.js', 'data.js', 'mark.js'];
+// shell 脚本：$变量 后面直接跟非 ASCII 字符（L-82）
+const SHELL_DIRS = ['scripts', '.agents/skills'];
+const SHELL = /\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]/;
 const PAGE = /querySelector|\.closest\(|\.matches\(|aria-label|data-testid|data-chatgpt|data-user-message|data-turn|ProseMirror|contenteditable|backend-api/;
 
 function files(dir) {
@@ -52,8 +56,23 @@ export function checkRules(root) {
     const at = key => lines.findIndex(line => line.includes(`"${key}":`)) + 1;
     for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).filter(n => !ALLOWED_DEPS.includes(n))) hit(pkgFile, at(name), 'deps', name);
   }
+  for (const file of SHELL_DIRS.flatMap(dir => shellFiles(path.join(root, dir))))
+    fs.readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
+      if (SHELL.test(text)) hit(file, i + 1, 'shell', text);
+    });
   checkLessons(root, hit);
   return found;
+}
+
+// .sh 文件，和第一行是 bash/sh 的无扩展名脚本（scripts/hooks/pre-push）
+function shellFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : shellFiles(file);
+    if (entry.name.endsWith('.sh')) return [file];
+    return !path.extname(entry.name) && /^#!.*\b(ba)?sh\b/.test(fs.readFileSync(file, 'utf8').split('\n', 1)[0]) ? [file] : [];
+  });
 }
 
 // 插件目录下、不在测试目录里、又不是适配文件的源码

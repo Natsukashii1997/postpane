@@ -644,3 +644,11 @@
 - 正确做法：在插件后台新加函数前先 `grep -n "function 名字"`。`test/background.test.mjs` 的「no two functions of the worker share a name」会查顶层同名函数。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round6/`。
 - 升级：〔机检〕测试已加。
+
+## L-82 shell 脚本里 `$变量` 后面紧跟中文，macOS 自带 bash 3.2 在 UTF-8 语言环境下把中文字节当成变量名，`set -u` 下装机脚本直接退出（2026-11-28）
+
+- 现象：#542 第 9 轮跑 `node --test tests/*.test.mjs`，装机脚本和备环境脚本的 14 条测试一起失败，报 `OLD�: unbound variable`、`CARGO_TARGET_DIR�: unbound variable`。前几轮同样的测试都过。
+- 根因：`install.sh` 第 91 行 `echo "装前 $OLD，已备份到 …"`，`$OLD` 后面直接是中文逗号。`/bin/bash` 3.2 在 `LANG` 是任何 UTF-8 语言（`en_US.UTF-8`、`zh_CN.UTF-8`、`C.UTF-8`）时，把中文的字节也算进变量名，变量名成了 `OLD�`，`set -u` 下没定义就整段退出；`LANG` 没设（C）时才不出事。前几轮跑测试的环境没设 `LANG`，这一轮的会话环境是 `LANG=C.UTF-8`。常浩的终端若是 UTF-8 语言，照着 skill 装机会停在备份之后、退出应用之前。全仓库搜到 4 处（`install.sh` 两处、`install-guard.sh`、`setup-worktree.sh`）。
+- 正确做法：变量后面紧跟非 ASCII 字符时一律写 `${变量}`。验证：`LANG=en_US.UTF-8 bash -c 'set -u; OLD=x; echo "$OLD，"'` 报错，换成 `${OLD}，` 就好。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round9/`（`node.log` 改前 14 条失败，`red-check-rules.log` 新检查在改前脚本上抓到 4 处）。
+- 升级：〔机检〕已升级（2026-11-28，#543）：`scripts/check-rules.mjs` 的 `shell` 一条扫 `scripts/`、`.agents/skills/` 下的 shell 脚本。可提议提升为全局坑（和 G-08 同属 `set -u` 一类）。
