@@ -24,19 +24,25 @@ test("a view on its way out takes no key press (ENG-07)", () => {
     // Round 3: hidden from VoiceOver, and out of Tab's order.
     /"aria-hidden": true/,
     /control\.tabIndex = -1;/,
-    // Round 4: the view itself too (a peek is one button), put back if it is
-    // called back before it is gone, and no press, drag or wheel gets in.
-    /\[view, \.\.\.view\.querySelectorAll<HTMLElement>\(TABBABLE\)\]/,
-    /backInTabs\(taken\.current\);/,
-    /taken\.current = outOfTabs\(view\);/,
+    // Round 4: the view itself too (a peek is one button), and no new
+    // press, drag or wheel gets in.
+    /\[\s*root,\s*\.\.\.root\.querySelectorAll<HTMLElement>\(TABBABLE\),?\s*\]/,
     /onPointerDownCapture: halt/,
     /onPointerMoveCapture: halt/,
-    /onPointerUpCapture: halt/,
-    /onPointerCancelCapture: halt/,
     /onWheelCapture: halt/,
+    // Round 5: what React writes or adds while the view leaves is followed
+    // (the queued changes first, when it is called back), and only where
+    // WebKit has no inert; webkit-r5/r5t-*.txt.
+    /new MutationObserver\(/,
+    /attributeFilter: \["tabindex"\]/,
+    /note\(watch\.takeRecords\(\)\);\s*watch\.disconnect\(\);/,
+    /return KNOWS_INERT \? undefined : outOfTabs\(view\);/,
     /view\.contains\(held\)\) held\.blur\(\)/,
   ])
     assert.match(present, part);
+  // A release and a cancel still go through, so a gesture begun before the
+  // view started leaving ends as it does (webkit-r5/r5-gesture-*.txt).
+  assert.doesNotMatch(present, /onPointer(Up|Cancel)Capture/);
   // The card's three views and the panel's content cross-fade through them.
   const surface = read("scene/HUDExpandedSurface.tsx");
   assert.match(surface, /<PresentButton\s+\/\/[^\n]*\n\s*key=\{`peek-/);

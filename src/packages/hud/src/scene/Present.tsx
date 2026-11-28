@@ -14,57 +14,90 @@ const stop = (event: SyntheticEvent) => {
   event.preventDefault();
   event.stopPropagation();
 };
-/** A press, drag or wheel on its way in: no row's gesture starts (ENG-19).
- * Not held back by default, so the page still scrolls and selects. */
+/** A press, drag or wheel on its way in: no row's gesture starts or moves
+ * (ENG-19). A release and a cancel still go through, so a gesture begun
+ * before the view started leaving ends as it always does (the tray settles);
+ * nothing in the sidebar acts on a release. Not held back by default, so
+ * the page still scrolls and selects. */
 const halt = (event: SyntheticEvent) => event.stopPropagation();
 const letGo = (event: FocusEvent) => {
   if (event.target instanceof HTMLElement) event.target.blur();
 };
 
+/** WebKit knows `inert` (Safari 15.5, macOS 12.4, on): it does it all. */
+const KNOWS_INERT =
+  typeof HTMLElement !== "undefined" && "inert" in HTMLElement.prototype;
+
 /** What Tab can reach: the view itself (a peek is one button) or inside it. */
 const TABBABLE = "a[href], button, input, select, textarea, [tabindex]";
 
-/** The view and what Tab reaches in it, each with the tabindex it had. */
-function outOfTabs(view: HTMLElement): [HTMLElement, string | null][] {
-  const controls = [view, ...view.querySelectorAll<HTMLElement>(TABBABLE)]
-    .filter((control) => control.matches(TABBABLE))
-    .map((control): [HTMLElement, string | null] => [
-      control,
-      control.getAttribute("tabindex"),
-    ]);
-  for (const [control] of controls) control.tabIndex = -1;
-  return controls;
+/** Keeps a leaving view out of Tab's order where WebKit has no `inert`, and
+ * gives back on `release` the tabindex each control should have now. While
+ * it leaves, React may still draw: a tabindex it writes is what the control
+ * should have once back (it is taken out again till then), and a control it
+ * adds is taken out as well (ENG-07). */
+function outOfTabs(view: HTMLElement) {
+  const was = new Map<HTMLElement, string | null>();
+  const take = (control: HTMLElement) => {
+    if (!was.has(control)) was.set(control, control.getAttribute("tabindex"));
+    control.tabIndex = -1;
+  };
+  const sweep = (root: HTMLElement) => {
+    for (const control of [
+      root,
+      ...root.querySelectorAll<HTMLElement>(TABBABLE),
+    ])
+      if (control.matches(TABBABLE)) take(control);
+  };
+  const note = (changes: MutationRecord[]) => {
+    for (const change of changes)
+      if (change.type === "childList") {
+        for (const added of change.addedNodes)
+          if (added instanceof HTMLElement) sweep(added);
+      } else if (change.target instanceof HTMLElement) {
+        // React wrote this one: it is what the control should have.
+        was.set(change.target, change.target.getAttribute("tabindex"));
+        change.target.tabIndex = -1;
+      }
+  };
+  const watch = new MutationObserver((changes) => {
+    note(changes);
+    watch.takeRecords(); // our own writes just now, not React's
+  });
+  sweep(view);
+  watch.observe(view, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["tabindex"],
+  });
+  return () => {
+    // What React wrote in the commit that calls the view back is still
+    // queued: take it first, or the old value would win.
+    note(watch.takeRecords());
+    watch.disconnect();
+    for (const [control, value] of was)
+      if (value === null) control.removeAttribute("tabindex");
+      else control.setAttribute("tabindex", value);
+  };
 }
 
-/** Back as they were: a view called back before it was gone (same key). */
-function backInTabs(controls: [HTMLElement, string | null][]) {
-  for (const [control, was] of controls)
-    if (was === null) control.removeAttribute("tabindex");
-    else control.setAttribute("tabindex", was);
-}
-
-/** Props for a view that may be leaving: `inert` where WebKit knows it
- * (Safari 15.5, macOS 12.4, on). Before that the view does inert's work
- * itself: hidden from VoiceOver (`aria-hidden`); out of Tab's order, itself
- * and its controls (`tabindex=-1`, put back if it is called back before it
- * is gone); swallowing clicks and keys, and keeping presses, drags and the
- * wheel from the rows inside it; letting go of any focus in or reaching it.
+/** Props for a view that may be leaving: `inert` where WebKit knows it.
+ * Before that (macOS 12.0 to 12.3) the view does inert's work itself: hidden
+ * from VoiceOver (`aria-hidden`); out of Tab's order, itself and what is in
+ * it (`outOfTabs`, given back if it is called back before it is gone, with
+ * the same key); swallowing clicks and keys and keeping new presses, drags
+ * and the wheel from the rows; letting go of any focus in or reaching it.
  * Where focus goes next is the page's, as when a view went at once. */
 export function useLeaving<E extends HTMLElement>() {
   const present = useIsPresent();
   const ref = useRef<E>(null);
-  const taken = useRef<[HTMLElement, string | null][]>([]);
   useLayoutEffect(() => {
     const view = ref.current;
-    if (!view) return;
-    if (present) {
-      backInTabs(taken.current);
-      taken.current = [];
-      return;
-    }
-    taken.current = outOfTabs(view);
+    if (present || !view) return;
     const held = document.activeElement;
     if (held instanceof HTMLElement && view.contains(held)) held.blur();
+    return KNOWS_INERT ? undefined : outOfTabs(view);
   }, [present]);
   return present
     ? { ref }
@@ -76,8 +109,6 @@ export function useLeaving<E extends HTMLElement>() {
         onKeyDownCapture: stop,
         onPointerDownCapture: halt,
         onPointerMoveCapture: halt,
-        onPointerUpCapture: halt,
-        onPointerCancelCapture: halt,
         onWheelCapture: halt,
         onFocusCapture: letGo,
       };
