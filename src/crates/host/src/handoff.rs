@@ -46,6 +46,7 @@ pub(crate) mod book;
 mod claiming;
 #[path = "handoff/answers/desk_driver.rs"]
 mod driver;
+mod end;
 #[path = "handoff/back/desk_ended.rs"]
 mod ended;
 #[path = "handoff/gate/desk.rs"]
@@ -82,6 +83,9 @@ const CLAUDE: &str = "claude";
 const CODEX: &str = "codex";
 /// The local tool Claude calls to hand its work to ChatGPT.
 pub(crate) const RELAY_METHOD: &str = "relay_to_chatgpt";
+/// The handoff tools on the local tools channel: handing work over, and
+/// listing and ending handoffs (#439).
+pub(crate) const RELAY_METHODS: [&str; 3] = [RELAY_METHOD, "relay_list", "relay_end"];
 /// The longest text sent either way: Chrome refuses a message to an
 /// extension above 1 MB, and a refused one drops its connection.
 const TEXT_LIMIT: usize = 768 * 1024;
@@ -1493,7 +1497,8 @@ fn launch_text(kind: &str, code: &str) -> Option<String> {
     };
     let what = if kind == "review" { "审核" } else { "讨论" };
     Some(format!(
-        "{ask}调用 relay_to_chatgpt 时 launch 参数填「{code}」，驿窗靠它认出这次左滑已经办了。（驿窗左滑「{what}」发来）"
+        "{ask}调用 relay_to_chatgpt 时 launch 参数填「{code}」，驿窗靠它认出这次左滑已经办了。{said}{what}」发来）",
+        said = book::SWIPE_SAID
     ))
 }
 
@@ -1930,6 +1935,19 @@ pub(crate) fn relay(app: &tauri::AppHandle, params: &Value) -> Result<Value, Str
     let message = super::chatgpt::noted(answer["message"].as_str().unwrap_or(""), note);
     answer["message"] = json!(message);
     Ok(answer)
+}
+
+/// A handoff tool of the local tools channel (`RELAY_METHODS`).
+pub(crate) fn relay_tool(
+    app: &tauri::AppHandle,
+    method: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    match method {
+        "relay_list" => end::relay_list(app),
+        "relay_end" => end::relay_end(app, params),
+        _ => relay(app, params),
+    }
 }
 
 /// The handoff card's buttons (`Desk::act`).

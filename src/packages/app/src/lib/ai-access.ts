@@ -60,6 +60,18 @@ export function mcpReach(
   };
 }
 
+/** How the handoff tools relay_list / relay_end stand: they answer
+ * whenever the local tools channel listens (the ChatGPT extension
+ * registered, or HUD tools or agent messages on: `channel_wanted` in
+ * host/src/tools.rs), extension or not (#439 review P2-05). Read from the
+ * host's own report of the channel, not worked out again here. */
+export function relayToolsState(
+  local: { enabled: boolean; listening: boolean } | undefined,
+): "on" | "failed" | "off" {
+  if (!local?.enabled) return "off";
+  return local.listening ? "on" : "failed";
+}
+
 /** Where PostPane reads each client: its sessions, and its quota. */
 const sources: Record<string, { sessions: Words; quota: Words }> = {
   claude: {

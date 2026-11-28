@@ -6,7 +6,7 @@ import {
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { EngineClient } from "@agent-hud/engine-client";
-import { relayDescription, relayInput } from "./relay.ts";
+import { registerRelayTools } from "./relay.ts";
 import type { Snapshot } from "@agent-hud/protocol";
 
 const engine = new EngineClient(undefined, "app");
@@ -494,56 +494,13 @@ serveStdio(() => {
     },
     ({ key, value }) => guarded("set_setting", { key, value }),
   );
-  server.registerTool(
-    "relay_to_chatgpt",
-    {
-      description: relayDescription,
-      inputSchema: z.object(relayInput).strict(),
-      annotations: {
-        ...localWrite,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
-    },
-    async (
-      { title, summary, brief, risk, head, chain, extra, launch },
-      context,
-    ) => {
-      const named = caller(
-        context.mcpReq._meta as Record<string, unknown> | undefined,
-      );
-      try {
-        return result(
-          await engine.request(
-            "relay_to_chatgpt",
-            {
-              title,
-              summary,
-              brief,
-              risk,
-              head,
-              chain,
-              extra,
-              launch,
-              caller: named,
-              cwd: process.cwd(),
-              parent: launchedBy,
-            },
-            // Continuing a review waits for the extension to send (≤ 30 s).
-            { timeoutMs: 55_000 },
-          ),
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Engine operation failed.";
-        // The app's own refusals are in Chinese; a transport failure is not.
-        const text = /[\u4e00-\u9fff]/.test(message)
-          ? message
-          : `连不上驿窗的本机工具通道：请确认驿窗在运行，并在设置 → 智能体插件里登记「ChatGPT（Chrome 插件）」。（${message}）`;
-        return { isError: true, content: [{ type: "text" as const, text }] };
-      }
-    },
-  );
+  registerRelayTools(server, {
+    request: (method, params, options) =>
+      engine.request(method, params, options),
+    result,
+    caller,
+    launchedBy,
+  });
   const hosted = new Map<
     string,
     { tool: HostTool; registered: RegisteredTool }

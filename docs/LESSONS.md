@@ -716,3 +716,11 @@
 - 正确做法：要做过渡的那个属性不写 `!important`，也别让带 `!important` 的简写（`background`、`transition`、`transform` 等）顺带设到它；需要压别人的，只给真正冲突的长写属性加（这里是 `background-color`、`background-image`）。验证时在页面里逐帧读 `getComputedStyle` 或看 `el.getAnimations()` 里有没有这条过渡，别只看计算样式里的 `transition-*`。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/settings/`（`switch.mjs` 两次输出：改前一帧跳到 0；改后 100% → 48% → 20% → … → 0，约 120ms）。
 - 升级：〔文字〕未升级：只出现过一次，记在这里。
+
+## L-90 Claude 桌面会话间转达的消息标了 isMeta，「这一轮谁开的头」把它跳过，认成了上一轮常浩自己打的字（2026-11-19；2026-11-28 两次变基撞号，由 L-59 改号为 L-90）
+
+- 现象：#439 装机实测 `relay_end`，本会话这一轮是别的 Claude 会话转达常浩批量答复开的头，按设计应整批拒收，结果核实通过、结束了 0B-4b 那张接力（它本来就在要结束的名单里，结果无害）。
+- 根因：`claude_plugin/opener.rs` 的 `current_turn` 往回找「这一轮的第一条用户消息」时只认 `claude_prompt`，而它排除 `isMeta`。Claude 桌面的会话间转达那一行是 `isMeta: true`、`origin.kind: "peer"`，被当成非提问跳过，往回落到常浩上一轮自己打的字（`origin.kind: "human"`），于是判成 `Opener::Person`。任务通知那一行不带 `isMeta`，所以原测试里「认不出」一直是绿的，没发现。同样影响 #258 插话重算和到上限后续审的授权（`extra`），只是那两处还比对时间、要晚于最近一次转回，暴露得少。
+- 正确做法：判断一轮由谁开头时，凡是 Claude Code 写了 `origin` 的用户行都算这一轮的开头（再按 `origin.kind` 判：`human` 是本人，驿窗插件的按插件判，其余一律认不出），不能只用「像不像用户提问」的过滤；新的开头来源要先在本机会话记录里数一遍各种 `origin` 和 `isMeta` 的组合，再写测试。
+- 证据：`evidence/2026-11-19-439-relay-end/`：`live-end-refused.txt`（本该拒收却结束了）、`red-peer.txt`（补的测试在旧代码上失败：`left: Some((Person, …))`）。
+- 升级：〔机检〕已升级（2026-11-20，#439）：`claude_plugin/tests.rs` 的 `the_current_turn_is_begun_by_the_person_or_by_the_plugin` 加了会话间转达开头的一轮。
