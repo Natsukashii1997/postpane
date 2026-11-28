@@ -522,3 +522,62 @@ fn a_review_waiting_on_chatgpt_takes_no_other_words() {
     );
     assert_eq!(lines.sent.borrow().len(), sends);
 }
+
+/// #542 review round 6 (owner 2026-11-27 「甲」): an opening's words go
+/// named by their request, as words sent later are, so the extension knows
+/// the prompt they became from any prompt of the person's; its answer is
+/// held to them all the same, the line aside, and not to other words.
+#[test]
+fn an_openings_words_go_named_by_their_request_and_its_answer_still_counts() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let Started::Opening { handoff, .. } = desk
+        .start(&lines, "s1", None, "修登录", None, "改动如下", false, 1)
+        .unwrap()
+    else {
+        panic!("a first brief opens a conversation");
+    };
+    desk.open(&lines, &handoff.id, "改动如下", None, || 2)
+        .unwrap();
+    let (kind, _, text) = last_sent(&lines);
+    assert_eq!(kind, "open");
+    assert_eq!(text, format!("【驿窗送审 {}~0】\n改动如下", handoff.id));
+    // Another prompt with that line is not its answer.
+    shown(&format!("【驿窗送审 {}~0】\n别的话", handoff.id));
+    assert!(!desk.observe(&turn("complete", GATE_PASS), 3));
+    shown(&text);
+    assert!(desk.observe(&turn("complete", GATE_PASS), 4));
+    assert_eq!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Replied);
+}
+
+/// #542 review round 7, P1-07: the line left out is the opening's own
+/// request, no other: a prompt naming another request is not its answer,
+/// its words the same, or sharing the start a long brief keeps. No prompt
+/// id was seen as it opened (`asked_as` is none), so words decide.
+#[test]
+fn an_openings_answer_is_not_a_prompt_naming_another_request() {
+    let long = format!("{}\n末尾这段不在摘录里", "长".repeat(700));
+    for (brief, other) in [
+        ("改动如下".to_owned(), "改动如下".to_owned()),
+        (long.clone(), format!("{}\n别的结尾", "长".repeat(700))),
+    ] {
+        let (_temp, desk) = desk();
+        let lines = Fake::default();
+        assert!(lines.asked_as.borrow().is_none());
+        let Started::Opening { handoff, .. } = desk
+            .start(&lines, "s1", None, "修登录", None, &brief, false, 1)
+            .unwrap()
+        else {
+            panic!("a first brief opens a conversation");
+        };
+        desk.open(&lines, &handoff.id, &brief, None, || 2).unwrap();
+        shown(&format!("【驿窗送审 h-other~0】\n{other}"));
+        assert!(!desk.observe(&turn("complete", GATE_PASS), 3), "{other:.8}");
+        assert_eq!(
+            desk.lock().get(&handoff.id).unwrap().phase,
+            Phase::Delivered
+        );
+        shown(&format!("【驿窗送审 {}~0】\n{brief}", handoff.id));
+        assert!(desk.observe(&turn("complete", GATE_PASS), 4));
+    }
+}

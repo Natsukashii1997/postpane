@@ -244,11 +244,31 @@ fn the_extension_opens_a_conversation_and_reports_its_reply() {
     wait_for(|| reads.lock().unwrap().len() == 1);
     assert_eq!(reads.lock().unwrap()[0], found);
 
-    // A newer connection wins; the old one is closed.
+    // Conversations whose handoffs all ended are told with the list (#542),
+    // once each time they change.
+    let ended = Ended {
+        conversations: vec!["68a1".into()],
+        handoffs: vec!["h1".into()],
+        live: vec![],
+    };
+    channel.ended(&ended);
+    assert_eq!(
+        next(&mut extension),
+        json!({"type":"watch","conversations":["68a1","68b2"],"ended":["68a1"],"endedRelays":["h1"]})
+    );
+    channel.ended(&ended);
+    channel.reread("68b2").unwrap();
+    assert_eq!(
+        next(&mut extension)["type"],
+        "reread",
+        "the same, not again"
+    );
+
+    // A newer connection wins; the old one is closed, and is told them too.
     let mut newer = connect(&data);
     assert_eq!(
         next(&mut newer),
-        json!({"type":"watch","conversations":["68a1","68b2"]})
+        json!({"type":"watch","conversations":["68a1","68b2"],"ended":["68a1"],"endedRelays":["h1"]})
     );
     assert_eq!(read_frame(&mut extension, INBOUND_LIMIT).unwrap(), None);
     assert_eq!(channel.status()["connected"], true);

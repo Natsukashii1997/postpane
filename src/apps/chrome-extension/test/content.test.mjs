@@ -74,7 +74,10 @@ test("a reply streamed without pause is reported once when it ends", async () =>
   assert.equal(done[0].messageId, "m3");
   assert.equal(done[0].reply, "字".repeat(40) + "。结论：通过");
   assert.equal(done[0].prompt, "请审核这次改动");
-  assert.ok((await turns(page)).some((m) => m.phase === "start"));
+  const start = (await turns(page)).find((m) => m.phase === "start");
+  assert.ok(start);
+  // #542 round 7: the end tells when its turn began, as the start did.
+  assert.equal(done[0].begunAt, start.at);
 });
 
 test("after its own send, a reply counts even if no stop button was seen", async () => {
@@ -461,6 +464,206 @@ test("words for another conversation than the page shows are not put in or sent"
   await page.close();
 });
 
+// #542 review round 4, P1-06: words that open a conversation go from a new
+// chat's page only: not into one the tab shows, nor once it moves on to one
+// as they go in.
+const OPENED = "6aed31aa-e880-83ee-9327-cd83363c9021";
+/** A page at chatgpt.com `path`, `before` run in it (with `arg`) first. */
+async function at(path, before = () => {}, arg = null) {
+  const page = await browser.newPage();
+  await page.route("https://chatgpt.com/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: fixture }),
+  );
+  await page.goto(`https://chatgpt.com${path}`);
+  await page.evaluate(before, arg);
+  await page.evaluate(() => {
+    window.told = [];
+    window.chrome = {
+      runtime: {
+        sendMessage: (message) => (
+          window.told.push(message),
+          Promise.resolve()
+        ),
+        onMessage: {
+          addListener(listener) {
+            window.listener = listener;
+          },
+        },
+      },
+    };
+  });
+  for (const path of scripts) await page.addScriptTag({ path });
+  return page;
+}
+const command = (page, message) =>
+  page.evaluate(
+    (message) =>
+      new Promise((resolve) => window.listener(message, {}, resolve)),
+    message,
+  );
+
+test("words that open a conversation go from a new chat's page only", async () => {
+  const shown = await at(`/c/${OPENED}`);
+  assert.deepEqual(
+    await command(shown, { op: "submit", text: "第 1 轮", conversation: null }),
+    { ok: false, reason: "other-conversation", pressed: false },
+  );
+  assert.equal(await shown.evaluate(() => window.sent), undefined);
+  await shown.close();
+  // Moved on to a conversation as the words go in: not sent there.
+  const moved = await at("/", () => {
+    const box = document.querySelector(".ProseMirror");
+    new MutationObserver(() => {
+      if (location.pathname === "/")
+        history.pushState({}, "", "/c/6aed31aa-e880-83ee-9327-cd83363c9022");
+    }).observe(box, { childList: true, subtree: true, characterData: true });
+  });
+  const answer = await command(moved, {
+    op: "submit",
+    text: "第 1 轮",
+    conversation: null,
+  });
+  assert.equal(answer.reason, "other-conversation");
+  assert.equal(answer.pressed, false);
+  assert.equal(await moved.evaluate(() => window.sent), undefined);
+  await moved.close();
+  const blank = await at("/");
+  const sent = await command(blank, {
+    op: "submit",
+    text: "第 1 轮",
+    conversation: null,
+  });
+  assert.equal(sent.ok, true);
+  assert.equal(await blank.evaluate(() => window.sent), "第 1 轮");
+  await blank.close();
+});
+
+// Round 5, review test 5: moved on to a conversation of his as send was
+// pressed, before the words' prompt showed: the newest prompt there is not
+// told as theirs.
+test("words sent from a page moved on as they went name no prompt of the page it went to", async () => {
+  const page = await at("/", () => {
+    document.getElementById("slot").addEventListener("click", () => {
+      history.pushState({}, "", "/c/6aed31aa-e880-83ee-9327-cd83363c9024");
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="h1:0:user" data-chatgpt-search-message-ids="pHis"><div data-user-message-bubble="true">我自己的问题</div></div>`,
+        );
+    });
+  });
+  const sent = await command(page, {
+    op: "submit",
+    text: "第 1 轮",
+    conversation: null,
+  });
+  assert.deepEqual(sent, { ok: true });
+  // Not moved on, the prompt the words became is told.
+  const stay = await at("/", () => {
+    document.getElementById("slot").addEventListener("click", () => {
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="n1:0:user" data-chatgpt-search-message-ids="pNew"><div data-user-message-bubble="true">第 1 轮</div></div>`,
+        );
+    });
+  });
+  assert.deepEqual(
+    await command(stay, { op: "submit", text: "第 1 轮", conversation: null }),
+    { ok: true, promptId: "pNew" },
+  );
+  await page.close();
+  await stay.close();
+});
+
+test("asked whether it shows the words it was opened with, a page answers by its prompts", async () => {
+  const LONG = "长".repeat(7000);
+  // The page holding one prompt only: `words`, or none of its own (null).
+  const one = (words) => [
+    (words) => {
+      for (const node of document.querySelectorAll(
+        '[data-chatgpt-search-unit-key$=":user"]',
+      ))
+        node.remove();
+      document
+        .querySelector("main")
+        .insertAdjacentHTML(
+          "beforeend",
+          `<div data-chatgpt-search-unit-key="t9:0:user" data-chatgpt-search-message-ids="p9">${
+            words === null
+              ? ""
+              : `<div data-user-message-bubble="true">${words}</div>`
+          }</div>`,
+        );
+    },
+    words,
+  ];
+
+  const opened = async ([before, arg], text, more = {}) => {
+    const page = await at(`/c/${OPENED}`, before, arg);
+    const said = await command(page, {
+      op: "opened",
+      conversation: OPENED,
+      text,
+      ...more,
+    });
+    await page.close();
+    return said.ours;
+  };
+  // Its only prompt, beginning as the words do, their first line naming
+  // their request; spaces aside.
+  const NAMED = "【驿窗送审 h7~0】\n第 1 轮 请审核";
+  assert.equal(
+    await opened(one("【驿窗送审 h7~0】\n第 1 轮\n请审核"), NAMED),
+    true,
+  );
+  // Round 6: the same words with no request named are no proof: a prompt
+  // of his own may be just these.
+  assert.equal(await opened(one("第 1 轮 请审核"), "第 1 轮 请审核"), false);
+  assert.equal(await opened(one("第 1 轮 请审核"), NAMED), false);
+  assert.equal(
+    await opened(one("【驿窗送审 h8~0】\n第 1 轮 请审核"), NAMED),
+    false,
+  );
+  // Another's words, or more than one prompt: one of his own.
+  assert.equal(await opened(one("我自己的问题"), "第 1 轮"), false);
+  assert.equal(await opened([() => {}], "请审核这次改动"), false);
+  // The prompt the words became, newest: theirs, whatever else is there.
+  const newest = () =>
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        `<div data-chatgpt-search-unit-key="t9:0:user" data-chatgpt-search-message-ids="p9"><div data-user-message-bubble="true">附件</div></div>`,
+      );
+  assert.equal(await opened([newest], "x", { promptId: "p9" }), true);
+  assert.equal(await opened([newest], "x", { promptId: "p8" }), false);
+  // Its id known and not the newest: no other proof counts (round 5).
+  assert.equal(
+    await opened(one("第 1 轮"), "第 1 轮", { promptId: "p8" }),
+    false,
+  );
+  // No words of its own: no proof, a long paste ChatGPT made a file or not
+  // (round 5).
+  assert.equal(await opened(one(null), LONG), false);
+  assert.equal(await opened(one(null), "第 1 轮"), false);
+  // Another conversation than the one asked of.
+  const other = await at(
+    "/c/6aed31aa-e880-83ee-9327-cd83363c9023",
+    ...one("第 1 轮"),
+  );
+  const said = await command(other, {
+    op: "opened",
+    conversation: OPENED,
+    text: "第 1 轮",
+  });
+  assert.equal(said.ours, false);
+  assert.equal(said.conversation, "6aed31aa-e880-83ee-9327-cd83363c9023");
+  await other.close();
+});
+
 // #356: put in while a reply is being written (the extension installed,
 // updated or reloaded), the script reports that reply once it ends.
 // #507 review round 4, P1-04: no change to writing is seen by a script that
@@ -790,6 +993,43 @@ test("asked to load again to look, a page writing, holding a draft or showing an
     await reload(page, conversation),
     false,
     "an answer being written",
+  );
+  await page.close();
+});
+
+// #542: an ended relay's tab is closed only when its page says it may: it
+// shows the conversation, writes nothing and holds no words in hand.
+test("asked whether it may be closed, a page says no while writing, holding a draft or showing another conversation", async () => {
+  const closable = (page, conversation) =>
+    page.evaluate(
+      (conversation) =>
+        new Promise((resolve) =>
+          window.listener({ op: "closable", conversation }, {}, resolve),
+        ),
+      conversation,
+    );
+  const page = await open();
+  const conversation = await page.evaluate(
+    () => location.href.split("/c/")[1] ?? null,
+  );
+  await page.evaluate(() => (window.stillHere = true));
+  assert.equal(await closable(page, conversation), true);
+  assert.equal(await closable(page, "another"), false);
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  assert.equal(await closable(page, conversation), false, "a draft");
+  await page.evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "";
+    const slot = document.getElementById("slot");
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  assert.equal(await closable(page, conversation), false, "writing");
+  assert.equal(
+    await page.evaluate(() => window.stillHere),
+    true,
+    "the page is not loaded again",
   );
   await page.close();
 });

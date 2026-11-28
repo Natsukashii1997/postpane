@@ -39,6 +39,29 @@ const fixture = readFileSync(
       turn.innerHTML = "<div data-user-message-bubble></div>";
       turn.firstChild.textContent = window.sent;
       document.querySelector("main").append(turn);
+      // #542 round 5: a project's new chat gets its address a moment after
+      // the words go (ok); or Changhao moves the tab on to a conversation of
+      // his own as they go, before they show (his).
+      const at = (id) => history.pushState({}, "", "/c/" + id);
+      if (location.pathname === "/g/g-p-ok/project")
+        setTimeout(() => {
+          at("6af7ec47-c0f4-83ee-9b9e-0000000000a1");
+          document.querySelector("main").append(document.createElement("i"));
+        }, 300);
+      if (location.pathname === "/g/g-p-his/project") {
+        at("6af7ec47-c0f4-83ee-9b9e-0000000000a2");
+        for (const node of document.querySelectorAll(
+          '[data-chatgpt-search-unit-key$=":user"]',
+        ))
+          node.remove();
+        const his = document.createElement("div");
+        his.dataset.chatgptSearchUnitKey = "h:0:user";
+        his.dataset.chatgptSearchMessageIds = "pHis";
+        // His only prompt is the very words the opening's are, no request
+        // named (#542 round 6).
+        his.innerHTML = "<div data-user-message-bubble>第 1 轮</div>";
+        document.querySelector("main").append(his);
+      }
     });
   </script></body>`,
 );
@@ -456,4 +479,279 @@ test("a tab in front loaded again to look is read once its new page is there", a
     assert.equal((await find(id, request)).outcome, "there", `try ${n}`);
     await page.close();
   }
+});
+
+// #542: an ended relay's tabs are closed, in Chrome as it is: the ones the
+// extension made, in its group; not Changhao's own, nor one in front, nor
+// one holding a draft. A discarded one has a new id and is closed too. A
+// conversation taken on again gets a tab again.
+test("an ended relay's tabs in the relay group are closed, and only those; taken on again, it gets one", async () => {
+  const made = async (n) => {
+    const id = conversation(n);
+    await worker.evaluate((id) => watched.add(id), id);
+    const got = await worker.evaluate((id) => make(id, Date.now() + 15000), id);
+    assert.ok(got.tabId, JSON.stringify(got));
+    const grouped = await worker.evaluate(
+      async (tabId) => (await chrome.tabs.get(tabId)).groupId,
+      got.tabId,
+    );
+    assert.notEqual(grouped, -1, "made in the relay group");
+    return { id, tabId: got.tabId };
+  };
+  const plain = await made(30);
+  // Changhao's own tab of the same conversation, outside the group.
+  const own = await context.newPage();
+  await own.goto(address(plain.id));
+  const discarded = await made(31);
+  const draft = await made(32);
+  const front = await made(33);
+  const page = (id) => context.pages().find((p) => p.url() === address(id));
+  await page(draft.id).evaluate(() => {
+    document.querySelector(".ProseMirror").textContent = "还没发的问题";
+  });
+  await inFront();
+  await discard(discarded.tabId);
+  await worker.evaluate(
+    (tabId) => chrome.tabs.update(tabId, { active: true }),
+    front.tabId,
+  );
+  const ids = [plain.id, discarded.id, draft.id, front.id];
+  await worker.evaluate(
+    (ids) => onHost({ type: "watch", conversations: ids, ended: ids }),
+    ids,
+  );
+  const count = async (id) => (await tabsAt(id)).length;
+  const settled = async (want) => {
+    for (let tries = 0; tries < 50; tries++) {
+      const now = await Promise.all(ids.map(count));
+      if (JSON.stringify(now) === JSON.stringify(want)) return now;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return Promise.all(ids.map(count));
+  };
+  // His own stays; the discarded one goes; the draft and the one in front
+  // stay.
+  assert.deepEqual(await settled([1, 0, 1, 1]), [1, 0, 1, 1]);
+  assert.equal(own.isClosed(), false);
+  assert.equal(
+    await page(draft.id).evaluate(
+      () => document.querySelector(".ProseMirror").textContent,
+    ),
+    "还没发的问题",
+  );
+  // Another tab made active: the one in front is closed now.
+  await inFront();
+  assert.deepEqual(await settled([1, 0, 1, 0]), [1, 0, 1, 0]);
+  // Taken on by a new handoff: no longer ended, and words for it make a
+  // tab again.
+  await worker.evaluate(
+    (ids) => onHost({ type: "watch", conversations: ids }),
+    ids,
+  );
+  const sent = await worker.evaluate((id) => send(id, "下一轮"), discarded.id);
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.equal(await count(discarded.id), 1);
+});
+
+// #542 review P1-01: an opening that failed left a tab whose conversation
+// PostPane never heard of; once its handoff ended, it is closed by the
+// handoff: by its conversation, kept in local storage past a restart; a
+// blank one, while its page says it is still that blank page.
+test("the tabs a failed opening left are closed once its handoff ended", async () => {
+  const made = async (url) => {
+    const tabId = await worker.evaluate(async (url) => {
+      const tab = await chrome.tabs.create({ url, active: false });
+      await group(tab.id);
+      return tab.id;
+    }, url);
+    // Its page there, so the tab shows what it does.
+    for (let tries = 0; tries < 50; tries++) {
+      if (await worker.evaluate((tabId) => pages.has(tabId), tabId)) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return tabId;
+  };
+  const id = conversation(34);
+  const shown = await made(address(id));
+  const blankTab = await made("https://chatgpt.com/");
+  // The words may have gone: the conversation is the handoff's as its page
+  // shows them as its only prompt (round 4, P1-06); before, it does not.
+  const own1 = () =>
+    worker.evaluate(
+      (tabId) =>
+        own(tabId, "h9a1~1", {
+          conversation: null,
+          text: "【驿窗送审 h9a1~1】\n第 1 轮",
+        }),
+      shown,
+    );
+  await own1();
+  assert.equal(
+    (await worker.evaluate(() => chrome.storage.local.get("strays"))).strays?.[
+      id
+    ],
+    undefined,
+  );
+  const page = context.pages().find((page) => page.url() === address(id));
+  await page.evaluate(() => {
+    for (const node of document.querySelectorAll(
+      '[data-chatgpt-search-unit-key$=":user"]',
+    ))
+      node.remove();
+    document
+      .querySelector("main")
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div data-chatgpt-search-unit-key="x:8:user"><div data-user-message-bubble="true">【驿窗送审 h9a1~1】\n第 1 轮</div></div>',
+      );
+  });
+  await own1();
+  await worker.evaluate((tabId) => own(tabId, "h9a1~2"), blankTab);
+  assert.deepEqual(
+    await worker.evaluate(
+      async () => (await chrome.storage.local.get("strays")).strays,
+    ),
+    { [id]: "h9a1" },
+  );
+  assert.equal(
+    await worker.evaluate(
+      async (tabId) =>
+        (await chrome.storage.session.get("blank")).blank[tabId].path,
+      blankTab,
+    ),
+    "/",
+  );
+  await inFront();
+  await worker.evaluate(() =>
+    onHost({ type: "watch", conversations: [], endedRelays: ["h9a1"] }),
+  );
+  const exists = (tabId) =>
+    worker.evaluate(
+      (tabId) =>
+        chrome.tabs.get(tabId).then(
+          () => true,
+          () => false,
+        ),
+      tabId,
+    );
+  for (let tries = 0; tries < 50; tries++) {
+    if (!(await exists(shown)) && !(await exists(blankTab))) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.deepEqual(
+    [await exists(shown), await exists(blankTab)],
+    [false, false],
+  );
+});
+
+// #542 review round 5, P1-06: an opening in Chrome as it is, its page the
+// extension's own scripts. The words' prompt is the one the page that sent
+// them showed; moved on to a conversation of Changhao's as they went, the
+// opening is not confirmed, and that conversation is not the handoff's.
+test("an opening is confirmed by the prompt its words became, not by where the tab went", async () => {
+  const opened = (project, request, named = true) =>
+    worker.evaluate(
+      ([project, request, named]) =>
+        open(
+          named ? `【驿窗送审 ${request}】\n第 1 轮` : "第 1 轮",
+          `https://chatgpt.com${project}`,
+          request,
+        ),
+      [project, request, named],
+    );
+  const ok = await opened("/g/g-p-ok/project", "h9c1~1");
+  assert.deepEqual(
+    { ...ok, title: undefined },
+    {
+      ok: true,
+      conversation: "6af7ec47-c0f4-83ee-9b9e-0000000000a1",
+      title: undefined,
+      promptId: "p9",
+    },
+  );
+  const his = await opened("/g/g-p-his/project", "h9c2~1");
+  assert.deepEqual(his, { ok: false, reason: "unconfirmed", pressed: true });
+  // Words with no request named (an older PostPane's), his only prompt the
+  // very same: no proof either (round 6).
+  const bare = await opened("/g/g-p-his/project", "h9c3~1", false);
+  assert.deepEqual(bare, { ok: false, reason: "unconfirmed", pressed: true });
+  const kept = await worker.evaluate(() =>
+    chrome.storage.local.get(["strays", "watched", "asks"]),
+  );
+  const HIS = "6af7ec47-c0f4-83ee-9b9e-0000000000a2";
+  assert.equal(kept.strays?.[HIS], undefined);
+  assert.ok(!kept.watched.includes(HIS));
+  assert.equal(kept.asks?.[HIS], undefined);
+  assert.deepEqual(kept.asks?.["6af7ec47-c0f4-83ee-9b9e-0000000000a1"], ["p9"]);
+});
+
+// #542 review round 6, P2-11: two pages of one conversation, in Chrome as
+// it is. Changhao asks in one and stops the answer; PostPane's words go in
+// by the other and let his hold go; his stop, told seconds later, does not
+// take the conversation back.
+test("a stop told late of a prompt PostPane's words let go keeps it let go", async () => {
+  const { page: mine, id } = await open(40);
+  const his = await context.newPage();
+  await his.goto(address(id));
+  const listedTwice = () =>
+    worker.evaluate(
+      (id) => [...pages.values()].filter((p) => p.conversation === id).length,
+      id,
+    );
+  for (let tries = 0; tries < 50 && (await listedTwice()) < 2; tries++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  await worker.evaluate(() => {
+    const told = goneOn;
+    self.heard = [];
+    self.goneOn = (message) => {
+      heard.push(message.phase);
+      return told(message);
+    };
+  });
+  const kept = (key) =>
+    worker.evaluate(
+      async ([key, id]) => (await chrome.storage.local.get(key))[key]?.[id],
+      [key, id],
+    );
+  const until = async (check, what) => {
+    for (let tries = 0; tries < 100; tries++) {
+      if (await check()) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(what);
+  };
+  // He asks; the answer begins.
+  await his.evaluate(() => {
+    const turn = document.createElement("div");
+    turn.dataset.chatgptSearchUnitKey = "h:0:user";
+    turn.dataset.chatgptSearchMessageIds = "pHis";
+    turn.innerHTML = "<div data-user-message-bubble>我自己的问题</div>";
+    document.querySelector("main").append(turn);
+    slot.type = "button";
+    slot.setAttribute("aria-label", "停止");
+  });
+  await until(async () => "pHis" in ((await kept("taken")) ?? {}), "his");
+  // PostPane's words go in by the other page.
+  const sent = await worker.evaluate(
+    (id) => send(id, "【驿窗送审 h9d1~send1】\n下一轮"),
+    id,
+  );
+  assert.equal(sent.ok, true);
+  assert.equal(sent.promptId, "p9");
+  await until(async () => (await kept("taken")) === undefined, "let go");
+  assert.deepEqual(await kept("freed"), ["pHis"]);
+  // He stops it, nothing written: told after 2.6 s.
+  await his.evaluate(() => {
+    slot.type = "submit";
+    slot.setAttribute("aria-label", "发送");
+    document.querySelector("main").append(document.createElement("i"));
+  });
+  await until(
+    () => worker.evaluate(() => heard.includes("stopped")),
+    "stopped",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(await kept("taken"), undefined);
+  await mine.close();
+  await his.close();
 });

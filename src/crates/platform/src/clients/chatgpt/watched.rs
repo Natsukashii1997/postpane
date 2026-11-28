@@ -1,7 +1,7 @@
 //! The watched list (docs/chatgpt-channel.md): the conversations PostPane
 //! opened, which the extension may send to. Kept in
 //! `<data>/chatgpt/watched.json` and told to the extension whole.
-use super::{agent, folder, write_private};
+use super::{agent, folder, post_locked, shadow, write_private, State};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -60,6 +60,40 @@ pub(super) fn watch_message(list: &[Watched], shadow: bool) -> Value {
         message["shadow"] = json!(true);
     }
     message
+}
+/// What PostPane tells the extension of handoffs that ended, for it to close
+/// their tabs (#542), in order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Ended {
+    /// The conversations every handoff of which is closed.
+    pub conversations: Vec<String>,
+    /// The handoffs closed: a tab one opened is closed by it, though its
+    /// opening failed and it never had a conversation (review P1-01).
+    pub handoffs: Vec<String>,
+    /// The conversations a handoff not closed has: a tab of one is kept,
+    /// whatever opened it (review round 2, P2-09).
+    pub live: Vec<String>,
+}
+/// The watch message for the list `state` keeps: with the shadow switch
+/// as kept in `data`, and what ended (#542), each part when it holds any.
+pub(super) fn watch_of(state: &State, data: &Path) -> Value {
+    let mut message = watch_message(&state.watched, shadow::on(data));
+    let ended = &state.ended;
+    for (key, list) in [
+        ("ended", &ended.conversations),
+        ("endedRelays", &ended.handoffs),
+        ("live", &ended.live),
+    ] {
+        if !list.is_empty() {
+            message[key] = json!(list);
+        }
+    }
+    message
+}
+/// Tells the extension the list `state` keeps, if one is connected.
+pub(super) fn tell_watch(state: &mut State, data: &Path) {
+    let watch = watch_of(state, data);
+    post_locked(state, &watch);
 }
 /// Adds a conversation to the list, or names it again; whether it changed.
 /// A name PostPane gave is not replaced by the tab's.

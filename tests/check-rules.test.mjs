@@ -25,6 +25,23 @@ test('通用规则能抓到违规样本，合规样本不误报', () => {
   }
 });
 
+test('shell 脚本里变量后面紧跟中文的抓得到，写成 ${变量} 的不误报（L-83）', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-rules-'));
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  try {
+    // 真实样本：摘自改前的 .agents/skills/postpane-round/scripts/install.sh 第 91 行
+    write('.agents/skills/x/scripts/install.sh', 'echo "装前 $OLD，已备份到 $BACKUP"\necho "装前 ${OLD}，已备份到 $BACKUP"\n');
+    write('scripts/hooks/pre-push', '#!/bin/bash\necho "分支 $BRANCH：推送"\n');
+    write('scripts/hooks/note', 'not a script $X：\n');
+    assert.deepEqual(checkRules(root).map(v => `${v.file}:${v.line} ${v.kind}`), ['scripts/hooks/pre-push:2 shell', '.agents/skills/x/scripts/install.sh:1 shell']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('LESSONS 每条要有以层级词开头的「升级」行：缺行、不带层级词各报一次，合规条目和格式样例不误报', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-rules-'));
   // 真实样本：L-29、L-52 摘自本项目 2026-11-19 补层级之前的 docs/LESSONS.md（L-29 整条没有升级行，L-52 的升级行不带层级词）；
