@@ -81,6 +81,23 @@
 - 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-89。
 
+## 并行任务排队合并；全量测试和打包改成本机排队（L-91）（2026-11-28，Claude，常浩要求「盘点当前在进行的任务……逐个完成，不要互相打架」，#442 合并他回「合并」；已提交，PR 见描述；main `5bc9680` 已装机回读）
+
+- 时间：开工 `2026-11-28 12:51`（会话创建时间，未用 `date` 记；`date` 记到写交接时 `2026-11-28 14:51`）。来由：7 个开着的 PR 各有会话在推，4 份全量测试、3 次打包同时跑，负载 211、磁盘剩 9 GB，计时测试成片误报、反复重跑，谁都推不下去。
+- 排队合并（各 PR 由各自会话做，本会话叫号）：停掉打了 40 分钟的过期合并包 `tmp/570-install`（打完会把实机退回 #564 合并前）；按冲突文件排顺序 #557 → #582 → #543 → #560 → #442 → #574 → #539，LESSONS 编号预先分好。已合：#557 `228eb45`、#582 `ab2c083`、#560 `d38aa9d`、#574 `50b708f`、#543 `7c43057`、#442 `5bc9680`（常浩回「合并」，属修改权限），另有 #583、#584 两张只改 DECIDED。#539 第 4 轮审查中；#553 等 agent-kit#141。负载降到 6，磁盘 51 GB。
+- 装机：main `5bc9680`，`install.sh main-install --takeover`（原装 `tmp/578-combo` 的 `b7de41aca303`，那个会话已交还），产物 `72f244f46d91` / 已装 `72f244f46d91`，签名 `b773068e`，冒烟侧栏在动；没有权限弹窗（`evidence/2026-11-28-main-install/screen-after-small.jpg`）；`postpane.log` 本次启动后无报错。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-main-install/PostPane-b7de41aca303.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机验证：Antigravity 收发（#560）通过：`start_session` 新开会话，10 秒内回「收到，Antigravity 收发正常」。接力传信动画（#570）侧栏模式通过：同一次互发消息连拍六帧 `evidence/2026-11-28-main-install/flight/real-flight-sidebar.png`，已补进 DECIDED（#584）；刘海模式未在实机看（常浩用的是动态模式，没为验收改他的设置）。未验：#442 常浩授权结束接力的正常路径、#557 等回信超过 30 分钟的表现（都要有真实接力）、#543 新插件 0.2.12 要在 chrome://extensions 重新加载。
+- 改了哪些文件（排队这一项）：
+  - 你要求的：`src/tooling/heavy-queue.mjs`（新：本机重活排队，占位、排队提示、占位进程不在就接手、占位的是自己上级就不排）；`src/tooling/test-all.mjs`（`pnpm test` 先排队）；`src/tooling/package-resources.mjs`（打包生成资源先排队，在 `tauri build` 里位子占到打包结束）；`tests/heavy-queue.test.mjs`（新，7 条）；`docs/LESSONS.md` 新坑 L-91。
+  - 我顺手改的：无。
+- 行为变化（动手前已在会话里列出）：同一台电脑上同一时刻只跑一份 `pnpm test` 或一次打包，后来的排队、每分钟打印在等谁，前一个跑完自动开始。单独跑的 `cargo test`、`cargo build` 不经过它。
+- 测试：新测试先红 `red.txt`（`ℹ pass 0` / `ℹ fail 1`，模块还不存在），改后 `ℹ pass 7` / `ℹ fail 0`。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1252 failed 0，前端 `ℹ pass 554`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`），这一次本身就经过排队占位、跑完自动放手；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。打包那一路（`tauri build` 里占位到打包结束）还没在真实打包里走过，#539 合并后重装时实测。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue/`。
+- 验证：真实占位实测：全量测试占位时另起一份，打印「排队：全量测试（main-install，进程 3515，已跑 0 分钟） 跑完后自动开始实测排队」并一直等，8 秒后被时限停掉（`real-wait.txt`）。
+- 截图：无界面改动。
+- 发布与回读：排队这一项只改开发用的脚本，无需发布。
+- 与授权不一致之处、遗留问题、范围外发现：#539 审查通过合并后要再装一次机。主目录上 `node --test tests` 那 1 条失败是主目录在 #576 之后没重新装依赖（`@babel/parser`），已补装。#560 会话报的语言环境 C.UTF-8 下装机脚本变量紧跟中文标点的问题，已随 #560 合进 main。
+- 本轮新坑：L-91
+
 ## #439 接手续做：变基到最新 main，修审查第 2 轮的授权门竞态（P1-01）和三项 P2（2026-11-28，Claude，常浩 11-28 在驿窗主目录会话说「速度完成驿窗的所有任务，然后清掉能清掉的内容」，由主目录会话分派本会话接手 PR #442；已提交，PR 见下，未发布）
 
 - 时间：开工 `2026-11-28 10:50`（会话记录推算，未用 `date` 记；`date` 记到写交接时 `2026-11-28 11:23`）。来由：PR #442 从 11-19 停着、和 main 冲突；查接力记录，审查链 `h1a1f4958c4300` 最后一封回信（第 2 轮，受审 `d5d92ce`）出口是「返修」，P1-01 没修，接力 11-21 被驿窗 24 小时闲置自动结束。
