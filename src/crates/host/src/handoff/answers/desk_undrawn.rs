@@ -69,10 +69,6 @@ impl Desk {
             .remove(&id);
         if outcome == "changed" {
             let reason = changed_halt(&missing);
-            agent_hud_runtime::note!(
-                "ChatGPT page changed for {id}: cannot find {}",
-                missing.join(", ")
-            );
             return self.change(|book| book.page_changed(&id, &reason, now)) || changed;
         }
         self.change(|book| book.stop_undrawn(&id, &undrawn_halt(), now)) || changed

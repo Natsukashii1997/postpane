@@ -8,6 +8,7 @@ import { liveSessions } from "../src/panel/agent-board.ts";
 import { RUNNING_SHOWN, splitWork } from "../src/panel/place-sessions.ts";
 import { approvalGroups } from "../src/permissions/approval-list.ts";
 import { scene } from "./scenes/scenes.ts";
+import { NOW } from "./scenes/build.ts";
 
 const read = (path: string) =>
   readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
@@ -17,7 +18,7 @@ test("等待处理在前、正在进行在后，待核对排在等待处理最�
   const live = liveSessions(snapshot.sessions, snapshot.approvals).filter(
     (entry) => entry.session.source === "claude",
   );
-  const { waiting, running } = splitWork(live);
+  const { waiting, running } = splitWork(live, NOW);
   assert.deepEqual(
     waiting.map((entry) => entry.session.id),
     ["c-ask"],
@@ -26,7 +27,7 @@ test("等待处理在前、正在进行在后，待核对排在等待处理最�
   const stale = { ...waiting[0], stale: true };
   const fresh = { ...waiting[0], session: { ...waiting[0].session, id: "x" } };
   assert.deepEqual(
-    splitWork([stale, fresh]).waiting.map((entry) => entry.session.id),
+    splitWork([stale, fresh], NOW).waiting.map((entry) => entry.session.id),
     ["x", "c-ask"],
   );
 });
@@ -155,7 +156,11 @@ test("卡片整体一套左对齐线：图标线 0、文字线 30，各块都引
   );
   // Session rows and the fold line: the mark column, then the words.
   const live = read("panel/SessionsSection.tsx");
-  assert.match(live, /\$\{waiting \? "auto" : `\$\{GRID\.mark\}px`\}/);
+  // A backlog line keeps the mark column for its own mark (owner, 2026-11-28).
+  assert.match(
+    live,
+    /\$\{waiting && !backlog \? "auto" : `\$\{GRID\.mark\}px`\}/,
+  );
   assert.equal(live.match(/padding: "8px 6px 8px 0"/g)?.length, 2);
   const place = read("panel/PlaceRows.tsx");
   assert.match(place, /`\$\{GRID\.mark\}px minmax\(0, 1fr\) 26px`/);

@@ -1249,6 +1249,7 @@ export type NativeMethod =
   | "antigravity_cli_status"
   | "set_provider"
   | "answer_request"
+  | "tell_session"
   | "session_detail"
   | "open_session"
   | "open_feishu_chat"

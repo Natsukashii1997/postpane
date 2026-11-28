@@ -13,6 +13,7 @@ import { peekWork, workspaceOf } from "../src/workspace.ts";
 import { peekBubbleHeight } from "../src/scene/peek-size.ts";
 import { agentArtworkKey } from "../src/agent-artwork.ts";
 import { scene } from "./scenes/scenes.ts";
+import { NOW } from "./scenes/build.ts";
 
 const ids = (rows: { session: { id: string } }[]) =>
   rows.map((row) => row.session.id);
@@ -53,7 +54,7 @@ test("整张看板：每家的会话只出现在本家区块（C1）", () => {
 
 test("整张看板：顶部「等你」汇总按家计数，待核对不算，没有等你就没有这一行", () => {
   assert.deepEqual(
-    boardWaiting(board("mixed").places).map(({ source, count }) => [
+    boardWaiting(board("mixed").places, NOW).map(({ source, count }) => [
       source,
       count,
     ]),
@@ -63,10 +64,10 @@ test("整张看板：顶部「等你」汇总按家计数，待核对不算，�
     ],
   );
   assert.deepEqual(
-    boardWaiting(board("codex-stale").places).map((w) => w.count),
+    boardWaiting(board("codex-stale").places, NOW).map((w) => w.count),
     [1],
   );
-  assert.deepEqual(boardWaiting(board("all-running").places), []);
+  assert.deepEqual(boardWaiting(board("all-running").places, NOW), []);
 });
 
 test("某家在跑超过 3 条时收成一行，展开后都在；等你不收", () => {

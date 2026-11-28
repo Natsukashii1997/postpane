@@ -32,15 +32,9 @@ impl AgentHudCore {
                 .into_iter()
                 .filter(|log| log.source == claude)
                 .flat_map(|log| {
-                    // Its question, and a handoff card it proposed (#245).
-                    let activity = log.live.activity.as_ref();
-                    [
-                        activity.and_then(|activity| activity.desktop_ask.as_ref()),
-                        activity.and_then(|activity| activity.handoff.as_ref()),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .map(move |ask| (log, ask))
+                    // Its question, a handoff card (#245), a reply waiting on the owner (#562).
+                    agent_hud_agents::transcript::closing::standing_asks(&log.live)
+                        .map(move |ask| (log, ask))
                 })
                 .filter_map(|(log, ask)| {
                     // A question whose words this run could not read has no card.
@@ -53,7 +47,7 @@ impl AgentHudCore {
                         return None;
                     }
                     let key = crate::grok_cache::hash(&[&log.id, &ask.id]);
-                    Some((key, log.id.clone(), log.cwd.clone(), ask.clone()))
+                    Some((key, log.id.clone(), log.cwd.clone(), ask))
                 })
                 .collect::<Vec<_>>();
             for (key, session, cwd, ask) in candidates {

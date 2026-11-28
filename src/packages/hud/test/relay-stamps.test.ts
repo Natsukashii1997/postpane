@@ -4,7 +4,9 @@ import type { Handoff } from "@agent-hud/protocol";
 import {
   LETTER_LANDS_MS,
   LINGERS_MS,
+  REPLY_MOST_MS,
   REPLY_WAIT_MS,
+  WRITING_FRESH_MS,
   STAMP_INK,
   relayStamps,
   stampInk,
@@ -222,6 +224,43 @@ test("a relay stopped or handed back takes no 「审」; one unanswered past the
   );
   assert.equal(both?.overdue, true);
   assert.equal(both?.answering, false);
+});
+
+test("past the half hour, a review ChatGPT was lately found writing stays 「审」 (#544)", () => {
+  // Owner 2026-11-27: writing is waited on; five minutes quiet, or two hours
+  // in all, and it is 「未审」 as the host stops it.
+  const writing = (streamed: number, epoch = 50): Handoff => ({
+    ...relay("working", [{ at: 50, kind: "ask" }]),
+    rereading: { epoch, streamed },
+  });
+  const at = 50 + 40 * 60 * 1000;
+  const lately = relayStamps(
+    { handoffs: [writing(at - 60_000)] },
+    "chatgpt",
+    at,
+  );
+  assert.equal(lately?.overdue, false);
+  assert.equal(lately?.answering, true);
+  assert.equal(lately?.until, at - 60_000 + WRITING_FRESH_MS + 1);
+  const quiet = writing(at - WRITING_FRESH_MS - 1);
+  assert.equal(
+    relayStamps({ handoffs: [quiet] }, "chatgpt", at)?.overdue,
+    true,
+  );
+  // Found writing in an earlier phase: not this wait's.
+  const before = writing(at - 60_000, 49);
+  assert.equal(
+    relayStamps({ handoffs: [before] }, "chatgpt", at)?.overdue,
+    true,
+  );
+  // Writing still at two hours: 「未审」 all the same.
+  const long = 50 + REPLY_MOST_MS + 1;
+  const still = relayStamps(
+    { handoffs: [writing(long - 1000)] },
+    "chatgpt",
+    long,
+  );
+  assert.equal(still?.overdue, true);
 });
 
 test("「未审」 gives way while the stub has more to say, and ripples once it lingers", () => {
