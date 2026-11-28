@@ -704,13 +704,18 @@ fn the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry() {
     let temp = tempfile::tempdir().unwrap();
     let mut backend = fixture(temp.path());
     assert_eq!(backend.next_pass_due(), None, "no walk yet");
+    // The walk is timed from when the snapshot walked, somewhere between
+    // these two: a slow snapshot on a busy machine does not move it.
+    let before = std::time::Instant::now();
     backend.request("snapshot", json!({})).unwrap();
+    let after = std::time::Instant::now();
     let walk = backend.next_pass_due().expect("a walk is due");
-    let from_now = walk.saturating_duration_since(std::time::Instant::now());
+    let period = std::time::Duration::from_secs(300);
     assert!(
-        from_now > std::time::Duration::from_secs(290)
-            && from_now <= std::time::Duration::from_secs(300),
-        "{from_now:?}"
+        walk >= before + period && walk <= after + period,
+        "{:?} after the snapshot began, which took {:?}",
+        walk - before,
+        after - before
     );
     let path = temp.path().join(".claude/projects/test/locked.jsonl");
     backend.reads.pending.insert(path.clone());
