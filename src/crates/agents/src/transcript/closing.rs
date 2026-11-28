@@ -161,6 +161,7 @@ pub fn reply_ask(log: &LiveLog) -> Option<DesktopAsk> {
         return None;
     }
     let state = format!("〔{}〕{}", closing.status, closing.state);
+    let elsewhere = super::elsewhere::elsewhere(&closing.next).is_some();
     Some(DesktopAsk {
         id: format!("reply:{}", turn.id.as_deref().unwrap_or("turn")),
         response: None,
@@ -170,9 +171,11 @@ pub fn reply_ask(log: &LiveLog) -> Option<DesktopAsk> {
             Some(done) => format!("{done}\n{state}"),
             None => state,
         }),
+        // A step done in another session offers no answer here (2026-11-28).
         options: closing
             .choices
             .into_iter()
+            .filter(|_| !elsewhere)
             .map(|label| DesktopAskOption {
                 label,
                 message: None,

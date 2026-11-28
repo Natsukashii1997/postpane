@@ -820,8 +820,20 @@ fn a_handoff_card_hangs_a_start_tag_until_the_user_moves_on() {
 
 /// A session whose turn ended on the owner's closing lines with `state`.
 fn closing_with(root: &Path, session: &str, state: &str, wrap_up: bool) {
+    closing_saying(
+        root,
+        session,
+        state,
+        "做完后回「装机合并」；还没做完回『先等等』。",
+        wrap_up,
+    );
+}
+
+/// A session whose turn ended on the owner's closing lines with `state` and
+/// `next` as its next step.
+fn closing_saying(root: &Path, session: &str, state: &str, next: &str, wrap_up: bool) {
     let at = Utc::now().to_rfc3339();
-    let text = format!("改好了。\n\n**本次完成**：去掉虚线签。\n**当前状态**：〔{state}〕代码好了，差装机。\n**下一步**：做完后回「装机合并」；还没做完回『先等等』。");
+    let text = format!("改好了。\n\n**本次完成**：去掉虚线签。\n**当前状态**：〔{state}〕代码好了，差装机。\n**下一步**：{next}");
     let mut lines = vec![desktop_line(
         session,
         &at,
@@ -931,6 +943,90 @@ fn a_reply_that_waits_on_the_owner_stands_as_a_reply_card_its_next_step_answers(
         host.sent.lock().unwrap().clone(),
         vec![("claude".into(), waits.into(), "装机合并".into())]
     );
+}
+
+/// A desktop tab record for `cli` under `home`.
+fn desktop_tab_file(home: &Path, tab: &str, cli: &str) {
+    let dir = home.join("Library/Application Support/Claude/claude-code-sessions/org/acct");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join(format!("{tab}.json")),
+        json!({"sessionId": tab, "cliSessionId": cli, "isArchived": false}).to_string(),
+    )
+    .unwrap();
+}
+
+// A tab id no real desktop app holds: the index also reads this Mac's own.
+const RULES_TAB: &str = "local_0e1e5e00-0000-4000-8000-00000000abcd";
+const GO_THERE: &str =
+    "到[规则更新](#local_0e1e5e00-0000-4000-8000-00000000abcd)回话。推荐回『只合并』。";
+
+#[test]
+fn a_next_step_for_a_session_with_a_card_goes_onto_that_card() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let rules = "66666666-2222-3333-4444-555555555555";
+    let multi = "77777777-2222-3333-4444-555555555555";
+    desktop_tab_file(home, RULES_TAB, rules);
+    closing_with(&root, rules, "等你决定", true);
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    // The finished session has no card of its own; its step is on the other.
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    let card = &cards[0];
+    assert_eq!(card["sessionId"], rules);
+    assert_eq!(card["forwardedFrom"][0]["sessionId"], multi);
+    assert_eq!(card["forwardedFrom"][0]["note"], "推荐回『只合并』。");
+    assert!(card["elsewhere"].is_null());
+}
+
+#[test]
+fn a_next_step_for_a_session_without_a_card_points_there() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let rules = "66666666-2222-3333-4444-555555555555";
+    let multi = "77777777-2222-3333-4444-555555555555";
+    desktop_tab_file(home, RULES_TAB, rules);
+    closing_with(&root, rules, "已结束", false);
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    let card = &cards[0];
+    assert_eq!(card["sessionId"], multi);
+    assert_eq!(card["badge"], "REPLY");
+    assert_eq!(card["elsewhere"]["sessionId"], rules);
+    assert_eq!(card["elsewhere"]["title"], "规则更新");
+    let question = &card["questions"][0];
+    // No answer offered here, the reply it names included, and the link as its title.
+    assert_eq!(question["options"], json!([]));
+    assert_eq!(
+        question["question"],
+        "到「规则更新」回话。推荐回『只合并』。"
+    );
+}
+
+#[test]
+fn a_next_step_for_a_session_no_longer_here_says_so() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let multi = "77777777-2222-3333-4444-555555555555";
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    assert!(cards[0]["elsewhere"]["sessionId"].is_null());
+    assert_eq!(cards[0]["elsewhere"]["title"], "规则更新");
 }
 
 #[test]
