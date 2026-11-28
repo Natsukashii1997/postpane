@@ -16,6 +16,7 @@ import { PanelServicesProvider } from "../src/PanelContext";
 import { openHandoffCard } from "../src/alerts/HandoffCard";
 import { NOW } from "../test/scenes/build";
 import { SCENES } from "../test/scenes/scenes";
+import type { HUDFlightCommand } from "../src/scene/FlightLayer";
 
 // The scenes are written at one clock; the page runs at it too, so 「3 分钟前」
 // reads the same on every visit.
@@ -78,6 +79,24 @@ function Preview() {
     const timer = setTimeout(() => setArrived(true), 400);
     return () => clearTimeout(timer);
   }, []);
+  // A relay flight on demand (#570): the real flight layer, between Claude and ChatGPT.
+  const [flights, setFlights] = useState<HUDFlightCommand[]>([]);
+  const fly = (from: string, to: string, falls = false) =>
+    setFlights((list) => [
+      ...list,
+      {
+        flight: {
+          lane: `${from}|${to}`,
+          from,
+          to,
+          fromLeft: true,
+          arrives: false,
+          falls,
+        },
+        sequence: list.length + 1,
+        at: performance.now(),
+      },
+    ]);
   const events = current.snapshot.islandEvents;
   const shown = arrived
     ? {
@@ -148,6 +167,18 @@ function Preview() {
         >
           浅色
         </button>
+        <button style={button(false)} onClick={() => fly("claude", "chatgpt")}>
+          飞：送审
+        </button>
+        <button style={button(false)} onClick={() => fly("chatgpt", "claude")}>
+          飞：回信
+        </button>
+        <button
+          style={button(false)}
+          onClick={() => fly("claude", "chatgpt", true)}
+        >
+          飞：送不出去
+        </button>
         <span
           data-scene-title
           style={{ font: "13px system-ui", color: "#555" }}
@@ -185,6 +216,7 @@ function Preview() {
             </div>
           )}
           <HUDScene
+            flights={flights}
             snapshot={shown}
             config={config}
             height={height}

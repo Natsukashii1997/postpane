@@ -19,6 +19,34 @@
 - 范围外发现：看板面板「等待处理」的「等你」签也在图标列（11-14 定的版式），没动，已转给「设计规范失效审核｜层级对齐类错误根治」会话。
 - 本轮新坑：无
 
+## 设计规范失效审核：卡片版式规范写成「每种元素放在哪」，新增 `check:card-layout` 机检（2026-11-28，Claude，常浩要求「深度审核，说清楚原因并修复，确保以后不再犯」，经 #564 会话转来；已提交，PR 见描述；无需发布）
+
+- 时间：开工 `2026-11-28 05:17`（`date '+%F %H:%M'` 记录）。来由：积压事项的 WAIT 签放进了图标列（常浩 11-28 05:11 指出），同类界面规范错误反复出现，他写的全局 DESIGN.md 没约束住。
+- 改了哪些文件：
+  - 你要求的：`docs/design/卡片版式规范.md`（开头写什么时候读、要连全局 `ui-system/docs/design-spec/DESIGN.md` 一起读；新增「每种元素放在哪」表、「同一种事，同一种行」、11-28 正反例；例外第 1 条写明只管章；新增「画预览、规范版时」「机器查的几条」）；`src/tooling/check-card-layout.mjs`（新：基线与命令行）、`src/tooling/card-layout-rules.mjs`（新：读 TSX 查三条：类型签进图标列、缩进写死数字、签自己挑颜色）、`src/tooling/card-layout-baseline.json`（新：16 处旧问题）；`package.json` 加 `check:card-layout` 并接进 `check`，根目录开发依赖加 `@babel/parser` 7.29.9（理由：机检要读 TSX 语法树，仓库里的 TypeScript 7 不再带可调用的解析器；这个版本已在依赖树里，离线装上）；`scripts/check-rules.mjs` 的 `ALLOWED_DEPS` 加它；`tests/check-card-layout.test.mjs`（新：9 条，第一条用 #564 分支 `f8cebde` 原样摘出的 WAIT 写法）；`AGENTS.md`「做什么事之前读哪份」那一行改成「动侧栏任何界面，含画预览和规范版」并指向两份规范和机检；`.agents/skills/postpane-round/SKILL.md` 测试一步加界面自查；`docs/LESSONS.md` 新坑 L-80。
+  - 我顺手改的：记忆 `same-component-same-style.md`（原写「全局版在 CLAUDE.md 第 9 节」，实际没有，已改正）、`postpane-one-left-grid.md`（补类型签不进图标列）。
+- 同类：搜了 hud 全部 TSX 的网格行、`ApprovalTag` 调用、按 tone 挑颜色的分支：16 处旧问题（写死数字 10 处、签自己挑颜色 6 处）记进基线，这次不改界面代码；用 #564 分支当前代码跑，新增 3 处（WAIT 进图标列、WAIT/等你共用签自己传颜色、ApprovalContent 多一处文字线 30）。
+- 测试：`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（含新的 `check-card-layout.test.mjs` 9 条）；`pnpm test` 第一遍「全量测试汇总：6 套，失败 1 套」，失败的是 Chrome 插件（`ℹ pass 198` / `ℹ fail 2`，`chromium.test.mjs` 两条真实 Chromium 计时测试，本 PR 没改插件），单独重跑 `pnpm run test:extension` `ℹ pass 200` / `ℹ fail 0`；合进最新 main 后在 `b1497a4` 上三条重跑：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1189 failed 0，前端 `ℹ pass 542`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（证据子目录 `merged-b1497a4/`）。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-design-rules-audit/`（`check.log`、`test.log`、`extension-rerun.log`、`node-tests.log`）。新测试和机检是一起写的，没有先跑出红；用 #564 分支原样代码跑机检报错，算这次的「红」。
+- 验证：机检在 #564 分支 `f8cebde` 与当前头 `bf96b01` 的 `src/packages/hud/src` 上跑（`git archive` 到临时目录），都报 `SessionsSection.tsx:555` 类型签进了图标列。审核报告：https://claude.ai/artifact/DpgUQnEQcG36yE9xJ2uYRf。界面纠正盘点（50 条，带会话出处）在共享笔记 `界面纠正清单-2026-11-28.md`。
+- 截图：无界面改动。
+- 发布与回读：无需发布（只改规范、检查、文档）。
+- 与授权不一致之处、遗留问题、范围外发现：#564 合并前要改掉上面 3 处才过 `pnpm run check`（第一处正是常浩 05:11 要它改的）。#553 把 `scripts/check-rules.mjs` 换成 agent-kit 共用实现，后合的一方要把 `@babel/parser` 挪进新白名单。全局 CLAUDE.md、`ui-system` DESIGN.md、three-versions skill 三处改动只出了提案（报告第六节），等常浩定。16 处旧问题和把 `ApprovalTag` 按章、类型签、套餐标签拆开，要改界面代码，等 #564 合并后另开一单。
+- 本轮新坑：L-80。
+
+## 接力传信动画精修：细线白信封装信、连续对折成纸飞机（#570）（2026-11-28，Claude，常浩三版里选甲「细线」、改动确认回「改」：侧栏、刘海、互发消息一起换；已提交、未装机）
+
+- 时间：开工 `2026-11-28 04:39`（`date '+%F %H:%M'` 记录）。来由：常浩要接力纸飞机动画「再做 3 种版式」，两轮预览后定：保留折信封，普通白信封，细线画法（设计稿 https://claude.ai/artifact/MMBm4NF9wcdPqELQr1cS2h 甲）。
+- 行为变化（动手前已在会话里发改动确认，常浩回「改」）：接力和智能体互发消息的飞行，侧栏与刘海两种模式都换成新画法；约 2.5 秒 → 约 2.9 秒；虚线航迹换成渐淡小烟点；地上加影子；绕圈时纸飞机侧身翻过来、落地端正；送不出去改成失速翻滚、半路散开回信封；信纸落地时刻 `LETTER_LANDS_MS` 跟着变（约 2.88 秒），「审」章等信落地才盖的等待也跟着变长；减弱动效下的静态信封换成新画法。
+- 你要求的：`scene/flight-paper.ts`（新：白信封、纸飞机的 6 点裁切形状与下半边、飞机三面画法，翻身 `rollAt`、影子 `shadowAt`、信纸滑进信封 `letterClip`、失速翻滚 `tumble`、装信时刻 `PACK`）；`scene/flight-plan.ts` 的 `story()`（装信、封口两面翻、合上轻压、侧身、影子、小烟点、展开交信、失速翻滚；`STORY` 各段与 `handIn`；返回 `delivered`、`roll`、`shadow`、`puffs`）；`scene/flight-craft.tsx`（新：信封、封口、纸飞机、信纸、影子、数字的画法）；`scene/FlightLayer.tsx`（接上翻身、影子、下半边、小烟点；信纸移到最上层好滑进信封；接住时刻用 `delivered`）；`relay-stamps.ts`（`LETTER_LANDS_MS` 用 `handIn`）。
+- 我顺手改的：航线几何整块拆到 `scene/flight-route.ts`（行为不变，flight-plan 照旧转出，腾出行数过 300 行棘轮）；删掉没人用的 `pathData`；场景预览台 `preview/main.tsx` 加「飞：送审 / 回信 / 送不出去」三个按钮，能触发真实飞行；`file-size-baseline.json` 收紧（FlightLayer 925→716、flight-plan 834→692）。
+- 同类：搜了「收信时刻」`STORY.deliver * 0.7`，命中 3 处（FlightLayer 两处、relay-stamps 一处），都改成 `STORY.handIn` / `story.delivered`。
+- 测试：新测试先跑出红 `ℹ pass 6` / `ℹ fail 4`（`red.txt`）。改后 `node --test src/packages/hud/test/flight-plan.test.ts src/packages/hud/test/flight-paper.test.ts` `ℹ pass 14` / `ℹ fail 0`。`pnpm run check` 退出码 0（`check.txt`）。`pnpm test` 第一次失败 2 套：前端 `relay-stamps` 一条（信纸落地上限写死 2600，本轮带出，已改为 2600–3100），Rust `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 计时超窗（285 秒 < 290，机器忙；本轮没碰 Rust，单跑 `test result: ok. 1 passed`）；重跑 `全量测试汇总：6 套，失败 0 套`，Rust `test result` 合计 1189 passed、0 failed（`test2.txt`）。`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.txt`）。
+- 验证：替身通过。场景预览台（Chromium，真实 HUDScene + FlightLayer，`?scene=two-relays`，浅色、深色），用新加的按钮触发送审、回信、送不出去，暂停在 450 / 680 / 1010 / 1450 / 2330 / 2640 / 2800 毫秒和失败的 1780 / 2250 / 2520 毫秒逐帧看。刘海模式没在预览台看（预览台只有侧栏）；真实接力里的飞行要等下一次接力或互发消息时看，驿窗的 WKWebView 未验。
+- 截图：`evidence/2026-11-28-570-relay-paper/frames-scene-preview.png`（预览台 4 倍放大四帧）。
+- 发布与回读：未装机。包已打好（变基到 `2aba8b3` 之后重打，`build2.txt`），`install.sh 570-relay-paper` 停在 L-05 检查：已装的是 #569 会话 04:46 装的合并包 `3265645`（main + #564 `781c0f7` + #560 `fd3cdeb`，后两个还没合并），装本包会把这两项从实机拿掉，等常浩定。已登记 DECIDED.md（基线截图暂用预览台四帧，实机截图待补）。
+- 与授权不一致之处、遗留问题、范围外发现：预览阶段的「现状」画板是凭印象复刻的，和真实画法有出入（L-77），常浩两轮是拿它做参照；本轮实现照真实画法改，故事顺序没变。
+- 本轮新坑：L-77。
+- skill 进化：无。
 ## 恢复被 #568 冲掉的 #566「同一会话只出现一次」：代码、测试、场景、DECIDED 登记、交接一节（#569）（2026-11-28，Claude，常浩 11-28 已验收并让合并 #566；属回到已定行为，不改已定内容；已提交，PR 见描述）
 
 - 时间：开工 `2026-11-28 04:55`（`date '+%F %H:%M'` 记录）。来由：给 #564 打合并包前核对 main，发现 #568（`7575cf9`）的 squash 提交把 #566 改的 6 个文件原样退回 #566 之前（`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空），还删了 DECIDED 里 11-28「单一任务会话」那一行和 CURRENT 里 #565 一节；#568 的分支提交 `99296b6` 父提交就是 `1ac0ab1`，退回是它自己带进去的。之后在这个 main 上合的包（#567 会话装的 `2e53e13`）、#561 分支（`3b6908e`）都没有去重。

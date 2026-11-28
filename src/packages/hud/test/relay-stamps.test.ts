@@ -180,7 +180,7 @@ test("a stamp that shows while its letter is in the air waits for it to land", (
   // A clock ahead of the host never waits longer than a flight.
   assert.equal(stampWait(5000, 1000), 0);
   assert.ok(
-    LETTER_LANDS_MS > 2000 && LETTER_LANDS_MS < 2600,
+    LETTER_LANDS_MS > 2600 && LETTER_LANDS_MS < 3100,
     `${LETTER_LANDS_MS}`,
   );
 });

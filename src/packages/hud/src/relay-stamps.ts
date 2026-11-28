@@ -47,11 +47,7 @@ export const LINGERS_MS = STALE_REVIEW;
 /** How long after the words move the letter lands in the receiver: the
  * flight's story up to the letter sliding in. */
 export const LETTER_LANDS_MS =
-  STORY.pack +
-  STORY.fold +
-  STORY.fly +
-  STORY.unfold +
-  Math.round(STORY.deliver * 0.7);
+  STORY.pack + STORY.fold + STORY.fly + STORY.unfold + STORY.handIn;
 
 const moved = (handoff: Handoff, kind: "ask" | "reply") =>
   [...(handoff.steps ?? [])].reverse().find((step) => step.kind === kind)?.at ??

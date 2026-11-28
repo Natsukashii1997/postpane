@@ -1,0 +1,10 @@
+{
+  "grid-literal src/packages/hud/src/alerts/FailureAlertView.tsx": 2,
+  "grid-literal src/packages/hud/src/alerts/QuotaAlertViews.tsx": 2,
+  "grid-literal src/packages/hud/src/panel/HermesBoard.tsx": 1,
+  "grid-literal src/packages/hud/src/panel/ReviewSlip.tsx": 1,
+  "grid-literal src/packages/hud/src/permissions/ListCard.tsx": 2,
+  "tag-color src/packages/hud/src/alerts/CompactAlertView.tsx": 1,
+  "tag-color src/packages/hud/src/alerts/FailureAlertView.tsx": 1,
+  "tag-color src/packages/hud/src/panel/BoardHeading.tsx": 1
+}
