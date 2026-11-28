@@ -79,3 +79,26 @@ fn words_known_to_have_gone_in_at_once_need_no_word_of_it() {
     ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
     assert!(!desk.tell(&lines, 6));
 }
+
+// Gap 8: word that the words went in, come after a restart and before their
+// answer, is not taken (nothing kept in this run says what they were); the
+// look for them finds them, and that sets right what the session heard.
+#[test]
+fn late_word_after_a_restart_waits_for_the_look_that_finds_the_words() {
+    let (temp, desk) = desk();
+    let lines = Fake::default();
+    let (handoff, request) = unsure(&desk, &lines);
+    drop(desk);
+    let mut desk = Desk::new(Some(temp.path().join("data")));
+    desk.since = 0;
+    assert!(!desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 6));
+    assert!(desk.lock().get(&handoff.id).unwrap().unsure(), "not taken");
+    desk.observe(
+        &json!({"type":"found","conversation":"c-new","request":request,"outcome":"there"}),
+        50_000,
+    );
+    assert!(!desk.lock().get(&handoff.id).unwrap().unsure());
+    assert!(desk.tell(&lines, 50_001));
+    let last = told(&lines).last().unwrap().clone();
+    assert!(last.contains("更正"), "{last}");
+}

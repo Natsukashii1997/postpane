@@ -13,6 +13,7 @@ mod ended_tabs;
 mod find_tell;
 mod finding;
 mod held_back;
+mod late_after_close;
 mod letters;
 mod mend_late;
 mod mend_unsent;
