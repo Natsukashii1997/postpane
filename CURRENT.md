@@ -2,7 +2,7 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
-## 全项目动效统一：一套动效语言，侧栏、设置、统计、会话窗口按状态变化补齐过渡（2026-11-25，Claude，常浩要求「把项目的动效整体做到苹果那种细腻、丝滑的水准……审完直接做……最后直接合并上线」；碰到的 9 处已定内容单独发改动确认，常浩回「全按推荐」；已提交，PR #539，已登记 DECIDED.md，装机见下）
+## 全项目动效统一：一套动效语言，侧栏、设置、统计、会话窗口按状态变化补齐过渡（2026-11-25，Claude，常浩要求「把项目的动效整体做到苹果那种细腻、丝滑的水准……审完直接做……最后直接合并上线」；碰到的 9 处已定内容单独发改动确认，常浩回「全按推荐」；PR #539 已 squash 合并 `53291fe`（2026-11-28），已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-25 12:28`（`date '+%F %H:%M'` 记录）。来由：常浩要求整体动效到苹果水准，按「状态变化」找问题（出现、消失、移动、尺寸、内容、图标、数字、按下、悬停、加载、完成、出错），一套语言、克制、跟手可打断、不付性能代价、尊重「减少动态效果」，GPT 当方案、文案、交互顾问，做完再审，最后合并上线。
 - 动效语言（单一来源 `src/packages/ui/src/lib/motion.ts`，CSS 变量同值，`motion.test.ts` 锁住两边一致）：按下 60ms、悬停换色 120ms、退场 140ms、进场展开 200ms、数据变化 240ms；曲线两条：ease-out `(0.22,1,0.36,1)` 管进场、展开、数据、悬停，ease-in-out `(0.65,0,0.35,1)` 只给原地往返的循环；空间几何（侧栏外框、刘海）用回弹（visualDuration 0.32、bounce 0），中途反向保留速度；拖动和换家 0 时长（守 L-27）。
@@ -82,7 +82,7 @@
   - 帧率（`frames.txt`，CPU 4 倍降速，改前改后各 3 次）：中位帧 16.7–33.3ms 两边一样，最差帧都是首帧 200–500ms，噪声大，没测出变差。WKWebView 真机帧率未测。
   - 真实环境：上一版（`ce0db67`）装机冒烟过；本版装机见「发布与回读」。挂件摆回、小签淡入淡出、方章离场、托盘甩动、刘海回弹的观感都要常浩实机看。
 - 截图：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/`（`rest/`、`fold/`、`settings/`、`swap/`）。
-- 发布与回读：分支 `0d830d9` 打包，`install.sh motion-polish`：产物 `1bce2b00156a` / 已装 `1bce2b00156a`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 528 个像素不同；装前装后 600 个像素不同（0.06%），范围 `[895, 323, 931, 591]` 只在小人那一列（L-35 守住）；没有「想访问文稿」弹窗（`screen-after-install-2.png`）。第一次装后票根左边的竖签（Codex 1、ChatGPT 8、Hermes 1）没了，换回上一版 `17d222b2a4ef` 重启也一样没有，判为重启清掉了内存里的提醒，不是本次改的；之后用 `--takeover` 重装回本版（接管的是自己回滚的那份）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/PostPane-17d222b2a4ef.app" /Applications/PostPane.app; open /Applications/PostPane.app`。合并后从 main 重打重装。
+- 发布与回读：分支 `0d830d9` 打包，`install.sh motion-polish`：产物 `1bce2b00156a` / 已装 `1bce2b00156a`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 528 个像素不同；装前装后 600 个像素不同（0.06%），范围 `[895, 323, 931, 591]` 只在小人那一列（L-35 守住）；没有「想访问文稿」弹窗（`screen-after-install-2.png`）。第一次装后票根左边的竖签（Codex 1、ChatGPT 8、Hermes 1）没了，换回上一版 `17d222b2a4ef` 重启也一样没有，判为重启清掉了内存里的提醒，不是本次改的；之后用 `--takeover` 重装回本版（接管的是自己回滚的那份）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/PostPane-17d222b2a4ef.app" /Applications/PostPane.app; open /Applications/PostPane.app`。合并：2026-11-28 工程审查链 `r1a211f896d100` 通过（受审 `d976d90`，ENG-01～20 全部关闭），合并前在 `7e5ec19` 上三条全量全过（`pnpm run check` 通过；`pnpm test` 六套 Rust 1252、前端 586、MCP 10、插件 14、Chrome 插件 239、注入脚本 11，各 0 失败；`node --test tests` 82 过），证据 `evidence/2026-11-25-motion-polish/final-1128/`；squash 合并为 `53291fe`，主目录已快进到它。装机由「任务进度盘点」会话在全部 PR 合完后从 main 统一装一次，本节不另装；真实 VoiceOver、多键鼠标、macOS 12.0～12.3 真机未验，审查建议留到实机验收。
 - 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-89。
 
