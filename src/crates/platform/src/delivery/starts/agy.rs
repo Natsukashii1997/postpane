@@ -36,10 +36,13 @@ impl SessionStarts {
         fs::create_dir_all(&logs)?;
         prune(&logs);
         let log = logs.join(format!("{}.ndjson", request.request_id));
-        let arguments = ["-p", &request.text, "--output-format", "stream-json"];
         let plan = self.plan(
             executable,
-            arguments.map(String::from).to_vec(),
+            vec![
+                prompt(&request.text),
+                "--output-format".into(),
+                "stream-json".into(),
+            ],
             Some(folder),
             NAMED_WITHIN.as_secs(),
         );
@@ -125,6 +128,14 @@ fn heard(log: &str) -> Heard {
     Heard::Nothing
 }
 
+/// The message attached to `-p`, so agy never reads it as its own options
+/// (`-p "--version"` prints the version). agy 1.5.18 refuses an attached
+/// message that starts with `-`; a space in front makes it a prompt.
+fn prompt(text: &str) -> String {
+    let space = if text.starts_with('-') { " " } else { "" };
+    format!("-p={space}{text}")
+}
+
 fn prune(logs: &Path) {
     for entry in fs::read_dir(logs).into_iter().flatten().flatten() {
         let age = entry.metadata().and_then(|meta| meta.modified()).ok();
@@ -175,7 +186,7 @@ mod tests {
         let calls = fixture.fake.calls.lock().unwrap().clone();
         assert_eq!(
             calls,
-            [["-p", "修一下登录页", "--output-format", "stream-json"]]
+            [["-p=修一下登录页", "--output-format", "stream-json"]]
         );
         let log = fixture
             .root
@@ -185,6 +196,13 @@ mod tests {
             log.is_file(),
             "the stream is written beside the task folders"
         );
+    }
+
+    #[test]
+    fn a_message_never_becomes_one_of_agys_options() {
+        assert_eq!(prompt("修一下 -p 参数"), "-p=修一下 -p 参数");
+        assert_eq!(prompt("--version"), "-p= --version");
+        assert_eq!(prompt("-x\n第二行"), "-p= -x\n第二行");
     }
 
     #[test]
