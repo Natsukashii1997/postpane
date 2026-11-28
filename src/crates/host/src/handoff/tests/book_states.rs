@@ -42,6 +42,19 @@ fn t02_opened_binds_an_opening_or_a_failed_one_not_taken_over() {
     let other = book.begin("s3", None, "t", None, "brief", 30).id;
     assert!(book.opened(&other, "c2", 31));
     assert_eq!(state(&book, &late), (Status::Closed, Phase::Delivered));
+    // Saying by which on its card, and its session is told once (#544).
+    let why = book.get(&late).unwrap().steps.last().unwrap().clone();
+    assert_eq!(why.kind, StepKind::Fail);
+    assert_eq!(why.text.as_deref(), Some(taken_over("t").as_str()));
+    let untold = book.untold(0);
+    assert_eq!(untold.len(), 1);
+    assert_eq!(untold[0].0, late);
+    assert!(
+        matches!(&untold[0].2, crate::handoff::book::Trouble::TakenOver(text) if text == why.text.as_deref().unwrap())
+    );
+    let at = untold[0].1;
+    assert!(book.told(&late, at, "已发到 Claude 会话", 32));
+    assert!(book.untold(0).is_empty(), "told once");
     // Taken over by a newer one of its session: it binds no more.
     let gone = book.begin("s4", None, "t", None, "brief", 40).id;
     assert!(book.failed(&gone, "没打开", 41));

@@ -345,7 +345,36 @@ test("the page gets one handle, fixed in place, and no listener", () => {
   assert.equal(descriptor.writable, false);
   assert.equal(descriptor.configurable, false);
   assert.ok(Object.isFrozen(handle()));
-  assert.deepEqual(Object.keys(handle()).sort(), ["prove", "read", "stop"]);
+  assert.deepEqual(Object.keys(handle()).sort(), [
+    "marked",
+    "prove",
+    "read",
+    "stop",
+  ]);
+});
+
+// #544: whether the page signed in anew since a read was signed out, by a
+// mark made with the extension's salt; nothing of the sign-in in it.
+test("the mark of the page's sign-in is the same till the page signs in anew, and says nothing of it", async () => {
+  const salt = "a".repeat(32);
+  const { window, handle } = page();
+  assert.equal(await handle().marked(salt), null, "no sign-in heard yet");
+  await own(window);
+  const first = await handle().marked(salt);
+  assert.match(first, /^[0-9a-f]{16}$/);
+  assert.ok(!first.includes("secret") && !SECRET.includes(first));
+  assert.equal(await handle().marked(salt), first);
+  assert.notEqual(await handle().marked("b".repeat(32)), first);
+  assert.equal(await handle().marked("not a salt"), null);
+  await window.fetch(
+    `/backend-api/conversations/${CONVERSATION}?num_turns=10`,
+    {
+      headers: { ...pageHeaders, Authorization: "Bearer renewed" },
+    },
+  );
+  assert.notEqual(await handle().marked(salt), first);
+  handle().stop();
+  assert.equal(await handle().marked(salt), null, "none once stopped");
 });
 
 test("nothing is read before the page's own sign-in was heard", async () => {

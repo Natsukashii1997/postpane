@@ -25,10 +25,22 @@ impl From<Unasked> for String {
                 if reply["left"] == true {
                     return text + &left_in_box();
                 }
+                // A new chat's send pressed and no address seen (#544): the
+                // words may be in a conversation not yet known.
+                let unseen = matches!(reply["reason"].as_str(), Some("timeout" | "unconfirmed"));
+                if reply["pressed"] == true && unseen {
+                    return text + &pressed_unseen();
+                }
                 text
             }
         }
     }
+}
+fn pressed_unseen() -> String {
+    l10n::text(
+        "（发送已经点下去了：这段话可能已在一个新的 ChatGPT 会话里，重试前先到 ChatGPT 里核对，免得重复送审）",
+        " (send was pressed: these words may be in a new ChatGPT conversation; check ChatGPT before retrying, so they are not sent twice)",
+    )
 }
 fn left_in_box() -> String {
     l10n::text(
@@ -119,5 +131,19 @@ mod tests {
         assert!(left.starts_with(&plain) && left.len() > plain.len());
         let failed = SendFailed::from(Unasked::Refused(said(true)));
         assert_eq!(failed, SendFailed::NotPressed(left));
+    }
+
+    // #544 gap 3: a new chat's send pressed and no address seen: said, so
+    // it is checked before a retry sends the words again.
+    #[test]
+    fn a_send_pressed_with_no_address_seen_is_said_with_the_reason() {
+        let said = |pressed: bool| {
+            String::from(Unasked::Refused(
+                json!({"ok":false,"reason":"timeout","pressed":pressed}),
+            ))
+        };
+        assert!(said(true).starts_with(&said(false)) && said(true).len() > said(false).len());
+        let busy = json!({"ok":false,"reason":"busy","pressed":true});
+        assert_eq!(String::from(Unasked::Refused(busy)), refused("busy"));
     }
 }

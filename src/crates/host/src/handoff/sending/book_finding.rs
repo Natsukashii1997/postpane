@@ -128,6 +128,7 @@ impl Book {
         else {
             return false;
         };
+        let said = self.said_unknown(id, request);
         self.confirm_pending(id, request);
         self.set_limit(id, pending.limit);
         self.set_head(id, pending.head.as_deref());
@@ -136,7 +137,32 @@ impl Book {
         }
         let asked = self.asked(id, None, pending.words.as_deref().unwrap_or(""), now);
         self.asked_as(id, asked_id);
+        if said {
+            self.corrected(id, now);
+        }
         asked
+    }
+    /// Whether the session heard the words asked as `request` were never
+    /// known to have gone in (#544): a stop for them, or a look given up.
+    pub fn said_unknown(&self, id: &str, request: &str) -> bool {
+        self.get(id).is_some_and(|handoff| {
+            [&handoff.gate.pending, &handoff.gate.mending]
+                .into_iter()
+                .flatten()
+                .any(|p| p.request == request && (p.said || p.lost || p.restarted))
+        })
+    }
+    /// The session hears `id`'s words unanswered were never known to have
+    /// gone in (`unconfirmed`, told now or by the caller): word they did go
+    /// in after all is told too (#544, gaps 4, 5).
+    pub(super) fn said_unsure(&mut self, id: &str) {
+        if let Some(handoff) = self.live_mut(id) {
+            let gate = &mut handoff.gate;
+            let unsure = [&mut gate.mending, &mut gate.pending].into_iter().flatten();
+            if let Some(pending) = unsure.into_iter().find(|p| !p.answered) {
+                pending.said = true;
+            }
+        }
     }
     /// The review asked as `request` is not in the conversation: it did not
     /// go (`not_sent`), `note` on the card, and the round trip that stopped

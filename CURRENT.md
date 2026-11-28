@@ -10,7 +10,7 @@
     - 实时状态：`hud/src/presentation.rs` 的 `DETECTED_LATE` 加 `antigravity`，第一次检测到时打开一次，之后以常浩的选择为准；测试 `a_late_client_turns_live_the_first_time_it_is_detected_then_keeps_the_choice`（ChatGPT、Antigravity 各走一遍）和 `antigravity_saved_off_before_it_was_known_late_turns_on_once`（照本机现状：ChatGPT 已在名单里、手动关着，Antigravity 存成关后被检测到）。
     - 兜底判断：`clients/antigravity/mod.rs` 新增 `CallError::{Unavailable, Refused}`；`service::call` 一个服务都没找到才回 Unavailable，找到了但它拒绝回 Refused；`delivery/antigravity/mod.rs` 按类型换成 `Failure`，不再按文字判断；`accounts/host.rs` 照旧拿文字。
     - 兜底做法：新文件 `delivery/starts/agy.rs`：后台启动 `agy -p=<消息> --output-format stream-json`（消息贴在 `-p=` 上、以 `-` 开头时前面补空格：实测 `agy -p "--version"` 会把消息当成选项，原写法也有这个问题），输出写进 `~/.agenthud/agy-starts/<请求>.ndjson`（7 天前的下次开会话时删），20 秒内读到 `conversation_id` 就回 started 带会话编号，进程留着做完这一轮；看到登录提示就停掉进程，报「agy 命令行还没登录」；读到失败结果就停掉、报那条错误；进程自己结束却没给编号报「被拒」；20 秒还没编号报「不确定」，进程不停。`delivery/process/mod.rs` 给 `ProcessRunner` 加 `spawn`（输出写文件、不等结束，留下的进程结束后回收，不留僵尸）；`delivery/starts/clients.rs` 的 `start_antigravity` 只剩「语言服务器不在就走 agy」一句；`delivery/fixtures.rs` 的假执行器能演后台 agy。
-    - 文档：`docs/LESSONS.md` 新坑 L-92，L-84、L-87 的待定句标为已定。
+    - 文档：`docs/LESSONS.md` 新坑 L-93，L-84、L-87 的待定句标为已定。
   - 我顺手改的：无。
 - 行为变化（动手前已在会话里列出）：① Antigravity 实时状态第一次检测到时自动打开一次（本机装新版后会打开）。② 桌面版没开时，开 Antigravity 会话改由 agy 在后台开，不再直接报「没有已登录且正在运行的 Antigravity 服务」；agy 没登录时几秒内报要登录。③（审查返修带出，补列）macOS 上给已有 Antigravity 会话续发消息、打断，失败后不再换一个服务重发；发出去后结果不明时由报「被拒」改为报「不确定」（原来可能发重两遍）。
 - 测试：新测试先红：改前写法上 platform 3 条失败（`red-platform.txt`：认不出「没有服务」、读不到会话编号、没登录说不清），hud 2 条失败（`red-hud.txt`，Antigravity 仍是 `false`）；改后 platform 9 条、hud 2 条全过（`green-platform.txt`、`green-hud.txt`）。三条全量（`90e9d0a`，负载约 30）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1261 failed 0，前端 `ℹ pass 554`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。第一遍（`f046d37`）挂过两处：`service.rs` 超 300 行棘轮（已压回、基线收紧），`instance::tests::a_second_launch_brings_the_holder_forward` 负载约 49 时偶发失败（本轮没碰这块，单独连跑三次都过，`instance-rerun.txt`）。
@@ -20,7 +20,30 @@
 - 与授权不一致之处、遗留问题、范围外发现：已登录的 agy 真实开会话、开出的会话 get_message 能不能读到，都没验：本机 agy 没登录，登录要常浩本人做（终端运行一次 `agy`，按提示登录 Google 账号）。`instance::tests::a_second_launch_brings_the_holder_forward` 高负载下偶发失败，范围外，没改。Antigravity 桌面版已自动升到 2.36.0（language_server 参数 `--override_ide_version 2.36.0`），发现文件那一路照旧，装机后顺带看。
 - 审查第 1 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 写操作结果不明时会重发或再起 agy，可能开出两个会话：新增 `clients/antigravity/service/once.rs` 的 `call_once`，`Service::post` 把失败分成连不上（Unavailable，换下一个）、服务回错（Refused）、发出去后结果不明（Uncertain → `AcceptanceUncertain`，不重发、不兜底）；开会话的 `StartCascade` 和第一条消息都改走它。AGY586-P1-02 日志权限：目录用 `private_dir`（0700），文件用 `new_file_options`（0600），有结果就删。AGY586-P2-01 20 秒没拿到编号：后台线程接着读，最多 10 分钟，等开会话自己写完「不确定」回执后再补成 started 或 rejected；10 分钟还没编号就停掉 agy。D-01 升级时会把以前手动关掉的 Antigravity 实时状态打开一次：常浩这一轮要的就是打开，驿窗只有他一个人用，接受，补了测试写明。
 - 审查第 2 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 服务回 5xx 时可能已经动手：只有 4xx（408 / 409 / 499 除外）算拒绝，其余记「不确定」，报错里带 HTTP 状态和错误码；明确拒绝的换下一个服务（顺带解决 P2-03：续发时第一个服务认不得这个会话，交给下一个）。AGY586-P1-03 agy 没报编号就退出、报错或 10 分钟没动静都记「不确定」，只有登录提示算被拒。AGY586-P2-01 回执两个写入者加锁，「不确定」盖不掉已有结论；驿窗退出后 agy 照常把这一轮做完，下次开会话管理时读它留下的日志补写回执（`recover_agy_starts`）。
-- 本轮新坑：L-92
+- 本轮新坑：L-93
+
+## 接力治本第 4 步：影子读取遇拒暂停自动恢复、补格式两次没发出去说实话不挡路、迟到确认补更正、被接走要说（#544）（2026-11-28，Claude，常浩对改动确认 A、B 回「A、B 都改」；已提交，PR 见描述，合并后未装机）
+
+- 时间：开工 `2026-11-28 17:06`（约数，按会话开始时间）。来由：#544 第 4 步，改动确认 A、B 和全表空格 3、4、5、15。
+- 改了什么（你要求的）：
+  - A 影子读取：401 等页面换了新登录（插件比加盐指纹，登录信息不出页面）、403/429 停 1 小时后试读，试读没被拒就恢复，停和恢复写 `postpane.log` 与 `shadow.jsonl`；插件 0.2.14。`background.js`、`data.js`（句柄加 `marked`）、`platform/.../shadow.rs`、新 `shadow_pause.rs`、对账脚本。
+  - B 补格式：再补那次也明确没点发送时，清掉待确认、不再补、停因「补格式两次都没发出去：原因」，回信连停因转回会话，不发送达未确认，下一轮照常送。`sending/book_mending.rs` `mending_never_sent`、`gate/desk.rs`、`gate/desk_guard.rs`。
+  - 空格 3：新开会话点了发送等地址超时，插件回报带 `pressed: true`，驿窗失败说明提醒重试前先核对（`background.js` `openIn`、`platform/.../sending.rs`）。
+  - 空格 4、5：会话听说过「送达状态未知」的话，之后迟到确认或在会话里找到，卡上另记一步、通知会话「更正」（`notice/book.rs` `corrected`、`Pending.said`、`desk_asking.rs`、`book_finding.rs`、`book_mending.rs`；开头「驿窗接力「…」更正：」，`book_leave.rs` 认得是驿窗自己的话）。
+  - 空格 15：别的接力绑走同一会话，被顶替的卡记原因、通知发起会话（`notice/book.rs` `take_over`）。
+- 我顺手改的：`shadow.rs`、`book.rs`、`book_unsure.rs` 按行数棘轮拆挪；三条旧测试（`finding.rs`、`mend_late.rs`、`words_back.rs`）按种类找那一步；设置「AI 接入」页和 AGENTS.md 影子读取说明（文字在 `AiAccessPane.tsx`，交接简报写的 `ai-access.ts` 里没有）。
+- 已登记 DECIDED.md：新加 A、B 两行，行内写明部分取代 #488、#528 哪一句；旧行不动（改原有行属合并例外）；提交号写「见 PR 合并提交」。
+- 测试：`pnpm run check` 通过；`node --test tests/*.test.mjs` `ℹ pass 83` / `ℹ fail 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1263 failed 0，前端 `ℹ pass 586`，MCP 10，插件 14，Chrome 插件 244，注入脚本 11，各 `ℹ fail 0`）。原文 `evidence/2026-11-28-544-finish/full-test.log`。
+- 验证：替身通过（宿主假 Lines、插件接口替身、白名单单测）。真实环境：已装版本（16:35）二进制里搜得到 #589 的「标签页已经关了」「Chrome 插件没连上」，main 上到 #589 的接力修复都已装；`postpane.log` 第 119–125 行今天 16:45–17:19 有 5 行「PostPane stopped handoff …」，#557「驿窗自己停下写 postpane.log」这一条通过（真实环境）。本 PR 的改动未在真实环境验。记录 `evidence/2026-11-28-544-finish/real-checks.md`。
+- 截图：无界面改动（卡上和通知是文字）。
+- 发布与回读：合并后未装机（等盘点会话统一装）；插件要在 Chrome 扩展程序页重新加载到 0.2.14。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 脱敏快照测试没做成：新开的后台标签页里 ChatGPT 回答没画（只有 `<div hidden>`），Claude in Chrome 的脚本返回每次约 1000 字截断；做法改成标签页切前台、分段导出（`real-checks.md`）。
+  - 全表空格 1、2、6–10、12、13（补测试、小缺陷）本轮没做；空格 35 看过：自动往返关着时转回排队、插件 1 小时判过期后卡上写「交还常浩」，和 DECIDED 第 110 行「终局回信不后台续接」一致，没改行为，文档前提也还没补。
+  - 每日真浏览器自检（9:00 在「驿窗自检」项目发一句）仍待常浩定。
+  - 主线：接力治本｜✅ 0、1、2（端到端待验）、3、A、B、4 的空格 3/4/5/15/20 ⏳ 4 其余（补测试）、6（快照、每日自检）、7 真实环境逐条验收与关 #544 ❓ 每日自检时间与做法。
+- 本轮新坑：L-92。
+- skill 进化：无。
 
 ## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）
 

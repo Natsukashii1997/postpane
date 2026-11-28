@@ -6,6 +6,7 @@ mod back_early;
 mod background_run;
 mod book_states;
 mod codex;
+mod corrected;
 mod driver;
 mod end_asked;
 mod ended_tabs;

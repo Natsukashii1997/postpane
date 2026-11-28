@@ -91,6 +91,9 @@ pub struct Pending {
     /// person, once (#524).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lost: bool,
+    /// The session heard they were never known to have gone in (#544).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub said: bool,
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
@@ -279,6 +282,7 @@ impl Book {
     /// round trip stops, saying so; one already off says so on the card.
     /// `tell`: the session is to be told (no caller heard it already).
     pub fn unconfirmed(&mut self, id: &str, text: &str, tell: bool, now: i64) -> bool {
+        self.said_unsure(id);
         if !self.stop(id, text, true, now) {
             let Some(handoff) = self.live_mut(id) else {
                 return false;

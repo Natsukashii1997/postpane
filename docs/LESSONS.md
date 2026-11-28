@@ -673,7 +673,7 @@
 - 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。
 - 根因：`clients/antigravity` 的发现只从 language_server 启动参数读 `--csrf_token` / `--extension_server_port`。2.35.2 桌面版改成 `--subclient_type hub --https_server_port 0 --read_host_bridge_token_from_stdin`，参数里没有令牌，进程被整个跳过；新版把端口和令牌写在 `~/.gemini/antigravity/daemon/hub_<httpPort>.json`（0600，`pid`、`httpsPort`、`httpPort`、`csrfToken`）。不带令牌直接调，服务回 `401 missing CSRF token`。
 - 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认；文件里写的端口必须是那个进程正在监听的（`listening_ports(pid)`），否则文件就不只是给令牌、而是在决定驿窗信任谁（#560 审查 P1-01）。发现文件的位置跟会话记录用同一套（认 `GEMINI_CLI_HOME`）。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
-- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。2026-11-28 常浩定修，见 L-92（#586）。
+- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。2026-11-28 常浩定修，见 L-93（#586）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red.txt` 新测试在旧逻辑上失败、`green.txt`、全量测试输出、实机记录）。
 - 升级：〔提醒〕部分升级（2026-11-27，#558）：`running.rs` 新版启动参数与发现文件夹具测试、`daemon.rs` 发现文件测试，未接进必经检查。
 
@@ -733,7 +733,15 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue/`：`red.txt`（新测试在改前失败）、`green.txt`、`real-wait.txt`（全量测试占位时另起一份，打印「排队：全量测试（main-install，进程 3515…）」并一直等）。
 - 升级：〔提醒〕部分升级（2026-11-28）：排队写进 `test-all.mjs`、`package-resources.mjs`，测试 `tests/heavy-queue.test.mjs`；单独跑的 `cargo test`、`cargo build` 不经过它，不算必经检查。
 
-## L-92 按自家报错的文字判断错误类型，文字一改兜底就永远走不到；兜底又按同步跑完设计，60 秒掐断、读错字段，三处都没被测到（2026-11-28）
+## L-92 给接力卡上已有的一步打通知标记，通知发出后那一步的文字被追加了一句，送审文字和 ChatGPT 页面上的提问对不上，通过的回信收不下（2026-11-28）
+
+- 现象：#544 第 4 步做「迟到的已送到要给会话补更正」，第一版把更正标记（`cause`）打在迟到确认后补记的送审那一步（`Ask`）上。测试里更正通知发得出去，但之后 ChatGPT 写「通过」的回信一直收不下，`turns.jsonl` 记 `unmatched`；去掉通知那一步就好了。
+- 根因：通知发出后 `Book::told` 会在被标记那一步的文字末尾追加「；已发到 Claude 会话」（卡上看得出通知送没送到）。认回信时拿最近一条送审步的文字和页面上的提问逐字比（`answers/desk_belongs.rs` `held_to`），送审步的文字被改了，就永远对不上。标记本来都打在停下、失败这种说明步上，第一次打到送审步才撞上。
+- 正确做法：要通知会话的事，单独记一步（`Work`，`by_auto`）再打标记（`Book::corrected`），不借已有的送审、回信、补格式步；改会被拿来比对的步骤文字之前，先搜 `held_to`、`answers` 用的是哪一步。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-544-finish/`（`full-test.log`）；`src/crates/host/src/handoff/tests/corrected.rs` 锁住「更正之后通过的回信照常收」。
+- 升级：〔机检〕测试 `late_word_the_words_went_in_is_told_and_their_answer_may_pass` 会在标记再打回送审步时失败。
+
+## L-93 按自家报错的文字判断错误类型，文字一改兜底就永远走不到；兜底又按同步跑完设计，60 秒掐断、读错字段，三处都没被测到（2026-11-28）
 
 - 现象：Antigravity 桌面版没开时，经驿窗开 Antigravity 会话直接报「没有已登录且正在运行的 Antigravity 服务」，`agy` 命令行装着也不用。`start_antigravity` 写了 `agy -p` 兜底，从移植起一次都没走到过。
 - 根因：四处叠在一起。① `delivery/antigravity/mod.rs` 的 `call` 用 `error.contains("no running Antigravity service")` 判「不可用」，而 `service::call` 实际报的是本地化文字「没有已登录且正在运行的 Antigravity 服务」/ "No authenticated already-running…"，永远对不上，全判成「被拒」。② 就算走到，兜底用 `agy -p … --output-format json` 同步等整轮做完，60 秒一到就杀进程，稍长的任务必然被打断、报「不确定」。③ 读会话编号找的是 `session_id` / `sessionId` / `cascadeId`，agy 1.5.18 的字段是 `conversation_id`。④ agy 没登录时先在 stderr 打登录链接、等约 60 秒登录超时才退出 1，只报一句 "refused"。测试替身只测了有桌面版的那条路（G-34）。

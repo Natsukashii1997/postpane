@@ -52,6 +52,7 @@ impl Desk {
             if book.confirmed_late(id, request, &super::guard::confirmed_late(), now) {
                 return true;
             }
+            let said = book.said_unknown(id, request);
             book.confirm_pending(id, request);
             asking.anchor.set(book, id);
             // Taken words turn a self-stopped round trip on again (#410),
@@ -60,6 +61,10 @@ impl Desk {
             book.asked_as(id, asked_id);
             if asking.evidence {
                 book.evidence_in(id, now);
+            }
+            // Told they were never known to have gone in (#544, gap 4).
+            if said {
+                book.corrected(id, now);
             }
             asked
         })
