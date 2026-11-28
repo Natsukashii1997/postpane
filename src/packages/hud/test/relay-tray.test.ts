@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { Session } from "@agent-hud/protocol";
 import {
   alreadyQueuedText,
   launchKind,
   launchLine,
   stepBlock,
+  trayFlick,
+  tookDrag,
   trayKinds,
   trayReady,
   trayText,
@@ -124,4 +127,102 @@ test("words gone before they were seen taken are not said to be taken", () => {
     launchLine({ kind: "review", state: "lost", reason: null }, false).text,
     "Review request unaccounted for; no handoff in an hour",
   );
+});
+
+test("a flick opens or closes the tray however short; a slow let-go goes by half", () => {
+  let now = 0;
+  const at = (ms: number) => (now = ms);
+  const flick = trayFlick(() => now);
+  // 30 points left in 40 ms: a flick, open though far from half of 310.
+  at(0);
+  flick.note(0);
+  at(40);
+  flick.note(-30);
+  assert.equal(flick.opens(-30, 310), true);
+  // Open, flicked back right 30 points: it closes though still past half.
+  at(1000);
+  flick.note(-310);
+  at(1040);
+  flick.note(-280);
+  assert.equal(flick.opens(-280, 310), false);
+  // Dragged slowly to 60 points and let go: not past half, it closes.
+  at(2000);
+  flick.note(0);
+  at(2400);
+  flick.note(-60);
+  at(2800);
+  flick.note(-60);
+  assert.equal(flick.opens(-60, 310), false);
+  // Slowly past half: it opens.
+  at(4000);
+  flick.note(-100);
+  at(4400);
+  flick.note(-200);
+  assert.equal(flick.opens(-200, 310), true);
+});
+
+test("a quick twitch shorter than a swipe is not taken for a flick", () => {
+  let now = 0;
+  const flick = trayFlick(() => now);
+  // 8 points in 10 ms is fast, but the row barely moved: closed, by half.
+  flick.note(-6);
+  now = 10;
+  flick.note(-14);
+  assert.equal(flick.opens(-14, 310), false);
+});
+
+// #539 ENG-19: a press the row never saw end (released where it could not
+// hear, or cancelled) left the row thinking it was still dragging, so a later
+// move dragged again and a VoiceOver click was swallowed as a drag's own.
+// Measured in the system WKWebView: evidence webkit-r6/r6-*.txt.
+test("a click ends a drag only when a pointer made it; the mark goes either way", () => {
+  const dragged = { current: true };
+  assert.equal(tookDrag(dragged, { detail: 1 }), true);
+  assert.equal(dragged.current, false);
+  assert.equal(tookDrag(dragged, { detail: 1 }), false);
+  dragged.current = true;
+  // A click with no pointer behind it (detail 0: the keyboard, and VoiceOver
+  // in WebKit before 2026-10) still opens the row.
+  assert.equal(tookDrag(dragged, { detail: 0 }), false);
+  assert.equal(dragged.current, false);
+  // WebKit since 2026-10 gives VoiceOver a pointerdown and a detail 1 click:
+  // the row's pointerdown clears a mark a lost release left, so it opens too.
+  dragged.current = true;
+  dragged.current = false; // what onPointerDown does first
+  assert.equal(tookDrag(dragged, { detail: 1 }), false);
+});
+
+test("a row's press ends when the button is found up, or is cancelled", () => {
+  const row = readFileSync(
+    new URL("../src/panel/SessionsSection.tsx", import.meta.url),
+    "utf8",
+  );
+  const move = row.slice(
+    row.indexOf("onPointerMove="),
+    row.indexOf("onPointerUp="),
+  );
+  // Only the left button's bit: left dragging, right pressed, left let go
+  // leaves buttons at 2, and that drag is over too.
+  assert.match(
+    move,
+    /if \(!\(event\.buttons & 1\)\) \{\s*start\.current = null;\s*return from\.axis === "x" \? settle\(\) : undefined;/,
+  );
+  const down = row.slice(
+    row.indexOf("onPointerDown="),
+    row.indexOf("onPointerMove="),
+  );
+  assert.match(
+    down,
+    /if \(event\.button !== 0\) return;\s*dragged\.current = false;/,
+  );
+  const cancel = row.slice(
+    row.indexOf("onPointerCancel="),
+    row.indexOf("onWheel="),
+  );
+  assert.match(cancel, /dragged\.current = false;/);
+  assert.equal(
+    row.match(/if \(tookDrag\(dragged, event\)\) return;/g)?.length,
+    2,
+  );
+  assert.doesNotMatch(row, /if \(dragged\.current\) \{/);
 });

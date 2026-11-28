@@ -23,6 +23,7 @@ import { useMarkLevelText } from "../ground";
 import { isRingStyle } from "../usage-meter/arcs";
 import { MarkBars, MarkRing, markItems } from "../usage-meter/mark-usage";
 import { ReviewStamp } from "./RelayStamps";
+import { footKind, StubFoot } from "./StubFoot";
 import {
   stubBotTop,
   stubFootHeight,
@@ -474,9 +475,8 @@ export function StubFace({
     review: vendor.relay?.review ?? false,
     replied: !!(vendor.relay?.replied || vendor.relay?.stopped), // 「停」 on relay paper too
   });
-  // The relay's paper runs out over the perforated strip too, holes and all,
-  // so the stub's side is covered to its edge (owner 2026-11-10); the print
-  // stays where it was.
+  // The relay's paper runs out over the perforated strip, holes and all, to
+  // the stub's edge (owner 2026-11-10); the print stays where it was.
   const reach = print.relayPaper && side !== "top",
     strip = 3 * unit,
     // From the stub's top to the foot's, for the holes down a side.
@@ -486,8 +486,9 @@ export function StubFace({
     : null;
   return (
     <>
-      <span
-        aria-hidden="true"
+      <StubFoot
+        print={[footKind(print.shows, vendor.relay), label]}
+        still={reduceMotion}
         style={{
           position: "absolute",
           left: side === "left" && !reach ? strip : 0,
@@ -547,8 +548,7 @@ export function StubFace({
           </span>
         ) : print.shows === "stamp" && vendor.relay ? (
           // ChatGPT has a relay's words: the 「审」 stamp lands over the
-          // reading (#171); an answer back with Claude lands the same stamp
-          // as 「回」 (#218).
+          // reading (#171); an answer back to Claude lands 「回」 (#218).
           <ReviewStamp
             unit={unit}
             zh={zh}
@@ -602,7 +602,7 @@ export function StubFace({
             {label}
           </span>
         )}
-      </span>
+      </StubFoot>
     </>
   );
 }

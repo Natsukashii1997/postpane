@@ -13,6 +13,7 @@ import { SelectItem } from "@agent-hud/ui/components/select";
 import { Input } from "@agent-hud/ui/components/input";
 import { systemTimeZone } from "@agent-hud/ui/format";
 import { sessionClient } from "./lib/sessions";
+import { Fold, moves, useDrillArrival } from "./lib/Motion";
 import { useSessionDetail, useSessions } from "./lib/use-sessions";
 import type {
   NativeMethod,
@@ -21,11 +22,8 @@ import type {
   Snapshot,
 } from "./lib/types";
 import { InlineDetail } from "./sessions/SessionDetailView";
-import {
-  DayHeader,
-  SessionRow,
-  TodayCard,
-} from "./sessions/SessionListSection";
+import { SessionRow, TodayCard } from "./sessions/SessionListSection";
+import { DayHeader } from "./sessions/DayHeader";
 import {
   ALL,
   card,
@@ -172,13 +170,13 @@ export default function SessionStatistics({
     minWidth: 0,
     padding: "4px 22px 24px",
   };
-  const cards = (sessions: Session[], noMargin = false) => (
+  const cards = (sessions: Session[]) => (
     <Card
       style={{
         ...card(theme, "0"),
         overflow: "hidden",
         gap: 0,
-        marginBottom: noMargin ? 0 : 18,
+        marginBottom: 18,
       }}
     >
       {sessions.map((session, index) => (
@@ -195,8 +193,10 @@ export default function SessionStatistics({
     </Card>
   );
 
+  const pageRef = useDrillArrival(Boolean(selectedId));
   return (
     <section
+      ref={pageRef}
       className="session-statistics-native"
       style={contentStyle}
       aria-label={t("Session statistics", "会话统计")}
@@ -252,7 +252,10 @@ export default function SessionStatistics({
             />
           ) : (
             <Card style={card(theme)}>
-              <span style={{ color: theme.secondary, fontSize: 12 }}>
+              <span
+                className={error ? undefined : "app-loading-late"}
+                style={{ color: theme.secondary, fontSize: 12 }}
+              >
                 {error ?? t("Reading session usage…", "正在读取会话用量…")}
               </span>
             </Card>
@@ -318,8 +321,12 @@ export default function SessionStatistics({
                           arrangement === value
                             ? theme.selected
                             : "transparent",
-                        transition:
-                          "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease",
+                        transition: moves(
+                          "quick",
+                          "background-color",
+                          "color",
+                          "box-shadow",
+                        ),
                       }}
                     >
                       {value === "day"
@@ -428,6 +435,7 @@ export default function SessionStatistics({
           {!list.page && list.loading && (
             <div
               role="status"
+              className="app-loading-late"
               style={{ color: theme.secondary, fontSize: 12, marginBottom: 12 }}
             >
               {t("Loading sessions…", "正在加载会话…")}
@@ -511,26 +519,15 @@ export default function SessionStatistics({
                             transform: open ? "rotate(90deg)" : "rotate(0deg)",
                             alignSelf: "center",
                             flexShrink: 0,
-                            transition:
-                              "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+                            transition: moves("quick", "transform"),
                           }}
                         />
                       }
                     />
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateRows: open ? "1fr" : "0fr",
-                        opacity: open ? 1 : 0,
-                        marginBottom: open ? 18 : 0,
-                        transition:
-                          "grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, margin-bottom 220ms ease",
-                      }}
-                    >
-                      <div style={{ overflow: "hidden", minHeight: 0 }}>
-                        {cards(group.sessions, true)}
-                      </div>
-                    </div>
+                    {/* flow-root: the cards' margin folds with them. */}
+                    <Fold open={open} style={{ display: "flow-root" }}>
+                      {cards(group.sessions)}
+                    </Fold>
                   </div>
                 );
               })}

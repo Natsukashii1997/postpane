@@ -4,9 +4,9 @@
  * settings.css; pages never style these by hand. */
 import { useId, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
+import { Fold, TOOLTIP_DELAY, useFold } from "../lib/Motion";
 import type { NativeMethod, Snapshot } from "@agent-hud/protocol";
 import { Button } from "@agent-hud/ui/components/button";
-import { Slider } from "@agent-hud/ui/components/slider";
 import { Switch } from "@agent-hud/ui/components/switch";
 import { Tabs, TabsList, TabsTrigger } from "@agent-hud/ui/components/tabs";
 import {
@@ -19,6 +19,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@agent-hud/ui/components/tooltip";
 import type { HUDConfig } from "@agent-hud/hud/model";
@@ -36,6 +37,7 @@ export interface SettingsPaneProps {
 }
 
 export type Text = (en: string, zh: string) => string;
+export { Slide } from "./Slide";
 
 const nativeUnavailable =
   "This native integration is not available in this version.";
@@ -43,6 +45,13 @@ const nativeUnavailable =
 export function useText(snapshot: Snapshot | null): Text {
   const chinese = snapshot ? snapshotLanguage(snapshot) === "zh" : false;
   return (en, zh) => (chinese ? zh : en);
+}
+
+/** Where a Settings page's tooltips wait for the pointer to rest. */
+export function Tooltips({ children }: { children: ReactNode }) {
+  return (
+    <TooltipProvider delayDuration={TOOLTIP_DELAY}>{children}</TooltipProvider>
+  );
 }
 
 /** A page's body: its sections, one under another. */
@@ -264,64 +273,6 @@ export function Menu({
   );
 }
 
-/** A slider row: the name on the left, the slider flush right with its
- * value printed over the knob. */
-export function Slide({
-  title,
-  value,
-  min,
-  max,
-  step,
-  change,
-  format,
-  disabled = false,
-}: {
-  title: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  change: (value: number) => void;
-  format: (value: number) => string;
-  disabled?: boolean;
-}) {
-  const at =
-    max > min
-      ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))
-      : 0;
-  return (
-    <div className="settings-row settings-slider-row">
-      <div className="settings-row-main">
-        <div className="settings-row-text">
-          <label className="settings-row-title">{title}</label>
-        </div>
-        <div className="settings-row-control">
-          <span className="settings-slide">
-            <Slider
-              aria-label={title}
-              min={min}
-              max={max}
-              step={step}
-              value={[value]}
-              disabled={disabled}
-              onValueChange={(values) => change(values[0])}
-              className="settings-slider"
-            />
-            {/* Where Radix puts the 14 pt knob: kept inside the track, so
-                half a knob in at either end. */}
-            <output
-              className="settings-slider-value"
-              style={{ left: `calc(${at}% + ${7 - at * 0.14}px)` }}
-            >
-              {format(value)}
-            </output>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function SmallButton({
   children,
   onClick,
@@ -442,9 +393,11 @@ export function Collapsible({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
+  // Open-looking until the close has played, so the body keeps its place.
+  const body = useFold<HTMLDivElement>(open);
   return (
     <div
-      className={`settings-card settings-collapsible${open ? " is-open" : ""}`}
+      className={`settings-card settings-collapsible${body.shown ? " is-open" : ""}`}
     >
       <button
         type="button"
@@ -467,7 +420,12 @@ export function Collapsible({
           <span className="settings-collapsible-summary">{summary}</span>
         )}
       </button>
-      <div className="settings-collapsible-body" id={id} hidden={!open}>
+      <div
+        className="settings-collapsible-body"
+        id={id}
+        ref={body.ref}
+        hidden={!body.shown}
+      >
         {children}
       </div>
     </div>
@@ -497,7 +455,9 @@ export function MoreRows({
         <ChevronRight className="settings-chevron" size={13} />
         {label}
       </button>
-      {open && children}
+      <Fold className="settings-more-body" open={open}>
+        {children}
+      </Fold>
     </>
   );
 }

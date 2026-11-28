@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useState, type CSSProperties, type ReactNode } from "react";
 import { Card } from "@agent-hud/ui/components/card";
 import { HUDArtwork as HUDLogo } from "@agent-hud/hud/HUDArtwork";
 import { vendorKey } from "@agent-hud/hud/model";
@@ -24,6 +24,7 @@ import {
   useAnimatedNumber,
   type StatsTheme,
 } from "./StatsTheme";
+import { moves, scaledFill } from "../lib/moves";
 import { Sparkline } from "./UsageChart";
 import {
   dateFormat,
@@ -31,6 +32,16 @@ import {
   moneyAmount,
   moneyShort,
 } from "@agent-hud/ui/format";
+
+/** A card the side bar points at (for 2.5 s): an inked dashed frame drawn
+ * as an outline over the card's edges rather than as a border, so lighting
+ * it moves nothing inside; only its colours fade in and out. */
+const pointedOut = (on: boolean, theme: StatsTheme): CSSProperties => ({
+  borderTop: `1.5px dashed ${on ? theme.text : theme.divider}`,
+  outline: `1.5px dashed ${on ? theme.text : "transparent"}`,
+  outlineOffset: -1.5,
+  transition: moves("quick", "border-top-color", "outline-color"),
+});
 
 export function agentRows<T>(values: T[]): T[][] {
   const sizes = Array.from({ length: Math.floor(values.length / 3) }, () => 3);
@@ -135,10 +146,13 @@ export const ProviderCard = memo(function ProviderCard({
           >
             <div
               style={{
-                width: `${provider.selectedTokens ? Math.min(100, (entry.selectedTokens / provider.selectedTokens) * 100) : 0}%`,
+                ...scaledFill(
+                  provider.selectedTokens
+                    ? entry.selectedTokens / provider.selectedTokens
+                    : 0,
+                ),
                 height: "100%",
                 background: accent,
-                transition: "width 240ms cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             />
           </div>
@@ -157,15 +171,7 @@ export const ProviderCard = memo(function ProviderCard({
       className="statistics-agent-card"
       style={{
         ...card(theme),
-        ...(highlighted
-          ? {
-              border: `1.5px dashed ${theme.text}`,
-              boxShadow: "none",
-              transition: "border-color 220ms ease, box-shadow 220ms ease",
-            }
-          : {
-              transition: "border-color 220ms ease, box-shadow 220ms ease",
-            }),
+        ...pointedOut(highlighted, theme),
       }}
     >
       <div style={{ ...row, gap: 7 }}>
@@ -481,15 +487,7 @@ export const APIBillingCard = memo(function APIBillingCard({
       className="statistics-billing-card"
       style={{
         ...card(theme),
-        ...(highlighted
-          ? {
-              border: `1.5px dashed ${theme.text}`,
-              boxShadow: "none",
-              transition: "border-color 220ms ease, box-shadow 220ms ease",
-            }
-          : {
-              transition: "border-color 220ms ease, box-shadow 220ms ease",
-            }),
+        ...pointedOut(highlighted, theme),
       }}
     >
       <div style={{ ...row, justifyContent: "space-between" }}>

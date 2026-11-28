@@ -425,6 +425,7 @@
 }
 .apple-app .settings-card > * + *::before,
 .apple-app .settings-collapsible-body > * + *::before,
+.apple-app .settings-card > .settings-more-body > * + *::before,
 .apple-app .settings-collapsible.is-open .settings-collapsible-body::before {
   left: 0;
   right: 0;
@@ -490,7 +491,7 @@
   height: 24px;
   border-radius: 0;
   border: 1px solid rgb(var(--rc-ink));
-  background: var(--rc-paper) !important;
+  background-color: var(--rc-paper) !important;
   box-shadow: none;
   padding: 0;
   font: 400 12px/1 var(--font-sans);
@@ -500,21 +501,24 @@
   height: 20px;
   font-size: 11px;
 }
-/* The chosen half is the switch's own fill; the shared sliding thumb is
-   not used (it lands outside the box in WebKit). */
-.apple-app [data-slot="switch"][data-state="unchecked"] {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--rc-ink)) 0 50%,
-    var(--rc-paper) 50%
+/* The chosen half is the switch's own fill, an ink block over the paper;
+   the shared sliding thumb is not used (it lands outside the box in
+   WebKit). Flipped, the block slides across to the other half instead of
+   the halves swapping at once (owner chose 改, 2026-11-25). */
+.apple-app [data-slot="switch"][data-state] {
+  background-color: var(--rc-paper) !important;
+  background-image: linear-gradient(
+    rgb(var(--rc-ink)),
+    rgb(var(--rc-ink))
   ) !important;
+  background-repeat: no-repeat !important;
+  background-size: 50% 100% !important;
+  /* Not !important: an important value would win over the slide. */
+  background-position: 0 0;
+  transition: background-position var(--motion-quick) var(--ease-out);
 }
 .apple-app [data-slot="switch"][data-state="checked"] {
-  background: linear-gradient(
-    90deg,
-    var(--rc-paper) 0 50%,
-    rgb(var(--rc-ink)) 50%
-  ) !important;
+  background-position: 100% 0;
 }
 .apple-app [data-slot="switch"]:disabled {
   opacity: 0.4;
@@ -533,6 +537,7 @@
   z-index: 1;
   pointer-events: none;
   color: rgb(var(--rc-ink));
+  transition: color var(--motion-quick) var(--ease-out);
 }
 .apple-app [data-slot="switch"]::before {
   content: "Off";
@@ -667,6 +672,12 @@
 }
 .apple-app .apple-content [data-slot="button"][data-variant="outline"]:hover {
   background: rgba(var(--rc-ink), 0.08);
+}
+/* Pressed, a button sinks a point, as the sidebar's do (owner chose 改,
+   2026-11-25): before, a filled button showed nothing under the finger. */
+.apple-app .apple-content [data-slot="button"]:not(:disabled):active {
+  translate: 0 1px;
+  transition-duration: var(--motion-press);
 }
 .apple-app .settings-button[data-slot="button"] {
   height: 24px;
@@ -909,7 +920,8 @@
   align-items: start;
   padding-bottom: 12px;
 }
-.apple-app .settings-panel-parts > * + * {
+.apple-app .settings-panel-parts > * + *,
+.apple-app .settings-panel-parts > .settings-more-body > * + * {
   border-top: 1px dashed rgba(var(--rc-ink), 0.25);
 }
 .apple-app .settings-panel-subpart {

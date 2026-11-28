@@ -162,7 +162,7 @@ function QuotaLine({
         borderRadius: 4,
         cursor: clickable ? "pointer" : undefined,
         background: hovered && clickable ? inks.selected : "transparent",
-        transition: "background 0.12s ease",
+        transition: "background var(--motion-quick) var(--ease-out)",
       }}
     >
       <span

@@ -1,5 +1,6 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { PendantLayout, PendantRect } from "../app-pendant";
+import { resume, settle } from "./settle";
 
 const SHADOW =
   "drop-shadow(0 1px 1px rgba(0,0,0,.22)) drop-shadow(0 8px 14px rgba(0,0,0,.24))";
@@ -40,6 +41,10 @@ export function PendantShell({
   children: ReactNode;
 }) {
   const { frame, horizontal, reversed, cord, ball } = layout;
+  // Under the pointer, kept by hand rather than :hover so a leave can read
+  // the swing's angle before it stops.
+  const [hover, setHover] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   const cordColor = light ? "rgba(42,41,37,.5)" : "rgba(236,231,220,.5)";
   // Along the top or bottom the cord meets the ball at its middle.
   const cordStyle: CSSProperties = horizontal
@@ -109,10 +114,20 @@ export function PendantShell({
   );
   return (
     <div
+      ref={root}
       className="hud-app-pendant"
       data-app={app}
       data-motion={still ? "still" : "on"}
+      data-hover={hover}
       data-open={open}
+      onPointerEnter={() => {
+        resume(root.current);
+        setHover(true);
+      }}
+      onPointerLeave={() => {
+        if (!still) settle(root.current);
+        setHover(false);
+      }}
       {...dataAttributes}
       style={{
         position: "absolute",

@@ -31,6 +31,9 @@ import {
   launchLine,
   stepBlock,
   TRAY_BLOCK,
+  TRAY_SETTLE,
+  trayFlick,
+  tookDrag,
   trayKinds,
   trayReady,
   trayText,
@@ -73,8 +76,7 @@ export function RepliedRow({
   const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
-  // As a live row (#220): where it could not get there, the second line
-  // says why a few seconds.
+  // As a live row (#220): where it could not go, the second line says why.
   const goBack = async () => {
     if (!canOpen) return;
     const reason = failureOf(await services?.openSession?.(session), zh);
@@ -232,8 +234,7 @@ export function LiveRow({
   const failed = failure(session.id);
   const canOpen =
     Boolean(session.navigationTarget && services?.openSession) && !failed;
-  // Where it could not get there, the second line says why a few seconds,
-  // then ↗ may be tried again (#220).
+  // Where it could not go, the second line says why, then ↗ may retry (#220).
   const goBack = async () => {
     if (!canOpen) return;
     const reason = failureOf(await services?.openSession?.(session), zh);
@@ -270,6 +271,7 @@ export function LiveRow({
   } | null>(null);
   const dragged = useRef(false);
   const wheelEnd = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [flick] = useState(trayFlick);
   const kinds = trayKinds(session);
   const solo = kinds.length === 1;
   const trayWidth = solo ? removeWidth : kinds.length * TRAY_BLOCK;
@@ -280,22 +282,23 @@ export function LiveRow({
       Math.max(solo ? -trayWidth * 1.6 : -trayWidth - 40, to),
     );
     setDrag(offset.current);
+    flick.note(offset.current);
   };
   const settle = () => {
     setDrag(null);
-    onOpen(offset.current < -trayWidth / 2);
+    onOpen(flick.opens(offset.current, trayWidth));
   };
   useEffect(() => () => clearTimeout(wheelEnd.current), []);
   const row = useRef<HTMLDivElement>(null);
   const blocks = useRef<(HTMLButtonElement | null)[]>([]);
-  // The block under the pointer or the keyboard: its hint shows.
+  // The block under pointer or keyboard shows its hint till it leaves (ENG-08).
   const [hot, setHot] = useState<number | null>(null);
+  const cool = (i: number) => setHot((at) => (at === i ? null : at));
   const focusBlock = (index: number) => {
     setHot(index);
     blocks.current[index]?.focus();
   };
-  // ← opened the tray: its first block takes the keyboard once it is open,
-  // never after it closed again.
+  // ← opened the tray: its first block takes the keyboard once open, not after.
   const focusOnOpen = useRef(false);
   useEffect(() => {
     if (!open) {
@@ -315,8 +318,7 @@ export function LiveRow({
     const timer = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
-  // A handoff asked and not answered yet: another pick waits for it, and
-  // only the latest one's answer is said.
+  // A handoff not answered yet: another pick waits; only the latest is said.
   const launching = useRef(false);
   const asked = useRef(0);
   const pick = async (kind: TrayKind) => {
@@ -403,10 +405,9 @@ export function LiveRow({
                   if (ready) void pick(kind);
                 }}
                 onPointerEnter={() => setHot(index)}
-                onPointerLeave={() =>
-                  setHot((at) => (at === index ? null : at))
-                }
+                onPointerLeave={() => cool(index)}
                 onFocus={() => setHot(index)}
+                onBlur={() => cool(index)}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
                     event.preventDefault();
@@ -463,11 +464,8 @@ export function LiveRow({
           role="button"
           tabIndex={0}
           title={session.title}
-          onClick={() => {
-            if (dragged.current) {
-              dragged.current = false;
-              return;
-            }
+          onClick={(event) => {
+            if (tookDrag(dragged, event)) return;
             if (open) return onOpen(false);
             if (canOpen) void goBack();
             else details();
@@ -503,6 +501,11 @@ export function LiveRow({
           onPointerMove={(event) => {
             const from = start.current;
             if (!from) return;
+            // The primary button (the press began with it) is up: over (ENG-19).
+            if (!(event.buttons & 1)) {
+              start.current = null;
+              return from.axis === "x" ? settle() : undefined;
+            }
             const dx = event.clientX - from.x;
             const dy = event.clientY - from.y;
             if (!from.axis && Math.hypot(dx, dy) > 6) {
@@ -521,12 +524,12 @@ export function LiveRow({
           }}
           onPointerCancel={() => {
             start.current = null;
+            dragged.current = false;
             if (drag !== null) settle();
           }}
           onWheel={(event) => {
             if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-            // One swipe is many wheel events, faster than renders: add them up
-            // from where the swipe began until it rests.
+            // One swipe is many wheel events: add them up from where it began.
             if (wheelEnd.current === undefined)
               offset.current = open ? -trayWidth : 0;
             slide(offset.current - event.deltaX);
@@ -548,7 +551,7 @@ export function LiveRow({
             cursor: "pointer",
             opacity: hover && !x ? 0.78 : 1,
             transform: x ? `translateX(${x}px)` : undefined,
-            transition: drag === null ? "transform 0.18s ease" : undefined,
+            transition: drag === null ? TRAY_SETTLE : undefined,
           }}
         >
           {backlog ? (
@@ -616,10 +619,7 @@ export function LiveRow({
             }}
             onClick={(event) => {
               event.stopPropagation();
-              if (dragged.current) {
-                dragged.current = false;
-                return;
-              }
+              if (tookDrag(dragged, event)) return;
               if (open) return onOpen(false);
               void goBack();
             }}

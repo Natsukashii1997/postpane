@@ -7,6 +7,66 @@ export type TrayKind = "review" | "test" | "cont" | "disc" | "rm";
 /** Each block's width; the tray is as wide as its blocks. */
 export const TRAY_BLOCK = 62;
 
+/** A flick this fast (points a millisecond) opens or closes the tray
+ * whichever way it went, however short; slower, the tray goes the way the
+ * row was let go past half its width (owner chose 改, 2026-11-25). */
+export const FLICK_SPEED = 0.35;
+/** A let-go row slides to rest on the shared move. */
+export const TRAY_SETTLE = "transform var(--motion-enter) var(--ease-out)";
+/** How far back a let-go looks for the flick's speed. */
+const FLICK_WINDOW_MS = 80;
+/** And how far the row must have moved in this gesture before speed counts:
+ * a quick twitch is not a swipe (GPT review, 2026-11-25). */
+export const FLICK_TRAVEL = 12;
+
+/** Whether a click is the end of a row's drag, to be swallowed: only a
+ * pointer's click right after one (`detail` > 0). One from the keyboard or
+ * VoiceOver (detail 0) never is, whatever a lost release left; the mark goes
+ * either way (ENG-19). */
+export function tookDrag(
+  dragged: { current: boolean },
+  event: { detail: number },
+) {
+  const was = dragged.current;
+  dragged.current = false;
+  return was && event.detail > 0;
+}
+
+/** Where a dragged or swiped row has been lately, to tell a flick. */
+export function trayFlick(clock: () => number = () => performance.now()) {
+  let samples: { x: number; at: number }[] = [];
+  let from: number | null = null;
+  return {
+    /** The row is now at `x`; a pause starts a new gesture. */
+    note(x: number) {
+      const at = clock();
+      const last = samples[samples.length - 1];
+      if (last && at - last.at > 2 * FLICK_WINDOW_MS) {
+        samples = [];
+        from = null;
+      }
+      from ??= x;
+      samples.push({ x, at });
+      samples = samples.filter((one) => at - one.at <= FLICK_WINDOW_MS * 2);
+    },
+    /** Let go at `x`, `width` the open tray's: does it end open? */
+    opens(x: number, width: number): boolean {
+      const last = samples[samples.length - 1];
+      const first = samples.find(
+        (one) => last && last.at - one.at <= FLICK_WINDOW_MS,
+      );
+      const travel = from === null ? 0 : Math.abs(x - from);
+      samples = [];
+      from = null;
+      if (last && first && last.at > first.at && travel >= FLICK_TRAVEL) {
+        const speed = (last.x - first.x) / (last.at - first.at);
+        if (Math.abs(speed) >= FLICK_SPEED) return speed < 0;
+      }
+      return x < -width / 2;
+    },
+  };
+}
+
 /** The blocks a row's tray shows: a Claude Code session on this machine,
  * or a Codex thread (#282), can hand its work over (it calls
  * `relay_to_chatgpt` itself); any other only leaves the sidebar. */

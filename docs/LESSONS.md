@@ -709,6 +709,14 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/r6/`（会话 `f2e8fb04`：`transcript.jsonl` 提问 1939 字、回复 1789 字，`transcript_full.jsonl` 提问 8426 字、回复 17370 字；修后 `get_message` 的结果）。
 - 升级：〔提醒〕部分升级（2026-11-27，#560）：`antigravity_whole` 两条测试，未接进必经检查。
 
+## L-89 想让一个值滑过去，它的规则却带 `!important`：重要声明在层叠里压过过渡，值一下就跳到终点（2026-11-25）
+
+- 现象：动效统一第 6 处，设置页开关改成「墨块滑过去」，`background-position` 也写了 `transition`，计算样式里过渡属性和时长都对，逐帧读值却从 100% 一帧跳到 0，没有中间值。
+- 根因：CSS 层叠里，过渡产生的值排在所有普通声明之上、所有 `!important` 声明之下。开关原来用 `background: … !important` 压 Tailwind 的 `bg-primary`，简写顺带把 `background-position` 也设成了重要声明；勾选态那条也带 `!important`。过渡值赢不了它们，所以不动。
+- 正确做法：要做过渡的那个属性不写 `!important`，也别让带 `!important` 的简写（`background`、`transition`、`transform` 等）顺带设到它；需要压别人的，只给真正冲突的长写属性加（这里是 `background-color`、`background-image`）。验证时在页面里逐帧读 `getComputedStyle` 或看 `el.getAnimations()` 里有没有这条过渡，别只看计算样式里的 `transition-*`。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/settings/`（`switch.mjs` 两次输出：改前一帧跳到 0；改后 100% → 48% → 20% → … → 0，约 120ms）。
+- 升级：〔文字〕未升级：只出现过一次，记在这里。
+
 ## L-90 Claude 桌面会话间转达的消息标了 isMeta，「这一轮谁开的头」把它跳过，认成了上一轮常浩自己打的字（2026-11-19；2026-11-28 两次变基撞号，由 L-59 改号为 L-90）
 
 - 现象：#439 装机实测 `relay_end`，本会话这一轮是别的 Claude 会话转达常浩批量答复开的头，按设计应整批拒收，结果核实通过、结束了 0B-4b 那张接力（它本来就在要结束的名单里，结果无害）。

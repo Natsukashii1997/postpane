@@ -54,11 +54,15 @@
 }
 /* Inset hairlines between whatever sits in a card. */
 .settings-card > *,
-.settings-collapsible-body > * {
+.settings-collapsible-body > *,
+.settings-card > .settings-more-body > * {
   position: relative;
 }
+/* The rows behind More sit in a fold of their own (lib/Motion.tsx) and are
+   ruled as if they sat in the card. */
 .settings-card > * + *::before,
 .settings-collapsible-body > * + *::before,
+.settings-card > .settings-more-body > * + *::before,
 .settings-collapsible.is-open .settings-collapsible-body::before {
   content: "";
   position: absolute;
@@ -364,10 +368,11 @@
 .settings-chevron {
   flex-shrink: 0;
   color: var(--muted-foreground);
-  transition: transform 160ms ease;
+  transition: transform var(--motion-quick) var(--ease-out);
 }
-.is-open > .settings-collapsible-header .settings-chevron,
-.settings-more.is-open .settings-chevron {
+/* Turns with the click; the body stays open-looking while it folds away. */
+.settings-collapsible-header[aria-expanded="true"] .settings-chevron,
+.settings-more[aria-expanded="true"] .settings-chevron {
   transform: rotate(90deg);
 }
 

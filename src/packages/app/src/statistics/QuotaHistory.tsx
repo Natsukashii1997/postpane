@@ -16,6 +16,8 @@ import type {
   QuotaHistoryResponse,
   QuotaHistoryWindow,
 } from "../lib/types";
+import { HoverTip, dataProgress } from "../lib/Motion";
+import { systemReducesMotion } from "@agent-hud/ui/lib/motion";
 import {
   card,
   dateLabel,
@@ -78,13 +80,6 @@ const HEIGHT = 44;
 
 function accent(theme: StatsTheme) {
   return theme.text;
-}
-
-function reducedMotion() {
-  return (
-    typeof window !== "undefined" &&
-    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
-  );
 }
 
 /** One window's line on a fixed 0–100% axis: its runs, never joined across a reset or a gap, the resets as dashed rules, and the current cycle's steady budget as a faint diagonal. */
@@ -221,7 +216,7 @@ const QuotaLine = memo(function QuotaLine({
     if (width <= 0) return;
     // A new stretch draws in from the left; new readings in the same one
     // land in place, and Reduce Motion draws it whole at once.
-    if (revealed.current === reveal || reducedMotion()) {
+    if (revealed.current === reveal || systemReducesMotion()) {
       revealed.current = reveal;
       paint(1);
       return;
@@ -230,8 +225,8 @@ const QuotaLine = memo(function QuotaLine({
     const start = performance.now();
     let frame = 0;
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / 360);
-      paint(1 - Math.pow(1 - t, 3));
+      const { t, share } = dataProgress(start, now);
+      paint(share);
       if (t < 1) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
@@ -289,34 +284,38 @@ const QuotaLine = memo(function QuotaLine({
           {zh ? "该范围内没有读数" : "No readings in this range"}
         </div>
       )}
-      {hovered && (
-        <div
-          role="tooltip"
-          style={{
-            ...card(theme),
-            position: "absolute",
-            zIndex: 10,
-            pointerEvents: "none",
-            bottom: HEIGHT + 6,
-            left: Math.max(0, Math.min(width - 180, x(hovered[0]) - 90)),
-            width: 180,
-            padding: "8px 10px",
-            background: theme.ground,
-            boxShadow: "0 5px 18px #0002",
-            fontSize: 11,
-          }}
-        >
-          <div style={{ color: theme.secondary, marginBottom: 3 }}>
-            {dateLabel(hovered[0], timeZone, zh)}
-          </div>
-          <strong style={{ ...number, fontSize: 13 }}>
-            {quotaPercentLabel(hovered[1], display)}
-          </strong>{" "}
-          <span style={{ color: theme.secondary }}>
-            {quotaDisplayLabel(display, language)}
-          </span>
-        </div>
-      )}
+      <HoverTip
+        show={hovered !== null}
+        style={{
+          ...card(theme),
+          position: "absolute",
+          zIndex: 10,
+          pointerEvents: "none",
+          bottom: HEIGHT + 6,
+          left: hovered
+            ? Math.max(0, Math.min(width - 180, x(hovered[0]) - 90))
+            : 0,
+          width: 180,
+          padding: "8px 10px",
+          background: theme.ground,
+          boxShadow: "0 5px 18px #0002",
+          fontSize: 11,
+        }}
+      >
+        {hovered && (
+          <>
+            <div style={{ color: theme.secondary, marginBottom: 3 }}>
+              {dateLabel(hovered[0], timeZone, zh)}
+            </div>
+            <strong style={{ ...number, fontSize: 13 }}>
+              {quotaPercentLabel(hovered[1], display)}
+            </strong>{" "}
+            <span style={{ color: theme.secondary }}>
+              {quotaDisplayLabel(display, language)}
+            </span>
+          </>
+        )}
+      </HoverTip>
     </div>
   );
 });

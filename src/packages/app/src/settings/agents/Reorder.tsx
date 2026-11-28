@@ -2,6 +2,17 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@agent-hud/ui/components/button";
 import type { Text } from "../SettingsPrimitives";
 
+/** Rows that slide to their new places when the order changes. */
+export { useFlip } from "../../lib/Motion";
+
+/** `order` with `from` taken out and put back just before `to`: where a
+ * dragged row dropped on another lands. */
+export function moveBefore(order: string[], from: string, to: string) {
+  const values = order.filter((key) => key !== from);
+  values.splice(values.indexOf(to), 0, from);
+  return values;
+}
+
 /** Swaps `id` with its neighbour among `visible`, inside the full `order`
  * (which may keep ids that are not on screen, so their places survive a
  * failed read). Returns `order` unchanged at either end. */

@@ -30,7 +30,7 @@ import {
   type ApprovalEntry,
 } from "./approval-list";
 import { EntryRow, cardInks } from "./ListCard";
-import { cardFolds, FoldButton } from "./FoldButton";
+import { cardFolds, FoldButton, FoldRow, FoldRows } from "./FoldButton";
 import { cardPicks } from "../panel/fold-store";
 import type { NewsSeal } from "./PaperSeal";
 import { plainText } from "./reply-closing";
@@ -67,7 +67,7 @@ export function ApprovalContent({
   const inks = cardInks(paper, light);
   const services = usePanelServices();
   const { failure, fail } = useOpenFailures();
-  const [unfolded, toggleFold] = cardFolds.use("approvals");
+  const [unfolded, toggleFold, folding] = cardFolds.use("approvals");
   const entries: ApprovalEntry[] = [
     ...requests.map((request): ApprovalEntry => ({
       kind: "request",
@@ -188,73 +188,84 @@ export function ApprovalContent({
       className="hud-approval-content"
       style={{ ...cardColumn(0), position: "relative" }}
     >
-      {groups.map((group) => (
-        <div key={group.section ?? ""} style={cardColumn(0)}>
-          {group.entries.map((entry, index) => {
-            const open = entry.id === openId;
-            const target = sessionToOpen(entry);
-            return (
-              <div
-                key={entry.id}
-                className={open ? "hud-open-request" : undefined}
-                style={{
-                  borderTop: index > 0 ? `1px dotted ${inks.line}` : undefined,
-                }}
-              >
-                <EntryRow
-                  entry={entry}
-                  open={open}
-                  title={entryTitle(entry, fallbackTitle(entry))}
-                  summary={summaryOf(entry)}
-                  canOpen={
-                    Boolean(target && services?.openSession) &&
-                    !failure(entry.id)
-                  }
-                  onSelect={() => {
-                    pick(entry.id);
-                    if (entry.kind === "request") select(entry.id);
-                  }}
-                  onOpen={() => void goBack(entry)}
-                  inks={inks}
-                  light={light}
-                  zh={zh}
-                />
-                {failure(entry.id) && (
-                  <OpenNotice
-                    text={failure(entry.id)!}
-                    light={light}
-                    style={{
-                      padding: `0 0 10px ${GRID.text}px`,
-                      marginTop: -4,
-                    }}
-                  />
-                )}
-                {open && entry.kind === "reply" && (
-                  <div style={{ padding: `14px 0 20px ${GRID.text}px` }}>
-                    <ReplyDetail
-                      message={entry.event.message?.trim() || ""}
-                      light={light}
-                      zh={zh}
-                      dismiss={drop && (() => drop([entry.id]))}
-                    />
-                  </div>
-                )}
-                {open &&
-                  entry.kind === "request" &&
-                  openDetail(
-                    entry.request,
-                    goesToStart(
-                      entry,
-                      Boolean(services?.openSession) && !failure(entry.id),
-                    )
-                      ? () => void goBack(entry)
-                      : undefined,
-                  )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+      <FoldRows moving={folding}>
+        {groups.map((group) => (
+          <FoldRow key={group.section ?? ""}>
+            <div style={cardColumn(0)}>
+              <FoldRows moving={folding}>
+                {group.entries.map((entry, index) => {
+                  const open = entry.id === openId;
+                  const target = sessionToOpen(entry);
+                  return (
+                    <FoldRow key={entry.id}>
+                      <div
+                        className={open ? "hud-open-request" : undefined}
+                        style={{
+                          borderTop:
+                            index > 0 ? `1px dotted ${inks.line}` : undefined,
+                        }}
+                      >
+                        <EntryRow
+                          entry={entry}
+                          open={open}
+                          title={entryTitle(entry, fallbackTitle(entry))}
+                          summary={summaryOf(entry)}
+                          canOpen={
+                            Boolean(target && services?.openSession) &&
+                            !failure(entry.id)
+                          }
+                          onSelect={() => {
+                            pick(entry.id);
+                            if (entry.kind === "request") select(entry.id);
+                          }}
+                          onOpen={() => void goBack(entry)}
+                          inks={inks}
+                          light={light}
+                          zh={zh}
+                        />
+                        {failure(entry.id) && (
+                          <OpenNotice
+                            text={failure(entry.id)!}
+                            light={light}
+                            style={{
+                              padding: `0 0 10px ${GRID.text}px`,
+                              marginTop: -4,
+                            }}
+                          />
+                        )}
+                        {open && entry.kind === "reply" && (
+                          <div
+                            style={{ padding: `14px 0 20px ${GRID.text}px` }}
+                          >
+                            <ReplyDetail
+                              message={entry.event.message?.trim() || ""}
+                              light={light}
+                              zh={zh}
+                              dismiss={drop && (() => drop([entry.id]))}
+                            />
+                          </div>
+                        )}
+                        {open &&
+                          entry.kind === "request" &&
+                          openDetail(
+                            entry.request,
+                            goesToStart(
+                              entry,
+                              Boolean(services?.openSession) &&
+                                !failure(entry.id),
+                            )
+                              ? () => void goBack(entry)
+                              : undefined,
+                          )}
+                      </div>
+                    </FoldRow>
+                  );
+                })}
+              </FoldRows>
+            </div>
+          </FoldRow>
+        ))}
+      </FoldRows>
       <FoldButton
         hidden={hidden}
         unfolded={unfolded}

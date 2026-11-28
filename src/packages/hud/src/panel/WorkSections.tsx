@@ -11,7 +11,7 @@ import type { Snapshot } from "@agent-hud/protocol";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePaper } from "../paper";
 import { SHOWN_ENTRIES } from "../permissions/approval-list";
-import { cardFolds, FoldButton } from "../permissions/FoldButton";
+import { cardFolds, FoldButton, ListFolding } from "../permissions/FoldButton";
 import { cardInks } from "../permissions/ListCard";
 import type { GroupedRelay } from "../relay-groups";
 import type { LiveSession } from "./agent-board";
@@ -205,11 +205,13 @@ function Folded<T>({
   foldKey?: string;
 }) {
   const zh = useFormat().language === "zh";
-  const [unfolded, toggle] = cardFolds.use(foldKey);
+  const [unfolded, toggle, folding] = cardFolds.use(foldKey);
   const inks = cardInks(usePaper(), light);
   return (
     <>
-      {render(unfolded ? items : items.slice(0, shown))}
+      <ListFolding.Provider value={folding}>
+        {render(unfolded ? items : items.slice(0, shown))}
+      </ListFolding.Provider>
       <FoldButton
         hidden={items.length - shown}
         unfolded={unfolded}

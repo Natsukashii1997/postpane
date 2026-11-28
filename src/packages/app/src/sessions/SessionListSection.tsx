@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Card } from "@agent-hud/ui/components/card";
 import {
   sessionHelp,
@@ -8,6 +8,7 @@ import {
 } from "../lib/sessions";
 import type { Session, SessionsDay } from "../lib/types";
 import { useAnimatedNumber } from "../statistics/StatsTheme";
+import { moves, scaledFill } from "../lib/Motion";
 import { share } from "@agent-hud/ui/format";
 import { ShareRows, TurnSparkline } from "./SessionCharts";
 import {
@@ -149,7 +150,8 @@ export function TodayCard({
                   flex: `${kindsTotal > 0 ? entry.value / kindsTotal : 0} 1 0`,
                   minWidth: 1,
                   background: kindColor(theme, entry.kind),
-                  transition: "flex-grow 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  // Segments share one track: scaling one would not move the rest.
+                  transition: moves("data", "flex-grow"),
                 }}
               />
             ))}
@@ -289,11 +291,10 @@ function ContextFigure({ session, theme }: { session: Session; theme: Theme }) {
         <span
           style={{
             display: "block",
-            width: `${Math.min(100, Math.max(0, fill))}%`,
+            ...scaledFill(fill / 100),
             height: "100%",
             background: fill >= 80 ? theme.warning : theme.secondary,
-            transition:
-              "width 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 200ms ease",
+            transition: `${moves("data", "transform")}, ${moves("quick", "background-color")}`,
           }}
         />
       </span>
@@ -334,7 +335,6 @@ export function SessionRow({
 }) {
   const zh = Boolean(theme.zh);
   const [hovered, setHovered] = useState(false);
-  const animatedTokens = useAnimatedNumber(session.tokens);
   const bars = useMemo(
     () => (session.turnBars ? stackTurnBars(session.turnBars) : null),
     [session.turnBars],
@@ -366,7 +366,7 @@ export function SessionRow({
             : "rgba(255,255,255,.04)"
           : "transparent",
         borderTop: first ? 0 : `1px solid ${theme.divider}`,
-        transition: "background-color 140ms ease",
+        transition: moves("quick", "background-color"),
       }}
     >
       <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
@@ -418,81 +418,10 @@ export function SessionRow({
             ...numeric,
           }}
         >
-          {session.tokens > 0 ? compact(animatedTokens) : "—"}
+          {session.tokens > 0 ? compact(session.tokens) : "—"}
         </strong>
         <ContextFigure session={session} theme={theme} />
       </span>
     </button>
-  );
-}
-
-/** A day's header over its rows, on the rows' columns: its name and counts, then what the columns hold or, folded, what its sessions spent. */
-export function DayHeader({
-  title,
-  count,
-  open,
-  folded,
-  theme,
-  onToggle,
-  chevron,
-}: {
-  title: string;
-  count: number;
-  open: boolean;
-  /** What the day spent, shown while it is folded. */
-  folded: string;
-  theme: Theme;
-  /** Folds or opens the day; a list without days (Active) has nothing to fold. */
-  onToggle?: () => void;
-  chevron: ReactNode;
-}) {
-  const zh = Boolean(theme.zh);
-  const Element = onToggle ? "button" : "div";
-  return (
-    <Element
-      {...(onToggle
-        ? { type: "button" as const, onClick: onToggle, "aria-expanded": open }
-        : {})}
-      style={{
-        ...plain,
-        cursor: onToggle ? "pointer" : "default",
-        width: "100%",
-        display: "grid",
-        gridTemplateColumns: rowColumns,
-        columnGap: rowGap,
-        alignItems: "baseline",
-        padding: open ? "0 15px" : "9px 15px",
-        borderRadius: 10,
-        border: open ? "1px solid transparent" : `1px solid ${theme.border}`,
-        background: open ? "transparent" : theme.card,
-        marginBottom: open ? 6 : 8,
-        color: theme.secondary,
-        transition:
-          "background-color 180ms ease, border-color 180ms ease, padding 180ms ease",
-      }}
-    >
-      <span style={{ ...row, gap: 6, alignItems: "baseline" }}>
-        {chevron}
-        <strong style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>
-          {title}
-        </strong>
-        <span style={{ fontSize: 11, ...numeric }}>{count}</span>
-      </span>
-      <span
-        style={{
-          fontSize: 11,
-          opacity: open ? 1 : 0,
-          transition: "opacity 180ms ease",
-          ...clipped,
-        }}
-      >
-        {zh ? "每轮新增 Token" : "New tokens per turn"}
-      </span>
-      <span
-        style={{ fontSize: 11, textAlign: "right", ...numeric, ...clipped }}
-      >
-        {open ? (zh ? "Token · 上下文" : "Tokens · context") : folded}
-      </span>
-    </Element>
   );
 }
