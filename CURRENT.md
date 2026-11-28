@@ -2,6 +2,29 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 接力治本第 3 步其余 + 第 5 步日志：等回信按信号判（在写就接着等，2 小时总上限）；驿窗自己停下统一写 postpane.log（#544）（2026-11-27，Claude，接交接卡续做；「按信号判」是常浩对改动确认回「改」，日志统一入口按交接标「可直接做」；已提交，PR 见描述，已登记 DECIDED.md，未装机）
+
+- 时间：开工 `2026-11-27 18:45`（`date` 记录）。来由：#544 第 3 步「判活按信号」（问题清单：11-24 #319 ChatGPT 写了 54 分钟，30 分钟时被判没回信）、第 5 步「静默停摆」里的日志统一入口。
+- 改变的行为（常浩 11-27 对改动确认回「改」）：原来送达满 30 分钟一律停下交还常浩、侧栏改「未审」。现在满 30 分钟后，这一阶段最近 5 分钟内有重读报 `streaming` 就接着等，最多等 2 小时（从这一阶段开始算）；一直没读到在写的照旧 30 分钟停。停因和给会话的通知分三种：「ChatGPT 30 分钟没回信」（原样）、「ChatGPT 写到一半没了动静（5 分钟没在写）」、「ChatGPT 写了 2 小时还没写完」。侧栏「未审」按同一套规则、同一刻改章。
+- 你要求的：
+  - 驿窗：`answers/book_reread.rs` 的 `Reading` 加 `streamed`（落盘，旧文件读得进）、`Handoff::writing_at` / `wait_over` / `waited_out`、`Waited` 三种、`WRITING_FRESH_MS` 5 分钟、`REPLY_MOST_MS` 2 小时；重读报 `streaming` 时记下时间（原来次数为 0 时不记）。`book.rs` 的 `overdue` 改用 `waited_out`，三种停下都标 `Cause::NoAnswer`。`notice/book.rs` 的 `Trouble::NoAnswer` 带上是哪一种（按停下那一刻再判，`tell` 同一拍里先停后通知），`notice/desk.rs` 通知开头随之换说法，后半句不变。
+  - 侧栏：`relay-stamps.ts` 新 `waitEnds`、`WRITING_FRESH_MS`、`REPLY_MOST_MS`，「审」/「未审」和下次换章时间都按它；`protocol/handoffs.ts` 的 `Handoff` 加 `rereading`（快照里本来就带）。
+  - 日志（第 5 步）：新 `notice/desk_log.rs`，`Desk::change` 每次改完账本后比对各接力新增的、驿窗自动记的 `stop` / `fail` 步，一步一行 `PostPane stopped / gave up on handoff <编号>: <卡上那句>`；启动前已有的步骤不算新增，重启时驿窗自己停下的会记。删了 `desk_undrawn.rs` 里页面改版那句单独的日志（统一入口会写，卡上那句里有认不出哪几样）。
+  - 文档：`docs/chatgpt-channel.md`（侧栏章、等回信到头）、`docs/接力规范.md` 第 3、5 节、`docs/接力异常全表.md` E7 等回信一格、`docs/DECIDED.md` 新一行，2026-11-07 那行备注「部分取代」。
+- 我顺手改的：`handoff.rs` 里 `tossed` 的初始化改用同一个 `log::counts`（原来是同样的一段，行为不变）；`docs/LESSONS.md` 新坑 L-78。
+- 同类：搜了 `REPLY_WAIT_MS` 的所有用处，按时间判等回信的只有 host `overdue` 和侧栏 `relay-stamps.ts` 两处，都改了；`desk_texts.rs` 的 `no_answer` 文字不变（仍是一直没写那种）。写 `note!` 的停下只有页面改版一处，已收进统一入口。
+- 测试：`pnpm run check` 第一次 `check exit 1`（Prettier 报 `relay-stamps.ts`、`relay-stamps.test.ts` 两个文件格式），`prettier --write` 后重跑 `check exit 0`（`check.log`、`check2.log`）；`pnpm test` `test exit 0`，「全量测试汇总：6 套，失败 0 套」，Rust 合计 `1187 passed; 0 failed`，前端 `ℹ pass 535`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 200`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`（`test.log`；跑在格式化之前，格式化后 `relay-stamps.test.ts` 单独重跑 `ℹ pass 12` / `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.log`）。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-27-544-writing-wait/`。
+  - 先红：host 新测试在旧 `overdue` 上 `FAILED. 3 passed; 2 failed`（`red-host.txt`，过的 3 条守「一直没写照旧 30 分钟停」「上一阶段的在写不算」「旧文件读得进」）；侧栏新测试在旧 `relay-stamps.ts` 上是导入就失败（缺新导出），算弱红（`red-hud.txt`）；日志 2 条测的是新函数，旧代码上不存在，没有先红。
+- 验证：替身通过（单测）。真实环境未验：要等一次 ChatGPT 写超过 30 分钟的真实接力，看 `turns.jsonl` 里每 2 分钟一行 `streaming`、卡上不停；以及下一次驿窗自己停下时 `postpane.log` 里有那一行。
+- 截图：无界面外观改动（「未审」章样子不变，只改盖章时刻）。
+- 发布与回读：未发布（未装机）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 第 3 步「空占位被误判成没画出」没改代码：真实页面只读看清了隐藏副本（回答格子高 0、`getClientRects` 为 0、正文空）和显示那份（有高、有字），但空占位和「后台没画出」时显示那份的样子都没看到（空占位要在 ChatGPT 里发一句再点停止，要常浩同意；后台状态 Claude in Chrome 造不出，L-78）。外层是虚拟化轮次，只凭「有高度、没正文」判空占位会把 #457 那种真没画出误判掉，所以先不改。证据 `evidence/2026-11-27-544-placeholder-probe/real-page-hidden-vs-drawn.md`。
+  - 第 2 步端到端仍在等常浩两步操作（关掉插件开的「页面自检回复」标签页、在测试接力 `h1a21b81f47301` 卡上点「继续自动」）。18:45 回读：卡还是 13:44 停下、14:57 停读之后的样子。
+  - #539 那张接力（`h1a2121c4a2101`）11-27 已被「24 小时没动静」自动结束，交接里「装机后看它 5 次内停读」已无对象，装机后改看新接力。
+  - 影子读取 401 后自动恢复（第 5 步另一半）没做：改 #488 已定内容，要先发改动确认。
+  - 主线：接力治本｜✅ 0、1、2（端到端待验）、3 缺陷修复、3 按信号判、5 日志入口 ⏳ 3 空占位（等真实样子）、5 影子读取恢复（改动确认）、4、6、7。
+- 本轮新坑：L-78。
 ## 侧栏「等待处理」与「积压事项」按规范版改 7 项，积压行再改成「正在进行」的版式（停住的进度环、去掉 WAIT、细线框按钮、标题黄色）；小签 REPLY 回到蓝色（#562 #563）（2026-11-28，Claude，常浩看规范版回「都按推荐」，看实机后要求积压行改层级、选图标「丙」、标题「用黄色」；已提交、已推送 PR #564，已登记 DECIDED.md，已装机 `8bcbcb11881d`，等常浩看实物）
 - 时间：开工 `2026-11-28 04:41`（按交接卡转来的时间，约数）。来由：常浩 11-28 定了一套规范版（https://claude.ai/artifact/F46pSwSMyFUjq2CfyDTdGK ），7 项加小签 REPLY 变黄的 bug，做进 PR #564。开工前用 `list_events` 和会话记录核了原话（04:26「都按推荐」，04:31 补按钮位置、字数工整和「转给那个会话」）。
 - 行为变化（动手前已在会话里列出）：「等待处理」默认展开排第一的那条，REPLY 也能展开，同一时间只展开一条，只能回 Claude 里答的提问不再被拉进前 4 条；展开的 REPLY 小字写收尾、大字写下一步、右下「知道了」（只从驿窗收起，不往会话里发东西）；回复摘要去掉 Markdown 星号；积压签由红色「等你」换成紫色 WAIT；积压按钮「继续 / 不做了」改「继续 / 停止」，跟在问你最后一行右边，确认改「停止 / 取消」；小签 REPLY 由黄回到蓝，审批类的黄收成纸面 ochre。积压标题行补等了多久、问你全文换行（只加内容）。

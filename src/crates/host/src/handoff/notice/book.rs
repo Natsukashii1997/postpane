@@ -2,6 +2,7 @@
 //! or ChatGPT did not answer in time. The session that handed its work over
 //! waits on, unaware, unless it is told — once for each, never for trouble
 //! from before the notices began, so an upgrade tells no old session.
+use super::gate::Waited;
 use super::{read_small, Book, Handoff, Phase, Status, Step, StepKind};
 use agent_hud_runtime::chatgpt::{folder, write_private};
 use serde::{Deserialize, Serialize};
@@ -30,8 +31,9 @@ pub fn notices_since(data: &Path, now: i64) -> i64 {
 pub enum Trouble {
     /// The conversation did not open (its error).
     NotOpened(String),
-    /// ChatGPT has not answered in `REPLY_WAIT_MS`; the auto round trip stopped.
-    NoAnswer,
+    /// ChatGPT's answer was waited out (how it stood then, #544); the auto
+    /// round trip stopped.
+    NoAnswer(Waited),
     /// Words were sent and never known to have gone in; the auto round
     /// trip stopped (#347 round 4 P1-14).
     Unconfirmed,
@@ -98,7 +100,9 @@ impl Handoff {
             Cause::NotOpened if self.status == Status::Failed => {
                 Trouble::NotOpened(self.error.clone().unwrap_or_default())
             }
-            Cause::NoAnswer if self.live() && !self.auto => Trouble::NoAnswer,
+            Cause::NoAnswer if self.live() && !self.auto => {
+                Trouble::NoAnswer(self.wait_over(step.at).unwrap_or(Waited::Silent))
+            }
             Cause::Undrawn if self.live() && !self.auto => Trouble::Undrawn,
             // Its answer, come since, moved it on; so did word it went in.
             Cause::Unconfirmed if self.live() && self.unanswered().is_some() => {
@@ -213,7 +217,7 @@ impl Book {
 #[cfg(test)]
 mod tests {
     use super::super::{Book, Step, StepKind, REPLY_WAIT_MS};
-    use super::Trouble;
+    use super::{Trouble, Waited};
 
     const NO_ANSWER: &str = "ChatGPT 30 分钟没回信";
 
@@ -242,7 +246,7 @@ mod tests {
         let untold = book.untold(0);
         assert_eq!(untold.len(), 1, "{untold:?}");
         assert_eq!(untold[0].0, id);
-        assert_eq!(untold[0].2, Trouble::NoAnswer);
+        assert_eq!(untold[0].2, Trouble::NoAnswer(Waited::Silent));
     }
 
     /// P3-02: the stop is known by a mark, not by its words: the language
@@ -253,7 +257,7 @@ mod tests {
         stopped_for(&mut book, "ChatGPT has not answered in 30 minutes");
         let untold = book.untold(0);
         assert_eq!(untold.len(), 1, "{untold:?}");
-        assert_eq!(untold[0].2, Trouble::NoAnswer);
+        assert_eq!(untold[0].2, Trouble::NoAnswer(Waited::Silent));
     }
 
     /// Review of #318, P2-04: the session handed over again since, in a new

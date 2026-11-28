@@ -115,6 +115,10 @@ export interface Handoff {
    * to have gone in (round 4 P1-10). The snapshot carries neither its words
    * nor theirs (#409). */
   mending?: HandoffPending;
+  /** The rereads of a quiet conversation (#433): `epoch` is the phase they
+   * count in (its `phaseAt`), `streamed` when one last found ChatGPT
+   * writing there (#544), 0 if none did. */
+  rereading?: { epoch: number; streamed?: number };
 }
 
 /** A review, or an ask to mend, on its way to ChatGPT. */
