@@ -737,6 +737,181 @@ const claudeHandoff: Scene = {
   }),
 };
 
+/** A reply waiting on you, as the ASK card is laid out (#562): REPLY, what
+ * it did small, its next step large, the replies it names as choices. */
+const claudeReplyCard: Scene = {
+  key: "claude-reply-card",
+  title:
+    "Claude 回复等你决定：REPLY 签、小字内容、白字下一步、选项、跳过 / 提交",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-reply",
+        title: "驿窗交接卡｜只挂一个标识",
+        state: "waiting",
+        lastAgo: 2,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      (() => {
+        const card = approval(
+          "claude",
+          "c-reply",
+          "question",
+          2,
+          "#558 做完后回「做完了，装机合并」；还没做完回『先等等』。",
+        );
+        return {
+          ...card,
+          badge: "REPLY",
+          detail:
+            "去掉三种虚线签，PR #561 已推送。\n〔等你决定〕代码和测试都好了，差装机实测。",
+          questions: card.questions?.map((q) => ({
+            ...q,
+            header: null,
+            options: [
+              { label: "做完了，装机合并", description: null },
+              { label: "先等等", description: null },
+            ],
+          })),
+        };
+      })(),
+    ],
+  }),
+};
+
+/** 积压事项 (#563): two asks from today, two waited on past 48 hours, sunk
+ * to one folded line at the foot of 「等待处理」. */
+const claudeBacklog: Scene = {
+  key: "claude-backlog",
+  title:
+    "Claude 两条新的等你、两条超过 48 小时：沉到「积压事项」，紫色 WAIT、等了多久、问你全文，按钮跟在最后一行右边（继续 / 停止）",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-new1",
+        title: "大学业务｜2027 增长 T 型拆解",
+        state: "waiting",
+        lastAgo: 21 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-new2",
+        title: "侧边栏｜双端需求上新通知",
+        state: "waiting",
+        lastAgo: 28 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-old1",
+        title: "月度用户策略｜Skill 批1上线进度",
+        state: "waiting",
+        lastAgo: 431 * 60,
+        asks: "question",
+      }),
+      session({
+        place: "claude",
+        id: "c-old2",
+        title: "Mac 合盖｜防休眠核查",
+        state: "waiting",
+        lastAgo: 398 * 60,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      approval(
+        "claude",
+        "c-new1",
+        "question",
+        21 * 60,
+        "【交接】大学增长战略｜荧光笔完整版自查与发布",
+      ),
+      approval(
+        "claude",
+        "c-new2",
+        "question",
+        28 * 60,
+        "「模块整合」下掉了哪些模块？",
+      ),
+      approval(
+        "claude",
+        "c-old1",
+        "question",
+        431 * 60,
+        "补格式那一路改走同一个入口之后，旧的那段兜底代码要我现在删掉，还是先留一周观察实机日志再删？我推荐先留一周，日志干净再删。",
+      ),
+      approval(
+        "claude",
+        "c-old2",
+        "question",
+        398 * 60,
+        "设置好 Amphetamine 后，要我现在开始测试吗？",
+      ),
+    ],
+  }),
+};
+
+/** 规范版第 1 项 (owner, 2026-11-28): the one request can be answered only
+ * in Claude and sinks; the newest reply leads and is open, its closing in
+ * small print and its next step large, 「知道了」 at the bottom right. */
+const claudeReplyFirst: Scene = {
+  key: "claude-reply-first",
+  title:
+    "Claude 五条回复和一条只能回 Claude 里答的提问：默认展开第一条 REPLY（小字收尾、大字下一步、知道了），提问沉底",
+  snapshot: snapshot({
+    sessions: [
+      session({
+        place: "claude",
+        id: "c-asks-there",
+        title: "Mac 合盖｜防休眠核查",
+        state: "waiting",
+        lastAgo: 30,
+        asks: "question",
+      }),
+    ],
+    approvals: [
+      {
+        ...approval(
+          "claude",
+          "c-asks-there",
+          "question",
+          30,
+          "设置好 Amphetamine 后，要我现在开始测试吗？",
+        ),
+        answersQuestion: false,
+      },
+    ],
+    events: [
+      {
+        ...reply(
+          "claude",
+          "c-r1",
+          1,
+          "【交接】收尾按钮框｜修钩子去重误拦、更正证据",
+        ),
+        message: [
+          "**主线**：收尾按钮框｜✅2 ▶1｜本轮：钩子去重",
+          "**本次完成**：修了 wrapup-guard 的去重误拦，开了 PR #571，全量测试通过（1 284 项）。",
+          "**当前状态**：〔后台进行中〕PR 已绿，Hermes 在合并。",
+          "**下一步**：Hermes 合并 PR #571，合并后装机回读一次钩子日志。",
+        ].join("\n"),
+      },
+      {
+        ...reply("claude", "c-r2", 6, "侧栏回复｜每会话只出现一次"),
+        message: "**本次完成**：#566 已合并（1ac0ab1）；#561、#564 等你看",
+      },
+      reply("claude", "c-r3", 7, "驿窗·额度暗印｜登出后消失"),
+      reply("claude", "c-r4", 20, "驿窗·接力｜送审格式补全"),
+      reply("claude", "c-r5", 25, "数码世界｜入口整理"),
+    ],
+  }),
+};
+
 export const SCENES: readonly Scene[] = [
   allRunning,
   codexApproval,
@@ -752,6 +927,9 @@ export const SCENES: readonly Scene[] = [
   claudeBusy,
   claudeManyAsks,
   claudeHandoff,
+  claudeReplyCard,
+  claudeBacklog,
+  claudeReplyFirst,
   hermesDesks,
   hermesTrouble,
   relayStopped,

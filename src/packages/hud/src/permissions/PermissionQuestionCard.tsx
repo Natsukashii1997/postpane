@@ -14,13 +14,14 @@ import type {
   RequestDecision,
 } from "@agent-hud/protocol";
 import { clientDisplayName } from "../IslandNews";
-import { alertFill, onAlertFill, permissionColors } from "../tokens";
+import { alertFill, onAlertFill } from "../tokens";
 import { useGround } from "../ground";
 import { cardColumn } from "../card-column";
 import { usePaper } from "../paper";
 import { ApprovalTag } from "./ApprovalTag";
 import { START_BADGE } from "./approval-list";
 import { sendThenForget } from "./answer-gate";
+import { CardButton } from "./CardButton";
 
 /** A question's draft: the offered answers picked, the words typed, and
  * whether those words are the answer (`own`). Skipping or picking a single
@@ -134,9 +135,6 @@ export function PermissionQuestionCard({
       : "rgba(255,255,255,0.1)";
   const round = (radius: number) => (paper ? 2 : radius);
   const ground = useGround(light);
-  const controls = permissionColors(ground);
-  const allow = paper ? paper.ink : controls.allowFill;
-  const onAllow = paper ? paper.paper : controls.onAllow;
   const signal = paper ? paper.ink : alertFill("warning", ground);
   const onSignal = paper ? paper.paper : onAlertFill(ground);
   const accentEdge = paper ? paper.ink : "rgba(233,161,109,0.45)";
@@ -304,60 +302,36 @@ export function PermissionQuestionCard({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {opensPlugins && (
-            <button
-              type="button"
+            <CardButton
+              tone="primary"
+              light={light}
+              icon={<Plug size={9} strokeWidth={2.6} />}
               onClick={() => openSettings?.(AGENT_PLUGINS_PAGE)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                height: 22,
-                padding: "0 9px",
-                borderRadius: round(6),
-                border: 0,
-                background: allow,
-                color: onAllow,
-                fontSize: 11,
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
             >
-              <Plug size={9} strokeWidth={2.6} />
               {t("Open Agent plugins", "打开智能体插件")}
-            </button>
+            </CardButton>
           )}
           <span style={{ flex: 1, minWidth: 8 }} />
-          <button
-            type="button"
+          <CardButton
+            tone="secondary"
+            light={light}
             disabled={disabled}
+            icon={
+              goStart ? (
+                <ArrowUpRight size={9} strokeWidth={2.6} />
+              ) : (
+                <X size={9} strokeWidth={2.6} />
+              )
+            }
             onClick={() => {
               if (goStart) return goStart();
               void sendThenForget(answer, { kind: "leave" }, () =>
                 drafts.delete(request.id),
               );
             }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              height: 22,
-              padding: "0 9px",
-              borderRadius: round(6),
-              border: `1px solid ${stroke(0.18)}`,
-              background: "transparent",
-              color: secondary,
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: disabled ? "default" : "pointer",
-            }}
           >
-            {goStart ? (
-              <ArrowUpRight size={9} strokeWidth={2.6} />
-            ) : (
-              <X size={9} strokeWidth={2.6} />
-            )}
             {goStart ? t("Go start", "去开始") : t("Dismiss", "知道了")}
-          </button>
+          </CardButton>
         </div>
       </div>
     );
@@ -603,9 +577,11 @@ export function PermissionQuestionCard({
           gap: 6,
         }}
       >
-        <button
-          type="button"
+        <CardButton
+          tone="secondary"
+          light={light}
           disabled={disabled}
+          icon={<ArrowRight size={9} strokeWidth={2.6} />}
           onClick={() => {
             setEditingCustomKey(null);
             changeAnswer(key, { selected: [], own: false });
@@ -615,83 +591,44 @@ export function PermissionQuestionCard({
               submitAllAnswers(key);
             }
           }}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            height: 22,
-            padding: "0 9px",
-            borderRadius: round(6),
-            border: `1px solid ${stroke(0.18)}`,
-            background: "transparent",
-            color: secondary,
-            fontSize: 11,
-            fontWeight: 500,
-            cursor: disabled ? "default" : "pointer",
-          }}
         >
-          <ArrowRight size={9} strokeWidth={2.6} />
           {t("Skip", "跳过")}
-        </button>
+        </CardButton>
         <span style={{ flex: 1, minWidth: 8 }} />
         {safePage > 0 && (
-          <button
-            type="button"
+          <CardButton
+            tone="secondary"
+            light={light}
             disabled={disabled}
+            icon={<ChevronLeft size={9} strokeWidth={2.6} />}
             onClick={() => {
               setEditingCustomKey(null);
               setPage(safePage - 1);
             }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              height: 22,
-              padding: "0 9px",
-              borderRadius: round(6),
-              border: `1px solid ${stroke(0.18)}`,
-              background: "transparent",
-              color: secondary,
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: disabled ? "default" : "pointer",
-            }}
           >
-            <ChevronLeft size={9} strokeWidth={2.6} />
             {t("Back", "返回")}
-          </button>
+          </CardButton>
         )}
-        <button
-          type="button"
+        <CardButton
+          tone="primary"
+          light={light}
           disabled={disabled || !isAnswered}
+          faded={!isAnswered}
           onClick={advanceOrSubmit}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            height: 22,
-            padding: "0 9px",
-            borderRadius: round(6),
-            border: 0,
-            background: allow,
-            color: onAllow,
-            fontSize: 11,
-            fontWeight: 500,
-            opacity: isAnswered ? 1 : 0.45,
-            cursor: disabled || !isAnswered ? "default" : "pointer",
-          }}
+          icon={
+            pending ? (
+              <LoaderCircle size={9} className="animate-spin" />
+            ) : safePage + 1 < questions.length ? (
+              <ArrowRight size={9} strokeWidth={2.6} />
+            ) : (
+              <Check size={9} strokeWidth={2.6} />
+            )
+          }
         >
-          {pending ? (
-            <LoaderCircle size={9} className="animate-spin" />
-          ) : safePage + 1 < questions.length ? (
-            <ArrowRight size={9} strokeWidth={2.6} />
-          ) : (
-            <Check size={9} strokeWidth={2.6} />
-          )}
           {safePage + 1 < questions.length
             ? t("Next", "继续")
             : t("Submit", "提交")}
-        </button>
+        </CardButton>
       </div>
     </div>
   );
