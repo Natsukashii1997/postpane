@@ -716,3 +716,11 @@
 - 正确做法：判断一轮由谁开头时，凡是 Claude Code 写了 `origin` 的用户行都算这一轮的开头（再按 `origin.kind` 判：`human` 是本人，驿窗插件的按插件判，其余一律认不出），不能只用「像不像用户提问」的过滤；新的开头来源要先在本机会话记录里数一遍各种 `origin` 和 `isMeta` 的组合，再写测试。
 - 证据：`evidence/2026-11-19-439-relay-end/`：`live-end-refused.txt`（本该拒收却结束了）、`red-peer.txt`（补的测试在旧代码上失败：`left: Some((Person, …))`）。
 - 升级：〔机检〕已升级（2026-11-20，#439）：`claude_plugin/tests.rs` 的 `the_current_turn_is_begun_by_the_person_or_by_the_plugin` 加了会话间转达开头的一轮。
+
+## L-91 几个会话各自在 worktree 里同时跑全量测试和打包，负载 211，计时测试成片误报、反复重跑（2026-11-28）
+
+- 现象：11-28 中午 7 个开着的 PR 各有一个会话在推，同一时刻 4 份 `pnpm test`、3 次 `tauri build`、1 次 `setup-worktree`（编引擎 release）在跑，10 核机器平均负载 211、磁盘剩 9 GB。core 的 `the_next_pass_is_due…`、Chrome 插件真浏览器、MCP 的计时测试每份都挂几条、每次挂的不一样（L-47），各会话又整套重跑，越跑越挤；#539 一轮重跑了三次没跑通。另有一份打了 40 分钟的过期合并包，打完会被它的会话装上去，把实机退回旧版。
+- 根因：装机有锁（L-05），全量测试和打包没有：每个 worktree 各起各的，谁也不知道别人在跑。L-47 只写了「别把测试和打包放进同一条命令」，管不到不同会话之间。
+- 正确做法：重活排队。`pnpm test`（`src/tooling/test-all.mjs`）和打包生成资源那一步（`src/tooling/package-resources.mjs`，`tauri build` 和 `setup-worktree.sh` 都经过它）开跑前先在 `~/Library/Application Support/postpane/heavy-queue/` 占位，别人占着就排队、每分钟说一次在等谁，跑完放手；打包时位子占到整个 `tauri build` 进程结束；占位进程不在了就直接接手；占位的是自己的上级就不排。实测 11-28 那次是由主目录会话按顺序叫号解开的，负载降到 6，6 个 PR 约两小时内合完。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue/`：`red.txt`（新测试在改前失败）、`green.txt`、`real-wait.txt`（全量测试占位时另起一份，打印「排队：全量测试（main-install，进程 3515…）」并一直等）。
+- 升级：〔提醒〕部分升级（2026-11-28）：排队写进 `test-all.mjs`、`package-resources.mjs`，测试 `tests/heavy-queue.test.mjs`；单独跑的 `cargo test`、`cargo build` 不经过它，不算必经检查。
