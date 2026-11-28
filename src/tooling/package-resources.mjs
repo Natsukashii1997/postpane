@@ -2,6 +2,15 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, copyFileSync, chmodSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
+import { ancestry, enqueue, tauriBuild } from "./heavy-queue.mjs";
+// L-91：编引擎是重活，和别的会话的全量测试、打包排队。在 tauri build 里跑时位子占到整个打包结束
+// （这一步退出后还要编 app），由 tauri build 进程退出放手；单独跑（setup-worktree）编完就放。
+const chain = ancestry();
+const build = tauriBuild(chain);
+const done = await enqueue(
+  { pid: build ?? process.pid, what: build ? "打包" : "编打包用的程序" },
+  { chain },
+);
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const triple = process.env.TAURI_ENV_TARGET_TRIPLE;
 const platform = triple?.includes("windows")
@@ -66,3 +75,4 @@ if (platform !== "windows") {
 // hud-dock: Bun's compiled relay comes out with a broken signature, and macOS kills it on launch.
 if (platform === "darwin")
   run("codesign", ["--force", "--sign", "-", join(output, "agent-hud-mcp")]);
+if (!build) done();

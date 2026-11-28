@@ -3,6 +3,7 @@
 // 原来用 `&&` 串起来，前面一套一挂后面的根本不跑，报告里容易当成「只挂了这一套」。
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { enqueue } from "./heavy-queue.mjs";
 
 export const SUITES = [
   ["Rust", "cargo", ["test", "--workspace"]],
@@ -37,7 +38,10 @@ export function summary(results) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  // L-91：本机同一时刻只跑一份全量测试或打包，别的会话在跑就排队等
+  const done = await enqueue({ pid: process.pid, what: "全量测试" });
   const { failed, text } = summary(runSuites(SUITES));
+  done();
   console.log(`\n${text}`);
   process.exitCode = failed ? 1 : 0;
 }
