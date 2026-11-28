@@ -15,6 +15,33 @@ pub struct Reading {
     /// 这一阶段最近一次重读报「在写」的时间；0 是没报过。
     #[serde(default)]
     pub streamed: i64,
+    /// 这一阶段最近一次读到什么：等到头时按它说为什么读不到（#544）。
+    #[serde(default)]
+    pub seen: Seen,
+}
+
+/// 最近一次读的结果里，说得出「读不到」原因的几种；其余都是 `Other`。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Seen {
+    #[default]
+    Other,
+    /// 这个会话的标签页一个都没有了（插件报 `closed`）。
+    Closed,
+    /// 标签页在，但不应答这个会话：可能掉了登录、停在错误页（`unreachable`）。
+    Unreachable,
+    /// Chrome 插件没连上，读不了（驿窗自己记）。
+    Disconnected,
+}
+
+impl Seen {
+    fn of(outcome: Option<&str>) -> Self {
+        match outcome {
+            Some("closed") => Seen::Closed,
+            Some("unreachable") => Seen::Unreachable,
+            _ => Seen::Other,
+        }
+    }
 }
 
 /// 最近这么久内报过「在写」就算还在写：在写时每 2 分钟重读一次（`AGAIN_MS`），
@@ -27,6 +54,8 @@ pub const REPLY_MOST_MS: i64 = 2 * 60 * 60 * 1000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Waited {
     Silent,
+    /// 一直没读到回信，原因看得出：标签页关了、不应答、插件没连上（#544）。
+    Unread(Seen),
     Quiet,
     TooLong,
 }
@@ -50,7 +79,12 @@ impl Handoff {
             return Some(Waited::TooLong);
         }
         match self.writing_at() {
-            None => Some(Waited::Silent),
+            None => Some(match self.gate.rereading {
+                read if read.epoch == self.phase_at && read.seen != Seen::Other => {
+                    Waited::Unread(read.seen)
+                }
+                _ => Waited::Silent,
+            }),
             Some(at) if now - at <= WRITING_FRESH_MS => None,
             Some(_) => Some(Waited::Quiet),
         }
@@ -59,6 +93,14 @@ impl Handoff {
     pub fn waited_out(&self, now: i64, no_answer: &str) -> Option<String> {
         Some(match self.wait_over(now)? {
             Waited::Silent => no_answer.to_owned(),
+            Waited::Unread(seen) => l10n::text(
+                &format!("{}，自动往返停下，交还常浩", Waited::Unread(seen).why()),
+                match seen {
+                    Seen::Closed => "The ChatGPT tab of this conversation was closed; left to you",
+                    Seen::Disconnected => "The Chrome extension is not connected; left to you",
+                    _ => "The ChatGPT tab does not answer (signed out or an error page?); left to you",
+                },
+            ),
             Waited::Quiet => l10n::text(
                 &format!("{}，自动往返停下，交还常浩", Waited::Quiet.why()),
                 "ChatGPT stopped writing midway (not writing for 5 minutes); left to you",
@@ -72,10 +114,31 @@ impl Handoff {
 }
 
 impl Waited {
+    /// 读不到时，常浩怎样能把回信收回来（发给会话的通知里说）。
+    pub fn hint(self) -> &'static str {
+        match self {
+            Waited::Unread(Seen::Closed) => "常浩重新打开那个 ChatGPT 对话，驿窗就能读到。",
+            Waited::Unread(Seen::Disconnected) => {
+                "要先让 Chrome 插件重新连上驿窗（在 Chrome 扩展程序页重新加载驿窗插件）。"
+            }
+            Waited::Unread(_) => "常浩打开那个 ChatGPT 标签页看看，可能要重新登录。",
+            _ => "",
+        }
+    }
+
     /// 发给会话的那句开头（会话里只说中文）。
     pub fn why(self) -> String {
         match self {
             Waited::Silent => format!("ChatGPT {} 分钟没回信", REPLY_WAIT_MS / 60_000),
+            Waited::Unread(Seen::Closed) => {
+                "ChatGPT 那个会话的标签页已经关了，驿窗读不到回信".to_owned()
+            }
+            Waited::Unread(Seen::Disconnected) => {
+                "Chrome 插件没连上，驿窗读不到 ChatGPT".to_owned()
+            }
+            Waited::Unread(_) => {
+                "ChatGPT 标签页不应答（可能掉了登录或停在错误页），驿窗读不到回信".to_owned()
+            }
             Waited::Quiet => format!(
                 "ChatGPT 写到一半没了动静（{} 分钟没在写）",
                 WRITING_FRESH_MS / 60_000
@@ -132,6 +195,27 @@ impl Book {
         (true, sent)
     }
 
+    /// Chrome 插件没连上：等回信的接力都记下「读不了」，到头时照实说（#544）。
+    /// 有变化才返回真，调用方据此决定要不要写盘。
+    pub fn unread_while_off(&mut self) -> bool {
+        let mut changed = false;
+        for h in &mut self.list {
+            if !(h.live() && matches!(h.phase, Phase::Delivered | Phase::Working)) {
+                continue;
+            }
+            let read = &mut h.gate.rereading;
+            if read.epoch != h.phase_at {
+                *read = Reading {
+                    epoch: h.phase_at,
+                    ..Default::default()
+                };
+            }
+            changed |= read.seen != Seen::Disconnected;
+            read.seen = Seen::Disconnected;
+        }
+        changed
+    }
+
     pub fn reread_result(&mut self, id: &str, outcome: Option<&str>, now: i64) -> bool {
         let Some(h) = self
             .get_mut(id)
@@ -143,6 +227,7 @@ impl Book {
         if read.epoch != h.phase_at || read.stopped {
             return false;
         }
+        read.seen = Seen::of(outcome);
         // An answer told and taken moved the phase on (checked above); one
         // told but not taken is an older round's and brings nothing (#539
         // round 4, 2026-11-26: read for twelve hours past the limit).
@@ -257,11 +342,23 @@ mod tests {
         assert_eq!(book.list[0].wait_over(late), Some(Waited::Silent));
     }
 
+    #[test]
+    fn what_a_read_found_is_kept_by_name() {
+        let read: Reading = serde_json::from_str(
+            r#"{"epoch":2,"at":5,"attempts":1,"stopped":false,"seen":"closed"}"#,
+        )
+        .unwrap();
+        assert_eq!(read.seen, Seen::Closed);
+        assert_eq!(Seen::of(Some("unreachable")), Seen::Unreachable);
+        assert_eq!(Seen::of(Some("waiting")), Seen::Other);
+    }
+
     // A file written before the time was kept still reads.
     #[test]
     fn a_reading_kept_before_reads_with_no_writing() {
         let read: Reading =
             serde_json::from_str(r#"{"epoch":2,"at":5,"attempts":1,"stopped":false}"#).unwrap();
         assert_eq!(read.streamed, 0);
+        assert_eq!(read.seen, Seen::Other);
     }
 }

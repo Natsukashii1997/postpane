@@ -84,6 +84,7 @@ const PAGE_OUTCOME: &[&str] = &[
     "unreachable",
     "unopened",
     "changed",
+    "closed",
 ];
 const LOGIN: &[&str] = &["same", "other"];
 const ASYNC: &[&str] = &["other"];
