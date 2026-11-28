@@ -123,11 +123,15 @@ impl Desk {
                 });
                 true
             }
-            // Send never pressed: it did not go, and goes once more (#528).
+            // Send never pressed: it did not go, and goes once more (#528);
+            // never pressed that time too, it is not asked again, and holds
+            // nothing back (#544).
             Err(SendFailed::NotPressed(error))
                 if self.change(|book| {
                     let note = super::guard::mending_not_sent(&error);
+                    let twice = super::guard::mending_never_sent(&error);
                     book.mending_not_sent(id, &request, &note, now)
+                        || book.mending_never_sent(id, &request, &twice, now)
                 }) =>
             {
                 true

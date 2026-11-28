@@ -113,7 +113,7 @@ impl Book {
     /// Send was never pressed for the mending asked as `request` (#528):
     /// it did not go, so the answer waits again as before it was asked,
     /// `note` on the card, and it is asked once more (`mending_waits`).
-    /// Not after the once more: then it is as any send not known (false).
+    /// Not after the once more: then `mending_never_sent` (false).
     pub fn mending_not_sent(&mut self, id: &str, request: &str, note: &str, now: i64) -> bool {
         let Some(handoff) = self.live_mut(id) else {
             return false;
@@ -128,6 +128,26 @@ impl Book {
             .push(Step::new(now, StepKind::Work, Some(note)).by_auto());
         handoff.enter(Phase::Replied, now);
         true
+    }
+    /// Send was never pressed for the mending asked as `request` once more
+    /// as well (#544, in place of #528's stop as not known): it did not go
+    /// either, so nothing of it is left to hold the next review back. The
+    /// answer waits as before it was asked, it is not asked again, and the
+    /// auto round trip stops for `reason`, which the answer, handed back
+    /// to the session as the stop leaves it, carries: it did not go, not
+    /// that it may have. Whether so.
+    pub fn mending_never_sent(&mut self, id: &str, request: &str, reason: &str, now: i64) -> bool {
+        let Some(handoff) = self.live_mut(id) else {
+            return false;
+        };
+        let asked = |p: &Pending| p.request == request && !p.answered;
+        if !handoff.gate.mending.as_ref().is_some_and(asked) || handoff.mendings_asked() < 2 {
+            return false;
+        }
+        handoff.gate.mending = None;
+        handoff.enter(Phase::Replied, now);
+        // Asked only while the round trip is on (`next`): it stops here.
+        self.stop(id, reason, true, now)
     }
     /// The send of the mending asked as `request` gave up waiting.
     /// Whether nothing says it went in: not so when word of it was heard
