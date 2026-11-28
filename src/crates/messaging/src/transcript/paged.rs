@@ -19,11 +19,12 @@ const PENDING: usize = 70;
 /// out: the prompt is before it.
 pub(super) fn current(
     query: &dyn Fn(&str, Value) -> crate::Result<Value>,
+    id: &str,
     caller: &Caller,
 ) -> Option<Option<Value>> {
     let last_prompt = |from| {
         let mut prompt = None;
-        let read = pages(query, &caller.session_id, from, |row, _| {
+        let read = pages(query, id, from, |row, _| {
             if row["isPrompt"] == true {
                 prompt = Some(row.clone());
             }
@@ -43,8 +44,7 @@ pub(super) fn current(
     }
 }
 
-pub(super) fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
-    let id = &message.to.session_id;
+pub(super) fn answer(host: &Host<'_>, id: &str, message: &Message) -> Option<Found> {
     let from = message
         .turn
         .as_ref()
@@ -65,7 +65,7 @@ pub(super) fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
     let mut turn: Option<(Turn, Option<String>)> = None;
     let mut last = None;
     let mut later = false;
-    pages(host.query, id, from, |row, cursor| {
+    let read = pages(host.query, id, from, |row, cursor| {
         let Some((found, started)) = &turn else {
             if is_message(row, message) && !before(row) {
                 turn = Some((
@@ -109,7 +109,17 @@ pub(super) fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
         true
     })?;
     let (found, started) = turn?;
-    let live = crate::find(host.snapshot, id).map(|session| &session["liveFacts"]);
+    // The snapshot leaves a session's live facts out while its client's live
+    // status is off on the HUD; its pages still carry the collector's. `id`
+    // is the snapshot's own (`page_id`), so it is matched as it is.
+    let live = host.snapshot["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|session| session["id"] == id)
+        .map(|session| &session["liveFacts"])
+        .filter(|live| live.as_object().is_some_and(|facts| !facts.is_empty()))
+        .or(read.live.as_ref());
     let ended_at = live
         .map(|live| &live["endedAt"])
         .filter(|at| !at.is_null())
@@ -136,6 +146,8 @@ pub(super) fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
 struct Read {
     /// It was a tail page that left earlier rows out.
     cut: bool,
+    /// The live facts the last page read carried (`session.liveFacts`).
+    live: Option<Value>,
 }
 
 /// Visits every message row from `from` (the transcript's tail when None) to
@@ -154,6 +166,7 @@ fn pages(
 ) -> Option<Read> {
     let mut cursor = from;
     let mut looks = 0;
+    let mut live = None;
     for _ in 0..PAGES + PENDING {
         let params = match cursor {
             Some(cursor) => {
@@ -165,6 +178,9 @@ fn pages(
         if cursor.is_none() && page["endMessageCursor"].is_null() {
             cursor = Some(0);
             continue;
+        }
+        if page["session"]["liveFacts"].is_object() {
+            live = Some(page["session"]["liveFacts"].clone());
         }
         let rows = page["messages"].as_array().filter(|rows| !rows.is_empty());
         // Still decoding up to the cursor, or the look ended right at it with
@@ -190,23 +206,24 @@ fn pages(
         let start = page["messageCursor"].as_u64().unwrap_or(0);
         for row in rows.into_iter().flatten() {
             if !visit(row, start) {
-                return Some(Read { cut: false });
+                return Some(Read { cut: false, live });
             }
         }
         if cursor.is_none() {
             // A tail page reads to the end in one look.
             return Some(Read {
                 cut: page["messagesTruncatedBefore"] == true,
+                live,
             });
         }
         match page["nextMessageCursor"].as_u64() {
             Some(next) if Some(next) != cursor && page["messagesComplete"] != true => {
                 cursor = Some(next)
             }
-            _ => return Some(Read { cut: false }),
+            _ => return Some(Read { cut: false, live }),
         }
     }
-    Some(Read { cut: false })
+    Some(Read { cut: false, live })
 }
 
 #[cfg(test)]
@@ -229,7 +246,7 @@ mod tests {
             session_id: "deepseek:session-a".into(),
             turn_id: None,
         };
-        assert_eq!(current(&query, &caller), None);
+        assert_eq!(current(&query, &caller.session_id, &caller), None);
     }
 
     #[test]
@@ -270,7 +287,7 @@ mod tests {
             id: Some("3".into()),
             cursor: 40,
         });
-        let found = answer(&host, &message).unwrap();
+        let found = answer(&host, "deepseek:session-a", &message).unwrap();
         assert_eq!(found.turn.id.as_deref(), Some("3"));
         assert!(found.done);
         assert_eq!(found.answer.as_deref(), Some("hello back"));

@@ -137,7 +137,7 @@ pub(crate) fn processes() -> Result<Vec<ProcessInfo>, String> {
     processes.retain(|process| !process.executable.is_empty());
     Ok(processes)
 }
-pub(crate) fn listening_ports(pid: u32) -> Result<Vec<u16>, String> {
+pub(crate) fn listening_ports(pid: u32) -> Result<Vec<std::net::SocketAddr>, String> {
     super::unix::listening_ports(
         include_str!("../../../scripts/linux/listening-ports.sh"),
         pid,

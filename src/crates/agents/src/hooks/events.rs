@@ -12,6 +12,24 @@ pub struct HookEvent {
     pub kind: String,
     pub data: Value,
 }
+impl HookEvent {
+    /// Names the turn a completion ends in `facts` (a session's liveFacts):
+    /// its own, unless it could not tell which (`turnKnown: false`:
+    /// Antigravity's Stop read a tail without the prompt) and the log already
+    /// names one. A callback's own time-made id would make the log's turn end
+    /// a second time under another name. Such an ending stays marked
+    /// `turnKnown: false` whether or not the log names a turn yet, as the
+    /// name can still change while this one ending stands (postpane#560 P2-02).
+    pub fn end_turn(&self, facts: &mut Value) {
+        let unknown = self.data["turnKnown"] == false;
+        if unknown {
+            facts["turnKnown"] = json!(false);
+        }
+        if !unknown || !facts["turnId"].is_string() {
+            facts["turnId"] = self.data["turnId"].clone();
+        }
+    }
+}
 fn event(source: &str, session: &str, now: i64, kind: &str, data: Value) -> HookEvent {
     HookEvent {
         source: source.into(),
