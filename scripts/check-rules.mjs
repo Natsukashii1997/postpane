@@ -19,7 +19,8 @@ const TIME = [/\b\w*(?:At|_at)\.slice\(\s*(?:0\s*,\s*1[06]|5\s*,\s*16|11\s*,\s*1
 const TIME_OK = /\/[/*]\s*北京时间/;
 const LISTEN_OK = /\.listen\(\s*[\w.]+\s*,\s*['"]127\.0\.0\.1['"]/;
 // package.json 用白名单：黑名单认不出新出的库，白名单逼着每个新依赖都过一遍交接
-const ALLOWED_DEPS = ['@playwright/test', 'prettier'];
+// @babel/parser：卡片版式机检（src/tooling/check-card-layout.mjs）要读 TSX 的语法树；TypeScript 7 不再带可调用的解析器
+const ALLOWED_DEPS = ['@babel/parser', '@playwright/test', 'prettier'];
 // LESSONS「升级」行开头的层级词，口径同全局 LESSONS「怎么升级」（agent-kit hooks/lessons-remind.mjs 的 LEVELS）
 const LEVELS = ['结构', '机检', '体检', '文字', '提醒'];
 // 插件里认 ChatGPT 页面的写法：只许在适配文件里（#548）。网址、域名不算页面结构。
