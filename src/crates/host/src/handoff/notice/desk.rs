@@ -112,6 +112,19 @@ pub(super) fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
         Trouble::PageChanged(what) => format!(
             "{what}。这不是 ChatGPT 没回信：页面改了样子，驿窗读不到回信，这次接力交常浩处理（要先修驿窗的 Chrome 插件）。先不要再调用 relay_to_chatgpt 重送，请向常浩说明是 ChatGPT 页面改版、驿窗认不出页面。"
         ),
+        // What it heard before no longer holds (#544, gaps 4, 5).
+        Trouble::Confirmed => format!(
+            "驿窗随后确认上一段话其实已经送到了 ChatGPT，之前说的「送达状态未知」不再成立。{}ChatGPT 的回信到了照常收下、转回这里，写「通过」的可以按通过结束。不要重送这一段。请向常浩说明上一段其实已送到。",
+            if handoff.auto {
+                "自动往返已经恢复，"
+            } else {
+                "自动往返仍停着（常浩暂停了，或还有别的原因），下一步等常浩决定；"
+            }
+        ),
+        // Nothing more comes back by this one (#544, gap 15).
+        Trouble::TakenOver(why) => format!(
+            "{why}。这不是审查结论：这次接力不会再有回信转回这里。先不要再调用 relay_to_chatgpt 往那个会话送；还要接着审，请向常浩说明，由常浩决定怎么接。"
+        ),
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
         // The round trip may stay stopped (review of #524, P2): an earlier
@@ -130,7 +143,11 @@ pub(super) fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
             book::FIND_MOST
         ),
     };
-    format!("{}{what}", book::notice_head(handoff))
+    let head = match trouble {
+        Trouble::Confirmed => book::correction_head(handoff),
+        _ => book::notice_head(handoff),
+    };
+    format!("{head}{what}")
 }
 
 /// What becomes of an answer that comes after the stop: it goes back all

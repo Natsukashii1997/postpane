@@ -259,8 +259,10 @@ async function openIn(tab, text) {
   const result = await submit(tab.id, text, undefined, null);
   if (result.pressed === false) outOf(entry);
   if (!result.ok) return result;
+  // Pressed, and no address in time: the words may be in a new chat all the
+  // same, so a retry is not to send them blind (#544, gap 3).
   const page = await ready(tab.id, 60000, (p) => !!p.conversation);
-  if (!page) return { ok: false, reason: "timeout" };
+  if (!page) return { ok: false, reason: "timeout", pressed: true };
   const state = await proven(tab.id, page.conversation, text, result.promptId);
   if (!state) return { ok: false, reason: "unconfirmed", pressed: true };
   // Its prompt, as the page that sent it, or the one prompt showing the
@@ -1363,14 +1365,26 @@ const MARK_SCRIPT = {
 const SCRIPTS = [DATA_SCRIPT, MARK_SCRIPT];
 const IDS = SCRIPTS.map((script) => script.id);
 const WRITING_AFTER = 20000;
-// A read these answer ends every read: signed out, refused, too many.
+// A read these answer pauses every read (#544, in place of #488's stop for
+// good): signed out (401) until the page signs in anew, refused or too many
+// (403, 429) for an hour, then one read tries again.
 const HALT = [401, 403, 429];
+const PAUSE = 60 * 60 * 1000;
 // Reads and pages kept at most: the oldest go first.
 const KEEP = 200;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isId = (v) => typeof v === "string" && UUID.test(v);
+const SALT = /^[0-9a-f]{32}$/;
+const MARK = /^[0-9a-f]{16}$/;
 let shadow = false;
-let halted = false;
+// Reads paused: `{ status, at, until }` (403, 429), `{ status: 401, at,
+// mark }` with the mark the page's sign-in left when it was refused; null
+// while reading. The marks are made with `salt`, kept with the stops: a mark
+// says only whether a sign-in is the same one, nothing of it leaves the
+// page. One read tries at a time (`trying`).
+let pause = null;
+let salt = null;
+let trying = false;
 const unread = new Set(); // conversations a read failed on: not read again
 // Moved on by every switching: work begun before stops at its next step,
 // and a switch-off waits for all of it (review P1-02).
@@ -1462,12 +1476,16 @@ async function applyShadow(on, gen) {
   const was = kept.shadow === true;
   // On since before (a restarted worker told again): its stops still hold.
   if (on && was) {
-    halted = !!kept.shadowStops?.halted;
+    pause = pauseKept(kept.shadowStops);
+    salt = SALT.test(kept.shadowStops?.salt ?? "")
+      ? kept.shadowStops.salt
+      : null;
     unread.clear();
     for (const id of kept.shadowStops?.unread ?? []) unread.add(id);
   }
   if (on !== was) {
-    halted = false;
+    pause = null;
+    salt = null;
     unread.clear();
     await chrome.storage.local.set({
       shadow: on,
@@ -1725,7 +1743,89 @@ async function trustedPage(tabId, documentId) {
   return proved[0].result === expected;
 }
 
-const stops = () => ({ halted, unread: [...unread] });
+const stops = () => ({ paused: pause, unread: [...unread], salt });
+
+/** The pause `kept` holds, if it is one. A worker of before #544 kept only
+ * `halted`: paused an hour from now, as a refusal is. */
+function pauseKept(kept) {
+  const was = kept?.paused;
+  const time = (v) => Number.isInteger(v) && v > 0;
+  if (was?.status === 401 && time(was.at) && MARK.test(was.mark ?? ""))
+    return { status: 401, at: was.at, mark: was.mark };
+  if ((was?.status === 403 || was?.status === 429) && time(was.until))
+    return { status: was.status, at: was.at, until: was.until };
+  if (kept?.halted === true) {
+    const at = Date.now();
+    return { status: null, at, until: at + PAUSE };
+  }
+  return null;
+}
+
+// Run in the page's own world: the mark its sign-in makes with `salt`.
+function markInPage(salt) {
+  return window.__postpaneData?.marked?.(salt) ?? null;
+}
+
+/** The mark of the sign-in the page in `tabId` holds now, or null. */
+async function markOf(tabId) {
+  if (tabId === null) return null;
+  if (!salt) {
+    salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+    await chrome.storage.local.set({ shadowStops: stops() });
+  }
+  const ran = await chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: markInPage,
+      args: [salt],
+    })
+    .catch(() => null);
+  const mark = ran?.[0]?.result;
+  return typeof mark === "string" && MARK.test(mark) ? mark : null;
+}
+
+/** Whether a read of `conversation` may go while paused, as the one that
+ * tries again: a refusal's hour is over, or the page shows it signed in
+ * anew since it was signed out. */
+async function mayTry(conversation) {
+  if (pause.status !== 401) return Date.now() >= pause.until;
+  const mark = await markOf(await tabShowing(conversation));
+  return mark !== null && mark !== pause.mark;
+}
+
+/** Reads pause, as `status` says; PostPane is told, and logs it. */
+async function paused(status, tabId) {
+  const at = Date.now();
+  pause =
+    status === 401
+      ? { status, at, mark: (await markOf(tabId)) ?? "0".repeat(16) }
+      : { status, at, until: at + PAUSE };
+  await chrome.storage.local.set({ shadowStops: stops() });
+  post({
+    type: "shadow",
+    why: "pause",
+    outcome: "paused",
+    status,
+    at,
+    ...(pause.until ? { until: pause.until } : {}),
+  });
+}
+
+/** A read tried while paused was not refused: reads go on, PostPane is
+ * told, and logs it. */
+async function resumed() {
+  const was = pause;
+  pause = null;
+  await chrome.storage.local.set({ shadowStops: stops() });
+  post({
+    type: "shadow",
+    why: "pause",
+    outcome: "resumed",
+    at: Date.now(),
+    ...(Number.isInteger(was?.status) ? { status: was.status } : {}),
+  });
+}
 
 /** Words went out to `conversation`: the prompt they became is the one its
  * reads look for, and the data is read once while the answer is written,
@@ -1766,9 +1866,10 @@ function sending(conversation) {
  * tells PostPane what that found, with `beside` (what the page made of it).
  * The prompt is `named`, else the one the page's reply answers, else the
  * one PostPane's words became. It is marked read before it is read. A read
- * that failed ends the reads of that conversation; one refused or over a
- * limit ends them all, until the switch goes off and on. With no prompt
- * known, nothing is read. */
+ * that failed ends the reads of that conversation; one signed out, refused
+ * or over a limit pauses them all (`paused`), till one read tried again is
+ * not refused, or the switch goes off and on. With no prompt known, nothing
+ * is read. */
 function shadowRead(conversation, why, beside = {}, named) {
   return track(readShadow(conversation, why, beside, named));
 }
@@ -1776,8 +1877,28 @@ function shadowRead(conversation, why, beside = {}, named) {
 async function readShadow(conversation, why, beside, named) {
   const begun = generation;
   await restored;
-  if (!shadow || !port || halted || begun !== generation) return;
+  if (!shadow || !port || begun !== generation) return;
   if (!watched.has(conversation) || unread.has(conversation)) return;
+  if (!pause) return readOnce(conversation, why, beside, named, begun);
+  // Paused: one read at a time tries again, once it may; not refused, the
+  // reads go on (#544).
+  if (trying) return;
+  trying = true;
+  try {
+    if (!(await mayTry(conversation))) return;
+    if (begun !== generation || !shadow) return;
+    const answer = await readOnce(conversation, why, beside, named, begun);
+    const status = answer?.status;
+    if (pause && Number.isInteger(status) && !HALT.includes(status))
+      await resumed();
+  } finally {
+    trying = false;
+  }
+}
+
+/** One read, as `readShadow` says; what it found, once told. */
+async function readOnce(conversation, why, beside, named, begun) {
+  const pausedAs = pause;
   const told = { type: "shadow", conversation, why, at: Date.now(), ...beside };
   // What was read is not known: nothing is read (review P1-03).
   if (!ledgerOk) return post({ ...told, outcome: "ledger-unavailable" });
@@ -1830,12 +1951,16 @@ async function readShadow(conversation, why, beside, named) {
   // on: data.js is put in now, and hears the page's sign-in on its next
   // request. What it reads there is not trusted.
   if (answer.outcome === "no-script") await putIn(tabId, begun);
-  if (answer.outcome === "http" || answer.outcome === "error") {
-    if (HALT.includes(answer.status)) halted = true;
-    else unread.add(conversation);
+  // Refused: every read pauses, unless a read beside this one paused them
+  // first. Any other failure ends the reads of this conversation.
+  const refused = answer.outcome === "http" && HALT.includes(answer.status);
+  if (!refused && (answer.outcome === "http" || answer.outcome === "error")) {
+    unread.add(conversation);
     await chrome.storage.local.set({ shadowStops: stops() });
   }
   post({ ...told, ...answer });
+  if (refused && pause === pausedAs) await paused(answer.status, tabId);
+  return answer;
 }
 
 // What a page may say of a read: these fields, of these kinds, and nothing

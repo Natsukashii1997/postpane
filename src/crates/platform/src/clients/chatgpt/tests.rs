@@ -124,6 +124,54 @@ fn the_watch_list_names_the_ended_conversations_when_there_are_any() {
     );
 }
 
+// #544: the reads pausing on a refusal and going on again are kept while the
+// switch is on, of no one conversation, and each is a line of postpane.log.
+#[test]
+fn the_shadow_reads_pausing_and_going_on_again_are_kept_and_logged() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let paused = json!({"type":"shadow","why":"pause","outcome":"paused","status":429,"at":5,"until":3_600_005});
+    let resumed =
+        json!({"type":"shadow","why":"pause","outcome":"resumed","status":429,"at":3_600_010});
+    let signed_out = json!({"type":"shadow","why":"pause","outcome":"paused","status":401,"at":7});
+    assert_eq!(
+        shadow::keep(&data, false, &paused, 9),
+        Ok(false),
+        "switch off"
+    );
+    crate::os::private_directory(&folder(&data)).unwrap();
+    std::fs::write(
+        folder(&data).join("config.json"),
+        r#"{"project":null,"dataShadow":true}"#,
+    )
+    .unwrap();
+    assert_eq!(shadow::keep(&data, false, &paused, 9), Ok(true));
+    assert_eq!(shadow::keep(&data, false, &resumed, 10), Ok(true));
+    let lines: Vec<Value> = std::fs::read_to_string(shadow::path(&data))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        lines[0],
+        json!({"why":"pause","outcome":"paused","status":429,"at":5,"until":3_600_005,"heardAt":9})
+    );
+    assert_eq!(lines[1]["outcome"], "resumed");
+    let said = shadow::pause::said(&paused).unwrap();
+    assert!(said.starts_with("Shadow read paused: chatgpt.com answered HTTP 429; one read tries again after 1970-01-01 "), "{said}");
+    assert_eq!(
+        shadow::pause::said(&signed_out).unwrap(),
+        "Shadow read paused: chatgpt.com answered HTTP 401; reads wait for the page to sign in anew"
+    );
+    assert_eq!(
+        shadow::pause::said(&resumed).unwrap(),
+        "Shadow read resumed: a read tried again after HTTP 429 was not refused"
+    );
+    // A conversation's read is no pause, whatever it says.
+    let read = json!({"type":"shadow","conversation":"6af7ec47-c0f4-83ee-9b9e-bf518660767e","why":"pause","outcome":"paused"});
+    assert_eq!(shadow::pause::said(&read), None);
+}
+
 // #488: what the extension read from ChatGPT's own data is kept beside what
 // the page gave, only while the switch is on and for watched conversations.
 #[test]

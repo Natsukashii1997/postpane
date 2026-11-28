@@ -137,6 +137,9 @@ export function summarize(records, handoffs = []) {
     days: days.size,
     refused: refused.length,
     limited: limited.length,
+    // 遇到拒绝后整体暂停、试读没被拒恢复的次数（#544）。
+    paused: records.filter((record) => record.outcome === "paused").length,
+    resumed: records.filter((record) => record.outcome === "resumed").length,
   };
   result.bar = {
     replies: result.compared >= BAR.replies,
@@ -186,7 +189,7 @@ function print(result) {
     `发出 20 秒后读到 ${result.writing.reads} 次：已写完 ${result.writing.alreadyWritten}；回信状态：${list(result.writing.finalStatus)}；最后一条消息状态：${list(result.writing.lastStatus)}。`,
   );
   console.log(
-    `没读成（非 200 或请求没发出去）${result.refused} 次，其中限流或被拒 ${result.limited} 次。`,
+    `没读成（非 200 或请求没发出去）${result.refused} 次，其中限流或被拒 ${result.limited} 次；因此整体暂停 ${result.paused} 次，试读没被拒、恢复 ${result.resumed} 次。`,
   );
   console.log("");
   console.log(

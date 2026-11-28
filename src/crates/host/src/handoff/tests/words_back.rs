@@ -153,10 +153,10 @@ fn words_sent_after_the_wait_gave_up_still_count() {
     assert!(desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 5));
     let shown = desk.projection(5);
     assert_eq!(shown[0]["phase"], "delivered");
-    assert_eq!(
-        shown[0]["steps"].as_array().unwrap().last().unwrap()["kind"],
-        "ask"
-    );
+    // The ask, then a step setting right what the session heard (#544).
+    let steps = shown[0]["steps"].as_array().unwrap();
+    let kinds = steps.iter().rev().take(2).map(|s| s["kind"].clone());
+    assert_eq!(kinds.collect::<Vec<_>>(), [json!("work"), json!("ask")]);
     // Told twice, it counts once; Claude asking again sends nothing more.
     assert!(!desk.observe(&json!({"type":"sent","requestId":request,"ok":true}), 5));
     lines.send_fails.set(false);

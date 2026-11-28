@@ -188,6 +188,14 @@ pub(super) fn mending_not_sent(error: &str) -> String {
         &format!("The ask to mend the last lines did not go ({error}): send was never pressed; PostPane asks once more in a while"),
     )
 }
+/// PostPane's ask to mend the last lines: send never pressed once more
+/// either (#544): why the round trip stopped.
+pub(super) fn mending_never_sent(error: &str) -> String {
+    l10n::text(
+        &format!("补格式两次都没发出去：{error}"),
+        &format!("The ask to mend the last lines did not go, twice: {error}"),
+    )
+}
 /// A review looked for `FIND_MOST` times is still not known (#524): on the
 /// card.
 pub(super) fn finding_lost() -> String {
