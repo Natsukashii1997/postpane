@@ -50,15 +50,21 @@ function outOfTabs(view: HTMLElement) {
       if (control.matches(TABBABLE)) take(control);
   };
   const note = (changes: MutationRecord[]) => {
+    const written = new Set<HTMLElement>();
+    const added: HTMLElement[] = [];
     for (const change of changes)
       if (change.type === "childList") {
-        for (const added of change.addedNodes)
-          if (added instanceof HTMLElement) sweep(added);
-      } else if (change.target instanceof HTMLElement) {
-        // React wrote this one: it is what the control should have.
-        was.set(change.target, change.target.getAttribute("tabindex"));
-        change.target.tabIndex = -1;
-      }
+        for (const node of change.addedNodes)
+          if (node instanceof HTMLElement) added.push(node);
+      } else if (change.target instanceof HTMLElement)
+        written.add(change.target);
+    // React wrote these: what each has now is what it should have once back.
+    // Read them all before writing any, so one written twice in a batch keeps
+    // React's last value, not the -1 put on it a record earlier (ENG-07).
+    for (const control of written)
+      was.set(control, control.getAttribute("tabindex"));
+    for (const control of written) control.tabIndex = -1;
+    for (const node of added) sweep(node);
   };
   const watch = new MutationObserver((changes) => {
     note(changes);

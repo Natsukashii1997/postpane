@@ -37,6 +37,9 @@ test("a view on its way out takes no key press (ENG-07)", () => {
     /attributeFilter: \["tabindex"\]/,
     /note\(watch\.takeRecords\(\)\);\s*watch\.disconnect\(\);/,
     /return KNOWS_INERT \? undefined : outOfTabs\(view\);/,
+    // Round 6: a batch's values are all read before any is written, so one
+    // written twice keeps React's last value (webkit-r6/r6-*.txt).
+    /for \(const control of written\)\s*was\.set\(control, control\.getAttribute\("tabindex"\)\);\s*for \(const control of written\) control\.tabIndex = -1;/,
     /view\.contains\(held\)\) held\.blur\(\)/,
   ])
     assert.match(present, part);

@@ -19,6 +19,19 @@ const FLICK_WINDOW_MS = 80;
  * a quick twitch is not a swipe (GPT review, 2026-11-25). */
 export const FLICK_TRAVEL = 12;
 
+/** Whether a click is the end of a row's drag, to be swallowed: only a
+ * pointer's click right after one (`detail` > 0). One from the keyboard or
+ * VoiceOver (detail 0) never is, whatever a lost release left; the mark goes
+ * either way (ENG-19). */
+export function tookDrag(
+  dragged: { current: boolean },
+  event: { detail: number },
+) {
+  const was = dragged.current;
+  dragged.current = false;
+  return was && event.detail > 0;
+}
+
 /** Where a dragged or swiped row has been lately, to tell a flick. */
 export function trayFlick(clock: () => number = () => performance.now()) {
   let samples: { x: number; at: number }[] = [];

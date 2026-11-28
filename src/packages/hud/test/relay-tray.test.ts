@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { Session } from "@agent-hud/protocol";
 import {
   alreadyQueuedText,
@@ -7,6 +8,7 @@ import {
   launchLine,
   stepBlock,
   trayFlick,
+  tookDrag,
   trayKinds,
   trayReady,
   trayText,
@@ -167,4 +169,44 @@ test("a quick twitch shorter than a swipe is not taken for a flick", () => {
   now = 10;
   flick.note(-14);
   assert.equal(flick.opens(-14, 310), false);
+});
+
+// #539 ENG-19: a press the row never saw end (released where it could not
+// hear, or cancelled) left the row thinking it was still dragging, so a later
+// move dragged again and a VoiceOver click was swallowed as a drag's own.
+// Measured in the system WKWebView: evidence webkit-r6/r6-*.txt.
+test("a click ends a drag only when a pointer made it; the mark goes either way", () => {
+  const dragged = { current: true };
+  assert.equal(tookDrag(dragged, { detail: 1 }), true);
+  assert.equal(dragged.current, false);
+  assert.equal(tookDrag(dragged, { detail: 1 }), false);
+  dragged.current = true;
+  // The keyboard's or VoiceOver's click (detail 0) still opens the row.
+  assert.equal(tookDrag(dragged, { detail: 0 }), false);
+  assert.equal(dragged.current, false);
+});
+
+test("a row's press ends when the button is found up, or is cancelled", () => {
+  const row = readFileSync(
+    new URL("../src/panel/SessionsSection.tsx", import.meta.url),
+    "utf8",
+  );
+  const move = row.slice(
+    row.indexOf("onPointerMove="),
+    row.indexOf("onPointerUp="),
+  );
+  assert.match(
+    move,
+    /if \(!event\.buttons\) \{\s*start\.current = null;\s*return from\.axis === "x" \? settle\(\) : undefined;/,
+  );
+  const cancel = row.slice(
+    row.indexOf("onPointerCancel="),
+    row.indexOf("onWheel="),
+  );
+  assert.match(cancel, /dragged\.current = false;/);
+  assert.equal(
+    row.match(/if \(tookDrag\(dragged, event\)\) return;/g)?.length,
+    2,
+  );
+  assert.doesNotMatch(row, /if \(dragged\.current\) \{/);
 });

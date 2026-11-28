@@ -33,6 +33,7 @@ import {
   TRAY_BLOCK,
   TRAY_SETTLE,
   trayFlick,
+  tookDrag,
   trayKinds,
   trayReady,
   trayText,
@@ -463,11 +464,8 @@ export function LiveRow({
           role="button"
           tabIndex={0}
           title={session.title}
-          onClick={() => {
-            if (dragged.current) {
-              dragged.current = false;
-              return;
-            }
+          onClick={(event) => {
+            if (tookDrag(dragged, event)) return;
             if (open) return onOpen(false);
             if (canOpen) void goBack();
             else details();
@@ -503,6 +501,11 @@ export function LiveRow({
           onPointerMove={(event) => {
             const from = start.current;
             if (!from) return;
+            // The release went where this row could not hear it: over (ENG-19).
+            if (!event.buttons) {
+              start.current = null;
+              return from.axis === "x" ? settle() : undefined;
+            }
             const dx = event.clientX - from.x;
             const dy = event.clientY - from.y;
             if (!from.axis && Math.hypot(dx, dy) > 6) {
@@ -521,12 +524,12 @@ export function LiveRow({
           }}
           onPointerCancel={() => {
             start.current = null;
+            dragged.current = false;
             if (drag !== null) settle();
           }}
           onWheel={(event) => {
             if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-            // One swipe is many wheel events, faster than renders: add them up
-            // from where the swipe began until it rests.
+            // One swipe is many wheel events: add them up from where it began.
             if (wheelEnd.current === undefined)
               offset.current = open ? -trayWidth : 0;
             slide(offset.current - event.deltaX);
@@ -616,10 +619,7 @@ export function LiveRow({
             }}
             onClick={(event) => {
               event.stopPropagation();
-              if (dragged.current) {
-                dragged.current = false;
-                return;
-              }
+              if (tookDrag(dragged, event)) return;
               if (open) return onOpen(false);
               void goBack();
             }}
