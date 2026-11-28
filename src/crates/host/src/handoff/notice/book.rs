@@ -49,6 +49,9 @@ pub enum Trouble {
     /// The page lacks what PostPane reads, so it cannot read the answer
     /// (#548): what it lacks, as the step says.
     PageChanged(String),
+    /// Words the session heard were never known to have gone in did go in
+    /// after all (#544, gaps 4, 5): what it heard is set right.
+    Confirmed,
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -70,6 +73,8 @@ pub enum Cause {
     Lost,
     /// `page_changed`: the page lacks what PostPane reads (#548).
     PageChanged,
+    /// `corrected`: words said unknown went in after all (#544).
+    Confirmed,
 }
 
 impl Step {
@@ -113,6 +118,7 @@ impl Handoff {
             Cause::PageChanged if self.live() => {
                 Trouble::PageChanged(step.text.clone().unwrap_or_default())
             }
+            Cause::Confirmed if self.live() && !self.unsure() => Trouble::Confirmed,
             _ => return None,
         };
         Some((at, trouble))
@@ -186,6 +192,22 @@ impl Book {
         );
         h.updated_at = now;
         true
+    }
+    /// Word that words the session heard were never known to have gone in
+    /// did go in came (#544, gaps 4, 5): a step of its own says so (the
+    /// words' own step is held to as sent, and a telling adds to the step
+    /// it tells of), and the session is told what it heard no longer holds.
+    pub fn corrected(&mut self, id: &str, now: i64) {
+        let Some(handoff) = self.live_mut(id) else {
+            return;
+        };
+        let note = agent_hud_runtime::l10n::text(
+            "驿窗随后确认这一段其实已送到 ChatGPT，更正之前的「送达未确认」",
+            "PostPane later heard these words did go in to ChatGPT: what was said of them not being known is set right",
+        );
+        let step = Step::new(now, StepKind::Work, Some(&note)).by_auto();
+        handoff.steps.push(step.caused(Cause::Confirmed));
+        handoff.updated_at = now;
     }
     /// The step `overdue` just put down for `id` is of trouble `cause`.
     pub(super) fn caused_last(&mut self, id: &str, cause: Cause) {

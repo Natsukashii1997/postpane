@@ -259,8 +259,10 @@ async function openIn(tab, text) {
   const result = await submit(tab.id, text, undefined, null);
   if (result.pressed === false) outOf(entry);
   if (!result.ok) return result;
+  // Pressed, and no address in time: the words may be in a new chat all the
+  // same, so a retry is not to send them blind (#544, gap 3).
   const page = await ready(tab.id, 60000, (p) => !!p.conversation);
-  if (!page) return { ok: false, reason: "timeout" };
+  if (!page) return { ok: false, reason: "timeout", pressed: true };
   const state = await proven(tab.id, page.conversation, text, result.promptId);
   if (!state) return { ok: false, reason: "unconfirmed", pressed: true };
   // Its prompt, as the page that sent it, or the one prompt showing the

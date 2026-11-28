@@ -91,6 +91,11 @@ pub struct Pending {
     /// person, once (#524).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lost: bool,
+    /// The session heard they were never known to have gone in (a stop
+    /// for them, told or answered so): word they did go in after all is
+    /// told it too (#544, gaps 4, 5).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub said: bool,
     /// How word of them stands in this run (a mending's, #446).
     #[serde(skip)]
     pub word: Word,
@@ -227,6 +232,16 @@ impl Book {
         }
         true
     }
+    /// Whether the session heard the words asked as `request` were never
+    /// known to have gone in (#544): a stop for them, or a look given up.
+    pub fn said_unknown(&self, id: &str, request: &str) -> bool {
+        self.get(id).is_some_and(|handoff| {
+            [&handoff.gate.pending, &handoff.gate.mending]
+                .into_iter()
+                .flatten()
+                .any(|p| p.request == request && (p.said || p.lost || p.restarted))
+        })
+    }
     /// Words sent as `request` went in: a review's clears all that was
     /// unsure before it; a mending's clears only itself.
     pub fn confirm_pending(&mut self, id: &str, request: &str) -> bool {
@@ -279,6 +294,14 @@ impl Book {
     /// round trip stops, saying so; one already off says so on the card.
     /// `tell`: the session is to be told (no caller heard it already).
     pub fn unconfirmed(&mut self, id: &str, text: &str, tell: bool, now: i64) -> bool {
+        // Told now, or by the caller: a late word they went in says so too.
+        if let Some(handoff) = self.live_mut(id) {
+            let gate = &mut handoff.gate;
+            let unsure = [&mut gate.mending, &mut gate.pending].into_iter().flatten();
+            if let Some(pending) = unsure.into_iter().find(|p| !p.answered) {
+                pending.said = true;
+            }
+        }
         if !self.stop(id, text, true, now) {
             let Some(handoff) = self.live_mut(id) else {
                 return false;

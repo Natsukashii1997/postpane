@@ -3505,11 +3505,13 @@ test("a tab words are going into is not closed meanwhile, though its conversatio
 test("the tab a failed opening made is closed once its handoff ended", async () => {
   const tabs = [];
   const removed = [];
+  const posted = [];
   const api = {};
   const { listeners } = Object.assign(
     api,
     load(tabs, {
       now: true,
+      posted,
       removed,
       groups: [{ id: 7, title: "驿窗接力" }],
       closable: { 99: true },
@@ -3523,6 +3525,13 @@ test("the tab a failed opening made is closed once its handoff ended", async () 
   );
   await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
   await settleLong();
+  // #544 gap 3: send pressed, no address in time: said, so no retry sends
+  // the words blind.
+  const answer = posted.find((m) => m.requestId === "h7~1");
+  assert.deepEqual(
+    [answer?.ok, answer?.reason, answer?.pressed],
+    [false, "timeout", true],
+  );
   await listeners.port({
     type: "watch",
     conversations: [],

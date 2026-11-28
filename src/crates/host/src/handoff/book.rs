@@ -34,7 +34,7 @@ mod gate_io;
 mod guard;
 #[path = "gate/book_leave.rs"]
 mod leave;
-pub use leave::{notice_head, SWIPE_SAID};
+pub use leave::{correction_head, notice_head, SWIPE_SAID};
 #[path = "notice/book.rs"]
 mod notice;
 #[path = "gate/book_pull_request.rs"]

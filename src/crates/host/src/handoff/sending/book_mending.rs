@@ -91,7 +91,7 @@ impl Book {
         if mending.request != request || mending.answered {
             return None;
         }
-        let word = mending.word;
+        let (word, said) = (mending.word, mending.said);
         match word {
             Word::Awaited => mending.word = Word::Heard,
             Word::GaveUp => {
@@ -103,6 +103,10 @@ impl Book {
                     handoff.resume_for_ask(now);
                 }
                 handoff.updated_at = now;
+                // Told it was never known to have gone in (#544, gap 4).
+                if said {
+                    self.corrected(id, now);
+                }
                 return Some(true);
             }
             Word::Heard => {}

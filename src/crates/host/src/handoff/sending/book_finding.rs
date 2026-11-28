@@ -128,6 +128,7 @@ impl Book {
         else {
             return false;
         };
+        let said = self.said_unknown(id, request);
         self.confirm_pending(id, request);
         self.set_limit(id, pending.limit);
         self.set_head(id, pending.head.as_deref());
@@ -136,6 +137,9 @@ impl Book {
         }
         let asked = self.asked(id, None, pending.words.as_deref().unwrap_or(""), now);
         self.asked_as(id, asked_id);
+        if said {
+            self.corrected(id, now);
+        }
         asked
     }
     /// The review asked as `request` is not in the conversation: it did not
