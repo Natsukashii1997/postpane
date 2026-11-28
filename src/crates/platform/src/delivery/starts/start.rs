@@ -141,7 +141,7 @@ impl SessionStarts {
     }
 }
 
-fn receipt_path(receipts: &Path, provider: Provider, request_id: &str) -> PathBuf {
+pub(super) fn receipt_path(receipts: &Path, provider: Provider, request_id: &str) -> PathBuf {
     receipts.join(format!("start-{provider:?}-{request_id}.json"))
 }
 /// Replaces a start's receipt and keeps the request fingerprint beside it.

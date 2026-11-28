@@ -670,4 +670,27 @@ mod live_status_tests {
         assert_eq!(detected["sourcePreferences"]["antigravity"]["live"], true);
         assert_eq!(detected["sourcePreferences"]["chatgpt"]["live"], false);
     }
+
+    #[test]
+    fn antigravity_turned_off_before_this_version_turns_on_once_then_stays_off() {
+        // Accepted on 2026-11-28 (#586): an off saved before Antigravity was
+        // in DETECTED_LATE cannot be told from one saved while undetected.
+        let folder = tempfile::tempdir().unwrap();
+        let snapshot = json!({"mode": "live", "providers": [{"id": "antigravity", "detected": true}], "sessions": []});
+        let owner = Presentation::new(folder.path().to_path_buf()).unwrap();
+        owner
+            .source_update(json!({"source": "antigravity", "patch": {"live": false}}))
+            .unwrap();
+        let upgraded = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let mut first = snapshot.clone();
+        upgraded.project_snapshot(&mut first);
+        assert_eq!(first["sourcePreferences"]["antigravity"]["live"], true);
+        upgraded
+            .source_update(json!({"source": "antigravity", "patch": {"live": false}}))
+            .unwrap();
+        let later = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let mut again = snapshot;
+        later.project_snapshot(&mut again);
+        assert_eq!(again["sourcePreferences"]["antigravity"]["live"], false);
+    }
 }

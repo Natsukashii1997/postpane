@@ -1,6 +1,10 @@
 //! Shared acquisition of an already-running Antigravity service. Account and
 //! approval adapters share discovery; no app/server is launched or signed in.
 use super::{running, CallError};
+use once::allowed;
+pub use once::call_once;
+
+mod once;
 use agent_hud_core::l10n;
 use reqwest::{blocking::Client, header::HeaderValue};
 use serde_json::{json, Value};
@@ -66,26 +70,19 @@ fn service() -> Result<&'static Service, String> {
         .as_ref()
         .map_err(Clone::clone)
 }
-fn allowed(method: &str) -> Result<(), String> {
-    if matches!(
-        method,
-        "GetUserStatus"
-            | "RetrieveUserQuotaSummary"
-            | "GetAllCascadeTrajectories"
-            | "GetCascadeTrajectory"
-            | "HandleCascadeUserInteraction"
-            | "StartCascade"
-            | "SendUserCascadeMessage"
-            | "SendAgentMessage"
-            | "CancelCascadeInvocation"
-    ) {
-        Ok(())
-    } else {
-        Err("Unsupported public Antigravity service operation".into())
-    }
-}
 impl Service {
     fn send(&self, endpoint: &Endpoint, method: &str, params: &Value) -> Result<Value, String> {
+        self.post(endpoint, method, params).map_err(String::from)
+    }
+    /// A request that never connected is Unavailable (not sent); one that
+    /// was sent and then lost, timed out or answered unreadably is Uncertain.
+    fn post(&self, endpoint: &Endpoint, method: &str, params: &Value) -> Result<Value, CallError> {
+        let failed = || {
+            l10n::text(
+                "Antigravity 本地服务请求失败",
+                "Antigravity local service request failed",
+            )
+        };
         let response = self
             .http
             .post(format!(
@@ -96,16 +93,14 @@ impl Service {
             .header("X-Codeium-Csrf-Token", endpoint.csrf.clone())
             .json(params)
             .send()
-            .map_err(|_| {
-                l10n::text(
-                    "Antigravity 本地服务请求失败",
-                    "Antigravity local service request failed",
-                )
+            .map_err(|error| match error.is_connect() {
+                true => CallError::Unavailable(failed()),
+                false => CallError::Uncertain(failed()),
             })?;
         if !response.status().is_success() {
-            return Err(service_error(response));
+            return Err(CallError::Refused(service_error(response)));
         }
-        crate::accounts::http::response_json(response, "Antigravity")
+        crate::accounts::http::response_json(response, "Antigravity").map_err(CallError::Uncertain)
     }
     fn cached(&self) -> Vec<Endpoint> {
         self.state

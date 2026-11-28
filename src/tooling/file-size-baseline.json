@@ -61,7 +61,7 @@
   "src/crates/hud/src/vendors.rs": 417,
   "src/crates/platform/src/accounts/credentials.rs": 446,
   "src/crates/platform/src/accounts/mod.rs": 1092,
-  "src/crates/platform/src/clients/antigravity/service.rs": 463,
+  "src/crates/platform/src/clients/antigravity/service.rs": 458,
   "src/crates/platform/src/clients/chatgpt/mod.rs": 465,
   "src/crates/platform/src/clients/codex/desktop.rs": 530,
   "src/crates/platform/src/clients/codex/desktop/pending.rs": 442,

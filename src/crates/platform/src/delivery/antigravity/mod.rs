@@ -179,15 +179,17 @@ fn metadata() -> Value {
 }
 
 fn call(method: &str, body: Value) -> Result<Value> {
-    crate::clients::antigravity::service::call(method, &body).map_err(failure)
+    crate::clients::antigravity::service::call_once(method, &body).map_err(failure)
 }
 
-/// Only a language server that is not there lets a start fall back to `agy`.
+/// Only a language server that was never reached lets a start fall back to
+/// `agy`; one that may have acted leaves the start uncertain.
 fn failure(error: crate::clients::antigravity::CallError) -> Failure {
     use crate::clients::antigravity::CallError;
     match error {
         CallError::Unavailable(reason) => Failure::Unavailable(reason),
         CallError::Refused(reason) => Failure::Rejected(reason),
+        CallError::Uncertain(_) => Failure::AcceptanceUncertain,
     }
 }
 
@@ -207,5 +209,8 @@ mod tests {
         }
         let refused = failure(CallError::Refused("bad request".into()));
         assert!(matches!(refused, Failure::Rejected(_)));
+        // Sent and lost: the cascade may exist, so no second start follows.
+        let lost = failure(CallError::Uncertain("timed out".into()));
+        assert!(matches!(lost, Failure::AcceptanceUncertain));
     }
 }

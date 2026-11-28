@@ -6,12 +6,14 @@ pub(crate) mod permissions;
 mod running;
 pub mod service;
 
-/// Why a call to the running language server failed: none answered, or one
-/// answered and refused. Only the first lets a start fall back to `agy`.
+/// Why a call to the running language server failed: none was reached, one
+/// answered and refused, or a request was sent and its outcome is unknown.
+/// Only the first lets a start fall back to `agy`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CallError {
     Unavailable(String),
     Refused(String),
+    Uncertain(String),
 }
 impl CallError {
     /// No language server answered at all.
@@ -25,7 +27,9 @@ impl CallError {
 impl From<CallError> for String {
     fn from(error: CallError) -> Self {
         match error {
-            CallError::Unavailable(text) | CallError::Refused(text) => text,
+            CallError::Unavailable(text)
+            | CallError::Refused(text)
+            | CallError::Uncertain(text) => text,
         }
     }
 }

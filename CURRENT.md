@@ -12,12 +12,13 @@
     - 兜底做法：新文件 `delivery/starts/agy.rs`：后台启动 `agy -p=<消息> --output-format stream-json`（消息贴在 `-p=` 上、以 `-` 开头时前面补空格：实测 `agy -p "--version"` 会把消息当成选项，原写法也有这个问题），输出写进 `~/.agenthud/agy-starts/<请求>.ndjson`（7 天前的下次开会话时删），20 秒内读到 `conversation_id` 就回 started 带会话编号，进程留着做完这一轮；看到登录提示就停掉进程，报「agy 命令行还没登录」；读到失败结果就停掉、报那条错误；进程自己结束却没给编号报「被拒」；20 秒还没编号报「不确定」，进程不停。`delivery/process/mod.rs` 给 `ProcessRunner` 加 `spawn`（输出写文件、不等结束，留下的进程结束后回收，不留僵尸）；`delivery/starts/clients.rs` 的 `start_antigravity` 只剩「语言服务器不在就走 agy」一句；`delivery/fixtures.rs` 的假执行器能演后台 agy。
     - 文档：`docs/LESSONS.md` 新坑 L-92，L-84、L-87 的待定句标为已定。
   - 我顺手改的：无。
-- 行为变化（动手前已在会话里列出）：① Antigravity 实时状态第一次检测到时自动打开一次（本机装新版后会打开）。② 桌面版没开时，开 Antigravity 会话改由 agy 在后台开，不再直接报「没有已登录且正在运行的 Antigravity 服务」；agy 没登录时几秒内报要登录。
+- 行为变化（动手前已在会话里列出）：① Antigravity 实时状态第一次检测到时自动打开一次（本机装新版后会打开）。② 桌面版没开时，开 Antigravity 会话改由 agy 在后台开，不再直接报「没有已登录且正在运行的 Antigravity 服务」；agy 没登录时几秒内报要登录。③（审查返修带出，补列）macOS 上给已有 Antigravity 会话续发消息、打断，失败后不再换一个服务重发；发出去后结果不明时由报「被拒」改为报「不确定」（原来可能发重两遍）。
 - 测试：新测试先红：改前写法上 platform 3 条失败（`red-platform.txt`：认不出「没有服务」、读不到会话编号、没登录说不清），hud 2 条失败（`red-hud.txt`，Antigravity 仍是 `false`）；改后 platform 9 条、hud 2 条全过（`green-platform.txt`、`green-hud.txt`）。三条全量（`90e9d0a`，负载约 30）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1261 failed 0，前端 `ℹ pass 554`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。第一遍（`f046d37`）挂过两处：`service.rs` 超 300 行棘轮（已压回、基线收紧），`instance::tests::a_second_launch_brings_the_holder_forward` 负载约 49 时偶发失败（本轮没碰这块，单独连跑三次都过，`instance-rerun.txt`）。
 - 验证：本机 agy 1.5.18 真跑过两次：`-p … --output-format json` 没登录时 stderr 先打 Google 登录链接、约 66 秒后退出 1，结果 `{"conversation_id":"","status":"ERROR","error":"authentication failed or timed out"}`（`agy-p-output.json`）；`-p "/help" --output-format stream-json` 的事件是 `{"event":"…","…":{…}}` 一行一个（`agy-help-stream.ndjson`）。已登录时 `init` 事件里会话编号的确切位置没法看到（本机 agy 未登录），解析按「事件顶层或下一层的 `conversation_id`」写，`result` 里一定有。
 - 截图：无界面改动。
 - 发布与回读：未发布。
 - 与授权不一致之处、遗留问题、范围外发现：已登录的 agy 真实开会话、开出的会话 get_message 能不能读到，都没验：本机 agy 没登录，登录要常浩本人做（终端运行一次 `agy`，按提示登录 Google 账号）。`instance::tests::a_second_launch_brings_the_holder_forward` 高负载下偶发失败，范围外，没改。Antigravity 桌面版已自动升到 2.36.0（language_server 参数 `--override_ide_version 2.36.0`），发现文件那一路照旧，装机后顺带看。
+- 审查第 1 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 写操作结果不明时会重发或再起 agy，可能开出两个会话：新增 `clients/antigravity/service/once.rs` 的 `call_once`，`Service::post` 把失败分成连不上（Unavailable，换下一个）、服务回错（Refused）、发出去后结果不明（Uncertain → `AcceptanceUncertain`，不重发、不兜底）；开会话的 `StartCascade` 和第一条消息都改走它。AGY586-P1-02 日志权限：目录用 `private_dir`（0700），文件用 `new_file_options`（0600），有结果就删。AGY586-P2-01 20 秒没拿到编号：后台线程接着读，最多 10 分钟，等开会话自己写完「不确定」回执后再补成 started 或 rejected；10 分钟还没编号就停掉 agy。D-01 升级时会把以前手动关掉的 Antigravity 实时状态打开一次：常浩这一轮要的就是打开，驿窗只有他一个人用，接受，补了测试写明。
 - 本轮新坑：L-92
 
 ## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）

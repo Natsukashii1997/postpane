@@ -124,7 +124,8 @@ impl ProcessRunner for NativeProcessRunner {
         if !plan.executable.is_absolute() {
             return Err(Failure::InvalidInput("Explicit executable required".into()));
         }
-        let file = std::fs::File::create(log)?;
+        // Only this user may read what the process prints (0600).
+        let file = host::new_file_options().open(log)?;
         let mut command = Command::new(&plan.executable);
         command
             .args(&plan.arguments)

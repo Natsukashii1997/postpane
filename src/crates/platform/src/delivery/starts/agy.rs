@@ -2,13 +2,20 @@
 //! server runs: `agy -p` in the background, its event stream read until it
 //! names the conversation. The turn then finishes on its own, and its reply
 //! is read from the conversation like any other.
+use super::super::process::Background;
 use super::*;
 use agent_hud_core::l10n;
 use std::time::Instant;
 
 /// How long a start waits for `agy` to name its conversation.
+#[cfg(not(test))]
 const NAMED_WITHIN: Duration = Duration::from_secs(20);
-/// Stream logs older than this are removed at the next start.
+#[cfg(test)]
+const NAMED_WITHIN: Duration = Duration::from_millis(300);
+/// How long a start left uncertain is still followed in the background
+/// before an `agy` that named nothing is stopped.
+const FOLLOWED_FOR: Duration = Duration::from_secs(10 * 60);
+/// Stream logs a crash left behind are removed at the next start.
 const KEPT_FOR: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// What a start has heard from `agy` so far.
@@ -32,10 +39,13 @@ impl SessionStarts {
         let Some(executable) = self.config.antigravity_executable.as_ref() else {
             return Err(Failure::Unavailable(reason));
         };
+        // The stream holds the whole turn: only this user may read it, and
+        // it is removed once the start is settled.
         let logs = self.config.task_root.with_file_name("agy-starts");
-        fs::create_dir_all(&logs)?;
+        private_dir(&logs)?;
         prune(&logs);
         let log = logs.join(format!("{}.ndjson", request.request_id));
+        let _ = fs::remove_file(&log);
         let plan = self.plan(
             executable,
             vec![
@@ -47,45 +57,94 @@ impl SessionStarts {
             NAMED_WITHIN.as_secs(),
         );
         let mut process = self.runner.spawn(&plan, &log)?;
-        let began = Instant::now();
-        loop {
-            // Asked before reading, so an end is read with all it printed.
-            let running = process.running();
-            match heard(&fs::read_to_string(&log).unwrap_or_default()) {
-                Heard::Started(id) => {
-                    return Ok(StartReceipt {
-                        provider: Provider::Antigravity,
-                        request_id: request.request_id.clone(),
-                        session_id: Some(id),
-                        thread_id: None,
-                        state: "started".into(),
-                        reason: None,
-                        job_id: None,
-                        handoff_pending: false,
-                    })
-                }
-                Heard::NeedsLogin => {
-                    process.stop();
-                    return Err(Failure::Unavailable(l10n::text(
-                        "agy 命令行还没登录：在终端运行一次 agy，按提示登录 Google 账号",
-                        "The agy command line is not signed in: run agy once in a terminal and sign in",
-                    )));
-                }
-                Heard::Failed(error) => {
-                    process.stop();
-                    return Err(Failure::Rejected(error));
-                }
-                Heard::Nothing if !running => {
-                    return Err(Failure::Rejected(
-                        "Antigravity CLI ended without starting a session".into(),
-                    ))
-                }
-                Heard::Nothing if began.elapsed() >= NAMED_WITHIN => {
-                    return Err(Failure::AcceptanceUncertain)
-                }
-                Heard::Nothing => std::thread::sleep(Duration::from_millis(200)),
-            }
+        if let Some(settled) = watch(&mut *process, &log, NAMED_WITHIN) {
+            let _ = fs::remove_file(&log);
+            return settled.map(|id| started(&request.request_id, id));
         }
+        // Still running and nothing named yet: the start is saved uncertain,
+        // and its receipt is completed when `agy` settles.
+        let receipts = self.receipts.clone();
+        let request_id = request.request_id.clone();
+        std::thread::spawn(move || follow(process, &log, &receipts, &request_id));
+        Err(Failure::AcceptanceUncertain)
+    }
+}
+
+fn started(request_id: &str, id: String) -> StartReceipt {
+    StartReceipt {
+        provider: Provider::Antigravity,
+        request_id: request_id.into(),
+        session_id: Some(id),
+        thread_id: None,
+        state: "started".into(),
+        reason: None,
+        job_id: None,
+        handoff_pending: false,
+    }
+}
+
+/// Reads the stream until `agy` names its conversation or fails, for at most
+/// `within`; `None` while it still runs having said nothing. A failed or
+/// unsigned `agy` is stopped.
+fn watch(process: &mut dyn Background, log: &Path, within: Duration) -> Option<Result<String>> {
+    let began = Instant::now();
+    loop {
+        // Asked before reading, so an end is read with all it printed.
+        let running = process.running();
+        let settled = match heard(&fs::read_to_string(log).unwrap_or_default()) {
+            Heard::Started(id) => Ok(id),
+            Heard::NeedsLogin => Err(Failure::Unavailable(l10n::text(
+                "agy 命令行还没登录：在终端运行一次 agy，按提示登录 Google 账号",
+                "The agy command line is not signed in: run agy once in a terminal and sign in",
+            ))),
+            Heard::Failed(error) => Err(Failure::Rejected(error)),
+            Heard::Nothing if !running => Err(Failure::Rejected(
+                "Antigravity CLI ended without starting a session".into(),
+            )),
+            Heard::Nothing if began.elapsed() >= within => return None,
+            Heard::Nothing => {
+                std::thread::sleep(Duration::from_millis(200));
+                continue;
+            }
+        };
+        if settled.is_err() {
+            process.stop();
+        }
+        return Some(settled);
+    }
+}
+
+/// Completes the receipt of a start saved uncertain: started once `agy`
+/// names the conversation, rejected when it fails or ends naming none, and
+/// rejected and stopped when it says nothing for `FOLLOWED_FOR`.
+fn follow(mut process: Box<dyn Background>, log: &Path, receipts: &Path, request_id: &str) {
+    let settled = watch(&mut *process, log, FOLLOWED_FOR).unwrap_or_else(|| {
+        process.stop();
+        Err(Failure::Rejected(
+            "Antigravity CLI named no conversation in 10 minutes and was stopped".into(),
+        ))
+    });
+    let _ = fs::remove_file(log);
+    // The start writes its uncertain receipt once it returns; wait for it,
+    // so it never overwrites this one.
+    let key = super::start::receipt_path(receipts, Provider::Antigravity, request_id);
+    for _ in 0..50 {
+        if read_json(&key)["receipt"]["reason"] == Failure::AcceptanceUncertain.to_string() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let receipt = settled.map_or_else(
+        |error| StartReceipt {
+            state: "rejected".into(),
+            reason: Some(error.to_string()),
+            session_id: None,
+            ..started(request_id, String::new())
+        },
+        |id| started(request_id, id),
+    );
+    if let Err(error) = super::start::save_receipt(receipts, &receipt) {
+        agent_hud_core::note!("An Antigravity start's receipt could not be completed: {error}");
     }
 }
 
@@ -188,14 +247,74 @@ mod tests {
             calls,
             [["-p=修一下登录页", "--output-format", "stream-json"]]
         );
-        let log = fixture
-            .root
-            .join("agy-starts")
-            .join(format!("{REQUEST}.ndjson"));
+        let logs = fixture.root.join("agy-starts");
         assert!(
-            log.is_file(),
+            logs.is_dir(),
             "the stream is written beside the task folders"
         );
+        let log = logs.join(format!("{REQUEST}.ndjson"));
+        assert!(!log.exists(), "and removed once the start is settled");
+    }
+
+    /// An `agy` that is still running, or has ended.
+    struct Agy(bool, bool);
+    impl Background for Agy {
+        fn running(&mut self) -> bool {
+            self.0
+        }
+        fn stop(&mut self) {
+            self.1 = true;
+        }
+    }
+    /// A start saved uncertain, its stream holding `printed`: the receipts
+    /// folder, the receipt and the stream.
+    fn left_uncertain(printed: &str) -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+        let temp = tempfile::tempdir().unwrap();
+        let receipts = temp.path().join("receipts");
+        private_dir(&receipts).unwrap();
+        let receipt = StartReceipt {
+            state: "uncertain".into(),
+            reason: Some(Failure::AcceptanceUncertain.to_string()),
+            session_id: None,
+            ..started(REQUEST, String::new())
+        };
+        let key = super::super::start::receipt_path(&receipts, Provider::Antigravity, REQUEST);
+        atomic_json(
+            &key,
+            &serde_json::json!({"fingerprint": "f", "receipt": receipt}),
+        )
+        .unwrap();
+        let log = temp.path().join("stream.ndjson");
+        fs::write(&log, printed).unwrap();
+        (temp, receipts, key, log)
+    }
+
+    #[test]
+    fn a_start_left_uncertain_is_completed_once_agy_names_the_conversation() {
+        // The shape Antigravity's headless docs give: the id beside `init`.
+        let init = format!(
+            r#"{{"event":"init","conversation_id":"{ID}","init":{{"cwd":"/w","tools":[]}}}}"#
+        );
+        let (_temp, receipts, key, log) = left_uncertain(&init);
+        follow(Box::new(Agy(true, false)), &log, &receipts, REQUEST);
+        let receipt = &read_json(&key)["receipt"];
+        assert_eq!(receipt["state"], "started");
+        assert_eq!(receipt["sessionId"], ID);
+        assert_eq!(
+            read_json(&key)["fingerprint"],
+            "f",
+            "the request stays the same"
+        );
+        assert!(!log.exists());
+    }
+
+    #[test]
+    fn a_start_left_uncertain_whose_agy_ended_naming_nothing_is_rejected() {
+        let (_temp, receipts, key, log) = left_uncertain("");
+        follow(Box::new(Agy(false, false)), &log, &receipts, REQUEST);
+        let receipt = &read_json(&key)["receipt"];
+        assert_eq!(receipt["state"], "rejected");
+        assert!(receipt["sessionId"].is_null());
     }
 
     #[test]
