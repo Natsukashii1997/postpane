@@ -381,25 +381,17 @@ pub fn call(method: &str, params: &Value) -> Result<Value, CallError> {
         state.complete = false;
     }
     let mut last = None;
-    for endpoint in service
+    let found = service
         .discover(true, false)
-        .map_err(CallError::Unavailable)?
-    {
+        .map_err(CallError::Unavailable)?;
+    for endpoint in found {
         match service.send(&endpoint, method, params) {
             Ok(value) => return Ok(value),
             Err(error) => last = Some(error),
         }
     }
     // A service that answered with its own error is reachable; say what it said.
-    Err(last.map_or_else(
-        || {
-            CallError::Unavailable(l10n::text(
-                "没有已登录且正在运行的 Antigravity 服务",
-                "No authenticated already-running Antigravity service is available",
-            ))
-        },
-        CallError::Refused,
-    ))
+    Err(last.map_or_else(CallError::none, CallError::Refused))
 }
 
 /// The service's own Connect error (`{"code","message"}`), limited in size.

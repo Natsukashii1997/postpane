@@ -13,6 +13,15 @@ pub enum CallError {
     Unavailable(String),
     Refused(String),
 }
+impl CallError {
+    /// No language server answered at all.
+    pub(crate) fn none() -> Self {
+        Self::Unavailable(agent_hud_core::l10n::text(
+            "没有已登录且正在运行的 Antigravity 服务",
+            "No authenticated already-running Antigravity service is available",
+        ))
+    }
+}
 impl From<CallError> for String {
     fn from(error: CallError) -> Self {
         match error {
