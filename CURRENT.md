@@ -2,6 +2,24 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## Antigravity 实时状态检测到后自动打开；没开桌面版时由 agy 命令行开会话（#586）（2026-11-28，Claude，常浩回「打开实时状态，命令行兜底也修了」；已提交，PR 见描述；未发布，等合并后装机）
+
+- 时间：开工 `2026-11-28 15:25`（按会话记录推算，未用 `date` 记；`date` 记到写交接时 `2026-11-28 15:55`）。来由：#558 收尾留下的两项待定，常浩当天定：都做。
+- 改了哪些文件：
+  - 你要求的：
+    - 实时状态：`hud/src/presentation.rs` 的 `DETECTED_LATE` 加 `antigravity`，第一次检测到时打开一次，之后以常浩的选择为准；测试 `a_late_client_turns_live_the_first_time_it_is_detected_then_keeps_the_choice`（ChatGPT、Antigravity 各走一遍）和 `antigravity_saved_off_before_it_was_known_late_turns_on_once`（照本机现状：ChatGPT 已在名单里、手动关着，Antigravity 存成关后被检测到）。
+    - 兜底判断：`clients/antigravity/mod.rs` 新增 `CallError::{Unavailable, Refused}`；`service::call` 一个服务都没找到才回 Unavailable，找到了但它拒绝回 Refused；`delivery/antigravity/mod.rs` 按类型换成 `Failure`，不再按文字判断；`accounts/host.rs` 照旧拿文字。
+    - 兜底做法：新文件 `delivery/starts/agy.rs`：后台启动 `agy -p <消息> --output-format stream-json`，输出写进 `~/.agenthud/agy-starts/<请求>.ndjson`（7 天前的下次开会话时删），20 秒内读到 `conversation_id` 就回 started 带会话编号，进程留着做完这一轮；看到登录提示就停掉进程，报「agy 命令行还没登录」；读到失败结果就停掉、报那条错误；进程自己结束却没给编号报「被拒」；20 秒还没编号报「不确定」，进程不停。`delivery/process/mod.rs` 给 `ProcessRunner` 加 `spawn`（输出写文件、不等结束，留下的进程结束后回收，不留僵尸）；`delivery/starts/clients.rs` 的 `start_antigravity` 只剩「语言服务器不在就走 agy」一句；`delivery/fixtures.rs` 的假执行器能演后台 agy。
+    - 文档：`docs/LESSONS.md` 新坑 L-92，L-84、L-87 的待定句标为已定。
+  - 我顺手改的：无。
+- 行为变化（动手前已在会话里列出）：① Antigravity 实时状态第一次检测到时自动打开一次（本机装新版后会打开）。② 桌面版没开时，开 Antigravity 会话改由 agy 在后台开，不再直接报「没有已登录且正在运行的 Antigravity 服务」；agy 没登录时几秒内报要登录。
+- 测试：新测试先红：改前写法上 platform 3 条失败（`red-platform.txt`：认不出「没有服务」、读不到会话编号、没登录说不清），hud 2 条失败（`red-hud.txt`，Antigravity 仍是 `false`）；改后 platform 8 条、hud 2 条全过（`green-platform.txt`、`green-hud.txt`）。三条全量（`90e9d0a`，负载约 30）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1261 failed 0，前端 `ℹ pass 554`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。第一遍（`f046d37`）挂过两处：`service.rs` 超 300 行棘轮（已压回、基线收紧），`instance::tests::a_second_launch_brings_the_holder_forward` 负载约 49 时偶发失败（本轮没碰这块，单独连跑三次都过，`instance-rerun.txt`）。
+- 验证：本机 agy 1.5.18 真跑过两次：`-p … --output-format json` 没登录时 stderr 先打 Google 登录链接、约 66 秒后退出 1，结果 `{"conversation_id":"","status":"ERROR","error":"authentication failed or timed out"}`（`agy-p-output.json`）；`-p "/help" --output-format stream-json` 的事件是 `{"event":"…","…":{…}}` 一行一个（`agy-help-stream.ndjson`）。已登录时 `init` 事件里会话编号的确切位置没法看到（本机 agy 未登录），解析按「事件顶层或下一层的 `conversation_id`」写，`result` 里一定有。
+- 截图：无界面改动。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：已登录的 agy 真实开会话、开出的会话 get_message 能不能读到，都没验：本机 agy 没登录，登录要常浩本人做（终端运行一次 `agy`，按提示登录 Google 账号）。`instance::tests::a_second_launch_brings_the_holder_forward` 高负载下偶发失败，范围外，没改。Antigravity 桌面版已自动升到 2.36.0（language_server 参数 `--override_ide_version 2.36.0`），发现文件那一路照旧，装机后顺带看。
+- 本轮新坑：L-92
+
 ## 接力治本第 3 步：等回信停下时说准原因——标签页关了、标签页不应答（可能掉登录）、插件没连上（#544）（2026-11-28，Claude，常浩经驿窗回「继续接力治本」；修 bug，让停因回到实情；已提交，PR 见描述，未装机）
 
 - 时间：开工 `2026-11-28 15:55`（约数，按建分支的时间）。来由：全表空格 18、19、23：等回信时标签页被关、插件断连、掉登录，都被说成「ChatGPT 30 分钟没回信」，会话被告知去等 ChatGPT。
