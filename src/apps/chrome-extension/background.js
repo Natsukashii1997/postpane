@@ -32,6 +32,8 @@ function connect() {
     extensionId: chrome.runtime.id,
   });
   retry = 5000;
+  // Told while it was away, in order (#544, gap 13).
+  for (const message of held.splice(0)) post(message);
   // PostPane (started again) knows of no tab yet, nor of any answer being
   // written: each says again.
   resync();
@@ -42,11 +44,28 @@ function reconnect() {
   retry = Math.min(retry * 2, 60000);
 }
 
+// What a page or a late answer told while PostPane was away (#544, gap
+// 13): an answer done, words gone in, a chat opened. Kept in order, at most
+// HELD_MOST, the oldest going first, and told once PostPane is back, after
+// it is said hello to. A worker stopped meanwhile keeps none of it: reads
+// again find those answers (#433).
+const HELD_MOST = 20;
+const held = [];
+const holds = (message) =>
+  (message.type === "turn" && message.phase === "complete") ||
+  ((message.type === "sent" || message.type === "opened") &&
+    message.ok === true);
+
 function post(message) {
   try {
-    port?.postMessage(message);
+    if (!port) throw new Error("not connected");
+    port.postMessage(message);
   } catch {
-    /* reconnect handles it */
+    // Reconnect handles the port; what is worth telling waits for it.
+    if (holds(message)) {
+      held.push(message);
+      held.splice(0, Math.max(0, held.length - HELD_MOST));
+    }
   }
 }
 
