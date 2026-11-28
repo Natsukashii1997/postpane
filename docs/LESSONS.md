@@ -643,3 +643,11 @@
 - 正确做法：后台标签页、窗口被挡住这类页面状态，不靠 Claude in Chrome 现造：用真实接力留下的 `turns.jsonl`（`phase: "reread"` 那行的 `hidden`、`fronted`、`outcome`）取证，或请常浩把插件开的那个标签页留在后台时，只读看那一刻的结构。试两次没造出来就停，不再换花样试。只能在真实状态下才分得清的判定（如空占位 vs 没画出），没看到真实样子之前不改代码。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-544-placeholder-probe/real-page-hidden-vs-drawn.md`；#457 证据 `evidence/2026-11-20-457-reread-undrawn/pr-body.md`「实机未做」一条。
 - 升级：〔提醒〕未升级。
+
+## L-81 按会话编号去重做完、场景和测试都过，实机侧栏还是一个任务出好几行：重复的是主会话派出的子任务，各有自己的编号（2026-11-28）
+
+- 现象：#565/#569 让 REPLY 按「来源 + 会话编号」每个会话只留一行，测试和场景预览台都过，常浩 11-28 验收后合并。当天上午侧栏又出现 4 行以上「你在做一个 skill 的盲测执行方……」（#578）。
+- 根因：这些行是主会话 `b633847f` 派出的子任务（Claude 的 `subagents/agent-…jsonl`），每个子任务的会话编号不同，只是标题一样；会话数据里带着 `parentId`，但生成回复的 `island_events/turns.rs` `ended()` 没看它。修 #565 时只看了常浩截图里的标题，没拿实机快照（`hud_snapshot` 的 `islandEvents`）核对重复行的 `sessionId`，场景也只造了「同一编号回两次」。
+- 正确做法：侧栏「单位是单一任务会话」，带 `parentId` 的子任务不单独出回复和失败提醒（`ended()` 已过滤）。查「同一个东西出现好几次」先从实机快照取出那几行的编号和父编号，再决定按什么去重；造场景时把「标题相同、编号不同」和「子任务」各造一个。
+- 证据：快照 `islandEvents.items` 里 9:29–9:53 的 completion 行 `sessionId` 为 `agent-a7350e0a…`、`agent-a96fb22c…`、`agent-a033c91c…`、`agent-ad83d7d9…` 等，`sessions` 里对应 `parentId` 都是 `b633847f-c6e5-47dd-ae61-0d8c9ac92606`；测试 `island_events::turns::tests::a_subagent_that_answers_or_fails_is_not_a_line_of_its_own`。
+- 升级：〔机检〕已升级（2026-11-28，#578 的 PR）：测试 `a_subagent_that_answers_or_fails_is_not_a_line_of_its_own` 守住子任务不出行；「先拿实机编号再定去重」只靠本条提醒。
