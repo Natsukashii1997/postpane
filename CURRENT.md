@@ -2,6 +2,19 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）
+
+- 时间：开工 `2026-11-28 16:08`（`date '+%F %H:%M'` 记录）。来由：#539 合并后统一装机，打包走 #585 的排队，排队提示写「全量测试（586-agy-live…已跑 8 分钟）」，其实那份测试有一段时间是排队等的，「已跑」被说长了。
+- 改了哪些文件：
+  - 你要求的：无（常浩要求的排队合并、装机已在上一节）。
+  - 我顺手改的：`src/tooling/heavy-queue.mjs`（`started` 改在拿到位子时记，原来是开始排队时记）；`tests/heavy-queue.test.mjs` 加一条断言。修 #585 自己带进来的 bug，回到原定行为。
+- 测试：新断言先红 `red.txt`（`ℹ pass 6` / `ℹ fail 1`），改后 `ℹ pass 7` / `ℹ fail 0`。三条全量：`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1252 failed 0，前端 `ℹ pass 586`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`；本身在 587-relay-end-agent 的全量后面排了约 3 分钟）；`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue-started/`。
+- 验证：打包那一路实测通过：`tauri build` 在 586-agy-live 的全量测试后面排了 4 分钟，排到后开始打包，16:04:23 打完；下一份（587-relay-end-agent 的全量测试）16:04:27 才占上位子，说明位子占到了整个打包结束（`evidence/2026-11-28-main-install-2/build.log`、`heavy-queue` 目录时间）。
+- 截图：无界面改动。
+- 发布与回读：统一装机 main `53291fe`（含 7 个 PR，之后 main 只多 #590 文档补记）：`install.sh main-install-2`，产物 `c7a8631db4d9` / 已装 `c7a8631db4d9`，签名 `b773068e`，冒烟侧栏在动，无权限弹窗，`postpane.log` 启动后无报错。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-main-install-2/PostPane-72f244f46d91.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：排队不按先来后到（谁先查到位子空谁拿），587 比打包早等，打包先拿到；够用，没改。#553 等 agent-kit#141。未在实机验：刘海模式的飞行、#442 结束接力正常路径、#557 等回信超过 30 分钟、Chrome 插件新版本要在 chrome://extensions 重新加载。
+- 本轮新坑：无
+
 ## 接力治本第 3 步：等回信停下时说准原因——标签页关了、标签页不应答（可能掉登录）、插件没连上（#544）（2026-11-28，Claude，常浩经驿窗回「继续接力治本」；修 bug，让停因回到实情；已提交，PR 见描述，未装机）
 
 - 时间：开工 `2026-11-28 15:55`（约数，按建分支的时间）。来由：全表空格 18、19、23：等回信时标签页被关、插件断连、掉登录，都被说成「ChatGPT 30 分钟没回信」，会话被告知去等 ChatGPT。
