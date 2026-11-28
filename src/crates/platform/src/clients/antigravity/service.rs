@@ -1,6 +1,10 @@
 //! Shared acquisition of an already-running Antigravity service. Account and
 //! approval adapters share discovery; no app/server is launched or signed in.
-use super::running;
+use super::{running, CallError};
+use once::allowed;
+pub use once::call_once;
+
+mod once;
 use agent_hud_core::l10n;
 use reqwest::{blocking::Client, header::HeaderValue};
 use serde_json::{json, Value};
@@ -66,26 +70,19 @@ fn service() -> Result<&'static Service, String> {
         .as_ref()
         .map_err(Clone::clone)
 }
-fn allowed(method: &str) -> Result<(), String> {
-    if matches!(
-        method,
-        "GetUserStatus"
-            | "RetrieveUserQuotaSummary"
-            | "GetAllCascadeTrajectories"
-            | "GetCascadeTrajectory"
-            | "HandleCascadeUserInteraction"
-            | "StartCascade"
-            | "SendUserCascadeMessage"
-            | "SendAgentMessage"
-            | "CancelCascadeInvocation"
-    ) {
-        Ok(())
-    } else {
-        Err("Unsupported public Antigravity service operation".into())
-    }
-}
 impl Service {
     fn send(&self, endpoint: &Endpoint, method: &str, params: &Value) -> Result<Value, String> {
+        self.post(endpoint, method, params).map_err(String::from)
+    }
+    /// Unavailable if it never connected (not sent); Uncertain if sent and
+    /// then lost, timed out, answered with an error or unreadably.
+    fn post(&self, endpoint: &Endpoint, method: &str, params: &Value) -> Result<Value, CallError> {
+        let failed = || {
+            l10n::text(
+                "Antigravity 本地服务请求失败",
+                "Antigravity local service request failed",
+            )
+        };
         let response = self
             .http
             .post(format!(
@@ -96,16 +93,14 @@ impl Service {
             .header("X-Codeium-Csrf-Token", endpoint.csrf.clone())
             .json(params)
             .send()
-            .map_err(|_| {
-                l10n::text(
-                    "Antigravity 本地服务请求失败",
-                    "Antigravity local service request failed",
-                )
+            .map_err(|error| match error.is_connect() {
+                true => CallError::Unavailable(failed()),
+                false => CallError::Uncertain(failed()),
             })?;
         if !response.status().is_success() {
-            return Err(service_error(response));
+            return Err(CallError::Uncertain(once::service_error(response)));
         }
-        crate::accounts::http::response_json(response, "Antigravity")
+        crate::accounts::http::response_json(response, "Antigravity").map_err(CallError::Uncertain)
     }
     fn cached(&self) -> Vec<Endpoint> {
         self.state
@@ -363,15 +358,15 @@ impl MessageSession {
 
 /// Quota reads may use the first readable service. Pending permissions instead
 /// retain and revalidate an explicit Endpoint through `endpoints(true)`.
-pub fn call(method: &str, params: &Value) -> Result<Value, String> {
-    allowed(method)?;
+pub fn call(method: &str, params: &Value) -> Result<Value, CallError> {
+    allowed(method).map_err(CallError::Refused)?;
     if !crate::clients::runs(&agent_hud_agents::antigravity::LOCAL_SERVICE) {
-        return Err(format!(
+        return Err(CallError::Unavailable(format!(
             "Antigravity local service acquisition is unsupported on {}",
             std::env::consts::OS
-        ));
+        )));
     }
-    let service = service()?;
+    let service = service().map_err(CallError::Unavailable)?;
     for endpoint in service.cached() {
         if let Ok(value) = service.send(&endpoint, method, params) {
             return Ok(value);
@@ -381,39 +376,17 @@ pub fn call(method: &str, params: &Value) -> Result<Value, String> {
         state.complete = false;
     }
     let mut last = None;
-    for endpoint in service.discover(true, false)? {
+    let found = service
+        .discover(true, false)
+        .map_err(CallError::Unavailable)?;
+    for endpoint in found {
         match service.send(&endpoint, method, params) {
             Ok(value) => return Ok(value),
             Err(error) => last = Some(error),
         }
     }
     // A service that answered with its own error is reachable; say what it said.
-    Err(last.unwrap_or_else(|| {
-        l10n::text(
-            "没有已登录且正在运行的 Antigravity 服务",
-            "No authenticated already-running Antigravity service is available",
-        )
-    }))
-}
-
-/// The service's own Connect error (`{"code","message"}`), limited in size.
-/// These come from the loopback service and hold no credentials.
-fn service_error(response: reqwest::blocking::Response) -> String {
-    use std::io::Read;
-    let status = response.status().as_u16();
-    let mut bytes = Vec::new();
-    let _ = response.take(4096).read_to_end(&mut bytes);
-    let message = serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .and_then(|body| body["message"].as_str().map(str::to_owned))
-        .filter(|text| !text.is_empty());
-    match message {
-        Some(text) => format!(
-            "Antigravity: {}",
-            text.chars().take(300).collect::<String>()
-        ),
-        None => format!("Antigravity local service returned HTTP {status}"),
-    }
+    Err(last.map_or_else(CallError::none, CallError::Refused))
 }
 
 #[cfg(all(test, target_os = "windows"))]

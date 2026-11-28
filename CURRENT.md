@@ -2,6 +2,27 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## Antigravity 实时状态检测到后自动打开；没开桌面版时由 agy 命令行开会话（#586）（2026-11-28，Claude，常浩回「打开实时状态，命令行兜底也修了」；已提交，PR 见描述；未发布，等合并后装机）
+
+- 时间：开工 `2026-11-28 15:25`（按会话记录推算，未用 `date` 记；`date` 记到写交接时 `2026-11-28 15:55`）。来由：#558 收尾留下的两项待定，常浩当天定：都做。
+- 改了哪些文件：
+  - 你要求的：
+    - 实时状态：`hud/src/presentation.rs` 的 `DETECTED_LATE` 加 `antigravity`，第一次检测到时打开一次，之后以常浩的选择为准；测试 `a_late_client_turns_live_the_first_time_it_is_detected_then_keeps_the_choice`（ChatGPT、Antigravity 各走一遍）和 `antigravity_saved_off_before_it_was_known_late_turns_on_once`（照本机现状：ChatGPT 已在名单里、手动关着，Antigravity 存成关后被检测到）。
+    - 兜底判断：`clients/antigravity/mod.rs` 新增 `CallError::{Unavailable, Refused}`；`service::call` 一个服务都没找到才回 Unavailable，找到了但它拒绝回 Refused；`delivery/antigravity/mod.rs` 按类型换成 `Failure`，不再按文字判断；`accounts/host.rs` 照旧拿文字。
+    - 兜底做法：新文件 `delivery/starts/agy.rs`：后台启动 `agy -p=<消息> --output-format stream-json`（消息贴在 `-p=` 上、以 `-` 开头时前面补空格：实测 `agy -p "--version"` 会把消息当成选项，原写法也有这个问题），输出写进 `~/.agenthud/agy-starts/<请求>.ndjson`（7 天前的下次开会话时删），20 秒内读到 `conversation_id` 就回 started 带会话编号，进程留着做完这一轮；看到登录提示就停掉进程，报「agy 命令行还没登录」；读到失败结果就停掉、报那条错误；进程自己结束却没给编号报「被拒」；20 秒还没编号报「不确定」，进程不停。`delivery/process/mod.rs` 给 `ProcessRunner` 加 `spawn`（输出写文件、不等结束，留下的进程结束后回收，不留僵尸）；`delivery/starts/clients.rs` 的 `start_antigravity` 只剩「语言服务器不在就走 agy」一句；`delivery/fixtures.rs` 的假执行器能演后台 agy。
+    - 文档：`docs/LESSONS.md` 新坑 L-93，L-84、L-87 的待定句标为已定。
+  - 我顺手改的：无。
+- 行为变化（动手前已在会话里列出）：① Antigravity 实时状态第一次检测到时自动打开一次（本机装新版后会打开）。② 桌面版没开时，开 Antigravity 会话改由 agy 在后台开，不再直接报「没有已登录且正在运行的 Antigravity 服务」；agy 没登录时几秒内报要登录。③（审查返修带出，补列）macOS 上给已有 Antigravity 会话续发消息、打断，失败后不再换一个服务重发；发出去后结果不明时由报「被拒」改为报「不确定」（原来可能发重两遍）。
+- 测试：新测试先红：改前写法上 platform 3 条失败（`red-platform.txt`：认不出「没有服务」、读不到会话编号、没登录说不清），hud 2 条失败（`red-hud.txt`，Antigravity 仍是 `false`）；改后 platform 9 条、hud 2 条全过（`green-platform.txt`、`green-hud.txt`）。三条全量（`90e9d0a`，负载约 30）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1261 failed 0，前端 `ℹ pass 554`，MCP 10，插件 14，Chrome 插件 239，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。第一遍（`f046d37`）挂过两处：`service.rs` 超 300 行棘轮（已压回、基线收紧），`instance::tests::a_second_launch_brings_the_holder_forward` 负载约 49 时偶发失败（本轮没碰这块，单独连跑三次都过，`instance-rerun.txt`）。
+- 验证：本机 agy 1.5.18 真跑过两次：`-p … --output-format json` 没登录时 stderr 先打 Google 登录链接、约 66 秒后退出 1，结果 `{"conversation_id":"","status":"ERROR","error":"authentication failed or timed out"}`（`agy-p-output.json`）；`-p "/help" --output-format stream-json` 的事件是 `{"event":"…","…":{…}}` 一行一个（`agy-help-stream.ndjson`）。已登录时 `init` 事件里会话编号的确切位置没法看到（本机 agy 未登录），解析按「事件顶层或下一层的 `conversation_id`」写，`result` 里一定有。
+- 截图：无界面改动。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：已登录的 agy 真实开会话、开出的会话 get_message 能不能读到，都没验：本机 agy 没登录，登录要常浩本人做（终端运行一次 `agy`，按提示登录 Google 账号）。`instance::tests::a_second_launch_brings_the_holder_forward` 高负载下偶发失败，范围外，没改。Antigravity 桌面版已自动升到 2.36.0（language_server 参数 `--override_ide_version 2.36.0`），发现文件那一路照旧，装机后顺带看。
+- 审查第 1 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 写操作结果不明时会重发或再起 agy，可能开出两个会话：新增 `clients/antigravity/service/once.rs` 的 `call_once`，`Service::post` 把失败分成连不上（Unavailable，换下一个）、服务回错（Refused）、发出去后结果不明（Uncertain → `AcceptanceUncertain`，不重发、不兜底）；开会话的 `StartCascade` 和第一条消息都改走它。AGY586-P1-02 日志权限：目录用 `private_dir`（0700），文件用 `new_file_options`（0600），有结果就删。AGY586-P2-01 20 秒没拿到编号：后台线程接着读，最多 10 分钟，等开会话自己写完「不确定」回执后再补成 started 或 rejected；10 分钟还没编号就停掉 agy。D-01 升级时会把以前手动关掉的 Antigravity 实时状态打开一次：常浩这一轮要的就是打开，驿窗只有他一个人用，接受，补了测试写明。
+- 审查第 2 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 服务回 5xx 时可能已经动手：只有 4xx（408 / 409 / 499 除外）算拒绝，其余记「不确定」，报错里带 HTTP 状态和错误码；明确拒绝的换下一个服务（顺带解决 P2-03：续发时第一个服务认不得这个会话，交给下一个）。AGY586-P1-03 agy 没报编号就退出、报错或 10 分钟没动静都记「不确定」，只有登录提示算被拒。AGY586-P2-01 回执两个写入者加锁，「不确定」盖不掉已有结论；驿窗退出后 agy 照常把这一轮做完，下次开会话管理时读它留下的日志补写回执（`recover_agy_starts`）。
+- 审查第 3 轮返修（ChatGPT，到轮数上限停下；常浩回「按推荐继续」，轮数重新计）：AGY586-P1-01 / P2-03 服务回任何错误都记「不确定」、不换服务重发，只有连不上才换（`service/once.rs`；Connect 没有哪个状态能证明服务没动手）；代价是多窗口时续发给别的窗口里的会话会直接报错。AGY586-P2-01 `agy.rs` 新增 `record`：回执写成功才删日志；重启后读到登录提示保持「不确定」并留日志；恢复只认 `.ndjson`、回执的 provider 和 requestId 要对上。
+- 本轮新坑：L-93
+
 ## 接力治本第 4 步：插件和驿窗断开期间的「答完」先暂存、连回后补报；送话途中插件断开按说不清处理（#544 全表空格 13、12）（2026-11-28，Claude，交接卡标「可直接做」；已提交，PR 见描述，合并后要从 main 重装、插件重新加载到 0.2.15）
 
 - 时间：开工 `2026-11-28 18:20`。来由：空格 13，驿窗重启或桥接连不上时，页面报的「答完」被插件直接丢掉，只能等 3 分钟后重读。

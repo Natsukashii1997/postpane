@@ -136,22 +136,49 @@ impl SessionStarts {
                 }
             }
         }
-        atomic_json(&key, &json!({"fingerprint":fingerprint,"receipt":receipt}))?;
-        Ok(receipt)
+        settle(&self.receipts, receipt)
     }
 }
 
-fn receipt_path(receipts: &Path, provider: Provider, request_id: &str) -> PathBuf {
+pub(super) fn receipt_path(receipts: &Path, provider: Provider, request_id: &str) -> PathBuf {
     receipts.join(format!("start-{provider:?}-{request_id}.json"))
+}
+/// One writer at a time for start receipts: a start and the follower that
+/// completes it later write the same file.
+static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Saves `receipt` as the start's outcome, unless it is uncertain and the
+/// saved one is already settled (started or rejected): whichever writes
+/// first, the settled outcome stands. Returns the receipt that stands.
+pub(super) fn settle(receipts: &Path, receipt: StartReceipt) -> Result<StartReceipt> {
+    let _writing = WRITING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = receipt_path(receipts, receipt.provider, &receipt.request_id);
+    let saved = &read_json(&key)["receipt"];
+    if receipt.state == "uncertain"
+        && matches!(saved["state"].as_str(), Some("started" | "rejected"))
+    {
+        return serde_json::from_value(saved.clone()).map_err(|e| Failure::Protocol(e.to_string()));
+    }
+    write_receipt(&key, &receipt)?;
+    Ok(receipt)
 }
 /// Replaces a start's receipt and keeps the request fingerprint beside it.
 pub(super) fn save_receipt(receipts: &Path, receipt: &StartReceipt) -> Result<()> {
-    let key = receipt_path(receipts, receipt.provider, &receipt.request_id);
-    let mut value = read_json(&key);
+    let _writing = WRITING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    write_receipt(
+        &receipt_path(receipts, receipt.provider, &receipt.request_id),
+        receipt,
+    )
+}
+fn write_receipt(key: &Path, receipt: &StartReceipt) -> Result<()> {
+    let mut value = read_json(key);
     if !value.is_object() || value["fingerprint"].as_str().is_none() {
         return Err(Failure::Protocol("Start receipt".into()));
     }
     value["receipt"] =
         serde_json::to_value(receipt).map_err(|e| Failure::Protocol(e.to_string()))?;
-    atomic_json(&key, &value)
+    atomic_json(key, &value)
 }
