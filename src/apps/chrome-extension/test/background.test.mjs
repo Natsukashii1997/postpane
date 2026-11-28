@@ -44,6 +44,9 @@ function load(
     // what a page's handle answers to prove it (by default, rightly).
     marks = {},
     proofs = {},
+    // #544: the mark of the sign-in each tab's page holds, by tab (none
+    // unless named).
+    logins = {},
     sendGates = [],
     // The reads due 20 s after words went out, held for the test to run.
     held = null,
@@ -273,6 +276,10 @@ function load(
                   .update(`${token}:${args[0]}`)
                   .digest("hex");
           return [{ documentId, result: proof }];
+        }
+        if (func?.name === "markInPage") {
+          called.push([target.tabId, "markInPage", [...args]]);
+          return [{ documentId, result: logins[target.tabId] ?? null }];
         }
         if (faults.noDocumentId && func?.name === "readInPage") {
           called.push([target.tabId, func.name, [...args]]);
@@ -2117,6 +2124,7 @@ test("two failed tries say not pressed only when both do", async () => {
 // --- #488: the shadow read of ChatGPT's own data ------------------------------
 
 const SHADOWED = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+const HOUR = 60 * 60 * 1000;
 // Prompts and replies are named by UUIDs, as ChatGPT's are.
 const P = (n) => `0b1c2d3e-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const M = (n) => `0b1c2d3e-0000-4000-9000-${String(n).padStart(12, "0")}`;
@@ -2379,8 +2387,10 @@ test("what a page answers is told only as a summary of known fields", async () =
   );
 });
 
-test("a read that failed ends the reads of that conversation; a limit or a refusal ends them all", async () => {
+test("a read that failed ends the reads of that conversation; a limit or a refusal pauses them all", async () => {
+  const clock = { now: 1_000_000 };
   const kit = await shadowed({
+    clock,
     answers: [
       { outcome: "http", status: 500 },
       { outcome: "read" },
@@ -2402,8 +2412,9 @@ test("a read that failed ends the reads of that conversation; a limit or a refus
   await settle();
   assert.equal(kit.reads().length, 3, "after a limit no conversation is read");
   assert.deepEqual(kit.stored.shadowStops, {
-    halted: true,
+    paused: { status: 429, at: 1_000_000, until: 1_000_000 + HOUR },
     unread: [SHADOWED],
+    salt: null,
   });
   assert.deepEqual(
     kit.shadows().map((told) => [told.outcome, told.status ?? null]),
@@ -2411,14 +2422,148 @@ test("a read that failed ends the reads of that conversation; a limit or a refus
       ["http", 500],
       ["read", null],
       ["http", 429],
+      ["paused", 429],
     ],
   );
+  assert.deepEqual(kit.shadows().at(-1), {
+    type: "shadow",
+    why: "pause",
+    outcome: "paused",
+    status: 429,
+    at: 1_000_000,
+    until: 1_000_000 + HOUR,
+  });
   // Switched off and on again by the person: reads start over.
   await kit.watch();
   await kit.watch(true);
   kit.complete(2, SHADOWED, { promptId: P(4) });
   await settle();
   assert.equal(kit.reads().length, 4);
+});
+
+// #544, in place of #488's stop for good: refused or over a limit, the
+// reads pause an hour, then one tries again; not refused, they go on.
+test("an hour after a refusal one read tries again: refused again, another hour; not refused, the reads go on", async () => {
+  const clock = { now: 1_000_000 };
+  const kit = await shadowed({
+    clock,
+    answers: [
+      { outcome: "http", status: 403 },
+      { outcome: "http", status: 403 },
+      { outcome: "read", status: 200 },
+      { outcome: "read", status: 200 },
+    ],
+  });
+  await kit.watch(true);
+  kit.complete(2, SHADOWED);
+  await settle();
+  clock.now += HOUR - 1;
+  kit.complete(3, OTHER);
+  await settle();
+  assert.equal(kit.reads().length, 1, "nothing is read within the hour");
+  clock.now += 1;
+  kit.complete(3, OTHER);
+  await settle();
+  assert.equal(kit.reads().length, 2, "the hour over, one read tries");
+  assert.deepEqual(kit.stored.shadowStops.paused, {
+    status: 403,
+    at: 1_000_000 + HOUR,
+    until: 1_000_000 + 2 * HOUR,
+  });
+  clock.now += HOUR;
+  kit.complete(3, OTHER, { promptId: P(2) });
+  await settle();
+  kit.complete(2, SHADOWED, { promptId: P(2) });
+  await settle();
+  assert.equal(kit.reads().length, 4, "not refused: the reads go on");
+  assert.equal(kit.stored.shadowStops.paused, null);
+  assert.deepEqual(
+    kit
+      .shadows()
+      .filter((told) => told.why === "pause")
+      .map((told) => [told.outcome, told.status, told.at]),
+    [
+      ["paused", 403, 1_000_000],
+      ["paused", 403, 1_000_000 + HOUR],
+      ["resumed", 403, 1_000_000 + 2 * HOUR],
+    ],
+  );
+});
+
+test("signed out, the reads wait for the page to sign in anew, not for an hour", async () => {
+  const clock = { now: 1_000_000 };
+  const kit = await shadowed({
+    clock,
+    logins: { 2: "1".repeat(16), 3: "1".repeat(16) },
+    answers: [
+      { outcome: "http", status: 401 },
+      { outcome: "read", status: 200 },
+    ],
+  });
+  await kit.watch(true);
+  kit.complete(2, SHADOWED);
+  await settle();
+  const { paused, salt } = kit.stored.shadowStops;
+  assert.deepEqual(paused, {
+    status: 401,
+    at: 1_000_000,
+    mark: "1".repeat(16),
+  });
+  assert.match(salt, /^[0-9a-f]{32}$/);
+  assert.ok(
+    kit.called
+      .filter(([, name]) => name === "markInPage")
+      .every(([, , args]) => args[0] === salt),
+    "the mark is made with the salt kept",
+  );
+  // The same sign-in, an hour on: nothing is read.
+  clock.now += 2 * HOUR;
+  kit.complete(3, OTHER);
+  await settle();
+  assert.equal(kit.reads().length, 1);
+  // Signed in anew: one read tries, and the reads go on.
+  kit.logins[3] = "2".repeat(16);
+  kit.complete(3, OTHER, { promptId: P(2) });
+  await settle();
+  assert.equal(kit.reads().length, 2);
+  assert.equal(kit.stored.shadowStops.paused, null);
+  assert.deepEqual(
+    kit
+      .shadows()
+      .filter((told) => told.why === "pause")
+      .map((told) => [told.outcome, told.status, "until" in told]),
+    [
+      ["paused", 401, false],
+      ["resumed", 401, false],
+    ],
+  );
+});
+
+test("a worker of before #544 that stopped the reads for good is paused an hour", async () => {
+  const clock = { now: 5_000_000 };
+  const kit = await shadowed({
+    clock,
+    stored: {
+      shadow: true,
+      registered: true,
+      shadowStops: { halted: true, unread: [] },
+    },
+    answers: [{ outcome: "read", status: 200 }],
+  });
+  await kit.watch(true);
+  kit.complete(2, SHADOWED);
+  await settle();
+  assert.deepEqual(kit.reads(), []);
+  clock.now += HOUR;
+  kit.complete(2, SHADOWED, { promptId: P(2) });
+  await settle();
+  assert.equal(kit.reads().length, 1);
+  assert.deepEqual(kit.shadows().at(-1), {
+    type: "shadow",
+    why: "pause",
+    outcome: "resumed",
+    at: 5_000_000 + HOUR,
+  });
 });
 
 test("a restarted worker goes by what the extension kept: stops still hold, and a switch off still takes data.js out", async () => {

@@ -182,6 +182,16 @@ test("对账：编号不一致、漏读、限流，各自单独算出来，都�
   assert.equal(result.reached, false);
 });
 
+test("对账：遇拒整体暂停、试读恢复的次数单独数出来，不算漏读也不算没读成（#544）", () => {
+  const result = summarize([
+    { why: "pause", outcome: "paused", status: 429, at: 1, until: 2 },
+    { why: "pause", outcome: "paused", status: 429, at: 2, until: 3 },
+    { why: "pause", outcome: "resumed", status: 429, at: 3 },
+  ]);
+  assert.deepEqual([result.paused, result.resumed], [2, 1]);
+  assert.deepEqual([result.refused, result.missed.length], [0, 0]);
+});
+
 test("对账：重读时数据一路本可救回的、生成中读到的状态，各自数出来", () => {
   const result = summarize([
     {
