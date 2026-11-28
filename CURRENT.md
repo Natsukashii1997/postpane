@@ -9,11 +9,12 @@
   - 你要求的：`host/src/handoff/end.rs`（不再整批拒收：判出是不是常浩授权，是走 `end_said`，不是走新的 `end_by_agent`；返回多 `byPerson`；删掉 `end_unheard`、`end_busy`）；`handoff/book_end.rs`（新 `end_by_agent`，结束步带 `agent`）；`handoff/book.rs`（`Step.agent`）；`handoff/gate/book_guard.rs`（`open_top` 把 `agent` 结束和 #368 闲置结束一样算没了结）；`protocol/src/handoffs.ts`（`agent?`）；`hud/src/alerts/relay-stop.ts`、`handoff-actions.ts`（智能体自行结束的到顶卡照旧盖「停」，底部写「智能体已自行结束，还没了结」）；`apps/mcp/src/relay.ts`（工具说明）；设置「AI 接入」页文字；`AGENTS.md`、`docs/chatgpt-channel.md`（三处旧说法）；`docs/DECIDED.md` 新增一行（取代 11-19 甲里「只认常浩开头」那条）。
   - 我顺手改的：无。
 - 行为变化（动手前已在会话里列出）：原来不是常浩开头的一轮调 `relay_end` 整批拒收；现在照样结束，记「自行结束」，到上限的审查链不算了结。送话途中原来整批拒收，现在按「不是常浩授权」结束（正在送话的那张仍逐张拒收）。
-- 测试：没先写红测试再实现（违反 L-32 顺序，测试和实现同一轮写）。`cargo test -p agent-hud-host --lib`：`275 passed; 0 failed`（handoff 部分），新测 `without_the_person_s_word_an_agent_ends_it_on_its_own`、`words_on_their_way_to_the_caller_are_not_the_person_s_word`、`an_end_an_agent_made_on_its_own_settles_no_cap` 通过。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 1253 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。证据 `evidence/2026-11-28-587-relay-end-agent/`。
+- 测试：没先写红测试再实现（违反 L-32 顺序，测试和实现同一轮写）。`cargo test -p agent-hud-host --lib`：`275 passed; 0 failed`（handoff 部分），新测 `without_the_person_s_word_an_agent_ends_it_on_its_own`、`words_on_their_way_to_the_caller_are_not_the_person_s_word`、`an_end_an_agent_made_on_its_own_settles_no_cap` 通过。三条全量（合并 main c7badea 后的 9246ff1）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 1258 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。证据 `evidence/2026-11-28-587-relay-end-agent/merged/`。
 - 验证：单测与前端测试（替身通过）；实机未验。
 - 截图：无（卡上只多一句说明文字，场景同 #411 的「闲置收起」）。
 - 发布与回读：未发布，待审查通过后合并装机。
 - 与授权不一致之处、遗留问题、范围外发现：#141 那张旧接力 `h1a21c35c77600` 在本轮开工时已不在未结束名单里，没动它。
+- 本轮新坑：无
 
 ## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）
 
