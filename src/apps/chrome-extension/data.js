@@ -167,11 +167,13 @@
   if (KEY in window) return "present";
   let readNow = async () => ({ outcome: "failed" });
   let proveNow = async () => null;
+  let markNow = async () => null;
   try {
     Object.defineProperty(window, KEY, {
       value: Object.freeze({
         read: (conversation, promptId) => readNow(conversation, promptId),
         prove: (nonce) => proveNow(nonce),
+        marked: (salt) => markNow(salt),
         stop: () => {
           readNow = async () => ({ outcome: "stopped" });
           try {
@@ -329,6 +331,20 @@
       .join("")
       .slice(0, 16);
   }
+
+  // Whether the page signed in anew since a read was signed out (#544): a
+  // mark of the sign-in it holds now, made with the extension's `salt`.
+  // The mark says only whether two sign-ins are the same; nothing of the
+  // sign-in leaves the page. None once stopped, or with none heard.
+  markNow = async (salt) => {
+    if (!alive || typeof salt !== "string" || !/^[0-9a-f]{32}$/.test(salt))
+      return null;
+    const login = same ?? other;
+    if (!login) return null;
+    let text = salt;
+    for (const [name, value] of login) text += `\n${name}: ${value}`;
+    return fingerprint(text);
+  };
 
   /** Whether one more request may go now; counts it when it may. */
   function allowed() {

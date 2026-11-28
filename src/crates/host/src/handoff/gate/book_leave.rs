@@ -34,6 +34,10 @@ pub const SWIPE_SAID: &str = "（驿窗左滑「";
 pub fn notice_head(h: &super::Handoff) -> String {
     format!("驿窗接力「{}」出错：", h.title)
 }
+/// How the words setting right what a session heard begin (#544).
+pub fn correction_head(h: &super::Handoff) -> String {
+    format!("驿窗接力「{}」更正：", h.title)
+}
 
 impl Book {
     /// Whether `turn` began with the person's own words (#439): typed in
@@ -49,7 +53,10 @@ impl Book {
                 unlabelled(text).len() == text.trim_start().len()
                     && !text.contains(SWIPE_SAID)
                     && !self.list.iter().any(|other| {
-                        other.sent_back(text) || text.trim_start().starts_with(&notice_head(other))
+                        let said = text.trim_start();
+                        other.sent_back(text)
+                            || said.starts_with(&notice_head(other))
+                            || said.starts_with(&correction_head(other))
                     })
             }
             None => false,
@@ -116,6 +123,8 @@ mod tests {
         // trouble notice (#318), a swipe's request (左滑发起).
         let notice = "驿窗接力「修登录」出错：ChatGPT 30 分钟没回信，驿窗的自动往返已经停下";
         assert!(!book.person_began(plugin(notice).as_ref()));
+        let correction = "驿窗接力「修登录」更正：驿窗随后确认上一段话其实已经送到了 ChatGPT";
+        assert!(!book.person_began(plugin(correction).as_ref()));
         let swipe = "请把这一轮的工作交给 ChatGPT 审核……（驿窗左滑「审核」发来）";
         assert!(!book.person_began(plugin(swipe).as_ref()));
         // The person quoting a notice of a handoff not in the book is theirs.

@@ -7,6 +7,8 @@
 //! it. A line holds only the fields below, of their kinds: ids, sizes and
 //! marks, no words of a reply, nothing of the sign-in. Fields:
 //! docs/chatgpt-channel.md.
+#[path = "shadow_pause.rs"]
+pub(super) mod pause;
 use serde_json::{json, Map, Value};
 use std::{
     fs,
@@ -53,7 +55,7 @@ use Kind::*;
 
 // The words a field may be: what the extension says, nothing else (#488
 // review). The kinds of a message are data.js's `KINDS`, or `other`.
-const WHY: &[&str] = &["complete", "reread", "writing", "off"];
+const WHY: &[&str] = &["complete", "reread", "writing", "off", "pause"];
 const OUTCOME: &[&str] = &[
     "read",
     "http",
@@ -74,6 +76,8 @@ const OUTCOME: &[&str] = &[
     "ledger-unavailable",
     "disarmed",
     "disarm-pending",
+    "paused",
+    "resumed",
 ];
 const PAGE_OUTCOME: &[&str] = &[
     "told",
@@ -113,6 +117,7 @@ const FIELDS: &[(&str, Kind)] = &[
     ("conversation", Uuid),
     ("why", Of(WHY)),
     ("at", Time),
+    ("until", Time),
     ("pagePromptId", Uuid),
     ("pageMessageId", Uuid),
     ("pageChars", Count),
@@ -248,10 +253,14 @@ fn line(message: &Value, now: i64) -> Option<Map<String, Value>> {
 /// Keeps what one shadow read found, with when it was heard: only while the
 /// switch is on, only of a conversation PostPane watches. What a switch-off
 /// came to (`why: off`, no conversation) is kept either way: it says the
-/// pages no longer read. Whether it was kept.
+/// pages no longer read. The reads paused or going on again (`why: pause`,
+/// #544) are of no one conversation: kept while the switch is on. Whether
+/// it was kept.
 pub(super) fn keep(data: &Path, watched: bool, message: &Value, now: i64) -> Result<bool, String> {
-    let off = message["why"] == "off" && message.get("conversation").is_none();
-    if !off && (!watched || !on(data)) {
+    let whole = message.get("conversation").is_none();
+    let off = message["why"] == "off" && whole;
+    let pause = message["why"] == "pause" && whole;
+    if !off && !(if pause { on(data) } else { watched && on(data) }) {
         return Ok(false);
     }
     let line = line(message, now).ok_or("no summary")?;
@@ -274,9 +283,16 @@ pub(super) fn keep(data: &Path, watched: bool, message: &Value, now: i64) -> Res
     Ok(true)
 }
 
-/// What the extension told of a shadow read: kept, and nothing else.
+/// What the extension told of a shadow read: kept, and nothing else. The
+/// reads paused or going on again are also a line of postpane.log (#544).
 pub(super) fn heard(data: &Path, watched: bool, message: &Value, now: i64) {
-    if let Err(error) = keep(data, watched, message, now) {
-        agent_hud_core::note!("A shadow read could not be kept: {error}");
+    match keep(data, watched, message, now) {
+        Err(error) => agent_hud_core::note!("A shadow read could not be kept: {error}"),
+        Ok(true) => {
+            if let Some(said) = pause::said(message) {
+                agent_hud_core::note!("{said}");
+            }
+        }
+        Ok(false) => {}
     }
 }

@@ -51,8 +51,15 @@ fn late_word_of_a_mending_before_its_answer_lets_the_mended_pass() {
     assert!(!after.unsure(), "known to have gone in");
     assert!(after.auto, "the stop was for this: on again");
     assert_eq!(notes(&after, &guard::mending_confirmed_late()), 1);
-    let resumed = after.steps.last().unwrap();
+    // Then a step setting right what the session heard (#544).
+    let [.., resumed, correction] = after.steps.as_slice() else {
+        panic!()
+    };
     assert_eq!((resumed.kind, resumed.auto), (StepKind::Resume, true));
+    assert_eq!(
+        correction.cause,
+        Some(crate::handoff::book::Cause::Confirmed)
+    );
     // The same word again changes nothing.
     assert!(!desk.observe(&word(&request), 6));
     assert_eq!(kept(&desk, &handoff).steps.len(), after.steps.len());

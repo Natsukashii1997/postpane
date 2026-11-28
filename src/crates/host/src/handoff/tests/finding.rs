@@ -90,7 +90,14 @@ fn words_found_in_the_conversation_went_in() {
         assert!(!found(&desk, &request, "there", 50_001));
         assert_eq!(asks(&desk), before + 1);
         // Its answer passes as any review's does.
-        let words = kept.steps.last().unwrap().text.clone();
+        // A step after it sets right what the session heard (#544).
+        let correction = kept.steps.last().unwrap();
+        assert_eq!(
+            correction.cause,
+            Some(crate::handoff::book::Cause::Confirmed),
+            "{restarted}"
+        );
+        let words = kept.last_asked().unwrap().text.clone();
         desk.observe(&reply_as(words, PASS, "m2"), 50_002);
         let kept = desk.lock().get(&handoff.id).cloned().unwrap();
         assert_eq!(kept.phase, Phase::Replied, "{restarted}");
