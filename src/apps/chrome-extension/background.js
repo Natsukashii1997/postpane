@@ -954,6 +954,16 @@ const freedRead = chrome.storage.local
   .get("freed")
   .then((kept) => (freed = { ...kept?.freed, ...freed }))
   .catch(() => {});
+/** By conversation, when the latest words of the extension's known to be in
+ * it began to go (round 8, P2-11): a prompt of Changhao's told of first only
+ * after that, but begun before it, as its page says, is let go too. One
+ * whose beginning is not known still holds it. Local storage, the newest
+ * `STRAYS_MOST`. */
+let ownedSince = {};
+const ownedSinceRead = chrome.storage.local
+  .get("ownedSince")
+  .then((kept) => (ownedSince = { ...kept?.ownedSince, ...ownedSince }))
+  .catch(() => {});
 
 /** Prompt `promptId` in `conversation` is the extension's, its words begun
  * to go at `since`: noted; and a conversation Changhao went on with before
@@ -961,7 +971,7 @@ const freedRead = chrome.storage.local
  * whose came last is not known (round 5). */
 async function ownPrompt(conversation, promptId, since) {
   if (!conversation || !promptId) return;
-  await Promise.all([asksRead, takenRead, freedRead]);
+  await Promise.all([asksRead, takenRead, freedRead, ownedSinceRead]);
   const ids = (asks[conversation] ?? []).filter((id) => id !== promptId);
   delete asks[conversation];
   asks[conversation] = [...ids, promptId].slice(-ASK_IDS);
@@ -969,6 +979,14 @@ async function ownPrompt(conversation, promptId, since) {
   for (const old of all.slice(0, Math.max(0, all.length - STRAYS_MOST)))
     delete asks[old];
   chrome.storage.local.set({ asks }).catch(() => {});
+  if (!(ownedSince[conversation] >= since)) {
+    delete ownedSince[conversation];
+    ownedSince[conversation] = since;
+    const owned = Object.keys(ownedSince);
+    for (const old of owned.slice(0, Math.max(0, owned.length - STRAYS_MOST)))
+      delete ownedSince[old];
+    chrome.storage.local.set({ ownedSince }).catch(() => {});
+  }
   // His prompts begun before these words: let go; any begun after stand.
   const his = Object.entries(taken[conversation] ?? {});
   const before = his.filter(([, at]) => at < since).map(([id]) => id);
@@ -1008,7 +1026,14 @@ async function goneOn(message) {
     message.promptId ?? (phase === "stopped" ? message.newest : null);
   if (!["start", "complete", "stopped"].includes(phase)) return;
   if (!conversation || !promptId) return;
-  await Promise.all([asksRead, headsRead, straysRead, takenRead, freedRead]);
+  await Promise.all([
+    asksRead,
+    headsRead,
+    straysRead,
+    takenRead,
+    freedRead,
+    ownedSinceRead,
+  ]);
   if (asks[conversation]?.includes(promptId)) return;
   // Only a relay's conversation is looked at: words alike elsewhere take no
   // head away (round 6).
@@ -1023,6 +1048,9 @@ async function goneOn(message) {
   // When it began, as its page told it (a start's `at`, an end's
   // `begunAt`); else as heard, later than it was: let go later, not sooner.
   const told = phase === "start" ? message.at : message.begunAt;
+  // Begun, as its page says, before words of the extension's since known to
+  // be there: let go already, though first told of now (round 8).
+  if (Number.isFinite(told) && told < ownedSince[conversation]) return;
   const mine = taken[conversation] ?? {};
   const at = Math.min(
     Number.isFinite(told) ? told : Date.now(),

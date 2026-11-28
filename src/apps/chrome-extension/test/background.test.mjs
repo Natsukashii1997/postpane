@@ -4292,6 +4292,40 @@ test("a prompt of Changhao's told late stands in for no later one of his", async
   assert.deepEqual(sent.removed, []);
 });
 
+// Round 8, P2-11: a prompt of his begun before PostPane's words, its start
+// first told only after those words are known, is let go as well; one
+// begun after them, or whose beginning is not told, still holds.
+test("a prompt of Changhao's begun before PostPane's words, told first after they are known, takes nothing", async () => {
+  const late = await sentOnce({ ok: true, promptId: P(110) }, async () => {}, {
+    tab3: true,
+  });
+  const since = late.stored.ownedSince?.[ENDED];
+  assert.ok(Number.isFinite(since), "when the words began is kept");
+  turn(late.listeners, "start", P(111), { prompt: MINE, tab: 3, at: since - 5 });
+  await settleLong();
+  assert.equal(late.stored.taken?.[ENDED], undefined, "begun before");
+  await late.end();
+  await late.done(P(110), SENT);
+  assert.ok(late.removed.includes(2), JSON.stringify(late.removed));
+
+  const later = await sentOnce({ ok: true, promptId: P(112) }, async () => {}, {
+    tab3: true,
+  });
+  const from = later.stored.ownedSince[ENDED];
+  turn(later.listeners, "start", P(113), { prompt: MINE, tab: 3, at: from - 5 });
+  turn(later.listeners, "start", P(114), { prompt: MINE, tab: 3, at: from + 5 });
+  turn(later.listeners, "start", P(115), { prompt: MINE, tab: 3 });
+  await settleLong();
+  assert.deepEqual(
+    Object.keys(later.stored.taken?.[ENDED] ?? {}).sort(),
+    [P(114), P(115)],
+    "begun after, or when not told, still his",
+  );
+  await later.end();
+  await later.done(P(112), SENT);
+  assert.deepEqual(later.removed, []);
+});
+
 // An end whose beginning was not heard tells when its turn began
 // (`begunAt`): kept from then, not from when it is heard.
 test("an end of a prompt of his counts from when its turn began, as told", async () => {
