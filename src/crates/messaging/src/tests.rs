@@ -122,6 +122,10 @@ struct Transcripts {
     decoder: Arc<Mutex<Option<(String, u64, usize)>>>,
     /// `session_detail` calls answered.
     calls: Arc<AtomicUsize>,
+    /// The live facts a session's page carries (`session.liveFacts`), by
+    /// session: the collector's, which the snapshot leaves out for a client
+    /// whose live status is off on the HUD.
+    page_live: Arc<Mutex<BTreeMap<String, Value>>>,
 }
 /// A product's store of conversation turns, in memory: the turns of each
 /// session, built from the facts the collector hands it.
@@ -282,6 +286,16 @@ impl Transcripts {
     }
     fn query(&self) -> impl Fn(&str, Value) -> Result<Value> + '_ {
         move |method, params| {
+            let id = params["id"].as_str().unwrap_or_default().to_owned();
+            let mut page = self.page(method, params)?;
+            if let Some(live) = self.page_live.lock().unwrap().get(&id) {
+                page["session"] = json!({"id": id, "liveFacts": live});
+            }
+            Ok(page)
+        }
+    }
+    fn page(&self, method: &str, params: Value) -> Result<Value> {
+        {
             assert_eq!(method, "session_detail");
             let id = params["id"].as_str().unwrap();
             assert!(
@@ -2105,6 +2119,100 @@ fn an_antigravity_answer_the_store_cannot_tie_to_the_message_flies_only_its_repl
     assert_eq!(flown(&world).len(), 2);
     assert_eq!(flown(&world)[1]["from"], "antigravity");
     assert_eq!(world.get(&json!(id))["state"], "replied");
+}
+
+/// A start's receipt names an Antigravity session by its bare id; the app's
+/// snapshot and pages know it as `antigravity:<id>`. Its answer is read from
+/// the pages under the snapshot's id (postpane#558: the first answer of a
+/// session started in Antigravity 2.35.2 stayed `started`).
+#[test]
+fn an_antigravity_start_named_by_its_bare_id_is_read_under_the_snapshots_id() {
+    let mut world = World::on();
+    let full = format!("antigravity:{ANTIGRAVITY}");
+    let project = world.fixture.home().join("project");
+    world.snapshot["sessions"].as_array_mut().unwrap().push(json!(
+        {"id":full,"source":"antigravity","title":"Plan the film","cwd":project,"state":"idle","parentId":null,"liveFacts":{}}
+    ));
+    let sent = world.send(("claude", CLAUDE), &full, "Plan the film");
+    let id = sent["id"].as_str().unwrap().to_owned();
+    let mut message = world.messaging.journal.find(&id).unwrap().clone();
+    assert_eq!(
+        message.to.session_id, full,
+        "a send names the snapshot's id"
+    );
+    message.kind = Kind::Start;
+    message.to.session_id = ANTIGRAVITY.into();
+    world.messaging.journal.replace(message.clone());
+    let words = words::compose(
+        false,
+        message.form,
+        &party(&world.snapshot, "claude", CLAUDE),
+        "antigravity",
+        &id,
+        None,
+        "Plan the film",
+    );
+    world.transcripts.prompt(&full, "step-0", &words);
+    world.transcripts.reply(&full, "step-0", "Planned.");
+    world.live(
+        &full,
+        json!({"turnId":"step-0","turnStartedAt":"2026-10-22T01:00:00Z","endedAt":"2026-10-22T01:03:00Z"}),
+    );
+    let done = world.get(&json!(id));
+    assert_eq!(done["state"], "done", "{done}");
+    assert_eq!(done["answer"], "Planned.");
+}
+
+/// With a client's live status off on the HUD, the snapshot leaves out its
+/// live facts; the answer is still read once its turn ended, by the live
+/// facts its own pages carry (postpane#558: Antigravity's live status was off).
+#[test]
+fn a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry() {
+    // The snapshot leaves the facts out, or (postpane#560) keeps an empty object.
+    ends_by_the_facts_its_pages_carry(None);
+    ends_by_the_facts_its_pages_carry(Some(json!({})));
+}
+fn ends_by_the_facts_its_pages_carry(snapshot_live: Option<Value>) {
+    let mut world = World::on();
+    let full = format!("antigravity:{ANTIGRAVITY}");
+    let project = world.fixture.home().join("project");
+    let mut session = json!(
+        {"id":full,"source":"antigravity","title":"Plan the film","cwd":project,"state":"idle","parentId":null}
+    );
+    if let Some(live) = snapshot_live {
+        session["liveFacts"] = live;
+    }
+    world.snapshot["sessions"]
+        .as_array_mut()
+        .unwrap()
+        .push(session);
+    let sent = world.send(("claude", CLAUDE), &full, "Plan the film");
+    let id = sent["id"].as_str().unwrap().to_owned();
+    let message = world.messaging.journal.find(&id).unwrap().clone();
+    let words = words::compose(
+        false,
+        message.form,
+        &party(&world.snapshot, "claude", CLAUDE),
+        "antigravity",
+        &id,
+        None,
+        "Plan the film",
+    );
+    world.transcripts.prompt(&full, "step-0", &words);
+    world.transcripts.reply(&full, "step-0", "Planned.");
+    assert_eq!(
+        world.get(&json!(id))["state"],
+        "started",
+        "no facts, no end"
+    );
+    world.transcripts.page_live.lock().unwrap().insert(
+        full.clone(),
+        json!({"turnId":"step-0","turnStartedAt":"2026-10-22T01:00:00Z","endedAt":"2026-10-22T01:03:00Z"}),
+    );
+    let done = world.get(&json!(id));
+    assert_eq!(done["state"], "done", "{done}");
+    assert_eq!(done["answer"], "Planned.");
+    assert_eq!(done["endedAt"], "2026-10-22T01:03:00Z");
 }
 
 impl Preferences {

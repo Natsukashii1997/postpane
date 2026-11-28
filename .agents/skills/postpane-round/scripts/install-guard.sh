@@ -126,7 +126,7 @@ check_record() {
     echo "还没有归属记录，比不了：带上产物路径再跑，install.sh check <产物 .app>。" >&2
     exit 1
   fi
-  echo "已装 $installed；已装的是 $(describe_record)"
+  echo "已装 ${installed}；已装的是 $(describe_record)"
   if [ "$installed" != "$(field "$RECORD" hash)" ]; then
     echo "不一致：已装的 $installed 不在归属记录里（用旧版 install.sh 的会话装的，或有人手动 ditto、回滚过）。先重装再请常浩看（L-05）。" >&2
     exit 1

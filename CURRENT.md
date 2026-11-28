@@ -15,6 +15,43 @@
 - 发布与回读：未发布。叠在 #564（`claude/562-reply-next-card`）上，要等 #564 合并后再合。
 - 与授权不一致之处、遗留问题、范围外发现：分支接在 #564 那个会话本地还没推的 `73bfc1f` 上；它推之前，本 PR 的对比会带上它那 3 个提交。端到端测试第一次用了真实的标签 id，桌面索引会读本机真实的 Claude 目录，撞上了真实会话，已改用假 id（测试里写了注释）。已登记 DECIDED.md。
 - 本轮新坑：无
+## Antigravity 2.35.2 桌面版经驿窗能开会话、能读回复：认发现文件里的令牌，补齐 get_message 判完成的三处断点（#558）（2026-11-27，Claude，多模型协同会话转来常浩的目标「经驿窗新开 Antigravity 会话交任务」；已提交，PR 见描述；本分支包已装机 `4f01917620a7` 回读通过，未合并）
+
+- 时间：开工 `2026-11-27 20:47`（`date '+%F %H:%M'` 记录）。来由：#558。桌面版开着、没有 agy 进程时，`start_session`（antigravity）、`send_message` 被拒「没有已登录且正在运行的 Antigravity 服务」，卡住 MA-04 第一次试跑。
+- 你要求的（验收句「`start_session` 新开成功，`get_message` 能读到回复」要求的四处，前一处修好才露出后一处）：
+  1. 发现：2.35.2 的 language_server 从标准输入拿 host 令牌，参数里没有 `--csrf_token`；新版把端口和令牌写在 `~/.gemini/antigravity*/daemon/*.json`。新 `clients/antigravity/daemon.rs` 读它，`running.rs` 只在参数里没令牌时按 pid 对上发现文件才用，过期文件不认；旧版和 agy 命令行照旧（L-84）。
+  2. 完成事件的轮次：`antigravity/hooks.rs` 的 `enrich` 把 `turnId` 写成回复那一步，会话记录按提问那一步编号，对不上就判不出最新一轮；改成往回找开启这一轮的提问步（L-85）。
+  3. 会话 id：start 回执记裸 UUID，快照和 `session_detail` 认 `antigravity:<uuid>`；读会话页前统一换成快照 id（`transcript::page_id`，L-86）。
+  4. 判结束的数据：侧栏「实时状态」关着的那家，快照里没有 liveFacts；本机 Antigravity 正是关的。改成快照里没有时用会话页自带的 `session.liveFacts`（L-87）。
+- 改变的行为（动手前已在会话里列出）：① 任何一家「实时状态」关着时，`get_message` 原来永远停在 started，现在按会话页的 liveFacts 判出 done 并给回复；快照里有 liveFacts 的照旧。② Antigravity 完成事件的 `turnId` 从回复步改成提问步（和会话记录一致）。③ 2.35+ 桌面版从「认不出」变成能读额度、能收发消息。
+- 我顺手改的：进程发现从 `service.rs` 搬到 `running.rs`（300 行棘轮，`service.rs` 基线 662→476）；`docs/accounts.md` 补一段发现文件；测试夹具 `session_detail` 能带 `session.liveFacts`；LESSONS L-84～L-87。
+- 同类：见各提交正文「同类：」一行。范围外发现：`delivery/antigravity/mod.rs` 的 `call` 按 `"no running Antigravity service"` 判不可用，和实际报错对不上，`agy -p` 兜底从移植起没走到过（改了会在没开桌面版时改由命令行无头开会话，属行为变化，没改）；`stored::answer` 同样只看快照 liveFacts（驿窗没接会话存储，没改）。
+- 测试：新测试先在旧逻辑上跑红（`red.txt` 2 failed、`red-hooks.txt` 2 failed、`red-bare-id.txt`、`red-live-off.txt` 各 1 failed）。最终版本 `36c660b` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1190 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`r4/`）。
+- 验证：真实环境通过。桌面版 2.35.2 开着、agy 进程数 0：`start_session`（folder 空）第 4 次 `m-8e6f70a778cb` → done，回复「驿窗 558 第四次已收到」；`send_message` 续发 `m-85c21e82de73` → done，回复「驿窗 558 续发已收到」；修前修后每一步的现象见证据目录 `real-env.md`。
+- 截图：无界面改动；装机冒烟图在各 `evidence/2026-11-27-558-agy-hub-r*/`。
+- 发布与回读：本分支包装了 4 次，最后一次 `4f01917620a7`，产物与已装 `shasum` 一致，签名证书一致；回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub-r4/PostPane-70b60e21467d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。第一次装机接管了 #554 分支的包（#554 已合并进 main，本分支含它）。
+- 与授权不一致之处、遗留问题：
+  - 待常浩定：本机 Antigravity「实时状态」是关的（`presentation.json` `sources.antigravity.live: false`，首次见到时还没检测到、默认存成了关；ChatGPT 有 `DETECTED_LATE` 检测到后补开一次，Antigravity 没有）。关着时侧栏只显示空闲，#554 实机「只看到打盹」很可能是这个原因（未核实）。要不要打开、要不要把 Antigravity 加进 `DETECTED_LATE`，没动。
+  - 测试时在 Antigravity 里留了 4 个「驿窗连通性测试…」会话，可删。
+- 本轮新坑：L-84、L-85、L-86、L-87、L-88（变基到 main 时改了号：原先用的号和 main、#543 撞了）。
+- MA-02 第 1 轮返修（审查链 `r1a21d3e4c3c00`，受审 `8bf3b91`，P1 1、P2 3、P3 2，全部已修）：
+  - P1-01 发现文件里的端口没和进程绑定：`running::candidates` 只用该进程正在监听的端口（`listening_ports(pid)`），读不到监听端口就不用文件；命令行来的照旧。
+  - P2-01 目录符号链接：存储目录和 `daemon` 目录是链接的不读（文件本身原来就不读链接）。检查和打开之间的竞态没处理，理由写在回信里：端口已经绑定到进程，文件改不了信任对象。
+  - P2-02 超长轮次的回退轮次：钩子认不出轮次时标 `turnKnown: false`，`HookEvent::completed_turn` 让 overlay 保留会话记录的轮次，同一轮不会在两个名字下各结束一次。
+  - P2-03 发现文件的位置改用 `AGENT.discovery.storage`，和会话记录一致（认 `GEMINI_CLI_HOME`）。`hud_tools::antigravity` 的注释说 Antigravity 不认这个变量，两边不一致，没改它。
+  - P3-01 钩子判「未答的提问」改成和 `TURNS` 一样，只排除 SYSTEM；P3-02 `page_id` 按客户端限定，判结束时按快照 id 精确匹配；快照 liveFacts 为空对象 `{}` 时也改看会话页。
+  - 每条新测试都先临时换回旧写法跑出红，证据在 `r5/red-*.txt`。
+  - 返修后 `a88b866` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1196 passed, 0 failed`，前端各套 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `2042a24ea279`，真实环境 `start_session` 第 5 次 `m-57203ff68420` → done，回复「驿窗 560 返修后已收到」。
+- 长消息读不到回复（多模型协同会话报的 `m-fa3b7d6821af`，L-88）：Antigravity 的 `transcript.jsonl` 会把长字段截断（`truncated_fields`，正文中间换成 `<truncated N bytes>`），完整内容在 `transcript_full.jsonl`。新增 `core/clients/antigravity_whole.rs`：会话页读到被截断的行，按 `step_index` 回填完整那一行；用量和实时状态仍读 `transcript.jsonl`（换来源文件可能把历史用量算两遍）。`conversation.rs` 只改一行。测试：Rust `1198 passed, 0 failed`；`pnpm test` 第一遍在负载 150 下 Chrome 插件套件 4 败（两次失败的不是同一批测试，那套代码没改），负载降到约 40 后重跑 exit 0、各套 `ℹ fail 0`；`pnpm run check` exit 0；根目录 `ℹ pass 65` `ℹ fail 0`。装机 `05f150bd7f38`，`get_message m-fa3b7d6821af` → done，回复完整。
+- MA-02 第 2 轮返修（受审 `323430e`，P2-01、P2-03、P3-01～03 已验证关闭；待修 P1-01、P2-02、P2-04，已在 `2d38464` 修完）：
+  - P1-01 端口归属不等于连得到：三个平台的 `listening_ports` 改成返回监听地址（lsof 脚本 `-Fn` → `-Fnt` 读地址族；Windows 带上 `local_addr`）。发现文件来的服务只认 IPv4 `127.0.0.1` 或 `0.0.0.0` 上的监听（实际连接写死 `127.0.0.1`），`127.0.0.2`、其他网卡、IPv6 都不认；命令行来的服务、Windows 导航和 macOS 认 codex 进程两处仍按端口比对，行为不变。
+  - P2-04 发现文件只写了 HTTP 端口时，不再拿令牌去试进程其他端口的 HTTPS。
+  - P2-02 `turnKnown: false` 的完成先叠在旧轮次上、日志追上后改名，岛事件原来会按两个键各提醒一次；`Tracker::completions` 另按「同一会话、同一结束时刻」去重。
+  - 行为变化（动手前已在会话里列出）：上面三条。实机 Antigravity 监听的就是 `127.0.0.1`，不受影响。
+  - 每条新测试都先在旧逻辑上跑出红，证据在 `r7/red-*.txt`。`2d38464` 三条全量：`pnpm run check` exit 0；`pnpm test` exit 0（Rust `1201 passed, 0 failed`，六套全过）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。装机 `85ce451e68d7`（旧版在负载 185 下 10 秒没退出，脚本没覆盖；退出后重跑），回滚见 `r7/install.txt`。真实环境 agy 进程数 0：`start_session` `m-e5e1578b47cb` → done「收到，r7」，`send_message` `m-82e84ffcef1d` → done「续发也通」（`r7/real-env.md`）。
+- MA-02 第 3 轮返修（受审 `fd3cdeb`：P1-01、P2-04 已验证关闭，be5f60e 长消息回填无问题；P2-02 待修）：第 2 轮加的「同一会话、同一结束时刻只提醒一次」对各家都生效，秒级时间戳的日志里一秒内结束的两轮会被挡掉第二轮。改成只对「轮次未知、借用了日志轮次」的完成（liveFacts 记 `turnKnown: false`）按时刻去重，并把之后出现的每个轮次名记为已提醒；其他完成照旧按 `source:session:turn`。顺带堵上自查发现的一条：日志追上后自己再结束这一轮，原来会提醒第二次。两条新断言都在旧逻辑上跑出红（`r8/red-*.txt`）。变基到 main，LESSONS 改号。
+- skill 进化：无。
+
 ## 侧栏 REPLY 和失败提醒不再给子任务（subagent）单独出行（#578）（2026-11-28，Claude，常浩 11-28 截图追问「还是出现同一个会话多次？」；回到 11-28 已定的「侧栏单位是单一任务会话」，不改已定内容；已提交，PR 见描述）
 
 - 时间：开工 `2026-11-28 10:00`（`date '+%F %H:%M'` 记录）。来由：#565/#569 的按会话去重已在装着的包里（`4b853dea` 含 `replyLine`），侧栏仍出现 4 行以上「你在做一个 skill 的盲测执行方……」。实机快照里这些行的 `sessionId` 都是 `agent-a…`，父会话都是 `b633847f`「设计规范失效审核」：是主会话派出的子任务，各有编号。
@@ -180,8 +217,6 @@
 - 与授权不一致之处、遗留问题、范围外发现：常浩同轮提出侧栏三处困惑，已出方案页 https://claude.ai/artifact/YQxPFTSoqWweCMWVC5sTfB（源文件 `docs/design/侧栏行动化三版预览-2026-11-27.html`，未进仓库），等他挑 3 处。Claude 收尾稳定给按钮框另开会话（任务卡，待常浩点开始）。
 - 主线：侧栏行动化｜✅ 0 ▶ 1 ❓ 3 📌 1：① 只留类型签（本 PR，等 #558 实机做完装机合并）▶；② 回复按收尾状态分流、主文字换成下一步、按钮一键做 ❓；③ 48 小时积压区 + 「不做了」❓；④ 积压区名字 ❓；⑤ Claude 收尾一律带按钮框（另开会话）📌。
 - 本轮新坑：无。
-- skill 进化：无。
-
 ## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
 
 - 时间：开工 `2026-11-27 17:31`（`date '+%F %H:%M'` 记录）。来由：全表 E11 空格 31，真实环境现场 #539 第 4 轮（11-26 11:52 起每 2 分钟重读 12 小时以上）。
