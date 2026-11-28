@@ -260,11 +260,50 @@ test("the story packs, folds, flies nose first, unfolds and delivers", () => {
     told.shape[0].clipPath,
     "an envelope again at the end",
   );
+  assert.ok(told.puffs.length >= 16, `${told.puffs.length} puffs mark the way`);
+  for (const puff of told.puffs) {
+    assertOrdered("puff", puff.frames);
+    assert.ok(
+      Math.max(...puff.frames.map((frame) => frame.opacity as number)) <= 0.55,
+      "puffs stay faint",
+    );
+  }
+  // The letter is seen going into the envelope, slipping behind its front edge.
   assert.ok(
-    told.dashes.length >= 16,
-    `${told.dashes.length} dashes mark the way`,
+    told.letter.some((frame) => frame.clipPath === "inset(0px 0px 100% 0px)"),
+    "the letter slips behind the envelope's front",
   );
-  for (const dash of told.dashes) assertOrdered("dash", dash.frames);
+  // The flap closes from its inner face to its outer one.
+  const colors = new Set(told.flap.map((frame) => frame.color));
+  assert.ok(colors.size >= 2, "the flap shows both faces");
+  assert.ok(
+    told.pop.some((frame) => frame.scale === "1 0.92"),
+    "pressed shut",
+  );
+  // The loop starts leftwards and lands rightwards: it rolls over on the way
+  // and lands the right way up, level, to unfold into an upright envelope.
+  for (const [name, frames] of Object.entries({
+    roll: told.roll,
+    shadow: told.shadow,
+  }))
+    assertOrdered(name, frames);
+  const rolled = (frame: Keyframe) =>
+    parseFloat(String(frame.scale).split(" ")[1]);
+  assert.ok(
+    told.roll.some((frame) => Math.abs(rolled(frame)) <= 0.3),
+    "edge on mid-roll",
+  );
+  const angle = (parseFloat(String(told.turn.at(-1)!.rotate)) * Math.PI) / 180;
+  assert.ok(
+    rolled(told.roll.at(-1)!) * Math.cos(angle) > 0,
+    "upright at the end",
+  );
+  assert.ok(Math.abs(Math.sin(angle)) < 0.01, "and level");
+  assert.ok(
+    told.delivered > told.landing + STORY.unfold &&
+      told.delivered < told.length,
+    "delivered after it unfolds",
+  );
 });
 
 test("a refused plane falls from halfway and bursts open; reduced motion only shows envelopes", () => {
@@ -283,12 +322,29 @@ test("a refused plane falls from halfway and bursts open; reduced motion only sh
   assert.equal(fell.length, fell.landing + STORY.fall);
   assert.equal(fell.pop.at(-1)?.opacity, 0, "fades out where it fell");
   const halfway = measure(route).at(0.5).point;
-  const before = translate(fell.move.at(-4)!);
+  const at = fell.landing / fell.length;
+  const before = translate(
+    fell.move.find((frame) => Math.abs((frame.offset as number) - at) < 1e-3)!,
+  );
   assert.ok(
     Math.hypot(before.x - halfway.x, before.y - halfway.y) < 1,
     "falls from halfway",
   );
   assert.ok(translate(fell.move.at(-1)!).y > before.y + 40, "and drops");
+  const spun = (frame: Keyframe) => parseFloat(String(frame.rotate));
+  const aloft = fell.turn.find(
+    (frame) => Math.abs((frame.offset as number) - at) < 1e-3,
+  )!;
+  assert.ok(
+    Math.abs(spun(fell.turn.at(-1)!) - spun(aloft)) >= 360,
+    "tumbling over as it falls",
+  );
+  assert.equal(
+    fell.shape.at(-1)?.clipPath,
+    fell.shape[0].clipPath,
+    "back to an envelope",
+  );
+  assert.equal(fell.flap.at(-1)?.scale, "1 -1", "bursting open");
 
   const still = stillStory(false);
   assert.deepEqual(
@@ -334,8 +390,8 @@ test("on a dock the robots throw and catch: still at both ends, leaning the lett
   );
 });
 
-test("the whole flight takes about two and a half seconds", () => {
+test("the whole flight takes about three seconds", () => {
   const told =
     STORY.pack + STORY.fold + STORY.fly + STORY.unfold + STORY.deliver;
-  assert.ok(told >= 2300 && told <= 2700, `${told} ms`);
+  assert.ok(told >= 2800 && told <= 3000, `${told} ms`);
 });
