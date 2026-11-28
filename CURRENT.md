@@ -2,6 +2,20 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 智能体能自行结束接力：relay_end 不再要常浩开头（#587）（2026-11-28，Claude，常浩问「为什么旧接力只能由本人结束」，要求「完全可以 AI 接管去处理，不必须非要本人去结束」；已提交、未合并、未发布）
+
+- 时间：开工 `2026-11-28 15:32`。来由：agent-kit#141 重送审查卡在旧接力上，两个会话互相转话开头的轮次过不了 #439 的「常浩开头」门，驿窗会话又照旧文档把活推给常浩去侧栏点。
+- 改了哪些文件：
+  - 你要求的：`host/src/handoff/end.rs`（不再整批拒收：判出是不是常浩授权，是走 `end_said`，不是走新的 `end_by_agent`；返回多 `byPerson`；删掉 `end_unheard`、`end_busy`）；`handoff/book_end.rs`（新 `end_by_agent`，结束步带 `agent`）；`handoff/book.rs`（`Step.agent`）；`handoff/gate/book_guard.rs`（`open_top` 把 `agent` 结束和 #368 闲置结束一样算没了结）；`protocol/src/handoffs.ts`（`agent?`）；`hud/src/alerts/relay-stop.ts`、`handoff-actions.ts`（智能体自行结束的到顶卡照旧盖「停」，底部写「智能体已自行结束，还没了结」）；`apps/mcp/src/relay.ts`（工具说明）；设置「AI 接入」页文字；`AGENTS.md`、`docs/chatgpt-channel.md`（三处旧说法）；`docs/DECIDED.md` 新增一行（取代 11-19 甲里「只认常浩开头」那条）。
+  - 我顺手改的：无。
+- 行为变化（动手前已在会话里列出）：原来不是常浩开头的一轮调 `relay_end` 整批拒收；现在照样结束，记「自行结束」，到上限的审查链不算了结。送话途中原来整批拒收，现在按「不是常浩授权」结束（正在送话的那张仍逐张拒收）。
+- 测试：没先写红测试再实现（违反 L-32 顺序，测试和实现同一轮写）。`cargo test -p agent-hud-host --lib`：`275 passed; 0 failed`（handoff 部分），新测 `without_the_person_s_word_an_agent_ends_it_on_its_own`、`words_on_their_way_to_the_caller_are_not_the_person_s_word`、`an_end_an_agent_made_on_its_own_settles_no_cap` 通过。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 1253 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。证据 `evidence/2026-11-28-587-relay-end-agent/`。
+- 验证：单测与前端测试（替身通过）；实机未验。
+- 截图：无（卡上只多一句说明文字，场景同 #411 的「闲置收起」）。
+- 发布与回读：未发布，待审查通过后合并装机。
+- 与授权不一致之处、遗留问题、范围外发现：#141 那张旧接力 `h1a21c35c77600` 在本轮开工时已不在未结束名单里，没动它。
+- 本轮新坑：无
+
 ## 全项目动效统一：一套动效语言，侧栏、设置、统计、会话窗口按状态变化补齐过渡（2026-11-25，Claude，常浩要求「把项目的动效整体做到苹果那种细腻、丝滑的水准……审完直接做……最后直接合并上线」；碰到的 9 处已定内容单独发改动确认，常浩回「全按推荐」；PR #539 已 squash 合并 `53291fe`（2026-11-28），已登记 DECIDED.md，装机见下）
 
 - 时间：开工 `2026-11-25 12:28`（`date '+%F %H:%M'` 记录）。来由：常浩要求整体动效到苹果水准，按「状态变化」找问题（出现、消失、移动、尺寸、内容、图标、数字、按下、悬停、加载、完成、出错），一套语言、克制、跟手可打断、不付性能代价、尊重「减少动态效果」，GPT 当方案、文案、交互顾问，做完再审，最后合并上线。
