@@ -932,3 +932,30 @@ fn a_reply_that_waits_on_the_owner_stands_as_a_reply_card_its_next_step_answers(
         vec![("claude".into(), waits.into(), "装机合并".into())]
     );
 }
+
+#[test]
+fn the_backlogs_stop_sends_its_words_into_a_session_with_no_question_left() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut backend = fixture(temp.path());
+    let words = json!({"id": "s-old", "source": "claude", "words": "这件事不做了，停掉"});
+    // No host: nothing can carry the words, and the row stays with why.
+    assert!(backend.request("tell_session", words.clone()).is_err());
+
+    let host = std::sync::Arc::new(FakeReplies::default());
+    backend.set_session_replies(Some(host.clone()));
+    backend.request("tell_session", words.clone()).unwrap();
+    assert_eq!(
+        host.sent.lock().unwrap().as_slice(),
+        &[("claude".into(), "s-old".into(), "这件事不做了，停掉".into())]
+    );
+
+    // The host's refusal comes back as the reason; empty words are refused.
+    *host.refusal.lock().unwrap() = Some("process stopped".into());
+    assert_eq!(
+        backend.request("tell_session", words).unwrap_err(),
+        "process stopped"
+    );
+    assert!(backend
+        .request("tell_session", json!({"id": "s-old", "words": " "}))
+        .is_err());
+}

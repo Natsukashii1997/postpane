@@ -629,8 +629,7 @@ function AppContent({
   }, [statistics]);
   const panelServices: PanelServices = {
     sources: snapshot?.sourcePreferences ?? store.sources,
-    // The reason a session or chat could not be reached goes back to the
-    // line that asked, where the side panel says it (#220).
+    // Why a session or chat was not reached goes back to its line (#220).
     openSession: async (session) => {
       try {
         await act("open_session", { id: session.id });
@@ -648,10 +647,11 @@ function AppContent({
       }
     },
     query: (method, params) => act(method, params),
+    tellSession: async ({ id, source }, words) =>
+      void (await act("tell_session", { id, source, words })),
     openSettingsPage: (page) => {
       if (isTauri()) void call("hud_show_main", { page });
     },
-    // The handoff card's buttons (relay design 甲, docs/chatgpt-channel.md).
     handoffAct: async (id, action) => {
       if (!isTauri()) throw new Error("只能在驿窗里操作接力");
       return call("handoff_act", { id, action });
