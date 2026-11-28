@@ -651,6 +651,23 @@
 - 正确做法：侧栏「单位是单一任务会话」，带 `parentId` 的子任务不单独出回复和失败提醒（`ended()` 已过滤）。查「同一个东西出现好几次」先从实机快照取出那几行的编号和父编号，再决定按什么去重；造场景时把「标题相同、编号不同」和「子任务」各造一个。
 - 证据：快照 `islandEvents.items` 里 9:29–9:53 的 completion 行 `sessionId` 为 `agent-a7350e0a…`、`agent-a96fb22c…`、`agent-a033c91c…`、`agent-ad83d7d9…` 等，`sessions` 里对应 `parentId` 都是 `b633847f-c6e5-47dd-ae61-0d8c9ac92606`；测试 `island_events::turns::tests::a_subagent_that_answers_or_fails_is_not_a_line_of_its_own`。
 - 升级：〔机检〕已升级（2026-11-28，#578 的 PR）：测试 `a_subagent_that_answers_or_fails_is_not_a_line_of_its_own` 守住子任务不出行；「先拿实机编号再定去重」只靠本条提醒。
+
+## L-82 插件后台是普通脚本，新加的函数和已有的同名，后一个悄悄顶掉前一个，不报错（2026-11-27）
+
+- 现象：#542 第 5 轮返修给后台加了 `sending(text)`，文件里已有 `sending(conversation)`（送话途中记账用）。脚本照常加载，`send` 调到的却是新函数，按文字认提问的几条测试一直不过，换了几种写法都以为是逻辑问题。
+- 根因：`background.js` 是 Chrome 插件的普通脚本（不是模块），同名的 `function` 声明后者覆盖前者，没有任何报错；文件近 1900 行，起名前没搜。
+- 正确做法：在插件后台新加函数前先 `grep -n "function 名字"`。`test/background.test.mjs` 的「no two functions of the worker share a name」会查顶层同名函数。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round6/`。
+- 升级：〔机检〕测试已加。
+
+## L-83 shell 脚本里 `$变量` 后面紧跟中文，macOS 自带 bash 3.2 在 UTF-8 语言环境下把中文字节当成变量名，`set -u` 下装机脚本直接退出（2026-11-28）
+
+- 现象：#542 第 9 轮跑 `node --test tests/*.test.mjs`，装机脚本和备环境脚本的 14 条测试一起失败，报 `OLD�: unbound variable`、`CARGO_TARGET_DIR�: unbound variable`。前几轮同样的测试都过。
+- 根因：`install.sh` 第 91 行 `echo "装前 $OLD，已备份到 …"`，`$OLD` 后面直接是中文逗号。`/bin/bash` 3.2 在 `LANG` 是任何 UTF-8 语言（`en_US.UTF-8`、`zh_CN.UTF-8`、`C.UTF-8`）时，把中文的字节也算进变量名，变量名成了 `OLD�`，`set -u` 下没定义就整段退出；`LANG` 没设（C）时才不出事。前几轮跑测试的环境没设 `LANG`，这一轮的会话环境是 `LANG=C.UTF-8`。常浩的终端若是 UTF-8 语言，照着 skill 装机会停在备份之后、退出应用之前。全仓库搜到 4 处（`install.sh` 两处、`install-guard.sh`、`setup-worktree.sh`）。
+- 正确做法：变量后面紧跟非 ASCII 字符时一律写 `${变量}`。验证：`LANG=en_US.UTF-8 bash -c 'set -u; OLD=x; echo "$OLD，"'` 报错，换成 `${OLD}，` 就好。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round9/`（`node.log` 改前 14 条失败，`red-check-rules.log` 新检查在改前脚本上抓到 4 处）。
+- 升级：〔机检〕已升级（2026-11-28，#543）：`scripts/check-rules.mjs` 的 `shell` 一条扫 `scripts/`、`.agents/skills/` 下的 shell 脚本。可提议提升为全局坑（和 G-08 同属 `set -u` 一类）。
+
 ## L-84 客户端升级后把本地服务的令牌从启动参数挪进发现文件，驿窗只看启动参数，整家报「没有正在运行的服务」（2026-11-27）
 
 - 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。

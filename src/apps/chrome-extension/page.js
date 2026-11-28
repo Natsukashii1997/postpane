@@ -532,7 +532,7 @@
     };
     try {
       timely();
-      return await press(doc, text, wait, timely, put);
+      return await press(doc, text, wait, timely, put, shows);
     } catch (error) {
       if (error !== LATE && error !== ELSEWHERE) throw error;
       // Out of time, the page may show another conversation as well.
@@ -570,7 +570,7 @@
     return !!bare(box.textContent);
   }
 
-  async function press(doc, text, wait, timely, put = {}) {
+  async function press(doc, text, wait, timely, put = {}, shows = () => true) {
     if (streaming(doc)) return unsent("busy");
     const box = await wait(() => doc.querySelector(SEL.composer), 15000);
     if (!box) return unsent("no-composer");
@@ -625,16 +625,67 @@
       doc,
     );
     if (!started) return { ok: false, reason: "send-failed", pressed: true };
+    // The prompt the words became: read only while the page shows what it
+    // did as send was pressed (#542 review round 5, P1-06). Moved on since,
+    // the newest prompt is another conversation's, not these words'.
+    const moved = {};
     const promptId = await waitFor(
       () => {
+        if (!shows()) return moved;
         const id = lastPromptId(doc);
         return id && id !== before ? id : null;
       },
       3000,
       doc,
     );
-    return promptId ? { ok: true, promptId } : { ok: true };
+    return promptId && promptId !== moved
+      ? { ok: true, promptId }
+      : { ok: true };
   }
+
+  /** Whether `text`, sent on a new chat's page, is the prompt of the
+   * conversation this page shows (#542 review round 4, P1-06): Changhao may
+   * have moved the tab on to one of his own meanwhile. Its newest prompt is
+   * `promptId`, the one the words became as the page that sent them showed
+   * it; with that known, nothing else counts (round 5). Not known: it holds
+   * one prompt only, whose words begin as these do. One with no words of
+   * its own (ChatGPT made a long paste an attachment, #410) is no proof. */
+  function opened(doc, text, promptId) {
+    if (promptId) return lastPromptId(doc) === promptId;
+    const keyOf = (node) =>
+      node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? node;
+    const turns = new Set(
+      [...doc.querySelectorAll(SEL.prompt)].map((node) => keyOf(node)),
+    );
+    if (turns.size !== 1) return false;
+    const node = newestPrompt(doc).node;
+    const bubble = node.matches(SEL.user) ? node : node.querySelector(SEL.user);
+    return begins(bubble ? shownText(bubble) : "", text);
+  }
+
+  /** Whether the words a prompt shows, `shown`, begin as `text` does: its
+   * first `HEAD` characters, spaces aside (#542 review round 5). Only words
+   * whose first line names their request (`named`) can be told so: words
+   * alike are not proof they are these (round 6, owner 2026-11-27 「甲」). No
+   * words is no proof. */
+  function begins(shown, text) {
+    const words = bare(shown ?? "");
+    const want = bare(text ?? "");
+    if (!words || !named(text)) return false;
+    const head = Math.min(HEAD, want.length);
+    return words.slice(0, head) === want.slice(0, head);
+  }
+  const HEAD = 100;
+  /** Whether `text`'s first line names the request it went as:
+   * 「【驿窗送审 <request>】」. */
+  const named = (text) => {
+    const first = (text ?? "").split("\n", 1)[0];
+    return (
+      first.startsWith(OWN) &&
+      first.endsWith("】") &&
+      first.length > OWN.length + 1
+    );
+  };
 
   /** Page check (#548): what PostPane reads that this page cannot find, by
    * name; empty when all is there. Each is looked for as the rest of this
@@ -680,6 +731,8 @@
     lastPromptId,
     answered,
     marked,
+    opened,
+    begins,
     drafting,
     reveal,
     markdown,

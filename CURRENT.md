@@ -78,6 +78,80 @@
 - 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
 - 本轮新坑：L-89。
 
+## 接力结束后自动关掉它的 ChatGPT 标签页（#542）（2026-11-26，Claude，常浩看四点推荐后回「按推荐开工」；已提交，PR 见描述，已登记 DECIDED.md；未发布）
+
+- 时间：开工 `2026-11-26 22:30`（`date '+%F %H:%M'` 记录）。来由：常浩 11-25「送由 gpt 评审的会话，如果完了就在 Chrome 关闭，不然他一直开着占我内存」；交换文件 21–25 GB。插件每次接力都开标签页、从不关（整个插件没有 `tabs.remove`）。
+- 改变的行为（动手前已在会话里列出，常浩回「按推荐开工」）：接力结束后，插件关掉「驿窗接力」组里显示这条会话的标签页。原来一直开着。四点：① 接力 `closed`、同一会话没有别的接力在开着或失败着才关，失败的不关；② 驿窗随名单（`watch` 的 `ended`）告诉插件，插件连上时补关；③ 只关组内的，组外的不碰，窗口当前标签页等切走再关，页面在写回答或有草稿的不关；④ 存量走同一套逻辑。
+- 你要求的：
+  - `src/crates/host/src/handoff/back/desk_ended.rs`（新）：`ended_conversations` 从接力记录算出「全部 closed」的会话；`Desk::tell_ended` 每次刷新快照告诉通道。`handoff.rs`：`Lines` 加 `ended`（默认什么都不做）、挂新文件、`projection` 里调一次；`sending/desk_lines.rs` 接到通道。
+  - `src/crates/platform/src/clients/chatgpt/`：`State` 记 `ended`；`commands.rs` 的 `Channel::ended` 名单变了才发一次 `watch`；`watched.rs` 的 `watch_of` / `tell_watch` 把 `ended` 带上（只在非空时）。
+  - `src/apps/chrome-extension/background.js`：收到 `watch` 就 `closeEnded()`；`closeSome` 只看「驿窗接力」组，`due` 判一个标签页该不该关（跳过前台的、正在 `open` 的、正在送话 / 查找 / 重读 / 切前台的、`live` 里的会话），显示着会话又没页面的直接关，其余先问页面 `closable`，关前再判一次；换标签页、页面报到、回答写完、手上的活做完时再看一遍，没关成的 5 分钟后再看。`open` 拆出 `openIn`，结束时 `own` 记下标签页归哪条接力（`strays` / `blank`）。`content.js`：新增 `closable`，和 `reload` 共用 `idleFor`。插件 0.2.11 → 0.2.12。
+  - 文档：`docs/chatgpt-channel.md`（`watch` 一行、「接力结束关标签页」一段），`src/crates/host/src/handoff/README.md`（`back/` 一行），`docs/DECIDED.md` 新一行。
+- 我顺手改的：`content.js` 把 `reload` 里那段「显示这个会话、没在写、没草稿」的判断提成 `idleFor`，`reload` 行为不变；`mod.rs` 里两处「拼 watch 再发」合成 `tell_watch` 一行（300 行棘轮只许变短，加字段要腾出两行）。没改变别的行为。
+- 同类：搜了插件里所有 `chrome.tabs.create`（`open`、`make`、`focus` 三处）。`open`、`make` 开的都进组，会被关；`focus` 新开的不进组、不关（常浩点接力卡要看的）。没有别处开标签页。
+- 测试：
+  - 新测试先红后绿：插件后台 3 条在旧代码上 `ℹ pass 1` / `ℹ fail 2`（`red-plugin.log`；过的那条守「正在送话时不关」，临时去掉 `inUse` 判断后它红、还原后绿）；页面 1 条在旧代码上一直等不到回答（`red-content.log`）；Rust 新 4 条在 `unimplemented!` 桩上 `FAILED`（`red-rust.log`）。
+  - 真实 Chromium（Playwright 加载插件本身）新 1 条：组内的关掉、组外同一会话的不动、带草稿的留着、前台的等切走才关、被回收的（换了编号）也关、再送话会重开；`ℹ pass 1`（`chromium-new.log`）。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`（第一次卡在 `check-test-paths`：测试把临时目录本身当数据目录，改成 `temp.path().join("data")`）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1178 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 201`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。
+  - 证据目录 `~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/`。
+- 验证：替身通过（Playwright 自带的 Chromium 加载插件，本机 HTTPS 夹具顶替 chatgpt.com，不是常浩的 Chrome、不是真 chatgpt.com）。未在真实环境验证：要先装新版驿窗、常浩在 chrome://extensions 重新加载插件 0.2.12，再跑一条接力、结束后看那个标签页有没有关、他自己开的有没有被碰。11-26 查 Chrome，`/c/` 标签页只剩 1 个且不属于任何接力，存量目前没有要清的。
+- 截图：无界面改动。
+- 发布与回读：未发布（合并和装机等常浩点头）。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 常浩点接力卡把一个已结束接力的组内标签页切到前台看，切走后它会被关（计划里的「切走再关」）；常浩 11-26 定保持现状。
+  - 接力记录只留最新 200 条，更早的会话不在 `ended` 里，它们的标签页不会被关（目前没有这样的标签页）。
+  - 开着的 #442（`relay_end`）也会把接力改成 `closed`；这里按状态算，不用另接。两边都改 `handoff.rs`，后合的那张要变基。
+- 第 1 轮 ChatGPT 审查（返修，P1 2、P2 6）怎么处理的：
+  - P1-01 已修：失败接力没有会话编号时关不掉。驿窗多发一份 `endedRelays`（已结束的接力 id），插件按 `open` 的 `requestId` 记下每个标签页是哪条接力开的、当时显示哪个会话（`chrome.storage.session`），接力结束后照同样的规矩关；后来显示了别的、还在用的会话就不关。`open` 原来的结果不变。
+  - P1-02 判定不成立：`Book::opened` 只在 `Desk::open` 和 `opened_late` 两处调用，绑的都是 `open()` 刚新开的会话，编号不可能已经在 `ended` 里；照旧加了一道：正在 `open` 的标签页不关。
+  - P2-03 改了顺序：先出快照、后算名单。原来 `desk.tell` 已先用同一时刻跑过 24 小时收尾，实际不会晚一拍，按审查意见改成不依赖这一点。
+  - P2-04 已修：页面报到、回答写完或停下时再看一遍，没关成的 5 分钟后再看。
+  - P2-05 已修：只认 `https://chatgpt.com` 的 `/c/<id>` 和 `/g/<项目>/c/<id>`，跳转中按要去的网址认。
+  - P2-06（关前一瞬间草稿竞态）、P2-07（只管最近 200 条）、P2-08（点接力卡看过、切走后关）：常浩 11-26 回「都按推荐」，即接受、接受、保持现状，已登记 DECIDED.md。
+  - 返修测试：新测试在上一版代码上 `ℹ pass 0` / `ℹ fail 3`（插件，`red-round2-plugin.log`）、把快照顺序改回去 `FAILED. 1 passed; 1 failed`（驿窗，`red-round2-host.log`）；真实 Chromium 一共 `ℹ pass 17`（`chromium-round2.log`）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 205`，其余同上；`ℹ pass 64` / `ℹ fail 0`（`round2/`）。
+- 第 2 轮 ChatGPT 审查（返修，P1 2）怎么处理的：P1-02、P2-03 对方判定不成立，P2-05 已验证关闭；P2-06～08 常浩已定。
+  - P1-01 三条路径已修：打开途中接力就被结束（`own` 记完立刻再看一遍）；页面晚报会话（空白页 10 分钟内报出的会话记到这条接力名下）；浏览器重启（有会话的按会话存进 `chrome.storage.local` 的 `strays`，重启后还认得；空白页存 `chrome.storage.session`，重启后认不出、不关，写进通道文档）。
+  - P1-03 已修：「没有会话」不当作身份。空白页只在还停在原来那个 chatgpt.com 路径、页面亲口答「可以关」时才关；去了别的网站、被 Chrome 回收的空白页都不关。
+  - P2-09 已修：驿窗多发 `live`（没结束的接力占着的会话），插件用它代替原来的「名单里有就不关」：重试时被放弃那一次开出的会话在名单里、却没有接力在用，接力结束后会关。
+  - P2-10 已修：会话的送话 / 查找 / 重读 / 切前台做完时再看一遍。P2-04 补齐：Chrome 没答出标签组、关前那次查询没答，都 5 分钟后再看。
+  - 测试：新测试在第 2 轮那版代码上 `ℹ pass 0` / `ℹ fail 6`（`round3/red-plugin.log`）；真实 Chromium `ℹ pass 17`（`round3/chromium.log`，这条仍是测试直接开标签页再调 `own`，没有真走一遍超时失败的 `open`）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 210`，前端 516、MCP 9、插件 14、注入脚本 11；`ℹ pass 64` / `ℹ fail 0`（`round3/`）。
+- 第 3 轮 ChatGPT 审查（返修，P1 1）怎么处理的：P1-01、P1-03、P2-09、P2-10 对方已验证关闭；P2-06～08 已定。
+  - P1-04 已修（改成更保守）：空白页之后报出任何会话，就不再算这条接力的、不关。分不出是那次打开晚出的会话，还是常浩点去了别的会话；长送审被 ChatGPT 转成附件，读不到原话来核对。常浩 11-27 选「不关，接受」。
+  - P2-12 已修：`own` 查标签页时 Chrome 没答（不是「没有这个标签页」）的，先记下，下一次关标签页时再查。
+  - P2-04 补测试：关前那次查询没答，5 分钟后再看（这条行为第 2 轮已有，补的是测试）。
+  - P2-11：常浩 11-27 选「不再关」：接力结束后会话里又开始了一轮回答（不是插件补报的），记为常浩接着用的，不再自动关（`taken`）。P2-13：常浩选「接受」200 条上限。均已登记 DECIDED.md。
+  - 测试：新测试在第 3 轮那版代码上红（`round4/red-plugin.log` `ℹ fail 2`、`red-taken.log` `ℹ fail 1`；「关前查询没答」那条守的是已有行为，旧代码上也过）。三条全量：`check exit 0`；「6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，Chrome 插件 `ℹ pass 213`；`ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 17`（`round4b/`）。
+- 第 4 轮 ChatGPT 审查（受审 `280a5ba`，返修，P1 2；驿窗把这一轮记成新授权周期的第 1 轮，因为常浩中途回答过取舍）：P1-04、P2-04、P2-12、P2-13 已验证关闭。两条 P1 由接手会话（2026-11-27）修：
+  - P1-05 已修：「常浩接着用」改按提问编号认，不按消息先后认。插件每次送话（`send`、`open`）记下送进去的提问编号（`asks`，`chrome.storage.local`，每个会话最近 20 个、最多 200 个会话）；没看到编号的记「欠一个」，下一个没见过的编号算插件的；正在 `open` 的标签页报的也算插件的（新会话首页开始回答、拿到地址后补报的那次）。`turn` 的 `start` / `complete` 带的编号不是插件的才记 `taken`，不管 `ended` 名单到没到；只记接力用过的会话；插件再往里送话就清掉 `taken`。原来只凭「start 到达时会话已在 ended」判断。
+  - P1-06 已修：`openIn` 等页面报到时它已在某个会话里就不发（`other-conversation`、`pressed: false`）；发送指令带 `conversation: null`，`content.js` 只在页面没有会话时放字、点发送，途中换走就停、按 #507 规矩取回已放的字；发出后问页面 `opened`（新），页面显示的就是拿到的会话、最新提问就是发送时看到的那条，或没看到编号时只有一条提问、开头和送出的话一样（没字的只在送出的话超过 6000 字时算），才算打开成功；证明不了回 `unconfirmed`、`pressed: true`（驿窗按「没能完成，请核对是否已发出」说明，不改 Rust），不进名单。`own` 只记打开成功的那个会话；失败而话可能已发的，再问一次页面；没发或证明不了的会话不记、不关。
+  - 改了 4 条已有测试的前提（照审查意见改，不是放宽）：插件后台「失败的打开留下的标签页」三条原来让页面不报到、`ready` 超时却照样认标签页上的会话，现在改成页面报到、话发出去、页面证明有这段话；P2-11 那条的 `turn` 补上提问编号。真实 Chromium 那条改成先不带证明（不记）、页面只剩「第 1 轮」一条提问后再记，走真实的 `opened` 判定。
+  - 测试：新测试先红后绿：插件后台 6 条在 `280a5ba` 上 `ℹ pass 1` / `ℹ fail 5`（`round5/red-plugin.log`；过的那条守新加的「再送话清掉 taken」，临时去掉 `untake` 后 `ℹ fail 1`，`red-untake.log`）；页面 2 条在旧代码上：「只在新对话页发」`✖`（`red-content.log`），「opened」旧页面不回、超时 `cancelled 1`（`red-opened.log`）。真实 Chromium（Playwright 加载插件本身）`ℹ pass 17`。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 221`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`。证据 `round5/`。
+  - 验证：替身通过（测试替身和本机夹具，不是常浩的 Chrome、不是真 chatgpt.com）。未在真实环境验证：要装新版、重新加载插件 0.2.12 后跑一条接力；「打开途中点去别的会话」「接力结束后自己接着聊」两种情形要人工制造。
+- 第 5 轮 ChatGPT 审查（受审 `c5dd449`，返修，P1 2）：P1-01 在原接受范围内已验证关闭，`unconfirmed` 走默认说明已验证；P1-05、P1-06、P2-11 待修。之后 main 合进分支（`da58f18`，只动 CURRENT.md）。本轮（2026-11-27）处理：
+  - P1-05 已修（改成只认证明得了的）：去掉「欠一个」计数和「打开中的标签页一律算插件的」。插件的提问只有两种证明：发送那一页点发送后、页面没换时看到的编号；或回合消息带的提问原文开头和插件送出、还没对上编号的话一样（`heads`，最近 50 段、最多一周）。其余带编号的提问一律算常浩的（`taken` 记编号和时间）。插件的提问被证明、且常浩那条早于这次送话开始，才清 `taken`；送话途中听到的、话没确认送到的，都不清。`content.js` 的 `stopped` 多带 `newest`、`prompt`，回答在提问编号画出来前就被停的也能判断。
+  - P1-06 已修：`page.js` 的 `press` 点发送后只在页面还是同一页时读提问编号，换了页不读；`opened` 有编号时只认编号，对不上不再退回按文字比；没有字的提问不再算证明。代价：长文被转成附件、又没在发送时看到编号的那次打开会报 `unconfirmed`，要常浩去页面核对（写进通道文档）。
+  - P2-11：随 P1-05 修。
+  - 顺手：返修时新加的 `sending(text)` 和后台已有的 `sending(conversation)` 同名，普通脚本里后者悄悄被顶掉（L-82）；改名，并加测试查后台顶层同名函数。
+  - 测试：照审查列的 8 类补齐。新测试在 `c5dd449` 上：插件后台 `ℹ pass 3` / `ℹ fail 6`（过的三条守保留下来的行为：送话后重新归接力、按原文认新会话首次开始、无同名函数），页面 `ℹ fail 2`，真实 Chromium 端到端 `open` 1 条 `ℹ fail 1`（`round6/red-*.log`）。送话途中插入常浩提问用的是送话进行中的真实交错（`sendGates`），发送后换页用真实 `page.submit`（页面测试和真实 Chromium）。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 227`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 18`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round6/`。
+- 第 6 轮 ChatGPT 审查（受审 `793c725`，返修，P1 2、P2 1）：L-82 改名已验证。本轮（2026-11-27）处理：
+  - 根子在新开会话的话没有唯一标识。问常浩后他选「甲：加这一行」（已登记 DECIDED.md）：驿窗 `Desk::open` 发出前用续审同一个 `book::tagged` 加「【驿窗送审 <接力号~第几次>】」；Ask 步骤照旧记原话，驿窗按回信认这次审核时（`answers/desk_belongs.rs` 的 `held_to`），记的话不带请求号的，先去掉页面提问开头的请求号行再比，续审的比法不变。
+  - P1-05 已修：插件只记、只认第一行带请求号的话（`heads`），不带的开头再像也不算；只在接力用过的会话里认；两段以上同时对上不认；读回存储时清过期的。
+  - P1-06 已修：`opened` 没编号时同样要求送出的话带请求号行，常浩会话里只有一条正文完全相同的提问也报 `unconfirmed`；`own` 的二次证明走同一条规则。
+  - P2-11 已修：被清掉的那条提问记进 `freed`，它迟到的回合（别的标签页的写完、停止）不再把会话认回去；`taken` 记页面报的开始时间。
+  - 测试：Rust 新 1 条（新开会话发出的话带请求号、带请求号的提问照样认回信、别的话不认），在改前的驿窗上 `FAILED. 0 passed; 1 failed`；插件后台新 3 条、页面改 1 条、真实 Chromium 新 2 条（两个页面实例的迟到停止；不带请求号的话打开、他的会话里一条完全相同的提问），在 `793c725` / `4e7a6e2` 上都红（`round7/red*.log`，真实 Chromium 旧代码把他的会话当成打开成功、编号是他那条）。真实 Chromium 跑整套时一次挂在已有的「前台标签页重载后读取」（`try 12`），再跑两遍 19 条都过，偶发，与本改动无关。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1182 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 231`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round7/`。
+- 第 7 轮 ChatGPT 审查（受审 `2fc20e6`，返修，P1 1、P2 1；P1-05、P1-06 已验证关闭）。之后又把 main（#548）合进分支（`ba92f15`）。本轮（2026-11-27）处理：
+  - P1-07 已修：驿窗认新开会话那一轮的回信时，只在页面提问第一行正好是这条接力自己的请求号（`handoff.request()`）时去掉它再比（`answers/desk_belongs.rs` 的 `held_to`，前缀用已有的 `tagged(request, "")` 拼）；别的请求号开头的，正文完全一样、或长文前 600 字一样，都不认。Rust 新测试 1 条（两种反例，`asked_as` 为空走文字比对），在 `2fc20e6` 上 `FAILED`。
+  - P2-11 已修：`taken` 改成按提问各记一条（编号 → 开始时间，每个会话最近 20 条），一条迟到的不再顶掉另一条；插件的提问被证明时只放掉比它早开始的那几条。`content.js` 的 `complete`、`stopped` 带上页面记下的这一轮开始时间（`begunAt`）。审查要求的「插件再送 R 之后仍保留 P2」与常浩 11-27 定的 P2-11（插件的提问被证明、常浩那条更早就重新归接力）冲突，没照做；照做的是其中真正的漏洞：Q 在 P1、P2 之间送出，P1 的开始迟到、Q 的证明更晚才到时，P2 被一起丢掉。插件后台新 2 条、页面 1 条断言，在 `2fc20e6` 上都红（`round8/`）。
+  - 三条全量：`pnpm run check` 原样 `check exit 0`（第一次因 `book_unsure.rs` 加函数后 303 行超棘轮，改成在 `held_to` 里用已有的 `tagged` 拼前缀，那个文件不动）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1186 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 237`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round8/`。
+- 第 8 轮 ChatGPT 审查（受审 `b7bb81c`，决策升级，P1 1；P1-07 已验证关闭，P2-11 主路径已修）。原会话上下文过 50%，由接手会话（2026-11-28，主目录会话按常浩「速度完成驿窗的所有任务」派来）处理。先把 main（#561、#566/#569、#567、#573、#576、#577，`ed0b91d`；#557，`009d86c`；#582，`e063b0b`）合进分支，只有 CURRENT、LESSONS 文档冲突；本 PR 的坑号先后和 main 的 L-75、#582 的 L-81 撞号，最终为 L-82、L-83。
+  - P2-11 已修（`9eeef87`）：插件送话被证明时，按会话记下这次送话的开始时间（`ownedSince`，存 `chrome.storage.local`，最多 200 个会话）；常浩的提问页面报的开始时间早于它、却在之后才第一次报到的，不再记成「常浩接着用」；页面没报开始时间的照旧记（保守）。插件后台新测试 1 条：Q 已证明 → 更早的 P1 的 start 才到 → 不记、接力结束后关；Q 之后开始的、没报时间的仍记、不关。在改前代码上红（`round9/red-plugin.log`；只去掉 `goneOn` 里那道判断也红，`red-no-check.log`）。`docs/chatgpt-channel.md` 补一句。
+  - P1-08 转单 #579：长文附件兜底认回信不核对请求号，是 #543 之前就有的行为，审查方也建议不在本 PR 删；严格还是保持现状，等常浩在那张单里定。
+  - 换行差异（`\r\n`）：审查判定失败关闭、不阻断，未改。
+  - 顺手（`6993ffc`）：跑规则测试时装机脚本那组 14 条失败，查实是 shell 脚本里 `$变量` 后面紧跟中文，macOS 自带 bash 3.2 在 UTF-8 语言环境下把中文字节算进变量名，`set -u` 下退出（L-83）；本会话 `LANG=C.UTF-8`，前几轮环境没设 `LANG` 才没暴露。全仓库 4 处改成 `${变量}`，`check-rules` 加 `shell` 一条（在改前脚本上抓到 4 处，`red-check-rules.log`）。
+  - 测试（机器负载 100–200，十几个会话同时跑全量）：`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 75` / `ℹ fail 0`；`pnpm test` 前端 `ℹ pass 542`、MCP 9、插件 14、注入脚本 11 全过，Rust 503 passed、1 failed（`ingestion::the_next_pass_is_due…` 计时，单独重跑 `1 passed`），Chrome 插件 `ℹ pass 235` / `ℹ fail 3`（都是真实 Chromium 里的重载、建标签页超时）；真实 Chromium 单跑 `ℹ pass 17` / `ℹ fail 2`。失败的 5 条按 L-47 单独重跑：3 条一次过，「被回收的标签页重读」「页面忙时另开标签页」两条再失败，换回改前的插件后台跑过、换回现在的代码连跑两次都过，判定负载超时、与本改动无关（`rerun-*.log`）。按「任务进度盘点」排队，合进 #582 之后（负载降到 6 左右）再跑一遍全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1210 passed、0 failed，前端 `ℹ pass 553`，MCP 9，插件 14，Chrome 插件 `ℹ pass 238`，注入脚本 11；`node --test tests/*.test.mjs` `ℹ pass 75` / `ℹ fail 0`；真实 Chromium `ℹ pass 19` / `ℹ fail 0`（`check3.log`、`test3.log`、`node3.log`、`chromium3.log`）。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round9/`。
+- 第 9 轮 ChatGPT 审查（受审 `93c64d5`，**通过**，未决 P0 0、P1 0；P1-08 认可转单 #579，shell 修复与 L-83 规则检查认可）。留一条非阻断：P2-11 同一提问从两个标签页各报一次（一个带早于边界的开始时间、一个不带时间）时，仍会被认回常浩的。合并前顺手修了：被时间边界判成旧的提问也记进 `freed`，已记下的 `taken` 一并清掉（`letGo`，`ownPrompt` 原来那段放掉逻辑也改用它，行为不变）。插件后台新测试 1 条覆盖两种到达顺序，在 `93c64d5` 上 `ℹ fail 1`（`round10/red-plugin.log`）；插件整套（含真实 Chromium）`ℹ pass 239` / `ℹ fail 0`，prettier、`check-rules` 通过（`round10/extension.log`）。审查已通过，这一改没有再送审（工程流程「补改未复审」，PR 正文写明了原受审 SHA 和补改提交）。合并前 #560 合进 main，和本 PR 只在 install.sh 同一处修复和文档上冲突（取 main 的写法），合了 #560 后再跑全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」，Rust 合计 1234 passed、0 failed，前端 553，MCP 9，插件 14，Chrome 插件 239，注入脚本 11；`node --test tests/*.test.mjs` `ℹ pass 75` / `ℹ fail 0`（`round10/`）。
+- 本轮新坑：L-82、L-83。
+- skill 进化：无。
 ## 下一步在别的会话：并到那个会话的卡上，或改成指路卡（2026-11-28，Claude，常浩看三版预览后回「选丙」；已提交，未装机）
 
 - 时间：开工 `2026-11-28 05:20`（按建 worktree 的时间，约数）。来由：常浩截图里「多模型协同」会话的 REPLY 卡下一步是「到[规则更新](#local_…)回话」，侧栏却给了「输入回答 / 跳过 / 提交」，在这里提交话会送进做完了的会话；三版预览 https://claude.ai/artifact/YBPzjQux75zyby4TJAt29X 选丙。

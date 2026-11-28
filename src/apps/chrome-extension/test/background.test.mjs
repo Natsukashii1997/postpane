@@ -59,10 +59,20 @@ function load(
     // Waits of these lengths do not end, though `now`: what is waited for
     // comes first, or never.
     parked = [],
+    // #542: the tab groups, the tabs closed, and what each tab's page says
+    // asked whether it may be closed (unanswered when not named).
+    groups = [],
+    removed = [],
+    closable = {},
+    // Round 4, P1-06: what a tab's page says asked whether it shows the
+    // words it was opened with; by default, that it does when it shows the
+    // conversation asked of.
+    opened = {},
   } = {},
 ) {
   const listeners = {};
   const injected = [];
+  const gets = {};
   const event = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
   // As Chrome: a tab made active is told to each listener, with its window.
   const activated = new Set();
@@ -86,6 +96,15 @@ function load(
       onMessage: event("message"),
     },
     storage: {
+      // #542: what lives as long as the browser does.
+      session: (() => {
+        const kept = {};
+        return {
+          get: async () => JSON.parse(JSON.stringify(kept)),
+          set: async (values) =>
+            Object.assign(kept, JSON.parse(JSON.stringify(values))),
+        };
+      })(),
       local: {
         get: async (keys) => {
           if (faults.restore && [keys].flat().includes("shadowLedger"))
@@ -110,6 +129,14 @@ function load(
       },
       // As Chrome: a tab that is not there throws.
       get: async (tabId) => {
+        // #542 round 3: Chrome failing once to say, for a tab that is there;
+        // `getAt`: at that call for the tab, counted from 1.
+        gets[tabId] = (gets[tabId] ?? 0) + 1;
+        if (
+          faults.getOnce?.delete(tabId) ||
+          faults.getAt?.[tabId] === gets[tabId]
+        )
+          throw new Error("Tabs cannot be queried right now.");
         const tab = tabs.find((tab) => tab.id === tabId);
         if (!tab) throw new Error(`No tab with id: ${tabId}.`);
         return tab;
@@ -123,6 +150,12 @@ function load(
       update: async (tabId, { active }) => {
         fronted.push(tabId);
         if (active) activate(tabId);
+      },
+      remove: async (tabId) => {
+        const at = tabs.findIndex((tab) => tab.id === tabId);
+        if (at < 0) throw new Error(`No tab with id: ${tabId}.`);
+        tabs.splice(at, 1);
+        removed.push(tabId);
       },
       onActivated: {
         addListener: (fn) => activated.add(fn),
@@ -139,6 +172,20 @@ function load(
       sendMessage: async (tabId, message) => {
         if (message.op === "state") return null;
         if (hung.has(tabId)) return new Promise(() => {});
+        // #542: whether the page may be closed; a page that does not know
+        // the question (an older script) answers nothing.
+        if (message.op === "closable") {
+          asked.push([tabId, message.op]);
+          if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
+          return closable[tabId];
+        }
+        if (message.op === "opened") {
+          asked.push([tabId, message.op]);
+          if (tabId in opened) return opened[tabId];
+          const tab = tabs.find((tab) => tab.id === tabId);
+          const shown = tab?.url?.split("/c/")[1] ?? null;
+          return { conversation: shown, ours: shown === message.conversation };
+        }
         // #507: whether the page is there, and which conversation it shows.
         if (message.op === "alive") {
           if (dead.has(tabId)) throw new Error("Receiving end does not exist.");
@@ -166,6 +213,12 @@ function load(
     },
     windows: {
       get: async (id) => windows[id] ?? { state: "normal", focused: true },
+    },
+    tabGroups: {
+      query: async ({ title }) => {
+        if (faults.groups) throw new Error("No groups");
+        return groups.filter((g) => g.title === title);
+      },
     },
     scripting: {
       // As Chrome: a script already registered, or not registered, throws.
@@ -263,6 +316,7 @@ function load(
     clearTimeout() {},
     crypto: globalThis.crypto,
     TextEncoder,
+    URL,
     // `clock`: the time the script reads, moved by the test.
     ...(clock && { Date: { now: () => clock.now } }),
   });
@@ -3128,4 +3182,1208 @@ test("automatic rereads never reopen a closed conversation tab", async () => {
     posted.filter((m) => m.type === "reread").map((m) => m.outcome),
     ["unreachable", "unreachable", "unreachable"],
   );
+});
+
+// #542: every relay opened a ChatGPT tab and none was ever closed; on
+// 2026-11-25 Changhao's swap stood at 21–25 GB. PostPane names the
+// conversations every handoff of which has ended; their tabs in the relay
+// group are closed, and no other.
+const ENDED = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+const LIVE = "7bf8fd58-d1a5-94ff-ac0f-c0a29771878f";
+const settleLong = async () => {
+  for (let i = 0; i < 30; i++) await tick();
+};
+/** A tab an opening makes, `more` to it, whose page says at once it is a
+ * new chat's: the words go in (round 4, P1-06). `api` is what `load` gave. */
+const madeBlank = (api, more) => (tab) => {
+  Object.assign(tab, more);
+  api.listeners.message(
+    { type: "page", conversation: null, hidden: true },
+    { tab: { id: tab.id } },
+  );
+};
+
+test("conversations PostPane says ended have their tabs in the relay group closed, and only those", async () => {
+  const at = (id, conversation, more = {}) => ({
+    id,
+    url: `https://chatgpt.com/c/${conversation}`,
+    windowId: 1,
+    active: false,
+    groupId: 7,
+    ...more,
+  });
+  const tabs = [
+    at(2, ENDED),
+    // Changhao's own, outside the group.
+    at(3, ENDED, { groupId: -1 }),
+    // A live handoff's.
+    at(4, LIVE),
+    // In front of its window: he may be looking at it.
+    at(5, ENDED, { active: true, windowId: 2 }),
+    // Discarded: no page in it to lose anything.
+    at(6, ENDED, { discarded: true }),
+    // Its page holds words not sent, or is writing.
+    at(8, ENDED),
+    // Its page says nothing (an older script, or frozen).
+    at(9, ENDED),
+    // In another group of the same name's look, but not the relay's.
+    at(10, ENDED, { groupId: 11 }),
+  ];
+  const asked = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    asked,
+    removed,
+    groups: [
+      { id: 7, title: "驿窗接力" },
+      { id: 11, title: "别的" },
+    ],
+    closable: { 2: true, 8: false },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED, LIVE],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed.sort(), [2, 6]);
+  assert.deepEqual(
+    asked
+      .filter(([, op]) => op === "closable")
+      .map(([id]) => id)
+      .sort(),
+    [2, 8, 9],
+    "a discarded tab is not asked; one in front, outside the group or live is not looked at",
+  );
+  // A list naming none ended closes nothing more.
+  await listeners.port({ type: "watch", conversations: [ENDED, LIVE] });
+  await settleLong();
+  assert.deepEqual(removed.sort(), [2, 6]);
+});
+
+test("an ended conversation's tab left in front is closed once another tab of its window is", async () => {
+  const tabs = [
+    {
+      id: 5,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: true,
+      groupId: 7,
+    },
+    { id: 12, url: "https://example.com/", windowId: 1, active: false },
+  ];
+  const removed = [];
+  const { listeners, chrome } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 5: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "not while he may be looking at it");
+  chrome.tabs.activate(12);
+  await settleLong();
+  assert.deepEqual(removed, [5]);
+});
+
+test("a tab words are going into is not closed meanwhile, though its conversation ended", async () => {
+  // A new handoff may take an ended conversation on (#542): PostPane names
+  // it ended no more by its next list, but one sent before may be in hand.
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  let release;
+  const { listeners } = load(tabs, {
+    removed,
+    watched: [ENDED],
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true },
+    sendGates: [() => new Promise((resolve) => (release = resolve))],
+  });
+  await settleLong();
+  const sending = listeners.port({
+    type: "send",
+    requestId: "r1",
+    conversation: ENDED,
+    text: "第 2 轮",
+  });
+  await settleLong();
+  assert.ok(release, "the words reached the page");
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, []);
+  release();
+  await sending;
+  // Done with it, the tab is looked at again (round 2, P2-10).
+  await settleLong();
+  assert.deepEqual(removed, [2]);
+});
+
+// #542 review P1-01: a handoff whose opening failed knows no conversation
+// (the page did not say its address in time); once it ended, the tab it
+// opened is closed all the same, by the handoff.
+test("the tab a failed opening made is closed once its handoff ended", async () => {
+  const tabs = [];
+  const removed = [];
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      // The words went in and the address came, but the page never said so;
+      // asked, it shows them.
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h8"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "another handoff's end");
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// #542 review P2-05: only a chatgpt.com conversation's address counts, and
+// where a tab is going comes before where it was.
+test("only a chatgpt.com conversation address names an ended conversation", async () => {
+  const tabs = [
+    {
+      id: 2,
+      url: `https://example.com/redirect?next=/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+    {
+      id: 3,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      pendingUrl: `https://chatgpt.com/c/${LIVE}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+    {
+      id: 4,
+      url: `https://chatgpt.com/g/g-p-abc/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true, 3: true, 4: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [4], "a project's conversation counts");
+});
+
+// #542 review P2-04: a tab left open as its page was writing is closed once
+// the answer is done, with nothing else changed.
+test("a tab left open while its page wrote is closed once its answer is done", async () => {
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  const closable = { 2: false };
+  const { listeners } = load(tabs, {
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable,
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "writing");
+  closable[2] = true;
+  listeners.message(
+    { type: "turn", phase: "complete", conversation: ENDED, reply: "好" },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  assert.deepEqual(removed, [2]);
+});
+
+// #542 review round 2, P1-01 path A: the handoff ended while its opening
+// was still on; once the opening is over, its tab is looked at again.
+test("a tab whose handoff ended while it opened is closed once the opening is over", async () => {
+  const tabs = [];
+  const removed = [];
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// Round 2, P1-03: no conversation is not an identity. A blank tab a failed
+// opening left is closed only while its page says it is still that blank
+// page; not once it went to another site, nor unloaded.
+test("a blank tab a failed opening left is closed only as the same blank page", async () => {
+  const run = async (after) => {
+    const tabs = [];
+    const removed = [];
+    const asked = [];
+    const { listeners } = load(tabs, {
+      now: true,
+      removed,
+      asked,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      onCreate: (tab) => Object.assign(tab, { groupId: 7 }),
+    });
+    await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+    await settleLong();
+    after(tabs[0]);
+    await listeners.port({
+      type: "watch",
+      conversations: [],
+      endedRelays: ["h7"],
+    });
+    await settleLong();
+    return { removed, asked: asked.filter(([, op]) => op === "closable") };
+  };
+  const same = await run(() => {});
+  assert.deepEqual(same.removed, [99], "still the blank page");
+  const away = await run((tab) =>
+    Object.assign(tab, { url: "https://example.com/", discarded: true }),
+  );
+  assert.deepEqual(away.removed, [], "taken to another site");
+  const unloadedBlank = await run((tab) =>
+    Object.assign(tab, { discarded: true }),
+  );
+  assert.deepEqual(unloadedBlank.removed, [], "cannot say it is the same");
+  assert.deepEqual(unloadedBlank.asked, []);
+});
+
+// Round 2, P1-01 path B: the page of a blank tab says its conversation soon
+// after: that conversation is the handoff's.
+test("a blank tab whose page comes to show a conversation is kept", async () => {
+  // Round 3, P1-04: whether the opening or Changhao going to another brought
+  // it there cannot be told, so it is not known as the handoff's any more.
+  const tabs = [];
+  const removed = [];
+  const { listeners } = load(tabs, {
+    now: true,
+    removed,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 99: true },
+    onCreate: (tab) => Object.assign(tab, { groupId: 7 }),
+  });
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  tabs[0].url = `https://chatgpt.com/c/${ENDED}`;
+  listeners.message(
+    { type: "page", conversation: ENDED, hidden: true },
+    { tab: { id: 99 } },
+  );
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [], "now at a conversation");
+  // Back at the blank page: still not known as the handoff's.
+  tabs[0].url = "https://chatgpt.com/";
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, []);
+});
+
+// Round 2, P1-01 path C and P2-09: whose a conversation's tab is outlives the
+// browser starting again (new tab ids); a conversation PostPane heard of but
+// no handoff took (a try given up on) is no reason to keep it, one a
+// handoff not ended has is.
+test("a conversation a failed opening came to is closed by its handoff, after a restart too", async () => {
+  const at = (id) => ({
+    id,
+    url: `https://chatgpt.com/c/${ENDED}`,
+    windowId: 1,
+    active: false,
+    groupId: 7,
+  });
+  const kept = { strays: { [ENDED]: "h7" } };
+  const first = [];
+  const one = load([at(41)], {
+    removed: first,
+    stored: { ...kept },
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 41: true },
+  });
+  await one.listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    endedRelays: ["h7"],
+    live: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(first, [], "a handoff not ended has it");
+  const removed = [];
+  const { listeners } = load([at(41)], {
+    removed,
+    stored: { ...kept },
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 41: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [41]);
+});
+
+// Round 2, P2-04: Chrome not saying which groups there are is not "none":
+// looked at again later.
+test("Chrome not answering for the groups has the tabs looked at again later", async () => {
+  const waits = [];
+  const { listeners } = load([], {
+    waits,
+    faults: { groups: true },
+    groups: [{ id: 7, title: "驿窗接力" }],
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.ok(waits.includes(5 * 60 * 1000), JSON.stringify(waits));
+});
+
+// Round 3, P2-12: Chrome not saying how the tab stood as its opening ended is
+// not "no tab": its owner is noted once Chrome says, and it is closed.
+test("a tab whose owner Chrome did not let be noted at once is noted later", async () => {
+  const tabs = [];
+  const removed = [];
+  const waits = [];
+  // The first ask is the grouping's; the second, as the opening ends, fails.
+  const faults = { getAt: { 99: 2 } };
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      waits,
+      faults,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      closable: { 99: true },
+      // The page never says its address, so `ready` gives up and Chrome is
+      // asked of the tab only as the opening ends.
+      onCreate: madeBlank(api, {
+        url: `https://chatgpt.com/c/${ENDED}`,
+        groupId: 7,
+      }),
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+// Round 3, P2-04: Chrome not saying how a tab stands, asked just before it is
+// closed, has it looked at again later.
+test("Chrome not answering for a tab just before closing it has it looked at again", async () => {
+  const tabs = [
+    {
+      id: 2,
+      url: `https://chatgpt.com/c/${ENDED}`,
+      windowId: 1,
+      active: false,
+      groupId: 7,
+    },
+  ];
+  const removed = [];
+  const waits = [];
+  const { listeners } = load(tabs, {
+    removed,
+    waits,
+    faults: { getOnce: new Set([2]) },
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true },
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(removed, []);
+  assert.ok(waits.includes(5 * 60 * 1000), JSON.stringify(waits));
+});
+
+// Round 3, P2-11 (owner 2026-11-27, 「不再关」): Changhao went on in an ended
+// relay's conversation himself: its tab is his now, and not closed, after a
+// restart of the worker too.
+test("a conversation Changhao went on with after its relay ended is not closed", async () => {
+  const tab = () => ({
+    id: 2,
+    url: `https://chatgpt.com/c/${ENDED}`,
+    windowId: 1,
+    active: false,
+    groupId: 7,
+  });
+  const stored = {};
+  const removed = [];
+  const closable = { 2: false };
+  const { listeners } = load([tab()], {
+    removed,
+    stored,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable,
+  });
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: ENDED,
+      prompt: "再问一句",
+      promptId: P(41),
+    },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  closable[2] = true;
+  listeners.message(
+    {
+      type: "turn",
+      phase: "complete",
+      conversation: ENDED,
+      promptId: P(41),
+      reply: "好",
+    },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  assert.deepEqual(removed, []);
+  // A worker started again knows it.
+  const again = [];
+  const next = load([tab()], {
+    removed: again,
+    stored,
+    groups: [{ id: 7, title: "驿窗接力" }],
+    closable: { 2: true },
+  });
+  await next.listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    ended: [ENDED],
+  });
+  await settleLong();
+  assert.deepEqual(again, []);
+});
+
+// Round 4 and 5, P1-05: whose a prompt is goes by what proves it the
+// extension's: its id, as the page that sent it had it, or its words. Not
+// by when it is heard of, nor by being the next one heard of: any other is
+// Changhao's, and keeps his tab open.
+const endedTab = (id = 2) => ({
+  id,
+  url: `https://chatgpt.com/c/${ENDED}`,
+  windowId: 1,
+  active: false,
+  groupId: 7,
+});
+const SENT = "【驿窗送审 h7~send1】\n补格式";
+const MINE = "我自己再问一句";
+/** A turn told by tab `tab` of conversation `ENDED`. */
+const turn = (listeners, phase, promptId, more = {}) =>
+  listeners.message(
+    {
+      type: "turn",
+      phase,
+      conversation: ENDED,
+      promptId,
+      reply: "好",
+      ...more,
+    },
+    { tab: { id: more.tab ?? 2 } },
+  );
+/** A relay whose conversation is `ENDED`, its tab 2 (and tab 3, `more`),
+ * the words `SENT` sent once: the page answers `answer` once `during` (run
+ * while it sends) is done. `clock` moves a millisecond with each turn. */
+async function sentOnce(answer, during = async () => {}, more = {}) {
+  const removed = [];
+  const closable = { 2: false, 3: false };
+  const stored = {};
+  const clock = { now: 1_000_000 };
+  const api = {};
+  const tabs = [endedTab(2), ...(more.tab3 ? [endedTab(3)] : [])];
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      clock,
+      removed,
+      closable,
+      stored,
+      answers: [answer],
+      groups: [{ id: 7, title: "驿窗接力" }],
+      sendGates: [
+        async () => {
+          clock.now += 10;
+          await during(api.listeners, clock);
+          clock.now += 10;
+        },
+      ],
+    }),
+  );
+  listeners.message(
+    { type: "page", conversation: ENDED, hidden: true },
+    { tab: { id: 2 } },
+  );
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED],
+    live: [ENDED],
+  });
+  await (more.before ?? (async () => {}))(listeners, clock);
+  clock.now += 10;
+  await listeners.port({
+    type: "send",
+    requestId: "s1",
+    conversation: ENDED,
+    text: SENT,
+  });
+  await settleLong();
+  const end = async () => {
+    await listeners.port({
+      type: "watch",
+      conversations: [ENDED],
+      ended: [ENDED],
+    });
+    await settleLong();
+  };
+  // The answer done in each tab: what may be closed now is.
+  const done = async (promptId, words) => {
+    closable[2] = closable[3] = true;
+    turn(listeners, "complete", promptId, { prompt: words });
+    await settleLong();
+  };
+  return { listeners, removed, stored, clock, end, done };
+}
+
+test("an answer to the words PostPane sent, begun only after its relay ended, is PostPane's", async () => {
+  // Its id, as the page that sent the words had it.
+  const known = await sentOnce({ ok: true, promptId: P(51) });
+  await known.end();
+  turn(known.listeners, "start", P(51), { prompt: SENT });
+  await settleLong();
+  await known.done(P(51), SENT);
+  assert.deepEqual(known.removed, [2], "id seen");
+  // Its id not seen: its words show it.
+  const unseen = await sentOnce({ ok: true });
+  await unseen.end();
+  turn(unseen.listeners, "start", P(52), { prompt: SENT });
+  await settleLong();
+  await unseen.done(P(52), SENT);
+  assert.deepEqual(unseen.removed, [2], "words seen");
+  // Neither: no proof is his, and kept (a paste ChatGPT made a file).
+  const none = await sentOnce({ ok: true });
+  await none.end();
+  turn(none.listeners, "start", P(53), { prompt: null });
+  await settleLong();
+  await none.done(P(53), null);
+  assert.deepEqual(none.removed, [], "nothing shows whose");
+});
+
+test("a prompt of Changhao's heard of before PostPane says its relay ended is his all the same", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(61) });
+  turn(sent.listeners, "start", P(62), { prompt: MINE });
+  await settleLong();
+  await sent.end();
+  await sent.done(P(62), MINE);
+  assert.deepEqual(sent.removed, []);
+});
+
+// Round 5, review tests 1 and 2: a prompt of his heard of while PostPane's
+// words go, before the page says what became of them, in the tab sending
+// them or in another of the same conversation, is not taken for theirs; nor
+// does theirs, known after, make the conversation the relay's again.
+test("a prompt of Changhao's heard of while PostPane's words go is his", async () => {
+  for (const tab of [2, 3])
+    for (const answer of [{ ok: true, promptId: P(63) }, { ok: true }]) {
+      const sent = await sentOnce(
+        answer,
+        async (listeners) => {
+          turn(listeners, "start", P(64), { prompt: MINE, tab });
+          await settleLong();
+        },
+        { tab3: true },
+      );
+      await sent.end();
+      await sent.done(P(64), MINE);
+      const what = `tab ${tab}, ${JSON.stringify(answer)}`;
+      assert.deepEqual(sent.removed, [], what);
+      assert.ok(!sent.stored.asks?.[ENDED]?.includes(P(64)), what);
+    }
+});
+
+test("words PostPane sends after Changhao went on make the conversation the relay's again", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(71) }, async () => {}, {
+    before: async (listeners) => {
+      turn(listeners, "start", P(72), { prompt: MINE });
+      await settleLong();
+    },
+  });
+  await sent.end();
+  await sent.done(P(71), SENT);
+  assert.deepEqual(sent.removed, [2]);
+});
+
+// Round 5, review test 3: words not known to have gone. Gone after all,
+// their prompt shows them; not gone, the next prompt is his; and what he
+// went on with before is not undone by them.
+test("words not known to have gone count only as their prompt shows them", async () => {
+  const unknown = { ok: false, reason: "tab-closed" };
+  const went = await sentOnce(unknown);
+  await went.end();
+  turn(went.listeners, "start", P(73), { prompt: SENT });
+  await settleLong();
+  await went.done(P(73), SENT);
+  assert.deepEqual(went.removed, [2], "they went");
+  const not = await sentOnce(unknown);
+  await not.end();
+  turn(not.listeners, "start", P(74), { prompt: MINE });
+  await settleLong();
+  await not.done(P(74), MINE);
+  assert.deepEqual(not.removed, [], "they did not, and he asked");
+  const before = await sentOnce(unknown, async () => {}, {
+    before: async (listeners) => {
+      turn(listeners, "start", P(75), { prompt: MINE });
+      await settleLong();
+    },
+  });
+  await before.end();
+  await before.done(P(75), MINE);
+  assert.deepEqual(before.removed, [], "his from before stands");
+  assert.ok(before.stored.taken?.[ENDED]);
+});
+
+// Round 5, review test 8: an answer stopped before its prompt was named:
+// the newest prompt then tells whose it was.
+test("a stopped answer whose beginning named no prompt is told by the newest", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(81) });
+  await sent.end();
+  turn(sent.listeners, "start", null, { prompt: null });
+  await settleLong();
+  sent.listeners.message(
+    {
+      type: "turn",
+      phase: "stopped",
+      conversation: ENDED,
+      promptId: null,
+      newest: P(82),
+      prompt: MINE,
+    },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  await sent.done(P(81), SENT);
+  assert.deepEqual(sent.removed, []);
+});
+
+// What PostPane opens a conversation with: its first line names the
+// request (round 6, owner 2026-11-27 「甲」).
+const OPENING = "【驿窗送审 h7~1】\n第 1 轮";
+test("a new conversation's beginning, told again as it has its address, is PostPane's by its words", async () => {
+  const tabs = [];
+  const removed = [];
+  const stored = {};
+  const closable = { 99: false };
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      closable,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      stored,
+      onCreate: madeBlank(api, { groupId: 7 }),
+      // The words go in, their id not seen; the page has its address.
+      sendGates: [
+        async () => {
+          tabs[0].url = `https://chatgpt.com/c/${ENDED}`;
+          listeners.message(
+            { type: "page", conversation: ENDED, hidden: true },
+            { tab: { id: 99 } },
+          );
+        },
+      ],
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: OPENING });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [ENDED, LIVE],
+    ended: [ENDED],
+  });
+  await settleLong();
+  // Round 6: Changhao asks the same words, no request named, in another
+  // relay's conversation: his, and no head is taken away by it.
+  listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(92),
+      prompt: "第 1 轮",
+    },
+    { tab: { id: 98 } },
+  );
+  await settleLong();
+  assert.ok(P(92) in (stored.taken?.[LIVE] ?? {}), "his, words alike");
+  // Begun on the new chat's page, told again once it has its address.
+  turn(listeners, "start", P(91), { tab: 99, prompt: OPENING });
+  await settleLong();
+  closable[99] = true;
+  turn(listeners, "complete", P(91), { tab: 99, prompt: OPENING });
+  await settleLong();
+  assert.deepEqual(removed, [99]);
+});
+
+test("words with no request named prove no prompt the extension's", async () => {
+  // An older PostPane's opening, its words not named; his prompt the same.
+  const tabs = [];
+  const stored = {};
+  const api = {};
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      stored,
+      groups: [{ id: 7, title: "驿窗接力" }],
+      onCreate: madeBlank(api, { groupId: 7 }),
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({ type: "watch", conversations: [LIVE], live: [LIVE] });
+  listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(93),
+      prompt: "第 1 轮",
+    },
+    { tab: { id: 98 } },
+  );
+  await settleLong();
+  assert.ok(P(93) in (stored.taken?.[LIVE] ?? {}));
+});
+
+// Round 4 and 5, P1-06: Changhao moved the tab an opening made on to a
+// conversation of his own: the words do not go there, nor is it the
+// handoff's, nor closed with it; a prompt of his there, heard of while it
+// opens, is not taken for the extension's (review test 4).
+const HIS = "8c09ae69-e2a1-a5aa-bd01-d1b30298898a";
+async function movedOn(how) {
+  const tabs = [];
+  const removed = [];
+  const asked = [];
+  const posted = [];
+  const stored = {};
+  const api = {};
+  const toHis = () => {
+    tabs[0].url = `https://chatgpt.com/c/${HIS}`;
+    api.listeners.message(
+      { type: "page", conversation: HIS, hidden: true },
+      { tab: { id: 99 } },
+    );
+    api.listeners.message(
+      {
+        type: "turn",
+        phase: "start",
+        conversation: HIS,
+        promptId: P(95),
+        prompt: MINE,
+      },
+      { tab: { id: 99 } },
+    );
+  };
+  const { listeners } = Object.assign(
+    api,
+    load(tabs, {
+      now: true,
+      removed,
+      asked,
+      posted,
+      stored,
+      closable: { 99: true },
+      groups: [{ id: 7, title: "驿窗接力" }],
+      onCreate:
+        how === "before"
+          ? (tab) => {
+              Object.assign(tab, { groupId: 7 });
+              api.listeners.message(
+                { type: "page", conversation: null, hidden: true },
+                { tab: { id: tab.id } },
+              );
+              toHis();
+            }
+          : madeBlank(api, { groupId: 7 }),
+      // As the words went in, the tab moved on; the page says so.
+      sendGates: how === "after" ? [async () => toHis()] : [],
+      opened: { 99: { conversation: HIS, ours: false } },
+    }),
+  );
+  await listeners.port({ type: "open", requestId: "h7~1", text: "第 1 轮" });
+  await settleLong();
+  await listeners.port({
+    type: "watch",
+    conversations: [],
+    endedRelays: ["h7"],
+  });
+  await settleLong();
+  return {
+    removed,
+    submitted: asked.some(([, op]) => op === "submit"),
+    opened: posted.find((m) => m.type === "opened"),
+    strays: stored.strays ?? {},
+    watched: stored.watched ?? [],
+    asks: stored.asks ?? {},
+  };
+}
+
+test("an opening whose tab was moved on to another conversation before the words went sends nothing there", async () => {
+  const before = await movedOn("before");
+  assert.equal(before.submitted, false);
+  assert.equal(before.opened.ok, false);
+  assert.equal(before.opened.reason, "other-conversation");
+  assert.deepEqual(before.strays, {});
+  assert.deepEqual(before.asks, {});
+  assert.deepEqual(before.removed, []);
+});
+
+test("a conversation an opening's tab was moved on to, not showing its words, is not the handoff's", async () => {
+  const after = await movedOn("after");
+  assert.equal(after.submitted, true);
+  assert.equal(after.opened.ok, false);
+  assert.equal(after.opened.reason, "unconfirmed");
+  assert.ok(!after.watched.includes(HIS));
+  assert.deepEqual(after.strays, {});
+  assert.deepEqual(after.asks, {});
+  assert.deepEqual(after.removed, []);
+});
+
+// Round 5: the worker is a plain script, where a second function of a name
+// stands in for the first without a word (a `sending` of #542 did so).
+test("no two functions of the worker share a name", () => {
+  const names = [...source.matchAll(/^(?:async )?function (\w+)/gm)].map(
+    (match) => match[1],
+  );
+  const twice = names.filter((name, at) => names.indexOf(name) !== at);
+  assert.deepEqual(twice, []);
+});
+
+// Round 6, P2-11: a prompt of Changhao's whose hold PostPane's later words
+// let go does not take it back, told again late (its answer stopped, from
+// another tab); a new prompt of his does.
+test("a prompt of Changhao's let go by PostPane's words after it does not take the conversation back when told again", async () => {
+  const sent = await sentOnce({ ok: true, promptId: P(77) }, async () => {}, {
+    tab3: true,
+    before: async (listeners) => {
+      turn(listeners, "start", P(76), { prompt: MINE, tab: 3 });
+      await settleLong();
+    },
+  });
+  assert.equal(sent.stored.taken?.[ENDED], undefined, "let go");
+  sent.listeners.message(
+    {
+      type: "turn",
+      phase: "stopped",
+      conversation: ENDED,
+      promptId: P(76),
+      newest: P(76),
+      prompt: MINE,
+    },
+    { tab: { id: 3 } },
+  );
+  await settleLong();
+  assert.equal(sent.stored.taken?.[ENDED], undefined, "told again");
+  await sent.end();
+  await sent.done(P(77), SENT);
+  assert.ok(sent.removed.includes(2), JSON.stringify(sent.removed));
+  // A new one of his takes it.
+  turn(sent.listeners, "start", P(78), { prompt: MINE, tab: 3 });
+  await settleLong();
+  assert.deepEqual(Object.keys(sent.stored.taken?.[ENDED] ?? {}), [P(78)]);
+});
+
+// Round 6, P1-05: words alike are the extension's only in a relay's
+// conversation, and only as one of its words: two of them alike prove
+// neither; those past their week, kept from before, prove nothing.
+test("words alike prove a prompt the extension's only once, in a relay's conversation, within the week", async () => {
+  // Two openings of words alike, neither's prompt known.
+  const twice = await sentOnce({ ok: true });
+  await twice.listeners.port({
+    type: "send",
+    requestId: "s2",
+    conversation: ENDED,
+    text: SENT,
+  });
+  await settleLong();
+  await twice.end();
+  turn(twice.listeners, "start", P(84), { prompt: SENT });
+  await settleLong();
+  await twice.done(P(84), SENT);
+  assert.deepEqual(twice.removed, [], "two alike");
+  // Another conversation, not a relay's, takes no head away.
+  const elsewhere = await sentOnce({ ok: true });
+  elsewhere.listeners.message(
+    {
+      type: "turn",
+      phase: "start",
+      conversation: LIVE,
+      promptId: P(85),
+      prompt: SENT,
+    },
+    { tab: { id: 2 } },
+  );
+  await settleLong();
+  await elsewhere.end();
+  turn(elsewhere.listeners, "start", P(86), { prompt: SENT });
+  await settleLong();
+  await elsewhere.done(P(86), SENT);
+  assert.deepEqual(elsewhere.removed, [2], "still there");
+  // Kept from more than a week ago.
+  const clock = { now: 2_000_000_000 };
+  const stored = {
+    heads: [
+      { head: "【驿窗送审h7~old】旧", at: clock.now - 8 * 24 * 3600 * 1000 },
+    ],
+  };
+  const removed = [];
+  const closable = { 2: false };
+  const again = load([endedTab(2)], {
+    now: true,
+    clock,
+    removed,
+    stored,
+    closable,
+    groups: [{ id: 7, title: "驿窗接力" }],
+  });
+  const ended = () =>
+    again.listeners.port({
+      type: "watch",
+      conversations: [ENDED],
+      ended: [ENDED],
+    });
+  await ended();
+  await settleLong();
+  turn(again.listeners, "complete", P(87), {
+    prompt: "【驿窗送审 h7~old】\n旧",
+  });
+  await settleLong();
+  closable[2] = true;
+  await ended();
+  await settleLong();
+  assert.deepEqual(removed, [], "a week old");
+});
+
+// Round 7, P2-11: his prompts are kept each by when it began; one told late
+// stands in for no other. P1 began before PostPane's words Q, P2 after;
+// P1's start is heard only after P2's, and Q's prompt known only after
+// both: Q lets P1 go, and P2 still holds the conversation.
+test("a prompt of Changhao's told late stands in for no later one of his", async () => {
+  const sent = await sentOnce(
+    { ok: true },
+    async (listeners, clock) => {
+      turn(listeners, "start", P(102), { prompt: MINE, tab: 3, at: clock.now });
+      await settleLong();
+    },
+    { tab3: true },
+  );
+  const q = sent.stored.heads.at(-1).at;
+  turn(sent.listeners, "start", P(101), { prompt: MINE, tab: 3, at: q - 5 });
+  await settleLong();
+  turn(sent.listeners, "start", P(103), { prompt: SENT });
+  await settleLong();
+  assert.deepEqual(Object.keys(sent.stored.taken?.[ENDED] ?? {}), [P(102)]);
+  assert.deepEqual(sent.stored.freed?.[ENDED], [P(101)]);
+  await sent.end();
+  await sent.done(P(103), SENT);
+  assert.deepEqual(sent.removed, []);
+});
+
+// Round 8, P2-11: a prompt of his begun before PostPane's words, its start
+// first told only after those words are known, is let go as well; one
+// begun after them, or whose beginning is not told, still holds.
+test("a prompt of Changhao's begun before PostPane's words, told first after they are known, takes nothing", async () => {
+  const late = await sentOnce({ ok: true, promptId: P(110) }, async () => {}, {
+    tab3: true,
+  });
+  const since = late.stored.ownedSince?.[ENDED];
+  assert.ok(Number.isFinite(since), "when the words began is kept");
+  turn(late.listeners, "start", P(111), {
+    prompt: MINE,
+    tab: 3,
+    at: since - 5,
+  });
+  await settleLong();
+  assert.equal(late.stored.taken?.[ENDED], undefined, "begun before");
+  await late.end();
+  await late.done(P(110), SENT);
+  assert.ok(late.removed.includes(2), JSON.stringify(late.removed));
+
+  const later = await sentOnce({ ok: true, promptId: P(112) }, async () => {}, {
+    tab3: true,
+  });
+  const from = later.stored.ownedSince[ENDED];
+  turn(later.listeners, "start", P(113), {
+    prompt: MINE,
+    tab: 3,
+    at: from - 5,
+  });
+  turn(later.listeners, "start", P(114), {
+    prompt: MINE,
+    tab: 3,
+    at: from + 5,
+  });
+  turn(later.listeners, "start", P(115), { prompt: MINE, tab: 3 });
+  await settleLong();
+  assert.deepEqual(
+    Object.keys(later.stored.taken?.[ENDED] ?? {}).sort(),
+    [P(114), P(115)],
+    "begun after, or when not told, still his",
+  );
+  await later.end();
+  await later.done(P(112), SENT);
+  assert.deepEqual(later.removed, []);
+});
+
+// Round 9, P2-11: a prompt shown old by when it began stays let go though
+// another tab tells of it with no beginning, before or after.
+test("a prompt of his shown older than PostPane's words takes nothing, whichever tab tells of it first", async () => {
+  for (const oldFirst of [true, false]) {
+    const sent = await sentOnce(
+      { ok: true, promptId: P(120) },
+      async () => {},
+      { tab3: true },
+    );
+    const since = sent.stored.ownedSince[ENDED];
+    const old = () =>
+      turn(sent.listeners, "start", P(121), {
+        prompt: MINE,
+        tab: 3,
+        at: since - 5,
+      });
+    const untimed = () =>
+      turn(sent.listeners, "complete", P(121), { prompt: MINE, tab: 2 });
+    if (oldFirst) old();
+    else untimed();
+    await settleLong();
+    if (oldFirst) untimed();
+    else old();
+    await settleLong();
+    assert.equal(sent.stored.taken?.[ENDED], undefined, `oldFirst ${oldFirst}`);
+    assert.ok(sent.stored.freed?.[ENDED]?.includes(P(121)));
+    await sent.end();
+    await sent.done(P(120), SENT);
+    assert.ok(sent.removed.includes(2), JSON.stringify(sent.removed));
+  }
+});
+
+// An end whose beginning was not heard tells when its turn began
+// (`begunAt`): kept from then, not from when it is heard.
+test("an end of a prompt of his counts from when its turn began, as told", async () => {
+  // Heard while the words go, begun well before them.
+  const sent = await sentOnce(
+    { ok: true, promptId: P(104) },
+    async (listeners, clock) => {
+      turn(listeners, "complete", P(105), {
+        prompt: MINE,
+        begunAt: clock.now - 50,
+      });
+      await settleLong();
+    },
+  );
+  assert.equal(sent.stored.taken?.[ENDED], undefined);
+  assert.deepEqual(sent.stored.freed?.[ENDED], [P(105)]);
 });
