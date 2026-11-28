@@ -1,4 +1,3 @@
-import { HUD_METRICS } from "../model";
 import type { RingItem } from "./mark-windows";
 
 /** Horizontal bars for `items`, the first on top, stacked in the middle of a
@@ -21,7 +20,6 @@ export function UsageBars({
   track: string;
   reduceMotion?: boolean;
 }) {
-  const [x1, y1, x2, y2] = HUD_METRICS.ease;
   return (
     <span
       aria-hidden="true"
@@ -55,7 +53,7 @@ export function UsageBars({
               background: item.color,
               transition: reduceMotion
                 ? undefined
-                : `width ${HUD_METRICS.duration}s cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
+                : "width var(--motion-data) var(--ease-out)",
             }}
           />
         </span>

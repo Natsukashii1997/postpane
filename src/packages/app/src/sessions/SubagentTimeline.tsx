@@ -447,7 +447,7 @@ export const SubagentTimeline = memo(function SubagentTimeline({
                 borderRadius: 6,
                 background: focus === i ? theme.pick : "transparent",
                 opacity: dim(i),
-                transition: "opacity 150ms ease",
+                transition: "opacity var(--motion-quick) var(--ease-out)",
               }}
             >
               <span

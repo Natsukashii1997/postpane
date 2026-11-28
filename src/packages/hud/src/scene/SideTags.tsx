@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { EASE_OUT, MOTION } from "@agent-hud/ui/lib/motion";
 import type { Session } from "@agent-hud/protocol";
 import type { QuotaDisplay } from "@agent-hud/ui/format";
 import {
@@ -109,6 +111,7 @@ export function SideTags({
   zh,
   notchWidth,
   sessions,
+  still = false,
   onFront,
 }: {
   tags: readonly { side: SideNews; rect: HUDRect; narrow?: boolean }[];
@@ -120,6 +123,8 @@ export function SideTags({
   zh: boolean;
   notchWidth: number;
   sessions: readonly Session[];
+  /** Reduced motion, or animations turned off: tags come and go at once. */
+  still?: boolean;
   onFront: (id: string) => void;
 }) {
   const punched = perforation(perforatedSide(edge), 10 * scale, 2.1 * scale);
@@ -127,12 +132,24 @@ export function SideTags({
   const resting = useRef<ReturnType<typeof setTimeout>>(undefined);
   const stopResting = () => clearTimeout(resting.current);
   useEffect(() => stopResting, []);
+  // A tag fades in where it hangs and fades out where it was, and folding to
+  // its narrow slip crosses the two; nothing slides, so nothing passes under
+  // the pointer (L-27). Owner chose 改 for this on 2026-11-25.
+  const fade = (ms: number) =>
+    still ? { duration: 0 } : { duration: ms, ease: EASE_OUT };
   return (
-    <>
+    <AnimatePresence initial={false}>
       {tags.map(({ side, rect, narrow }) => (
-        <div
-          key={side.vendor}
+        <motion.div
+          key={`${side.vendor}-${narrow ? "narrow" : "wide"}`}
           className="hud-side-tag"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: fade(MOTION.enter) }}
+          exit={{
+            opacity: 0,
+            pointerEvents: "none",
+            transition: fade(MOTION.exit),
+          }}
           onPointerEnter={() => {
             stopResting();
             resting.current = setTimeout(
@@ -184,8 +201,8 @@ export function SideTags({
             narrow={narrow}
             across={horizontal(edge)}
           />
-        </div>
+        </motion.div>
       ))}
-    </>
+    </AnimatePresence>
   );
 }

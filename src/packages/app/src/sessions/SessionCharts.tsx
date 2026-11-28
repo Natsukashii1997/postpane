@@ -16,6 +16,7 @@ import {
   type StackedBar,
 } from "../lib/sessions";
 import { moneyShort } from "@agent-hud/ui/format";
+import { HoverTip, moves } from "../lib/Motion";
 import {
   clipped,
   compact,
@@ -32,8 +33,7 @@ export type Measure = "tokens" | "cost";
 /** How strongly the sub-agents' part of a bar is drawn (Open's `subagentOpacity`). */
 const subagentOpacity = 0.4;
 /** Bars grow and shrink, never jump; the window's reduce-motion rule stills them. */
-const grow =
-  "y 240ms cubic-bezier(0.22, 1, 0.36, 1), height 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease";
+const grow = `${moves("data", "y", "height")}, ${moves("quick", "opacity")}`;
 /** The axis the turn chart and the context chart share, so a compaction lines up with its turn. */
 const axis = 44;
 const labelFont = { fontSize: 10, fontFamily: "inherit" } as const;
@@ -330,7 +330,7 @@ export function TurnBarsChart({
       <g
         key={entry.id}
         opacity={picked < 0 || picked === index ? 1 : 0.45}
-        style={{ transition: "opacity 160ms ease" }}
+        style={{ transition: moves("quick", "opacity") }}
       >
         {rects}
       </g>
@@ -497,23 +497,20 @@ export function TurnBarsChart({
           })}
         </svg>
       )}
-      {hovered && pointed !== null && (
-        <div
-          role="tooltip"
-          style={{
-            position: "absolute",
-            top: 0,
-            ...(pointed * slot + slot / 2 > plot / 2
-              ? { right: width - pointed * slot + 8 }
-              : { left: (pointed + 1) * slot + 8 }),
-            pointerEvents: "none",
-            zIndex: 2,
-            animation: "session-fade-in 140ms ease",
-          }}
-        >
-          {hover(hovered)}
-        </div>
-      )}
+      <HoverTip
+        show={Boolean(hovered) && pointed !== null}
+        style={{
+          position: "absolute",
+          top: 0,
+          ...((pointed ?? 0) * slot + slot / 2 > plot / 2
+            ? { right: width - (pointed ?? 0) * slot + 8 }
+            : { left: ((pointed ?? 0) + 1) * slot + 8 }),
+          pointerEvents: "none",
+          zIndex: 2,
+        }}
+      >
+        {hovered && hover(hovered)}
+      </HoverTip>
     </div>
   );
 }
@@ -808,7 +805,8 @@ export function ShareRows({
                   minWidth: row.value > 0 ? 2 : 0,
                   background: row.color ?? theme.secondary,
                   borderRadius: 2,
-                  transition: "width 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  // Width, not scale: scaling would squash the rounded end.
+                  transition: moves("data", "width"),
                 }}
               />
             </span>

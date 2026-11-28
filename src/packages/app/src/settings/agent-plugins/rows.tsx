@@ -23,7 +23,7 @@ import {
   type PillTone,
   type Text,
 } from "../SettingsPrimitives";
-import { useBriefly } from "./use-status";
+import { useReceipt } from "./receipt";
 
 const tones: Record<Tone, PillTone> = {
   working: "green",
@@ -53,17 +53,17 @@ export function StatePill({
 }
 
 function CopyLink({ text, t }: { text: string; t: Text }) {
-  const [copied, setCopied] = useBriefly<true>(1600);
+  const [label, showCopied] = useReceipt();
   return (
     <LinkButton
       onClick={() =>
         void navigator.clipboard
           ?.writeText(text)
-          .then(() => setCopied(true))
+          .then(showCopied)
           .catch(() => {})
       }
     >
-      {copied ? t("Copied", "已复制") : t("Copy", "复制")}
+      {label(t("Copy", "复制"), t("Copied", "已复制"))}
     </LinkButton>
   );
 }

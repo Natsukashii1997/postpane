@@ -1,0 +1,54 @@
+/* The windows' shared moving parts (lib/Motion.tsx), at the paces of the
+   one motion language (@agent-hud/ui/global.css). */
+
+/* A chart's hover card: a 2 px rise in, a quicker fade out. */
+.app-tip {
+  animation: app-tip-in var(--motion-quick) var(--ease-out) both;
+}
+.app-tip.is-leaving {
+  animation: app-tip-out 80ms var(--ease-out) both;
+}
+@keyframes app-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+@keyframes app-tip-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* A label that changes in place: both words on one spot, one showing. */
+.app-swap {
+  display: inline-grid;
+  gap: inherit;
+}
+.app-swap > * {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  transition: opacity var(--motion-quick) var(--ease-out);
+}
+.app-swap > [aria-hidden="true"] {
+  opacity: 0;
+}
+
+/* Words that say something is loading: shown only when it takes long
+   enough to notice, as .loading-state is. */
+.app-loading-late {
+  animation: loading-state-in var(--motion-enter) var(--ease-out)
+    var(--motion-quick) both;
+}
+
+/* The heatmap's hover card (a Radix tooltip) comes and goes as a chart's
+   does; moving on to the next hour shows that hour's card at once. */
+.statistics-heatmap-details[data-state="delayed-open"] {
+  animation: app-tip-in var(--motion-quick) var(--ease-out) both;
+}
+.statistics-heatmap-details[data-state="closed"] {
+  animation: app-tip-out 80ms var(--ease-out) both;
+}

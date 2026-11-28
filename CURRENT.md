@@ -18,6 +18,89 @@
   - 主线：接力治本｜✅ 0、1、2（端到端待验）、3 全部、5 日志入口 ❓ 5 影子读取（改动确认 A）、4 补格式（改动确认 B）⏳ 4 其余、6、7。
 - 本轮新坑：无。
 - skill 进化：无。
+## 全项目动效统一：一套动效语言，侧栏、设置、统计、会话窗口按状态变化补齐过渡（2026-11-25，Claude，常浩要求「把项目的动效整体做到苹果那种细腻、丝滑的水准……审完直接做……最后直接合并上线」；碰到的 9 处已定内容单独发改动确认，常浩回「全按推荐」；PR #539 已 squash 合并 `53291fe`（2026-11-28），已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-25 12:28`（`date '+%F %H:%M'` 记录）。来由：常浩要求整体动效到苹果水准，按「状态变化」找问题（出现、消失、移动、尺寸、内容、图标、数字、按下、悬停、加载、完成、出错），一套语言、克制、跟手可打断、不付性能代价、尊重「减少动态效果」，GPT 当方案、文案、交互顾问，做完再审，最后合并上线。
+- 动效语言（单一来源 `src/packages/ui/src/lib/motion.ts`，CSS 变量同值，`motion.test.ts` 锁住两边一致）：按下 60ms、悬停换色 120ms、退场 140ms、进场展开 200ms、数据变化 240ms；曲线两条：ease-out `(0.22,1,0.36,1)` 管进场、展开、数据、悬停，ease-in-out `(0.65,0,0.35,1)` 只给原地往返的循环；空间几何（侧栏外框、刘海）用回弹（visualDuration 0.32、bounce 0），中途反向保留速度；拖动和换家 0 时长（守 L-27）。
+- 改变的行为（动手前已在会话里列出；9 处已定内容另发改动确认，常浩回「全按推荐」）：
+  - **已定内容 9 处**（逐条见 DECIDED.md 2026-11-25 九行）：别家小签进出淡入淡出；「展开其余 / 收起」行与纸一起淡入淡出、伸缩，箭头转向；挂件移开 0.4 秒摆回；接力方章离场淡出略缩；左滑托盘看甩动速度、回弹 200ms；设置开关墨块滑过去；设置按钮按下下沉 1px；GoButton 和卡片文字按钮曲线统一；票根读数变化交叉淡。
+  - 减少动态效果：原来只把时长压到 0.01ms，循环动画照转、每帧跳位置会闪；侧栏「动画」开关只管 JS 动画。现在系统设置开或「动画」关时，CSS 动画和过渡都压到 0.01ms 且循环只跑一次（ChatGPT 未审闪烁、「在跑」方点、接力绿点停在静止状态）；没开时和原来一样。
+  - 侧栏：换内容（换家、小收据 / 小签 / 展开卡之间）从「旧的瞬间卸掉、隔 120ms 新的才淡入」改为旧的 140ms 淡出、新的 200ms 淡入叠着换，中间不留空纸；外框从固定 0.4s 补间改回弹；刘海收回时浅色 200ms 变黑，不再瞬间变；数据条、环、Token 图、索引进度统一 240ms ease-out（进度条原来 600ms）。
+  - 弹层、提示、下拉：缩放 0.95 → 0.98、位移统一 1，开 120 关 80；对话框开 200 关 140；设置窗口提示延迟统一 400ms（原来 0/300/400 三种）。
+  - 窗口：设置折叠区、会话详情、日分组标题改为高度 + 透明度可打断展开；设置切页、会话进详情淡入；统计卡被点名高亮从边框 0→1.5px（内容横跳）改为 outline；复制、保存回执统一停 1600ms（原来 1600/2000 混用）、文字交叉淡；设置滑块松手后本地先跟手，等后端回读最多 1.5 秒再对齐（原来把手落后鼠标、可能回跳）。
+- 你要求的：
+  - 共用：`ui/src/lib/motion.ts`（新）；`ui/src/global.css`（`@theme` 两条曲线和 Tailwind 默认过渡、`--motion-*` 五档、减少动态效果两条规则、`[data-hud-block]` 过渡、GoButton / `.hud-press` / 挂件改用变量和 `data-hover`、折叠箭头）；`ui/src/ui/`（button 去 `transition-all` 加按下态，switch、tabs 去 `transition-all`，select / tooltip / dropdown-menu / dialog 的进出时长与幅度）。
+  - 侧栏（hud）：`HUDScene.tsx`（`data-motion`、小签 `still`）；`scene/HUDExpandedSurface.tsx`（回弹、三种视图交叉淡、换内容叠着换、刘海填色过渡、`FoldScope`）；`scene/NotchSurface.tsx`（回弹、可打断）；`scene/SideTags.tsx`（小签淡入淡出）；`scene/PendantShell.tsx`（`data-hover`、移开摆回）；`scene/StubFoot.tsx`（新，票根读数与方章换场）；`scene/HUDMarkStrip.tsx`（接上 `StubFoot`）；`permissions/FoldButton.tsx`（`FoldRows` / `FoldRow` / `FoldList` / `FoldScope`、箭头）；`panel/fold-store.ts`（`moving()`）；`permissions/ApprovalContent.tsx`、`alerts/CompletionAlertView.tsx`、`panel/PlaceRows.tsx`、`panel/RelayRows.tsx`（行套 `FoldRow`）；`panel/relay-tray.ts`（`trayFlick`、`TRAY_SETTLE`）、`panel/SessionsSection.tsx`（接上甩动判断）；`usage-meter/UsageBars.tsx`、`UsageRing.tsx`、`panel/TokenChartSection.tsx`、`IndexingSection.tsx`、`AgentBoard.tsx`、`ResetCreditsRow.tsx`、`HoverPanel.tsx`、`model.ts`（数据与悬停过渡改用共用值）。
+  - 窗口（app）：`lib/Motion.tsx`、`lib/moves.ts`、`motion.css`（新，`useFold` 等）；`settings/slide-hold.ts`、`Slide.tsx`（新，滑块跟手）；`settings/receipt.css`（开关滑动、按钮按下）、`settings.css`；`sessions/DayHeader.tsx`、`Folded.tsx`；`settings/agent-plugins/receipt.tsx`；统计 `ProviderCard.tsx`、`UsageChart.tsx`、`QuotaHistory.tsx`、`StatsTheme.tsx`、`ActivityHeatmap.tsx` 等（逐个见 PR 文件列表）。
+  - 测试：`ui/test/motion.test.ts`（新）、`ui/test/pendant-sway.test.ts`（改为认 `data-hover`，新增「移开摆回」一条）、`hud/test/fold-store.test.ts`（2 条）、`hud/test/relay-tray.test.ts`（甩动 1 条）、`app/test/slide-hold.test.ts`、`app/test/moves.test.ts`（新，禁止窗口里手写时长和曲线）。
+  - 文档：`docs/DECIDED.md` 9 行；`docs/LESSONS.md` L-89。
+- 我顺手改的：
+  - `scene/AirmailEdges.tsx`（新）：从 `HUDExpandedSurface.tsx` 挪出航空斜纹边，给 300 行棘轮腾行；行为不变。
+  - 几处注释并成一行、`HUDScene.tsx` 减动画判断写法，给棘轮腾行；`src/tooling/file-size-baseline.json` 收紧。
+  - `model.ts` 删掉没人用的 `HUD_METRICS.ease`。
+- 同类：全项目搜了 `transition-all`、手写毫秒、`ease` / `ease-in-out` / 各种 `cubic-bezier`，侧栏和窗口里管状态变化的都换成共用值；小人、纸飞机、等待线等已定动效的时长和曲线没动；`app/test/moves.test.ts` 防窗口里再手写。
+- GPT 方案顾问（思维评审，接力卡 `h1a211896fd701`，第 1 轮返修）逐条处理：
+  - 已改：刘海回弹 0.32 → 0.26 秒（`NOTCH_GEOMETRY`，侧栏外框仍 0.32）；托盘甩动另要这次手势至少滑过 12 点才看速度（`FLICK_TRAVEL`）；「收起」时退出中的行不再接点击。各补一条测试。
+  - 不改并说明：票根读数「高频时跳过动画」——读数随快照变，几秒到几分钟一次，且已用等宽数字；「交叉淡时交互归属」——侧栏三种视图、小签退出时已 `pointerEvents: none`，设置切页是同一节点淡入，不叠放。
+  - 转单 #538：加载反馈 300ms 后才出现、出错回执不自动消失、回执文案统一；减少动态效果分两级。
+  - 交常浩：挂件摆回 0.4 秒（常浩已批）GPT 建议 0.18–0.22 秒，没改，在会话里问；常浩回「保持 0.4 秒」。
+- GPT 方案顾问第 2 轮（受审 `d8b26f4`）：「审查出口：通过」，接力结束。非阻断意见处理：
+  - 退出中的行键盘还能聚焦：已改，`FoldRow` 退出时 `inert`（`useIsPresent`）。侧栏三种视图、小签退出时没加 `inert`，只有 `pointerEvents: none`，退场只有 140ms，留作代码审查看。
+  - 挂件回位要先快后慢、不二次摆动、半路再移入能接上：回位动画改成叠加在摇晃上（`composite: "add"`）。无头 Chromium 逐帧（`pendant-settle.txt`）：移开时 4.2° → 3.4° → 2.8° → … 衰减；回位途中再移入，角度继续减到 0 再自然接上新一轮摇晃，没有跳变。扫帚那一路测试页没带上它的规则，没测到。
+  - 减少动态效果下循环停在哪：0.01ms、只跑一次后元素回到自身样式，项目里这些循环的静止样式就是 100% 关键帧那一帧；重新挂载会重跑一次 0.01ms，看不出来。
+  - 「动画」开关作用范围：现在只管侧栏，三个窗口只看系统设置；补进 #538 评论，由那张定。
+  - 票根读数位数变化：读数那一格左右用绝对定位固定，内容居中，位数变不推动别的东西。
+- GPT 工程审查（链 `r1a211f896d100`，第 1 轮受审 `261b2ff`，返修，P0 0、P1 0、P2 9、P3 2）逐条处理：
+  - ENG-01 已修：「在跑 n」用的是看板自己的折叠记录，行却读卡片的，展开收起不动。`foldStore.use` 第三个值改成「这个列表刚折叠过」，`PlaceRows` 在跑那一段用看板自己的，卡片列表经 `ListFolding` 传给里面的行。
+  - ENG-03 已修：原来任何一个列表折叠后 600ms 内，所有列表的增减都动画。现在按列表 key 各记各的，测试「另一个列表同一时刻变化不动」。
+  - ENG-02 判定不成立：关键帧起点是 `running ? opacity : open ? 0 : 1`，完全展开后收起是 1 → 0。把起止算法抽成 `foldFrames` 并补测试（收起 1→0、展开 0→1、半路反向从当前值）。
+  - ENG-06 已修：`useFlip` 排序前改读屏幕上的位置（`getBoundingClientRect`，含正在播放的位移），新动画开始前先取消同一行上一段，再量落点。
+  - ENG-04 已修：悬停面板跳到某家时的平滑滚动，系统减少动态效果或「动画」关时改为直接到位。
+  - ENG-05 已修：每个摆动部件只留一个回位动画，第二次移开先读当前角度（摇晃加回位），取消旧的再起新的。
+  - ENG-07 已修：侧栏三种视图和面板内容退场时 `inert`（新 `scene/Present.tsx`，`useIsPresent`），键盘也够不着，焦点随之移出。
+  - ENG-08 判定不成立：托盘提示只在指针停在托盘某块上时出现，点「收起」时指针已在折叠按钮上，提示已收，折叠动画期间不会有提示被裁。
+  - ENG-09 已修：「动画」关时「在跑」方点和系统减少动态效果一样 `animation: none`、透明度 0.55。
+  - ENG-10 已核实并加退化：项目最低 macOS 12（`tauri.macos.conf.json`），那一代 WebKit 不支持动画叠加。按 WebKit 给的办法检测（`new KeyframeEffect(null, []).composite`），不支持就用替换并在指针回来时结束回位。用系统 WKWebView 实测（`webkit/`，本机 macOS 27.2.1）：检测为支持；移开 4.3° 起平滑回落，回位中移回接着走，摆起来后第二次移开从 3.5° 平滑回 0，没有叠加翻倍；强制走退化路径时，移回那一下从 1.3° 跳回 0，之后正常。两段 400ms 动画只动 transform，没另测主线程占用。
+  - ENG-11 已修：`session-share-row` 悬停底色、`loading-state-in` 改用共用值（140ms → 120ms、240ms → 200ms，曲线统一）；挂件抬起、眼睛发光、按下三处是 11-06 定稿的挂件动效，列为保留例外；`motion.test.ts` 新增一条：单次过渡不许再写死时间（循环、0.01ms、例外除外），ui 组件的 `duration-N` 只许共用档位和弹层关闭用的 80。
+- GPT 工程审查第 2 轮（受审 `02e7839`，返修，P0 0、P1 0；ENG-01、04、05、06、09、11 已验证关闭，ENG-02 判定不成立；新提 ENG-17、18）逐条处理：
+  - ENG-03 已修（同一列表）：600ms 窗口里同一列表因回答、移除增减的行也跟着动。`foldStore.use` 第三个值改为折叠时刻，`FoldRows` 记下上次画的折叠时刻和行（画完才记），新判定 `rowsMove`：折叠引起的那次渲染动；窗口内行没变照常动；窗口内行变了是别的原因，直接出现消失；嵌套列表经 `ParentFold` 各按各的行判。测试 `fold-store.test.ts` 两条。
+  - ENG-08 已修：托盘块加 `onBlur`，指针或焦点离开都收提示（和 `onPointerLeave` 共用 `cool`）。
+  - ENG-07 已修（不认 `inert` 的旧 WebKit）、焦点交接转单 #541：`scene/Present.tsx` 新 `useLeaving`，退场时除 `inert` 外还在捕获阶段吞掉点击和按键、放掉焦点，折叠行 `FoldRow` 共用。系统 WKWebView 实测（`webkit-r2/leaving.txt`）：退场视图拿不到焦点、点击和回车到不了；去掉 `inert` 模拟旧 WebKit 照样拦住；改前同测法焦点、点击、按键都到了（`leaving-old.txt`）。焦点交给新视图：main 上视图即时替换，本来也没有交接，属新功能，转 #541。
+  - ENG-10 已修：叠加能力从只看接口改成在隐藏小块上实际叠一次（新 `scene/adds-onto.ts`：CSS 动画 10px 加回位 10px 要得 20px），Safari 16.0/16.1 那种有接口叠错的会走替换。实测（`webkit-r2/adds-onto.txt`）：本机判支持，首次 6ms；同测法换成替换读到 10；帧间隔只摇摆 191 帧中位 10ms、超 20ms 2 帧，20 次回位 831 帧中位 10ms、最长 35ms、超 20ms 2 帧。没测 Safari 16.0/16.1、macOS 12.0～12.3 的真实 WebKit（本机只有 macOS 27）。退化路径移回时 1.3° 回 0 的小跳保留：只在不支持叠加时出现，改前离开就从最多 13° 直接跳回。
+  - ENG-17 已修：跳到某家的滚动挪到新 `panel/spotlight.ts`（`useSpotlight`），到位时读当前「动画」开关，中途关掉立即到位（HoverPanel.tsx 551 → 511 行，基线已收紧）。
+  - ENG-18 已修：`useFold` 走减少动态效果那条路时，把被取消动画设的 `overflow` 还原。
+- GPT 工程审查第 3 轮（受审 `0679038`，返修，P0 0、P1 0；ENG-03、08、17、18 已验证关闭；ENG-03 一条失败路径审查方核对 motion 14.3.0 源码后自行撤回）逐条处理：
+  - ENG-07 已修：`useLeaving` 退场时另加 `aria-hidden`，并把视图里能拿焦点的元素设 `tabIndex=-1`（视图一会儿就卸载，不用还原），旧 WebKit 不认 inert 时也不在 Tab 顺序和 VoiceOver 里。
+  - ENG-19 已修（main 上就有，同类顺手修）：整张卡（`hud-card`）和内容层（`surface-content`）退场也走 `PresentDiv`，里层视图自身仍在场时一样不可交互。实测（`webkit-r3/r3.txt`）：卡退场期间里层按钮拿不到焦点、点击和回车到不了、tabIndex -1，去掉 inert 一样；改前对照（`r3-old.txt`）焦点、点击、按键都到了。
+  - ENG-10 已修：回位整体挪到新 `scene/settle.ts`，真实回位抽成 `settleBack`，探测直接用它：底下 CSS `rotate(4deg)`，从 3° 的矩阵回到 none、叠加，起点要得 7°。实测叠加 7.00°、替换 3.00°；真实回位序列平滑。退化路径的 1.3° 小跳写进 `settle.ts` 注释，请常浩确认接受。
+- GPT 工程审查第 4 轮（受审 `b37e2c8`，返修，P0 0、P1 0；ENG-10 已验证关闭，notch 结构和 #574 合并解法核对通过；新提 ENG-20 待决策）逐条处理：
+  - ENG-07 已修：退场视图的根元素本身（小收据是一个按钮）也移出 Tab 顺序；记下原来的 tabindex，视图退到一半被叫回（同一个 key）时还原。实测（`webkit-r4/r4-new.txt`）：小收据单独退场时根按钮 tabindex -1；叫回后 3、0 原样恢复。改前对照（`r4-old.txt`）根按钮没移出，叫回后一直卡在 -1（第 3 轮改法带出来的，一并修好）。真实 Tab 键和 VoiceOver 没测。
+  - ENG-19 已修：旧 WebKit 退场期间在捕获阶段拦下按下、拖动、松手、取消和滚轮（只停传递、不阻止默认），会话行的左滑托盘手势起不来。实测去掉 inert 后五种事件都到不了；改前对照五种都到了。
+  - ENG-20 常浩 2026-11-28 回「接受」：不支持叠加的旧 WebKit 上，回位途中移回挂件会跳约 1.3°，作为兼容降级保留，已登记 DECIDED.md。
+- GPT 工程审查第 5 轮（新授权周期第 1 轮，受审 `4aeab6e`，返修，P0 0、P1 0；ENG-20 已验证关闭）逐条处理：
+  - ENG-07 已修：退场期间盯着视图里的 tabindex 和新增节点（MutationObserver）：React 写的值记成叫回后应有的值、当下仍保持 -1；新插进来的可聚焦元素也移出 Tab 顺序；叫回时先处理还排着队的变化记录再还原，不再写回退场开始时的旧值。这套退化只在不认 inert 的 WebKit 上启用。实测（`webkit-r5/r5t-new.txt`，页面先去掉 inert 支持）：退场中 0→-1 叫回仍 -1、-1→0 退场中仍 -1 叫回后 0、退场中新增按钮 -1 叫回后无、叫回同一刻改成 -1 仍 -1；改前对照（`r5t-old.txt`）四种都错。
+  - ENG-19 已修：退场期间只拦按下、拖动和滚轮，松手和取消放行，退场前开始的手势照常收尾（侧栏里只有会话行用松手和取消，且只用来结束手势）。实测（`r5-gesture-new.txt`，会话行替身）：按下拖动后退场、退场中松手、叫回再移动 → 松手收尾、叫回后不再拖；改前（`r5-gesture-old.txt`）叫回后接着拖。退场前开始的滚轮滑动停下后照常收尾，两版一致，是这个手势的正常结束。
+- GPT 工程审查新周期第 2 轮（受审 `bf609f9`，返修，P0 0、P1 0）逐条处理：
+  - ENG-07 已修：同一批变化记录先把每个元素 React 最后写的值全读出来，再统一设 -1，连写两次的不会被前一条写的 -1 盖掉（回调和叫回时的清理走同一处）。实测（`webkit-r6/`）连写两次后叫回、连写两次后立刻叫回都恢复成 0；改前对照都卡在 -1。
+  - ENG-19 已修（改在会话行自己，支持 inert 的新系统也受益：退场视图不接收命中，松手同样到不了行）：拖动时发现鼠标键已松开（`event.buttons` 为 0）就当手势结束，横向拖过的照常回位；取消时清掉「刚拖过」；点击是否算拖完的点击改由 `relay-tray.ts` 的 `tookDrag` 判断，非鼠标点出来的点击（读屏器、键盘，`detail` 为 0）不吞。实测：没过阈值就退场、行外松手、叫回再移动不再拖；取消或点击被拦后读屏器点击照常生效；改前对照分别接着拖、被吞。滚轮在叫回后接着滚是同一次滑动接着走（-20 到 -40，停下收尾一次），两版一致，按设计保留。
+- GPT 工程审查新周期第 3 轮（受审 `107dcab`，返修，P0 0、P1 0；ENG-07 已验证关闭，滚轮续接判定不成立获认可）：
+  - ENG-19 已修：会话行判断手势结束改看左键那一位（`event.buttons & 1`），左键拖动中按下右键再松左键（buttons 为 2）也算结束。实测（`webkit-r7/`）：改后松左键当场回位、之后不再拖，单按右键不起手势；改前一直拖，后面单按右键也被旧手势带着拖。测试补「按下先清『刚拖过』标记」的断言和新版 WebKit 读屏器（按下、松手、detail 1 点击）的顺序，两种读屏器顺序实测都照常生效；真实 VoiceOver 没测。
+- 测试：
+  - 新测试先红后绿：`ui/test/motion.test.ts` 对 main 的 CSS `ℹ pass 2` / `ℹ fail 2`（`red-motion.txt`），改后 `ℹ pass 4` / `ℹ fail 0`；`app/test/slide-hold.test.ts` 红 3 → 绿 3；托盘「轻微一抖不算甩动」对改前的 `trayFlick` 会判成打开（速度 0.8 > 0.35）。
+  - 工程审查第 1 轮返修后：`pnpm run check` 原样 `check exit 0`（`check-7.txt`）；`pnpm test`（`test-9.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 540`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。新测试：`hud/test/present.test.ts`、fold-store 两条、moves 两条、motion 两条、pendant-settle 加断言。装机的包 `1bce2b00156a` 不含这一轮。
+  - 送代码审查前自查改了一处：`FoldRow` 展开时 `pointerEvents` 从 `"auto"` 改成 `"inherit"`，免得把外层（拖动时）关掉的点击又打开；补断言。之后 `pnpm run check` 原样 `check exit 0`（`check-6.txt`），`pnpm test`（`test-8.txt`）6 套全过，数字同下一条。装机的包 `1bce2b00156a` 不含这一处。
+  - 最终一版：`pnpm run check` 原样 `check exit 0`（`check-5.txt`）；`pnpm test`（`test-7.txt`）「全量测试汇总：6 套，失败 0 套」，Rust 1158 passed，前端 `ℹ pass 534`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 184`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`。
+  - 之前一版：`pnpm run check` 原样 `check exit 0`（`check-4.txt`）；`pnpm test`（`test-6.txt`）：Rust 合计 1158 passed、0 failed，前端 `ℹ pass 534` / `ℹ fail 0`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，注入脚本 `ℹ pass 11`，各 `ℹ fail 0`；Chrome 插件 `ℹ pass 182` / `ℹ fail 2`（真实 Chromium 里「标签页重新加载」两条计时测试）。本分支没改 `src/apps/chrome-extension/`；单独重跑两次：`ℹ pass 184` / `ℹ fail 0`，`ℹ pass 183` / `ℹ fail 1`（又换成另一条 10 秒超时，`ext-1.txt`、`ext-2.txt`），判为既有偶发，未修，见下「范围外发现」。前一次全量（`test-4.txt`，提交 `8d63a86`）6 套全过。
+- 验证（替身通过，环境是无头 Chromium + 场景预览台 1480 改前 / 1481 改后，设置页开发服务 1420，数据目录用证据目录里的假数据）：
+  - 「展开 / 收起」逐帧（`fold/fold-trace-1480.txt` 改前：点「收起」第一帧按钮从 953 跳到 654、纸还 1089，之后空纸缩；`fold-trace-1481.txt` 改后：末尾 4 行约 140ms 淡到 0，高度和纸一起从 1089 收到 790，按钮跟着纸走）。
+  - 设置开关逐帧（`settings/switch-trace.txt`：墨块 0% → 52% → 80% → 93% → … → 100%，约 120ms）；按钮按住时 `translate: 0px 1px`、`scale 0.98`。
+  - 静止对比：场景预览台 27 个场景 × 2 状态（`rest/`）只有小人姿势不同；设置 5 页 × 深浅色（`settings/before-*`、`after3-*`）差别只在实时数据（检查时间、额度数、预览条里智能体排序）。
+  - 帧率（`frames.txt`，CPU 4 倍降速，改前改后各 3 次）：中位帧 16.7–33.3ms 两边一样，最差帧都是首帧 200–500ms，噪声大，没测出变差。WKWebView 真机帧率未测。
+  - 真实环境：上一版（`ce0db67`）装机冒烟过；本版装机见「发布与回读」。挂件摆回、小签淡入淡出、方章离场、托盘甩动、刘海回弹的观感都要常浩实机看。
+- 截图：`~/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/`（`rest/`、`fold/`、`settings/`、`swap/`）。
+- 发布与回读：分支 `0d830d9` 打包，`install.sh motion-polish`：产物 `1bce2b00156a` / 已装 `1bce2b00156a`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 528 个像素不同；装前装后 600 个像素不同（0.06%），范围 `[895, 323, 931, 591]` 只在小人那一列（L-35 守住）；没有「想访问文稿」弹窗（`screen-after-install-2.png`）。第一次装后票根左边的竖签（Codex 1、ChatGPT 8、Hermes 1）没了，换回上一版 `17d222b2a4ef` 重启也一样没有，判为重启清掉了内存里的提醒，不是本次改的；之后用 `--takeover` 重装回本版（接管的是自己回滚的那份）。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-25-motion-polish/PostPane-17d222b2a4ef.app" /Applications/PostPane.app; open /Applications/PostPane.app`。合并：2026-11-28 工程审查链 `r1a211f896d100` 通过（受审 `d976d90`，ENG-01～20 全部关闭），合并前在 `7e5ec19` 上三条全量全过（`pnpm run check` 通过；`pnpm test` 六套 Rust 1252、前端 586、MCP 10、插件 14、Chrome 插件 239、注入脚本 11，各 0 失败；`node --test tests` 82 过），证据 `evidence/2026-11-25-motion-polish/final-1128/`；squash 合并为 `53291fe`，主目录已快进到它。装机由「任务进度盘点」会话在全部 PR 合完后从 main 统一装一次，本节不另装；真实 VoiceOver、多键鼠标、macOS 12.0～12.3 真机未验，审查建议留到实机验收。
+- 范围外发现：Chrome 插件真实浏览器测试里「标签页重新加载」几条计时测试偶发失败，每次挂的不同；`core` 的 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 机器忙时偶发（读到 288 秒、要求 290–300），单独跑通过。都没修。
+- 本轮新坑：L-89。
 
 ## 接力治本第 3 步收尾：真实页面实测「空占位」——停在一个字之前时页面不出回答格子，误判不存在，不改代码（#544）（2026-11-28，Claude，常浩回「可以发，空占位那步去做吧」；已提交，PR 见描述，无需发布）
 

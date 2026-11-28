@@ -7,10 +7,10 @@
 // builds read the same. The pieces live in ./agent-plugins/.
 import { Braces } from "lucide-react";
 import type { Snapshot } from "@agent-hud/protocol";
-import { TooltipProvider } from "@agent-hud/ui/components/tooltip";
 import {
   Page,
   Section,
+  Tooltips,
   useText,
   type SettingsPaneProps,
   type Text,
@@ -139,7 +139,7 @@ export function AgentPluginsPane({
       client.plugin && plugins[client.id]?.status?.installed === false,
   ).length;
   return (
-    <TooltipProvider delayDuration={300}>
+    <Tooltips>
       <Page>
         <HooksSection snapshot={snapshot} action={action} t={t} />
         <Section
@@ -221,6 +221,6 @@ export function AgentPluginsPane({
         </ToolsSection>
         <MessagesSection snapshot={snapshot} action={action} t={t} />
       </Page>
-    </TooltipProvider>
+    </Tooltips>
   );
 }

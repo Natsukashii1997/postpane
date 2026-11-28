@@ -15,20 +15,21 @@ import {
   nativeChatGptReviewLimit,
   type ChatGptReviewLimitService,
 } from "./services";
-import { useBriefly, type ChatGpt } from "./use-status";
+import type { ChatGpt } from "./use-status";
+import { useReceipt } from "./receipt";
 
 /** The ChatGPT project new review conversations open in: its page's address,
  * pasted and saved. */
 export function ProjectRow({ chatgpt, t }: { chatgpt: ChatGpt; t: Text }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [saved, setSaved] = useBriefly<true>(1600);
+  const [label, showSaved] = useReceipt();
   const text = draft ?? chatgpt.project ?? "";
   const changed = text.trim() !== (chatgpt.project ?? "");
   const save = async () => {
     if (!changed || chatgpt.savingProject) return;
     if (await chatgpt.saveProject(text)) {
       setDraft(null);
-      setSaved(true);
+      showSaved();
     }
   };
   return (
@@ -62,7 +63,7 @@ export function ProjectRow({ chatgpt, t }: { chatgpt: ChatGpt; t: Text }) {
         disabled={!changed || chatgpt.savingProject}
         onClick={() => void save()}
       >
-        {saved ? t("Saved", "已保存") : t("Save", "保存")}
+        {label(t("Save", "保存"), t("Saved", "已保存"))}
       </SmallButton>
     </Row>
   );

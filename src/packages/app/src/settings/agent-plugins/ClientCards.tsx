@@ -19,9 +19,9 @@ import {
 } from "../SettingsPrimitives";
 import { PluginControl, StatePill, StatusRow } from "./rows";
 import { ProjectRow, ReviewLimitRow } from "./ChatGptRows";
+import { useReceipt } from "./receipt";
 import type { AgentPluginContext, AgentPluginItem } from "./types";
 import {
-  useBriefly,
   type ChatGpt,
   type HudTools,
   type McpClients,
@@ -408,7 +408,7 @@ export function OtherAgentsCard({
   icon: ReactNode;
   t: Text;
 }) {
-  const [copied, setCopied] = useBriefly<true>(2000);
+  const [label, showCopied] = useReceipt();
   return (
     <Collapsible
       icon={icon}
@@ -437,17 +437,16 @@ export function OtherAgentsCard({
           onClick={() =>
             void navigator.clipboard
               ?.writeText(JSON.stringify(json, null, 2))
-              .then(() => setCopied(true))
+              .then(showCopied)
               .catch(() => {})
           }
         >
-          {copied ? (
+          {label(
+            t("Copy settings", "复制设置"),
             <>
               <Check size={13} aria-hidden />
               {t("Copied", "已复制")}
-            </>
-          ) : (
-            t("Copy settings", "复制设置")
+            </>,
           )}
         </SmallButton>
       </Row>

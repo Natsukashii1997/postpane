@@ -46,7 +46,7 @@ export function ResetCreditsRow({
         whiteSpace: "nowrap",
         color: colors.secondary,
         background: hovered ? colors.selected : "transparent",
-        transition: "background 0.12s ease-out",
+        transition: "background var(--motion-quick) var(--ease-out)",
       }}
     >
       <RotateCcw

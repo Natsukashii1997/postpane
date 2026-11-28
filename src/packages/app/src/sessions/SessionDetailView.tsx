@@ -23,6 +23,8 @@ import type {
   Snapshot,
 } from "../lib/types";
 import { SubagentTimeline } from "./SubagentTimeline";
+import { Folded } from "./Folded";
+import { moves } from "../lib/Motion";
 import {
   ContextChart,
   ShareRows,
@@ -662,7 +664,10 @@ function TurnPanel({
   };
   return (
     <Card
-      style={{ ...card(theme), animation: "session-fade-in 200ms ease" }}
+      style={{
+        ...card(theme),
+        animation: "session-fade-in var(--motion-enter) var(--ease-out)",
+      }}
       className="session-turn-panel"
     >
       <div style={{ ...row, justifyContent: "space-between" }}>
@@ -946,7 +951,8 @@ function KindsCard({ detail, theme }: { detail: SessionDetail; theme: Theme }) {
                 flex: `${value / total} 1 0`,
                 minWidth: 1,
                 background: kindColor(theme, kind),
-                transition: "flex-grow 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                // Segments share one track: scaling one would not move the rest.
+                transition: moves("data", "flex-grow"),
               }}
             />
           ))}
@@ -1057,7 +1063,8 @@ function SubagentsCard({
                   minWidth: part.value > 0 ? 2 : 0,
                   background: part.color,
                   opacity: part.fade,
-                  transition: "flex-grow 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  // Segments share one track: scaling one would not move the rest.
+                  transition: moves("data", "flex-grow"),
                 }}
               />
             ))}
@@ -1240,7 +1247,8 @@ function ModelsCard({
                   width: `${whole > 0 ? (tokens / whole) * 100 : 0}%`,
                   background: theme.input,
                   borderRadius: 2,
-                  transition: "width 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  // Width, not scale: scaling would squash the rounded end.
+                  transition: moves("data", "width"),
                 }}
               />
             </span>
@@ -1250,46 +1258,6 @@ function ModelsCard({
       {models.length === 0 && (
         <span style={{ color: theme.secondary, fontSize: 11 }}>—</span>
       )}
-    </Card>
-  );
-}
-
-/** A folded section at the foot of the page. */
-function Folded({
-  title,
-  theme,
-  children,
-}: {
-  title: string;
-  theme: Theme;
-  children: ReactNode;
-}) {
-  return (
-    <Card style={{ ...card(theme, "0") }}>
-      <details className="session-folded">
-        <summary
-          style={{
-            ...row,
-            cursor: "pointer",
-            padding: "10px 14px",
-            fontSize: 13,
-            fontWeight: 600,
-            listStyle: "none",
-          }}
-        >
-          <ChevronRight
-            size={11}
-            className="session-folded-chevron"
-            style={{
-              transition: "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          />
-          {title}
-        </summary>
-        <div style={{ padding: "0 14px 12px", display: "grid", gap: 8 }}>
-          {children}
-        </div>
-      </details>
     </Card>
   );
 }
@@ -1425,8 +1393,11 @@ export function InlineDetail({
                               measure === value && theme.light
                                 ? "0 1px 2px rgba(0,0,0,.08)"
                                 : "none",
-                            transition:
-                              "background-color 160ms ease, box-shadow 160ms ease",
+                            transition: moves(
+                              "quick",
+                              "background-color",
+                              "box-shadow",
+                            ),
                           }}
                         >
                           {value === "tokens" ? "Token" : zh ? "费用" : "Cost"}
