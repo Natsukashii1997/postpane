@@ -74,7 +74,11 @@ pub fn prompt_row(text: &str) -> Value {
 pub fn current_prompt(host: &Host<'_>, caller: &Caller) -> Option<Option<Value>> {
     match stored(host, &caller.client) {
         Some(store) => stored::current(store, host.snapshot, caller),
-        None => paged::current(host.query, caller),
+        None => paged::current(
+            host.query,
+            page_id(host.snapshot, &caller.client, &caller.session_id),
+            caller,
+        ),
     }
 }
 
@@ -90,7 +94,54 @@ pub struct Found {
 pub fn answer(host: &Host<'_>, message: &Message) -> Option<Found> {
     match stored(host, &message.to.client) {
         Some(store) => stored::answer(store, host.snapshot, message),
-        None => paged::answer(host, message),
+        None => paged::answer(
+            host,
+            page_id(host.snapshot, &message.to.client, &message.to.session_id),
+            message,
+        ),
+    }
+}
+
+/// The id the app's pages know a session of `client` by: the snapshot's. A
+/// start's receipt and a client's own tools name some sessions without the
+/// client prefix the snapshot puts before them (`antigravity:…`); another
+/// client's session of the same bare id is not it (postpane#560 P3-02).
+fn page_id<'a>(snapshot: &'a Value, client: &str, id: &'a str) -> &'a str {
+    snapshot["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|session| session["source"] == client)
+        .filter_map(|session| session["id"].as_str())
+        .find(|known| crate::snapshot::same_session(known, id))
+        .unwrap_or(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bare_id_is_named_as_the_snapshot_names_that_clients_session() {
+        let snapshot = json!({"sessions": [
+            {"id": "deepseek:s-1", "source": "deepseek"},
+            {"id": "antigravity:s-1", "source": "antigravity"},
+            {"id": "c-1", "source": "claude"},
+        ]});
+        assert_eq!(page_id(&snapshot, "antigravity", "s-1"), "antigravity:s-1");
+        assert_eq!(
+            page_id(&snapshot, "antigravity", "antigravity:s-1"),
+            "antigravity:s-1"
+        );
+        assert_eq!(page_id(&snapshot, "deepseek", "s-1"), "deepseek:s-1");
+        assert_eq!(
+            page_id(&snapshot, "deepseek", "antigravity:s-1"),
+            "deepseek:s-1"
+        );
+        assert_eq!(page_id(&snapshot, "claude", "c-1"), "c-1");
+        // Not in the snapshot: the id as given.
+        assert_eq!(page_id(&snapshot, "antigravity", "s-2"), "s-2");
+        assert_eq!(page_id(&json!({}), "antigravity", "s-1"), "s-1");
     }
 }
 

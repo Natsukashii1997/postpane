@@ -11,6 +11,7 @@ use std::{
     ffi::OsStr,
     fs,
     io::Read,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
@@ -203,18 +204,38 @@ pub(super) fn processes(
         })
         .collect())
 }
-pub(super) fn listening_ports(script: &str, pid: u32) -> Result<Vec<u16>, String> {
+pub(super) fn listening_ports(script: &str, pid: u32) -> Result<Vec<SocketAddr>, String> {
     let pid = pid.to_string();
-    let output = inspect(script, &[OsStr::new(&pid)])?;
-    let mut ports = output
+    Ok(listeners(&inspect(script, &[OsStr::new(&pid)])?))
+}
+/// The addresses in `lsof -Fnt` output, each `n` line read with the `t`
+/// line before it: `*` is every address of that family.
+fn listeners(output: &str) -> Vec<SocketAddr> {
+    let mut v6 = false;
+    let mut found = output
         .lines()
-        .filter(|line| line.starts_with('n'))
-        .filter_map(|line| line.rsplit(':').next()?.parse::<u16>().ok())
-        .filter(|port| *port != 0)
+        .filter_map(|line| {
+            let (field, value) = line.split_at_checked(1)?;
+            if field == "t" {
+                v6 = value == "IPv6";
+            }
+            let (host, port) = value.rsplit_once(':').filter(|_| field == "n")?;
+            let port = port.parse::<u16>().ok().filter(|port| *port != 0)?;
+            let ip = match host {
+                "*" if v6 => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                "*" => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                host => host
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .parse()
+                    .ok()?,
+            };
+            Some(SocketAddr::new(ip, port))
+        })
         .collect::<Vec<_>>();
-    ports.sort_unstable();
-    ports.dedup();
-    Ok(ports)
+    found.sort_unstable();
+    found.dedup();
+    found
 }
 /// Entries of `directory`, newest name first.
 /// The visible entries of `directory`, highest version number first:
@@ -318,6 +339,25 @@ mod spawn_tests {
     #[test]
     fn a_script_that_succeeds_opens() {
         assert_eq!(spawn_script("exit 0", &[]), Ok(()));
+    }
+
+    /// The address stays with its port: a port held on another address is
+    /// not the one 127.0.0.1 reaches (postpane#560 P1-01).
+    #[test]
+    fn listeners_keep_their_addresses() {
+        let output = "p7\nf7\ntIPv4\nn127.0.0.1:53120\nf8\ntIPv4\nn*:53121\nf9\ntIPv6\nn*:53122\n\
+                      f10\ntIPv6\nn[::1]:53123\nf11\ntIPv4\nn192.168.1.20:53124\nf12\ntIPv4\nn127.0.0.1:0\n";
+        let at = |text: &str| text.parse::<SocketAddr>().unwrap();
+        assert_eq!(
+            listeners(output),
+            [
+                at("0.0.0.0:53121"),
+                at("127.0.0.1:53120"),
+                at("192.168.1.20:53124"),
+                at("[::]:53122"),
+                at("[::1]:53123"),
+            ]
+        );
     }
 
     #[test]

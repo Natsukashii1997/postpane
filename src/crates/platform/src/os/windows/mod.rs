@@ -224,7 +224,7 @@ pub(crate) fn legacy_quota_database(_home: &Path) -> Option<PathBuf> {
 pub(crate) fn processes() -> Result<Vec<ProcessInfo>, String> {
     antigravity::processes()
 }
-pub(crate) fn listening_ports(pid: u32) -> Result<Vec<u16>, String> {
+pub(crate) fn listening_ports(pid: u32) -> Result<Vec<std::net::SocketAddr>, String> {
     antigravity::listening_ports(pid)
 }
 

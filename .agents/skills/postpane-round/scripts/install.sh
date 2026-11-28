@@ -49,7 +49,7 @@ if [[ "$MODE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}- ]]; then
   exit 2
 fi
 if [ ! -x "$NEW/$BIN" ]; then
-  echo "找不到产物：$NEW/${BIN}（先 pnpm --filter @agent-hud/desktop exec tauri build --bundles app）" >&2
+  echo "找不到产物：${NEW}/${BIN}（先 pnpm --filter @agent-hud/desktop exec tauri build --bundles app）" >&2
   exit 1
 fi
 
