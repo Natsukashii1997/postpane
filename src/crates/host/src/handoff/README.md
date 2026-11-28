@@ -10,7 +10,7 @@
 | `sending/` | 送审：送进 ChatGPT 的话、没确认送到的话、谁做这一轮 | `book_unsure.rs`、`book_mending.rs`、`book_doer.rs` | `desk_asking.rs`、`desk_lines.rs` |
 | `notice/` | 出错通知：没打开、没回信时告诉发起的会话 | `book.rs` | `desk.rs` |
 
-顶层留着两半的核心：`../handoff.rs`（`Desk`、发起、按钮、自动往返）和 `book.rs`（数据类型与 `Book` 的基本移动）；`settings.rs` 是设置页的两项；`tests.rs` 与 `tests/` 是测试。
+顶层留着两半的核心：`../handoff.rs`（`Desk`、发起、按钮、自动往返）和 `book.rs`（数据类型与 `Book` 的基本移动）；`settings.rs` 是设置页的两项；`end.rs`（宿主）与 `book_end.rs`（记录）是智能体列出与结束接力（`relay_list`、`relay_end`，#439）；`tests.rs` 与 `tests/` 是测试。
 
 **注意：目录不等于模块。** 文件用 `#[path]` 挂在原来的模块下：记录一侧仍是 `book::gate`、`book::held` 这些模块（能用 `Book` 的私有方法），宿主一侧仍是 `handoff::gate`、`handoff::held`。找代码按目录，读 `use` 路径按模块名。对照表在 `book.rs` 和 `../handoff.rs` 开头的 `#[path]` 声明里。
 

@@ -24,6 +24,8 @@ use std::{
 mod chain;
 #[path = "sending/book_doer.rs"]
 mod doer;
+#[path = "book_end.rs"]
+mod ending;
 #[path = "gate/book.rs"]
 mod gate;
 #[path = "gate/book_io.rs"]
@@ -953,22 +955,6 @@ impl Book {
     /// The person ended the handoff.
     pub fn end(&mut self, id: &str, now: i64) -> bool {
         self.end_said(id, None, now)
-    }
-    /// Ends it as `end` does, saying on the card who ended it and why:
-    /// an agent at the person's word (#439). Not by the auto round trip,
-    /// so a cap it reached counts as settled, as the person's own end.
-    pub fn end_said(&mut self, id: &str, text: Option<&str>, now: i64) -> bool {
-        let Some(handoff) = self
-            .get_mut(id)
-            .filter(|h| h.live() || h.status == Status::Failed)
-        else {
-            return false;
-        };
-        handoff.status = Status::Closed;
-        handoff.brief = None;
-        handoff.steps.push(Step::new(now, StepKind::End, text));
-        handoff.enter(Phase::Ended, now);
-        true
     }
     /// A pass ended the handoff, by the auto round trip.
     pub fn passed(&mut self, id: &str, text: &str, now: i64) -> bool {

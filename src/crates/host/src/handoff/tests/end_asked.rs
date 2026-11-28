@@ -157,7 +157,8 @@ fn postpane_s_own_words_are_known_by_how_they_are_written() {
     let (_temp, desk) = desk();
     let lines = Fake::default();
     let handoff = opened(&desk, &lines);
-    let notice = super::super::notice::notice_text(&handoff, &crate::handoff::book::Trouble::NoAnswer);
+    let notice =
+        super::super::notice::notice_text(&handoff, &crate::handoff::book::Trouble::NoAnswer);
     let swipe = super::super::launch_text("review", "L1").unwrap();
     for words in [notice, swipe] {
         let turn = (Opener::Plugin(words.clone()), 9);
@@ -179,7 +180,8 @@ fn words_on_their_way_to_the_caller_refuse_the_whole_batch() {
         &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
         4,
     );
-    let ids: &'static [String] = Box::leak(vec![own.id.clone(), other.id.clone()].into_boxed_slice());
+    let ids: &'static [String] =
+        Box::leak(vec![own.id.clone(), other.id.clone()].into_boxed_slice());
     let answer: &'static RefCell<Option<Result<Value, String>>> =
         Box::leak(Box::new(RefCell::new(None)));
     lines.on_reply = Some(Box::new(move || {
@@ -194,7 +196,11 @@ fn words_on_their_way_to_the_caller_refuse_the_whole_batch() {
     }));
     assert!(desk.drive(&lines, 4));
     lines.on_reply = None;
-    let error = answer.borrow_mut().take().expect("asked while sending").unwrap_err();
+    let error = answer
+        .borrow_mut()
+        .take()
+        .expect("asked while sending")
+        .unwrap_err();
     assert_eq!(error, super::super::end::end_busy());
     let book = desk.lock();
     assert_ne!(book.get(&own.id).unwrap().phase, Phase::Ended);

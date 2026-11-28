@@ -87,9 +87,9 @@ impl Desk {
             .cloned()
             .collect();
         let book = self.lock();
-        ids.iter().filter_map(|id| book.get(id)).any(|h| {
-            h.claude_session == session && h.doer.as_deref().unwrap_or(CLAUDE) == doer
-        })
+        ids.iter()
+            .filter_map(|id| book.get(id))
+            .any(|h| h.claude_session == session && h.doer.as_deref().unwrap_or(CLAUDE) == doer)
     }
 
     fn end_one(&self, id: &str, text: &str, now: i64) -> Result<(), String> {
