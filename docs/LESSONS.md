@@ -644,7 +644,7 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-544-placeholder-probe/real-page-hidden-vs-drawn.md`；#457 证据 `evidence/2026-11-20-457-reread-undrawn/pr-body.md`「实机未做」一条。
 - 升级：〔提醒〕未升级。
 
-## L-81 插件后台是普通脚本，新加的函数和已有的同名，后一个悄悄顶掉前一个，不报错（2026-11-27）
+## L-82 插件后台是普通脚本，新加的函数和已有的同名，后一个悄悄顶掉前一个，不报错（2026-11-27）
 
 - 现象：#542 第 5 轮返修给后台加了 `sending(text)`，文件里已有 `sending(conversation)`（送话途中记账用）。脚本照常加载，`send` 调到的却是新函数，按文字认提问的几条测试一直不过，换了几种写法都以为是逻辑问题。
 - 根因：`background.js` 是 Chrome 插件的普通脚本（不是模块），同名的 `function` 声明后者覆盖前者，没有任何报错；文件近 1900 行，起名前没搜。
@@ -652,7 +652,7 @@
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-26-542-close-tabs/round6/`。
 - 升级：〔机检〕测试已加。
 
-## L-82 shell 脚本里 `$变量` 后面紧跟中文，macOS 自带 bash 3.2 在 UTF-8 语言环境下把中文字节当成变量名，`set -u` 下装机脚本直接退出（2026-11-28）
+## L-83 shell 脚本里 `$变量` 后面紧跟中文，macOS 自带 bash 3.2 在 UTF-8 语言环境下把中文字节当成变量名，`set -u` 下装机脚本直接退出（2026-11-28）
 
 - 现象：#542 第 9 轮跑 `node --test tests/*.test.mjs`，装机脚本和备环境脚本的 14 条测试一起失败，报 `OLD�: unbound variable`、`CARGO_TARGET_DIR�: unbound variable`。前几轮同样的测试都过。
 - 根因：`install.sh` 第 91 行 `echo "装前 $OLD，已备份到 …"`，`$OLD` 后面直接是中文逗号。`/bin/bash` 3.2 在 `LANG` 是任何 UTF-8 语言（`en_US.UTF-8`、`zh_CN.UTF-8`、`C.UTF-8`）时，把中文的字节也算进变量名，变量名成了 `OLD�`，`set -u` 下没定义就整段退出；`LANG` 没设（C）时才不出事。前几轮跑测试的环境没设 `LANG`，这一轮的会话环境是 `LANG=C.UTF-8`。常浩的终端若是 UTF-8 语言，照着 skill 装机会停在备份之后、退出应用之前。全仓库搜到 4 处（`install.sh` 两处、`install-guard.sh`、`setup-worktree.sh`）。

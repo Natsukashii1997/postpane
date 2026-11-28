@@ -25,7 +25,7 @@ test('通用规则能抓到违规样本，合规样本不误报', () => {
   }
 });
 
-test('shell 脚本里变量后面紧跟中文的抓得到，写成 ${变量} 的不误报（L-82）', () => {
+test('shell 脚本里变量后面紧跟中文的抓得到，写成 ${变量} 的不误报（L-83）', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-rules-'));
   const write = (file, text) => {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
