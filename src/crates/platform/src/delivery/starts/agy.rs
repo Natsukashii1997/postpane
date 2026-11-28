@@ -80,8 +80,7 @@ impl SessionStarts {
                 "agy has not named its conversation yet; still following it".into(),
             ));
         };
-        let _ = fs::remove_file(&log);
-        outcome(&request.request_id, settled)
+        record(&self.receipts, &log, &request.request_id, settled)
     }
 
     fn agy_logs(&self) -> PathBuf {
@@ -89,9 +88,11 @@ impl SessionStarts {
     }
 
     /// After a restart, nothing follows the starts a quit left uncertain: a
-    /// stream that has since named its conversation (or asked to sign in)
-    /// completes its start, and streams of settled starts are removed.
-    /// Others stay until `agy` names one or `KEPT_FOR` passes.
+    /// stream that has since named its conversation completes its start, and
+    /// streams of settled starts are removed. Others stay until `agy` names
+    /// one or `KEPT_FOR` passes. A stream that asked to sign in stays
+    /// uncertain, saying so: the `agy` that printed it may still run, and
+    /// nothing here can stop it or see it end.
     pub(super) fn recover_agy_starts(&self) {
         for entry in fs::read_dir(self.agy_logs())
             .into_iter()
@@ -99,6 +100,9 @@ impl SessionStarts {
             .flatten()
         {
             let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("ndjson") {
+                continue;
+            }
             let Some(request_id) = path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
@@ -107,21 +111,53 @@ impl SessionStarts {
                 continue;
             };
             let key = super::start::receipt_path(&self.receipts, Provider::Antigravity, request_id);
-            if read_json(&key)["receipt"]["state"] != "uncertain" {
+            let saved = &read_json(&key)["receipt"];
+            if saved["requestId"] != request_id
+                || saved["provider"] != serde_json::json!(Provider::Antigravity)
+            {
+                continue;
+            }
+            if saved["state"] != "uncertain" {
                 let _ = fs::remove_file(&path);
                 continue;
             }
-            let settled = match heard(&fs::read_to_string(&path).unwrap_or_default()) {
-                Heard::Started(id) => Settled::Named(id),
-                Heard::NeedsLogin => Settled::NotSignedIn,
-                Heard::Nothing | Heard::Failed(_) => continue,
-            };
-            if let Ok(receipt) = outcome(request_id, settled) {
-                let _ = super::start::settle(&self.receipts, receipt);
+            match heard(&fs::read_to_string(&path).unwrap_or_default()) {
+                Heard::Started(id) => {
+                    let _ = record(&self.receipts, &path, request_id, Settled::Named(id));
+                }
+                Heard::NeedsLogin => {
+                    let reason = "agy asked to sign in before Agent HUD quit; whether it made a \
+                                  conversation cannot be confirmed";
+                    let _ =
+                        super::start::settle(&self.receipts, unsettled(request_id, reason.into()));
+                }
+                Heard::Nothing | Heard::Failed(_) => {}
             }
-            let _ = fs::remove_file(&path);
         }
     }
+}
+
+/// Saves how a start through `agy` ended, then removes its stream, which
+/// holds the whole turn. One whose outcome could not be saved stays for the
+/// next start to read.
+fn record(receipts: &Path, log: &Path, request_id: &str, settled: Settled) -> Result<StartReceipt> {
+    let ended = outcome(request_id, settled);
+    let receipt = match &ended {
+        Ok(receipt) => receipt.clone(),
+        Err(error) => StartReceipt {
+            state: "rejected".into(),
+            reason: Some(error.to_string()),
+            session_id: None,
+            ..started(request_id, String::new())
+        },
+    };
+    match super::start::settle(receipts, receipt) {
+        Ok(_) => drop(fs::remove_file(log)),
+        Err(error) => {
+            agent_hud_core::note!("An Antigravity start's receipt could not be saved: {error}")
+        }
+    }
+    ended
 }
 
 fn started(request_id: &str, id: String) -> StartReceipt {
@@ -200,16 +236,7 @@ fn follow(mut process: Box<dyn Background>, log: &Path, receipts: &Path, request
         process.stop();
         Settled::Unknown("agy named no conversation in 10 minutes and was stopped".into())
     });
-    let _ = fs::remove_file(log);
-    let receipt = outcome(request_id, settled).unwrap_or_else(|error| StartReceipt {
-        state: "rejected".into(),
-        reason: Some(error.to_string()),
-        session_id: None,
-        ..started(request_id, String::new())
-    });
-    if let Err(error) = super::start::settle(receipts, receipt) {
-        agent_hud_core::note!("An Antigravity start's receipt could not be completed: {error}");
-    }
+    let _ = record(receipts, log, request_id, settled);
 }
 
 /// Reads `agy --output-format stream-json`, with its stderr in the same log.
@@ -294,8 +321,22 @@ mod tests {
             folder: String::new(),
             title: None,
         };
+        // What `start` saves before it asks the client.
+        intent(&fixture.receipts());
         let started = starts.start_agy(&fixture.home(), &request, "no server".into());
         (fixture, started)
+    }
+    /// The uncertain receipt `start` saves first, under request `REQUEST`.
+    fn intent(receipts: &Path) -> PathBuf {
+        private_dir(receipts).unwrap();
+        let receipt = unsettled(REQUEST, Failure::AcceptanceUncertain.to_string());
+        let key = super::super::start::receipt_path(receipts, Provider::Antigravity, REQUEST);
+        atomic_json(
+            &key,
+            &serde_json::json!({"fingerprint": "f", "receipt": receipt}),
+        )
+        .unwrap();
+        key
     }
 
     #[test]
@@ -339,19 +380,7 @@ mod tests {
     fn left_uncertain(printed: &str) -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
         let temp = tempfile::tempdir().unwrap();
         let receipts = temp.path().join("receipts");
-        private_dir(&receipts).unwrap();
-        let receipt = StartReceipt {
-            state: "uncertain".into(),
-            reason: Some(Failure::AcceptanceUncertain.to_string()),
-            session_id: None,
-            ..started(REQUEST, String::new())
-        };
-        let key = super::super::start::receipt_path(&receipts, Provider::Antigravity, REQUEST);
-        atomic_json(
-            &key,
-            &serde_json::json!({"fingerprint": "f", "receipt": receipt}),
-        )
-        .unwrap();
+        let key = intent(&receipts);
         let log = temp.path().join("stream.ndjson");
         fs::write(&log, printed).unwrap();
         (temp, receipts, key, log)
@@ -410,15 +439,7 @@ mod tests {
     #[test]
     fn after_a_restart_a_stream_that_named_its_conversation_completes_the_start() {
         let fixture = StartFixture::new();
-        let receipts = fixture.receipts();
-        private_dir(&receipts).unwrap();
-        let key = super::super::start::receipt_path(&receipts, Provider::Antigravity, REQUEST);
-        let receipt = unsettled(REQUEST, "still following".into());
-        atomic_json(
-            &key,
-            &serde_json::json!({"fingerprint": "f", "receipt": receipt}),
-        )
-        .unwrap();
+        let key = intent(&fixture.receipts());
         let logs = fixture.root.join("agy-starts");
         private_dir(&logs).unwrap();
         let log = logs.join(format!("{REQUEST}.ndjson"));
@@ -427,16 +448,76 @@ mod tests {
             format!(r#"{{"event":"init","conversation_id":"{ID}"}}"#),
         )
         .unwrap();
-        let settled = logs.join(format!("{}.ndjson", super::super::super::fixtures::SESSION));
-        fs::write(&settled, "").unwrap();
         let _starts = fixture.starts();
         assert_eq!(read_json(&key)["receipt"]["state"], "started");
         assert_eq!(read_json(&key)["receipt"]["sessionId"], ID);
+        assert!(!log.exists(), "removed once the start is saved");
+        // A later start finds its start settled: the stream goes.
+        fs::write(&log, "").unwrap();
+        let _starts = fixture.starts();
+        assert!(!log.exists(), "a stream of a settled start is removed");
+    }
+
+    #[test]
+    fn after_a_restart_only_a_stream_matching_its_own_receipt_is_read() {
+        let fixture = StartFixture::new();
+        let key = intent(&fixture.receipts());
+        let logs = fixture.root.join("agy-starts");
+        private_dir(&logs).unwrap();
+        let named = format!(r#"{{"event":"init","conversation_id":"{ID}"}}"#);
+        // Not a stream's name, or no receipt of its own: left alone.
+        let other = logs.join(format!("{REQUEST}.txt"));
+        fs::write(&other, &named).unwrap();
+        let orphan = logs.join(format!("{}.ndjson", super::super::super::fixtures::SESSION));
+        fs::write(&orphan, &named).unwrap();
+        let _starts = fixture.starts();
+        assert_eq!(read_json(&key)["receipt"]["state"], "uncertain");
+        assert!(other.exists() && orphan.exists());
+        // A receipt that names another request is not this stream's.
+        let mut saved = read_json(&key);
+        saved["receipt"]["requestId"] = super::super::super::fixtures::SESSION.into();
+        atomic_json(&key, &saved).unwrap();
+        let log = logs.join(format!("{REQUEST}.ndjson"));
+        fs::write(&log, &named).unwrap();
+        let _starts = fixture.starts();
+        assert!(read_json(&key)["receipt"]["sessionId"].is_null());
+        assert!(log.exists());
+    }
+
+    /// The `agy` that asked may still run after a quit, and nothing here can
+    /// stop it: the start is not rejected, and its stream is kept.
+    #[test]
+    fn after_a_restart_a_stream_that_asked_to_sign_in_stays_uncertain() {
+        let fixture = StartFixture::new();
+        let key = intent(&fixture.receipts());
+        let logs = fixture.root.join("agy-starts");
+        private_dir(&logs).unwrap();
+        let log = logs.join(format!("{REQUEST}.ndjson"));
+        fs::write(
+            &log,
+            "Authentication required. Please visit the URL to log in:\n",
+        )
+        .unwrap();
+        let _starts = fixture.starts();
+        let receipt = &read_json(&key)["receipt"];
+        assert_eq!(receipt["state"], "uncertain");
+        assert!(receipt["reason"].as_str().unwrap().contains("sign in"));
+        assert!(log.exists());
+    }
+
+    /// A conversation named but not saved: the stream that names it stays,
+    /// so the next start can still complete it.
+    #[test]
+    fn a_stream_is_kept_until_its_outcome_is_saved() {
+        let init = format!(r#"{{"event":"init","conversation_id":"{ID}"}}"#);
+        let (_temp, receipts, key, log) = left_uncertain(&init);
+        fs::remove_file(&key).unwrap();
+        follow(agy(true).0, &log, &receipts, REQUEST);
+        assert!(log.exists(), "the receipt could not be saved");
+        intent(&receipts);
+        follow(agy(true).0, &log, &receipts, REQUEST);
+        assert_eq!(read_json(&key)["receipt"]["sessionId"], ID);
         assert!(!log.exists());
-        assert!(
-            !settled.exists(),
-            "a stream with no uncertain start is removed"
-        );
     }
 
     #[test]
@@ -454,6 +535,14 @@ mod tests {
         );
         assert!(matches!(started, Err(Failure::Unavailable(reason)) if reason.contains("agy")));
         assert!(fixture.fake.agy_stopped.load(Ordering::SeqCst));
+        // Stopped here, so known to have made nothing: saved as refused.
+        let key =
+            super::super::start::receipt_path(&fixture.receipts(), Provider::Antigravity, REQUEST);
+        assert_eq!(read_json(&key)["receipt"]["state"], "rejected");
+        assert!(!fixture
+            .root
+            .join(format!("agy-starts/{REQUEST}.ndjson"))
+            .exists());
     }
 
     #[test]

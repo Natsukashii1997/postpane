@@ -6,8 +6,10 @@ pub(crate) mod permissions;
 mod running;
 pub mod service;
 
-/// Why a call to the running language server failed: none was reached, one
-/// answered and refused, or a request was sent and its outcome is unknown.
+/// Why a call to the running language server failed: none was reached, the
+/// request was refused before it was sent (an operation not offered; for
+/// reads, the last error a server answered with), or a request was sent and
+/// its outcome is unknown.
 /// Only the first lets a start fall back to `agy`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CallError {

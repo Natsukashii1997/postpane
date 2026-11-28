@@ -24,10 +24,13 @@ pub(super) fn allowed(method: &str) -> Result<(), String> {
 }
 
 /// Sends one write. It goes to the next server only when this one surely did
-/// not act: the connection never opened, or the server refused before acting
-/// (a 4xx answer). Known servers come first, then freshly found ones, each
-/// tried once. A request that may have been acted on (lost, timed out, a 5xx
-/// or an unreadable answer) ends it as Uncertain, never sent again.
+/// not get it: the connection never opened. Known servers come first, then
+/// freshly found ones, each tried once. Any answer that is not a success,
+/// whatever its status, and a request lost, timed out or answered unreadably
+/// may have been acted on: it ends as Uncertain, never sent again (Connect
+/// promises no status that proves a server did nothing). Discovery runs only
+/// after every known server failed to connect, so a failed discovery never
+/// hides a request that was sent.
 pub fn call_once(method: &str, params: &Value) -> Result<Value, CallError> {
     allowed(method).map_err(CallError::Refused)?;
     if !crate::clients::runs(&agent_hud_agents::antigravity::LOCAL_SERVICE) {
@@ -35,32 +38,26 @@ pub fn call_once(method: &str, params: &Value) -> Result<Value, CallError> {
     }
     let service = service().map_err(CallError::Unavailable)?;
     let mut tried = Vec::new();
-    let mut refused = None;
-    for fresh in [false, true] {
-        let endpoints = match fresh {
-            false => service.cached(),
-            true => service
-                .discover(true, false)
-                .map_err(CallError::Unavailable)?,
-        };
-        if let Some(done) = service.once(endpoints, method, params, &mut tried, &mut refused) {
-            return done;
-        }
+    if let Some(done) = service.once(service.cached(), method, params, &mut tried) {
+        return done;
     }
-    Err(refused.map_or_else(CallError::none, CallError::Refused))
+    let found = service
+        .discover(true, false)
+        .map_err(CallError::Unavailable)?;
+    service
+        .once(found, method, params, &mut tried)
+        .unwrap_or_else(|| Err(CallError::none()))
 }
 
 impl Service {
-    /// The servers in `endpoints` not `tried` yet, until one answers or may
-    /// have acted; `None` when every one surely did nothing, the last
-    /// refusal kept in `refused`.
+    /// The servers in `endpoints` not `tried` yet, until one is reached;
+    /// `None` when none of them could be connected to.
     fn once(
         &self,
         endpoints: Vec<Endpoint>,
         method: &str,
         params: &Value,
         tried: &mut Vec<Endpoint>,
-        refused: &mut Option<String>,
     ) -> Option<Result<Value, CallError>> {
         for endpoint in endpoints {
             if tried.contains(&endpoint) {
@@ -69,8 +66,7 @@ impl Service {
             tried.push(endpoint.clone());
             match self.post(&endpoint, method, params) {
                 Err(CallError::Unavailable(_)) => forget(self, &endpoint),
-                Err(CallError::Refused(error)) => *refused = Some(error),
-                answered => return Some(answered),
+                reached => return Some(reached),
             }
         }
         None
@@ -83,24 +79,10 @@ fn forget(service: &Service, endpoint: &Endpoint) {
     state.complete = false;
 }
 
-/// A non-2xx answer. Connect maps a request it turned down before acting to
-/// a 4xx (invalid argument, not found, unauthenticated, exhausted); 5xx
-/// (internal, unavailable, deadline exceeded), 408, 409 (aborted) and 499
-/// (canceled) may come after the server acted, so they are Uncertain.
-pub(super) fn answered_with_error(response: reqwest::blocking::Response) -> CallError {
-    let status = response.status().as_u16();
-    let error = service_error(response);
-    if (400..500).contains(&status) && !matches!(status, 408 | 409 | 499) {
-        CallError::Refused(error)
-    } else {
-        CallError::Uncertain(error)
-    }
-}
-
 /// The service's own Connect error (`{"code","message"}`) with its HTTP
 /// status, limited in size. These come from the loopback service and hold no
 /// credentials.
-fn service_error(response: reqwest::blocking::Response) -> String {
+pub(super) fn service_error(response: reqwest::blocking::Response) -> String {
     use std::io::Read;
     let status = response.status().as_u16();
     let mut bytes = Vec::new();
@@ -196,109 +178,124 @@ mod tests {
         let _ = stream.write_all(body.as_bytes());
     }
 
+    /// Connect promises no status that proves a server did nothing, and a
+    /// body may be missing or not match its status: every error answer is
+    /// Uncertain, its status and code kept in the text.
     #[test]
-    fn a_write_turned_down_before_acting_is_refused_with_its_status() {
-        let refusing = server(|stream| {
-            answer(
-                stream,
-                "400 Bad Request",
-                r#"{"code":"invalid_argument","message":"no"}"#,
-            )
-        });
-        let sent = loopback().post(&at(refusing), "StartCascade", &json!({}));
-        let Err(CallError::Refused(error)) = sent else {
-            panic!("{sent:?}");
-        };
-        assert_eq!(error, "Antigravity (HTTP 400 invalid_argument): no");
-    }
-
-    #[test]
-    fn a_write_answered_with_a_server_error_may_have_acted() {
-        for status in [
-            "500 Internal Server Error",
-            "503 Service Unavailable",
-            "409 Conflict",
-        ] {
-            let failing = server(match status {
-                "500 Internal Server Error" => |stream: &mut std::net::TcpStream| {
+    fn a_write_answered_with_any_error_is_uncertain_with_its_status() {
+        let cases: [(fn(&mut std::net::TcpStream), &str); 6] = [
+            (
+                |s| {
                     answer(
-                        stream,
+                        s,
+                        "400 Bad Request",
+                        r#"{"code":"invalid_argument","message":"no"}"#,
+                    )
+                },
+                "Antigravity (HTTP 400 invalid_argument): no",
+            ),
+            (
+                |s| answer(s, "400 Bad Request", "{}"),
+                "Antigravity local service returned HTTP 400 ",
+            ),
+            (
+                |s| answer(s, "400 Bad Request", r#"{"code":"internal","message":"x"}"#),
+                "Antigravity (HTTP 400 internal): x",
+            ),
+            (
+                |s| {
+                    answer(
+                        s,
+                        "429 Too Many Requests",
+                        r#"{"code":"resource_exhausted","message":"slow"}"#,
+                    )
+                },
+                "Antigravity (HTTP 429 resource_exhausted): slow",
+            ),
+            (
+                |s| answer(s, "404 Not Found", r#"{"code":"internal","message":"odd"}"#),
+                "Antigravity (HTTP 404 internal): odd",
+            ),
+            (
+                |s| {
+                    answer(
+                        s,
                         "500 Internal Server Error",
                         r#"{"code":"internal","message":"boom"}"#,
                     )
                 },
-                "503 Service Unavailable" => |stream: &mut std::net::TcpStream| {
-                    answer(stream, "503 Service Unavailable", "{}")
-                },
-                _ => |stream: &mut std::net::TcpStream| {
-                    answer(
-                        stream,
-                        "409 Conflict",
-                        r#"{"code":"aborted","message":"x"}"#,
-                    )
-                },
-            });
-            let sent = loopback().post(&at(failing), "StartCascade", &json!({}));
-            assert!(
-                matches!(sent, Err(CallError::Uncertain(_))),
-                "{status}: {sent:?}"
-            );
+                "Antigravity (HTTP 500 internal): boom",
+            ),
+        ];
+        for (respond, said) in cases {
+            let sent = loopback().post(&at(server(respond)), "StartCascade", &json!({}));
+            assert_eq!(sent, Err(CallError::Uncertain(said.into())));
         }
     }
 
     #[test]
-    fn a_server_that_turned_it_down_hands_the_write_to_the_next() {
-        let refusing = server(|stream| {
-            answer(
-                stream,
-                "404 Not Found",
-                r#"{"code":"not_found","message":"no cascade"}"#,
-            )
-        });
+    fn a_server_that_could_not_be_connected_to_hands_the_write_to_the_next() {
+        let closed = TcpListener::bind("127.0.0.1:0").unwrap();
+        let closed_port = closed.local_addr().unwrap().port();
+        drop(closed);
         let taking = server(|stream| answer(stream, "200 OK", r#"{"ok":true}"#));
-        let (mut tried, mut refused) = (Vec::new(), None);
+        let mut tried = Vec::new();
         let done = loopback().once(
-            vec![at(refusing), at(taking)],
+            vec![at(closed_port), at(taking)],
             "SendUserCascadeMessage",
             &json!({}),
             &mut tried,
-            &mut refused,
         );
         assert_eq!(done.unwrap().unwrap(), json!({"ok": true}));
-        assert!(refused.is_some());
+        // None reachable: the caller may look for servers afresh.
+        let mut tried = Vec::new();
+        let none = loopback().once(
+            vec![at(closed_port)],
+            "StartCascade",
+            &json!({}),
+            &mut tried,
+        );
+        assert!(none.is_none());
     }
 
+    /// An error answer, even a 404 that may mean the cascade lives on another
+    /// server, ends the write: no other server is asked, and no fresh
+    /// discovery runs after it (`call_once` returns what `once` reached).
     #[test]
-    fn a_write_that_may_have_acted_goes_to_no_other_server() {
-        let failing = server(|stream| answer(stream, "500 Internal Server Error", "{}"));
-        let other = TcpListener::bind("127.0.0.1:0").unwrap();
-        other.set_nonblocking(true).unwrap();
-        let other_port = other.local_addr().unwrap().port();
-        let (mut tried, mut refused) = (Vec::new(), None);
-        let done = loopback().once(
-            vec![at(failing), at(other_port)],
-            "StartCascade",
-            &json!({}),
-            &mut tried,
-            &mut refused,
-        );
-        assert!(
-            matches!(done, Some(Err(CallError::Uncertain(_)))),
-            "{done:?}"
-        );
-        let reached = other.accept();
-        assert!(
-            matches!(&reached, Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
-            "the second server was never asked"
-        );
-        // A server already tried is not asked again by a fresh discovery.
-        let again = loopback().once(
-            vec![at(failing)],
-            "StartCascade",
-            &json!({}),
-            &mut tried,
-            &mut refused,
-        );
-        assert!(again.is_none());
+    fn a_write_answered_with_an_error_goes_to_no_other_server() {
+        for status in ["404 Not Found", "500 Internal Server Error"] {
+            let failing = server(match status {
+                "404 Not Found" => |s: &mut std::net::TcpStream| {
+                    answer(
+                        s,
+                        "404 Not Found",
+                        r#"{"code":"not_found","message":"no cascade"}"#,
+                    )
+                },
+                _ => |s: &mut std::net::TcpStream| answer(s, "500 Internal Server Error", "{}"),
+            });
+            let other = TcpListener::bind("127.0.0.1:0").unwrap();
+            other.set_nonblocking(true).unwrap();
+            let other_port = other.local_addr().unwrap().port();
+            let mut tried = Vec::new();
+            let done = loopback().once(
+                vec![at(failing), at(other_port)],
+                "StartCascade",
+                &json!({}),
+                &mut tried,
+            );
+            assert!(
+                matches!(done, Some(Err(CallError::Uncertain(_)))),
+                "{status}: {done:?}"
+            );
+            let reached = other.accept();
+            assert!(
+                matches!(&reached, Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+                "{status}: the second server was never asked"
+            );
+            // A server already tried is not asked again by a fresh discovery.
+            let again = loopback().once(vec![at(failing)], "StartCascade", &json!({}), &mut tried);
+            assert!(again.is_none());
+        }
     }
 }
