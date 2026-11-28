@@ -100,7 +100,7 @@ export function free(dir, { now = Date.now(), isAlive = alive } = {}) {
 
 /**
  * 排队占位，拿到后返回放手的函数。占位的是自己的祖先（全量测试里又起了打包这类）就不再排，直接跑。
- * owner：{ pid, what }；cwd、started 自动补。
+ * owner：{ pid, what }；cwd 自动补，started 在拿到位子时记。
  */
 export async function enqueue(owner, options = {}) {
   const {
@@ -112,18 +112,19 @@ export async function enqueue(owner, options = {}) {
     now = Date.now,
     chain = ancestry(),
   } = options;
-  const mine = {
-    cwd: process.cwd(),
-    started: new Date(now()).toISOString(),
-    ...owner,
-  };
+  const mine = { cwd: process.cwd(), ...owner };
   mkdirSync(dirname(dir), { recursive: true });
   let waited = 0;
   let said = -Infinity;
   for (;;) {
     try {
       mkdirSync(dir);
-      writeFileSync(join(dir, "owner.json"), JSON.stringify(mine));
+      // started 记拿到位子的时刻：排队提示里的「已跑 N 分钟」不算它排队等的时间
+      const started = new Date(now()).toISOString();
+      writeFileSync(
+        join(dir, "owner.json"),
+        JSON.stringify({ ...mine, started }),
+      );
       if (waited)
         log(`排到了，开始${mine.what}（排了 ${minutes(waited)} 分钟）`);
       return () => {
