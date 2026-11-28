@@ -579,8 +579,20 @@ async function reread(conversation) {
 async function readAgain(conversation) {
   const at = await reach(conversation, Date.now() + REACH_BY, false);
   const reloaded = at.reloaded && { reloaded: true };
-  if (at.tabId === undefined)
-    return { outcome: at.made ? "unopened" : "unreachable", ...reloaded };
+  if (at.tabId === undefined) {
+    if (at.made) return { outcome: "unopened", ...reloaded };
+    // No tab shows it and none is being made: it was closed (#544, said so
+    // when the wait ends, not "no answer"). One there not answering as this
+    // conversation (signed out, an error page) is `unreachable`.
+    const open = making.has(conversation)
+      ? null
+      : await tabsAt(conversation, Date.now() + ASK_BY);
+    const shown = [...pages.values()].some(
+      (page) => page.conversation === conversation,
+    );
+    const closed = open?.length === 0 && !shown;
+    return { outcome: closed ? "closed" : "unreachable", ...reloaded };
+  }
   const { tabId } = at;
   const stood = await standing(tabId);
   // One that has not drawn its history yet (just opened) is asked again

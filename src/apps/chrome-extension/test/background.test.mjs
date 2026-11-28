@@ -410,6 +410,25 @@ test("reading again loads a tab again that Chrome unloaded", async () => {
   assert.equal(posted.find((m) => m.type === "reread").outcome, "unreachable");
 });
 
+// #544 (E6): the conversation's tab was closed while its answer was waited
+// on. A read again makes none (#433) and says so, rather than leaving
+// PostPane to end the wait as "ChatGPT did not answer". Another
+// conversation's tab is not its tab.
+test("a read again with no tab of the conversation left says it was closed", async () => {
+  const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
+  const posted = [];
+  const tabs = [{ id: 3, url: "https://chatgpt.com/c/someone-else" }];
+  const { listeners } = load(tabs, {
+    posted,
+    watched: [conversation],
+    now: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  await listeners.port({ type: "reread", conversation });
+  assert.equal(tabs.length, 1, "没有另开标签页");
+  assert.equal(posted.find((m) => m.type === "reread").outcome, "closed");
+});
+
 // #507 review P1-01, P1-02: a page that says nothing may be writing the very
 // answer waited for; loading it again would end that. It is left as it is,
 // and the conversation read in a tab made for it. A script that is not done
