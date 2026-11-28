@@ -27,21 +27,36 @@ impl Book {
         cwd: Option<&str>,
         thinking: bool,
     ) -> Option<&Handoff> {
+        self.unsettled_tops(session, cwd, thinking)
+            .into_iter()
+            .next()
+    }
+
+    /// Every such review here, newest first: a chain going on past its own
+    /// cap at the person's word still needs it for each of the others
+    /// (#587 review P1-01).
+    pub fn unsettled_tops(
+        &self,
+        session: &str,
+        cwd: Option<&str>,
+        thinking: bool,
+    ) -> Vec<&Handoff> {
         let here = |h: &Handoff| {
             h.thinking() == thinking
                 && (h.claude_session == session || (cwd.is_some() && h.cwd.as_deref() == cwd))
         };
-        let top = self
-            .list
+        self.list
             .iter()
             .rev()
-            .find(|h| here(h) && h.gate.notice == Some(Notice::Top) && open_top(h))?;
-        let at = top_at(top);
-        let since = self
-            .list
-            .iter()
-            .any(|h| h.id != top.id && here(h) && h.created_at > at);
-        (!since).then_some(top)
+            .filter(|h| here(h) && h.gate.notice == Some(Notice::Top) && open_top(h))
+            .filter(|top| {
+                let at = top_at(top);
+                !self
+                    .list
+                    .iter()
+                    .any(|h| h.id != top.id && here(h) && h.created_at > at)
+            })
+            .collect()
     }
 
     /// Whether handoff `h` is in the snapshot at `now`: live; failed or

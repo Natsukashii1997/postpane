@@ -72,15 +72,18 @@ impl Desk {
         Ok(json!({"ended": ended, "refused": refused, "byPerson": heard}))
     }
 
-    /// Whether words of any handoff are on their way to `doer`'s `session`
-    /// (a claim of `claim` or `claim_back`): words back, a trouble notice.
+    /// Whether words back of any handoff are on their way to `doer`'s
+    /// `session` (`claim_back`). Not words toward ChatGPT (`claim`, #587
+    /// review P2-01); a trouble notice goes under `claim` too, yet its words
+    /// are told apart by how they begin (`Book::person_began`).
     fn sending_to(&self, doer: &str, session: &str) -> bool {
         let ids: Vec<String> = self
             .sending
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .keys()
-            .cloned()
+            .iter()
+            .filter(|(_, toward_chatgpt)| !**toward_chatgpt)
+            .map(|(id, _)| id.clone())
             .collect();
         let book = self.lock();
         ids.iter()
@@ -90,10 +93,11 @@ impl Desk {
 
     fn end_one(&self, id: &str, text: &str, heard: bool, now: i64) -> Result<(), String> {
         let gone = || l10n::text("这次接力已经结束", "This handoff has ended");
-        match self.lock().get(id).map(endable) {
+        match self.lock().get(id) {
             None => return Err(l10n::text("找不到这次接力", "No such handoff")),
-            Some(false) => return Err(gone()),
-            Some(true) => {}
+            Some(h) if !endable(h) => return Err(gone()),
+            Some(h) if !heard && awaited(h, now) => return Err(still_awaited()),
+            Some(_) => {}
         }
         // Not while words are on their way, as the card's button (`act`).
         let _sending = self.claim(id)?;
@@ -112,6 +116,20 @@ impl Desk {
 /// What `Book::end` takes: live, or failed and not closed.
 fn endable(h: &Handoff) -> bool {
     h.live() || h.status == Status::Failed
+}
+
+/// Still with ChatGPT and within the wait PostPane gives it, not stopped:
+/// ended by an agent on its own, its answer would be lost (#587 review
+/// P1-02). Once the wait is over, or PostPane stopped it, it is stuck.
+fn awaited(h: &Handoff, now: i64) -> bool {
+    h.in_flight() && h.halt.is_none() && h.wait_over(now).is_none()
+}
+
+fn still_awaited() -> String {
+    l10n::text(
+        "ChatGPT 还在答这张，驿窗正常等着回信，智能体不能自行结束（回信会丢）：等它答完、或驿窗等到头停下后再结束；常浩说要结束的照结。",
+        "ChatGPT is still answering this one and PostPane is waiting as usual; an agent cannot end it on its own (the answer would be lost). End it once answered or once PostPane stops waiting; at the person's word it ends.",
+    )
 }
 
 /// The card's words for an end an agent made, at the person's word

@@ -77,8 +77,8 @@ pub(super) fn no_anchor(pr: &str) -> String {
 /// The chain's newest handoff still waits on ChatGPT (P1-04).
 pub(super) fn chain_busy(chain: &str, waiting: &str) -> String {
     l10n::text(
-        &format!("审查链 {chain} 上一张接力（{waiting}）还在等 ChatGPT 回信，没有发出：等那封回信到了、算进轮数再接着送；不要了的话，请常浩先在侧栏结束那张接力。"),
-        &format!("Review chain {chain}'s handoff {waiting} still waits on ChatGPT; nothing was sent. Send once its answer is in and counted, or have the person end that handoff first."),
+        &format!("审查链 {chain} 上一张接力（{waiting}）还在等 ChatGPT 回信，没有发出：等那封回信到了、算进轮数再接着送；不要了的话，等驿窗等到头停下后用 relay_end 结束那张，或请常浩结束。"),
+        &format!("Review chain {chain}'s handoff {waiting} still waits on ChatGPT; nothing was sent. Send once its answer is in and counted; not wanted, end it with relay_end once PostPane stops waiting, or have the person end it."),
     )
 }
 /// A review here reached its cap and is not settled (P1-08).

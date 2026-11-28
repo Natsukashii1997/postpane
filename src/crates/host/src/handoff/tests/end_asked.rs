@@ -42,6 +42,9 @@ fn the_open_handoffs_are_listed_with_the_session_that_began_each() {
     assert_eq!(listed[0]["quietMinutes"], 3);
 }
 
+/// Past the wait for an answer to words delivered at 2.
+const LATE: i64 = 3 + book::REPLY_WAIT_MS;
+
 #[test]
 fn without_the_person_s_word_an_agent_ends_it_on_its_own() {
     let (_temp, desk) = desk();
@@ -61,8 +64,16 @@ fn without_the_person_s_word_an_agent_ends_it_on_its_own() {
         ),
     ] {
         *lines.opener.borrow_mut() = opener;
+        // Past the wait: no longer a review awaited (#587 review P1-02).
         let answer = desk
-            .end_asked(&lines, CLAUDE, "s9", &[handoff.id.clone()], "回信是空的", 3)
+            .end_asked(
+                &lines,
+                CLAUDE,
+                "s9",
+                &[handoff.id.clone()],
+                "回信是空的",
+                LATE,
+            )
             .unwrap();
         assert_eq!(answer["ended"], json!([handoff.id]));
         assert_eq!(answer["byPerson"], false);
@@ -250,6 +261,66 @@ fn words_on_their_way_to_the_caller_are_not_the_person_s_word() {
     assert!(
         desk.lock()
             .get(&own.id)
+            .unwrap()
+            .steps
+            .last()
+            .unwrap()
+            .agent
+    );
+}
+
+/// #587 review P1-02: a review ChatGPT is still answering, within the wait,
+/// is no agent's to end on its own: its answer would be lost. Past the wait,
+/// or at the person's word, it ends.
+#[test]
+fn a_review_still_awaited_is_not_ended_by_an_agent_on_its_own() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let awaited = opened(&desk, &lines);
+    let ids = vec![awaited.id.clone()];
+    let answer = desk
+        .end_asked(&lines, CLAUDE, "s9", &ids, "看着卡住了", 3)
+        .unwrap();
+    assert_eq!(answer["ended"], json!([]));
+    assert_eq!(answer["refused"][0]["id"], awaited.id);
+    let why = answer["refused"][0]["why"].as_str().unwrap();
+    assert!(why.contains("ChatGPT"), "{why}");
+    assert_ne!(desk.lock().get(&awaited.id).unwrap().phase, Phase::Ended);
+    // At the person's word it ends.
+    *lines.opener.borrow_mut() = Some((Opener::Person, 3));
+    let answer = desk
+        .end_asked(&lines, CLAUDE, "s9", &ids, "常浩说不要了", 4)
+        .unwrap();
+    assert_eq!(answer["ended"], json!([awaited.id]));
+    // Another one, past the wait, ends on the agent's own.
+    let (_temp, desk) = super::desk();
+    let lines = Fake::default();
+    let late = opened(&desk, &lines);
+    let answer = desk
+        .end_asked(&lines, CLAUDE, "s9", &[late.id.clone()], "等到头了", LATE)
+        .unwrap();
+    assert_eq!(answer["ended"], json!([late.id]), "{answer}");
+}
+
+/// #587 review P2-01: words on their way to ChatGPT for a handoff of the
+/// calling session are not words to it: the person's word stands.
+#[test]
+fn words_on_their_way_to_chatgpt_leave_the_person_s_word_as_it_is() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    let own = opened(&desk, &lines);
+    let other = failed(&desk, &lines);
+    let _sending = desk.claim(&own.id).unwrap();
+    *lines.opener.borrow_mut() = Some((Opener::Person, 8));
+    let answer = desk
+        .end_asked(&lines, CLAUDE, "s1", &[other.id.clone()], "不要了", 9)
+        .unwrap();
+    assert_eq!(answer["byPerson"], true);
+    assert_eq!(answer["ended"], json!([other.id]));
+    assert!(
+        !desk
+            .lock()
+            .get(&other.id)
             .unwrap()
             .steps
             .last()

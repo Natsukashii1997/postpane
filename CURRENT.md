@@ -13,7 +13,13 @@
 - 验证：单测与前端测试（替身通过）；实机未验。
 - 截图：无（卡上只多一句说明文字，场景同 #411 的「闲置收起」）。
 - 发布与回读：未发布，待审查通过后合并装机。
-- 与授权不一致之处、遗留问题、范围外发现：#141 那张旧接力 `h1a21c35c77600` 在本轮开工时已不在未结束名单里，没动它。
+- ChatGPT 第 1 轮审查（受审 1b13c21，回信标签页没画出、驿窗没收到，本会话用 Chrome 插件另开标签页读到全文）：返修，P1 两项、P2 两项，本轮全部处理：
+  - P1-01 已修：带授权续审一条到顶的链（新开接力那条路，`handoff.rs` `start_ruled`）原来整段跳过「同目录别的到顶未了结的链」，现在逐条核实（`Book::unsettled_tops`）。同会话续审自己那张走 `ask`，不新建接力、不了结别的链，不受影响。回归测试 `review_gate::leave_for_one_capped_chain_does_not_settle_another_capped_here`：撤掉修复跑红（`review1/red-p101.txt`），修复后绿。
+  - P1-02（ChatGPT 标「待决策」，按它推荐的默认做，没另问常浩）：不是常浩授权时，ChatGPT 还在正常答、驿窗还没等到头的那张（`awaited`：在途、没停、没到 30 分钟等待线）拒收；卡住或停下的照样能结束，常浩授权的照结。不加强制结束参数。测试 `end_asked::a_review_still_awaited_is_not_ended_by_an_agent_on_its_own`。
+  - P2-01 已修：`sending_to` 只看往会话送的转回（`claim_back`），往 ChatGPT 送话不再把常浩授权降级；出错通知占 `claim` 但靠开头写法认出。测试 `end_asked::words_on_their_way_to_chatgpt_leave_the_person_s_word_as_it_is`。
+  - P2-02：三条新测先跑红再改（`review1/red.txt`：3 failed），见上。
+  - 顺带：审查链被占时的拒收说明改成「等驿窗停下后用 relay_end 结束，或请常浩结束」（`desk_guard.rs` `chain_busy`）。
+- 与授权不一致之处、遗留问题、范围外发现：#141 那张旧接力 `h1a21c35c77600` 在本轮开工时已不在未结束名单里，没动它。本 PR 第 1 轮送审的接力 `h1a2213d0ec500` 卡在「回信没画出」，要常浩点开驿窗那组里的 ChatGPT 标签页才能收下、再送第 2 轮。
 - 本轮新坑：无
 
 ## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）

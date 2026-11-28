@@ -738,20 +738,22 @@ impl Desk {
         }
         // A cap reached here and not settled: no new review of its kind here
         // without the person's word, whatever chain it names (P1-08; a 思维
-        // 评审 too, round 4 P1-13).
-        if !past {
-            let top = self
-                .lock()
-                .unsettled_top(session, cwd, !engineering)
-                .and_then(|t| {
-                    let other = earlier.as_ref().is_none_or(|e| e.id != t.id);
-                    let named = t.gate.chain.clone().unwrap_or_else(|| t.title.clone());
-                    other.then(|| (t.id.clone(), named))
-                });
-            if let Some((top, chain)) = top {
-                if !self.lock().leave_spoken(&top, turn().as_ref()) {
-                    return Err(guard::top_unsettled(&chain));
-                }
+        // 评审 too, round 4 P1-13) — each one, past its own cap or not
+        // (#587 review P1-01).
+        let tops: Vec<(String, String)> = (self.lock().unsettled_tops(session, cwd, !engineering))
+            .into_iter()
+            .filter(|t| earlier.as_ref().is_none_or(|e| e.id != t.id))
+            .map(|t| {
+                (
+                    t.id.clone(),
+                    t.gate.chain.clone().unwrap_or_else(|| t.title.clone()),
+                )
+            })
+            .collect();
+        let turn = (!tops.is_empty()).then(turn).flatten();
+        for (top, chain) in tops {
+            if !self.lock().leave_spoken(&top, turn.as_ref()) {
+                return Err(guard::top_unsettled(&chain));
             }
         }
         let head = self.head(rule, brief);
