@@ -357,3 +357,51 @@ fn words_back_the_plugin_gave_up_are_left_to_the_person_at_once() {
     assert_eq!(shown[0]["halt"], undelivered("refused", Some("busy")));
     assert_eq!(last_back(&desk, 6).1, "refused");
 }
+
+/// #544 gap 35: words back queued while the auto round trip is off are
+/// neither woken in the background nor stopped at the hour (those two are
+/// the round trip's; DECIDED 2026-11-21: what waits on the person is not
+/// resumed in the background). They wait in the queue till the session
+/// takes them or the plugin gives them up, and then the card says so.
+#[test]
+fn words_back_queued_while_off_wait_for_the_session_or_the_plugin() {
+    let (_temp, desk) = desk();
+    let lines = Fake {
+        unreachable: true,
+        ..Fake::default()
+    };
+    let handoff = opened(&desk, &Fake::default());
+    desk.act(&lines, &handoff.id, "pause", 3).unwrap();
+    desk.observe(
+        &turn("complete", "1. 少一项\n审查出口：返修\n结论：需修改"),
+        4,
+    );
+    desk.act(&lines, &handoff.id, "back", 5).unwrap();
+    let halt = desk.projection(5)[0]["halt"].clone();
+    let later = 6 + book::QUEUE_WAIT_MS;
+    desk.drive(&lines, later);
+    desk.track(&lines, later);
+    let shown = desk.projection(later);
+    assert_eq!(shown[0]["phase"], "returned");
+    assert_eq!(shown[0]["halt"], halt, "no stop at the hour");
+    assert_eq!(shown[0]["queuedAt"], 5);
+    assert!(
+        !lines.sent.borrow().iter().any(|s| s.0 == "wake"),
+        "not woken in the background"
+    );
+    let (prompt, _) = last_back(&desk, later);
+    left_by(&lines, &prompt, "expired", None);
+    assert!(desk.track(&lines, later + 1));
+    let shown = desk.projection(later + 1);
+    // Paused by the person still: the card has why as a step, not a stop.
+    assert_eq!(shown[0]["halt"], halt);
+    let last = shown[0]["steps"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .clone();
+    assert_eq!(last["kind"], "fail");
+    assert_eq!(last["text"], undelivered("expired", None));
+    assert_eq!(shown[0]["phase"], "replied", "the answer waits again");
+}
