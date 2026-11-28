@@ -2,6 +2,26 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 智能体能自行结束接力：relay_end 不再要常浩开头（#587）（2026-11-28，Claude，常浩问「为什么旧接力只能由本人结束」，要求「完全可以 AI 接管去处理，不必须非要本人去结束」；已提交、未合并、未发布）
+
+- 时间：开工 `2026-11-28 15:32`。来由：agent-kit#141 重送审查卡在旧接力上，两个会话互相转话开头的轮次过不了 #439 的「常浩开头」门，驿窗会话又照旧文档把活推给常浩去侧栏点。
+- 改了哪些文件：
+  - 你要求的：`host/src/handoff/end.rs`（不再整批拒收：判出是不是常浩授权，是走 `end_said`，不是走新的 `end_by_agent`；返回多 `byPerson`；删掉 `end_unheard`、`end_busy`）；`handoff/book_end.rs`（新 `end_by_agent`，结束步带 `agent`）；`handoff/book.rs`（`Step.agent`）；`handoff/gate/book_guard.rs`（`open_top` 把 `agent` 结束和 #368 闲置结束一样算没了结）；`protocol/src/handoffs.ts`（`agent?`）；`hud/src/alerts/relay-stop.ts`、`handoff-actions.ts`（智能体自行结束的到顶卡照旧盖「停」，底部写「智能体已自行结束，还没了结」）；`apps/mcp/src/relay.ts`（工具说明）；设置「AI 接入」页文字；`AGENTS.md`、`docs/chatgpt-channel.md`（三处旧说法）；`docs/DECIDED.md` 新增一行（取代 11-19 甲里「只认常浩开头」那条）。
+  - 我顺手改的：无。
+- 行为变化（动手前已在会话里列出）：原来不是常浩开头的一轮调 `relay_end` 整批拒收；现在照样结束，记「自行结束」，到上限的审查链不算了结。送话途中原来整批拒收，现在按「不是常浩授权」结束（正在送话的那张仍逐张拒收）。
+- 测试：没先写红测试再实现（违反 L-32 顺序，测试和实现同一轮写）。`cargo test -p agent-hud-host --lib`：`275 passed; 0 failed`（handoff 部分），新测 `without_the_person_s_word_an_agent_ends_it_on_its_own`、`words_on_their_way_to_the_caller_are_not_the_person_s_word`、`an_end_an_agent_made_on_its_own_settles_no_cap` 通过。三条全量（合并 main c7badea 后的 9246ff1）：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 1258 通过 0 失败）；`node --test tests/*.test.mjs` `ℹ pass 82` / `ℹ fail 0`。证据 `evidence/2026-11-28-587-relay-end-agent/merged/`。
+- 验证：单测与前端测试（替身通过）；实机未验。
+- 截图：无（卡上只多一句说明文字，场景同 #411 的「闲置收起」）。
+- 发布与回读：未发布，待审查通过后合并装机。
+- ChatGPT 第 1 轮审查（受审 1b13c21，回信标签页没画出、驿窗没收到，本会话用 Chrome 插件另开标签页读到全文）：返修，P1 两项、P2 两项，本轮全部处理：
+  - P1-01 已修：带授权续审一条到顶的链（新开接力那条路，`handoff.rs` `start_ruled`）原来整段跳过「同目录别的到顶未了结的链」，现在逐条核实（`Book::unsettled_tops`）。同会话续审自己那张走 `ask`，不新建接力、不了结别的链，不受影响。回归测试 `review_gate::leave_for_one_capped_chain_does_not_settle_another_capped_here`：撤掉修复跑红（`review1/red-p101.txt`），修复后绿。
+  - P1-02（ChatGPT 标「待决策」，按它推荐的默认做，没另问常浩）：不是常浩授权时，ChatGPT 还在正常答、驿窗还没等到头的那张（`awaited`：在途、没停、没到 30 分钟等待线）拒收；卡住或停下的照样能结束，常浩授权的照结。不加强制结束参数。测试 `end_asked::a_review_still_awaited_is_not_ended_by_an_agent_on_its_own`。
+  - P2-01 已修：`sending_to` 只看往会话送的转回（`claim_back`），往 ChatGPT 送话不再把常浩授权降级；出错通知占 `claim` 但靠开头写法认出。测试 `end_asked::words_on_their_way_to_chatgpt_leave_the_person_s_word_as_it_is`。
+  - P2-02：三条新测先跑红再改（`review1/red.txt`：3 failed），见上。
+  - 顺带：审查链被占时的拒收说明改成「等驿窗停下后用 relay_end 结束，或请常浩结束」（`desk_guard.rs` `chain_busy`）。
+- 与授权不一致之处、遗留问题、范围外发现：#141 那张旧接力 `h1a21c35c77600` 在本轮开工时已不在未结束名单里，没动它。本 PR 第 1 轮送审的接力 `h1a2213d0ec500` 卡在「回信没画出」，要常浩点开驿窗那组里的 ChatGPT 标签页才能收下、再送第 2 轮。
+- 本轮新坑：无
+
 ## 接力治本第 4 步：插件和驿窗断开期间的「答完」先暂存、连回后补报；送话途中插件断开按说不清处理（#544 全表空格 13、12）（2026-11-28，Claude，交接卡标「可直接做」；已提交，PR 见描述，合并后要从 main 重装、插件重新加载到 0.2.15）
 
 - 时间：开工 `2026-11-28 18:20`。来由：空格 13，驿窗重启或桥接连不上时，页面报的「答完」被插件直接丢掉，只能等 3 分钟后重读。

@@ -761,3 +761,50 @@ fn an_engineering_review_short_of_evidence_pauses_then_goes_again() {
     let text = last_reply_to_claude(&lines);
     assert!(text.contains("审查出口与结论对不上") && text.contains("交常浩决定"));
 }
+
+/// #587 review P1-01: a chain past its cap, going on at the person's word,
+/// does not carry another cap reached here since and ended only by an agent:
+/// that one needs the person's word after it too.
+#[test]
+fn leave_for_one_capped_chain_does_not_settle_another_capped_here() {
+    let (_temp, desk) = desk();
+    let lines = Fake::default();
+    // Chain B, here in /w, reaches its cap at 7.
+    ruled(&desk, &lines, "s1", "L2", None, 1).unwrap();
+    desk.observe(&turn("complete", FIX), 3);
+    desk.drive(&lines, 4);
+    ruled(&desk, &lines, "s1", "L2", None, 5).unwrap();
+    desk.observe(&reply_as(asked(), FIX, "m2"), 6);
+    desk.drive(&lines, 7);
+    assert_eq!(status(&desk, 7).1.as_deref(), Some("top"));
+    // Another review A, in /w too, reaches its cap at 10, its answer back.
+    let a = desk.change(|book| {
+        let a = book.begin("s2", Some("/w"), "修首页", None, "改动", 8);
+        book.opened(&a.id, "c-a", 8);
+        book.replied("c-a", FIX, Some("m-a"), 9);
+        let prompt = book.get(&a.id).unwrap().prompt_for(StepKind::Back);
+        book.returned(&a.id, StepKind::Back, "到顶了", &prompt, true, 10);
+        book.note(&a.id, book::Notice::Top, 10);
+        a.id
+    });
+    // An agent ends A on its own: no cap of A settled.
+    let ended = desk
+        .end_asked(&lines, CLAUDE, "s3", &[a.clone()], "清掉", 11)
+        .unwrap();
+    assert_eq!(ended["byPerson"], false);
+    // B goes on from another session in /w, a new handoff on its pull
+    // request: the person spoke after B went back, before A did — B's
+    // leave only.
+    *lines.opener.borrow_mut() = Some((Opener::Person, 9));
+    let refused = ruled(&desk, &lines, "s4", "L2", Some("常浩授权继续"), 12);
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|e| e.contains("reached its cap")),
+        "{:?}",
+        refused.err()
+    );
+    // Once the person speaks after A went back, B goes on.
+    *lines.opener.borrow_mut() = Some((Opener::Person, 11));
+    assert!(ruled(&desk, &lines, "s4", "L2", Some("常浩授权继续"), 13).is_ok());
+}

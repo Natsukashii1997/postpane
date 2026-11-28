@@ -1,8 +1,9 @@
 //! Ending handoffs from an agent session (#439): `relay_list` names the
 //! handoffs still open and the session that began each, `relay_end` ends
-//! them as the card's 结束接力 does — only when the person began the
-//! calling session's current turn, so no agent ends a review (or settles
-//! a cap) on its own.
+//! them as the card's 结束接力 does. Any agent may (#587, 常浩 2026-11-28:
+//! no hand of his needed); only when the person began the calling
+//! session's current turn does the end settle a cap, so no agent lets a
+//! capped review go on by ending it.
 use super::*;
 use std::collections::HashSet;
 
@@ -32,9 +33,9 @@ impl Desk {
             .collect()
     }
 
-    /// Ends `ids` for `doer`'s `session`, when the person began its current
-    /// turn: which ended, and which did not and why. Refused whole when the
-    /// person's word cannot be told.
+    /// Ends `ids` for `doer`'s `session`: which ended, and which did not and
+    /// why, and whether at the person's word (`byPerson`, #587) — the
+    /// person began its current turn — which alone settles a cap.
     pub(crate) fn end_asked(
         &self,
         lines: &dyn Lines,
@@ -54,37 +55,35 @@ impl Desk {
         let turn = lines.opener(doer, session);
         // Words on their way to the calling session go in before they are
         // written down (`Book::returned` follows the send), so the turn they
-        // began reads as the person's meanwhile (#439 review P1-01): refused
-        // whole while any are. Looked at before the book: words still on
+        // began reads as the person's meanwhile (#439 review P1-01): not the
+        // person's while any are. Looked at before the book: words still on
         // their way after the turn was read are told by this, and words that
         // arrived before are in the book by then.
-        if self.sending_to(doer, session) {
-            return Err(end_busy());
-        }
-        if !self.lock().person_began(turn.as_ref()) {
-            return Err(end_unheard());
-        }
-        let text = ended_by(doer, session, reason);
+        let heard = !self.sending_to(doer, session) && self.lock().person_began(turn.as_ref());
+        let text = ended_by(doer, session, reason, heard);
         let (mut ended, mut refused) = (vec![], vec![]);
         let mut seen = HashSet::new();
         for id in ids.iter().filter(|id| seen.insert(id.as_str())) {
-            match self.end_one(id, &text, now) {
+            match self.end_one(id, &text, heard, now) {
                 Ok(()) => ended.push(id.clone()),
                 Err(why) => refused.push(json!({"id": id, "why": why})),
             }
         }
-        Ok(json!({"ended": ended, "refused": refused}))
+        Ok(json!({"ended": ended, "refused": refused, "byPerson": heard}))
     }
 
-    /// Whether words of any handoff are on their way to `doer`'s `session`
-    /// (a claim of `claim` or `claim_back`): words back, a trouble notice.
+    /// Whether words back of any handoff are on their way to `doer`'s
+    /// `session` (`claim_back`). Not words toward ChatGPT (`claim`, #587
+    /// review P2-01); a trouble notice goes under `claim` too, yet its words
+    /// are told apart by how they begin (`Book::person_began`).
     fn sending_to(&self, doer: &str, session: &str) -> bool {
         let ids: Vec<String> = self
             .sending
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .keys()
-            .cloned()
+            .iter()
+            .filter(|(_, toward_chatgpt)| !**toward_chatgpt)
+            .map(|(id, _)| id.clone())
             .collect();
         let book = self.lock();
         ids.iter()
@@ -92,16 +91,21 @@ impl Desk {
             .any(|h| h.claude_session == session && h.doer.as_deref().unwrap_or(CLAUDE) == doer)
     }
 
-    fn end_one(&self, id: &str, text: &str, now: i64) -> Result<(), String> {
+    fn end_one(&self, id: &str, text: &str, heard: bool, now: i64) -> Result<(), String> {
         let gone = || l10n::text("这次接力已经结束", "This handoff has ended");
-        match self.lock().get(id).map(endable) {
+        match self.lock().get(id) {
             None => return Err(l10n::text("找不到这次接力", "No such handoff")),
-            Some(false) => return Err(gone()),
-            Some(true) => {}
+            Some(h) if !endable(h) => return Err(gone()),
+            Some(h) if !heard && awaited(h, now) => return Err(still_awaited()),
+            Some(_) => {}
         }
         // Not while words are on their way, as the card's button (`act`).
         let _sending = self.claim(id)?;
-        if self.change(|book| book.end_said(id, Some(text), now)) {
+        let ended = self.change(|book| match heard {
+            true => book.end_said(id, Some(text), now),
+            false => book.end_by_agent(id, text, now),
+        });
+        if ended {
             Ok(())
         } else {
             Err(gone())
@@ -114,32 +118,40 @@ fn endable(h: &Handoff) -> bool {
     h.live() || h.status == Status::Failed
 }
 
-/// The card's words for an end an agent made.
-fn ended_by(doer: &str, session: &str, reason: &str) -> String {
+/// Still with ChatGPT and within the wait PostPane gives it, not stopped:
+/// ended by an agent on its own, its answer would be lost (#587 review
+/// P1-02). Once the wait is over, or PostPane stopped it, it is stuck.
+fn awaited(h: &Handoff, now: i64) -> bool {
+    h.in_flight() && h.halt.is_none() && h.wait_over(now).is_none()
+}
+
+fn still_awaited() -> String {
+    l10n::text(
+        "ChatGPT 还在答这张，驿窗正常等着回信，智能体不能自行结束（回信会丢）：等它答完、或驿窗等到头停下后再结束；常浩说要结束的照结。",
+        "ChatGPT is still answering this one and PostPane is waiting as usual; an agent cannot end it on its own (the answer would be lost). End it once answered or once PostPane stops waiting; at the person's word it ends.",
+    )
+}
+
+/// The card's words for an end an agent made, at the person's word
+/// (`heard`) or on its own.
+fn ended_by(doer: &str, session: &str, reason: &str, heard: bool) -> String {
     let client = if doer == CODEX {
         "Codex"
     } else {
         "Claude Code"
     };
     let reason: String = reason.chars().take(200).collect();
-    l10n::text(
-        &format!("{client} 会话 {session} 按常浩授权结束：{reason}"),
-        &format!("Ended by {client} session {session} at the person's word: {reason}"),
-    )
-}
-
-pub(super) fn end_busy() -> String {
-    l10n::text(
-        "驿窗正往这个会话送话，这一轮是谁开的头现在核实不了，没有结束任何接力。等这段话送到、常浩在会话里说一句要结束哪几张，再调用。",
-        "PostPane is sending words to this session, so who began this turn cannot be told now. Nothing was ended. Once they are in, ask the person to say in this session which handoffs to end, then call again.",
-    )
-}
-
-pub(super) fn end_unheard() -> String {
-    l10n::text(
-        "驿窗核实不到这一轮是常浩开的头（他在会话里打的字，或经驿窗插件送进来、不带智能体来源标签的话才算；别的智能体转达的不算），没有结束任何接力。请常浩在这个会话里说一句要结束哪几张，再调用。",
-        "PostPane could not tell the person began this turn (their own words in the session, or words Agent HUD's plugin brought in without an agent's label; another agent passing it on does not count). Nothing was ended. Ask the person to say in this session which handoffs to end, then call again.",
-    )
+    if heard {
+        l10n::text(
+            &format!("{client} 会话 {session} 按常浩授权结束：{reason}"),
+            &format!("Ended by {client} session {session} at the person's word: {reason}"),
+        )
+    } else {
+        l10n::text(
+            &format!("{client} 会话 {session} 自行结束：{reason}"),
+            &format!("Ended by {client} session {session} on its own: {reason}"),
+        )
+    }
 }
 
 /// The calling client, as `relay`: Claude Code or Codex, whose turns can be
@@ -161,7 +173,7 @@ pub(crate) fn relay_list(app: &tauri::AppHandle) -> Result<Value, String> {
     Ok(json!({"relays": desk.endable(now_ms())}))
 }
 
-/// `relay_end`: ends handoffs at the person's word (`Desk::end_asked`).
+/// `relay_end`: ends handoffs for an agent (`Desk::end_asked`).
 pub(crate) fn relay_end(app: &tauri::AppHandle, params: &Value) -> Result<Value, String> {
     let caller = &params["caller"];
     let doer = doer_of(caller)?;

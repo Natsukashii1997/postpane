@@ -45,7 +45,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
     : request.method === 'relay_list'
       ? { result: { relays: [{ id: 'h1', title: '修登录', session: 'session-1' }] } }
     : request.method === 'relay_end'
-      ? { error: { message: '驿窗核实不到这一轮是常浩开的头' } }
+      ? { error: { message: '认不出是哪个会话在调用' } }
     : { error: { message: 'not here' } };
   process.stdout.write(JSON.stringify({ id: request.id, ...reply }) + '\\n');
 });
@@ -422,6 +422,8 @@ test("relay_list and relay_end are listed without any host group; ending names t
     assert.equal(end.annotations.destructiveHint, true);
     assert.deepEqual(end.inputSchema.required, ["ids", "reason"]);
     assert.match(end.description, /常浩/);
+    // #587: an agent may end one on its own, which settles no cap.
+    assert.match(end.description, /自行结束/);
     const listed = await client.callTool({ name: "relay_list", arguments: {} });
     assert.equal(listed.structuredContent.relays[0].session, "session-1");
     const refused = await client.callTool({
@@ -430,7 +432,7 @@ test("relay_list and relay_end are listed without any host group; ending names t
     });
     // The app's own refusal goes to the agent as it is.
     assert.equal(refused.isError, true);
-    assert.equal(refused.content[0].text, "驿窗核实不到这一轮是常浩开的头");
+    assert.equal(refused.content[0].text, "认不出是哪个会话在调用");
     const call = fake
       .requests()
       .find((request) => request.method === "relay_end");

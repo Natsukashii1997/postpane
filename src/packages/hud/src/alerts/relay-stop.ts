@@ -1,11 +1,16 @@
 import type { Handoff, HandoffStep } from "@agent-hud/protocol";
 
-/** Ended by PostPane after a day untouched (#368), not by the person: the
- * gate counts such a one at its cap as not settled (host handoff/gate/book_guard.rs
- * `unsettled_top`), so it still shows 「停」 (#411 L2 P2-02). */
+/** Ended by PostPane after a day untouched (#368), or by an agent on its
+ * own (#587), not at the person's word: the gate counts such a one at its
+ * cap as not settled (host handoff/gate/book_guard.rs `unsettled_top`), so it
+ * still shows 「停」 (#411 L2 P2-02). */
 export function idleEnded(handoff: Handoff): boolean {
   const last = handoff.steps?.at(-1);
-  return handoff.status === "closed" && last?.kind === "end" && !!last.auto;
+  return (
+    handoff.status === "closed" &&
+    last?.kind === "end" &&
+    !!(last.auto || last.agent)
+  );
 }
 
 /** Stopped at its cap, the person's to decide (#347, #409): 「停」. Open, or
@@ -61,7 +66,8 @@ export function endWords(
   step: HandoffStep,
   zh: boolean,
 ): { title: string; sub?: string } {
-  // Ended by an agent at the person's word (#439): who and why.
+  // Ended by an agent, at the person's word (#439) or on its own (#587):
+  // who and why.
   if (!step.auto)
     return {
       title: zh ? "结束接力" : "Handoff ended",

@@ -47,8 +47,8 @@ export function AgentReachRows({
           "列出与结束接力（relay_list、relay_end）",
         )}
         subtitle={t(
-          "Claude Code and Codex sessions: list the relays still open and the session that began each; end them as the card's “End relay” does, only when you began that session's current turn (your own words, or words the plugin brought in with no agent's label). Each end goes on the card with who ended it and why. Reachable while the local tools channel listens, as above; no ChatGPT extension needed.",
-          "接 Claude Code 和 Codex 会话：列出还没结束的接力和各自的发起会话；结束接力和卡片上点「结束接力」一样，但只在调用的那一轮是你开的头时才收（你在会话里打的字，或经插件送进来、不带智能体来源标签的话），卡上记谁、为什么结束。本机工具通道开着就够得着（同上），不需要 ChatGPT 插件。",
+          "Claude Code and Codex sessions: list the relays still open and the session that began each; end them as the card's “End relay” does, without your hand. When you began that session's current turn (your own words, or words the plugin brought in with no agent's label) the end is at your word; otherwise it is the agent's own: a review chain stopped at its cap stays unsettled, and one ChatGPT is still answering within PostPane's wait is left to its answer. Each end goes on the card with who ended it and why. Reachable while the local tools channel listens, as above; no ChatGPT extension needed.",
+          "接 Claude Code 和 Codex 会话：列出还没结束的接力和各自的发起会话；结束接力和卡片上点「结束接力」一样，不用你动手。调用的那一轮是你开的头（你在会话里打的字，或经插件送进来、不带智能体来源标签的话）就算你授权；不是就记成智能体自行结束：审到上限的审查链不算了结，ChatGPT 还在正常答、驿窗还没等到头的那张不能结束（回信会丢）。卡上记谁、为什么结束。本机工具通道开着就够得着（同上），不需要 ChatGPT 插件。",
         )}
       >
         <Pill

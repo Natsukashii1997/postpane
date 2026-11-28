@@ -30,6 +30,9 @@ export interface HandoffStep {
   key?: string | null;
   /** Done by the auto round trip, not by the person (#72). */
   auto?: boolean;
+  /** An end an agent made on its own, not at the person's word (#587): it
+   * settles no cap. */
+  agent?: boolean;
   /** Words back to Claude (`back`, `again`, #257): the id they were left
    * under for the session's plugin. */
   prompt?: string;

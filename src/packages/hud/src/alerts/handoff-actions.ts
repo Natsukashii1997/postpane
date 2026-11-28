@@ -109,13 +109,18 @@ export function actionTitle(
   return undefined;
 }
 
-/** Beside 「知道了」 on an ended card: ended, or put away by PostPane after a
- * day idle while still stopped at its cap (#411 L2 P2-02). */
+/** Beside 「知道了」 on an ended card: ended, or put away while still stopped
+ * at its cap — by PostPane after a day idle (#411 L2 P2-02), or by an agent
+ * on its own (#587). */
 export const endedNote = (handoff: Handoff, zh: boolean) =>
-  stopped(handoff)
+  !stopped(handoff)
     ? zh
-      ? "闲置一天已自动收起，还没了结"
-      : "Put away after a day idle, not settled"
-    : zh
       ? "接力已结束"
-      : "This handoff has ended";
+      : "This handoff has ended"
+    : handoff.steps?.at(-1)?.agent
+      ? zh
+        ? "智能体已自行结束，还没了结"
+        : "Ended by an agent on its own, not settled"
+      : zh
+        ? "闲置一天已自动收起，还没了结"
+        : "Put away after a day idle, not settled";

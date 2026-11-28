@@ -200,6 +200,10 @@ pub struct Step {
     /// Done by the auto round trip, not by the person (#72).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub auto: bool,
+    /// Ended by an agent on its own, not at the person's word (#587):
+    /// settles no cap, as an end by PostPane.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub agent: bool,
     /// Words back to Claude (`back`, `again`, #257): the id they were left
     /// under for the session's plugin, the same each time the step is tried.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -250,6 +254,7 @@ impl Step {
             verdict: None,
             key: None,
             auto: false,
+            agent: false,
             prompt: None,
             delivery: None,
             cause: None,
