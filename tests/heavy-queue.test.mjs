@@ -66,6 +66,8 @@ test("别的会话占着：排队，每分钟说一次在等谁；它跑完就�
     },
   );
   assert.equal(readOwner(dir).pid, 7);
+  // 「已跑多久」从拿到位子算，不含排队等的 2 分钟（11-28 实测：排了 4 分钟的打包被说成「已跑 8 分钟」）
+  assert.equal(readOwner(dir).started, new Date(125_000).toISOString());
   const waiting = lines.filter((l) => l.startsWith("排队："));
   assert.equal(waiting.length, 3, lines.join("\n")); // 0、60、120 秒各一次
   assert.match(waiting[0], /全量测试（reply-elsewhere，进程 4242/);
