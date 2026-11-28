@@ -24,6 +24,8 @@ use std::{
 mod chain;
 #[path = "sending/book_doer.rs"]
 mod doer;
+#[path = "book_end.rs"]
+mod ending;
 #[path = "gate/book.rs"]
 mod gate;
 #[path = "gate/book_io.rs"]
@@ -32,6 +34,7 @@ mod gate_io;
 mod guard;
 #[path = "gate/book_leave.rs"]
 mod leave;
+pub use leave::{notice_head, SWIPE_SAID};
 #[path = "notice/book.rs"]
 mod notice;
 #[path = "gate/book_pull_request.rs"]
@@ -951,17 +954,7 @@ impl Book {
     }
     /// The person ended the handoff.
     pub fn end(&mut self, id: &str, now: i64) -> bool {
-        let Some(handoff) = self
-            .get_mut(id)
-            .filter(|h| h.live() || h.status == Status::Failed)
-        else {
-            return false;
-        };
-        handoff.status = Status::Closed;
-        handoff.brief = None;
-        handoff.steps.push(Step::new(now, StepKind::End, None));
-        handoff.enter(Phase::Ended, now);
-        true
+        self.end_said(id, None, now)
     }
     /// A pass ended the handoff, by the auto round trip.
     pub fn passed(&mut self, id: &str, text: &str, now: i64) -> bool {

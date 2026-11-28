@@ -138,13 +138,13 @@ fn handle(
         }
         return host_request(extension.as_deref(), method, params);
     }
-    if method == super::handoff::RELAY_METHOD {
-        // Claude handing its work to ChatGPT: not a HUD tool, so not behind
-        // their switch; the ChatGPT extension must be connected instead.
+    if super::handoff::RELAY_METHODS.contains(&method) {
+        // Claude handing its work to ChatGPT, or listing and ending those
+        // handoffs (#439): not HUD tools, so not behind their switch.
         if !active.load(Ordering::Acquire) {
             return Err("Local tools are disabled".into());
         }
-        return super::handoff::relay(app, &params);
+        return super::handoff::relay_tool(app, method, &params);
     }
     let mut owner = backend.lock().unwrap_or_else(PoisonError::into_inner);
     if !active.load(Ordering::Acquire) {

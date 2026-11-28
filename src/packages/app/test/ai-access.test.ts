@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Provider } from "@agent-hud/protocol";
-import { dataObjects, executorState, mcpReach } from "../src/lib/ai-access.ts";
+import {
+  dataObjects,
+  executorState,
+  mcpReach,
+  relayToolsState,
+} from "../src/lib/ai-access.ts";
 
 const chatgpt = {
   supported: true,
@@ -110,4 +115,13 @@ test("data objects split into read, switched off and not here", () => {
   assert.equal(data.reading[2]!.sessions[1], "它的本机日志");
   assert.deepEqual(data.off, ["DeepSeek"]);
   assert.deepEqual(data.absent, ["Kimi"]);
+});
+
+test("listing and ending relays shows the local tools channel as the host reports it, extension or not (#439 P2-05)", () => {
+  assert.equal(relayToolsState(undefined), "off");
+  assert.equal(relayToolsState({ enabled: false, listening: false }), "off");
+  // On with no ChatGPT extension (HUD tools or agent messages on): the
+  // channel listens, so the tools answer.
+  assert.equal(relayToolsState({ enabled: true, listening: true }), "on");
+  assert.equal(relayToolsState({ enabled: true, listening: false }), "failed");
 });

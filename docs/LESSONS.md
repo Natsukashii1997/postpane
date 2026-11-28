@@ -708,3 +708,11 @@
 - 正确做法：会话页读到带 `truncated_fields` 的 Antigravity 行时，按 `step_index` 去 `transcript_full.jsonl` 取整条（`core/clients/antigravity_whole.rs`，按文件长度和修改时间缓存一份步号→偏移的索引）。用量和实时状态仍读 `transcript.jsonl`：用量账本按「来源文件 + 事件键」做主键，换来源文件可能把历史用量算两遍，所以没有整体改读完整版。凡是「把回复交给别人」的功能，验收要带一条长消息和一条长回复。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/r6/`（会话 `f2e8fb04`：`transcript.jsonl` 提问 1939 字、回复 1789 字，`transcript_full.jsonl` 提问 8426 字、回复 17370 字；修后 `get_message` 的结果）。
 - 升级：〔提醒〕部分升级（2026-11-27，#560）：`antigravity_whole` 两条测试，未接进必经检查。
+
+## L-90 Claude 桌面会话间转达的消息标了 isMeta，「这一轮谁开的头」把它跳过，认成了上一轮常浩自己打的字（2026-11-19；2026-11-28 两次变基撞号，由 L-59 改号为 L-90）
+
+- 现象：#439 装机实测 `relay_end`，本会话这一轮是别的 Claude 会话转达常浩批量答复开的头，按设计应整批拒收，结果核实通过、结束了 0B-4b 那张接力（它本来就在要结束的名单里，结果无害）。
+- 根因：`claude_plugin/opener.rs` 的 `current_turn` 往回找「这一轮的第一条用户消息」时只认 `claude_prompt`，而它排除 `isMeta`。Claude 桌面的会话间转达那一行是 `isMeta: true`、`origin.kind: "peer"`，被当成非提问跳过，往回落到常浩上一轮自己打的字（`origin.kind: "human"`），于是判成 `Opener::Person`。任务通知那一行不带 `isMeta`，所以原测试里「认不出」一直是绿的，没发现。同样影响 #258 插话重算和到上限后续审的授权（`extra`），只是那两处还比对时间、要晚于最近一次转回，暴露得少。
+- 正确做法：判断一轮由谁开头时，凡是 Claude Code 写了 `origin` 的用户行都算这一轮的开头（再按 `origin.kind` 判：`human` 是本人，驿窗插件的按插件判，其余一律认不出），不能只用「像不像用户提问」的过滤；新的开头来源要先在本机会话记录里数一遍各种 `origin` 和 `isMeta` 的组合，再写测试。
+- 证据：`evidence/2026-11-19-439-relay-end/`：`live-end-refused.txt`（本该拒收却结束了）、`red-peer.txt`（补的测试在旧代码上失败：`left: Some((Person, …))`）。
+- 升级：〔机检〕已升级（2026-11-20，#439）：`claude_plugin/tests.rs` 的 `the_current_turn_is_begun_by_the_person_or_by_the_plugin` 加了会话间转达开头的一轮。

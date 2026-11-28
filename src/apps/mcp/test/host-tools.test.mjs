@@ -42,6 +42,10 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
     : request.method === 'host_tool' ? { result: { echoed: request.params.name } }
     : request.method === 'relay_to_chatgpt'
       ? (tools ? { result: { handoffId: 'h1', status: 'opening', message: '已交给 ChatGPT 审核' } } : { error: { message: 'Local tools are disabled' } })
+    : request.method === 'relay_list'
+      ? { result: { relays: [{ id: 'h1', title: '修登录', session: 'session-1' }] } }
+    : request.method === 'relay_end'
+      ? { error: { message: '驿窗核实不到这一轮是常浩开的头' } }
     : { error: { message: 'not here' } };
   process.stdout.write(JSON.stringify({ id: request.id, ...reply }) + '\\n');
 });
@@ -401,5 +405,41 @@ test("relay_to_chatgpt without a caller leaves it to the app, and says in Chines
     assert.match(result.content[0].text, /Local tools are disabled/);
   } finally {
     await closed.close();
+  }
+});
+
+test("relay_list and relay_end are listed without any host group; ending names the caller", async () => {
+  const fake = engine("relay-end", [tool]);
+  const client = await connect(fake.file, {
+    CLAUDE_CODE_SESSION_ID: "session-9",
+  });
+  try {
+    const { tools } = await client.listTools();
+    const list = tools.find((item) => item.name === "relay_list");
+    const end = tools.find((item) => item.name === "relay_end");
+    assert.ok(list && end, "both listed");
+    assert.equal(list.annotations.readOnlyHint, true);
+    assert.equal(end.annotations.destructiveHint, true);
+    assert.deepEqual(end.inputSchema.required, ["ids", "reason"]);
+    assert.match(end.description, /常浩/);
+    const listed = await client.callTool({ name: "relay_list", arguments: {} });
+    assert.equal(listed.structuredContent.relays[0].session, "session-1");
+    const refused = await client.callTool({
+      name: "relay_end",
+      arguments: { ids: ["h1", "h2"], reason: "PR 已合并" },
+    });
+    // The app's own refusal goes to the agent as it is.
+    assert.equal(refused.isError, true);
+    assert.equal(refused.content[0].text, "驿窗核实不到这一轮是常浩开的头");
+    const call = fake
+      .requests()
+      .find((request) => request.method === "relay_end");
+    assert.deepEqual(call.params, {
+      ids: ["h1", "h2"],
+      reason: "PR 已合并",
+      caller: { client: "claude", sessionId: "session-9", turnId: null },
+    });
+  } finally {
+    await client.close();
   }
 });

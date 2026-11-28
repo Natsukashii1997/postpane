@@ -2,6 +2,26 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## #439 接手续做：变基到最新 main，修审查第 2 轮的授权门竞态（P1-01）和三项 P2（2026-11-28，Claude，常浩 11-28 在驿窗主目录会话说「速度完成驿窗的所有任务，然后清掉能清掉的内容」，由主目录会话分派本会话接手 PR #442；已提交，PR 见下，未发布）
+
+- 时间：开工 `2026-11-28 10:50`（会话记录推算，未用 `date` 记；`date` 记到写交接时 `2026-11-28 11:23`）。来由：PR #442 从 11-19 停着、和 main 冲突；查接力记录，审查链 `h1a1f4958c4300` 最后一封回信（第 2 轮，受审 `d5d92ce`）出口是「返修」，P1-01 没修，接力 11-21 被驿窗 24 小时闲置自动结束。
+- 改了哪些文件：
+  - 你要求的（接手的 #439 本身）：
+    - 变基：9 天里 main 把接力记录搬进 host（#503）、按概念分目录（#505），PR 的 `platform/.../handoffs.rs`、`leave.rs`、`guard.rs` 改动跟着落到 `host/src/handoff/book.rs`、`gate/book_leave.rs`、`gate/book_guard.rs`；宿主测试改挂在 `handoff/tests.rs` 下（`mod end_asked;`）；`launch_text` 改引 `book::SWIPE_SAID`；MCP `relay.ts` 取 PR 版（main 只改过一行注释的出处，已带上）。
+    - P1-01：`host/src/handoff/end.rs` 的 `Desk::end_asked`：读完调用方这一轮是谁开的头后，先看驿窗有没有正往这个会话送的话（`sending_to`：有接力占着送话位、且它的会话就是调用方），有就整批拒收（新报错 `end_busy`）；再查账本。先看送话位、后查账本，读开头那一刻在路上的话要么还占着位、要么已记进账本。
+    - P2-01：`platform/src/claude_plugin/opener.rs` 的 `current_turn`：带 `origin` 但不是提问的行（会话间转达等）只用来截住往回找，一律返回「认不出」，不再按它写的 `origin` 认成常浩或插件；本机近 30 天 1194 份会话记录里这种行只有会话间转达（1077 行）。
+    - P2-05：`AGENTS.md`「AI 接入」、`docs/chatgpt-channel.md`、设置「AI 接入」页的说明改准：接力工具只要本机工具通道开着就够得着（登记 ChatGPT 插件、`hudTools`、`agentMessages` 任一项开着通道就开），不是「移除插件登记即关」。行为不变。
+    - P2-06 转单 #580（保存失败仍报成功）。P2-02 判定不成立（第 3 轮审查认可）：账本现存 192 张，最坏情况下排队那张恰好最旧，1 小时（排队话的有效期）里新建 9 张就会把它挤掉；实测任一小时最多新建 6 张。（第 3 轮送审时误写成「要新建 200 张」，审查纠正。）
+    - P2-05 补：设置「AI 接入」页「列出与结束接力」那行的状态原来用 ChatGPT 插件登记与否显示，没登记插件、但开着 `hudTools` 或 `agentMessages` 时实际够得着却显示「关 · 插件未登记」；改为读宿主报的本机工具通道状态（`connection.localTools`）：开着显示「开 · 本机工具通道开着」，该开却没在运行（启动失败或运行中停了）显示「够不着 · 本机工具通道未运行」，关着显示「关 · 本机工具通道关着」（`lib/ai-access.ts` 的 `relayToolsState`，测试 `ai-access.test.ts`）。「发起接力」那行仍显示插件登记状态（它要插件连着才送得出去）。
+  - 我顺手改的：`docs/LESSONS.md` 原 PR 的 L-59 和 main 上的 L-59 撞号，改成 L-90（第二次变基又撞 main 上的 L-81，改为盘点会话分配的 L-90）（CURRENT 里 #439 那一节、`chatgpt-channel.md` 引用同步）。
+- 测试：先红后绿：去掉 `sending_to` 一判，新测试 `words_on_their_way_to_the_caller_refuse_the_whole_batch` 失败，内容正是审查写的路径（另一张 `h502` 被结束、自己那张被拒）（`red-p1-01.txt`）。`cargo test -p agent-hud-host end_asked` 6 passed / 0 failed；`cargo test -p agent-hud-platform current_turn` 2 passed / 0 failed；`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（干净环境；本会话 shell 里跑有 14 条装机测试失败，`env -i` 后全过，推送钩子同样只在干净环境下过）；`pnpm test`（负载 190–220）「全量测试汇总：6 套，失败 2 套」：前端 `ℹ pass 542`、MCP 10、插件 14、注入脚本 11 均 fail 0；Rust 挂在 `agent-hud-core` 计时测试 `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry`（单独重跑 1 passed），cargo 因此停下，**宿主 crate 全量未跑**；Chrome 插件 `ℹ pass 199` / `ℹ fail 1`（真实 Chromium 计时测试 `a page too busy to answer is not loaded again`，单独重跑仍挂，本 PR 没改插件）。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-439-rebase/`。
+  - 第二次变基（到 `7c43057`，#543 合并后，盘点会话排的重活位）后完整重跑，干净环境：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 各 crate 合计 1252 passed、0 failed，其中宿主 crate 322 passed；前端 `ℹ pass 554`、MCP 10、插件 14、Chrome 插件 239、注入脚本 11，均 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 75` / `ℹ fail 0`。变基后第一次跑出两处要改：#557 把「没回信」出错改成带等待信息，`end_asked.rs` 一条测试换成不带参数的 `Unconfirmed`（只验通知开头写法）；交接一节「本轮新坑」那行合并时丢了，补上。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-439-rebase2/`。
+- 验证：ChatGPT 审查链 `r1a1f4958c4300` 续审两轮（接力 `h1a22094235900`）：受审 `9f91083` 返修（P1-01、P2-01 已验证关闭，剩 P2-05 设置页状态章），受审 `4f6aa71` **通过**（P0 0、P1 0，台账全部关闭、判定不成立或转单）。通过后照非阻断意见把「没起来」改成「未运行」（只改文字，`ai-access.test.ts` `ℹ pass 5` / `ℹ fail 0`、`tsc` 通过），没再送审。未装机：按「任务进度盘点」会话 11-28 的重活排队，#442 排第 5，等 #557、#543 合并后再变基、补跑完整 `pnpm test`，全部合完统一装一次。
+- 截图：设置页只改了一行说明文字，没做截图对比。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：通过路径（常浩在会话里打一句字、再调 `relay_end`）实机仍未验证。
+- 本轮新坑：无（原 PR 的 L-59 两次撞号，现为 L-90，是 11-19 那轮的坑；本会话没有新坑）
+
 ## 接力结束后自动关掉它的 ChatGPT 标签页（#542）（2026-11-26，Claude，常浩看四点推荐后回「按推荐开工」；已提交，PR 见描述，已登记 DECIDED.md；未发布）
 
 - 时间：开工 `2026-11-26 22:30`（`date '+%F %H:%M'` 记录）。来由：常浩 11-25「送由 gpt 评审的会话，如果完了就在 Chrome 关闭，不然他一直开着占我内存」；交换文件 21–25 GB。插件每次接力都开标签页、从不关（整个插件没有 `tabs.remove`）。
@@ -197,6 +217,34 @@
 - 发布与回读：无需发布（只改规范、检查、文档）。
 - 与授权不一致之处、遗留问题、范围外发现：#564 合并前要改掉上面 3 处才过 `pnpm run check`（第一处正是常浩 05:11 要它改的）。#553 把 `scripts/check-rules.mjs` 换成 agent-kit 共用实现，后合的一方要把 `@babel/parser` 挪进新白名单。全局 CLAUDE.md、`ui-system` DESIGN.md、three-versions skill 三处改动只出了提案（报告第六节），等常浩定。16 处旧问题和把 `ApprovalTag` 按章、类型签、套餐标签拆开，要改界面代码，等 #564 合并后另开一单。
 - 本轮新坑：L-80。
+
+## 智能体能列出、结束接力：agent-hud MCP 新增 relay_list / relay_end，经常浩授权才收（#439）（2026-11-20，Claude，常浩经「人机协作｜减轻认知负担方案」会话批量回「全部按推荐」，即「按甲开工，授权 L3 送审」；已提交、PR 见下、已发布 `ad07ec632cf5` 回读通过）
+
+- 时间：开工 `2026-11-19 23:12`。来由：常浩问「结束接力为什么只能在驿窗界面里点」：结束接力只有侧栏按钮（`handoff_act`），MCP 只有 `relay_to_chatgpt`，智能体列不出、也结束不了接力，卡住的「未完暂停」卡总要常浩自己去点，还对不上是哪个会话。
+- 改了哪些文件：
+  - 常浩要求的：
+    - `host/src/handoff/end.rs`（新）：`Desk::endable`（列出 `Book::end` 能结束的接力，带发起会话、PR、阶段、停因、轮数、多久没动静）、`Desk::end_asked`（先核实调用方这一轮是常浩开的头，再逐张结束，送话中的拒收，同一编号只办一次）、宿主方法 `relay_list` / `relay_end`。
+    - `host/src/handoff.rs`：`RELAY_METHODS`、`relay_tool` 分发；`host/src/tools.rs` 本机工具通道把三个接力方法一起放行（同 `relay_to_chatgpt`，不受 `hudTools` 管）。
+    - `platform/.../handoffs/leave.rs`：`Book::person_began`（常浩自己打的字，或驿窗插件送进来、不带智能体来源标签的话；带 `[Agent HUD · from …]` 的智能体消息、驿窗自己的话（转回过的话、出错通知、左滑请求）都不算），比 `leave_spoken` 严。出错通知开头抽成 `handoffs::notice_head`、左滑请求结尾抽成 `handoffs::SWIPE_SAID`，宿主写这两段话也用它们（文字不变），宿主测试守住两边一致。
+    - `platform/.../handoffs.rs`：`Book::end_said`（结束步带说明文字），`end` 改为委托它。
+    - `apps/mcp/src/relay.ts`：三个接力工具的说明、参数和注册都放这里（`registerRelayTools`），新增 `relay_list`（只读）、`relay_end`（`destructiveHint`）；`index.ts` 只留一行调用。
+    - `hud/src/alerts/relay-stop.ts`：手动结束步有说明文字时，时间线在「结束接力」下面显示（谁、为什么）。
+    - 设置 →「AI 接入」：`settings/AiAccessAgentRows.tsx` 加一行「列出与结束接力」；`AGENTS.md`「AI 接入」、`docs/chatgpt-channel.md` 新增一节。
+  - 我顺手改的：
+    - **改变了已有行为（修 bug 回到原定）**：`platform/src/claude_plugin/opener.rs` 的 `current_turn`：Claude 桌面的会话间转达那一行标了 `isMeta`，以前被跳过、误认成上一轮常浩自己打的字（L-90）；现在凡是带 `origin` 的用户行都算一轮的开头，会话间转达开头的一轮返回「认不出」。连带影响 #258 插话重算轮数、到上限后续审的授权（`extra`）：转达开头的一轮不再算常浩插话。
+    - `apps/mcp/src/index.ts`：`relay_to_chatgpt` 的注册原样挪进 `relay.ts`（行为、参数、等 55 秒不变），给 300 行棘轮腾地方。
+- 测试：先红后绿，红的输出存证据目录（`red-mcp.txt` 工具不存在、`red-card.txt` 时间线没显示原因、`red-rust.txt` 缺 `end_said`、`red-host.txt` 缺 `end_asked` / `endable`、`red-peer.txt` 转达开头被判成 `Person`、`red-notice.txt` 驿窗出错通知开头被判成常浩的话；`person_began` 是和测试一起写的，没单独跑红）。新增：宿主 5 条（`handoff/tests/end_asked.rs`）、平台 2 条（`leave.rs`、`guard.rs`）、MCP 1 条、`current_turn` 和接力卡时间线各加断言。第三次全量（修 L-90、排除驿窗自己的通知和左滑请求后）：`pnpm run check` 退出码 0；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」，cargo 合计 `1065 passed`（基线 1058 + 7），前端 `ℹ pass 486` / `ℹ fail 0`，MCP `ℹ pass 10`、插件 `ℹ pass 14`、Chrome 插件 `ℹ pass 32`、注入脚本 `ℹ pass 11`，均 `ℹ fail 0`；`node --test tests/*.test.mjs` `ℹ pass 55` / `ℹ fail 0`（L-90「升级」行改过格式后重跑）。日志 `~/Library/Application Support/postpane/evidence/2026-11-19-439-relay-end/`（`check-3.txt`、`test-3.txt`、`rules-3.txt`）。
+- 验证：装机后用新装的 `PostPane --mcp` 单独起一个 MCP 客户端，以本会话 id 调用（本会话自己的 agent-hud 是装机前起的旧进程，看不到新工具）：`tools/list` 有 `relay_to_chatgpt, relay_list, relay_end`；`relay_list` 列出 10 张没结束的接力，带发起会话（`live-list.txt`）。拒收路径：第一次装机（`ffbfbcceafa4`）时本该拒收，却结束了 0B-4b（`h1a1ed56ea0e00`），查出 L-90，修好重装后同样调用被整批拒收、卡没动（`evidence/2026-11-20-439-relay-end-2/live-end-refused.txt`）；送审前自查又发现驿窗自己的出错通知、左滑请求在 Claude 会话里不带标签，开头的一轮会被当成常浩的话，补上后第三次装机再测，仍整批拒收（`evidence/2026-11-20-439-relay-end-3/`）。通过路径实机**未验证**：要常浩在本会话自己打一句字，再调 `relay_end`。
+- 截图：时间线只多一行说明文字，没做截图对比；装机冒烟截图在两个证据目录（`smoke-*.png`），第一次装前装后差 38% 是装前 Hermes 悬停面板开着，第二、三次差 0.29%、0.27%，只落在小人上。
+- 发布与回读：`install.sh 439-relay-end-3`：产物 `ad07ec632cf5` / 已装 `ad07ec632cf5`，签名证书一致。回滚到 #410 的包（main 上一次装机）：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-19-439-relay-end/PostPane-f125b9dbbacb.app" /Applications/PostPane.app; open /Applications/PostPane.app`；本分支前两次的包在 `evidence/2026-11-20-439-relay-end-2/`、`-3/`。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 0B-4b（`h1a1ed56ea0e00`）是在 L-90 漏洞下被结束的，卡上写「Claude Code 会话 84621bdb… 按常浩授权结束：实测拒收路径」，说明不准确；这张本来就在常浩让处理的名单里（PR #207 已合并），结果无害，账本没改。
+  - 11-19 那 7 张：0B-4b 已结束（见上）、#348 复核 23:04 由 #437 自动认领并结束、0D（`h1a1eed8181200`）被驿窗 24 小时闲置自动结束；还剩 4 张（`h1a1f09f8a3f02` #409、`h1a1f284876004` PR #218 第 3 轮、`h1a1f265307d01` #411 L2、`h1a1f1cdd3f600` 0B-4c-1）等常浩在会话里说一句后用 `relay_end` 结束，同时补上通过路径的实机验证。
+  - 会话标题驿窗拿不到，`relay_list` 只给会话 id 和工作目录。
+  - `relay_end` 声明了 `destructiveHint`，Codex 默认每次调用要常浩批准（未实测）。
+  - 本机工具通道里的 `caller` 由 MCP 自报，本机其他进程能冒充，和 `relay_to_chatgpt` 一样按本机可信处理。
+- 本轮新坑：L-90
+- skill 进化：无
 
 ## 接力传信动画精修：细线白信封装信、连续对折成纸飞机（#570）（2026-11-28，Claude，常浩三版里选甲「细线」、改动确认回「改」：侧栏、刘海、互发消息一起换；已提交、未装机）
 
