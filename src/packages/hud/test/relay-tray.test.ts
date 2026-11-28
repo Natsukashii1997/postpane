@@ -181,9 +181,15 @@ test("a click ends a drag only when a pointer made it; the mark goes either way"
   assert.equal(dragged.current, false);
   assert.equal(tookDrag(dragged, { detail: 1 }), false);
   dragged.current = true;
-  // The keyboard's or VoiceOver's click (detail 0) still opens the row.
+  // A click with no pointer behind it (detail 0: the keyboard, and VoiceOver
+  // in WebKit before 2026-10) still opens the row.
   assert.equal(tookDrag(dragged, { detail: 0 }), false);
   assert.equal(dragged.current, false);
+  // WebKit since 2026-10 gives VoiceOver a pointerdown and a detail 1 click:
+  // the row's pointerdown clears a mark a lost release left, so it opens too.
+  dragged.current = true;
+  dragged.current = false; // what onPointerDown does first
+  assert.equal(tookDrag(dragged, { detail: 1 }), false);
 });
 
 test("a row's press ends when the button is found up, or is cancelled", () => {
@@ -195,9 +201,19 @@ test("a row's press ends when the button is found up, or is cancelled", () => {
     row.indexOf("onPointerMove="),
     row.indexOf("onPointerUp="),
   );
+  // Only the left button's bit: left dragging, right pressed, left let go
+  // leaves buttons at 2, and that drag is over too.
   assert.match(
     move,
-    /if \(!event\.buttons\) \{\s*start\.current = null;\s*return from\.axis === "x" \? settle\(\) : undefined;/,
+    /if \(!\(event\.buttons & 1\)\) \{\s*start\.current = null;\s*return from\.axis === "x" \? settle\(\) : undefined;/,
+  );
+  const down = row.slice(
+    row.indexOf("onPointerDown="),
+    row.indexOf("onPointerMove="),
+  );
+  assert.match(
+    down,
+    /if \(event\.button !== 0\) return;\s*dragged\.current = false;/,
   );
   const cancel = row.slice(
     row.indexOf("onPointerCancel="),

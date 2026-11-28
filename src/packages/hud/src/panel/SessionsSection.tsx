@@ -501,8 +501,8 @@ export function LiveRow({
           onPointerMove={(event) => {
             const from = start.current;
             if (!from) return;
-            // The release went where this row could not hear it: over (ENG-19).
-            if (!event.buttons) {
+            // The left button (the press began with it) is up: over (ENG-19).
+            if (!(event.buttons & 1)) {
               start.current = null;
               return from.axis === "x" ? settle() : undefined;
             }
