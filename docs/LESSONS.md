@@ -732,3 +732,11 @@
 - 正确做法：重活排队。`pnpm test`（`src/tooling/test-all.mjs`）和打包生成资源那一步（`src/tooling/package-resources.mjs`，`tauri build` 和 `setup-worktree.sh` 都经过它）开跑前先在 `~/Library/Application Support/postpane/heavy-queue/` 占位，别人占着就排队、每分钟说一次在等谁，跑完放手；打包时位子占到整个 `tauri build` 进程结束；占位进程不在了就直接接手；占位的是自己的上级就不排。实测 11-28 那次是由主目录会话按顺序叫号解开的，负载降到 6，6 个 PR 约两小时内合完。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue/`：`red.txt`（新测试在改前失败）、`green.txt`、`real-wait.txt`（全量测试占位时另起一份，打印「排队：全量测试（main-install，进程 3515…）」并一直等）。
 - 升级：〔提醒〕部分升级（2026-11-28）：排队写进 `test-all.mjs`、`package-resources.mjs`，测试 `tests/heavy-queue.test.mjs`；单独跑的 `cargo test`、`cargo build` 不经过它，不算必经检查。
+
+## L-92 给接力卡上已有的一步打通知标记，通知发出后那一步的文字被追加了一句，送审文字和 ChatGPT 页面上的提问对不上，通过的回信收不下（2026-11-28）
+
+- 现象：#544 第 4 步做「迟到的已送到要给会话补更正」，第一版把更正标记（`cause`）打在迟到确认后补记的送审那一步（`Ask`）上。测试里更正通知发得出去，但之后 ChatGPT 写「通过」的回信一直收不下，`turns.jsonl` 记 `unmatched`；去掉通知那一步就好了。
+- 根因：通知发出后 `Book::told` 会在被标记那一步的文字末尾追加「；已发到 Claude 会话」（卡上看得出通知送没送到）。认回信时拿最近一条送审步的文字和页面上的提问逐字比（`answers/desk_belongs.rs` `held_to`），送审步的文字被改了，就永远对不上。标记本来都打在停下、失败这种说明步上，第一次打到送审步才撞上。
+- 正确做法：要通知会话的事，单独记一步（`Work`，`by_auto`）再打标记（`Book::corrected`），不借已有的送审、回信、补格式步；改会被拿来比对的步骤文字之前，先搜 `held_to`、`answers` 用的是哪一步。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-544-finish/`（`full-test.log`）；`src/crates/host/src/handoff/tests/corrected.rs` 锁住「更正之后通过的回信照常收」。
+- 升级：〔机检〕测试 `late_word_the_words_went_in_is_told_and_their_answer_may_pass` 会在标记再打回送审步时失败。
