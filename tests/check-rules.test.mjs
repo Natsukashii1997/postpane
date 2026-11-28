@@ -56,3 +56,25 @@ test('LESSONS 每条要有以层级词开头的「升级」行：缺行、不带
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('认网页的写法只许在插件的适配文件里：别的插件文件出现选择器各报一次，适配文件和测试不误报', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-rules-'));
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  try {
+    // 真实样本：content.js 在 #548 之前自己写着按钮文字属性
+    write('src/apps/chrome-extension/content.js', 'observer.observe(document, {\n  attributeFilter: ["aria-label"],\n});\nconst box = document.querySelector(".ProseMirror");\n');
+    write('src/apps/chrome-extension/background.js', 'const HOME = "https://chatgpt.com/";\n');
+    write('src/apps/chrome-extension/page.js', 'const SEL = { composer: \'.ProseMirror[contenteditable="true"]\' };\n');
+    write('src/apps/chrome-extension/data.js', 'const API = "/backend-api/";\n');
+    write('src/apps/chrome-extension/test/page.test.mjs', 'document.querySelector("[data-user-message-bubble]");\n');
+    assert.deepEqual(checkRules(root).map(v => `${v.file}:${v.line} ${v.kind}`), [
+      'src/apps/chrome-extension/content.js:2 page',
+      'src/apps/chrome-extension/content.js:4 page',
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

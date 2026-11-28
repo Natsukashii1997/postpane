@@ -12,6 +12,8 @@
     send: 'form button[type="submit"]',
     stop: '[data-testid="stop-button"], form button[type="button"][aria-label]',
     skip: ".sr-only, button, svg, [role=status], h4[data-conversation-role]",
+    // Each message's ids, the prompt's last (#410).
+    ids: "[data-chatgpt-search-message-ids]",
     prose:
       "p, li, h1, h2, h3, h5, h6, table, blockquote, [data-d-component=text]",
   };
@@ -23,6 +25,9 @@
     "Stop generating",
     "Stop streaming",
   ];
+  /** The attributes whose change on the page may start or end an answer:
+   * the stop button is the send button with another label. */
+  const WATCHED = ["aria-label"];
 
   /** `/c/<id>` or `/g/<project>/c/<id>`. */
   function conversationId(url) {
@@ -53,6 +58,7 @@
   // older turn's. Order is each message's first place in the page (its key);
   // of its copies the last, the drawn one when there is one, is read.
   const UNIT = "data-chatgpt-search-unit-key";
+  const IDS = "data-chatgpt-search-message-ids";
 
   /** The newest of `selector`'s messages, by conversation order, and where
    * it stands in that order. A node outside any unit is a message of its own. */
@@ -79,9 +85,7 @@
   function lastReply(doc) {
     const node = newest(doc, SEL.assistant)?.node;
     if (!node) return null;
-    const ids = (node.getAttribute("data-chatgpt-search-message-ids") || "")
-      .split(/\s+/)
-      .filter(Boolean);
+    const ids = (node.getAttribute(IDS) || "").split(/\s+/).filter(Boolean);
     return { messageId: ids[ids.length - 1] || null, markdown: markdown(node) };
   }
 
@@ -117,9 +121,7 @@
   function lastPromptId(doc) {
     const node = newestPrompt(doc)?.node;
     const turn = node?.closest(`[${UNIT}]`);
-    const ids = (turn?.getAttribute("data-chatgpt-search-message-ids") || "")
-      .split(/\s+/)
-      .filter(Boolean);
+    const ids = (turn?.getAttribute(IDS) || "").split(/\s+/).filter(Boolean);
     return ids[ids.length - 1] || null;
   }
 
@@ -170,13 +172,11 @@
         turns.set(key, node);
     }
     const idsOf = (node) =>
-      (node?.getAttribute("data-chatgpt-search-message-ids") || "")
-        .split(/\s+/)
-        .filter(Boolean);
+      (node?.getAttribute(IDS) || "").split(/\s+/).filter(Boolean);
     const idOf = (node) => idsOf(node.closest(`[${UNIT}]`)).pop() ?? null;
     const anchor = after
-      ? [...doc.querySelectorAll("[data-chatgpt-search-message-ids]")].find(
-          (node) => idsOf(node).includes(after),
+      ? [...doc.querySelectorAll(SEL.ids)].find((node) =>
+          idsOf(node).includes(after),
         )
       : null;
     const from = anchor ? order.get(keyOf(anchor)) : Infinity;
@@ -636,8 +636,41 @@
     return promptId ? { ok: true, promptId } : { ok: true };
   }
 
+  /** Page check (#548): what PostPane reads that this page cannot find, by
+   * name; empty when all is there. Each is looked for as the rest of this
+   * file looks for it, so a check that passes is one the reads pass.
+   * - `composer`: no box to put words in. Not the send button: an empty
+   *   composer shows a voice button in its place (seen 2026-11-27), and
+   *   sending says so itself (`send-failed`);
+   * With `held`, the conversation is known to hold a prompt of PostPane's:
+   * - `turns`: no prompt at all;
+   * - `prompt-ids`: no message ids (answers are taken by them, #410);
+   * - `answers`, `bubbles`: two prompts or more, and no answer, or no
+   *   prompt words, among them.
+   * A page still drawing its history may lack its turns a moment: PostPane
+   * acts only on what two reads minutes apart find. */
+  function shape(doc, held = false) {
+    const missing = [];
+    if (!doc.querySelector(SEL.composer)) missing.push("composer");
+    if (!held) return missing;
+    if (!doc.querySelector(SEL.prompt)) return [...missing, "turns"];
+    if (!doc.querySelector(SEL.ids)) missing.push("prompt-ids");
+    const prompts = new Set(
+      [...doc.querySelectorAll(SEL.prompt)].map(
+        (node, i) => node.closest(`[${UNIT}]`)?.getAttribute(UNIT) ?? i,
+      ),
+    );
+    if (prompts.size >= 2 && !doc.querySelector(SEL.assistant))
+      missing.push("answers");
+    if (prompts.size >= 2 && !doc.querySelector(SEL.user))
+      missing.push("bubbles");
+    return missing;
+  }
+
   globalThis.PostPanePage = {
     SEL,
+    WATCHED,
+    shape,
     conversationId,
     streaming,
     title,

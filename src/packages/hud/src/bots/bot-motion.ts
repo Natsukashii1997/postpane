@@ -28,7 +28,9 @@ import {
   type CloudSnot,
   type CloudMist,
 } from "./bot-cloud.ts";
-import { whaleSea } from "./bot-whale.ts";
+import { whaleSea, type WhaleCue } from "./bot-whale.ts";
+import { floatSpace } from "./bot-float.ts";
+import type { FloatSky } from "./bot-float-sky.ts";
 import type { WhaleWater } from "./bot-whale-water.ts";
 export {
   botFace,
@@ -51,6 +53,8 @@ import {
   BotPace,
   SplitMix,
   petalRatchet,
+  aimAt,
+  isRestPose,
   type BotFlap,
   type BotPose,
 } from "./bot-motion-parts.ts";
@@ -85,6 +89,7 @@ export interface MotionSpec {
   petals?: boolean;
   cloud?: boolean;
   whale?: boolean;
+  float?: boolean;
   avatar?: unknown;
   keeps?: unknown;
   decor?: readonly { kind: string; fins?: readonly { hand: number }[] }[];
@@ -135,6 +140,9 @@ export class BotMotion {
   /** The DeepSeek whale: floats, paddles, blows bubbles and spouts. */
   whale = false;
   water: WhaleWater | null = null;
+  /** The Antigravity bot: hovers over its shadow, flips, drops when its gravity fails. */
+  float = false;
+  air: FloatSky | null = null;
   private gaze: readonly [number, number] | null = null;
   avatar = false;
   prop: AvatarProp | null = null;
@@ -206,6 +214,7 @@ export class BotMotion {
     this.petals = Boolean(spec.petals);
     this.cloud = Boolean(spec.cloud);
     this.whale = Boolean(spec.whale);
+    this.float = Boolean(spec.float);
     this.pulses = Boolean(spec.keeps);
     this.finned = Boolean(
       spec.decor?.some(
@@ -240,20 +249,9 @@ export class BotMotion {
     if (this.settled) return true;
     if (this.morph !== 0 || this.staysBot || this.state.hovered) return false;
     if (this.look === "idle" || this.look === "asleep")
-      return this.botInterval === null && this.poseIsRest();
-    if (this.look === "no-news") return this.poseIsRest();
+      return this.botInterval === null && isRestPose(this.pose);
+    if (this.look === "no-news") return isRestPose(this.pose);
     return this.look === "done" && (this.last ?? 0) - this.since > 2.4;
-  }
-  private poseIsRest() {
-    const p = this.pose;
-    return (
-      p.x === 0 &&
-      p.y === 0 &&
-      p.rotation === 0 &&
-      p.scaleX === 1 &&
-      p.scaleY === 1 &&
-      p.footing === 0
-    );
   }
   set(next: BotState | BotPhase, now: number) {
     if (typeof next === "string") next = botPhaseState(next);
@@ -337,7 +335,7 @@ export class BotMotion {
       (this.morph > 0.9 || !hasFace)
     ) {
       this.event = { kind: this.pending.kind, start: now };
-      if (this.cloud || this.whale) this.weather = { ...this.event };
+      if (this.ownMoves) this.weather = { ...this.event };
       this.joltFrom = this.turn;
       this.pending = null;
       this.act = null;
@@ -359,7 +357,7 @@ export class BotMotion {
     if (
       this.greeting !== null &&
       now - this.greeting >=
-        (this.whale
+        (this.ownSea
           ? 1.5
           : this.finned || this.cloud
             ? Math.max(BotMoves.hopSeconds, BotMoves.finWaveSeconds)
@@ -426,7 +424,7 @@ export class BotMotion {
       this.limbed && arrived ? this.stance(age, now, dozing) : botLimbs();
     this.flap =
       this.finned && arrived ? this.flapping(age, now) : { left: 0, right: 0 };
-    if (this.whale && arrived) this.swim(age, now, dozing);
+    if (this.ownSea && arrived) this.swim(age, now, dozing);
     this.pose.x += this.limbs.x * this.stepShare * this.morph;
     this.pose.y += this.limbs.y * this.stepShare * this.morph;
     if (arrived && (!inPlace || this.morph > 0))
@@ -453,17 +451,7 @@ export class BotMotion {
     const wait = this.nextFrame(now, age, wanted, dozing);
     this.wait = wait === null ? null : wait + now - time;
   }
-  static aim(
-    center: readonly [number, number],
-    target: readonly [number, number],
-  ): readonly [number, number] {
-    const dx = target[0] - center[0],
-      dy = target[1] - center[1],
-      distance = Math.hypot(dx, dy);
-    if (distance < 1) return [0, 0];
-    const share = distance / (distance + 120);
-    return [(dx / distance) * share, (dy / distance) * share];
-  }
+  static aim = aimAt;
   private nextFrame(
     now: number,
     age: number,
@@ -521,8 +509,10 @@ export class BotMotion {
         );
       if (dozing) return every(BotPace.following);
     }
-    if (this.whale && this.morph > 0 && !this.settled)
-      return every(this.water?.live ? BotPace.lively : BotPace.following);
+    if (this.ownSea && this.morph > 0 && !this.settled)
+      return every(
+        this.water?.live || this.air?.live ? BotPace.lively : BotPace.following,
+      );
     if (this.cloud) {
       if (this.skyMoving || (this.look === "done" && age < 2.8))
         return every(BotPace.lively);
@@ -792,14 +782,18 @@ export class BotMotion {
         ? (Math.max(0, age) % 6) / 6
         : null;
   }
-  /** Cloud and whale move their own way instead of knocking and tilting. */
+  /** Cloud, whale and Antigravity move their own way instead of knocking and tilting. */
   private get ownMoves() {
-    return this.cloud || this.whale;
+    return this.cloud || this.ownSea;
   }
-  /** The whale's own moves on top of the shared pose; its fins replace the shared flaps. */
+  /** Whale and Antigravity: their own pose, eyes and overlay each frame. */
+  private get ownSea() {
+    return this.whale || this.float;
+  }
+  /** Whale or Antigravity moves on top of the shared pose; whale fins replace the shared flaps. */
   private swim(age: number, now: number, dozing: boolean) {
     if (this.weather && now - this.weather.start > 2.5) this.weather = null;
-    const sea = whaleSea({
+    const cue: WhaleCue = {
         look: this.look,
         age,
         now,
@@ -816,19 +810,22 @@ export class BotMotion {
           : null,
         greeting: this.greeting === null ? null : now - this.greeting,
         greetSide: this.greetSide,
-      }),
+      },
+      sea = this.whale ? whaleSea(cue) : floatSpace(cue),
       m = this.morph;
     this.pose.x += sea.x * m;
     this.pose.y += sea.y * m;
     this.pose.rotation += sea.rotation * m;
     this.pose.scaleX *= 1 + (sea.scaleX - 1) * m;
     this.pose.scaleY *= 1 + (sea.scaleY - 1) * m;
-    this.flap = {
-      left: Math.round(sea.fins.left * m),
-      right: Math.round(sea.fins.right * m),
-    };
+    if ("fins" in sea)
+      this.flap = {
+        left: Math.round(sea.fins.left * m),
+        right: Math.round(sea.fins.right * m),
+      };
     this.lids = sea.lids ? "curve" : null;
-    this.water = sea.water;
+    this.water = "water" in sea ? sea.water : null;
+    this.air = "sky" in sea ? sea.sky : null;
     this.gaze = sea.gaze;
   }
   private settleSky(dt: number) {
@@ -1095,12 +1092,13 @@ export class BotMotion {
     return pose;
   }
   private played(now: number) {
-    if (this.greeting !== null)
+    // Antigravity lifts off and greets its own way instead of the hop.
+    if (this.greeting !== null && !this.float)
       this.pose.y += BotMoves.hop(now - this.greeting) * this.morph;
     if (!this.event) return;
     const time = now - this.event.start;
     if (this.event.kind === "start")
-      this.pose.y += BotMoves.hop(time) * this.morph;
+      this.pose.y += this.float ? 0 : BotMoves.hop(time) * this.morph;
     else if (this.event.kind === "failed") {
       const sag = BotMoves.sag(time);
       this.pose.x += BotMoves.shake(time) * this.morph;
@@ -1224,7 +1222,7 @@ export class BotMotion {
       target.open = 0.72;
     if (this.avatar && this.state.badge === "limited" && !this.event)
       target.open = 0.45;
-    if (this.whale && this.gaze && !this.event && !this.state.hovered) {
+    if (this.ownSea && this.gaze && !this.event && !this.state.hovered) {
       target.look = this.gaze[0];
       target.lookY = this.gaze[1];
     }
@@ -1320,7 +1318,7 @@ export class BotMotion {
       this.look === "thinking" &&
       !this.limbed &&
       !this.avatar &&
-      !this.whale
+      !this.ownSea
     )
       sign = shownSign(sign, "ellipsis");
     if (this.morph > 0 && dozing && !this.ownMoves) sign = shownSign(sign, "z");

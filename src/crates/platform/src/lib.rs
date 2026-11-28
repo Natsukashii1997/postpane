@@ -7,6 +7,8 @@ mod file_changes;
 pub mod instance;
 pub use file_changes::FileChanges;
 mod accounts;
+mod child_proxy;
+pub use child_proxy::inherit_system_proxy;
 pub mod app_log;
 pub mod claude_plugin;
 pub mod clients;

@@ -9,11 +9,12 @@
 | 改需求、加功能 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | 构建、测试、打包 | [docs/development.md](docs/development.md)、[docs/platform-builds.md](docs/platform-builds.md)；下面「运行」 |
 | 接客户端、改钩子、审批卡 | [docs/agent-contract.md](docs/agent-contract.md)、[docs/client-hooks.md](docs/client-hooks.md) |
+| 改接力流程（送审、回信、转回、出错怎么处理）、接新执行方 | [docs/接力规范.md](docs/接力规范.md)（含「状态 × 异常事件」全表，改了处理要同步那一格） |
 | 改 ChatGPT 通道（Chrome 插件、转接程序、host manifest） | [docs/chatgpt-channel.md](docs/chatgpt-channel.md) |
 | 加或改 AI 功能、MCP 工具、读取哪家数据 | 下面「AI 接入」一节；改完同步设置 →「AI 接入」页 |
 | 写系统相关代码 | [docs/platform-architecture.md](docs/platform-architecture.md)（共用代码不写系统判断，`check:platform` 会查） |
 | 改小人 | `src/packages/hud/src/bots/`（画法与动作）、`src/crates/hud/src/bots/`（什么状态演什么）；各小人的测试在 `src/packages/hud/test/`（`codex-cloud`、`deepseek-whale`、`hermes-avatar` 等） |
-| 改卡片 / 面板版式（对齐、缩进、区块顺序） | [docs/design/卡片版式规范.md](docs/design/卡片版式规范.md)（一套左对齐线，数值只在 `panel/theme.ts` 的 `GRID`） |
+| 动侧栏任何界面：加一种行、改签或按钮、改对齐缩进和区块顺序，也包括画预览和规范版 | [docs/design/卡片版式规范.md](docs/design/卡片版式规范.md)（两条左对齐线、「每种元素放在哪」：类型签只在标题下面一行，图标列只放图标和章）和全局基础规范 `~/Documents/ChatGPT/个人/work/ui-system/docs/design-spec/DESIGN.md`；交付前 `pnpm run check` 里的 `check:card-layout` 会拦类型签进图标列、缩进写死数字、签自己挑颜色 |
 | 改侧栏结构、给某家加能力（等你、在跑、回执、接力入口、看板） | [docs/adr/0001-工作场所契约.md](docs/adr/0001-工作场所契约.md)、[GLOSSARY.md](GLOSSARY.md)；改完跑 `workplace-contract.test.ts`，在场景预览台（`pnpm --filter @agent-hud/hud run scenes`，127.0.0.1:1480）逐个场景看，不再另搭 `preview-xxx` 脚手架 |
 | 排障、改脚本、装 launchd 或定时任务 | 先 `grep -n 关键词 docs/LESSONS.md`，再搜全局坑 `/Users/nat/Documents/ChatGPT/个人/work/agent-kit/LESSONS.md` |
 | 开需求、拆任务、实现、审查 | 下面「Agent skills」一节 |

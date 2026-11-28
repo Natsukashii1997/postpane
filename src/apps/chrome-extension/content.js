@@ -213,7 +213,7 @@
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["aria-label"],
+    attributeFilter: page.WATCHED,
   });
 
   // A page on its way out (the tab loaded again, or moved on) hides as it
@@ -272,6 +272,10 @@
       const ready = () => !page.streaming(document) && page.answered(document);
       const seen = page.lastReply(document);
       const loaded = page.answered(document) || page.streaming(document);
+      // What of the page PostPane cannot find (#548): read again, the
+      // conversation holds its words.
+      const shape = page.shape(document, true);
+      const missing = shape.length ? { missing: shape } : {};
       if (!ready() || !seen?.markdown.trim()) {
         // Answered, but the answer is only in the hidden copy (#410): scroll
         // to it, so it is drawn by the next ask. A tab in the background is
@@ -284,6 +288,7 @@
           told: false,
           loaded,
           ...(undrawn && { undrawn }),
+          ...missing,
         });
         return false;
       }
@@ -294,7 +299,13 @@
           now?.messageId === seen.messageId &&
           now.markdown === seen.markdown;
         if (told) tellComplete(now, { reread: true });
-        reply({ ok: true, streaming: page.streaming(document), told, loaded });
+        reply({
+          ok: true,
+          streaming: page.streaming(document),
+          told,
+          loaded,
+          ...missing,
+        });
       }, 600);
       return true;
     }

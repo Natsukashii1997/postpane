@@ -23,14 +23,11 @@ import {
   CATCH,
   catchFrames,
   dockRoute,
-  ENVELOPE,
   FLIGHT_FRESHNESS_MS,
   FlightQueue,
   inward,
   notchRoute,
   notchStage,
-  PLANE_CREASES,
-  PLANE_POINTS,
   STORY,
   stillStory,
   story,
@@ -41,6 +38,18 @@ import {
   type Ride,
   type Story,
 } from "./flight-plan";
+import {
+  Count,
+  Envelope,
+  Flap,
+  Letter,
+  Paper,
+  PlaneDrawing,
+  Pocket,
+  Shadow,
+  type Tone,
+} from "./flight-craft";
+import { lowFace } from "./flight-paper";
 
 export type { HUDFlight, HUDFlightCommand } from "./flight-plan";
 
@@ -121,15 +130,17 @@ function FlightRun({
   const leftSource = flight.fromLeft ? flight.from : flight.to;
   const rightSource = flight.fromLeft ? flight.to : flight.from;
   const [size, setSize] = useState(() => craftSize(notch ? 34 : 44));
-  const [dashes, setDashes] = useState<Story["dashes"]>([]);
+  const [puffs, setPuffs] = useState<Story["puffs"]>([]);
   const craft = useRef<HTMLDivElement>(null);
   const turn = useRef<HTMLDivElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
+  const roll = useRef<HTMLDivElement>(null);
   const paper = {
-    shade: useRef<HTMLDivElement>(null),
     edge: useRef<HTMLDivElement>(null),
     body: useRef<HTMLDivElement>(null),
+    low: useRef<HTMLDivElement>(null),
   };
+  const shadow = useRef<HTMLDivElement>(null);
   const flap = useRef<SVGSVGElement>(null);
   const pocket = useRef<SVGSVGElement>(null);
   const folds = useRef<SVGSVGElement>(null);
@@ -170,8 +181,9 @@ function FlightRun({
           to: measured.ends.to,
           falls: flight.falls,
           delay,
+          craft: measured.size.width,
         });
-    setDashes(planned?.dashes ?? []);
+    setPuffs(planned?.puffs ?? []);
     setPlan({ ends: measured.ends, story: planned });
 
     /** Around the notch: from beside the sender's robot, under the notch, to beside the receiver's. */
@@ -318,8 +330,11 @@ function FlightRun({
       run(craft.current, s.move, { duration: s.length });
       run(turn.current, s.turn, { duration: s.length });
       run(mirror.current, s.mirror, { duration: s.length });
-      for (const part of Object.values(paper))
-        run(part.current, s.shape, { duration: s.length });
+      run(roll.current, s.roll, { duration: s.length });
+      run(paper.edge.current, s.shape, { duration: s.length });
+      run(paper.body.current, s.shape, { duration: s.length });
+      run(paper.low.current, lowFace(s.shape), { duration: s.length });
+      run(shadow.current, s.shadow, { duration: s.length });
       run(craft.current?.firstElementChild, s.pop, { duration: s.length });
       run(flap.current, s.flap, { duration: s.length });
       run(folds.current, s.folds, { duration: s.length });
@@ -333,9 +348,9 @@ function FlightRun({
         { duration: s.length },
       );
       run(letter.current, s.letter, { duration: s.length });
-      trail.current?.querySelectorAll("[data-dash]").forEach((dash, index) => {
-        const frames = s.dashes[index]?.frames;
-        if (frames) run(dash, frames, { duration: s.length });
+      trail.current?.querySelectorAll("[data-puff]").forEach((puff, index) => {
+        const frames = s.puffs[index]?.frames;
+        if (frames) run(puff, frames, { duration: s.length });
       });
       if (notch && stage) {
         for (const side of ["left", "right"] as const) {
@@ -481,17 +496,16 @@ function FlightRun({
           ],
           {
             duration: 300,
-            delay: s.landing + STORY.unfold + STORY.deliver * 0.7,
+            delay: s.delivered,
             easing: "ease-out",
             fill: "none",
           },
         );
       } else {
         // On a dock the receiver catches it as the letter slides in.
-        const delivered = s.landing + STORY.unfold + STORY.deliver * 0.7;
         run(receiver, catchFrames(inward[edge], along), {
           duration: CATCH.duration,
-          delay: Math.max(0, delivered - CATCH.duration * CATCH.impact),
+          delay: Math.max(0, s.delivered - CATCH.duration * CATCH.impact),
           easing: "ease-out",
           fill: "none",
         });
@@ -529,11 +543,10 @@ function FlightRun({
   const tone: Tone = {
     ink,
     edge: light ? "rgba(28,28,36,0.8)" : "rgba(0,0,0,0.5)",
-    shade: light ? "rgba(0,0,0,0.16)" : "rgba(0,0,0,0.3)",
   };
   // The plane's line, as bold as the reference icon's at this size.
   const line = Math.max(1.3, size.width / 18);
-  const dashColor = light ? "rgba(36,36,48,0.75)" : "rgba(255,255,255,0.75)";
+  const puffColor = light ? "rgba(140,144,156,0.9)" : "rgba(255,255,255,0.7)";
   const ends = plan?.ends;
   return (
     <div
@@ -605,38 +618,29 @@ function FlightRun({
           );
         })}
       <div ref={trail}>
-        {dashes.map((dash, index) => (
+        {puffs.map((puff, index) => (
           <span
             key={index}
-            data-dash
+            data-puff
             style={{
               position: "absolute",
-              left: -3,
-              top: -0.9,
-              width: 6,
-              height: 1.8,
-              borderRadius: 1,
-              background: dashColor,
-              translate: dash.translate,
-              rotate: dash.rotate,
+              left: -1.6,
+              top: -1.6,
+              width: 3.2,
+              height: 3.2,
+              borderRadius: "50%",
+              background: puffColor,
+              translate: puff.translate,
               opacity: 0,
             }}
           />
         ))}
       </div>
-      <div
-        ref={letter}
-        style={{
-          position: "absolute",
-          left: -size.width * 0.31,
-          top: -size.height * 0.38,
-          width: size.width * 0.62,
-          height: size.height * 0.76,
-          opacity: 0,
-        }}
-      >
-        <Letter tone={tone} />
-      </div>
+      {!reduceMotion && (
+        <div style={{ position: "absolute", left: 0, top: 0 }}>
+          <Shadow width={size.width} refTo={shadow} />
+        </div>
+      )}
       {reduceMotion && ends ? (
         <>
           <Placed at={ends.start} refTo={craft} size={size}>
@@ -660,52 +664,14 @@ function FlightRun({
               }}
             >
               <div ref={mirror} style={{ position: "absolute", inset: 0 }}>
-                <div style={{ position: "absolute", inset: 0 }}>
+                <div ref={roll} style={{ position: "absolute", inset: 0 }}>
                   <div ref={sheet} style={{ position: "absolute", inset: 0 }}>
                     <Paper tone={tone} refs={paper}>
                       <Pocket ink={ink} refTo={pocket} />
                     </Paper>
                   </div>
                   <Flap ink={ink} refTo={flap} open />
-                  <svg
-                    ref={folds}
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      overflow: "visible",
-                      opacity: 0,
-                    }}
-                  >
-                    <polygon
-                      points={PLANE_POINTS}
-                      fill={tone.shade}
-                      stroke={tone.shade}
-                      strokeWidth={line}
-                      strokeLinejoin="round"
-                      vectorEffect="non-scaling-stroke"
-                      transform={`translate(0 ${(150 / size.height).toFixed(2)})`}
-                    />
-                    <polygon
-                      points={PLANE_POINTS}
-                      fill="#fff"
-                      stroke={tone.edge}
-                      strokeWidth={line}
-                      strokeLinejoin="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <path
-                      d={PLANE_CREASES}
-                      fill="none"
-                      stroke={tone.edge}
-                      strokeWidth={line * 0.85}
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  </svg>
+                  <PlaneDrawing tone={tone} line={line} refTo={folds} />
                 </div>
               </div>
             </div>
@@ -713,6 +679,9 @@ function FlightRun({
           </div>
         </div>
       )}
+      <div style={{ position: "absolute", left: 0, top: 0 }}>
+        <Letter width={size.width} height={size.height} refTo={letter} />
+      </div>
     </div>
   );
 }
@@ -743,183 +712,5 @@ function Placed({
     >
       {children}
     </div>
-  );
-}
-
-/** An envelope, its flap closed or open. */
-function Envelope({
-  open,
-  tone,
-  count,
-}: {
-  open: boolean;
-  tone: Tone;
-  count: number;
-}) {
-  return (
-    <div style={{ position: "absolute", inset: 0 }}>
-      <Paper tone={tone}>
-        <Pocket ink={tone.ink} />
-      </Paper>
-      <Flap ink={tone.ink} open={open} />
-      {count > 1 && <Count value={count} size={20} />}
-    </div>
-  );
-}
-
-/** The inks a flight draws with. */
-interface Tone {
-  ink: string;
-  edge: string;
-  shade: string;
-}
-
-/** A sheet of paper cut to the envelope's (or the plane's) outline: a faint
- * copy a point and a half lower for its shadow, an outline-coloured copy for
- * its edge, and the white paper one point inside it. */
-function Paper({
-  tone,
-  refs,
-  children,
-}: {
-  tone: Tone;
-  refs?: Record<"shade" | "edge" | "body", RefObject<HTMLDivElement | null>>;
-  children?: React.ReactNode;
-}) {
-  const cut = { position: "absolute", clipPath: ENVELOPE } as const;
-  return (
-    <>
-      <div
-        ref={refs?.shade}
-        style={{
-          ...cut,
-          inset: 0,
-          translate: "0 1.5px",
-          background: tone.shade,
-        }}
-      />
-      <div
-        ref={refs?.edge}
-        style={{ ...cut, inset: 0, background: tone.edge }}
-      />
-      <div ref={refs?.body} style={{ ...cut, inset: 1, background: "#fff" }}>
-        {children}
-      </div>
-    </>
-  );
-}
-
-/** The envelope's pocket: the seams from its top corners to the middle. */
-function Pocket({
-  ink,
-  refTo,
-}: {
-  ink: string;
-  refTo?: RefObject<SVGSVGElement | null>;
-}) {
-  return (
-    <svg
-      ref={refTo}
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        overflow: "visible",
-      }}
-    >
-      <path
-        d="M0 0L50 60L100 0M0 100L38 46M100 100L62 46"
-        fill="none"
-        stroke={ink}
-        strokeWidth={1}
-        vectorEffect="non-scaling-stroke"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** The envelope's flap: folded down over it, or open above it. */
-function Flap({
-  ink,
-  open,
-  refTo,
-}: {
-  ink: string;
-  open: boolean;
-  refTo?: RefObject<SVGSVGElement | null>;
-}) {
-  return (
-    <svg
-      ref={refTo}
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      style={{
-        position: "absolute",
-        left: 0,
-        top: 0,
-        width: "100%",
-        height: "62%",
-        overflow: "visible",
-        transformOrigin: "50% 0%",
-        scale: open ? "1 -1" : "1 1",
-      }}
-    >
-      <path
-        d="M0 0L100 0L50 100Z"
-        fill="#f1f2f5"
-        stroke={ink}
-        strokeWidth={1}
-        vectorEffect="non-scaling-stroke"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** A sheet of writing paper. */
-function Letter({ tone }: { tone: Tone }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        background: "#fff",
-        borderRadius: 1.5,
-        boxShadow: `0 0 0 1px ${tone.edge}, 0 1.5px 0 1px ${tone.shade}`,
-        backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 22%, ${tone.ink} 22% 26%)`,
-        backgroundSize: "70% 100%",
-        backgroundPosition: "50% 60%",
-        backgroundRepeat: "no-repeat",
-      }}
-    />
-  );
-}
-
-/** How many flights this plane carries. */
-function Count({ value, size }: { value: number; size: number }) {
-  return (
-    <span
-      style={{
-        position: "absolute",
-        left: size * 0.2,
-        top: -size * 0.5 - 12,
-        minWidth: 16,
-        height: 16,
-        padding: "0 4px",
-        boxSizing: "border-box",
-        borderRadius: 8,
-        background: "#ff453a",
-        color: "#fff",
-        font: '600 10.5px/16px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
-        textAlign: "center",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.35)",
-      }}
-    >
-      {value}
-    </span>
   );
 }

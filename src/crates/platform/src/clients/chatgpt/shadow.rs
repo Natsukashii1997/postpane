@@ -83,6 +83,7 @@ const PAGE_OUTCOME: &[&str] = &[
     "waiting",
     "unreachable",
     "unopened",
+    "changed",
 ];
 const LOGIN: &[&str] = &["same", "other"];
 const ASYNC: &[&str] = &["other"];

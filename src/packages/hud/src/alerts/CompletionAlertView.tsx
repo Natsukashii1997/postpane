@@ -35,7 +35,6 @@ import {
   replyGroups,
   replyMessage,
   isReviewReply,
-  sessionReplies,
 } from "./reply-list";
 
 /** Replies waiting, as a list card: newest first, grouped, each to its session. */
@@ -72,7 +71,8 @@ export function CompletionAlertView({
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
   );
 
-  // Only ↗ goes back; replies go once the session is in front, else say why (#220).
+  // Only ↗ goes back; once the session is in front its reply (one line per
+  // session) is put away, else the line says why a while and may retry (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     const reason = failureOf(
@@ -83,7 +83,7 @@ export function CompletionAlertView({
       fail(entry.id, reason);
       return;
     }
-    drop(sessionReplies(entries, entry));
+    drop([entry.id]);
     handoff?.();
   };
   const canOpen = (entry: ApprovalEntry) =>

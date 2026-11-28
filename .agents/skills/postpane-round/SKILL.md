@@ -29,6 +29,7 @@ description: 「驿窗一轮」：驿窗 PostPane 每一轮改动从开工到收
 - 先格式化再测：`cargo fmt --all`，改过的前端文件 `pnpm exec prettier --write <文件>`。不先做，`pnpm run check` 常卡在格式检查（E-07）。
 - 先写测试、跑出红，再写实现：新测试先单独跑一次，把失败输出存进证据目录，再写实现。写完一起跑、第一次就全绿，只能事后临时改源码补红，容易被打断、留在改过的状态（L-32、E-14）。
 - 三条全跑：`pnpm run check`、`pnpm test`、`node --test tests/*.test.mjs`。改了任何脚本也跑全量，不只验一条路径（G-03）。
+- 有界面改动（含预览、规范版）：动手前读 `docs/design/卡片版式规范.md` 的「每种元素放在哪」和全局 `ui-system/docs/design-spec/DESIGN.md`；`pnpm run check` 里的 `check:card-layout` 拦类型签进图标列、缩进写死数字、签自己挑颜色，报错照它改，不往基线里加；它查不了的三项交付前在场景预览台手量并写进交接：新签的左边和同卡 REPLY、ASK 签一样（`getBoundingClientRect().left`），按钮和签一眼分得开，并排按钮字数一样（L-80）。
 - 性能、动画时长不在隐藏的内置浏览器面板里量：面板隐藏时 `requestAnimationFrame` 暂停、longtask 不报，测到的数不算；改用无头 Chrome，并记住它是 Chromium、不是驿窗的 WKWebView（L-29 补充、E-14）。
 - 多个 PR 连着合并后，在主目录用 main 自己的构建目录再跑一次三条全量，过了再打包装机（E-11）。
 - 报告时照抄原样结果（通过数、失败数那两行），不改写成「测试通过」（`docs/OPERATIONS.md`「报告与验收」第 3 条）。
