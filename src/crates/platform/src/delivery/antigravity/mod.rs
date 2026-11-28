@@ -179,11 +179,33 @@ fn metadata() -> Value {
 }
 
 fn call(method: &str, body: Value) -> Result<Value> {
-    crate::clients::antigravity::service::call(method, &body).map_err(|error| {
-        if error.contains("no running Antigravity service") {
-            Failure::Unavailable(error)
-        } else {
-            Failure::Rejected(error)
+    crate::clients::antigravity::service::call(method, &body).map_err(failure)
+}
+
+/// Only a language server that is not there lets a start fall back to `agy`.
+fn failure(error: crate::clients::antigravity::CallError) -> Failure {
+    use crate::clients::antigravity::CallError;
+    match error {
+        CallError::Unavailable(reason) => Failure::Unavailable(reason),
+        CallError::Refused(reason) => Failure::Rejected(reason),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::clients::antigravity::CallError;
+
+    #[test]
+    fn no_running_language_server_is_unavailable_whatever_it_says() {
+        for said in [
+            "没有已登录且正在运行的 Antigravity 服务",
+            "No authenticated already-running Antigravity service is available",
+        ] {
+            let failure = failure(CallError::Unavailable(said.into()));
+            assert!(matches!(failure, Failure::Unavailable(reason) if reason == said));
         }
-    })
+        let refused = failure(CallError::Refused("bad request".into()));
+        assert!(matches!(refused, Failure::Rejected(_)));
+    }
 }

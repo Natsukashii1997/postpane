@@ -673,7 +673,7 @@
 - 现象：Antigravity 桌面版 2.35.2 开着、没有 `agy` 进程时，经驿窗 `start_session`（client antigravity）、`send_message` 发 Antigravity 都被拒：「没有已登录且正在运行的 Antigravity 服务」；`agy` 命令行跑着时又能认出。
 - 根因：`clients/antigravity` 的发现只从 language_server 启动参数读 `--csrf_token` / `--extension_server_port`。2.35.2 桌面版改成 `--subclient_type hub --https_server_port 0 --read_host_bridge_token_from_stdin`，参数里没有令牌，进程被整个跳过；新版把端口和令牌写在 `~/.gemini/antigravity/daemon/hub_<httpPort>.json`（0600，`pid`、`httpsPort`、`httpPort`、`csrfToken`）。不带令牌直接调，服务回 `401 missing CSRF token`。
 - 正确做法：接本机客户端的本地服务，启动参数和客户端自己写的发现文件都要认；发现文件只在它写的 pid 对上一个正在运行、认得出的服务进程时才算，过期文件不认；文件里写的端口必须是那个进程正在监听的（`listening_ports(pid)`），否则文件就不只是给令牌、而是在决定驿窗信任谁（#560 审查 P1-01）。发现文件的位置跟会话记录用同一套（认 `GEMINI_CLI_HOME`）。客户端升级后某家突然「没在运行」，先 `ps -o command= -p <pid>` 看参数里还有没有令牌，再看它的数据目录下有没有 `daemon/` 这类发现文件；只打印字段名和长度，不打印令牌。
-- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。
+- 同类：搜了 `csrf_token`、`extension_server_port`、「没有已登录且正在运行」，令牌读取只此一处（已改）。另见 `delivery/antigravity/mod.rs` 的 `call`：按 `"no running Antigravity service"` 判「不可用」，和实际报错文字对不上，所以 `start_antigravity` 的 `agy -p` 兜底从移植起就没走到过；改它会让没开桌面版时改由命令行无头开会话，属行为变化，本轮没改，记为范围外发现。2026-11-28 常浩定修，见 L-92（#586）。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red.txt` 新测试在旧逻辑上失败、`green.txt`、全量测试输出、实机记录）。
 - 升级：〔提醒〕部分升级（2026-11-27，#558）：`running.rs` 新版启动参数与发现文件夹具测试、`daemon.rs` 发现文件测试，未接进必经检查。
 
@@ -699,7 +699,7 @@
 - 根因：`hud/src/presentation.rs` 在某家 `sources.<家>.live == false`（设置 →「智能体」→「实时状态：在侧栏上显示运行和等待中的会话」）时，从快照里删掉它的 liveFacts、状态记成 idle。messaging 的 `paged::answer` 只看快照的 liveFacts。本机 `presentation.json` 里 Antigravity 是 `live: false`：`apply_live_status_defaults` 在它第一次出现、还没检测到时存成了关，之后检测到也不会改（只有 `DETECTED_LATE` 里的 ChatGPT 会补开一次）。#554 实机「只看到打盹」很可能也是这个原因（未核实）。
 - 正确做法：业务判断（消息有没有被答完）不读经过显示偏好过滤的数据；快照里没有时，用会话页 `session_detail` 自带的 `session.liveFacts`。改显示偏好的过滤时，搜一遍谁还在读快照里的这个字段。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-558-agy-hub/`（`red-live-off.txt`、`green-live-off.txt`、实机第四次 `get_message`）。
-- 升级：〔提醒〕部分升级（2026-11-27，#558）：messaging 测试 `a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry`，未接进必经检查。`stored::answer` 同样只看快照，驿窗没接会话存储所以没改，接的时候要一起改。Antigravity 实时状态默认关、要不要像 ChatGPT 一样检测到后补开一次，待常浩定。
+- 升级：〔提醒〕部分升级（2026-11-27，#558）：messaging 测试 `a_turn_whose_client_shows_no_live_status_ends_by_the_facts_its_pages_carry`，未接进必经检查。`stored::answer` 同样只看快照，驿窗没接会话存储所以没改，接的时候要一起改。Antigravity 实时状态默认关、要不要像 ChatGPT 一样检测到后补开一次：2026-11-28 常浩定打开，Antigravity 加进 `DETECTED_LATE`（#586）。
 
 ## L-88 Antigravity 的 `transcript.jsonl` 会截断长字段，完整内容在旁边的 `transcript_full.jsonl`；用短消息验收测不出（2026-11-27）
 
@@ -732,3 +732,12 @@
 - 正确做法：重活排队。`pnpm test`（`src/tooling/test-all.mjs`）和打包生成资源那一步（`src/tooling/package-resources.mjs`，`tauri build` 和 `setup-worktree.sh` 都经过它）开跑前先在 `~/Library/Application Support/postpane/heavy-queue/` 占位，别人占着就排队、每分钟说一次在等谁，跑完放手；打包时位子占到整个 `tauri build` 进程结束；占位进程不在了就直接接手；占位的是自己的上级就不排。实测 11-28 那次是由主目录会话按顺序叫号解开的，负载降到 6，6 个 PR 约两小时内合完。
 - 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-heavy-queue/`：`red.txt`（新测试在改前失败）、`green.txt`、`real-wait.txt`（全量测试占位时另起一份，打印「排队：全量测试（main-install，进程 3515…）」并一直等）。
 - 升级：〔提醒〕部分升级（2026-11-28）：排队写进 `test-all.mjs`、`package-resources.mjs`，测试 `tests/heavy-queue.test.mjs`；单独跑的 `cargo test`、`cargo build` 不经过它，不算必经检查。
+
+## L-92 按自家报错的文字判断错误类型，文字一改兜底就永远走不到；兜底又按同步跑完设计，60 秒掐断、读错字段，三处都没被测到（2026-11-28）
+
+- 现象：Antigravity 桌面版没开时，经驿窗开 Antigravity 会话直接报「没有已登录且正在运行的 Antigravity 服务」，`agy` 命令行装着也不用。`start_antigravity` 写了 `agy -p` 兜底，从移植起一次都没走到过。
+- 根因：四处叠在一起。① `delivery/antigravity/mod.rs` 的 `call` 用 `error.contains("no running Antigravity service")` 判「不可用」，而 `service::call` 实际报的是本地化文字「没有已登录且正在运行的 Antigravity 服务」/ "No authenticated already-running…"，永远对不上，全判成「被拒」。② 就算走到，兜底用 `agy -p … --output-format json` 同步等整轮做完，60 秒一到就杀进程，稍长的任务必然被打断、报「不确定」。③ 读会话编号找的是 `session_id` / `sessionId` / `cascadeId`，agy 1.5.18 的字段是 `conversation_id`。④ agy 没登录时先在 stderr 打登录链接、等约 60 秒登录超时才退出 1，只报一句 "refused"。测试替身只测了有桌面版的那条路（G-34）。
+- 正确做法：错误类型用类型表达，不用文字：`service::call` 返回 `CallError::{Unavailable, Refused}`，「一个服务都没找到」才是 Unavailable，找到了但它拒绝是 Refused。让命令行替代后台服务时，按它的流式输出拿编号就返回，进程留着把这一轮做完（`agy -p … --output-format stream-json`，输出写进 `~/.agenthud/agy-starts/<请求>.ndjson`，20 秒内认出 `conversation_id` 就回 started），看到要登录就停掉进程、直接说要登录。接外部命令行之前先真跑一次看它的输出字段和失败时的样子，不凭记忆写字段名。
+- 同类：搜了按自家报错文字判断错误类型的写法（`contains(` 匹配本地化文字），只有这一处；其余命中是测试断言、读外部程序输出（`claude_plugin.rs` 读 claude 的 "unknown option"）或读 ChatGPT 回信。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-28-agy-fallback/`（`agy-p-output.json` 没登录时的真实输出、`agy-help-stream.ndjson` stream-json 的事件格式、红绿测试输出）。
+- 升级：〔提醒〕部分升级（2026-11-28，#586）：`delivery/antigravity` 的 `no_running_language_server_is_unavailable_whatever_it_says`、`starts/agy.rs` 七条测试、`presentation.rs` 两条，未接进必经检查。已登录的 agy 真实开会话没验（本机 agy 未登录）。

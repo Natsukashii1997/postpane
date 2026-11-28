@@ -5,3 +5,18 @@ mod daemon;
 pub(crate) mod permissions;
 mod running;
 pub mod service;
+
+/// Why a call to the running language server failed: none answered, or one
+/// answered and refused. Only the first lets a start fall back to `agy`.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CallError {
+    Unavailable(String),
+    Refused(String),
+}
+impl From<CallError> for String {
+    fn from(error: CallError) -> Self {
+        match error {
+            CallError::Unavailable(text) | CallError::Refused(text) => text,
+        }
+    }
+}

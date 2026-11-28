@@ -144,52 +144,8 @@ impl SessionStarts {
         request: &StartRequest,
     ) -> Result<StartReceipt> {
         match antigravity::start_cascade(folder, request) {
-            Ok(receipt) => Ok(receipt),
-            Err(Failure::Unavailable(reason)) => {
-                let Some(executable) = self.config.antigravity_executable.as_ref() else {
-                    return Err(Failure::Unavailable(reason));
-                };
-                let output = self.runner.run(&self.plan(
-                    executable,
-                    vec![
-                        "-p".into(),
-                        request.text.clone(),
-                        "--output-format".into(),
-                        "json".into(),
-                    ],
-                    Some(folder),
-                    60,
-                ))?;
-                if output.timed_out {
-                    return Err(Failure::AcceptanceUncertain);
-                }
-                if output.code != Some(0) {
-                    return Err(Failure::Rejected(
-                        "Antigravity CLI refused to start a session".into(),
-                    ));
-                }
-                let id = serde_json::from_slice::<Value>(&output.stdout)
-                    .ok()
-                    .and_then(|v| {
-                        v["session_id"]
-                            .as_str()
-                            .or_else(|| v["sessionId"].as_str())
-                            .or_else(|| v["cascadeId"].as_str())
-                            .filter(|id| valid_uuid(id))
-                            .map(str::to_owned)
-                    });
-                Ok(StartReceipt {
-                    provider: Provider::Antigravity,
-                    request_id: request.request_id.clone(),
-                    session_id: id.clone(),
-                    thread_id: None,
-                    state: if id.is_some() { "started" } else { "uncertain" }.into(),
-                    reason: None,
-                    job_id: None,
-                    handoff_pending: false,
-                })
-            }
-            Err(error) => Err(error),
+            Err(Failure::Unavailable(reason)) => self.start_agy(folder, request, reason),
+            started => started,
         }
     }
 }

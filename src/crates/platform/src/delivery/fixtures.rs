@@ -1,9 +1,9 @@
 //! Test doubles for session starts: a Claude Code that runs no process, and a
 //! home folder under the system temp directory with one trusted project.
-use super::process::{CommandPlan, ProcessOutput, ProcessRunner};
+use super::process::{Background, CommandPlan, ProcessOutput, ProcessRunner};
 use super::*;
 use serde_json::{json, Value};
-use std::fs;
+use std::{fs, path::Path};
 
 pub const JOB: &str = "abcdef12";
 pub const SESSION: &str = "11111111-2222-4333-8444-555555555555";
@@ -16,6 +16,9 @@ pub struct FakeClaude {
     claude_config: PathBuf,
     pub calls: Mutex<Vec<Vec<String>>>,
     pub opened: Mutex<Vec<String>>,
+    /// What a background `agy` prints, and whether it is still running.
+    pub agy: Mutex<(String, bool)>,
+    pub agy_stopped: Arc<std::sync::atomic::AtomicBool>,
 }
 impl FakeClaude {
     pub fn new(claude_config: PathBuf) -> Self {
@@ -23,6 +26,8 @@ impl FakeClaude {
             claude_config,
             calls: Mutex::new(Vec::new()),
             opened: Mutex::new(Vec::new()),
+            agy: Mutex::new((String::new(), false)),
+            agy_stopped: Default::default(),
         }
     }
     fn state_file(&self) -> PathBuf {
@@ -97,6 +102,21 @@ impl ProcessRunner for FakeClaude {
     fn open(&self, uri: &str) -> Result<()> {
         self.opened.lock().unwrap().push(uri.into());
         Ok(())
+    }
+    fn spawn(&self, plan: &CommandPlan, log: &Path) -> Result<Box<dyn Background>> {
+        self.calls.lock().unwrap().push(plan.arguments.clone());
+        let (printed, running) = self.agy.lock().unwrap().clone();
+        fs::write(log, printed)?;
+        Ok(Box::new(FakeAgy(running, self.agy_stopped.clone())))
+    }
+}
+struct FakeAgy(bool, Arc<std::sync::atomic::AtomicBool>);
+impl Background for FakeAgy {
+    fn running(&mut self) -> bool {
+        self.0
+    }
+    fn stop(&mut self) {
+        self.1.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 }
 

@@ -3,7 +3,7 @@
 use super::*;
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Instant,
 };
@@ -38,6 +38,36 @@ pub struct ProcessOutput {
 pub trait ProcessRunner: Send + Sync {
     fn run(&self, plan: &CommandPlan) -> Result<ProcessOutput>;
     fn open(&self, uri: &str) -> Result<()>;
+    /// Starts `plan` with its stdout and stderr written to `log`, and leaves
+    /// it running after this returns.
+    fn spawn(&self, plan: &CommandPlan, log: &Path) -> Result<Box<dyn Background>>;
+}
+/// A process started to outlive the call that started it.
+pub trait Background: Send {
+    fn running(&mut self) -> bool;
+    fn stop(&mut self);
+}
+struct Spawned(Option<std::process::Child>);
+impl Background for Spawned {
+    fn running(&mut self) -> bool {
+        self.0
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(None)))
+    }
+    fn stop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+impl Drop for Spawned {
+    /// Left running: reaped once it ends, so it leaves no zombie behind.
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            std::thread::spawn(move || child.wait());
+        }
+    }
 }
 pub struct NativeProcessRunner;
 impl ProcessRunner for NativeProcessRunner {
@@ -89,6 +119,24 @@ impl ProcessRunner for NativeProcessRunner {
             stderr: err,
             timed_out,
         })
+    }
+    fn spawn(&self, plan: &CommandPlan, log: &Path) -> Result<Box<dyn Background>> {
+        if !plan.executable.is_absolute() {
+            return Err(Failure::InvalidInput("Explicit executable required".into()));
+        }
+        let file = std::fs::File::create(log)?;
+        let mut command = Command::new(&plan.executable);
+        command
+            .args(&plan.arguments)
+            .envs(&plan.environment)
+            .stdin(Stdio::null())
+            .stdout(file.try_clone()?)
+            .stderr(file);
+        if let Some(folder) = &plan.directory {
+            command.current_dir(folder);
+        }
+        crate::os::configure_command(&mut command);
+        Ok(Box::new(Spawned(Some(command.spawn()?))))
     }
     fn open(&self, uri: &str) -> Result<()> {
         if !(uri.starts_with("claude://resume?session=")

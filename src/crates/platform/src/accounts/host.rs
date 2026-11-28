@@ -169,7 +169,7 @@ impl Host for AccountContext {
             if method == "ReadAccounts" {
                 crate::clients::antigravity::service::read_accounts(params)
             } else {
-                crate::clients::antigravity::service::call(method, params)
+                crate::clients::antigravity::service::call(method, params).map_err(String::from)
             }
         } else {
             Err(format!("{agent} has no native channel"))

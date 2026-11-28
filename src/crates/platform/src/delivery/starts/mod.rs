@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod agy;
 mod clients;
 mod commands;
 mod handoff;

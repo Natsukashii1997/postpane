@@ -65,11 +65,11 @@ struct State {
     /// (Open's `UsageStore.glowHidden`).
     glow_hidden: bool,
 }
-/// Clients nothing on this Mac shows until they connect (the ChatGPT
-/// extension): first seen undetected, their live status was saved off; the
-/// first time one is detected it turns on, once, and the person's choice
-/// stands after that.
-const DETECTED_LATE: &[&str] = &["chatgpt"];
+/// Clients often detected only after the first snapshot: the ChatGPT
+/// extension once it connects, Antigravity once its app is installed. First
+/// seen undetected, their live status was saved off; the first time one is
+/// detected it turns on, once, and the person's choice stands after that.
+const DETECTED_LATE: &[&str] = &["chatgpt", "antigravity"];
 /// Beside presentation.json: the `DETECTED_LATE` clients already turned on.
 const LATE_DETECTED_FILE: &str = "late-detected.json";
 pub struct Presentation {
@@ -629,25 +629,45 @@ mod live_status_tests {
     }
 
     #[test]
-    fn chatgpt_turns_live_the_first_time_it_is_detected_then_keeps_the_choice() {
+    fn a_late_client_turns_live_the_first_time_it_is_detected_then_keeps_the_choice() {
+        for id in ["chatgpt", "antigravity"] {
+            let folder = tempfile::tempdir().unwrap();
+            let owner = Presentation::new(folder.path().to_path_buf()).unwrap();
+            let snapshot = |detected: bool| json!({"mode": "live", "providers": [{"id": id, "detected": detected}], "sessions": []});
+            let mut first = snapshot(false);
+            owner.project_snapshot(&mut first);
+            assert_eq!(first["sourcePreferences"][id]["live"], false, "{id}");
+            // Connected or installed: on, across a restart too.
+            let reopened = Presentation::new(folder.path().to_path_buf()).unwrap();
+            let mut connected = snapshot(true);
+            reopened.project_snapshot(&mut connected);
+            assert_eq!(connected["sourcePreferences"][id]["live"], true, "{id}");
+            // Turned off by the person afterwards: it stays off.
+            reopened
+                .source_update(json!({"source": id, "patch": {"live": false}}))
+                .unwrap();
+            let again = Presentation::new(folder.path().to_path_buf()).unwrap();
+            let mut later = snapshot(true);
+            again.project_snapshot(&mut later);
+            assert_eq!(later["sourcePreferences"][id]["live"], false, "{id}");
+        }
+    }
+
+    #[test]
+    fn antigravity_saved_off_before_it_was_known_late_turns_on_once() {
+        // This Mac on 2026-11-28: ChatGPT turned on once, then off by hand;
+        // Antigravity saved off while undetected, and now detected.
         let folder = tempfile::tempdir().unwrap();
+        let snapshot = |antigravity: bool| json!({"mode": "live", "providers": [{"id": "chatgpt", "detected": true}, {"id": "antigravity", "detected": antigravity}], "sessions": []});
         let owner = Presentation::new(folder.path().to_path_buf()).unwrap();
-        let snapshot = |detected: bool| json!({"mode": "live", "providers": [{"id": "chatgpt", "detected": detected}], "sessions": []});
-        let mut first = snapshot(false);
-        owner.project_snapshot(&mut first);
-        assert_eq!(first["sourcePreferences"]["chatgpt"]["live"], false);
-        // The extension registers or connects: on, across a restart too.
-        let reopened = Presentation::new(folder.path().to_path_buf()).unwrap();
-        let mut connected = snapshot(true);
-        reopened.project_snapshot(&mut connected);
-        assert_eq!(connected["sourcePreferences"]["chatgpt"]["live"], true);
-        // Turned off by the person afterwards: it stays off.
-        reopened
+        owner.project_snapshot(&mut snapshot(false));
+        owner
             .source_update(json!({"source": "chatgpt", "patch": {"live": false}}))
             .unwrap();
-        let again = Presentation::new(folder.path().to_path_buf()).unwrap();
-        let mut later = snapshot(true);
-        again.project_snapshot(&mut later);
-        assert_eq!(later["sourcePreferences"]["chatgpt"]["live"], false);
+        let reopened = Presentation::new(folder.path().to_path_buf()).unwrap();
+        let mut detected = snapshot(true);
+        reopened.project_snapshot(&mut detected);
+        assert_eq!(detected["sourcePreferences"]["antigravity"]["live"], true);
+        assert_eq!(detected["sourcePreferences"]["chatgpt"]["live"], false);
     }
 }
