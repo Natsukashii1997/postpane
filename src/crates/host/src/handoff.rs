@@ -54,6 +54,8 @@ mod guard;
 mod held;
 #[path = "handoff/sending/desk_lines.rs"]
 mod lines;
+#[path = "handoff/notice/desk_log.rs"]
+mod log;
 #[path = "handoff/notice/desk.rs"]
 mod notice;
 #[path = "handoff/answers/desk_prompt.rs"]
@@ -264,6 +266,9 @@ pub(crate) struct Desk {
     /// How many of each handoff's steps the sidebar has flown a letter for
     /// (#171); those kept from before a restart count as flown.
     tossed: Mutex<HashMap<String, usize>>,
+    /// How many of each handoff's steps are past the log of PostPane's own
+    /// stops (`log_stops`); those from before the start are.
+    logged: Mutex<HashMap<String, usize>>,
     /// Reads in a row that found each handoff's answer undrawn (#457), or its page changed (#548).
     undrawn: Mutex<HashMap<String, (String, u32)>>,
     /// When the notices began (`notices_since`): trouble from before is not
@@ -333,18 +338,16 @@ impl Desk {
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
         let now = now_ms();
+        // Stops the restart makes below are logged (`log_stops`).
+        let logged = log::counts(&book);
         let since = data
             .as_deref()
             .map_or(now, |data| book::notices_since(data, now));
         let desk = |book: Book| Self {
             data,
             since,
-            tossed: Mutex::new(
-                book.list
-                    .iter()
-                    .map(|handoff| (handoff.id.clone(), handoff.steps.len()))
-                    .collect(),
-            ),
+            tossed: Mutex::new(log::counts(&book)),
+            logged: Mutex::new(logged),
             book: Mutex::new(book),
             early: Mutex::new(vec![]),
             sending: Mutex::new(HashMap::new()),
@@ -394,6 +397,7 @@ impl Desk {
         let _quiet = self.quiet();
         let mut book = self.lock();
         let result = change(&mut book);
+        self.log_stops(&book);
         if let Some(data) = &self.data {
             book::slim_kept(data, &mut book);
             if let Err(error) = book::save(data, &book) {

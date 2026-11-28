@@ -636,8 +636,23 @@
 - 正确做法：规范按「每种元素放在哪」写成表（图标、章、类型签、标题小字、按钮各只能在哪），配正反例；新加一种「等你处理的事」的行，照已有 ASK、REPLY 行排，并排放在预览里比；交付前 `pnpm run check` 的 `check:card-layout` 会拦类型签进图标列、缩进写死数字、签自己挑颜色；机检查不了的（签的左边是否在文字线、签和按钮分不分得开、并排字数）在场景预览台手量。
 - 证据：常浩原话在会话 `f257c206`（11-28 04:17「它应该是跟之前的 start reply ask 同层级」、04:20「同一个组件在不同的场景下它应该是一致的」）和 `a409fbef`（05:11「它变成了跟侧边的这个 Claude 的图标……成了一个层级了」）；规范版 `docs/design/侧栏等待处理与积压事项规范版-2026-11-28.html`（主目录，未进仓库）第 70 行 `.brow{grid-template-columns:auto …}`；`tests/check-card-layout.test.mjs` 第一条用 #564 分支 `f8cebde` 原样摘出的写法跑出失败。
 - 升级：〔机检〕已升级（2026-11-28，本条所在 PR）：`src/tooling/check-card-layout.mjs` 接进 `pnpm run check`，旧问题记在 `card-layout-baseline.json` 只许变少。签的左边是否正好在文字线、签和按钮分不分得开、并排字数仍只靠规范文字和手量。
+## L-78 想用 Claude in Chrome 造「后台标签页 / 窗口不在屏幕上」验 ChatGPT 页面：它自己的标签页一直是 `visible`，造不出来（2026-11-27）
 
-## L-81 想让一个值滑过去，它的规则却带 `!important`：重要声明在层叠里压过过渡，值一下就跳到终点（2026-11-25）
+- 现象：#544 第 3 步要看清「空占位」和「后台没画出」在真实页面上的区别，在 Claude in Chrome 自己的标签组里开两个 chatgpt.com 标签页，前一个、后一个、刚新建的，`document.visibilityState` 全是 `visible`；让后台那个重新加载也一样。#457（2026-11-20）当时也是两次没造出来。
+- 根因：Claude in Chrome 操作的标签页按可见处理（调试接管时页面不进入隐藏状态），ChatGPT 照常画，「后台不画」这种状态在它手里出不来。
+- 正确做法：后台标签页、窗口被挡住这类页面状态，不靠 Claude in Chrome 现造：用真实接力留下的 `turns.jsonl`（`phase: "reread"` 那行的 `hidden`、`fronted`、`outcome`）取证，或请常浩把插件开的那个标签页留在后台时，只读看那一刻的结构。试两次没造出来就停，不再换花样试。只能在真实状态下才分得清的判定（如空占位 vs 没画出），没看到真实样子之前不改代码。
+- 证据：`~/Library/Application Support/postpane/evidence/2026-11-27-544-placeholder-probe/real-page-hidden-vs-drawn.md`；#457 证据 `evidence/2026-11-20-457-reread-undrawn/pr-body.md`「实机未做」一条。
+- 升级：〔提醒〕未升级。
+
+## L-81 按会话编号去重做完、场景和测试都过，实机侧栏还是一个任务出好几行：重复的是主会话派出的子任务，各有自己的编号（2026-11-28）
+
+- 现象：#565/#569 让 REPLY 按「来源 + 会话编号」每个会话只留一行，测试和场景预览台都过，常浩 11-28 验收后合并。当天上午侧栏又出现 4 行以上「你在做一个 skill 的盲测执行方……」（#578）。
+- 根因：这些行是主会话 `b633847f` 派出的子任务（Claude 的 `subagents/agent-…jsonl`），每个子任务的会话编号不同，只是标题一样；会话数据里带着 `parentId`，但生成回复的 `island_events/turns.rs` `ended()` 没看它。修 #565 时只看了常浩截图里的标题，没拿实机快照（`hud_snapshot` 的 `islandEvents`）核对重复行的 `sessionId`，场景也只造了「同一编号回两次」。
+- 正确做法：侧栏「单位是单一任务会话」，带 `parentId` 的子任务不单独出回复和失败提醒（`ended()` 已过滤）。查「同一个东西出现好几次」先从实机快照取出那几行的编号和父编号，再决定按什么去重；造场景时把「标题相同、编号不同」和「子任务」各造一个。
+- 证据：快照 `islandEvents.items` 里 9:29–9:53 的 completion 行 `sessionId` 为 `agent-a7350e0a…`、`agent-a96fb22c…`、`agent-a033c91c…`、`agent-ad83d7d9…` 等，`sessions` 里对应 `parentId` 都是 `b633847f-c6e5-47dd-ae61-0d8c9ac92606`；测试 `island_events::turns::tests::a_subagent_that_answers_or_fails_is_not_a_line_of_its_own`。
+- 升级：〔机检〕已升级（2026-11-28，#578 的 PR）：测试 `a_subagent_that_answers_or_fails_is_not_a_line_of_its_own` 守住子任务不出行；「先拿实机编号再定去重」只靠本条提醒。
+
+## L-89 想让一个值滑过去，它的规则却带 `!important`：重要声明在层叠里压过过渡，值一下就跳到终点（2026-11-25）
 
 - 现象：动效统一第 6 处，设置页开关改成「墨块滑过去」，`background-position` 也写了 `transition`，计算样式里过渡属性和时长都对，逐帧读值却从 100% 一帧跳到 0，没有中间值。
 - 根因：CSS 层叠里，过渡产生的值排在所有普通声明之上、所有 `!important` 声明之下。开关原来用 `background: … !important` 压 Tailwind 的 `bg-primary`，简写顺带把 `background-position` 也设成了重要声明；勾选态那条也带 `!important`。过渡值赢不了它们，所以不动。

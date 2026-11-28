@@ -4,6 +4,8 @@ import { PermissionPlanCard } from "./permissions/PermissionPlanCard";
 import { PermissionQuestionCard } from "./permissions/PermissionQuestionCard";
 import { PermissionToolCard } from "./permissions/PermissionToolCard";
 import { HandoffStartCard } from "./permissions/HandoffStartCard";
+import { ElsewhereCard } from "./permissions/ElsewhereCard";
+import { ForwardedNote } from "./permissions/ForwardedNote";
 import { startsHere } from "./permissions/approval-list";
 import { useGround } from "./ground";
 import { alertText } from "./tokens";
@@ -21,6 +23,10 @@ export interface RequestActionsProps {
   onOpenSettings?: (page: string) => void;
   /** A handoff card's 去开始: back to its session, the card put away (#247). */
   onGoStart?: () => void;
+  /** A card pointing to another session: opens it, the card put away. */
+  onGoElsewhere?: () => void;
+  /** A session's title as the sidebar lists it. */
+  titleOf?: (sessionId: string) => string | undefined;
   light?: boolean;
   language?: string;
 }
@@ -34,6 +40,8 @@ export function RequestActions({
   onDecision,
   onOpenSettings,
   onGoStart,
+  onGoElsewhere,
+  titleOf,
   light = false,
   language,
 }: RequestActionsProps) {
@@ -108,6 +116,22 @@ export function RequestActions({
           zh={zh}
           answer={answer}
         />
+      ) : request.elsewhere ? (
+        <ElsewhereCard
+          key={identity}
+          request={request}
+          title={
+            (request.elsewhere.sessionId &&
+              titleOf?.(request.elsewhere.sessionId)) ||
+            request.elsewhere.title
+          }
+          disabled={disabled}
+          pending={pending}
+          light={light}
+          zh={zh}
+          answer={answer}
+          go={onGoElsewhere}
+        />
       ) : isQuestion ? (
         <PermissionQuestionCard
           key={identity}
@@ -119,6 +143,16 @@ export function RequestActions({
           answer={answer}
           openSettings={onOpenSettings}
           goStart={onGoStart}
+          note={
+            request.forwardedFrom?.length ? (
+              <ForwardedNote
+                from={request.forwardedFrom}
+                titleOf={titleOf}
+                light={light}
+                zh={zh}
+              />
+            ) : undefined
+          }
         />
       ) : isPlan ? (
         <PermissionPlanCard

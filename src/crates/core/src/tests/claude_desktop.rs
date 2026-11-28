@@ -817,3 +817,241 @@ fn a_handoff_card_hangs_a_start_tag_until_the_user_moves_on() {
     );
     assert!(desktop_cards(&mut backend).is_empty(), "withdrawn");
 }
+
+/// A session whose turn ended on the owner's closing lines with `state`.
+fn closing_with(root: &Path, session: &str, state: &str, wrap_up: bool) {
+    closing_saying(
+        root,
+        session,
+        state,
+        "做完后回「装机合并」；还没做完回『先等等』。",
+        wrap_up,
+    );
+}
+
+/// A session whose turn ended on the owner's closing lines with `state` and
+/// `next` as its next step.
+fn closing_saying(root: &Path, session: &str, state: &str, next: &str, wrap_up: bool) {
+    let at = Utc::now().to_rfc3339();
+    let text = format!("改好了。\n\n**本次完成**：去掉虚线签。\n**当前状态**：〔{state}〕代码好了，差装机。\n**下一步**：{next}");
+    let mut lines = vec![desktop_line(
+        session,
+        &at,
+        "user",
+        json!({"role": "user", "content": "继续做"}),
+    )];
+    if wrap_up {
+        lines.push(desktop_line(session, &at, "assistant", json!({"id": "m1", "role": "assistant", "model": "claude-opus-4-6",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "content": [{"type": "tool_use", "id": "toolu_wrap", "name": "mcp__ccd_turn__wrap_up",
+                         "input": {"recap": "差装机。", "ask": "装机合并吗？", "actions": [{"label": "装机合并"}]}}]})));
+        lines.push(desktop_line(
+            session,
+            &at,
+            "user",
+            json!({"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_wrap",
+            "content": [{"type": "text", "text": "Shown."}]}]}),
+        ));
+    }
+    lines.push(desktop_line(
+        session,
+        &at,
+        "assistant",
+        json!({"id": "m2", "role": "assistant", "model": "claude-opus-4-6",
+        "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 5},
+        "content": [{"type": "text", "text": text}]}),
+    ));
+    fs::write(
+        root.join(format!("{session}.jsonl")),
+        lines.join("\n") + "\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_reply_that_waits_on_the_owner_stands_as_a_reply_card_its_next_step_answers() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let waits = "11111111-2222-3333-4444-555555555555";
+    closing_with(&root, waits, "等你决定", false);
+    // Ended or still going in the background: nothing for the owner to do.
+    closing_with(
+        &root,
+        "22222222-2222-3333-4444-555555555555",
+        "已结束",
+        false,
+    );
+    closing_with(
+        &root,
+        "33333333-2222-3333-4444-555555555555",
+        "后台进行中",
+        false,
+    );
+    // Its own next-step box asks already: that box alone.
+    let boxed = "44444444-2222-3333-4444-555555555555";
+    closing_with(&root, boxed, "等你决定", true);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 2, "{cards:?}");
+    let reply = cards
+        .iter()
+        .find(|card| card["sessionId"] == waits)
+        .unwrap();
+    assert_eq!(reply["badge"], "REPLY");
+    let question = &reply["questions"][0];
+    assert_eq!(
+        question["question"],
+        "做完后回「装机合并」；还没做完回『先等等』。"
+    );
+    assert!(question["header"].is_null());
+    let labels = question["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["label"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(labels, ["装机合并", "先等等"]);
+    assert_eq!(
+        reply["detail"],
+        "去掉虚线签。\n〔等你决定〕代码好了，差装机。"
+    );
+    let boxed_card = cards
+        .iter()
+        .find(|card| card["sessionId"] == boxed)
+        .unwrap();
+    assert!(boxed_card["badge"].is_null());
+
+    // Answered from the sidebar: the chosen words go into the session.
+    let host = std::sync::Arc::new(FakeReplies::default());
+    backend.set_session_replies(Some(host.clone()));
+    host.reached.lock().unwrap().insert(waits.to_string());
+    let reply = desktop_cards(&mut backend)
+        .into_iter()
+        .find(|card| card["sessionId"] == waits)
+        .unwrap();
+    let key = reply["questions"][0]["answerKey"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    backend
+        .request("answer_request", json!({"id": reply["id"], "decision": {"kind": "answer", "answers": {key: {"selected": ["装机合并"]}}}}))
+        .unwrap();
+    assert_eq!(
+        host.sent.lock().unwrap().clone(),
+        vec![("claude".into(), waits.into(), "装机合并".into())]
+    );
+}
+
+/// A desktop tab record for `cli` under `home`.
+fn desktop_tab_file(home: &Path, tab: &str, cli: &str) {
+    let dir = home.join("Library/Application Support/Claude/claude-code-sessions/org/acct");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join(format!("{tab}.json")),
+        json!({"sessionId": tab, "cliSessionId": cli, "isArchived": false}).to_string(),
+    )
+    .unwrap();
+}
+
+// A tab id no real desktop app holds: the index also reads this Mac's own.
+const RULES_TAB: &str = "local_0e1e5e00-0000-4000-8000-00000000abcd";
+const GO_THERE: &str =
+    "到[规则更新](#local_0e1e5e00-0000-4000-8000-00000000abcd)回话。推荐回『只合并』。";
+
+#[test]
+fn a_next_step_for_a_session_with_a_card_goes_onto_that_card() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let rules = "66666666-2222-3333-4444-555555555555";
+    let multi = "77777777-2222-3333-4444-555555555555";
+    desktop_tab_file(home, RULES_TAB, rules);
+    closing_with(&root, rules, "等你决定", true);
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    // The finished session has no card of its own; its step is on the other.
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    let card = &cards[0];
+    assert_eq!(card["sessionId"], rules);
+    assert_eq!(card["forwardedFrom"][0]["sessionId"], multi);
+    assert_eq!(card["forwardedFrom"][0]["note"], "推荐回『只合并』。");
+    assert!(card["elsewhere"].is_null());
+}
+
+#[test]
+fn a_next_step_for_a_session_without_a_card_points_there() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let rules = "66666666-2222-3333-4444-555555555555";
+    let multi = "77777777-2222-3333-4444-555555555555";
+    desktop_tab_file(home, RULES_TAB, rules);
+    closing_with(&root, rules, "已结束", false);
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    let card = &cards[0];
+    assert_eq!(card["sessionId"], multi);
+    assert_eq!(card["badge"], "REPLY");
+    assert_eq!(card["elsewhere"]["sessionId"], rules);
+    assert_eq!(card["elsewhere"]["title"], "规则更新");
+    let question = &card["questions"][0];
+    // No answer offered here, the reply it names included, and the link as its title.
+    assert_eq!(question["options"], json!([]));
+    assert_eq!(
+        question["question"],
+        "到「规则更新」回话。推荐回『只合并』。"
+    );
+}
+
+#[test]
+fn a_next_step_for_a_session_no_longer_here_says_so() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path();
+    let root = home.join(".claude/projects/test");
+    fs::create_dir_all(&root).unwrap();
+    let multi = "77777777-2222-3333-4444-555555555555";
+    closing_saying(&root, multi, "等你决定", GO_THERE, false);
+
+    let mut backend = fixture(home);
+    let cards = desktop_cards(&mut backend);
+    assert_eq!(cards.len(), 1, "{cards:?}");
+    assert!(cards[0]["elsewhere"]["sessionId"].is_null());
+    assert_eq!(cards[0]["elsewhere"]["title"], "规则更新");
+}
+
+#[test]
+fn the_backlogs_stop_sends_its_words_into_a_session_with_no_question_left() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut backend = fixture(temp.path());
+    let words = json!({"id": "s-old", "source": "claude", "words": "这件事不做了，停掉"});
+    // No host: nothing can carry the words, and the row stays with why.
+    assert!(backend.request("tell_session", words.clone()).is_err());
+
+    let host = std::sync::Arc::new(FakeReplies::default());
+    backend.set_session_replies(Some(host.clone()));
+    backend.request("tell_session", words.clone()).unwrap();
+    assert_eq!(
+        host.sent.lock().unwrap().as_slice(),
+        &[("claude".into(), "s-old".into(), "这件事不做了，停掉".into())]
+    );
+
+    // The host's refusal comes back as the reason; empty words are refused.
+    *host.refusal.lock().unwrap() = Some("process stopped".into());
+    assert_eq!(
+        backend.request("tell_session", words).unwrap_err(),
+        "process stopped"
+    );
+    assert!(backend
+        .request("tell_session", json!({"id": "s-old", "words": " "}))
+        .is_err());
+}

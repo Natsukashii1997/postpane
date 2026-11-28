@@ -1,19 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  FileText,
-  Globe,
-  HelpCircle,
-  ListTodo,
-  MessageSquareText,
-  Monitor,
-  Pencil,
-  Puzzle,
-  Search,
-  Sparkles,
-  Terminal,
-  Wrench,
-  ArrowRightLeft,
-} from "lucide-react";
+import { MessageSquareText } from "lucide-react";
 import type { Approval, IslandEvent } from "@agent-hud/protocol";
 import { HUDArtwork } from "../HUDArtwork";
 import {
@@ -29,63 +15,7 @@ import { PAPER_FIGURES, usePaper } from "../paper";
 import { tagInk } from "../permissions/approval-list";
 import { cardColumn } from "../card-column";
 import { dateFormat } from "@agent-hud/ui/format";
-
-export function permissionToolBadge(request: Approval): {
-  badge: string;
-  Icon: typeof Terminal;
-} {
-  // A handoff card: switch to a new session (#245).
-  if (request.badge === "START")
-    return { badge: "START", Icon: ArrowRightLeft };
-  if (request.kind === "question" || request.toolName === "AskUserQuestion")
-    return { badge: "ASK", Icon: HelpCircle };
-  if (request.kind === "plan" || request.toolName === "ExitPlanMode")
-    return { badge: "PLAN", Icon: ListTodo };
-  // A native approval's kind comes from Core (Open's PermissionRequest.badge).
-  if (request.badge === "APP") return { badge: "APP", Icon: Monitor };
-  if (request.badge === "WEB") return { badge: "WEB", Icon: Globe };
-  const name = request.toolName;
-  if (
-    [
-      "Bash",
-      "BashOutput",
-      "KillShell",
-      "exec",
-      "shell",
-      "shell_command",
-      "exec_command",
-      "run_command",
-      "run_shell_command",
-    ].includes(name)
-  )
-    return { badge: "BASH", Icon: Terminal };
-  if (
-    [
-      "Edit",
-      "MultiEdit",
-      "Write",
-      "NotebookEdit",
-      "apply_patch",
-      "edit",
-      "replace",
-      "write_file",
-    ].includes(name)
-  )
-    return { badge: "EDIT", Icon: Pencil };
-  if (["Read", "view_image", "read_file", "read"].includes(name))
-    return { badge: "READ", Icon: FileText };
-  if (["Glob", "Grep", "glob", "grep", "grep_search"].includes(name))
-    return { badge: "FIND", Icon: Search };
-  if (["WebFetch", "WebSearch", "web_fetch", "web_search"].includes(name))
-    return { badge: "WEB", Icon: Globe };
-  if (["Task", "Agent", "spawn_agent"].includes(name))
-    return { badge: "AGENT", Icon: Sparkles };
-  if (name.startsWith("mcp__")) return { badge: "MCP", Icon: Puzzle };
-  return {
-    badge: (name.slice(0, 8) || "TOOL").toUpperCase(),
-    Icon: Wrench,
-  };
-}
+import { permissionToolBadge } from "./tool-badge";
 
 export function WaitedLabel({ createdAt }: { createdAt: string }) {
   const [, setTick] = useState(0);

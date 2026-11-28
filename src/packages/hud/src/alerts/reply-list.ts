@@ -8,6 +8,7 @@ import {
   findSession,
   type ApprovalEntry,
 } from "../permissions/approval-list.ts";
+import { plainText } from "../permissions/reply-closing.ts";
 
 /** The reply card's lines: one per reply waiting, with its session. */
 export function replyEntries(
@@ -77,12 +78,14 @@ export function isReviewReply(
   );
 }
 
-/** What the reply said: its own message, else the session's last one. */
+/** What the reply said: its own message, else the session's last one,
+ * without Markdown's bold stars (owner, 2026-11-28). */
 export function replyMessage(
   event: IslandEvent,
   session: Session | undefined,
 ): string | null {
-  return (event.message ?? session?.liveFacts?.message)?.trim() || null;
+  const said = (event.message ?? session?.liveFacts?.message)?.trim();
+  return said ? plainText(said) : null;
 }
 
 /** How long a turn took: "4 分 10 秒", "35 秒", "1 小时 5 分". */

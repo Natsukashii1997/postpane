@@ -15,6 +15,7 @@ import type { Snapshot } from "@agent-hud/protocol";
 import { HUDArtwork as HUDLogo } from "./HUDArtwork";
 export { HUDArtwork as HUDLogo } from "./HUDArtwork";
 import { DockMemory, type Direction } from "./bots/mark-director";
+import { useDecide, waitingRequests } from "./panel/backlog";
 import { useIslandNews, useSideClocks, clientDisplayName } from "./IslandNews";
 import { replyChip } from "./alerts/reply-list";
 import { sideClocks } from "./alerts/reply-stays";
@@ -260,7 +261,7 @@ export function HUDScene({
   const typing = Boolean(textFocused || domTyping || cardHeld);
   const suppressHover = useRef(false);
   const hover = useHoverMachine(config);
-  const panelServices = usePanelServices();
+  const panelServices = useDecide(usePanelServices(), onRequestDecision);
   const heldUntil = panelServices?.draft?.heldUntil ?? 0;
   const [holdActive, setHoldActive] = useState(false);
   const vendors = useMemo(
@@ -391,9 +392,7 @@ export function HUDScene({
       config.hasNotch,
     ],
   );
-  const requests = [...snapshot.approvals].sort(
-    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
-  );
+  const requests = waitingRequests(snapshot.approvals, Date.now());
   const usagePanelOpenRef = useRef(false);
   const allowsInlineUsageAlert = inlineAlertAllowed({
     notch: config.mode === "notch",

@@ -23,8 +23,8 @@ export interface RelayStamps {
   replied: boolean;
   /** When the latest of those words moved, in milliseconds. */
   since: number | null;
-  /** A relay's words have sat with ChatGPT past {@link REPLY_WAIT_MS} with no
-   * answer: 「未审」 in red, and the mark goes to that conversation. */
+  /** A relay's words have sat with ChatGPT past the wait ({@link waitEnds})
+   * with no answer: 「未审」 in red, and the mark goes to that conversation. */
   overdue: boolean;
   /** An overdue one has sat past {@link LINGERS_MS}: its 「未审」 ripples
    * as 「审」 does while ChatGPT answers, until the relay ends (#213). */
@@ -39,6 +39,26 @@ export interface RelayStamps {
 /** How long ChatGPT has to answer before the review counts as overdue; the
  * host hands the relay back at the same mark (REPLY_WAIT_MS in host/src/handoff/book.rs). */
 export const REPLY_WAIT_MS = 30 * 60 * 1000;
+/** Past that, a reread that found it writing this recently keeps the wait
+ * on, up to {@link REPLY_MOST_MS} (owner 2026-11-27, #544; the host's
+ * `WRITING_FRESH_MS` and `REPLY_MOST_MS` in handoff/answers/book_reread.rs). */
+export const WRITING_FRESH_MS = 5 * 60 * 1000;
+export const REPLY_MOST_MS = 2 * 60 * 60 * 1000;
+
+/** When the wait for ChatGPT's answer runs out, as things stand: the host
+ * stops the round trip then, and the stub turns 「未审」. */
+export function waitEnds(handoff: Handoff, since: number): number {
+  const read = handoff.rereading;
+  const writing =
+    read && read.epoch === handoff.phaseAt && read.streamed
+      ? read.streamed
+      : null;
+  const ends =
+    writing == null
+      ? since + REPLY_WAIT_MS
+      : Math.max(since + REPLY_WAIT_MS, writing + WRITING_FRESH_MS);
+  return Math.min(ends, since + REPLY_MOST_MS);
+}
 
 /** How long an overdue review sits before its 「未审」 ripples (owner,
  * 2026-11-07, #213): when the panel stops listing the review. */
@@ -96,19 +116,20 @@ export function relayStamps(
     // Owner, 2026-11-07: 「审」 only while ChatGPT really has it; a relay
     // stopped or handed back prints nothing, and one left unanswered past
     // the wait prints 「未审」 so it is seen and taken to ChatGPT.
+    const ends = (handoff: Handoff) => waitEnds(handoff, since(handoff));
     const overdue = waiting
-      .filter((handoff) => !yields && now - since(handoff) > REPLY_WAIT_MS)
+      .filter((handoff) => !yields && now > ends(handoff))
       .sort((a, b) => since(b) - since(a));
     const lingering = overdue.some(
       (handoff) => now - since(handoff) > LINGERS_MS,
     );
     const reviewing = waiting.filter(
-      (handoff) => !handoff.halt && now - since(handoff) <= REPLY_WAIT_MS,
+      (handoff) => !handoff.halt && now <= ends(handoff),
     );
     if (!overdue.length && !reviewing.length) return undefined;
     // A review falling overdue, or an overdue one starting to linger.
     const turns = [
-      ...reviewing.map((handoff) => since(handoff) + REPLY_WAIT_MS + 1),
+      ...reviewing.map((handoff) => ends(handoff) + 1),
       ...(lingering
         ? []
         : overdue.map((handoff) => since(handoff) + LINGERS_MS + 1)),

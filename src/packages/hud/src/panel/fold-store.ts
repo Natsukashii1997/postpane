@@ -76,3 +76,33 @@ export function rowsMove(
 /** The cards' 「展开其余 n 条」 lists: folded again once the sidebar closes,
  * so a card opens with its first few, as the owner set (#374, #382). */
 export const cardFolds = foldStore();
+
+/** The line a card's list has open, shared by both copies as the folds are
+ * (#430): picked, it stays open until the sidebar closes (owner,
+ * 2026-11-28: the first line opens by default, one at a time). */
+export function pickStore() {
+  let picked: string | null = null;
+  const listeners = new Set<() => void>();
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const set = (id: string | null) => {
+    if (picked === id) return;
+    picked = id;
+    listeners.forEach((listener) => listener());
+  };
+  return {
+    use(): [string | null, (id: string | null) => void] {
+      const now = () => picked;
+      return [useSyncExternalStore(subscribe, now, now), set];
+    },
+    reset: () => set(null),
+  };
+}
+
+/** The waiting card's open line. */
+export const cardPicks = pickStore();
+
+/** The backlog line asking 「确定停止？」. */
+export const backlogAsks = pickStore();

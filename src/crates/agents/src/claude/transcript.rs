@@ -17,6 +17,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod desktop_tabs;
+
 /// A copy of what Claude Code sent to the model (2.1.299 and later write
 /// `api-request-blob` lines, and `api-request…` lines about them). A copy
 /// repeats the conversation's own lines with no id or time, so it is no
@@ -1141,8 +1143,8 @@ pub fn desktop_ask_view(
         "answerNote": unanswerable.as_ref().map(|why| why.note.as_str()),
         "answerFix": unanswerable.and_then(|why| why.fix).map(|fix| fix.as_str()),
         "answersPlan": false,
-        // A handoff card's tag reads START (#245).
-        "badge": (ask.kind == "handoff").then_some("START"),
+        // A handoff card's tag reads START (#245), a reply waiting on the owner REPLY (#562).
+        "badge": match ask.kind.as_str() { "handoff" => Some("START"), "reply" => Some("REPLY"), _ => None },
     })
 }
 
@@ -1277,7 +1279,7 @@ impl ClaudeDesktopIndex {
                         Some(file) => file.clone(),
                         None => DesktopFile {
                             stamp,
-                            tab: desktop_tab(&path, kind),
+                            tab: desktop_tabs::desktop_tab(&path, kind),
                         },
                     };
                     files.insert(path, file);
@@ -1469,45 +1471,6 @@ fn desktop_metadata_files(root: &Path) -> Vec<PathBuf> {
         }
     }
     found
-}
-
-/// The tab a metadata file records: only its ids, archive flag and reasoning
-/// effort are read; its account is the two folders above it.
-fn desktop_tab(path: &Path, kind: &'static str) -> Option<DesktopTab> {
-    let stem = path.file_stem()?.to_str()?.to_owned();
-    let value = serde_json::from_slice::<Value>(&fs::read(path).ok()?).ok()?;
-    if value["sessionId"].as_str() != Some(stem.as_str()) {
-        return None;
-    }
-    let cli_id = value["cliSessionId"]
-        .as_str()
-        .filter(|id| uuid(id))?
-        .to_owned();
-    let folder = |path: Option<&Path>| {
-        path.and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            .unwrap_or("")
-            .to_owned()
-    };
-    let account = path.parent();
-    let scope = format!(
-        "{}/{}",
-        folder(account.and_then(Path::parent)),
-        folder(account)
-    );
-    let effort = value["effort"]
-        .as_str()
-        .map(str::trim)
-        .filter(|effort| !effort.is_empty())
-        .map(str::to_owned);
-    Some(DesktopTab {
-        kind,
-        id: stem,
-        cli_id,
-        archived: value["isArchived"] == true,
-        effort,
-        scope,
-    })
 }
 
 /// The desktop tab kind a Claude Code session's client opens in: the

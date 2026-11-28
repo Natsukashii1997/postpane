@@ -19,6 +19,7 @@ import { RunningMark } from "./RunningMark";
 import { LiveRow } from "./SessionsSection";
 import { FoldRow, FoldRows } from "../permissions/FoldButton";
 import { foldStore } from "./fold-store";
+import type { BacklogSlot } from "./BacklogLine";
 import { GRID, noButtonChrome, tabular } from "./theme";
 
 /** The places whose running rows are open: shared, so the panel's hidden
@@ -36,6 +37,7 @@ export function PlaceRows({
   now,
   onStats,
   fold,
+  backlog,
 }: {
   snapshot: Snapshot;
   entries: readonly LiveSession[];
@@ -43,6 +45,8 @@ export function PlaceRows({
   now: number;
   onStats?: () => void;
   fold?: string;
+  /** Each backlog line's slot: its rows are the backlog's. */
+  backlog?: (entry: LiveSession) => BacklogSlot;
 }) {
   const zh = useFormat().language === "zh";
   const inks = useBoardInks(light);
@@ -87,6 +91,7 @@ export function PlaceRows({
           setOpenKey(null);
           remove(entry);
         }}
+        backlog={backlog?.(entry)}
       />
     </FoldRow>
   );
@@ -165,15 +170,19 @@ export function PlaceRows({
 }
 
 /** A section's head: 「等待处理 · n」 or 「正在进行 · n」 and a rule to the
- * edge, one form on every agent's card (owner, 2026-11-14). */
+ * edge, one form on every agent's card (owner, 2026-11-14); 「积压事项」's
+ * words in yellow (owner, 2026-11-28). */
 export function SessionsHeading({
   light,
   count,
   children,
+  color,
 }: {
   light: boolean;
   count: ReactNode;
   children: ReactNode;
+  /** The words' colour, where not the caption grey. */
+  color?: string;
 }) {
   const inks = useBoardInks(light);
   return (
@@ -188,7 +197,7 @@ export function SessionsHeading({
         color: inks.secondary,
       }}
     >
-      <span style={{ whiteSpace: "nowrap" }}>
+      <span style={{ whiteSpace: "nowrap", color }}>
         {children} ·{" "}
         <span style={{ letterSpacing: 0, ...tabular }}>{count}</span>
       </span>

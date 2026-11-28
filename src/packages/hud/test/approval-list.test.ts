@@ -423,3 +423,14 @@ test("when every line can be answered only in Claude, they show as usual (#331)"
     ["b", "a"],
   );
 });
+
+test("a reply waiting on you hangs REPLY on its card and its folded tag (#562)", async () => {
+  const { permissionToolBadge } = await import("../src/alerts/tool-badge.ts");
+  const reply = {
+    kind: "question",
+    badge: "REPLY",
+    toolName: "mcp__ccd_turn__wrap_up",
+  } as never;
+  assert.equal(permissionToolBadge(reply).badge, "REPLY");
+  assert.deepEqual(requestBadge(reply), { label: "REPLY", tone: "reply" });
+});

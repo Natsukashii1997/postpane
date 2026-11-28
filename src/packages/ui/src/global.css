@@ -500,10 +500,29 @@ a:focus-visible {
     opacity: 0.4;
   }
 }
+/* A backlog line (owner chose 丙, 2026-11-28): a ring stopped three
+ * quarters round breathes, never turns; one round 2.8s. BacklogMark.tsx
+ * draws it. */
+.hud-backlog-stall .hud-stall-arc {
+  animation: hud-stall-breathe 2.8s ease-in-out infinite;
+}
+.hud-backlog-stall .hud-stall-dot {
+  animation: hud-stall-breathe 2.8s ease-in-out infinite reverse;
+}
+@keyframes hud-stall-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .loading-state,
   .loading-state-spinner,
-  .hud-running-grid > span {
+  .hud-running-grid > span,
+  .hud-backlog-stall * {
     animation: none;
   }
   .hud-running-grid > span {

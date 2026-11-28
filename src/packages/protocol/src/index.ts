@@ -606,6 +606,13 @@ export interface Approval {
    * it here; null when nothing on this Mac would. */
   answerFix?: AnswerFix | null;
   answersPlan?: boolean;
+  /** From Core: a next step done in another Claude session, which this card
+   * points to (owner, 2026-11-28); `sessionId` is null when that session is
+   * not on the sidebar any more. */
+  elsewhere?: { sessionId: string | null; title: string } | null;
+  /** From Core: next steps of finished sessions that sent the owner to this
+   * session, carried onto its card (owner, 2026-11-28). */
+  forwardedFrom?: { sessionId: string; title: string; note: string }[];
 }
 /** What lets Agent HUD answer a client's questions: install the client's
  * Agent HUD plugin (Settings → Agent plugins), load it in the session that
@@ -1249,6 +1256,7 @@ export type NativeMethod =
   | "antigravity_cli_status"
   | "set_provider"
   | "answer_request"
+  | "tell_session"
   | "session_detail"
   | "open_session"
   | "open_feishu_chat"

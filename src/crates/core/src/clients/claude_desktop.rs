@@ -118,6 +118,30 @@ impl crate::AgentHudCore {
         }
     }
 
+    /// The backlog's 「停止」 for a session with no question left waiting
+    /// (#563): `words` go into session `id` the way an answer does, and a
+    /// stopped Claude process is run again by the host to take them; a
+    /// refusal keeps the row with the host's reason.
+    pub(crate) fn tell_session(&self, params: &Value) -> Result<Value, String> {
+        let id = params["id"].as_str().ok_or("Session ID is required")?;
+        let source = params["source"].as_str().unwrap_or(CLAUDE.id);
+        let words = params["words"]
+            .as_str()
+            .filter(|words| !words.trim().is_empty())
+            .ok_or("Words are required")?;
+        if let Some(off) = self.claude_answers_off() {
+            return Err(off.note);
+        }
+        let replies = self.session_replies.as_ref().ok_or_else(|| {
+            crate::l10n::text(
+                "Agent HUD 不能把话发进这个会话。",
+                "Agent HUD can't send words into this session.",
+            )
+        })?;
+        replies.reply(source, id, words)?;
+        Ok(json!({"kind":"ack"}))
+    }
+
     /// Gives the answer to the Claude desktop app's question `id`, if it is
     /// one, before its card goes: the words go into its session through the
     /// host, and a refusal leaves the card waiting with the host's reason.
@@ -171,6 +195,9 @@ pub(crate) struct ClaudeDesktop {
     /// The keys of questions whose session the host has reached since they
     /// were asked: their cards stay answerable while they stand.
     pub(crate) reached: HashSet<String>,
+    /// The keys of next steps folded into another session's card: they stay
+    /// away once that card is answered, while they stand (2026-11-28).
+    pub(crate) forwarded: HashSet<String>,
 }
 
 impl ClaudeDesktop {

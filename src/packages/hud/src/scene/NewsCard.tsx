@@ -60,7 +60,6 @@ export function NewsCard({
   const waiting = request && (
     <ApprovalContent
       requests={news.requests}
-      selected={request}
       select={news.select}
       decide={decide}
       openSettings={openSettings}
@@ -68,6 +67,7 @@ export function NewsCard({
       language={language}
       sessions={snapshot.sessions}
       replies={news.replies}
+      drop={news.drop}
     />
   );
   const notice = !request && event && (

@@ -71,8 +71,7 @@ export function CompletionAlertView({
     unfolded ? Number.POSITIVE_INFINITY : SHOWN_ENTRIES,
   );
 
-  // Only ↗ goes back; once the session is in front its reply (one line per
-  // session) is put away, else the line says why a while and may retry (#220).
+  // Only ↗ goes back; its reply goes once the session is in front (#220).
   const goBack = async (entry: ApprovalEntry) => {
     const target = sessionToOpen(entry);
     const reason = failureOf(
