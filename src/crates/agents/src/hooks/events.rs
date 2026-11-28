@@ -17,13 +17,15 @@ impl HookEvent {
     /// its own, unless it could not tell which (`turnKnown: false`:
     /// Antigravity's Stop read a tail without the prompt) and the log already
     /// names one. A callback's own time-made id would make the log's turn end
-    /// a second time under another name; taking the log's is marked
-    /// `turnKnown: false`, as the log's turn can still change while this one
-    /// ending stands (postpane#560 P2-02).
+    /// a second time under another name. Such an ending stays marked
+    /// `turnKnown: false` whether or not the log names a turn yet, as the
+    /// name can still change while this one ending stands (postpane#560 P2-02).
     pub fn end_turn(&self, facts: &mut Value) {
-        if self.data["turnKnown"] == false && facts["turnId"].is_string() {
+        let unknown = self.data["turnKnown"] == false;
+        if unknown {
             facts["turnKnown"] = json!(false);
-        } else {
+        }
+        if !unknown || !facts["turnId"].is_string() {
             facts["turnId"] = self.data["turnId"].clone();
         }
     }
