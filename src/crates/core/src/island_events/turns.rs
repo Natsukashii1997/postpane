@@ -13,9 +13,12 @@ pub(super) struct Ended<'a> {
 }
 
 /// The sessions' ended turns whose outcome is one of `outcomes`, oldest first.
+/// A subagent (a session with a parent) is not a task of its own: its parent
+/// tells how the work went, so the sidebar shows one line per task session.
 pub(super) fn ended<'a>(sessions: &'a [Value], outcomes: &[&str]) -> Vec<Ended<'a>> {
     let mut turns = sessions
         .iter()
+        .filter(|session| session["parentId"].is_null())
         .filter_map(|session| {
             let facts = &session["liveFacts"];
             let outcome = facts["outcome"].as_str().filter(|o| outcomes.contains(o))?;
@@ -134,5 +137,37 @@ mod tests {
             .map(|e| e["sessionId"].as_str().unwrap().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(told, ["folded"]);
+    }
+
+    fn turn(id: &str, parent: Option<&str>, outcome: &str, at: i64) -> Value {
+        json!({"id":id,"parentId":parent,"source":"claude","title":"盲测执行","liveFacts":{"turnId":"t1","outcome":outcome,"endedAt":iso(at)}})
+    }
+    fn told(tracker: &mut Tracker, sessions: &[Value], now: i64) -> Vec<Value> {
+        tracker.update(sessions, &[], &[], &[], now)["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "completion" || event["kind"] == "turn-failed")
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn a_subagent_that_answers_or_fails_is_not_a_line_of_its_own() {
+        let mut tracker = Tracker::new();
+        let at = tracker.started + 1_000;
+        let sessions = [
+            turn("parent", None, "completed", at),
+            turn("agent-a1", Some("parent"), "completed", at),
+            turn("agent-a2", Some("parent"), "completed", at + 1),
+            turn("agent-a3", Some("parent"), "failed", at + 2),
+        ];
+        let events = told(&mut tracker, &sessions, at + 5);
+        let ids = events
+            .iter()
+            .map(|e| e["sessionId"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, ["parent"]);
+        assert_eq!(events[0]["kind"], "completion");
     }
 }
