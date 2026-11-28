@@ -31,6 +31,9 @@
 - 发布与回读：装机包是 `tmp/564-spec-560`（#564 `5e21539` + #560 `fd3cdeb`，worktree `.claude/worktrees/564-spec-install`），不含 #573（`e48b7a5`，合并时再合最新 main）。`install.sh 564-spec-v3 <产物> --takeover`（接管前一个合并包 `e07012a3446d`，装它的「侧栏回复｜每会话只出现一次」会话回话同意覆盖）：产物 `8bcbcb11881d` / 已装 `8bcbcb11881d`，签名正常，冒烟侧栏在动，没有权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-564-spec-v3/PostPane-e07012a3446d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机离屏渲染 `evidence/2026-11-28-564-spec-v3/real-claude-panel-board.png`：「积压事项 · 4」黄色、在正在进行下面；积压段折着，展开后的样子未在真实侧栏看（要动鼠标）。
 - #561：合了最新 main（`57b3552`，冲突只在 CURRENT / DECIDED，两边都留），全量 check 0、6 套里 Chrome 插件一条计时测试超时失败（机器同时在打包，26 秒），单独重跑 `ℹ pass 200` / `ℹ fail 0`，已推送。
 - 范围外发现：看板面板「等待处理」的「等你」签也在图标列（11-14 定的版式），没动，已转给「设计规范失效审核｜层级对齐类错误根治」会话。
+- 实机验收（2026-11-28 09:25–09:38，接手会话，常浩回「都按推荐」同意全屏、「停 Mac 合盖」选卡）：积压展开态截图已发常浩（`evidence/2026-11-28-561-564-merge-main/real-backlog-zoom.jpg` 等，实机）；REPLY「提交」实点：测试会话 `local_4e12de73` 收到「测试收到」，通过。积压「停止」实点「Mac 合盖」：行消失但会话没收到（它的提问 11-09 就过期了，旧代码没有提问就只移走行），不通过。
+- 修复（`5a637a3`）：核心新加 `tell_session`，没有能回答的提问时把「这件事不做了，停掉」送进会话（和回答提问同一条路，进程已结束的由 host 后台续接）；送到才移走行，送不到行留着写「没发出去：原因」。属回到已定行为（DECIDED 第 127 行「替你给会话发」），不改已定内容。新测试：core `the_backlogs_stop_sends_its_words_into_a_session_with_no_question_left`、hud `waiting-spec` 一条。
+- #561 已 squash 合并（`8f552b6`），本分支合了它之后的 main；冲突只在 CURRENT / DECIDED / 场景数据，DECIDED 去掉了合并带进来的三行重复。
 - 本轮新坑：无
 
 ## 设计规范失效审核：卡片版式规范写成「每种元素放在哪」，新增 `check:card-layout` 机检（2026-11-28，Claude，常浩要求「深度审核，说清楚原因并修复，确保以后不再犯」，经 #564 会话转来；已提交，PR 见描述；无需发布）

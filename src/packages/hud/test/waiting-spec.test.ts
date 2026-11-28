@@ -150,3 +150,19 @@ test("a backlog line is a running row's form: its stalled ring, its question, qu
   const mark = read("panel/BacklogMark.tsx");
   assert.match(mark, /hud-backlog-stall/);
 });
+
+// Found on the real sidebar (2026-11-28): a backlog line's question had long
+// expired, so 「停止」 only hid the line while its confirm promised words.
+test("「停止」 on a line with no question left sends the words into its session, and the line leaves only once they went", () => {
+  const fold = read("panel/BacklogFold.tsx");
+  assert.match(
+    fold,
+    /await services\.tellSession\(entry\.session, STOP_WORDS\);\s*remove\(entry\);/,
+  );
+  // A refusal keeps the line, saying why.
+  assert.match(fold, /catch \(failure\)[\s\S]*setFailed[\s\S]*没发出去/);
+  assert.ok(
+    !fold.includes("it only leaves the sidebar"),
+    "no path drops the line without the words, where the host can send them",
+  );
+});

@@ -6,6 +6,7 @@
 // its session) and 「停止」, which asks once and then tells the session the
 // work is off.
 import type { Snapshot } from "@agent-hud/protocol";
+import { useState } from "react";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { usePanelServices } from "../PanelContext";
 import { paperOf, usePaper } from "../paper";
@@ -39,13 +40,29 @@ export function BacklogFold({
   const services = usePanelServices();
   const { remove } = useRemovedSessions();
   const [asking, ask] = backlogAsks.use();
-  const stop = (entry: LiveSession) => {
+  // Why the words did not go, kept on the line until it is tried again.
+  const [failed, setFailed] = useState<{ key: string; why: string } | null>(
+    null,
+  );
+  const stop = async (entry: LiveSession) => {
     const decision = stopDecision(entry.approval);
-    if (decision && entry.approval && services?.decide)
-      void services.decide(entry.approval.id, decision);
-    // Nothing that reaches the session: it only leaves the sidebar.
-    else remove(entry);
+    setFailed(null);
     ask(null);
+    if (decision && entry.approval && services?.decide) {
+      void services.decide(entry.approval.id, decision);
+      return;
+    }
+    // No question left to answer: the words go into the session itself,
+    // and the line leaves only once they have (#563).
+    if (!services?.tellSession) return remove(entry);
+    try {
+      await services.tellSession(entry.session, STOP_WORDS);
+      remove(entry);
+    } catch (failure) {
+      const why = failure instanceof Error ? failure.message : String(failure);
+      setFailed({ key: removedKey(entry), why });
+      ask(removedKey(entry));
+    }
   };
   const t = (en: string, cn: string) => (zh ? cn : en);
   const slot = (entry: LiveSession): BacklogSlot => {
@@ -87,18 +104,24 @@ export function BacklogFold({
           }}
         >
           <span style={{ marginRight: "auto" }}>
-            {zh
-              ? `确定停止？会替你给这个会话发「${STOP_WORDS}」`
-              : "Stop it? The session is told the work is off."}
+            {failed?.key === removedKey(entry)
+              ? `${t("Not sent: ", "没发出去：")}${failed.why}`
+              : zh
+                ? `确定停止？会替你给这个会话发「${STOP_WORDS}」`
+                : "Stop it? The session is told the work is off."}
           </span>
           <CardButton
             tone="quietSure"
             light={light}
-            onClick={() => stop(entry)}
+            onClick={() => void stop(entry)}
           >
             {t("Stop", "停止")}
           </CardButton>
-          <CardButton tone="quiet" light={light} onClick={() => ask(null)}>
+          <CardButton
+            tone="quiet"
+            light={light}
+            onClick={() => (setFailed(null), ask(null))}
+          >
             {t("Cancel", "取消")}
           </CardButton>
         </div>

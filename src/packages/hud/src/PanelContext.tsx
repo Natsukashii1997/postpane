@@ -35,6 +35,10 @@ export interface PanelServices {
   /** Answers a request, as its card's buttons do: the backlog's 「不做了」
    * (#563). */
   decide?(id: string, decision: RequestDecision): void | Promise<void>;
+  /** Sends words into a session as its user's next message, the way an
+   * answer goes: the backlog's 「停止」 for a session with no question left
+   * waiting (#563). Rejects with the reason. */
+  tellSession?(session: Session, words: string): Promise<void>;
   /** Opens the Feishu chat of a Hermes ask; resolves as openSession does. */
   openFeishuChat?(chatId: string): Promise<Opened>;
   /** Settings, on the page with this id, such as "agent-plugins". */

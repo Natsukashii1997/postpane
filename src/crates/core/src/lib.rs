@@ -467,8 +467,7 @@ impl AgentHudCore {
                     .map(|kind| json!({"kind":kind}))
                     .unwrap_or_else(|| value.clone());
                 let now = Utc::now().timestamp_millis();
-                // A Claude desktop question's answer goes into its session
-                // first; a refusal leaves the card waiting with the reason.
+                // A desktop question's answer goes in first; a refusal keeps the card.
                 self.answer_desktop_ask(id, &decision, now)?;
                 self.requests.answer(id, &decision, now)?;
                 Ok(json!({"kind":"ack"}))
@@ -509,6 +508,7 @@ impl AgentHudCore {
             "sessions" => self.sessions(params),
             "session_detail" => self.session_detail(params),
             "hermes_chat_target" => self.hermes_chat(&params),
+            "tell_session" => self.tell_session(&params),
             _ => Err(format!("{method} is not supported by the local runtime")),
         }
     }
