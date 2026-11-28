@@ -3179,7 +3179,8 @@ test("a tab put in front late is moved back from only with its window untouched"
   assert.deepEqual(elsewhere.fronted, [2, 3], "another window is not this one");
 });
 
-// #433：常浩关掉会话后，自动重读不反复新开标签页。
+// #433：常浩关掉会话后，自动重读不反复新开标签页；#544 起报 `closed`，
+// 驿窗等到头时据此说「标签页已经关了」。
 test("automatic rereads never reopen a closed conversation tab", async () => {
   const conversation = "6af7ec47-c0f4-83ee-9b9e-bf518660767e";
   const posted = [];
@@ -3199,7 +3200,7 @@ test("automatic rereads never reopen a closed conversation tab", async () => {
   assert.equal(created, 0);
   assert.deepEqual(
     posted.filter((m) => m.type === "reread").map((m) => m.outcome),
-    ["unreachable", "unreachable", "unreachable"],
+    ["closed", "closed", "closed"],
   );
 });
 
