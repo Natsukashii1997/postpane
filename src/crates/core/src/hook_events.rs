@@ -514,7 +514,7 @@ impl HookEvidence {
             session["state"] = json!("idle");
             advance(session, completion.at_ms);
             let facts = facts(session);
-            facts["turnId"] = completion.completed_turn(&facts["turnId"]);
+            completion.end_turn(facts);
             facts["outcome"] = json!("completed");
             facts["endedAt"] = iso(completion.at_ms);
             facts["activity"] = Value::Null;

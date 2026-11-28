@@ -13,16 +13,18 @@ pub struct HookEvent {
     pub data: Value,
 }
 impl HookEvent {
-    /// The turn a completion ends: its own, unless it could not tell which
-    /// (`turnKnown: false`: Antigravity's Stop read a tail without the prompt)
-    /// and the log already names one. A callback's own time-made id would
-    /// make the log's turn end a second time under another name
-    /// (postpane#560 P2-02).
-    pub fn completed_turn(&self, logged: &Value) -> Value {
-        if self.data["turnKnown"] == false && logged.is_string() {
-            logged.clone()
+    /// Names the turn a completion ends in `facts` (a session's liveFacts):
+    /// its own, unless it could not tell which (`turnKnown: false`:
+    /// Antigravity's Stop read a tail without the prompt) and the log already
+    /// names one. A callback's own time-made id would make the log's turn end
+    /// a second time under another name; taking the log's is marked
+    /// `turnKnown: false`, as the log's turn can still change while this one
+    /// ending stands (postpane#560 P2-02).
+    pub fn end_turn(&self, facts: &mut Value) {
+        if self.data["turnKnown"] == false && facts["turnId"].is_string() {
+            facts["turnKnown"] = json!(false);
         } else {
-            self.data["turnId"].clone()
+            facts["turnId"] = self.data["turnId"].clone();
         }
     }
 }

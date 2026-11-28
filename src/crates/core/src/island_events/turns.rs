@@ -61,27 +61,34 @@ impl Tracker {
         at > self.started && at <= now && self.seen.insert(key.into(), at).is_none()
     }
 
-    /// Each finished turn, told once as a reply. One ending told under one
-    /// name is not told again under another: a Stop that could not tell its
-    /// turn takes the log's, which can change as the log catches up, while
-    /// the ending's time stays the Stop's (postpane#560 P2-02).
+    /// Each finished turn, told once as a reply. An ending whose turn was
+    /// not known (`turnKnown: false`) took the log's turn, which can change
+    /// as the log catches up while the ending's time stays the Stop's: it is
+    /// told once by that time, and each later name counts as told
+    /// (postpane#560 P2-02). Other endings go by their turn alone: two turns
+    /// can end within one second of a log without fractions.
     pub(super) fn completions(&mut self, sessions: &[Value], now: i64) {
         for Ended {
             at, key, session, ..
         } in ended(sessions, &["completed"])
         {
-            let ending = format!(
-                "{}:{}@ended:{at}",
-                session["source"].as_str().unwrap_or(""),
-                session["id"].as_str().unwrap_or("")
-            );
-            if self.seen.contains_key(&ending)
-                || !self.fresh(&key, at, now)
-                || stands_as_card(session)
-            {
+            let ending = (session["liveFacts"]["turnKnown"] == false).then(|| {
+                format!(
+                    "{}:{}@ended:{at}",
+                    session["source"].as_str().unwrap_or(""),
+                    session["id"].as_str().unwrap_or("")
+                )
+            });
+            if ending.as_ref().is_some_and(|e| self.seen.contains_key(e)) {
+                self.seen.entry(key).or_insert(at);
                 continue;
             }
-            self.seen.insert(ending, at);
+            if !self.fresh(&key, at, now) || stands_as_card(session) {
+                continue;
+            }
+            if let Some(ending) = ending {
+                self.seen.insert(ending, at);
+            }
             let facts = &session["liveFacts"];
             self.push(&key,json!({"kind":"completion","at":iso(at),"startedAt":facts["turnStartedAt"],"source":session["source"],"sessionId":session["id"],"turnId":facts["turnId"],"title":session["title"],"model":session["model"],"message":facts["message"],"prompt":facts["prompt"],"navigationTarget":session["navigationTarget"],"cwd":session["cwd"],"logPath":session["logPath"]}));
         }
@@ -187,5 +194,34 @@ mod tests {
         // its last line still older than the Stop.
         assert_eq!(look(&mut tracker, "step-0", at - 9_000, at + 1_000), 1);
         assert_eq!(look(&mut tracker, "step-2", at - 2_000, at + 2_000), 1);
+        // The log then ends step-2 itself, later: that name was told already.
+        let logged = json!({"source":"antigravity","id":"antigravity:a1","liveFacts":{"turnId":"step-2",
+            "outcome":"completed","endedAt":iso(at + 3_000)}});
+        tracker.update(&[logged], &[], &[], &[], at + 4_000);
+        let told = tracker.events.iter().filter(|e| e["kind"] == "completion");
+        assert_eq!(told.count(), 1);
+    }
+
+    /// Two turns of one session that ended within one second, from a log
+    /// whose times have no fraction of a second, are two replies: only an
+    /// ending whose turn was not known is told once by its time
+    /// (postpane#560 P2-02, round 3).
+    #[test]
+    fn two_turns_ending_in_the_same_second_are_both_told() {
+        let mut tracker = Tracker::new();
+        let at = (tracker.started / 1_000 + 10) * 1_000;
+        let session = |turn: &str| {
+            json!({"source":"claude","id":"s1","title":"t","liveFacts":{"turnId":turn,
+                "outcome":"completed","endedAt":iso(at),"turnStartedAt":iso(at - 5_000)}})
+        };
+        tracker.update(&[session("turn-a")], &[], &[], &[], at + 1_000);
+        tracker.update(&[session("turn-b")], &[], &[], &[], at + 2_000);
+        let told = tracker
+            .events
+            .iter()
+            .filter(|event| event["kind"] == "completion")
+            .map(|event| event["turnId"].clone())
+            .collect::<Vec<_>>();
+        assert_eq!(told, [json!("turn-a"), json!("turn-b")]);
     }
 }
