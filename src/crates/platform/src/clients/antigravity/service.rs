@@ -98,7 +98,7 @@ impl Service {
                 false => CallError::Uncertain(failed()),
             })?;
         if !response.status().is_success() {
-            return Err(CallError::Refused(service_error(response)));
+            return Err(once::answered_with_error(response));
         }
         crate::accounts::http::response_json(response, "Antigravity").map_err(CallError::Uncertain)
     }
@@ -387,26 +387,6 @@ pub fn call(method: &str, params: &Value) -> Result<Value, CallError> {
     }
     // A service that answered with its own error is reachable; say what it said.
     Err(last.map_or_else(CallError::none, CallError::Refused))
-}
-
-/// The service's own Connect error (`{"code","message"}`), limited in size.
-/// These come from the loopback service and hold no credentials.
-fn service_error(response: reqwest::blocking::Response) -> String {
-    use std::io::Read;
-    let status = response.status().as_u16();
-    let mut bytes = Vec::new();
-    let _ = response.take(4096).read_to_end(&mut bytes);
-    let message = serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .and_then(|body| body["message"].as_str().map(str::to_owned))
-        .filter(|text| !text.is_empty());
-    match message {
-        Some(text) => format!(
-            "Antigravity: {}",
-            text.chars().take(300).collect::<String>()
-        ),
-        None => format!("Antigravity local service returned HTTP {status}"),
-    }
 }
 
 #[cfg(all(test, target_os = "windows"))]

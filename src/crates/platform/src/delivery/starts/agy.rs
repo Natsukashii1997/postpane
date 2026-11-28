@@ -14,7 +14,10 @@ const NAMED_WITHIN: Duration = Duration::from_secs(20);
 const NAMED_WITHIN: Duration = Duration::from_millis(300);
 /// How long a start left uncertain is still followed in the background
 /// before an `agy` that named nothing is stopped.
+#[cfg(not(test))]
 const FOLLOWED_FOR: Duration = Duration::from_secs(10 * 60);
+#[cfg(test)]
+const FOLLOWED_FOR: Duration = Duration::from_millis(300);
 /// Stream logs a crash left behind are removed at the next start.
 const KEPT_FOR: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
@@ -25,6 +28,15 @@ enum Heard {
     Started(String),
     NeedsLogin,
     Failed(String),
+}
+
+/// How a start through `agy` ended. Only a sign-in prompt, which comes
+/// before any conversation exists, proves none was made; an `agy` that
+/// failed, ended or went quiet without naming one may still have made one.
+enum Settled {
+    Named(String),
+    NotSignedIn,
+    Unknown(String),
 }
 
 impl SessionStarts {
@@ -41,7 +53,7 @@ impl SessionStarts {
         };
         // The stream holds the whole turn: only this user may read it, and
         // it is removed once the start is settled.
-        let logs = self.config.task_root.with_file_name("agy-starts");
+        let logs = self.agy_logs();
         private_dir(&logs)?;
         prune(&logs);
         let log = logs.join(format!("{}.ndjson", request.request_id));
@@ -57,16 +69,58 @@ impl SessionStarts {
             NAMED_WITHIN.as_secs(),
         );
         let mut process = self.runner.spawn(&plan, &log)?;
-        if let Some(settled) = watch(&mut *process, &log, NAMED_WITHIN) {
-            let _ = fs::remove_file(&log);
-            return settled.map(|id| started(&request.request_id, id));
+        let Some(settled) = watch(&mut *process, &log, NAMED_WITHIN) else {
+            // Still running, nothing named yet: saved uncertain, and
+            // completed when `agy` names its conversation.
+            let receipts = self.receipts.clone();
+            let request_id = request.request_id.clone();
+            std::thread::spawn(move || follow(process, &log, &receipts, &request_id));
+            return Ok(unsettled(
+                &request.request_id,
+                "agy has not named its conversation yet; still following it".into(),
+            ));
+        };
+        let _ = fs::remove_file(&log);
+        outcome(&request.request_id, settled)
+    }
+
+    fn agy_logs(&self) -> PathBuf {
+        self.config.task_root.with_file_name("agy-starts")
+    }
+
+    /// After a restart, nothing follows the starts a quit left uncertain: a
+    /// stream that has since named its conversation (or asked to sign in)
+    /// completes its start, and streams of settled starts are removed.
+    /// Others stay until `agy` names one or `KEPT_FOR` passes.
+    pub(super) fn recover_agy_starts(&self) {
+        for entry in fs::read_dir(self.agy_logs())
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let path = entry.path();
+            let Some(request_id) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .filter(|id| valid_uuid(id))
+            else {
+                continue;
+            };
+            let key = super::start::receipt_path(&self.receipts, Provider::Antigravity, request_id);
+            if read_json(&key)["receipt"]["state"] != "uncertain" {
+                let _ = fs::remove_file(&path);
+                continue;
+            }
+            let settled = match heard(&fs::read_to_string(&path).unwrap_or_default()) {
+                Heard::Started(id) => Settled::Named(id),
+                Heard::NeedsLogin => Settled::NotSignedIn,
+                Heard::Nothing | Heard::Failed(_) => continue,
+            };
+            if let Ok(receipt) = outcome(request_id, settled) {
+                let _ = super::start::settle(&self.receipts, receipt);
+            }
+            let _ = fs::remove_file(&path);
         }
-        // Still running and nothing named yet: the start is saved uncertain,
-        // and its receipt is completed when `agy` settles.
-        let receipts = self.receipts.clone();
-        let request_id = request.request_id.clone();
-        std::thread::spawn(move || follow(process, &log, &receipts, &request_id));
-        Err(Failure::AcceptanceUncertain)
     }
 }
 
@@ -83,67 +137,77 @@ fn started(request_id: &str, id: String) -> StartReceipt {
     }
 }
 
-/// Reads the stream until `agy` names its conversation or fails, for at most
-/// `within`; `None` while it still runs having said nothing. A failed or
-/// unsigned `agy` is stopped.
-fn watch(process: &mut dyn Background, log: &Path, within: Duration) -> Option<Result<String>> {
+fn unsettled(request_id: &str, reason: String) -> StartReceipt {
+    StartReceipt {
+        state: "uncertain".into(),
+        reason: Some(reason),
+        session_id: None,
+        ..started(request_id, String::new())
+    }
+}
+
+/// The receipt a settled start stands on: an `agy` that asked to sign in is
+/// refused (a rejected start may be retried); anything short of a named
+/// conversation stays uncertain.
+fn outcome(request_id: &str, settled: Settled) -> Result<StartReceipt> {
+    match settled {
+        Settled::Named(id) => Ok(started(request_id, id)),
+        Settled::NotSignedIn => Err(Failure::Unavailable(l10n::text(
+            "agy 命令行还没登录：在终端运行一次 agy，按提示登录 Google 账号",
+            "The agy command line is not signed in: run agy once in a terminal and sign in",
+        ))),
+        Settled::Unknown(reason) => Ok(unsettled(request_id, reason)),
+    }
+}
+
+/// Reads the stream until `agy` names its conversation, asks to sign in,
+/// fails or ends, for at most `within`; `None` while it still runs having
+/// said nothing. An `agy` that asked to sign in or failed is stopped.
+fn watch(process: &mut dyn Background, log: &Path, within: Duration) -> Option<Settled> {
     let began = Instant::now();
     loop {
         // Asked before reading, so an end is read with all it printed.
         let running = process.running();
         let settled = match heard(&fs::read_to_string(log).unwrap_or_default()) {
-            Heard::Started(id) => Ok(id),
-            Heard::NeedsLogin => Err(Failure::Unavailable(l10n::text(
-                "agy 命令行还没登录：在终端运行一次 agy，按提示登录 Google 账号",
-                "The agy command line is not signed in: run agy once in a terminal and sign in",
-            ))),
-            Heard::Failed(error) => Err(Failure::Rejected(error)),
-            Heard::Nothing if !running => Err(Failure::Rejected(
-                "Antigravity CLI ended without starting a session".into(),
-            )),
+            Heard::Started(id) => return Some(Settled::Named(id)),
+            Heard::NeedsLogin => Settled::NotSignedIn,
+            Heard::Failed(error) => {
+                Settled::Unknown(format!("agy failed without naming a conversation: {error}"))
+            }
+            Heard::Nothing if !running => {
+                return Some(Settled::Unknown(
+                    "agy ended without naming a conversation".into(),
+                ))
+            }
             Heard::Nothing if began.elapsed() >= within => return None,
             Heard::Nothing => {
                 std::thread::sleep(Duration::from_millis(200));
                 continue;
             }
         };
-        if settled.is_err() {
-            process.stop();
-        }
+        process.stop();
         return Some(settled);
     }
 }
 
-/// Completes the receipt of a start saved uncertain: started once `agy`
-/// names the conversation, rejected when it fails or ends naming none, and
-/// rejected and stopped when it says nothing for `FOLLOWED_FOR`.
+/// Completes a start saved uncertain. If this app quits first, `agy` runs
+/// on and finishes its turn; the stream it leaves is read at the next start
+/// (`recover_agy_starts`).
 fn follow(mut process: Box<dyn Background>, log: &Path, receipts: &Path, request_id: &str) {
     let settled = watch(&mut *process, log, FOLLOWED_FOR).unwrap_or_else(|| {
+        // Stopped to free the computer; whether a conversation was made is
+        // still unknown.
         process.stop();
-        Err(Failure::Rejected(
-            "Antigravity CLI named no conversation in 10 minutes and was stopped".into(),
-        ))
+        Settled::Unknown("agy named no conversation in 10 minutes and was stopped".into())
     });
     let _ = fs::remove_file(log);
-    // The start writes its uncertain receipt once it returns; wait for it,
-    // so it never overwrites this one.
-    let key = super::start::receipt_path(receipts, Provider::Antigravity, request_id);
-    for _ in 0..50 {
-        if read_json(&key)["receipt"]["reason"] == Failure::AcceptanceUncertain.to_string() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    let receipt = settled.map_or_else(
-        |error| StartReceipt {
-            state: "rejected".into(),
-            reason: Some(error.to_string()),
-            session_id: None,
-            ..started(request_id, String::new())
-        },
-        |id| started(request_id, id),
-    );
-    if let Err(error) = super::start::save_receipt(receipts, &receipt) {
+    let receipt = outcome(request_id, settled).unwrap_or_else(|error| StartReceipt {
+        state: "rejected".into(),
+        reason: Some(error.to_string()),
+        session_id: None,
+        ..started(request_id, String::new())
+    });
+    if let Err(error) = super::start::settle(receipts, receipt) {
         agent_hud_core::note!("An Antigravity start's receipt could not be completed: {error}");
     }
 }
@@ -256,15 +320,19 @@ mod tests {
         assert!(!log.exists(), "and removed once the start is settled");
     }
 
-    /// An `agy` that is still running, or has ended.
-    struct Agy(bool, bool);
+    /// An `agy` that is still running, or has ended, and whether it was stopped.
+    struct Agy(bool, Arc<std::sync::atomic::AtomicBool>);
     impl Background for Agy {
         fn running(&mut self) -> bool {
             self.0
         }
         fn stop(&mut self) {
-            self.1 = true;
+            self.1.store(true, Ordering::SeqCst);
         }
+    }
+    fn agy(running: bool) -> (Box<Agy>, Arc<std::sync::atomic::AtomicBool>) {
+        let stopped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        (Box::new(Agy(running, stopped.clone())), stopped)
     }
     /// A start saved uncertain, its stream holding `printed`: the receipts
     /// folder, the receipt and the stream.
@@ -296,7 +364,7 @@ mod tests {
             r#"{{"event":"init","conversation_id":"{ID}","init":{{"cwd":"/w","tools":[]}}}}"#
         );
         let (_temp, receipts, key, log) = left_uncertain(&init);
-        follow(Box::new(Agy(true, false)), &log, &receipts, REQUEST);
+        follow(agy(true).0, &log, &receipts, REQUEST);
         let receipt = &read_json(&key)["receipt"];
         assert_eq!(receipt["state"], "started");
         assert_eq!(receipt["sessionId"], ID);
@@ -309,12 +377,66 @@ mod tests {
     }
 
     #[test]
-    fn a_start_left_uncertain_whose_agy_ended_naming_nothing_is_rejected() {
+    fn a_followed_agy_that_ends_or_goes_quiet_naming_nothing_stays_uncertain() {
         let (_temp, receipts, key, log) = left_uncertain("");
-        follow(Box::new(Agy(false, false)), &log, &receipts, REQUEST);
+        follow(agy(false).0, &log, &receipts, REQUEST);
         let receipt = &read_json(&key)["receipt"];
-        assert_eq!(receipt["state"], "rejected");
+        assert_eq!(receipt["state"], "uncertain");
         assert!(receipt["sessionId"].is_null());
+        // Quiet past FOLLOWED_FOR: stopped to free the computer, still uncertain.
+        let (_temp, receipts, key, log) = left_uncertain("");
+        let (quiet, stopped) = agy(true);
+        follow(quiet, &log, &receipts, REQUEST);
+        assert!(stopped.load(Ordering::SeqCst));
+        let receipt = &read_json(&key)["receipt"];
+        assert_eq!(receipt["state"], "uncertain");
+        assert!(receipt["reason"].as_str().unwrap().contains("10 minutes"));
+        assert!(!log.exists());
+    }
+
+    #[test]
+    fn whichever_writes_first_the_settled_receipt_stands() {
+        // The follower names the conversation before the start saves its
+        // own uncertain receipt: the start's late write keeps it.
+        let (_temp, receipts, key, _log) = left_uncertain("");
+        let named = super::super::start::settle(&receipts, started(REQUEST, ID.into())).unwrap();
+        assert_eq!(named.state, "started");
+        let late = unsettled(REQUEST, "still following".into());
+        let stands = super::super::start::settle(&receipts, late).unwrap();
+        assert_eq!(stands.session_id.as_deref(), Some(ID));
+        assert_eq!(read_json(&key)["receipt"]["sessionId"], ID);
+    }
+
+    #[test]
+    fn after_a_restart_a_stream_that_named_its_conversation_completes_the_start() {
+        let fixture = StartFixture::new();
+        let receipts = fixture.receipts();
+        private_dir(&receipts).unwrap();
+        let key = super::super::start::receipt_path(&receipts, Provider::Antigravity, REQUEST);
+        let receipt = unsettled(REQUEST, "still following".into());
+        atomic_json(
+            &key,
+            &serde_json::json!({"fingerprint": "f", "receipt": receipt}),
+        )
+        .unwrap();
+        let logs = fixture.root.join("agy-starts");
+        private_dir(&logs).unwrap();
+        let log = logs.join(format!("{REQUEST}.ndjson"));
+        fs::write(
+            &log,
+            format!(r#"{{"event":"init","conversation_id":"{ID}"}}"#),
+        )
+        .unwrap();
+        let settled = logs.join(format!("{}.ndjson", super::super::super::fixtures::SESSION));
+        fs::write(&settled, "").unwrap();
+        let _starts = fixture.starts();
+        assert_eq!(read_json(&key)["receipt"]["state"], "started");
+        assert_eq!(read_json(&key)["receipt"]["sessionId"], ID);
+        assert!(!log.exists());
+        assert!(
+            !settled.exists(),
+            "a stream with no uncertain start is removed"
+        );
     }
 
     #[test]
@@ -335,9 +457,21 @@ mod tests {
     }
 
     #[test]
-    fn an_agy_that_ends_naming_nothing_is_refused() {
-        let (_, started) = start("", false);
-        assert!(matches!(started, Err(Failure::Rejected(_))));
+    fn an_agy_that_ends_or_fails_naming_nothing_leaves_the_start_uncertain() {
+        // It may have made a conversation before it went: never "rejected",
+        // which would let the same task be started again.
+        let (_, ended) = start("", false);
+        let ended = ended.unwrap();
+        assert_eq!(
+            (ended.state.as_str(), ended.session_id),
+            ("uncertain", None)
+        );
+        let failed = r#"{"event":"result","result":{"conversation_id":"","status":"ERROR","error":"backend unavailable"}}"#;
+        let (fixture, failed) = start(failed, true);
+        let failed = failed.unwrap();
+        assert_eq!(failed.state, "uncertain");
+        assert!(failed.reason.unwrap().contains("backend unavailable"));
+        assert!(fixture.fake.agy_stopped.load(Ordering::SeqCst));
     }
 
     #[test]

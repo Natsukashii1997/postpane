@@ -130,13 +130,15 @@ impl SessionStarts {
         }
         private_dir(&receipts)?;
         let applications = config.applications();
-        Ok(Self {
+        let starts = Self {
             config,
             receipts,
             offers: Vec::new(),
             runner,
             applications,
-        })
+        };
+        starts.recover_agy_starts();
+        Ok(starts)
     }
     /// Tests look for desktop apps in fixture folders instead of this computer's.
     #[cfg(any(test, feature = "fixtures"))]

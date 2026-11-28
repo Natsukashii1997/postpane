@@ -19,6 +19,7 @@
 - 发布与回读：未发布。
 - 与授权不一致之处、遗留问题、范围外发现：已登录的 agy 真实开会话、开出的会话 get_message 能不能读到，都没验：本机 agy 没登录，登录要常浩本人做（终端运行一次 `agy`，按提示登录 Google 账号）。`instance::tests::a_second_launch_brings_the_holder_forward` 高负载下偶发失败，范围外，没改。Antigravity 桌面版已自动升到 2.36.0（language_server 参数 `--override_ide_version 2.36.0`），发现文件那一路照旧，装机后顺带看。
 - 审查第 1 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 写操作结果不明时会重发或再起 agy，可能开出两个会话：新增 `clients/antigravity/service/once.rs` 的 `call_once`，`Service::post` 把失败分成连不上（Unavailable，换下一个）、服务回错（Refused）、发出去后结果不明（Uncertain → `AcceptanceUncertain`，不重发、不兜底）；开会话的 `StartCascade` 和第一条消息都改走它。AGY586-P1-02 日志权限：目录用 `private_dir`（0700），文件用 `new_file_options`（0600），有结果就删。AGY586-P2-01 20 秒没拿到编号：后台线程接着读，最多 10 分钟，等开会话自己写完「不确定」回执后再补成 started 或 rejected；10 分钟还没编号就停掉 agy。D-01 升级时会把以前手动关掉的 Antigravity 实时状态打开一次：常浩这一轮要的就是打开，驿窗只有他一个人用，接受，补了测试写明。
+- 审查第 2 轮返修（ChatGPT，返修，P1 两项）：AGY586-P1-01 服务回 5xx 时可能已经动手：只有 4xx（408 / 409 / 499 除外）算拒绝，其余记「不确定」，报错里带 HTTP 状态和错误码；明确拒绝的换下一个服务（顺带解决 P2-03：续发时第一个服务认不得这个会话，交给下一个）。AGY586-P1-03 agy 没报编号就退出、报错或 10 分钟没动静都记「不确定」，只有登录提示算被拒。AGY586-P2-01 回执两个写入者加锁，「不确定」盖不掉已有结论；驿窗退出后 agy 照常把这一轮做完，下次开会话管理时读它留下的日志补写回执（`recover_agy_starts`）。
 - 本轮新坑：L-92
 
 ## 重活排队：「已跑多久」从拿到位子算；7 个 PR 全部合完后从 main 统一装机（2026-11-28，Claude，接上一节「并行任务排队合并」；已提交，PR 见描述；main `53291fe` 已装机回读）
