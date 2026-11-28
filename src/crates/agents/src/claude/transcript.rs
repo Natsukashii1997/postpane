@@ -1141,8 +1141,8 @@ pub fn desktop_ask_view(
         "answerNote": unanswerable.as_ref().map(|why| why.note.as_str()),
         "answerFix": unanswerable.and_then(|why| why.fix).map(|fix| fix.as_str()),
         "answersPlan": false,
-        // A handoff card's tag reads START (#245).
-        "badge": (ask.kind == "handoff").then_some("START"),
+        // A handoff card's tag reads START (#245), a reply waiting on the owner REPLY (#562).
+        "badge": match ask.kind.as_str() { "handoff" => Some("START"), "reply" => Some("REPLY"), _ => None },
     })
 }
 

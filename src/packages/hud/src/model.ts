@@ -15,7 +15,7 @@ import {
   visibleBalances,
 } from "./balance-rows.ts";
 import { heldUsed } from "./held-reading.ts";
-import { START_BADGE } from "./permissions/approval-list.ts";
+import { START_BADGE, currentRequests } from "./permissions/approval-list.ts";
 import { relaysAnswering } from "./relays-answering.ts";
 import { relayStamps, type RelayStamps } from "./relay-stamps.ts";
 import { quotaRowShown, leadingWindow } from "./quota-rows.ts";
@@ -164,6 +164,7 @@ export function vendorsFromSnapshot(
   const resting = restingAgents(snapshot, mode, now);
   const sources = resting.order;
   let expiresAt = resting.expiresAt;
+  const approvals = currentRequests(snapshot.approvals, now);
   const value = sources.map((name) => {
     const key = vendorKey(name);
     const quotas = snapshot.quotas.filter((q) => vendorKey(q.vendor) === key);
@@ -212,14 +213,13 @@ export function vendorsFromSnapshot(
         sessions.filter(isBusy).length,
         key === vendorKey("chatgpt") ? relaysAnswering(snapshot) : 0,
       ),
-      waiting: snapshot.approvals.filter((a) => vendorKey(a.source) === key)
-        .length,
-      questions: snapshot.approvals.filter(
+      waiting: approvals.filter((a) => vendorKey(a.source) === key).length,
+      questions: approvals.filter(
         (a) =>
           vendorKey(a.source) === key &&
           (a.kind === "question" || Boolean(a.questions?.length)),
       ).length,
-      handoffs: snapshot.approvals.filter(
+      handoffs: approvals.filter(
         (a) => vendorKey(a.source) === key && a.badge === START_BADGE,
       ).length,
       balance: deepseekBalances.length

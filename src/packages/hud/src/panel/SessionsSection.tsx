@@ -8,7 +8,9 @@ import { failureOf } from "../open-result";
 import type { Snapshot } from "@agent-hud/protocol";
 import { usePanelServices } from "../PanelContext";
 import { ApprovalTag } from "../permissions/ApprovalTag";
-import { GRID, noButtonChrome, tabular } from "./theme";
+import { BacklogLine, type BacklogSlot } from "./BacklogLine";
+import { BacklogMark } from "./BacklogMark";
+import { clipped, GRID, noButtonChrome, tabular } from "./theme";
 import { useFormat } from "@agent-hud/ui/format-context";
 import { useListedSessions } from "./listed-sessions";
 import type { LiveSession } from "./agent-board";
@@ -16,7 +18,7 @@ import { liveSessionLine } from "./live-line";
 import { useBoardInks } from "./AgentBoard";
 import { BotSeal } from "./BotStamp";
 import { useHandoffCard } from "../alerts/HandoffCard";
-import { usePaper } from "../paper";
+import { paperOf, usePaper } from "../paper";
 import type { DeskChat } from "../chatgpt-desk";
 import { replyTime } from "../scene/hermes-peek";
 import { dateFormat } from "@agent-hud/ui/format";
@@ -38,6 +40,8 @@ import {
 // A listed session's row (`LiveRow`) and a replied chat's (`RepliedRow`);
 // the sessions section that lists them is SourceSessions.tsx (ADR-0001 C1).
 
+/** A row's second line, under its title. */
+const underTitle = { gridColumn: "2 / 3", marginTop: 2, fontSize: 12 } as const;
 /** How far a row slides to show its Remove button alone. */
 const removeWidth = 72;
 
@@ -128,10 +132,7 @@ export function RepliedRow({
           fontSize: 13.5,
           fontWeight: 600,
           color: inks.text,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          minWidth: 0,
+          ...clipped,
         }}
       >
         {chat.title?.trim() || (zh ? "（未命名会话）" : "(untitled session)")}
@@ -167,9 +168,7 @@ export function RepliedRow({
       ) : (
         <span
           style={{
-            gridColumn: "2 / 3",
-            marginTop: 2,
-            fontSize: 12,
+            ...underTitle,
             color: inks.secondary,
           }}
         >
@@ -200,8 +199,12 @@ export function LiveRow({
   open,
   onOpen,
   onRemove,
+  backlog,
 }: {
   entry: LiveSession;
+  /** A backlog line: WAIT, how long it has waited, its question whole and
+   * its buttons (owner, 2026-11-28). */
+  backlog?: BacklogSlot;
   /** The handoff it is in: its second line says how that goes. */
   handoff?: Handoff;
   /** Its swipe's words not taken up yet: said before any handoff. */
@@ -250,7 +253,11 @@ export function LiveRow({
       ? "暂时无法回到原会话"
       : "Session return unavailable";
   const waiting = entry.status === "waiting";
-  const since = waiting ? null : runningSince(session, now, language);
+  const since = backlog
+    ? backlog.since
+    : waiting
+      ? null
+      : runningSince(session, now, language);
   const bot = session.bot ?? null;
   const slot = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -534,7 +541,7 @@ export function LiveRow({
           style={{
             position: "relative",
             display: "grid",
-            gridTemplateColumns: `${waiting ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
+            gridTemplateColumns: `${waiting && !backlog ? "auto" : `${GRID.mark}px`} minmax(0, 1fr)${bot ? " auto" : ""} 26px`,
             columnGap: GRID.gap,
             alignItems: "center",
             padding: "8px 6px 8px 0",
@@ -544,7 +551,12 @@ export function LiveRow({
             transition: drag === null ? "transform 0.18s ease" : undefined,
           }}
         >
-          {waiting ? (
+          {backlog ? (
+            <BacklogMark
+              label={zh ? "积压" : "Backlog"}
+              color={(paper ?? paperOf(light)).violet}
+            />
+          ) : waiting ? (
             <ApprovalTag
               label={zh ? "等你" : "WAITING"}
               tone="ask"
@@ -567,10 +579,7 @@ export function LiveRow({
                 fontSize: 13.5,
                 fontWeight: 600,
                 color: inks.text,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {session.liveFacts?.prompt?.trim() ||
@@ -625,14 +634,9 @@ export function LiveRow({
             <span
               role="status"
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: notice.ok ? inks.green : inks.red,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {notice.text}
@@ -641,14 +645,9 @@ export function LiveRow({
             <span
               role="status"
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: launchLine(waits, zh).ok ? inks.secondary : inks.red,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {launchLine(waits, zh).text}
@@ -674,26 +673,24 @@ export function LiveRow({
               />
               <span
                 style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  minWidth: 0,
+                  ...clipped,
                 }}
               >
                 {progressLine(handoff, now, zh)}
               </span>
             </span>
+          ) : backlog ? (
+            <BacklogLine
+              text={liveSessionLine(entry, language)}
+              slot={backlog}
+              inks={inks}
+            />
           ) : (
             <span
               style={{
-                gridColumn: "2 / 3",
-                marginTop: 2,
-                fontSize: 12,
+                ...underTitle,
                 color: inks.secondary,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                ...clipped,
               }}
             >
               {session.client === "claude-cloud"

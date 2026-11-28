@@ -38,8 +38,8 @@ export {
   CompletionClosedRow,
   PendingEventRows,
   WaitedLabel,
-  permissionToolBadge,
 } from "./alerts/PendingEventRows";
+export { permissionToolBadge } from "./alerts/tool-badge";
 
 /** Presentation only: Core is the sole producer/deduplicator of event facts. */
 export type IslandCard = LaneCard;

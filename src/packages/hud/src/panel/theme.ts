@@ -51,6 +51,14 @@ export const noButtonChrome: CSSProperties = {
 
 export const tabular: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
+/** One line, cut with an ellipsis where it runs out of room. */
+export const clipped: CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  minWidth: 0,
+};
+
 /** Unknown or newly discovered blocks retain their source order after saved ones. */
 export function inPanelOrder<T extends { key: string }>(
   items: T[],

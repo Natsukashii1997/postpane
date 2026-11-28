@@ -2,6 +2,27 @@
 
 当前阶段目标：ROADMAP 阶段 5「多智能体接力」做完并实机验收。（2026-11-08 常浩确认，digital-twin#114）
 
+## 侧栏「等待处理」与「积压事项」按规范版改 7 项，积压行再改成「正在进行」的版式（停住的进度环、去掉 WAIT、细线框按钮、标题黄色）；小签 REPLY 回到蓝色（#562 #563）（2026-11-28，Claude，常浩看规范版回「都按推荐」，看实机后要求积压行改层级、选图标「丙」、标题「用黄色」；已提交、已推送 PR #564，已登记 DECIDED.md，已装机 `8bcbcb11881d`，等常浩看实物）
+- 时间：开工 `2026-11-28 04:41`（按交接卡转来的时间，约数）。来由：常浩 11-28 定了一套规范版（https://claude.ai/artifact/F46pSwSMyFUjq2CfyDTdGK ），7 项加小签 REPLY 变黄的 bug，做进 PR #564。开工前用 `list_events` 和会话记录核了原话（04:26「都按推荐」，04:31 补按钮位置、字数工整和「转给那个会话」）。
+- 行为变化（动手前已在会话里列出）：「等待处理」默认展开排第一的那条，REPLY 也能展开，同一时间只展开一条，只能回 Claude 里答的提问不再被拉进前 4 条；展开的 REPLY 小字写收尾、大字写下一步、右下「知道了」（只从驿窗收起，不往会话里发东西）；回复摘要去掉 Markdown 星号；积压签由红色「等你」换成紫色 WAIT；积压按钮「继续 / 不做了」改「继续 / 停止」，跟在问你最后一行右边，确认改「停止 / 取消」；小签 REPLY 由黄回到蓝，审批类的黄收成纸面 ochre。积压标题行补等了多久、问你全文换行（只加内容）。
+- 你要求的：`permissions/approval-list.ts`（`openEntryId` 默认展开第一条）、`permissions/ApprovalContent.tsx`（回复也能展开、只保留点选的那条在视野里、`drop` 收起回复）、`permissions/ReplyDetail.tsx`（新：展开的 REPLY）、`permissions/reply-closing.ts`（新：读回复的收尾、去星号）、`permissions/tag-tone.ts`（新：类型签取色唯一入口 `toneInk`，加 WAIT / `wait`）、`paper.ts`（`violet`）、`alerts/CompactAlertView.tsx`（小签改走 `toneInk`）、`panel/BacklogFold.tsx`（WAIT、等了多久、继续 / 停止）、`panel/BacklogLine.tsx`（新：问你全文 + 按钮跟在最后一行）、`panel/backlog.ts`（`backlogWaited`）、`panel/SessionsSection.tsx` 与 `panel/PlaceRows.tsx`（积压行的写法，保留左滑）、`scene/NewsCard.tsx`；`docs/design/卡片版式规范.md` 加「组件一致性」；`docs/DECIDED.md` 两行。
+- 我顺手改的：`permissions/CardButton.tsx`（新：卡片按钮一份，ASK 卡的提交 / 跳过 / 返回 / 知道了 / 打开智能体插件也换成它，样式不变，`PermissionQuestionCard.tsx` 少 63 行）；`alerts/reply-list.ts` 的 `replyMessage` 去星号（普通回复卡的摘要和正文跟着去掉）；`panel/fold-store.ts` 加 `pickStore`，展开哪条、哪条在问「确定停止」两份侧栏共用（#430 同一个问题），关侧栏时复位（`scene/close-with-sidebar.ts`）；`panel/theme.ts` 加 `clipped`，`SessionsSection.tsx` 6 处重复的截断样式收成它；`ApprovalContent` 去掉不再用的 `selected` 参数；场景预览台加 `claude-reply-first`、积压场景换长问句；`file-size-baseline.json` 收紧 3 个文件。
+- 同类：搜了各处给类型签自己取色的写法（`tone ===`、`ApprovalTag color=`），只有 `CompactAlertView` 一处另取，已改；搜了显示回复原文的地方，`ApprovalContent` 摘要和回复卡共用的 `replyMessage` 两处，都去掉星号。
+- 测试：新测试 `src/packages/hud/test/waiting-spec.test.ts` 和实现一起写，事后放回改动前的代码上跑，因缺 `WAIT_BADGE` 等导出整份失败（先红是事后补验，不是先写测试）。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1193，前端 `ℹ pass 543` `ℹ fail 0`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。场景文件在全量跑的过程中改过，补跑侧栏包 `node --test src/packages/hud/test/*.test.ts` `ℹ pass 462` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-564-spec/`。
+- 验证：替身通过（场景预览台 127.0.0.1:1482，1440×900）。`claude-reply-first`：第一条 REPLY 默认展开，小字收尾、下一步大字、右下「知道了」，只能回 Claude 里答的提问在「展开其余 2 条」里；`claude-backlog`（纸面卡）：紫色 WAIT、「398 小时」、长问句最后一行和「继续 / 停止」同行，短句这一行放不下按钮时另起一行，按钮和文字至少隔 10 像素；`claude-reply-card`：小签 REPLY 颜色读回 `rgb(143, 176, 236)`（纸面蓝）。预览台里面板被侧栏场景层盖住，积压标题是用页面脚本点开的。未在真实侧栏验证。
+- 截图：证据目录 `scene-reply-first.jpg`、`scene-backlog-paper.jpg`、`scene-backlog-notch.jpg`（场景预览台，非实机）。
+- 发布与回读：未发布。
+- 与授权不一致之处、遗留问题、范围外发现：刘海模式（没有纸面）下主按钮沿用 ASK 卡在刘海里的绿色，规范版只画了纸面；和 ASK 卡一致，没另改。
+- 第 3 版（同日，看实机后返修）：常浩指出 WAIT 签放进左边图标列、和小人与在跑方点成了一级，层级不对。改成：左列放积压自己的图标 `panel/BacklogMark.tsx`（紫色停住的进度环，只呼吸不转，三选一选丙，预览 https://claude.ai/artifact/Sx7Ztr2k2Vhf7Uo5qgTKLx ）；去掉 WAIT 签和 `wait` 色调；问你改成在跑那一行的 12 号灰字；「继续 / 停止」改成 `CardButton` 的轻按钮（`quiet` / `quietStop` / `quietSure`，细线框、高 20、无图标）；积压段标题文字黄色（`SessionsHeading` 加 `color`）。顺手：`SessionsSection.tsx` 四处重复的第二行样式收成 `underTitle`；`unified-card.test.ts` 网格那条跟着新写法改。测试先红 `red-backlog-v3.txt`（`ℹ pass 4` / `ℹ fail 2`），三条全量：`check exit 0`；「全量测试汇总：6 套，失败 0 套」（前端 `ℹ pass 546`，Rust 合计 1193）；`ℹ pass 65` / `ℹ fail 0`（`check-3.log`、`test-3.log`、`rules-3.log`）。
+- 发布与回读：装机包是 `tmp/564-spec-560`（#564 `5e21539` + #560 `fd3cdeb`，worktree `.claude/worktrees/564-spec-install`），不含 #573（`e48b7a5`，合并时再合最新 main）。`install.sh 564-spec-v3 <产物> --takeover`（接管前一个合并包 `e07012a3446d`，装它的「侧栏回复｜每会话只出现一次」会话回话同意覆盖）：产物 `8bcbcb11881d` / 已装 `8bcbcb11881d`，签名正常，冒烟侧栏在动，没有权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-564-spec-v3/PostPane-e07012a3446d.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机离屏渲染 `evidence/2026-11-28-564-spec-v3/real-claude-panel-board.png`：「积压事项 · 4」黄色、在正在进行下面；积压段折着，展开后的样子未在真实侧栏看（要动鼠标）。
+- #561：合了最新 main（`57b3552`，冲突只在 CURRENT / DECIDED，两边都留），全量 check 0、6 套里 Chrome 插件一条计时测试超时失败（机器同时在打包，26 秒），单独重跑 `ℹ pass 200` / `ℹ fail 0`，已推送。
+- 范围外发现：看板面板「等待处理」的「等你」签也在图标列（11-14 定的版式），没动，已转给「设计规范失效审核｜层级对齐类错误根治」会话。
+- 实机验收（2026-11-28 09:25–09:38，接手会话，常浩回「都按推荐」同意全屏、「停 Mac 合盖」选卡）：积压展开态截图已发常浩（`evidence/2026-11-28-561-564-merge-main/real-backlog-zoom.jpg` 等，实机）；REPLY「提交」实点：测试会话 `local_4e12de73` 收到「测试收到」，通过。积压「停止」实点「Mac 合盖」：行消失但会话没收到（它的提问 11-09 就过期了，旧代码没有提问就只移走行），不通过。
+- 修复（`5a637a3`）：核心新加 `tell_session`，没有能回答的提问时把「这件事不做了，停掉」送进会话（和回答提问同一条路，进程已结束的由 host 后台续接）；送到才移走行，送不到行留着写「没发出去：原因」。属回到已定行为（DECIDED 第 127 行「替你给会话发」），不改已定内容。新测试：core `the_backlogs_stop_sends_its_words_into_a_session_with_no_question_left`、hud `waiting-spec` 一条。
+- 修复后实机复验（2026-11-28 12:14，装 `e291aa514a36` = 本分支 + #560，常浩回「停月度用户策略」选卡）：确认提示写「会替你给这个会话发『这件事不做了，停掉』」；点确认后显示「没发出去：这个会话还没加载 Agent HUD 插件……」，行留着，会话记录行数前后都是 1099（没写进去）。部分：拒绝这条路实机通过；送到这条路和 REPLY「提交」走同一个 `reply`，那条上午已实机通过，积压行上没有再实发验证。截图 `evidence/2026-11-28-564-stop-tell/real-stop-confirm.jpg`、`real-stop-refused.jpg`。
+- #561 已 squash 合并（`8f552b6`），本分支合了它之后的 main；冲突只在 CURRENT / DECIDED / 场景数据，DECIDED 去掉了合并带进来的三行重复。
+- 本轮新坑：无
+
 ## 设计规范失效审核：卡片版式规范写成「每种元素放在哪」，新增 `check:card-layout` 机检（2026-11-28，Claude，常浩要求「深度审核，说清楚原因并修复，确保以后不再犯」，经 #564 会话转来；已提交，PR 见描述；无需发布）
 
 - 时间：开工 `2026-11-28 05:17`（`date '+%F %H:%M'` 记录）。来由：积压事项的 WAIT 签放进了图标列（常浩 11-28 05:11 指出），同类界面规范错误反复出现，他写的全局 DESIGN.md 没约束住。
@@ -75,6 +96,23 @@
 - 与授权不一致之处、遗留问题、范围外发现：
   - 同一会话既有等你回答的请求（ASK）又有一条回复时，仍各占一行（请求和回复是两类，回复不该顶掉要你决定的请求）。要不要也合成一行，等常浩定。
   - 侧栏上现在已经堆着的重复行：装机会重启驿窗，队列清空，之后按新规矩来。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 侧栏行动化 2、3：要你动手的回复做成「下一步卡」（#562）；等你超过 48 小时沉到「积压事项」（#563）（2026-11-27，Claude，常浩选「第一处选甲，但是如图其实现在这样就行……你不要完全给我变了；第二处选甲，名字叫做积压事项」；已提交，PR 见描述，叠在 PR #561 上；未装机：#558 的包正装着做实机）
+
+- 时间：开工 `2026-11-27 23:00`（接着同一会话做）。来由：常浩反馈回复几十条却不告诉他下一步，要点进会话读最后一句；久挂的条目（最久约 431 小时）永远挂在侧栏。
+- 改变的行为（动手前已在会话里列出）：① 这一轮已经变成卡的（带按钮框的「下一步」框，或下面的回复卡），不再另发一条 REPLY 通知；「已结束」「后台进行中」的回复照旧 4 秒收起。② Claude 会话收尾是〔等你决定〕〔等你操作〕〔受阻〕且这一轮没带按钮框的，生成一张 REPLY 卡，版式就是现在的 ASK 卡：REPLY 签 → 小字（本次完成 + 当前状态）→ 白字放大的下一步 → 选项（下一步里每个「回复『X』」一项，另有「其他」）→ 跳过 / 提交；提交把那句话发回原会话，走侧栏回答 Claude 提问的同一条通道。③ 等你的卡和会话，不分类型，挂满 48 小时就不算进「等你」的数、不点亮侧栏小签，沉到「等待处理」最下面一行「积压事项 · n · 超过 48 小时没处理」，默认收起；展开后每条「继续」（回到会话）、「不做了」（先问一句，确认后替你给会话发「这件事不做了，停掉」；权限卡改成拒绝；送不进会话的只从侧栏移除）。④ **事前没列、补报**：会话「最后一段话」原来截到 240 字，现在遇到收尾三项整段保留（最多 1200 字），否则读不到下一步；回复摘要里能看到的字因此变多。
+- 你要求的：`agents/src/transcript/closing.rs`（新：解析收尾三项、整段保留、生成回复卡、列出会话的三种卡）；`core/src/sessions.rs`（回复卡进审批列表）；`agents/src/claude/transcript.rs`（REPLY 签）；`core/src/island_events/turns.rs`（已成卡的那一轮不再报 REPLY）；`hud/src/panel/backlog.ts`、`BacklogFold.tsx`（新：48 小时、积压事项一行、继续 / 不做了）；`place-sessions.ts`、`WorkSections.tsx`、`model.ts`、`HUDScene.tsx`、`PanelContext.tsx`（积压不计数、不点亮小签，面板拿得到回答通道）；`approval-list.ts`（REPLY 收起签）。
+- 我顺手改的：`permissionToolBadge` 从 `PendingEventRows.tsx` 搬到新文件 `alerts/tool-badge.ts`（300 行棘轮，原文件短了 70 行）；`last_paragraph` 从 `live.rs` 搬进 `closing.rs`；会话三种卡的拼法收成 `standing_asks` 一处；场景预览台补 `claude-reply-card`、`claude-backlog` 两个场景；收紧行数基线。
+- 同类：回复显示用的「最后一段」只有 `last_paragraph` 一个入口（Claude、Codex 共用），改一处两家都整段保留；会话出卡只有 `sync_claude_desktop_asks` 一处。
+- 测试：回复卡端到端测试旧代码上 `FAILED`（只有按钮框那张，`red-562.txt`），「已成卡不再报 REPLY」测试旧代码上 `FAILED`（`red-562-island.txt`），改后都通过；积压事项的前端测试**没有先跑出红**，写完实现后直接通过（`ℹ pass 22` / `ℹ fail 0`，含 approval-list）。全量：`pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 `1184 passed; 0 failed`，前端 `ℹ pass 537 ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。中途一次全量里两条旧前端测试失败（数据是固定旧日期，被 48 小时规则当成积压），已给它们传入场景的固定时间。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-559-handoff-one-tag/`。
+- 验证：替身通过。场景预览台（127.0.0.1:1482，内置浏览器 Chromium，不是 WKWebView）：`claude-reply-card` 卡上 REPLY、小字、白字下一步、两个选项加「其他」、跳过 / 提交（`scene-claude-reply-card.png`）；`claude-backlog` 小签数字是 2 不是 4，「积压事项 · 2」一行，展开两条各带继续 / 不做了，点「不做了」先问一句（`scene-backlog-*.png`；看板那块在预览台里被上层盖住，展开和点按钮是用脚本点的）。真实环境未验：装机后要在真实侧栏看一张真回复卡、点一次提交，确认话送进会话；积压事项点一次「不做了」。
+- 截图：见上，证据目录。
+- 发布与回读：未发布（#558 的包正装着做实机，没覆盖）。
+- 与授权不一致之处、遗留问题、范围外发现：① 回复卡的文字只在驿窗这次运行期间记得（会话记录检查点不存对话原文），驿窗重启后要等那个会话下一次说话才会再出卡；② Codex 的回复不出回复卡（Codex 的回答通道不同），只是摘要整段保留；③ 面板每行左边的「等你」章没动（11-15 定），积压事项里的行也还挂着它。
+- 11-28 返修（常浩在 #565 会话附截图提出、经该会话转来）：积压事项挪到「正在进行」下面，标题和「等待处理 · n」「正在进行 · n」同一种样式（`SessionsHeading`，「积压事项 · n」加横线），去掉「超过 48 小时没处理」；已登记 DECIDED.md。
+- 主线：侧栏行动化｜▶ ① 只留类型签（PR #561）② 回复下一步卡（本 PR）③ 积压事项（本 PR）④ 名字「积压事项」✅ 定；⑤ Claude 收尾一律带按钮框（另一个会话在做）。
 - 本轮新坑：无。
 - skill 进化：无。
 
