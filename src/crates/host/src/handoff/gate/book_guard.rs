@@ -75,13 +75,14 @@ impl Book {
     }
 }
 
-/// Live, or ended by PostPane after a day untouched (#368), which settles
-/// nothing: only the person's end, or a review begun since, does.
+/// Live, or ended by PostPane after a day untouched (#368) or by an agent
+/// on its own (#587), which settle nothing: only the person's end, or a
+/// review begun since, does.
 fn open_top(h: &Handoff) -> bool {
     h.live()
         || h.steps
             .last()
-            .is_some_and(|s| s.kind == StepKind::End && s.auto)
+            .is_some_and(|s| s.kind == StepKind::End && (s.auto || s.agent))
 }
 
 /// When it reached the cap; kept from before that, its last change.
@@ -165,6 +166,31 @@ mod tests {
         );
         // Ended already: nothing more.
         assert!(!book.end_said(&top.id, Some("再结束一次"), 4));
+    }
+
+    /// #587: an agent ending it on its own ends it, yet the cap stays
+    /// unsettled, as after PostPane's end of a day idle: the next review
+    /// here still needs the person's word.
+    #[test]
+    fn an_end_an_agent_made_on_its_own_settles_no_cap() {
+        let mut book = Book::default();
+        let top = book.begin("s1", Some("/w"), "修登录", None, "改动", 1);
+        book.opened(&top.id, "c1", 1);
+        book.replied("c1", "还差\n审查出口：返修\n结论：需修改", Some("m1"), 2);
+        book.note(&top.id, Notice::Top, 2);
+        let said = "Claude Code 会话 s2 自行结束：回信是空的";
+        assert!(book.end_by_agent(&top.id, said, 3));
+        let ended = book.get(&top.id).unwrap();
+        assert_eq!(ended.phase, Phase::Ended);
+        let last = ended.steps.last().unwrap();
+        assert_eq!(
+            (last.kind, last.auto, last.agent),
+            (StepKind::End, false, true)
+        );
+        assert_eq!(last.text.as_deref(), Some(said));
+        assert_eq!(book.unsettled_top("s1", None, false).unwrap().id, top.id);
+        assert!(book.holds_back(book.get(&top.id).unwrap()));
+        assert!(!book.end_by_agent(&top.id, said, 4), "ended already");
     }
 
     /// P2-05: an ended handoff's answer is cut only once it is kept whole

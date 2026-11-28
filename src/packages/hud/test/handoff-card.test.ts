@@ -797,6 +797,20 @@ test("stopped at its cap and ended by PostPane after a day idle, it is still sto
   );
   assert.deepEqual(actions(idled), ["close", "session"]);
   assert.equal(endedNote(idled, true), "闲置一天已自动收起，还没了结");
+  // Ended by an agent on its own (#587): as unsettled, said so.
+  const byAgent = {
+    ...idled,
+    steps: [
+      ...stoppedOne.steps!,
+      step("end", idle, {
+        text: "Claude Code 会话 s2 自行结束：回信是空的",
+        agent: true,
+      }),
+    ],
+  };
+  assert.deepEqual(stamp(byAgent, true), { text: "停", tone: "red" });
+  assert.deepEqual(actions(byAgent), ["close", "session"]);
+  assert.equal(endedNote(byAgent, true), "智能体已自行结束，还没了结");
   // Ended by the person: only ended.
   const ended = { ...idled, steps: [...stoppedOne.steps!, step("end", idle)] };
   assert.deepEqual(stamp(ended, true), { text: "已结束", tone: "dim" });

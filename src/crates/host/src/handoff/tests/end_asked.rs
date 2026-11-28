@@ -1,7 +1,7 @@
-//! #439: an agent session lists the handoffs still open and ends them, but
-//! only when the person began its current turn; the card says who ended
-//! each and why, and one with words on their way is left as the button
-//! leaves it.
+//! #439: an agent session lists the handoffs still open and ends them; the
+//! card says who ended each and why, and one with words on their way is
+//! left as the button leaves it. #587: without the person's word the agent
+//! still ends them, on its own, which settles no cap.
 use super::*;
 
 /// A second handoff, of session `s2`, failed to open.
@@ -43,25 +43,44 @@ fn the_open_handoffs_are_listed_with_the_session_that_began_each() {
 }
 
 #[test]
-fn ending_is_refused_unless_the_person_began_the_turn() {
+fn without_the_person_s_word_an_agent_ends_it_on_its_own() {
     let (_temp, desk) = desk();
     let lines = Fake::default();
-    let handoff = opened(&desk, &lines);
-    let ids = vec![handoff.id.clone()];
-    // Not told, or another agent's labelled message: nothing ends.
-    for opener in [
-        None,
-        Some((
-            Opener::Plugin("[Agent HUD · from Codex · t · m-1]\n\n结束".into()),
-            2,
-        )),
+    let live = opened(&desk, &lines);
+    let broken = failed(&desk, &lines);
+    // Not told, or another agent's labelled message: ended all the same,
+    // said to be the agent's own doing.
+    for (handoff, opener) in [
+        (&live, None),
+        (
+            &broken,
+            Some((
+                Opener::Plugin("[Agent HUD · from Codex · t · m-1]\n\n结束".into()),
+                2,
+            )),
+        ),
     ] {
         *lines.opener.borrow_mut() = opener;
-        let error = desk
-            .end_asked(&lines, CLAUDE, "s9", &ids, "已合并", 3)
-            .unwrap_err();
-        assert_eq!(error, super::super::end::end_unheard());
-        assert_ne!(desk.lock().get(&handoff.id).unwrap().phase, Phase::Ended);
+        let answer = desk
+            .end_asked(&lines, CLAUDE, "s9", &[handoff.id.clone()], "回信是空的", 3)
+            .unwrap();
+        assert_eq!(answer["ended"], json!([handoff.id]));
+        assert_eq!(answer["byPerson"], false);
+        let book = desk.lock();
+        let ended = book.get(&handoff.id).unwrap();
+        assert_eq!(ended.phase, Phase::Ended);
+        let last = ended.steps.last().unwrap();
+        assert_eq!(
+            (last.kind, last.auto, last.agent),
+            (StepKind::End, false, true)
+        );
+        let text = last.text.as_deref().unwrap();
+        assert!(text.contains("s9"), "{text}");
+        assert!(
+            text.contains("自行结束") || text.contains("on its own"),
+            "{text}"
+        );
+        assert!(!text.contains("常浩") && !text.contains("person"), "{text}");
     }
     // It asked about the caller's own turn, not the handoff's session.
     assert_eq!(lines.opener_asked.borrow()[0], "claude|s9");
@@ -96,6 +115,7 @@ fn the_person_s_word_ends_each_handoff_named_and_says_why_others_stay() {
     drop(sending);
     assert_eq!(lines.opener_asked.borrow()[0], "codex|thread-1");
     assert_eq!(answer["ended"], json!([live.id, broken.id]));
+    assert_eq!(answer["byPerson"], true);
     let refused = answer["refused"].as_array().unwrap();
     assert_eq!(refused.len(), 2, "{refused:?}");
     assert_eq!(refused[0]["id"], busy.id);
@@ -110,7 +130,10 @@ fn the_person_s_word_ends_each_handoff_named_and_says_why_others_stay() {
         let ended = book.get(id).unwrap();
         assert_eq!(ended.phase, Phase::Ended);
         let last = ended.steps.last().unwrap();
-        assert_eq!((last.kind, last.auto), (StepKind::End, false));
+        assert_eq!(
+            (last.kind, last.auto, last.agent),
+            (StepKind::End, false, false)
+        );
         let text = last.text.as_deref().unwrap();
         assert!(
             text.contains("Codex") && text.contains("thread-1"),
@@ -168,9 +191,10 @@ fn postpane_s_own_words_are_known_by_how_they_are_written() {
 
 /// #439 review P1-01: words back go in before the book writes them down, so
 /// a turn they began reads as the person's meanwhile. The session calling
-/// then, ending its own handoff and another, ends neither.
+/// then ends only on its own (#587): not its handoff with words on their
+/// way, and the other one with no cap settled.
 #[test]
-fn words_on_their_way_to_the_caller_refuse_the_whole_batch() {
+fn words_on_their_way_to_the_caller_are_not_the_person_s_word() {
     let (_temp, desk) = desk();
     let desk: &'static Desk = Box::leak(Box::new(desk));
     let mut lines = Fake::default();
@@ -196,16 +220,18 @@ fn words_on_their_way_to_the_caller_refuse_the_whole_batch() {
     }));
     assert!(desk.drive(&lines, 4));
     lines.on_reply = None;
-    let error = answer
+    let answer = answer
         .borrow_mut()
         .take()
         .expect("asked while sending")
-        .unwrap_err();
-    assert_eq!(error, super::super::end::end_busy());
+        .unwrap();
+    assert_eq!(answer["byPerson"], false);
+    assert_eq!(answer["ended"], json!([other.id]));
+    assert_eq!(answer["refused"][0]["id"], own.id);
     let book = desk.lock();
     assert_ne!(book.get(&own.id).unwrap().phase, Phase::Ended);
-    assert_ne!(book.get(&other.id).unwrap().phase, Phase::Ended);
-    // Once written down, the same words are PostPane's: still refused.
+    assert!(book.get(&other.id).unwrap().steps.last().unwrap().agent);
+    // Once written down, the same words are PostPane's: on its own still.
     drop(book);
     let back = lines
         .sent
@@ -216,8 +242,18 @@ fn words_on_their_way_to_the_caller_refuse_the_whole_batch() {
         .unwrap();
     let caller = Fake::default();
     *caller.opener.borrow_mut() = Some((Opener::Plugin(back), 5));
-    let error = desk
+    let answer = desk
         .end_asked(&caller, CLAUDE, "s1", ids, "都结束", 5)
-        .unwrap_err();
-    assert_eq!(error, super::super::end::end_unheard());
+        .unwrap();
+    assert_eq!(answer["byPerson"], false);
+    assert_eq!(answer["ended"], json!([own.id]));
+    assert!(
+        desk.lock()
+            .get(&own.id)
+            .unwrap()
+            .steps
+            .last()
+            .unwrap()
+            .agent
+    );
 }
