@@ -52,6 +52,9 @@ pub enum Trouble {
     /// Words the session heard were never known to have gone in did go in
     /// after all (#544, gaps 4, 5): what it heard is set right.
     Confirmed,
+    /// Another handoff bound its ChatGPT conversation, and it closed
+    /// (#544, gap 15): why, as the step says.
+    TakenOver(String),
 }
 
 /// The mark a step of such trouble carries: known by it, not by its words,
@@ -75,6 +78,8 @@ pub enum Cause {
     PageChanged,
     /// `corrected`: words said unknown went in after all (#544).
     Confirmed,
+    /// `opened`: another handoff took its conversation (#544).
+    TakenOver,
 }
 
 impl Step {
@@ -119,6 +124,9 @@ impl Handoff {
                 Trouble::PageChanged(step.text.clone().unwrap_or_default())
             }
             Cause::Confirmed if self.live() && !self.unsure() => Trouble::Confirmed,
+            Cause::TakenOver if self.status == Status::Closed => {
+                Trouble::TakenOver(step.text.clone().unwrap_or_default())
+            }
             _ => return None,
         };
         Some((at, trouble))
@@ -193,6 +201,23 @@ impl Book {
         h.updated_at = now;
         true
     }
+    /// `id` binds `conversation`: another live one bound to it is closed,
+    /// saying by which (#544, gap 15), and its session is told once.
+    pub(super) fn take_over(&mut self, id: &str, conversation: &str, now: i64) {
+        let by = self.get(id).map(|h| h.title.clone()).unwrap_or_default();
+        let note = taken_over(&by);
+        for handoff in &mut self.list {
+            if handoff.id != id
+                && handoff.live()
+                && handoff.chatgpt_conversation.as_deref() == Some(conversation)
+            {
+                handoff.status = Status::Closed;
+                let step = Step::new(now, StepKind::Fail, Some(&note)).by_auto();
+                handoff.steps.push(step.caused(Cause::TakenOver));
+                handoff.updated_at = now;
+            }
+        }
+    }
     /// Word that words the session heard were never known to have gone in
     /// did go in came (#544, gaps 4, 5): a step of its own says so (the
     /// words' own step is held to as sent, and a telling adds to the step
@@ -234,6 +259,15 @@ impl Book {
         handoff.updated_at = now;
         true
     }
+}
+
+/// Why a handoff closed when another bound its conversation (#544): on its
+/// card, in the app's language.
+pub fn taken_over(by: &str) -> String {
+    agent_hud_runtime::l10n::text(
+        &format!("这个 ChatGPT 会话被接力「{by}」接走了，这次接力已结束，之后的回信不再转回这里"),
+        &format!("This ChatGPT conversation was taken by the handoff \"{by}\"; this handoff ended, and later answers do not come back here"),
+    )
 }
 
 #[cfg(test)]

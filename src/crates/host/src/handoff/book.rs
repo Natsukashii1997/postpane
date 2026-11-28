@@ -51,7 +51,7 @@ pub use gate_io::{
 #[cfg(test)]
 pub use gate_io::{ledger, reviewed_commit};
 pub use idle::IDLE_END_MS;
-pub use notice::{notices_since, Cause, Trouble};
+pub use notice::{notices_since, taken_over, Cause, Trouble};
 pub use pull_request::pull_request;
 pub use unsure::{tagged, untagged, Pending, FIND_MOST};
 #[cfg(test)]
@@ -611,7 +611,6 @@ impl Handoff {
 pub struct Book {
     pub list: Vec<Handoff>,
 }
-
 impl Book {
     pub fn get(&self, id: &str) -> Option<&Handoff> {
         self.list.iter().find(|handoff| handoff.id == id)
@@ -710,15 +709,7 @@ impl Book {
         if !waiting {
             return false;
         }
-        for handoff in &mut self.list {
-            if handoff.id != id
-                && handoff.live()
-                && handoff.chatgpt_conversation.as_deref() == Some(conversation)
-            {
-                handoff.status = Status::Closed;
-                handoff.updated_at = now;
-            }
-        }
+        self.take_over(id, conversation, now);
         let handoff = self.get_mut(id).expect("checked above");
         let brief = handoff.brief.take().unwrap_or_default();
         handoff.chatgpt_conversation = Some(conversation.to_owned());

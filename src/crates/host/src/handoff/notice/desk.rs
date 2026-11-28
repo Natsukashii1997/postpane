@@ -121,6 +121,10 @@ pub(super) fn notice_text(handoff: &Handoff, trouble: &Trouble) -> String {
                 "自动往返仍停着（常浩暂停了，或还有别的原因），下一步等常浩决定；"
             }
         ),
+        // Nothing more comes back by this one (#544, gap 15).
+        Trouble::TakenOver(why) => format!(
+            "{why}。这不是审查结论：这次接力不会再有回信转回这里。先不要再调用 relay_to_chatgpt 往那个会话送；还要接着审，请向常浩说明，由常浩决定怎么接。"
+        ),
         // Not a failure: it may well have gone in (round 4 P1-14).
         Trouble::Unconfirmed => "驿窗没确认这一轮送审送到了 ChatGPT（送出后没收到确认，或确认前驿窗重启），送达状态未知，自动往返已经停下，这次接力交常浩处理。ChatGPT 若已收到并回信，驿窗仍会收下、照算一轮，但不按通过结束。先不要换一段话再送，也不要当成审查已通过；请向常浩说明这一轮送审状态未知。".to_owned(),
         // The round trip may stay stopped (review of #524, P2): an earlier
