@@ -11,7 +11,7 @@ use agent_hud_runtime::l10n;
 
 /// Why a pass or a close was held back, and whether Claude sending the
 /// pull request's current commit again sets it right: then the round trip
-/// goes on, not left to the person (Fable review #8, MA-02 §4).
+/// goes on, not left to the person (Fable review #8, review contract §4).
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Held {
     pub why: String,

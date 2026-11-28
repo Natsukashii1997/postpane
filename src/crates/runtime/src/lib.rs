@@ -25,6 +25,7 @@ pub use agent_hud_platform::clients::chatgpt;
 pub use agent_hud_platform::clients::codex;
 pub use agent_hud_platform::hooks;
 pub use agent_hud_platform::hud_tools;
+pub use agent_hud_platform::inherit_system_proxy;
 pub use agent_hud_platform::instance;
 pub use agent_hud_platform::local_tools;
 #[cfg(target_os = "macos")]

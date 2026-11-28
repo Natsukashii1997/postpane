@@ -91,7 +91,7 @@ impl Book {
         }
         closed
     }
-    /// Handoffs still open from before the review gate (#347, MA-02 §5.6):
+    /// Handoffs still open from before the review gate (#347, go-live gate of the old MA-02 §5.6):
     /// each gets its own review chain and a step saying what it counted
     /// when it moved over, so nothing is reset unseen.
     pub fn adopt(&mut self, now: i64) -> bool {

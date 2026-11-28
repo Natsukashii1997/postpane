@@ -55,9 +55,9 @@
   - P1-05 已修（改成只认证明得了的）：去掉「欠一个」计数和「打开中的标签页一律算插件的」。插件的提问只有两种证明：发送那一页点发送后、页面没换时看到的编号；或回合消息带的提问原文开头和插件送出、还没对上编号的话一样（`heads`，最近 50 段、最多一周）。其余带编号的提问一律算常浩的（`taken` 记编号和时间）。插件的提问被证明、且常浩那条早于这次送话开始，才清 `taken`；送话途中听到的、话没确认送到的，都不清。`content.js` 的 `stopped` 多带 `newest`、`prompt`，回答在提问编号画出来前就被停的也能判断。
   - P1-06 已修：`page.js` 的 `press` 点发送后只在页面还是同一页时读提问编号，换了页不读；`opened` 有编号时只认编号，对不上不再退回按文字比；没有字的提问不再算证明。代价：长文被转成附件、又没在发送时看到编号的那次打开会报 `unconfirmed`，要常浩去页面核对（写进通道文档）。
   - P2-11：随 P1-05 修。
-  - 顺手：返修时新加的 `sending(text)` 和后台已有的 `sending(conversation)` 同名，普通脚本里后者悄悄被顶掉（L-75）；改名，并加测试查后台顶层同名函数。
+  - 顺手：返修时新加的 `sending(text)` 和后台已有的 `sending(conversation)` 同名，普通脚本里后者悄悄被顶掉（L-81）；改名，并加测试查后台顶层同名函数。
   - 测试：照审查列的 8 类补齐。新测试在 `c5dd449` 上：插件后台 `ℹ pass 3` / `ℹ fail 6`（过的三条守保留下来的行为：送话后重新归接力、按原文认新会话首次开始、无同名函数），页面 `ℹ fail 2`，真实 Chromium 端到端 `open` 1 条 `ℹ fail 1`（`round6/red-*.log`）。送话途中插入常浩提问用的是送话进行中的真实交错（`sendGates`），发送后换页用真实 `page.submit`（页面测试和真实 Chromium）。三条全量：`pnpm run check` 原样 `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1181 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 227`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 64` / `ℹ fail 0`；真实 Chromium `ℹ pass 18`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round6/`。
-- 第 6 轮 ChatGPT 审查（受审 `793c725`，返修，P1 2、P2 1）：L-75 改名已验证。本轮（2026-11-27）处理：
+- 第 6 轮 ChatGPT 审查（受审 `793c725`，返修，P1 2、P2 1）：L-81 改名已验证。本轮（2026-11-27）处理：
   - 根子在新开会话的话没有唯一标识。问常浩后他选「甲：加这一行」（已登记 DECIDED.md）：驿窗 `Desk::open` 发出前用续审同一个 `book::tagged` 加「【驿窗送审 <接力号~第几次>】」；Ask 步骤照旧记原话，驿窗按回信认这次审核时（`answers/desk_belongs.rs` 的 `held_to`），记的话不带请求号的，先去掉页面提问开头的请求号行再比，续审的比法不变。
   - P1-05 已修：插件只记、只认第一行带请求号的话（`heads`），不带的开头再像也不算；只在接力用过的会话里认；两段以上同时对上不认；读回存储时清过期的。
   - P1-06 已修：`opened` 没编号时同样要求送出的话带请求号行，常浩会话里只有一条正文完全相同的提问也报 `unconfirmed`；`own` 的二次证明走同一条规则。
@@ -67,8 +67,144 @@
   - P1-07 已修：驿窗认新开会话那一轮的回信时，只在页面提问第一行正好是这条接力自己的请求号（`handoff.request()`）时去掉它再比（`answers/desk_belongs.rs` 的 `held_to`，前缀用已有的 `tagged(request, "")` 拼）；别的请求号开头的，正文完全一样、或长文前 600 字一样，都不认。Rust 新测试 1 条（两种反例，`asked_as` 为空走文字比对），在 `2fc20e6` 上 `FAILED`。
   - P2-11 已修：`taken` 改成按提问各记一条（编号 → 开始时间，每个会话最近 20 条），一条迟到的不再顶掉另一条；插件的提问被证明时只放掉比它早开始的那几条。`content.js` 的 `complete`、`stopped` 带上页面记下的这一轮开始时间（`begunAt`）。审查要求的「插件再送 R 之后仍保留 P2」与常浩 11-27 定的 P2-11（插件的提问被证明、常浩那条更早就重新归接力）冲突，没照做；照做的是其中真正的漏洞：Q 在 P1、P2 之间送出，P1 的开始迟到、Q 的证明更晚才到时，P2 被一起丢掉。插件后台新 2 条、页面 1 条断言，在 `2fc20e6` 上都红（`round8/`）。
   - 三条全量：`pnpm run check` 原样 `check exit 0`（第一次因 `book_unsure.rs` 加函数后 303 行超棘轮，改成在 `held_to` 里用已有的 `tagged` 拼前缀，那个文件不动）；`pnpm test`「全量测试汇总：6 套，失败 0 套」，Rust 合计 1186 passed、0 failed，前端 `ℹ pass 516`，MCP `ℹ pass 9`，插件 `ℹ pass 14`，Chrome 插件 `ℹ pass 237`，注入脚本 `ℹ pass 11`；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`；真实 Chromium `ℹ pass 19`。均为替身通过，真实 Chrome / chatgpt.com 未验。证据 `round8/`。
-- 本轮新坑：L-75。
+- 本轮新坑：L-81。
 - skill 进化：无。
+
+## 设计规范失效审核：卡片版式规范写成「每种元素放在哪」，新增 `check:card-layout` 机检（2026-11-28，Claude，常浩要求「深度审核，说清楚原因并修复，确保以后不再犯」，经 #564 会话转来；已提交，PR 见描述；无需发布）
+
+- 时间：开工 `2026-11-28 05:17`（`date '+%F %H:%M'` 记录）。来由：积压事项的 WAIT 签放进了图标列（常浩 11-28 05:11 指出），同类界面规范错误反复出现，他写的全局 DESIGN.md 没约束住。
+- 改了哪些文件：
+  - 你要求的：`docs/design/卡片版式规范.md`（开头写什么时候读、要连全局 `ui-system/docs/design-spec/DESIGN.md` 一起读；新增「每种元素放在哪」表、「同一种事，同一种行」、11-28 正反例；例外第 1 条写明只管章；新增「画预览、规范版时」「机器查的几条」）；`src/tooling/check-card-layout.mjs`（新：基线与命令行）、`src/tooling/card-layout-rules.mjs`（新：读 TSX 查三条：类型签进图标列、缩进写死数字、签自己挑颜色）、`src/tooling/card-layout-baseline.json`（新：16 处旧问题）；`package.json` 加 `check:card-layout` 并接进 `check`，根目录开发依赖加 `@babel/parser` 7.29.9（理由：机检要读 TSX 语法树，仓库里的 TypeScript 7 不再带可调用的解析器；这个版本已在依赖树里，离线装上）；`scripts/check-rules.mjs` 的 `ALLOWED_DEPS` 加它；`tests/check-card-layout.test.mjs`（新：9 条，第一条用 #564 分支 `f8cebde` 原样摘出的 WAIT 写法）；`AGENTS.md`「做什么事之前读哪份」那一行改成「动侧栏任何界面，含画预览和规范版」并指向两份规范和机检；`.agents/skills/postpane-round/SKILL.md` 测试一步加界面自查；`docs/LESSONS.md` 新坑 L-80。
+  - 我顺手改的：记忆 `same-component-same-style.md`（原写「全局版在 CLAUDE.md 第 9 节」，实际没有，已改正）、`postpane-one-left-grid.md`（补类型签不进图标列）。
+- 同类：搜了 hud 全部 TSX 的网格行、`ApprovalTag` 调用、按 tone 挑颜色的分支：16 处旧问题（写死数字 10 处、签自己挑颜色 6 处）记进基线，这次不改界面代码；用 #564 分支当前代码跑，新增 3 处（WAIT 进图标列、WAIT/等你共用签自己传颜色、ApprovalContent 多一处文字线 30）。
+- 测试：`pnpm run check` `check exit 0`；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（含新的 `check-card-layout.test.mjs` 9 条）；`pnpm test` 第一遍「全量测试汇总：6 套，失败 1 套」，失败的是 Chrome 插件（`ℹ pass 198` / `ℹ fail 2`，`chromium.test.mjs` 两条真实 Chromium 计时测试，本 PR 没改插件），单独重跑 `pnpm run test:extension` `ℹ pass 200` / `ℹ fail 0`；合进最新 main 后在 `b1497a4` 上三条重跑：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust passed 1189 failed 0，前端 `ℹ pass 542`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 74` / `ℹ fail 0`（证据子目录 `merged-b1497a4/`）。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-design-rules-audit/`（`check.log`、`test.log`、`extension-rerun.log`、`node-tests.log`）。新测试和机检是一起写的，没有先跑出红；用 #564 分支原样代码跑机检报错，算这次的「红」。
+- 验证：机检在 #564 分支 `f8cebde` 与当前头 `bf96b01` 的 `src/packages/hud/src` 上跑（`git archive` 到临时目录），都报 `SessionsSection.tsx:555` 类型签进了图标列。审核报告：https://claude.ai/artifact/DpgUQnEQcG36yE9xJ2uYRf。界面纠正盘点（50 条，带会话出处）在共享笔记 `界面纠正清单-2026-11-28.md`。
+- 截图：无界面改动。
+- 发布与回读：无需发布（只改规范、检查、文档）。
+- 与授权不一致之处、遗留问题、范围外发现：#564 合并前要改掉上面 3 处才过 `pnpm run check`（第一处正是常浩 05:11 要它改的）。#553 把 `scripts/check-rules.mjs` 换成 agent-kit 共用实现，后合的一方要把 `@babel/parser` 挪进新白名单。全局 CLAUDE.md、`ui-system` DESIGN.md、three-versions skill 三处改动只出了提案（报告第六节），等常浩定。16 处旧问题和把 `ApprovalTag` 按章、类型签、套餐标签拆开，要改界面代码，等 #564 合并后另开一单。
+- 本轮新坑：L-80。
+
+## 接力传信动画精修：细线白信封装信、连续对折成纸飞机（#570）（2026-11-28，Claude，常浩三版里选甲「细线」、改动确认回「改」：侧栏、刘海、互发消息一起换；已提交、未装机）
+
+- 时间：开工 `2026-11-28 04:39`（`date '+%F %H:%M'` 记录）。来由：常浩要接力纸飞机动画「再做 3 种版式」，两轮预览后定：保留折信封，普通白信封，细线画法（设计稿 https://claude.ai/artifact/MMBm4NF9wcdPqELQr1cS2h 甲）。
+- 行为变化（动手前已在会话里发改动确认，常浩回「改」）：接力和智能体互发消息的飞行，侧栏与刘海两种模式都换成新画法；约 2.5 秒 → 约 2.9 秒；虚线航迹换成渐淡小烟点；地上加影子；绕圈时纸飞机侧身翻过来、落地端正；送不出去改成失速翻滚、半路散开回信封；信纸落地时刻 `LETTER_LANDS_MS` 跟着变（约 2.88 秒），「审」章等信落地才盖的等待也跟着变长；减弱动效下的静态信封换成新画法。
+- 你要求的：`scene/flight-paper.ts`（新：白信封、纸飞机的 6 点裁切形状与下半边、飞机三面画法，翻身 `rollAt`、影子 `shadowAt`、信纸滑进信封 `letterClip`、失速翻滚 `tumble`、装信时刻 `PACK`）；`scene/flight-plan.ts` 的 `story()`（装信、封口两面翻、合上轻压、侧身、影子、小烟点、展开交信、失速翻滚；`STORY` 各段与 `handIn`；返回 `delivered`、`roll`、`shadow`、`puffs`）；`scene/flight-craft.tsx`（新：信封、封口、纸飞机、信纸、影子、数字的画法）；`scene/FlightLayer.tsx`（接上翻身、影子、下半边、小烟点；信纸移到最上层好滑进信封；接住时刻用 `delivered`）；`relay-stamps.ts`（`LETTER_LANDS_MS` 用 `handIn`）。
+- 我顺手改的：航线几何整块拆到 `scene/flight-route.ts`（行为不变，flight-plan 照旧转出，腾出行数过 300 行棘轮）；删掉没人用的 `pathData`；场景预览台 `preview/main.tsx` 加「飞：送审 / 回信 / 送不出去」三个按钮，能触发真实飞行；`file-size-baseline.json` 收紧（FlightLayer 925→716、flight-plan 834→692）。
+- 同类：搜了「收信时刻」`STORY.deliver * 0.7`，命中 3 处（FlightLayer 两处、relay-stamps 一处），都改成 `STORY.handIn` / `story.delivered`。
+- 测试：新测试先跑出红 `ℹ pass 6` / `ℹ fail 4`（`red.txt`）。改后 `node --test src/packages/hud/test/flight-plan.test.ts src/packages/hud/test/flight-paper.test.ts` `ℹ pass 14` / `ℹ fail 0`。`pnpm run check` 退出码 0（`check.txt`）。`pnpm test` 第一次失败 2 套：前端 `relay-stamps` 一条（信纸落地上限写死 2600，本轮带出，已改为 2600–3100），Rust `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 计时超窗（285 秒 < 290，机器忙；本轮没碰 Rust，单跑 `test result: ok. 1 passed`）；重跑 `全量测试汇总：6 套，失败 0 套`，Rust `test result` 合计 1189 passed、0 failed（`test2.txt`）。`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.txt`）。
+- 验证：替身通过。场景预览台（Chromium，真实 HUDScene + FlightLayer，`?scene=two-relays`，浅色、深色），用新加的按钮触发送审、回信、送不出去，暂停在 450 / 680 / 1010 / 1450 / 2330 / 2640 / 2800 毫秒和失败的 1780 / 2250 / 2520 毫秒逐帧看。刘海模式没在预览台看（预览台只有侧栏）；真实接力里的飞行要等下一次接力或互发消息时看，驿窗的 WKWebView 未验。
+- 截图：`evidence/2026-11-28-570-relay-paper/frames-scene-preview.png`（预览台 4 倍放大四帧）。
+- 发布与回读：未装机。包已打好（变基到 `2aba8b3` 之后重打，`build2.txt`），`install.sh 570-relay-paper` 停在 L-05 检查：已装的是 #569 会话 04:46 装的合并包 `3265645`（main + #564 `781c0f7` + #560 `fd3cdeb`，后两个还没合并），装本包会把这两项从实机拿掉，等常浩定。已登记 DECIDED.md（基线截图暂用预览台四帧，实机截图待补）。
+- 与授权不一致之处、遗留问题、范围外发现：预览阶段的「现状」画板是凭印象复刻的，和真实画法有出入（L-77），常浩两轮是拿它做参照；本轮实现照真实画法改，故事顺序没变。
+- 本轮新坑：L-77。
+- skill 进化：无。
+## 恢复被 #568 冲掉的 #566「同一会话只出现一次」：代码、测试、场景、DECIDED 登记、交接一节（#569）（2026-11-28，Claude，常浩 11-28 已验收并让合并 #566；属回到已定行为，不改已定内容；已提交，PR 见描述）
+
+- 时间：开工 `2026-11-28 04:55`（`date '+%F %H:%M'` 记录）。来由：给 #564 打合并包前核对 main，发现 #568（`7575cf9`）的 squash 提交把 #566 改的 6 个文件原样退回 #566 之前（`git diff bdcbc19 7575cf9 -- <6 个文件>` 为空），还删了 DECIDED 里 11-28「单一任务会话」那一行和 CURRENT 里 #565 一节；#568 的分支提交 `99296b6` 父提交就是 `1ac0ab1`，退回是它自己带进去的。之后在这个 main 上合的包（#567 会话装的 `2e53e13`）、#561 分支（`3b6908e`）都没有去重。
+- 改了哪些文件：
+  - 你要求的（恢复）：`src/packages/hud/src/alerts/news-lanes.ts`、`reply-list.ts`、`CompletionAlertView.tsx`、`test/reply-list.test.ts`、`test/reply-queue-keep.test.ts`、`test/scenes/scenes.ts` 取回 `1ac0ab1` 的版本；`docs/DECIDED.md` 补回那一行；`CURRENT.md` 补回 #565 一节（放在 #567 一节下面）。
+  - 我顺手改的：`docs/LESSONS.md` 新坑 L-76。
+- 同类：比对了 #568 改动的全部 18 个文件，和它主题（子程序继承系统代理）无关的只有上面 8 个，都是 #566 的；其余 10 个是 #567 自己的，没动。
+- 测试：见下「发布与回读」（合并包）；本分支单独的三条全量见 PR 描述。
+- 验证：装前侧栏截图（`evidence/2026-11-28-569-combo/smoke-before-1.png`，当时装的是 #567 会话的包 `2e53e13`）里，常浩开着 Claude 面板，能看到一张真实的 REPLY 下一步卡（REPLY 签、小字、白字下一步、选项、跳过 / 提交），和积压事项旧版式。新包的去重与积压事项新版式未在实机看（悬停面板我控制不了），留给常浩。
+- 截图：无界面改动（恢复已验收的行为）。
+- 发布与回读：合并包 `3265645` = main `7575cf9` + 本分支 `61736b4` + #564 `781c0f7` + #560 `fd3cdeb`（`turns.rs` 冲突照 #564 那次合法，`CURRENT.md`、`LESSONS.md` 两边都留）。三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1214 passed，前端 `ℹ pass 540`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。`install.sh 569-combo --takeover`（原装 #567 会话的 `bb4da8175097`，它同意覆盖）：产物 `e07012a3446d` / 已装 `e07012a3446d`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2143 个像素不同。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-569-combo/PostPane-bb4da8175097.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 与授权不一致之处、遗留问题、范围外发现：#560 分支也用了 L-75～L-79，和 main 的 L-75、本 PR 的 L-76 撞号，#560 变基时要改编号。
+- 本轮新坑：L-76。
+
+## 驿窗启动的子程序继承 Mac 系统代理，claude 登录续期不再因直连 403 失败（#567）（2026-11-28，Claude，常浩回「做甲乙两条」；已提交，未装机：真实机器上正装着别的会话 #566 的测试包）
+
+- 时间：开工 `2026-11-28 00:46`（`date '+%F %H:%M'` 记录）。来由：常浩截图说展开卡上的周额度暗印（#319）又看不到了，要求恢复并「确保这个问题以后不会再发生」。查实暗印代码没坏：本机 Claude Code 命令行登录过期，Claude 额度变成「过期」，暗印按设计不画；登录反复掉的根子是驿窗启动的 claude 不带代理、直连 Anthropic 被拒（L-75）。常浩带代理重登后，00:38 驿窗读回额度（本周 95%，吃紧）。
+- 行为变化（动手前已在会话里列出）：驿窗启动时，环境里一个代理变量都没有而 Mac 系统代理开着，就把系统代理写进自己的环境（`HTTPS_PROXY`/`HTTP_PROXY` 大小写两套，`NO_PROXY`/`no_proxy` 为 `localhost,127.0.0.1,::1`），之后启动的所有子程序（claude、codex、git 等）都继承；已有代理变量或系统代理没开时照旧。
+- 你要求的：`platform/src/child_proxy.rs`（新：判断要补哪些变量、启动时写进环境，5 条测试）；`platform/src/os/macos/proxy.rs`（新：读 `scutil --proxy`，HTTPS 优先、其次 HTTP，IPv6 加方括号，4 条测试）；`os/linux`、`os/windows` 各加 `system_proxy` 返回 None（这两个系统先不读）；`os/unix/mod.rs` 加 `script_output`（复用现有带时限的脚本执行）；`host/src/lib.rs` 启动入口在建任何线程前调用，日志记一行；`runtime/src/lib.rs` 转出；`docs/LESSONS.md` 新增 L-75。终端一侧 `~/.zshrc` 加 `claude` 包装函数（不进仓库，改前备份在证据目录 `zshrc.before`）。
+- 我顺手改的：`os/macos/mod.rs` 的 `legacy_preferences` 只转一手的包装函数改成 `pub(crate) use legacy_preferences::read as legacy_preferences;`（行为不变，腾出行数过 300 行棘轮）。
+- 同类：搜了驿窗启动子程序的地方（`accounts/engine.rs`、`mcp_clients.rs` 的 `run_client_in`、`delivery/process`），都是在继承的环境上追加变量、没有 `env_clear`，启动时补一次全部覆盖，不逐处改。
+- 测试：新测试先在打桩实现上跑出红 `test result: FAILED. 3 passed; 6 failed`（`red.txt`），改后 `test result: ok. 9 passed; 0 failed`（`green.txt`）。`pnpm run check` 退出码 0；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 合计 passed 1189 failed 0，前端 `ℹ pass 534` `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-28-567-child-proxy/`。
+- 验证：替身通过。按 E-24 用 `env -i HOME=<证据目录/sandbox-home> PATH=/usr/bin:/bin:/usr/sbin:/sbin` 启动打好的包（环境里没有代理变量，和从程序坞启动一样），日志第二行 `Programs started from here go through the system proxy http://127.0.0.1:8086 (#567)`；前后 `installed_plugins.json` 的 shasum 一致；按自己记下的进程号停掉。未在真实环境验证：没装进 /Applications，子程序实际继承、登录续期不再掉线要装机后看 `postpane.log` 和后续几天有没有 `OAuth session expired`。终端包装函数已实测：干净环境下 `zsh -ic 'claude -p …'` 回复 ok（改前同样命令 403）。
+- 截图：无界面改动。
+- 发布与回读：未发布。`install.sh 567-child-proxy` 停在 L-05 检查：00:51 已装的是 `reply-one-per-session`（`tmp/565-with-560`，PR #566）的测试包，那个会话正在实机验，没有 `--takeover`。
+- 与授权不一致之处、遗留问题、范围外发现：范围比会话里最初说的「驿窗启动 claude 时带代理」大，codex、git 等子程序也一并走代理（动手前已列出）。暗印在「读不到额度」时悄悄消失、原因看不到，常浩这次选了先不做提示（方案丙）。
+- 本轮新坑：L-75。可提议提升为全局坑：并进全局坑 11-14「交互终端缺代理」那条，补图形界面应用这一面。
+
+## 侧栏 REPLY 每个会话只出现一次，新回复顶替旧行（#565）（2026-11-28，Claude，常浩附截图要求「每个会话都是出现一次……并改好」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机见下）
+
+- 时间：开工 `2026-11-28 00:05`（按建 worktree 的时间，约数）。来由：常浩截图里回复卡同一会话出现 2～3 行（「Claude 收尾｜…」「【交接】数字分身…」「Antigravity｜代理登录修复」）；实机快照 `islandEvents` 里同一会话有 4 条回复事件，侧栏队列每条回复各占一行，只有「失败」按会话顶替旧行。
+- 改变的行为（动手前已在会话里列出）：回复卡、「等待处理」里的 REPLY 行、折起的回复小签和印章上的计数，同一会话（同一家 + 同一会话 id）只占一行；同一会话再回复，新回复在原位置顶替旧行，显示最新那条，计数按会话数算。没有会话 id 的回复照旧一条一行。
+- 你要求的：`src/packages/hud/src/alerts/news-lanes.ts`（`reconcileIslandCards` 新回复按 `replyLine` 找同一会话的旧行原位顶替）。
+- 我顺手改的：删掉 `reply-list.ts` 的 `sessionReplies`（回到会话时收起这个会话的全部回复；现在每个会话只有一行，`CompletionAlertView.tsx` 改成只收这一行）及其测试；场景预览台加场景 `replies-again`（`test/scenes/scenes.ts`）。
+- 同类：搜了 `islandEvents` 的所有读取处，侧栏只有 `IslandNews` 的队列一个入口，回复卡、等待处理卡、小签、印章都从它取，改这一处全部跟着变。
+- 测试：
+  - 新测试先红：`reply-queue-keep.test.ts` `ℹ pass 10` / `ℹ fail 2`（`red-reply-queue-keep.txt`；另 2 条守边界：别家同号、没会话 id、失败与回复分开，本来就过）；改后过。
+  - 三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1180 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据目录 `~/Library/Application Support/postpane/evidence/2026-11-28-reply-one-per-session/`。
+- 验证：场景预览台（替身）新场景 `replies-again`：Claude 同一会话连回 3 次，悬停 Claude 票根，「等待处理 · 1」只一行「整理周报模板」，时间是最新那次。
+- 截图：`scene-replies-again.jpg`（场景预览台，非实机）。
+- 发布与回读：常浩选「装合并包」：本分支 `d98a0a4` + #560 `fd3cdeb` 合在临时分支（合并提交 `004fb00`，只 `CURRENT.md` 冲突、两节都留），合并包三条全量：`pnpm run check` `check exit 0`；`pnpm test`「全量测试汇总：6 套，失败 0 套」（Rust 1201 passed，前端 `ℹ pass 537`，MCP 9，插件 14，Chrome 插件 200，注入脚本 11，各 `ℹ fail 0`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`combo-*.txt`）。`install.sh 565-reply-one-per-session --takeover`（原装的是 #560 分支 `2d38464` 的包 `85ce451e68d7`）：产物 `e0f0b96d9422` / 已装 `e0f0b96d9422`，签名证书 `b773068e`；冒烟：侧栏在动，隔 2 秒 2314 个像素不同；装后无权限弹窗。回滚：`osascript -e 'quit app "PostPane"'; ditto "~/Library/Application Support/postpane/evidence/2026-11-28-565-reply-one-per-session/PostPane-85ce451e68d7.app" /Applications/PostPane.app; open /Applications/PostPane.app`。
+- 实机：本机 `claude -p` 在同一会话 `44c224bd…` 连发两轮（「驿窗自检第 1/2 轮，只回 OK」，工作目录 `evidence/2026-11-28-565-reply-one-per-session/selftest`），驿窗快照里收到这个会话 2 条回复事件（`event:1`、`event:2`）。侧栏上显示几行没验：离屏截图不画回复提醒，驿窗后台控制权限常浩拒绝了；结论「部分」，界面那一下留给常浩悬停 Claude 票根看。常浩看过实机后回「验收，然后合并」，已登记 DECIDED.md。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 同一会话既有等你回答的请求（ASK）又有一条回复时，仍各占一行（请求和回复是两类，回复不该顶掉要你决定的请求）。要不要也合成一行，等常浩定。
+  - 侧栏上现在已经堆着的重复行：装机会重启驿窗，队列清空，之后按新规矩来。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 侧栏卡只留类型签：去掉「切换会话」「下一步」「新任务」三种虚线行动签（#559）（2026-11-27，Claude，常浩问「切换会话为什么会同时出现两个标识，没必要」，随后说「切换会话、下一步这种行为指引……都是可以统一去掉的」；已提交，PR 见描述；未装机：#558 的包正装着做实机，没覆盖）
+
+- 时间：开工 `2026-11-27 21:39`（`date '+%F %H:%M'` 记录）。来由：侧栏交接卡上方同时挂着绿色 START 小签（#245，2026-11-08 定）和问题分区标题「切换会话」（红色虚线签），说的是同一件事。
+- 改变的行为：Claude 桌面应用的三种卡原来在类型签下面再挂一枚红色虚线签：交接卡「切换会话」、下一步卡「下一步」、新任务卡「新任务」。改成都不挂，只留类型签（交接卡 START，其余 ASK）。收起时的一行提示「待切换会话」不变；已定的 START 小签不动；Claude Code 自己提问（AskUserQuestion）带的分区标题不在这次范围。
+- 你要求的：`src/crates/agents/src/claude/transcript.rs` 的 `desktop_ask_view`：三种卡的问题都不再带分区标题（`header` 为 null），前端本来就是有标题才画签；`claude_desktop.rs` 加两条断言（交接卡、下一步卡都没有标题）。
+- 我顺手改的：`src/packages/hud/test/approval-list.test.ts`、`src/packages/hud/test/scenes/build.ts` 测试数据的 `header` 跟着改成 null；场景预览台补一个 `claude-handoff` 场景（`src/packages/hud/test/scenes/scenes.ts`，两张交接卡：能在侧栏开始的、只能到 Claude 里开始的）。
+- 同类：搜了 `切换会话` / `Switch session` 和前端所有画 `header` 的地方（`HandoffStartCard`、`PermissionQuestionCard` 两处），只有 Rust 这一个来源，一处改掉即可。
+- 测试：两条新断言在旧代码上各自 `test result: FAILED. 0 passed; 1 failed`（`red.txt`、`red-next-step.txt`）；只去掉交接卡那一版：`pnpm run check` 退出码 0、`pnpm test`「全量测试汇总：6 套，失败 0 套」；扩到三种签后：`pnpm run check` 退出码 0，`pnpm test`「全量测试汇总：6 套，失败 2 套」（Rust `the_next_pass_is_due_at_the_folder_walk_or_a_failed_reads_retry` 计时失败，单独重跑 `ok. 1 passed`；Chrome 插件 3 条真浏览器计时测试，单独重跑仍 `ℹ fail 3`，当时机器负载 134，本 PR 不碰 Chrome 插件代码，**合并前要在负载正常时重跑全过**）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-559-handoff-one-tag/`。
+- 验证：替身通过。场景预览台（127.0.0.1:1482，`?scene=claude-handoff&panel&still`，浏览器内置面板，Chromium 不是 WKWebView）展开两张卡，都只有 START，页面上没有「切换会话」签。真实环境未验：需装机后在一张真实交接卡上看。
+- 截图：`scene-claude-handoff.png`（场景预览台）。
+- 发布与回读：未发布。`install.sh` 报现在装着的是 `claude/558-agy-hub`（21:36 装、PR #560 未合并）的包，停下没装（L-05）；#558 实机做完后再装本包、和改前对比 START 小签（AGENTS.md「没打算改、但碰到同一处代码」），再合并。
+- 与授权不一致之处、遗留问题、范围外发现：常浩同轮提出侧栏三处困惑，已出方案页 https://claude.ai/artifact/YQxPFTSoqWweCMWVC5sTfB（源文件 `docs/design/侧栏行动化三版预览-2026-11-27.html`，未进仓库），等他挑 3 处。Claude 收尾稳定给按钮框另开会话（任务卡，待常浩点开始）。
+- 主线：侧栏行动化｜✅ 0 ▶ 1 ❓ 3 📌 1：① 只留类型签（本 PR，等 #558 实机做完装机合并）▶；② 回复按收尾状态分流、主文字换成下一步、按钮一键做 ❓；③ 48 小时积压区 + 「不做了」❓；④ 积压区名字 ❓；⑤ Claude 收尾一律带按钮框（另开会话）📌。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 接力治本第 3 步（缺陷修复部分）：页面最新回答是更早一轮的，重读也在 5 次后停（#544）（2026-11-27，Claude，常浩在复盘主会话回「全部都按推荐」经主会话转来；已提交，PR 见描述，装机见下）
+
+- 时间：开工 `2026-11-27 17:31`（`date '+%F %H:%M'` 记录）。来由：全表 E11 空格 31，真实环境现场 #539 第 4 轮（11-26 11:52 起每 2 分钟重读 12 小时以上）。
+- 改了什么：`answers/book_reread.rs` 的 `reread_result`：插件报 `told`、回信却没被收下（接力还在等）时算无果，不再清零连续次数；`streaming` 照旧清零。被收下的回信会先把接力推离等待，不受影响。属修缺陷：让 #433（常浩 2026-11-25 定「最多 5 次」）在这种情形下也生效，不改已定行为。
+- 你要求的：上面一处；测试 `handoff/tests/read_older.rs` 2 条（只报旧回信的 5 次后停；中间报「在写」照旧重新计数）；文档 `docs/chatgpt-channel.md` 退避一句、`docs/接力规范.md` 第 3 节、`docs/接力异常全表.md` 空格 31。
+- 我顺手改的：无。
+- 同类：重读结果里会清零计数的只有 `told`、`streaming` 两种，`streaming` 是真进展，不改。
+- 测试：新测试旧代码上 `FAILED. 1 passed; 1 failed`（`red-host.txt`，过的那条守「在写照旧清零」）；改后 `cargo test -p agent-hud-host read_` `ok. 29 passed`。三条全量见 PR 描述。证据 `~/Library/Application Support/postpane/evidence/2026-11-27-544-reread-bugs/`。
+- 验证：替身通过。真实环境：#539 那张原来停不下的接力，装上本包后看它 5 次内停读（装机后回读）。
+- 截图：无界面改动。
+- 发布与回读：见 PR 描述。
+- 与授权不一致之处、遗留问题、范围外发现：
+  - 第 3 步其余部分没做：「30 分钟没回信」改成按信号判（改的是已定内容，单独发了改动确认，等常浩回）；空占位被误判成「没画出」（要先在真实页面看清空占位的样子再改）。
+  - 第 2 步端到端还差常浩两步操作（关掉插件开的「页面自检回复」标签页、在测试接力卡上点「继续自动」）。顺带的真实证据：测试接力因「标签页没画出回信」按设计停下并通知了会话（13:44），之后重读 5 次后停读并在卡上说明（14:57），#433 在真实环境生效。
+  - 主线：接力治本｜✅ 0、1、2（端到端待验）⏳ 3 其余（改动确认）、4、5、6、7。
+- 本轮新坑：无。
+- skill 进化：无。
+
+## 侧栏 Antigravity 小人有了一套「反重力」动作库（22 个场景，对标 ChatGPT 小花）；侧栏顺序调到 ChatGPT 下面、Hermes 上面（2026-11-27，Claude，常浩要求「位置调整到 GPT 的下面 Hermes 的上面」「把 anti-gravity 的动作库做出来，对标 GPT 的动作库的这个范围」；已提交，PR 见描述，常浩回「覆盖装机」后已发布 `628de7f4b999` 回读通过；常浩经驿窗回「Accepted, merge」验收，已登记 DECIDED.md）
+
+- 时间：开工 `2026-11-27 16:10`。来由：#554。常浩刚开通 Antigravity，它进了侧栏；要求调顺序、并按 GPT 小花的场景范围做它的动作库。小人动效按记忆只出一版。
+- 侧栏顺序：不在代码里，在侧栏布局 `hud.agents`。已经用 `draft_hud` 放进草稿：`[claude, codex, chatgpt, antigravity, hermes, deepseek]`，离屏截图核对过顺序。**要常浩悬停侧栏、在面板里点「保存」**；装机会重启应用，草稿会丢，装完已重放（见「发布与回读」）。
+- 改变的行为（动手前已在会话里列出）：① Antigravity 在侧栏改成常驻小人（`stays: true`），闲着不再显示图标；② 它的动作从通用动作换成自己的一套；别家小人走的分支不变。
+- 动作（场景 → 动作）：待机 悬浮 + 地影（飘高影子变小变淡）+ 每 8 秒一颗小黄石子往上飘；打招呼 往上飘、朝鼠标那边歪、那侧闪两颗星；开工 下蹲 → 脚底喷火蹿高 → 飘回；思考 头顶三颗彩色卫星绕圈，眼睛和身子跟着前面那颗（不挂省略号）；压缩上下文 一缩一放，卫星螺旋钻进钻出；改文件 3 秒一阵、每半秒往左/右歪一格、头顶蹦火星；跑命令 3 秒一阵脚底喷火、升高、抖；读文件 身边托一页纸、读到的行变蓝、眼睛逐行扫；长命令 土星环轨道、蓝卫星 6 秒一圈、后半圈藏到身子后面；其他干活 小火苗一阵阵；等批准 飞高上下蹦；问问题 飞高左右摇；方案待确认 飞高点头；看审批卡 停在高处看卡；三种找你都带左上角橙色星球牌（带环的小星球）! ? ≡；回复完成 空翻一圈撒四色星；长活完成 翻两圈；额度重置 飞更高翻一圈撒 8 颗星；打盹 沉低、歪着、弯线闭眼、慢呼吸、淡蓝梦泡，不挂 Z；出错 反重力失灵直直掉地、压扁、扬灰尘、红色星球牌 ×，过一会儿再飘起；额度用完 慢慢沉地坐着、紫色星球牌沙漏；卡住重试 半空不动；没新消息 悬浮 + 通用变淡。
+- 改了哪些文件：
+  - 新 `hud/src/bots/bot-float.ts`：按状态算每一帧的高度、角度、伸缩、眼睛朝向和身边的东西；读的是鲸鱼同一份 cue。
+  - 新 `hud/src/bots/bot-float-sky.ts`：卫星、星、火苗、灰尘、石子、梦泡、火星的形状与位置。
+  - 新 `hud/src/bots/bot-float-paint.ts`：画火苗、纸、土星环、星和点；地影抵消姿态（身子飘起来影子留在地上），用 `destination-over` 垫在身子后面；左上角星球牌。
+  - `bot-spec.ts`：`antigravity` 加 `float: true`、`stays: true`；`BotSpec` 加 `float` 开关。
+  - `bot-motion.ts`：鲸鱼的 `swim()` 接口改成鲸鱼 / Antigravity 共用（`ownSea`），Antigravity 开工和打招呼不叠共用的「跳一下」；思考不挂省略号、打盹不挂 Z 沿用鲸鱼的写法。
+  - `bot-renderer.ts`：画天空和地影一处接入；云、鲸鱼、Antigravity 三家的标识合成一个 `ownTag`；重绘判定键加上天空和姿态（地影跟姿态变）。
+  - 300 行棘轮（纯搬移，行为不变）：`BotSpec` 类型挪到 `bot-spec-types.ts`、原处转出；`BotMotion.aim`、`poseIsRest` 挪成 `bot-motion-parts.ts` 的 `aimAt`、`isRestPose`。基线 `bot-spec` 399 → 361、`bot-motion` 1532 → 1530，`bot-renderer` 仍 1191。
+  - 新 `hud/test/antigravity-float.test.ts`：18 条（只有 Antigravity 会飘并常驻、外形不变；没开关的小人没有天空；待机悬浮不落地、石子；打招呼朝鼠标歪 + 那侧闪星；开工先蹲后喷火蹿高；思考三颗卫星在头顶、眼睛跟、无省略号；压缩卫星螺旋进；改文件两边歪 + 火星；跑命令一阵喷火一阵歇；读文件纸在右、三行轮流、眼睛看纸；长命令 6 秒一圈；找你飞高、蹦、牌鼓、问问题摇、看卡停；标识走星球牌；完成翻一圈 4 星、长活两圈、重置 8 星；打盹歪着弯线闭眼梦泡无 Z；出错落地扬尘红 × 再飘起；额度用完沉地坐着；卡住不动）。
+- 测试：
+  - 新测试在 main 快照上跑是红的（`bot-float.ts` 不存在，`ℹ pass 0`，`red-on-main.txt`）；先写的实现、后写的测试，不是严格的先红后绿。改后 `ℹ pass 18` / `ℹ fail 0`。
+  - `pnpm run check` 退出码 0（`check.log`）；`pnpm test` 退出码 0，「全量测试汇总：6 套，失败 0 套」，Rust 合计 `1178 passed; 0 failed`，前端 `ℹ pass 534` / `ℹ fail 0`，其余 `ℹ pass 9`、`ℹ pass 14`、`ℹ pass 200`、`ℹ pass 11` 均 `ℹ fail 0`（`test.log`）；`node --test tests/*.test.mjs` `ℹ pass 65` / `ℹ fail 0`（`node.log`）。
+- 验证：定格胶片页（真实 `BotMotion` 按模拟时间逐帧推进，走 `BotMark` 同一条 `renderBot` + CSS 姿态路径，Chromium，替身）逐个场景截帧自查两轮，改过：开工的速度线跟着身子走像腿 → 改成脚底喷火；火苗太细 → 两层水滴形；卫星压住头顶 → 环上移；长命令轨道后半圈压在脸上 → 后半圈画到身后；改文件火星、完成的星、梦泡太小 → 放大；星球牌太大 → 缩到 1.1 倍、往左上挪；共用的「跳一下」抵消了开工的下蹲 → Antigravity 不叠。预览页放进票根看：地影在撕线上方，不碰。
+- 预览：https://claude.ai/artifact/FfbPChjxN1Rh7oy9L5BPyf （真实代码打包，现在 vs 新动作，31 号票根 + 放大，按新顺序排的侧栏一排）。
+- 截图与证据：`~/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/`：`before-after-strip.png`、`check.log`、`test.log`、`node.log`、`red-on-main.txt`、`build.log`；预览脚手架在 `preview/`（`entry.tsx`、`frames.tsx`、`build.sh`、`rebuild-frames.sh`、`out/`，`old/` 是 main 快照）。
+- 发布与回读：常浩经驿窗侧栏回「覆盖装机」，`install.sh 554-antigravity-moves --takeover`：装前 `d49ed6e89c8e`（`install-548-539` 合并包，含未合并的 #539）已备份到证据目录 `PostPane-d49ed6e89c8e.app`；产物 `628de7f4b999` / 已装 `628de7f4b999`，签名一致；`install.sh check` 一致。回滚：`osascript -e 'quit app "PostPane"'; ditto "/Users/nat/Library/Application Support/postpane/evidence/2026-11-27-554-antigravity-moves/PostPane-d49ed6e89c8e.app" /Applications/PostPane.app; open /Applications/PostPane.app`。实机截屏（`before-after-strip.png`，由 `smoke-before-1.png`、`smoke-after-1-1.png` 裁出）：装后 Antigravity 排第 4、是常驻小人、正在打盹；其余五家与装前一致。重启后顺序仍是第 4 位，但 `draft_hud` 回读的已保存列表里还没有 antigravity，请常浩在面板里再点一次「保存」。装上的包不含 #539，#539 合并后要从 main 重打重装。动作只看到打盹一种，其余动作没在实机上逐个验。
+- 与授权不一致之处、遗留问题、范围外发现：常浩看预览和实机截图后经驿窗回「Accepted, merge」，已验收并按他的话合并；实机只看到打盹，其余 21 个动作以预览为准。合并后主目录没拉（postpane 不在拉齐名单，请他回合并时没写「拉主目录等于上线」的提示）。顺序要他在面板里点「保存」。
+- 本轮新坑：无
+- skill 进化：无
 
 ## 接力治本第 2 步：重读时做页面体检，页面改版几分钟内说清认不出什么；认网页的写法收口（#548）（2026-11-27，Claude，常浩确认问题清单第 2 条后回「开始第 2 步」，动手前在会话里列了行为变化；已提交，PR 见描述，已登记 DECIDED.md，装机与端到端验证见下）
 

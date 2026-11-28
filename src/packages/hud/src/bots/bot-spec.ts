@@ -1,54 +1,14 @@
-/** Complete BotSpec.swift dimensions; coordinates are x0,y0,x1,y1 in body radii. */
-import type { Box, Decor, Paint, Point, Shape } from "./bot-spec-types";
-export type { Box, Decor, Fin, Paint, Point, Shape } from "./bot-spec-types";
-export interface BotSpec {
-  radius: number;
-  center: Point;
-  reach: number;
-  shape: Shape;
-  paint?: Paint;
-  face: Point;
-  eye: {
-    height: number;
-    width: number;
-    round: number;
-    spread: number;
-    across?: number;
-  };
-  eyeColor?: string;
-  spin?: number;
-  settle?: number;
-  decor?: Decor[];
-  ring?: {
-    radiusX: number;
-    radiusY: number;
-    drop: number;
-    tilt: number;
-    width: number;
-  };
-  patch?: { box: Box; round: number; paint: Paint };
-  stroke?: string;
-  pupil?: string;
-  signAt?: Point;
-  unpainted?: Box[];
-  crossesEyes?: boolean;
-  /** Stays a bot in the side strip instead of resting as its logo. */
-  stays?: boolean;
-  /** Petals open, close and turn with the work. */
-  petals?: boolean;
-  /** Floats, rolls its edge, puffs, rains and greys with the work, never turning. */
-  cloud?: boolean;
-  /** Floats, paddles its fins, blows bubbles and spouts: the DeepSeek whale. */
-  whale?: boolean;
-  /**
-   * Acts as its own artwork instead of a drawn bot: the portrait tilts, nods
-   * and closes its eyes. Eyes are ellipses [x, y, rx, ry] in artwork shares.
-   */
-  avatar?: { eyes: [number, number, number, number][] };
-  keeps?: Box;
-  ownEyes?: Box[];
-  limbs?: { arms: Box[]; legs: Box[]; pixel: number };
-}
+/** Every bot's spec (BotSpec.swift table); the type lives in bot-spec-types. */
+import type { BotSpec, Paint } from "./bot-spec-types";
+export type {
+  BotSpec,
+  Box,
+  Decor,
+  Fin,
+  Paint,
+  Point,
+  Shape,
+} from "./bot-spec-types";
 const basic: BotSpec = {
   radius: 0.36,
   center: [0.5, 0.5],
@@ -124,6 +84,8 @@ export function botSpecs(light: boolean): Record<string, BotSpec> {
       shape: { kind: "outline", keep: 0.5, smooth: 16 },
       face: [0, -0.2],
       settle: 0.093,
+      stays: true,
+      float: true,
     }),
     deepseek: spec({
       face: [0, -0.14],
