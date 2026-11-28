@@ -65,8 +65,8 @@ export function AgentReachRows({
             ? t("On · local tools channel on", "开 · 本机工具通道开着")
             : channel === "failed"
               ? t(
-                  "Not reachable · channel failed to start",
-                  "够不着 · 本机工具通道没起来",
+                  "Not reachable · local tools channel not running",
+                  "够不着 · 本机工具通道未运行",
                 )
               : t("Off · local tools channel off", "关 · 本机工具通道关着")}
         </Pill>
